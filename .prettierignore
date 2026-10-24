@@ -1,0 +1,12 @@
+**/node_modules/
+**/dist/
+**/coverage/
+**/.vite/
+apps/api/src/generated/
+pnpm-lock.yaml
+*.tsbuildinfo
+.pnpm-store/
+.localappdata/
+.env
+.env.*
+!.env.example

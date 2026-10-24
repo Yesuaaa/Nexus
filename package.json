@@ -1,7 +1,12 @@
 {
   "name": "nexus-starter",
   "private": true,
+  "packageManager": "pnpm@12.7.0",
   "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint . --max-warnings 0",
+    "audit:dependencies": "pnpm audit --audit-level high",
     "dev": "pnpm -r --parallel dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
@@ -10,5 +15,14 @@
     "db:generate": "pnpm --filter @nexus/api db:generate",
     "db:migrate": "pnpm --filter @nexus/api db:migrate",
     "db:studio": "pnpm --filter @nexus/api db:studio"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.13.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^16.5.0",
+    "prettier": "^3.9.10",
+    "typescript-eslint": "^8.72.0"
   }
 }

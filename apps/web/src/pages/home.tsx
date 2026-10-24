@@ -27,7 +27,8 @@ export function HomePage() {
         Build from a clean foundation.
       </h1>
       <p className="mt-6 max-w-xl text-lg leading-8 text-muted-foreground">
-        Routing, UI, styling, a server API, and a Prisma connection to Supabase PostgreSQL are wired together.
+        Routing, UI, styling, a server API, and a Prisma connection to Supabase
+        PostgreSQL are wired together.
       </p>
       <div className="mt-12 grid gap-4 sm:grid-cols-2">
         <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
@@ -37,7 +38,11 @@ export function HomePage() {
           </p>
           <div className="mt-5 flex items-center justify-between gap-4">
             <Status result={api} />
-            <Button variant="outline" onClick={() => void check("/api/health", setApi)} disabled={api === "checking"}>
+            <Button
+              variant="outline"
+              onClick={() => void check("/api/health", setApi)}
+              disabled={api === "checking"}
+            >
               Check API
             </Button>
           </div>
@@ -49,14 +54,21 @@ export function HomePage() {
           </p>
           <div className="mt-5 flex items-center justify-between gap-4">
             <Status result={database} />
-            <Button onClick={() => void check("/api/db-check", setDatabase)} disabled={database === "checking"}>
+            <Button
+              onClick={() => void check("/api/db-check", setDatabase)}
+              disabled={database === "checking"}
+            >
               Check database
             </Button>
           </div>
         </section>
       </div>
       <p className="mt-8 text-sm text-muted-foreground">
-        Start with <code className="rounded bg-muted px-1.5 py-1 text-foreground">README.md</code> for setup and migration commands.
+        Start with{" "}
+        <code className="rounded bg-muted px-1.5 py-1 text-foreground">
+          README.md
+        </code>{" "}
+        for setup and migration commands.
       </p>
     </main>
   )
@@ -70,7 +82,14 @@ function Status({ result }: { result: CheckResult }) {
     unavailable: "Unavailable",
   }
   return (
-    <span role="status" className={result === "connected" ? "text-sm font-medium text-emerald-700" : "text-sm text-muted-foreground"}>
+    <span
+      role="status"
+      className={
+        result === "connected"
+          ? "text-sm font-medium text-emerald-700"
+          : "text-sm text-muted-foreground"
+      }
+    >
       {labels[result]}
     </span>
   )

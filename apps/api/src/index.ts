@@ -14,7 +14,10 @@ app.get("/api/health", (_request, response) => {
 app.get("/api/db-check", async (_request, response) => {
   const prisma = getPrisma()
   if (!prisma) {
-    response.status(503).json({ status: "unavailable", message: "DATABASE_URL is not configured" })
+    response.status(503).json({
+      status: "unavailable",
+      message: "DATABASE_URL is not configured",
+    })
     return
   }
   try {
