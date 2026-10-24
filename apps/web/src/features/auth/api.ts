@@ -1,42 +1,48 @@
-export type Account = {
-  id: string
-  email: string
-  fullName: string | null
-  contactNumber: string | null
-  role: "SUPERADMIN" | "ADMIN" | "STAFF" | "USER"
-  createdAt: string
-}
+import { apiUrl } from "../../lib/api-url.ts"
+import type { Account, RegistrationData } from "./types"
 
 type AuthResult = { token: string; user: Account; expiresIn: number }
 
 const tokenKey = "nexus.auth.token"
-const apiBaseUrl = import.meta.env.VITE_API_URL?.replace(/\/$/, "") ?? ""
 
 export class ApiError extends Error {
-  constructor(
-    message: string,
-    public status: number,
-  ) {
+  readonly status: number
+
+  constructor(message: string, status: number) {
     super(message)
+    this.status = status
   }
 }
 
 export function getToken(): string | null {
-  return sessionStorage.getItem(tokenKey)
+  try {
+    return sessionStorage.getItem(tokenKey)
+  } catch {
+    return null
+  }
 }
 
 export function clearToken() {
-  sessionStorage.removeItem(tokenKey)
+  try {
+    sessionStorage.removeItem(tokenKey)
+  } catch {
+    // A blocked storage API cannot hold a session to clear.
+  }
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  const headers = new Headers(options.headers)
+  if (options.body && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json")
+  }
+  const token = getToken()
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`)
+  }
+
+  const response = await fetch(apiUrl(path), {
     ...options,
-    headers: {
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
-      ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
-      ...options.headers,
-    },
+    headers,
   })
 
   if (!response.ok) {
@@ -66,12 +72,7 @@ export async function signIn(
   return result.user
 }
 
-export async function register(data: {
-  fullName: string
-  contactNumber: string
-  email: string
-  password: string
-}): Promise<Account> {
+export async function register(data: RegistrationData): Promise<Account> {
   const result = await request<AuthResult>("/api/auth/register", {
     method: "POST",
     body: JSON.stringify(data),

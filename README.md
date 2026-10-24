@@ -39,6 +39,10 @@ The `ExampleItem` model in `apps/api/prisma/schema.prisma` is a placeholder for 
 
 The account pages are at `/login` and `/register`. They use the project's shadcn/ui Button, Input, and Label components and submit to the API. Field validation appears beside inputs, while Sileo shows sign-in and account outcome toasts. Successful sign-in plays the GSAP EXP loader before opening `/dashboard`; the success toast appears after the loader exits. Registration opens the dashboard directly. The registration form saves the full name and contact number, so apply the newest migration before using it. The three community photos in `apps/web/public/auth` are temporary local assets. Social icons on the form are visual placeholders; only email and password sign-in is available.
 
+Frontend code is organized by feature under `apps/web/src/features`. Auth owns its API calls, form schema, types, localized copy, hook, layout, and components. Dashboard owns account loading and display; status owns the starter health checks. Shared shadcn/ui primitives live in `components/ui`, and cross-feature utilities in `lib`. `App.tsx` defines the routes. Run `pnpm --filter @nexus/web test` for auth API and validation checks.
+
+The API follows the same feature layout under `apps/api/src/features`: auth owns credentials, sessions, and login limits; users owns account administration and role rules; health owns service checks. `app.ts` mounts the routes and handles HTTP errors, `index.ts` starts the server, and `lib/db.ts` provides Prisma access. `seed.ts` remains the Prisma seed entry point. Run `pnpm --filter @nexus/api test` for backend checks.
+
 ## Backend authentication
 
 The API stores users and sessions in PostgreSQL. Apply the migrations above before using these endpoints. Passwords require at least 12 characters. Registration always creates a `USER`; a client-supplied role is ignored. Roles are `SUPERADMIN`, `ADMIN`, `STAFF`, and `USER` in API requests and responses.
@@ -94,17 +98,18 @@ Deploy `apps/web/dist` to a static host. Set `VITE_API_URL` when building the we
 
 ## Commands
 
-| Command                            | Purpose                      |
-| ---------------------------------- | ---------------------------- |
-| `pnpm dev`                         | Run both apps                |
-| `pnpm build`                       | Build both apps              |
-| `pnpm typecheck`                   | Typecheck both apps          |
-| `pnpm --filter @nexus/api test`    | Test password and role rules |
-| `pnpm --filter @nexus/api db:seed` | Seed the first Superadmin    |
-| `pnpm start:api`                   | Start the built API          |
-| `pnpm preview:web`                 | Preview the built web app    |
-| `pnpm db:generate`                 | Generate Prisma Client       |
-| `pnpm db:migrate --name <name>`    | Create and apply a migration |
-| `pnpm db:studio`                   | Open Prisma Studio           |
+| Command                            | Purpose                               |
+| ---------------------------------- | ------------------------------------- |
+| `pnpm dev`                         | Run both apps                         |
+| `pnpm build`                       | Build both apps                       |
+| `pnpm typecheck`                   | Typecheck both apps                   |
+| `pnpm --filter @nexus/web test`    | Test frontend auth behavior           |
+| `pnpm --filter @nexus/api test`    | Test API routes, passwords, and roles |
+| `pnpm --filter @nexus/api db:seed` | Seed the first Superadmin             |
+| `pnpm start:api`                   | Start the built API                   |
+| `pnpm preview:web`                 | Preview the built web app             |
+| `pnpm db:generate`                 | Generate Prisma Client                |
+| `pnpm db:migrate --name <name>`    | Create and apply a migration          |
+| `pnpm db:studio`                   | Open Prisma Studio                    |
 
 Add shadcn/ui components from `apps/web` with `pnpm dlx shadcn@latest add <component>`. The web app already includes a Button and `components.json`.

@@ -1,4 +1,4 @@
-export type AuthLanguage = "en" | "fil"
+import type { AuthLanguage } from "./types"
 const languageStorageKey = "exp-auth-language"
 
 export function getStoredAuthLanguage(): AuthLanguage {

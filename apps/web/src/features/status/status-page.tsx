@@ -1,21 +1,19 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
+import { checkEndpoint, type StatusEndpoint } from "./api"
 
 type CheckResult = "idle" | "checking" | "connected" | "unavailable"
-const apiBaseUrl = import.meta.env.VITE_API_URL?.replace(/\/$/, "") ?? ""
 
-export function HomePage() {
+export function StatusPage() {
   const [api, setApi] = useState<CheckResult>("idle")
   const [database, setDatabase] = useState<CheckResult>("idle")
 
-  async function check(path: string, update: (result: CheckResult) => void) {
+  async function check(
+    path: StatusEndpoint,
+    update: (result: CheckResult) => void,
+  ) {
     update("checking")
-    try {
-      const response = await fetch(`${apiBaseUrl}${path}`)
-      update(response.ok ? "connected" : "unavailable")
-    } catch {
-      update("unavailable")
-    }
+    update((await checkEndpoint(path)) ? "connected" : "unavailable")
   }
 
   return (
