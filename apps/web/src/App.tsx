@@ -58,22 +58,12 @@ export default function App() {
         />
         <Route
           path="/login"
-          element={
-            <AuthPage
-              key="login"
-              mode="login"
-              onLoggedIn={beginLoginTransition}
-            />
-          }
+          element={<AuthPage mode="login" onLoggedIn={beginLoginTransition} />}
         />
         <Route
           path="/register"
           element={
-            <AuthPage
-              key="register"
-              mode="register"
-              onLoggedIn={beginLoginTransition}
-            />
+            <AuthPage mode="register" onLoggedIn={beginLoginTransition} />
           }
         />
         <Route
