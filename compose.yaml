@@ -2,11 +2,18 @@ services:
   api:
     build:
       context: .
-      target: api
+      target: api-dev
     environment:
       PORT: "3001"
       DATABASE_URL: ${DATABASE_URL:-}
-      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8080}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:5173}
+      CHOKIDAR_USEPOLLING: "true"
+    volumes:
+      - ./apps/api/src:/workspace/apps/api/src
+      - ./apps/api/prisma:/workspace/apps/api/prisma
+      - ./apps/api/prisma.config.ts:/workspace/apps/api/prisma.config.ts:ro
+    ports:
+      - "${API_PORT:-3001}:3001"
     healthcheck:
       test:
         [
@@ -18,16 +25,22 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
-      start_period: 10s
-    restart: unless-stopped
+      start_period: 20s
 
   web:
     build:
       context: .
-      target: web
+      target: web-dev
+    environment:
+      API_PROXY_TARGET: http://api:3001
+      FILE_WATCH_POLLING: "true"
+    volumes:
+      - ./apps/web/src:/workspace/apps/web/src
+      - ./apps/web/public:/workspace/apps/web/public
+      - ./apps/web/index.html:/workspace/apps/web/index.html:ro
+      - ./apps/web/vite.config.ts:/workspace/apps/web/vite.config.ts:ro
     depends_on:
       api:
         condition: service_healthy
     ports:
-      - "${WEB_PORT:-8080}:80"
-    restart: unless-stopped
+      - "${WEB_PORT:-5173}:5173"
