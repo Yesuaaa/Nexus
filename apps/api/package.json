@@ -5,10 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "prisma generate && tsx watch src/index.ts",
-    "build": "prisma generate && tsc",
-    "typecheck": "prisma generate && tsc --noEmit",
+    "build": "prisma generate && node node_modules/typescript/lib/tsc.js",
+    "typecheck": "prisma generate && node node_modules/typescript/lib/tsc.js --noEmit",
+    "test": "prisma generate && node node_modules/typescript/lib/tsc.js && node --test dist/auth.test.js",
     "start": "node dist/index.js",
     "db:generate": "prisma generate",
+    "db:seed": "prisma generate && node node_modules/typescript/lib/tsc.js && prisma db seed",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio"
   },
