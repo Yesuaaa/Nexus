@@ -64,3 +64,24 @@ body {
 [data-sileo-toast] [data-sileo-svg] {
   filter: drop-shadow(0 8px 20px rgb(23 39 53 / 14%));
 }
+
+/* Move the title to the top */
+[data-sileo-viewport][data-position="bottom-right"]
+  [data-sileo-header][data-edge="top"] {
+  top: 0;
+  bottom: auto;
+}
+
+/* Move the description below the title */
+[data-sileo-viewport][data-position="bottom-right"]
+  [data-sileo-content][data-edge="top"] {
+  top: var(--sileo-height);
+}
+
+/* Align the animated background with the new layout */
+[data-sileo-viewport][data-position="bottom-right"]
+  [data-sileo-canvas][data-edge="top"] {
+  top: 0;
+  bottom: auto;
+  transform: translateZ(0);
+}
