@@ -217,7 +217,9 @@ function PhotoPanel({ mode, copy }: { mode: Mode; copy: AuthCopy }) {
             <h1>
               {copy.loginHeroLine1}
               <br />
-              {copy.loginHeroLine2}
+              <span>{copy.loginHeroLine2}</span>
+              <br />
+              {copy.loginHeroLine3}
             </h1>
             <p>{copy.loginHeroDescription}</p>
           </>
@@ -508,7 +510,10 @@ export function AuthPage({
   }
 
   return (
-    <main className="auth-page" lang={language === "fil" ? "fil" : "en"}>
+    <main
+      className={`auth-page${mode === "login" ? " auth-page--login" : ""}`}
+      lang={language === "fil" ? "fil" : "en"}
+    >
       <PhotoPanel mode={mode} copy={copy} />
       <section className="auth-right">
         <header className="auth-header">
@@ -682,8 +687,9 @@ export function AuthPage({
             </form>
 
             <div className="auth-divider">
-              <span>{copy.orContinueWith}</span>
+              <span>{copy.or}</span>
             </div>
+            <p className="auth-social-label">{copy.continueWith}</p>
             <SocialPlaceholders copy={copy} />
           </div>
         </div>
