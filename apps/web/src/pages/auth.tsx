@@ -18,7 +18,22 @@ import {
   type AuthCopy,
   type AuthLanguage,
 } from "./auth-copy"
-import "./auth.css"
+
+const focusOutline =
+  "focus-visible:outline-[3px] focus-visible:outline-offset-[3px] focus-visible:outline-[#27c5db]"
+const fieldClass = "grid min-w-0 gap-[9px]"
+const labelClass = "text-[13px] font-bold uppercase text-[#121a2b]"
+const inputClass =
+  "h-[47px] w-full rounded-xl border border-[#cdd8e8] bg-white px-4 py-0 text-sm text-[#182a4c] shadow-none outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-[#788aad] placeholder:opacity-100 focus:border-[#54b9d8] focus:shadow-[0_0_0_3px_rgb(48_187_216_/_14%)] focus-visible:ring-0 aria-[invalid=true]:border-[#cf5265] aria-[invalid=true]:focus:shadow-[0_0_0_3px_rgb(207_82_101_/_15%)]"
+const navLinkClass =
+  "inline-flex h-9 min-w-[82px] items-center justify-center rounded-full border-2 text-sm font-semibold no-underline transition-[color,border-color] duration-150 hover:text-[#213f8c] max-[420px]:min-w-[73px] max-[420px]:text-[13px] motion-reduce:transition-none " +
+  focusOutline
+const selectedNavClass = "border-[#dce1eb] text-[#203e88]"
+const idleNavClass = "border-transparent text-[#526893]"
+const heroTitleClass =
+  "text-[clamp(42px,3.55vw,68px)] leading-[0.98] font-[750] tracking-[-0.045em]"
+const socialIconClass =
+  "grid size-12 select-none place-items-center rounded-[11px] border-2 border-[#dfe4ef] bg-white text-2xl font-bold leading-none"
 
 type Mode = "login" | "register"
 type Field =
@@ -90,7 +105,11 @@ function requestErrorMessage(
 
 function FieldError({ id, message }: { id: string; message?: string }) {
   return message ? (
-    <p id={`${id}-error`} className="auth-field-error" role="alert">
+    <p
+      id={`${id}-error`}
+      className="-mt-0.5 text-xs leading-[1.4] text-[#a92d43]"
+      role="alert"
+    >
       {message}
     </p>
   ) : null
@@ -103,7 +122,13 @@ const photos = [
 ]
 
 function Brand() {
-  return <img className="auth-brand" src="/auth/exp-logo.svg" alt="EXP" />
+  return (
+    <img
+      className="mx-auto mb-0.5 block h-[69px] w-[134px] object-contain"
+      src="/auth/exp-logo.svg"
+      alt="EXP"
+    />
+  )
 }
 
 function EyeIcon({ visible }: { visible: boolean }) {
@@ -148,17 +173,26 @@ function PasswordField({
 }) {
   const [visible, setVisible] = useState(false)
   return (
-    <div className="auth-field">
-      <div className="auth-field-heading">
-        <Label htmlFor={id}>{label}</Label>
+    <div className={fieldClass}>
+      <div className="flex items-baseline justify-between gap-3">
+        <Label
+          className={`${labelClass} ${id === "password" ? "font-normal" : ""}`}
+          htmlFor={id}
+        >
+          {label}
+        </Label>
         {recoveryLink && (
-          <Link className="auth-recovery-link" to="/forgot-password">
+          <Link
+            className="text-[13px] font-semibold text-[#1452ad] no-underline hover:underline"
+            to="/forgot-password"
+          >
             {copy.forgotPassword}
           </Link>
         )}
       </div>
-      <div className="auth-password-wrap">
+      <div className="relative">
         <Input
+          className={`${inputClass} pr-12`}
           id={id}
           type={visible ? "text" : "password"}
           value={value}
@@ -172,7 +206,7 @@ function PasswordField({
           required
         />
         <Button
-          className="auth-eye-button h-[47px] w-11 border-0 bg-transparent p-0 text-[#8b9fc0] shadow-none hover:bg-transparent hover:text-[#8b9fc0]"
+          className={`absolute top-0 right-0 grid h-[47px] w-11 place-items-center border-0 bg-transparent p-0 text-[#8b9fc0] shadow-none hover:bg-transparent hover:text-[#8b9fc0] [&_svg]:size-[19px] ${focusOutline}`}
           variant="outline"
           type="button"
           onClick={() => setVisible((current) => !current)}
@@ -187,8 +221,20 @@ function PasswordField({
   )
 }
 
-function PhotoPanel({ mode, copy }: { mode: Mode; copy: AuthCopy }) {
+function PhotoPanel({
+  mode,
+  copy,
+  language,
+}: {
+  mode: Mode
+  copy: AuthCopy
+  language: AuthLanguage
+}) {
   const [active, setActive] = useState(0)
+  const responsiveHeroTitleClass =
+    language === "fil"
+      ? "max-[1100px]:text-[clamp(32px,3.6vw,46px)]"
+      : "max-[1100px]:text-[clamp(39px,4.3vw,56px)]"
 
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
@@ -200,48 +246,62 @@ function PhotoPanel({ mode, copy }: { mode: Mode; copy: AuthCopy }) {
   }, [])
 
   return (
-    <aside className="auth-visual" aria-label={copy.community}>
+    <aside
+      className="relative min-h-svh overflow-hidden rounded-r-[26px] bg-[#173456] max-[850px]:hidden"
+      aria-label={copy.community}
+    >
       {photos.map((src, index) => (
         <img
           key={src}
-          className={`auth-photo ${index === active ? "is-active" : ""}`}
+          className={`absolute inset-0 size-full object-cover object-center transition-opacity duration-1000 ease-in-out motion-reduce:transition-none ${index === active ? "opacity-100" : "opacity-0"}`}
           src={src}
           alt=""
           aria-hidden="true"
         />
       ))}
-      <div className="auth-visual-shade" />
-      <div className="auth-visual-copy">
+      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgb(10_30_52_/_77%)_0%,rgb(13_39_67_/_49%)_60%,rgb(12_45_77_/_38%)_100%),linear-gradient(0deg,rgb(5_31_56_/_48%),transparent_55%)]" />
+      <div className="absolute z-1 top-[37%] left-[clamp(42px,6.2%,90px)] w-[min(83%,650px)] text-white">
         {mode === "login" ? (
           <>
-            <h1>
+            <h1 className={`${heroTitleClass} ${responsiveHeroTitleClass}`}>
               {copy.loginHeroLine1}
               <br />
-              <span>{copy.loginHeroLine2}</span>
+              <span className="bg-linear-to-r from-[#0989e5] to-[#23cae0] bg-clip-text text-transparent">
+                {copy.loginHeroLine2}
+              </span>
               <br />
               {copy.loginHeroLine3}
             </h1>
-            <p>{copy.loginHeroDescription}</p>
+            <p className="mt-[22px] max-w-[560px] text-[clamp(16px,1.04vw,20px)] leading-[1.32]">
+              {copy.loginHeroDescription}
+            </p>
           </>
         ) : (
           <>
-            <h1>
+            <h1 className={`${heroTitleClass} ${responsiveHeroTitleClass}`}>
               {copy.registerHeroLine1}
               <br />
-              <span>{copy.registerHeroLine2}</span>
+              <span className="bg-linear-to-r from-[#0989e5] to-[#23cae0] bg-clip-text text-transparent">
+                {copy.registerHeroLine2}
+              </span>
               <br />
               {copy.registerHeroLine3}
             </h1>
-            <p>{copy.registerHeroDescription}</p>
+            <p className="mt-[22px] max-w-[560px] text-[clamp(16px,1.04vw,20px)] leading-[1.32]">
+              {copy.registerHeroDescription}
+            </p>
           </>
         )}
       </div>
-      <div className="auth-dots" aria-label={copy.choosePhoto}>
+      <div
+        className="absolute right-8 bottom-5 z-2 flex items-center gap-2"
+        aria-label={copy.choosePhoto}
+      >
         {photos.map((_, index) => (
           <button
             key={index}
             type="button"
-            className={index === active ? "is-active" : ""}
+            className={`size-[7px] cursor-pointer rounded-full border-0 p-0 ${index === active ? "bg-[#2ed9e7] opacity-100" : "bg-white opacity-90"} ${focusOutline}`}
             onClick={() => setActive(index)}
             aria-label={`${copy.showPhoto} ${index + 1}`}
             aria-current={index === active ? "true" : undefined}
@@ -254,13 +314,16 @@ function PhotoPanel({ mode, copy }: { mode: Mode; copy: AuthCopy }) {
 
 function SocialPlaceholders({ copy }: { copy: AuthCopy }) {
   return (
-    <div className="auth-social" aria-label={copy.socialComingSoon}>
+    <div
+      className="flex justify-center gap-4"
+      aria-label={copy.socialComingSoon}
+    >
       <span
-        className="auth-social-google"
+        className={socialIconClass}
         title={copy.googleComingSoon}
         aria-hidden="true"
       >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
+        <svg className="size-6" viewBox="0 0 24 24" aria-hidden="true">
           <path
             fill="#4285F4"
             d="M21.35 12.21c0-.71-.06-1.42-.19-2.1H12v3.98h5.24a4.48 4.48 0 0 1-1.95 2.94v2.54h3.16c1.85-1.71 2.9-4.23 2.9-7.36Z"
@@ -280,18 +343,18 @@ function SocialPlaceholders({ copy }: { copy: AuthCopy }) {
         </svg>
       </span>
       <span
-        className="auth-social-facebook"
+        className={`${socialIconClass} text-[#3264d8]`}
         title={copy.facebookComingSoon}
         aria-hidden="true"
       >
         f
       </span>
       <span
-        className="auth-social-apple"
+        className={`${socialIconClass} text-[#111]`}
         title={copy.appleComingSoon}
         aria-hidden="true"
       >
-        <svg viewBox="0 0 24 24" fill="currentColor">
+        <svg className="size-[21px]" viewBox="0 0 24 24" fill="currentColor">
           <path d="M17.7 12.9c0-2 1.6-2.9 1.7-3-1-1.5-2.6-1.7-3.1-1.7-1.3-.1-2.5.8-3.2.8s-1.6-.8-2.6-.8c-1.4 0-2.7.8-3.4 2.1-1.4 2.5-.4 6.2 1 8.2.7 1 1.5 2.1 2.6 2.1 1 0 1.4-.7 2.7-.7 1.2 0 1.6.7 2.7.7s1.7-1 2.4-2c.8-1.1 1.1-2.2 1.1-2.2-.1 0-1.9-.7-1.9-2.5ZM15.4 6.8c.6-.7 1-1.6.9-2.6-.9 0-1.9.6-2.5 1.3-.5.6-1 1.5-.9 2.5 1 .1 1.9-.5 2.5-1.2Z" />
         </svg>
       </span>
@@ -352,10 +415,13 @@ function LanguagePicker({
   }
 
   return (
-    <div className="auth-language" ref={rootRef}>
+    <div
+      className="relative z-5 mr-1 text-[#26395e] max-[420px]:text-xs"
+      ref={rootRef}
+    >
       <button
         ref={triggerRef}
-        className="auth-language-trigger"
+        className={`group inline-flex min-h-11 items-center gap-2 rounded-lg border-0 bg-transparent px-2 font-[inherit] text-inherit cursor-pointer hover:bg-[#f1f4fa] aria-expanded:bg-[#f1f4fa] ${focusOutline}`}
         type="button"
         aria-label={`${copy.language}: ${language === "en" ? "English" : "Filipino"}`}
         aria-haspopup="menu"
@@ -369,13 +435,17 @@ function LanguagePicker({
         }}
       >
         <span>{language === "en" ? "English" : "Filipino"}</span>
-        <svg viewBox="0 0 16 16" aria-hidden="true">
+        <svg
+          className="size-3.5 fill-none stroke-current stroke-[1.8] [stroke-linecap:round] [stroke-linejoin:round] transition-transform duration-150 group-aria-expanded:rotate-180"
+          viewBox="0 0 16 16"
+          aria-hidden="true"
+        >
           <path d="m3 6 5 5 5-5" />
         </svg>
       </button>
       {open && (
         <div
-          className="auth-language-menu"
+          className="absolute top-[calc(100%+6px)] left-0 w-40 rounded-xl border border-[#d7dfed] bg-white p-[5px] shadow-[0_12px_32px_rgb(20_45_97_/_13%)]"
           role="menu"
           aria-label={copy.language}
           onKeyDown={handleMenuKeyDown}
@@ -385,6 +455,7 @@ function LanguagePicker({
         >
           <button
             ref={englishRef}
+            className={`flex min-h-11 w-full items-center justify-between rounded-lg border-0 bg-transparent px-[11px] text-left font-[inherit] text-[#26395e] cursor-pointer hover:bg-[#eef1f8] focus-visible:bg-[#eef1f8] aria-checked:font-semibold aria-checked:text-[#153e92] ${focusOutline}`}
             type="button"
             role="menuitemradio"
             aria-checked={language === "en"}
@@ -395,6 +466,7 @@ function LanguagePicker({
           </button>
           <button
             ref={filipinoRef}
+            className={`flex min-h-11 w-full items-center justify-between rounded-lg border-0 bg-transparent px-[11px] text-left font-[inherit] text-[#26395e] cursor-pointer hover:bg-[#eef1f8] focus-visible:bg-[#eef1f8] aria-checked:font-semibold aria-checked:text-[#153e92] ${focusOutline}`}
             type="button"
             role="menuitemradio"
             aria-checked={language === "fil"}
@@ -511,51 +583,66 @@ export function AuthPage({
 
   return (
     <main
-      className={`auth-page${mode === "login" ? " auth-page--login" : ""}`}
+      className="grid min-h-svh grid-cols-[minmax(0,60%)_minmax(420px,40%)] bg-white text-[#121b28] max-[1100px]:grid-cols-[minmax(0,55%)_minmax(400px,45%)] max-[850px]:block"
       lang={language === "fil" ? "fil" : "en"}
     >
-      <PhotoPanel mode={mode} copy={copy} />
-      <section className="auth-right">
-        <header className="auth-header">
+      <PhotoPanel mode={mode} copy={copy} language={language} />
+      <section className="flex min-h-svh min-w-0 flex-col">
+        <header className="flex h-[73px] items-center justify-center gap-[26px] px-6 text-[13px] max-[420px]:justify-end max-[420px]:gap-2.5 max-[420px]:px-[17px]">
           <LanguagePicker
             language={language}
             copy={copy}
             onChange={changeLanguage}
           />
-          <nav className="auth-nav" aria-label={copy.accountNavigation}>
-            {mode === "login" ? (
-              <Link to="/register" className="auth-account-link">
-                {copy.createAccountLink}
-              </Link>
-            ) : (
-              <Link to="/login" className="auth-account-link">
-                {copy.signInLink}
-              </Link>
-            )}
+          <nav
+            className="flex items-center gap-0.5"
+            aria-label={copy.accountNavigation}
+          >
+            <Link
+              to="/login"
+              className={`${navLinkClass} ${mode === "login" ? selectedNavClass : idleNavClass}`}
+              aria-current={mode === "login" ? "page" : undefined}
+            >
+              {copy.signInLink}
+            </Link>
+            <Link
+              to="/register"
+              className={`${navLinkClass} ${mode === "register" ? selectedNavClass : idleNavClass}`}
+              aria-current={mode === "register" ? "page" : undefined}
+            >
+              {copy.createAccountLink}
+            </Link>
           </nav>
         </header>
 
-        <div className="auth-content">
-          <div className="auth-card">
-            <div className="auth-intro">
+        <div
+          className={`flex flex-1 items-center justify-center px-8 pt-[26px] pb-[52px] max-[850px]:px-6 max-[850px]:pt-[30px] max-[850px]:pb-[58px] ${mode === "login" ? "min-[851px]:pt-12 min-[851px]:pb-[30px]" : ""}`}
+        >
+          <div className="w-[min(100%,384px)] min-w-0">
+            <div className="text-center">
               <Brand />
-              <h2>{mode === "login" ? copy.loginTitle : copy.registerTitle}</h2>
-              <p>
+              <h2 className="inline-block bg-[linear-gradient(90deg,#172735_0%,#246ea0_55%,#1cc5d0_100%)] bg-clip-text text-[25px] leading-[1.25] font-bold tracking-[-0.03em] text-transparent">
+                {mode === "login" ? copy.loginTitle : copy.registerTitle}
+              </h2>
+              <p className="mt-[7px] text-sm leading-[1.4] text-[#5b709e]">
                 {mode === "login" ? copy.loginSubtitle : copy.registerSubtitle}
               </p>
             </div>
 
             <form
               ref={formRef}
-              className="auth-form"
+              className="mt-7 grid gap-5"
               noValidate
               onSubmit={(event) => void handleSubmit(event)}
             >
               {mode === "register" && (
                 <>
-                  <div className="auth-field">
-                    <Label htmlFor="full-name">{copy.fullName}</Label>
+                  <div className={fieldClass}>
+                    <Label className={labelClass} htmlFor="full-name">
+                      {copy.fullName}
+                    </Label>
                     <Input
+                      className={inputClass}
                       id="full-name"
                       type="text"
                       value={fullName}
@@ -578,9 +665,12 @@ export function AuthPage({
                       message={visibleError("fullName")}
                     />
                   </div>
-                  <div className="auth-field">
-                    <Label htmlFor="contact-number">{copy.contactNumber}</Label>
+                  <div className={fieldClass}>
+                    <Label className={labelClass} htmlFor="contact-number">
+                      {copy.contactNumber}
+                    </Label>
                     <Input
+                      className={inputClass}
                       id="contact-number"
                       type="tel"
                       value={contactNumber}
@@ -605,9 +695,12 @@ export function AuthPage({
                   </div>
                 </>
               )}
-              <div className="auth-field">
-                <Label htmlFor="email">{copy.emailAddress}</Label>
+              <div className={fieldClass}>
+                <Label className={`${labelClass} font-normal`} htmlFor="email">
+                  {copy.emailAddress}
+                </Label>
                 <Input
+                  className={inputClass}
                   id="email"
                   type="email"
                   value={email}
@@ -616,7 +709,7 @@ export function AuthPage({
                   }
                   onBlur={() => markTouched("email")}
                   autoComplete="email"
-                  placeholder="you@example.com"
+                  placeholder="user@email.com"
                   required
                   aria-invalid={Boolean(visibleError("email"))}
                   aria-describedby={
@@ -638,7 +731,9 @@ export function AuthPage({
                   copy={copy}
                 />
               ) : (
-                <div className="auth-password-pair">
+                <div
+                  className={`grid gap-4 max-[420px]:grid-cols-1 max-[420px]:gap-5 [&_label]:whitespace-nowrap ${language === "fil" ? "grid-cols-1" : "grid-cols-2"}`}
+                >
                   <PasswordField
                     id="password"
                     label={copy.password}
@@ -664,15 +759,20 @@ export function AuthPage({
                 </div>
               )}
               {mode === "register" && (
-                <p className="auth-password-hint">{copy.passwordHint}</p>
+                <p className="-mt-[11px] -mb-[6px] text-xs text-[#6b7e9f]">
+                  {copy.passwordHint}
+                </p>
               )}
               {formError && (
-                <p className="auth-error" role="alert">
+                <p
+                  className="-my-[3px] rounded-lg bg-[#fff0f0] px-3 py-2.5 text-[13px] leading-[1.4] text-[#a1293d]"
+                  role="alert"
+                >
                   {formError}
                 </p>
               )}
               <Button
-                className="auth-submit h-[46px] w-full rounded-[6px] bg-[#253f8c] text-sm font-bold text-white hover:bg-[#1a3276]"
+                className={`grid h-[46px] w-full place-items-center rounded-md border-0 bg-[#253f8c] text-sm font-bold text-white transition-[background,transform] duration-150 hover:bg-[#1a3276] hover:enabled:-translate-y-px disabled:cursor-wait disabled:opacity-70 motion-reduce:transition-none ${focusOutline}`}
                 type="submit"
                 disabled={pending}
               >
@@ -686,15 +786,17 @@ export function AuthPage({
               </Button>
             </form>
 
-            <div className="auth-divider">
+            <div className="mt-[23px] mb-[13px] flex items-center gap-4 text-xs text-[#7485a7] before:h-px before:flex-1 before:bg-[#dce4ee] before:content-[''] after:h-px after:flex-1 after:bg-[#dce4ee] after:content-['']">
               <span>{copy.or}</span>
             </div>
-            <p className="auth-social-label">{copy.continueWith}</p>
+            <p className="mb-3 text-center text-[13px] leading-[1.4] text-[#7485a7]">
+              {copy.continueWith}
+            </p>
             <SocialPlaceholders copy={copy} />
           </div>
         </div>
 
-        <footer className="auth-footer">
+        <footer className="flex min-h-14 items-center justify-center gap-4 px-5 py-3 text-xs text-[#52688d] whitespace-nowrap max-[420px]:flex-wrap max-[420px]:gap-x-3 max-[420px]:gap-y-[5px] max-[420px]:leading-[1.4]">
           <span>{copy.about}</span>
           <span>{copy.terms}</span>
           <span>{copy.privacy}</span>
