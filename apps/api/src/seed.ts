@@ -1,7 +1,8 @@
 import "dotenv/config"
 import { Role } from "./generated/prisma/client.js"
-import { getPrisma } from "./db.js"
-import { hashPassword, validPassword } from "./password.js"
+import { hashPassword, validPassword } from "./features/auth/password.js"
+import { normalizedEmail } from "./features/auth/validation.js"
+import { getPrisma } from "./lib/db.js"
 
 async function main() {
   const prisma = getPrisma()
@@ -17,14 +18,9 @@ async function main() {
       return
     }
 
-    const email = process.env.BOOTSTRAP_EMAIL?.trim().toLowerCase()
+    const email = normalizedEmail(process.env.BOOTSTRAP_EMAIL)
     const password = process.env.BOOTSTRAP_PASSWORD
-    if (
-      !email ||
-      email.length > 254 ||
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
-      !validPassword(password)
-    ) {
+    if (!email || !validPassword(password)) {
       throw new Error(
         "Set BOOTSTRAP_EMAIL and BOOTSTRAP_PASSWORD (at least 12 characters) to seed the first Superadmin",
       )

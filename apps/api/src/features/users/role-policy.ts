@@ -1,4 +1,4 @@
-import { Role } from "./generated/prisma/client.js"
+import { Role } from "../../generated/prisma/client.js"
 
 export function canAssignRole(actor: Role, current: Role, next: Role): boolean {
   if (actor === Role.SUPERADMIN) return true

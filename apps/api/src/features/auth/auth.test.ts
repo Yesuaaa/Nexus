@@ -1,8 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { Role } from "./generated/prisma/client.js"
 import { hashPassword, validPassword, verifyPassword } from "./password.js"
-import { canAssignRole } from "./role-policy.js"
+import { normalizedEmail } from "./validation.js"
 
 test("passwords are salted and verified", async () => {
   const first = await hashPassword("a long unique password")
@@ -15,17 +14,7 @@ test("passwords are salted and verified", async () => {
   assert.equal(validPassword("twelve chars"), true)
 })
 
-test("role changes follow the account hierarchy", () => {
-  for (const target of Object.values(Role)) {
-    for (const next of Object.values(Role)) {
-      assert.equal(canAssignRole(Role.SUPERADMIN, target, next), true)
-      assert.equal(
-        canAssignRole(Role.ADMIN, target, next),
-        (target === Role.STAFF || target === Role.USER) &&
-          (next === Role.STAFF || next === Role.USER),
-      )
-      assert.equal(canAssignRole(Role.STAFF, target, next), false)
-      assert.equal(canAssignRole(Role.USER, target, next), false)
-    }
-  }
+test("email normalization accepts the same input for signup and seed", () => {
+  assert.equal(normalizedEmail("  User@Example.com  "), "user@example.com")
+  assert.equal(normalizedEmail("invalid"), undefined)
 })

@@ -1,40 +1,22 @@
-import { useCallback, useState } from "react"
-import { Navigate, Route, Routes, useNavigate } from "react-router"
-import { sileo, Toaster } from "sileo"
-import { AuthRouteLoader } from "@/components/loader"
-import { getToken } from "@/lib/auth"
-import { AuthPage } from "@/pages/auth"
-import { DashboardPage } from "@/pages/dashboard"
-import { NotFoundPage } from "@/pages/not-found"
-import { getAuthCopy, getStoredAuthLanguage } from "@/pages/auth-copy"
+import { Navigate, Route, Routes } from "react-router"
+import { Toaster } from "sileo"
+import { getToken } from "@/features/auth/api"
+import { AuthRouteLoader } from "@/features/auth/components/loader"
+import { getAuthCopy, getStoredAuthLanguage } from "@/features/auth/copy"
+import { AuthPage } from "@/features/auth/auth-page"
+import { useLoginTransition } from "@/features/auth/use-login-transition"
+import { DashboardPage } from "@/features/dashboard/dashboard-page"
+import { NotFoundPage } from "@/pages/not-found-page"
 
 export default function App() {
-  const navigate = useNavigate()
-  const [showLoader, setShowLoader] = useState(false)
-  const [destinationReady, setDestinationReady] = useState(false)
-  const [loginSucceeded, setLoginSucceeded] = useState(false)
-
-  const beginLoginTransition = useCallback(() => {
-    setDestinationReady(false)
-    setLoginSucceeded(false)
-    setShowLoader(true)
-  }, [])
-
-  const markDestinationReady = useCallback((succeeded: boolean) => {
-    setLoginSucceeded(succeeded)
-    setDestinationReady(true)
-  }, [])
-
-  function finishLoginTransition() {
-    setShowLoader(false)
-    if (loginSucceeded) {
-      const copy = getAuthCopy(getStoredAuthLanguage())
-      sileo.success({
-        title: copy.welcomeBackToast,
-        description: copy.signedInToast,
-      })
-    }
-  }
+  const {
+    showLoader,
+    destinationReady,
+    beginLoginTransition,
+    markDestinationReady,
+    navigateToDashboard,
+    finishLoginTransition,
+  } = useLoginTransition()
 
   return (
     <>
@@ -75,7 +57,7 @@ export default function App() {
       {showLoader && (
         <AuthRouteLoader
           destinationReady={destinationReady}
-          onNavigate={() => navigate("/dashboard", { replace: true })}
+          onNavigate={navigateToDashboard}
           onExited={finishLoginTransition}
           ariaLabel={getAuthCopy(getStoredAuthLanguage()).openingAccount}
         />

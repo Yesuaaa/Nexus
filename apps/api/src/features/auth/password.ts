@@ -3,6 +3,7 @@ import {
   scrypt as scryptCallback,
   timingSafeEqual,
 } from "node:crypto"
+
 const keyLength = 64
 const cost = 16384
 const blockSize = 8
