@@ -1,0 +1,14 @@
+{
+  "name": "nexus-starter",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "start:api": "pnpm --filter @nexus/api start",
+    "preview:web": "pnpm --filter @nexus/web preview",
+    "db:generate": "pnpm --filter @nexus/api db:generate",
+    "db:migrate": "pnpm --filter @nexus/api db:migrate",
+    "db:studio": "pnpm --filter @nexus/api db:studio"
+  }
+}

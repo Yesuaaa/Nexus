@@ -1,0 +1,13 @@
+**/node_modules
+**/dist
+apps/api/src/generated
+**/.env
+**/.env.*
+**/.pnpm-store
+**/.localappdata
+**/*.tsbuildinfo
+**/*.log
+.git
+.agents
+.codex
+.aws

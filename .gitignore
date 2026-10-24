@@ -1,0 +1,15 @@
+**/node_modules/
+**/dist/
+**/coverage/
+**/.vite/
+.env
+.env.*
+!.env.example
+docker.env
+apps/api/src/generated/
+.pnpm-store/
+.localappdata/
+*.tsbuildinfo
+*.log
+.DS_Store
+Thumbs.db
