@@ -1,11 +1,40 @@
-import { useEffect, useRef, useState, type FormEvent } from "react"
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react"
 import { Link, useNavigate } from "react-router"
+import { MotionConfig, motion } from "framer-motion"
 import { sileo } from "sileo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ApiError, register, signIn } from "@/lib/auth"
-import "./auth.css"
+import {
+  getAuthCopy,
+  getStoredAuthLanguage,
+  storeAuthLanguage,
+  type AuthCopy,
+  type AuthLanguage,
+} from "./auth-copy"
+
+const focusOutline =
+  "focus-visible:outline-[3px] focus-visible:outline-offset-[3px] focus-visible:outline-[#27c5db]"
+const fieldClass = "grid min-w-0 gap-[9px]"
+const labelClass = "text-[13px] font-bold uppercase text-[#121a2b]"
+const inputClass =
+  "h-[47px] w-full rounded-xl border border-[#cdd8e8] bg-white px-4 py-0 text-sm text-[#182a4c] shadow-none outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-[#788aad] placeholder:opacity-100 focus:border-[#54b9d8] focus:shadow-[0_0_0_3px_rgb(48_187_216_/_14%)] focus-visible:ring-0 aria-[invalid=true]:border-[#cf5265] aria-[invalid=true]:focus:shadow-[0_0_0_3px_rgb(207_82_101_/_15%)]"
+const navLinkClass =
+  "group relative inline-flex h-8 min-w-[70px] items-center justify-center rounded-full px-2.5 text-[13px] font-semibold no-underline transition-colors duration-150 max-[420px]:min-w-[64px] max-[420px]:px-2 max-[420px]:text-xs motion-reduce:transition-none " +
+  focusOutline
+const selectedNavClass = "text-white"
+const idleNavClass = "text-[#526893] hover:bg-white/70 hover:text-[#213f8c]"
+const heroTitleClass =
+  "text-[clamp(42px,3.55vw,68px)] leading-[0.98] font-[750] tracking-[-0.045em]"
+const socialIconClass =
+  "grid size-12 select-none place-items-center rounded-[11px] border-2 border-[#dfe4ef] bg-white text-2xl font-bold leading-none"
 
 type Mode = "login" | "register"
 type Field =
@@ -20,63 +49,68 @@ const fieldIds: Record<Field, string> = {
   confirmPassword: "confirm-password",
 }
 
-function validateAuth(mode: Mode, values: Record<Field, string>): FieldErrors {
+function validateAuth(
+  mode: Mode,
+  values: Record<Field, string>,
+  copy: AuthCopy,
+): FieldErrors {
   const errors: FieldErrors = {}
   const email = values.email.trim()
 
   if (mode === "register") {
     const name = values.fullName.trim()
     const contact = values.contactNumber.trim()
-    if (!name) errors.fullName = "Enter your full name."
+    if (!name) errors.fullName = copy.nameRequired
     else if (name.length < 2 || name.length > 100)
-      errors.fullName = "Name must be 2 to 100 characters."
+      errors.fullName = copy.nameLength
 
-    if (!contact) errors.contactNumber = "Enter your contact number."
+    if (!contact) errors.contactNumber = copy.contactRequired
     else if (!/^\+?[0-9][0-9\s-]{6,19}$/.test(contact))
-      errors.contactNumber = "Enter a valid number, such as +63 912 345 6789."
+      errors.contactNumber = copy.contactInvalid
   }
 
-  if (!email) errors.email = "Enter your email address."
+  if (!email) errors.email = copy.emailRequired
   else if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-    errors.email = "Enter a valid email address, such as name@example.com."
+    errors.email = copy.emailInvalid
 
-  if (!values.password) errors.password = "Enter your password."
+  if (!values.password) errors.password = copy.passwordRequired
   else if (mode === "register" && values.password.length < 12)
-    errors.password = "Use at least 12 characters for your password."
+    errors.password = copy.passwordShort
   else if (new TextEncoder().encode(values.password).length > 1024)
-    errors.password = "Password is too long. Use fewer characters."
+    errors.password = copy.passwordLong
 
   if (mode === "register") {
-    if (!values.confirmPassword)
-      errors.confirmPassword = "Confirm your password."
+    if (!values.confirmPassword) errors.confirmPassword = copy.confirmRequired
     else if (values.confirmPassword !== values.password)
-      errors.confirmPassword =
-        "Passwords do not match. Enter the same password."
+      errors.confirmPassword = copy.passwordMismatch
   }
 
   return errors
 }
 
-function requestErrorMessage(error: unknown, mode: Mode): string {
+function requestErrorMessage(
+  error: unknown,
+  mode: Mode,
+  copy: AuthCopy,
+): string {
   if (error instanceof ApiError) {
-    if (mode === "login" && error.status === 401)
-      return "Email or password is incorrect. Please try again."
-    if (mode === "register" && error.status === 409)
-      return "This email is already registered. Sign in instead."
-    if (error.status === 429)
-      return "Too many sign-in attempts. Please wait 15 minutes and try again."
-    if (error.status >= 500)
-      return "The server is having trouble. Please try again shortly."
-    return error.message
+    if (mode === "login" && error.status === 401) return copy.badCredentials
+    if (mode === "register" && error.status === 409) return copy.emailRegistered
+    if (error.status === 429) return copy.rateLimited
+    if (error.status >= 500) return copy.serverError
+    return copy.unknownError
   }
-  if (error instanceof TypeError)
-    return "Can't reach the server. Check your connection and try again."
-  return "Something went wrong. Please try again."
+  if (error instanceof TypeError) return copy.networkError
+  return copy.unknownError
 }
 
 function FieldError({ id, message }: { id: string; message?: string }) {
   return message ? (
-    <p id={`${id}-error`} className="auth-field-error" role="alert">
+    <p
+      id={`${id}-error`}
+      className="-mt-0.5 text-xs leading-[1.4] text-[#a92d43]"
+      role="alert"
+    >
       {message}
     </p>
   ) : null
@@ -89,7 +123,13 @@ const photos = [
 ]
 
 function Brand() {
-  return <img className="auth-brand" src="/auth/exp-logo.svg" alt="EXP" />
+  return (
+    <img
+      className="mx-auto mb-0.5 block h-[69px] w-[134px] object-contain"
+      src="/auth/exp-logo.svg"
+      alt="EXP"
+    />
+  )
 }
 
 function EyeIcon({ visible }: { visible: boolean }) {
@@ -118,6 +158,8 @@ function PasswordField({
   autoComplete,
   minLength,
   error,
+  recoveryLink = false,
+  copy,
 }: {
   id: string
   label: string
@@ -127,13 +169,31 @@ function PasswordField({
   autoComplete: string
   minLength?: number
   error?: string
+  recoveryLink?: boolean
+  copy: AuthCopy
 }) {
   const [visible, setVisible] = useState(false)
   return (
-    <div className="auth-field">
-      <Label htmlFor={id}>{label}</Label>
-      <div className="auth-password-wrap">
+    <div className={fieldClass}>
+      <div className="flex items-baseline justify-between gap-3">
+        <Label
+          className={`${labelClass} ${id === "password" ? "font-normal" : ""}`}
+          htmlFor={id}
+        >
+          {label}
+        </Label>
+        {recoveryLink && (
+          <Link
+            className="text-[13px] font-semibold text-[#1452ad] no-underline hover:underline"
+            to="/forgot-password"
+          >
+            {copy.forgotPassword}
+          </Link>
+        )}
+      </div>
+      <div className="relative">
         <Input
+          className={`${inputClass} pr-12`}
           id={id}
           type={visible ? "text" : "password"}
           value={value}
@@ -147,11 +207,11 @@ function PasswordField({
           required
         />
         <Button
-          className="auth-eye-button h-[47px] w-11 border-0 bg-transparent p-0 text-[#8b9fc0] shadow-none hover:bg-transparent hover:text-[#8b9fc0]"
+          className={`absolute top-0 right-0 grid h-[47px] w-11 place-items-center border-0 bg-transparent p-0 text-[#8b9fc0] shadow-none hover:bg-transparent hover:text-[#8b9fc0] [&_svg]:size-[19px] ${focusOutline}`}
           variant="outline"
           type="button"
           onClick={() => setVisible((current) => !current)}
-          aria-label={`${visible ? "Hide" : "Show"} ${label.toLowerCase()}`}
+          aria-label={`${visible ? copy.hidePassword : copy.showPassword} ${label.toLowerCase()}`}
           aria-pressed={visible}
         >
           <EyeIcon visible={visible} />
@@ -162,8 +222,20 @@ function PasswordField({
   )
 }
 
-function PhotoPanel({ mode }: { mode: Mode }) {
+function PhotoPanel({
+  mode,
+  copy,
+  language,
+}: {
+  mode: Mode
+  copy: AuthCopy
+  language: AuthLanguage
+}) {
   const [active, setActive] = useState(0)
+  const responsiveHeroTitleClass =
+    language === "fil"
+      ? "max-[1100px]:text-[clamp(32px,3.6vw,46px)]"
+      : "max-[1100px]:text-[clamp(39px,4.3vw,56px)]"
 
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
@@ -175,56 +247,64 @@ function PhotoPanel({ mode }: { mode: Mode }) {
   }, [])
 
   return (
-    <aside className="auth-visual" aria-label="EXP community">
+    <aside
+      className="relative min-h-svh overflow-hidden rounded-r-[26px] bg-[#173456] max-[850px]:hidden"
+      aria-label={copy.community}
+    >
       {photos.map((src, index) => (
         <img
           key={src}
-          className={`auth-photo ${index === active ? "is-active" : ""}`}
+          className={`absolute inset-0 size-full object-cover object-center transition-opacity duration-1000 ease-in-out motion-reduce:transition-none ${index === active ? "opacity-100" : "opacity-0"}`}
           src={src}
           alt=""
           aria-hidden="true"
         />
       ))}
-      <div className="auth-visual-shade" />
-      <div className="auth-visual-copy">
+      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgb(10_30_52_/_77%)_0%,rgb(13_39_67_/_49%)_60%,rgb(12_45_77_/_38%)_100%),linear-gradient(0deg,rgb(5_31_56_/_48%),transparent_55%)]" />
+      <div className="absolute z-1 top-[37%] left-[clamp(42px,6.2%,90px)] w-[min(83%,650px)] text-white">
         {mode === "login" ? (
           <>
-            <h1>
-              Empower Your
+            <h1 className={`${heroTitleClass} ${responsiveHeroTitleClass}`}>
+              {copy.loginHeroLine1}
               <br />
-              <span>Digital Solutions</span>
+              <span className="bg-linear-to-r from-[#0989e5] to-[#23cae0] bg-clip-text text-transparent">
+                {copy.loginHeroLine2}
+              </span>
               <br />
-              Journey
+              {copy.loginHeroLine3}
             </h1>
-            <p>
-              Access powerful tools and insights to drive your campaigns
-              forward. Sign in to continue your EXP experience.
+            <p className="mt-[22px] max-w-[560px] text-[clamp(16px,1.04vw,20px)] leading-[1.32]">
+              {copy.loginHeroDescription}
             </p>
           </>
         ) : (
           <>
-            <h1>
-              Join the
+            <h1 className={`${heroTitleClass} ${responsiveHeroTitleClass}`}>
+              {copy.registerHeroLine1}
               <br />
-              <span>EXP Community</span>
+              <span className="bg-linear-to-r from-[#0989e5] to-[#23cae0] bg-clip-text text-transparent">
+                {copy.registerHeroLine2}
+              </span>
               <br />
-              Today
+              {copy.registerHeroLine3}
             </h1>
-            <p>
-              Create your account to start managing bookings and services with
-              EXP.
+            <p className="mt-[22px] max-w-[560px] text-[clamp(16px,1.04vw,20px)] leading-[1.32]">
+              {copy.registerHeroDescription}
             </p>
           </>
         )}
       </div>
-      <div className="auth-dots" aria-label="Choose photo">
+      <div
+        className="absolute right-8 bottom-5 z-2 flex items-center gap-2"
+        aria-label={copy.choosePhoto}
+      >
         {photos.map((_, index) => (
           <button
             key={index}
             type="button"
-            className={index === active ? "is-active" : ""}
+            className={`size-[7px] cursor-pointer rounded-full border-0 p-0 ${index === active ? "bg-[#2ed9e7] opacity-100" : "bg-white opacity-90"} ${focusOutline}`}
             onClick={() => setActive(index)}
-            aria-label={`Show photo ${index + 1}`}
+            aria-label={`${copy.showPhoto} ${index + 1}`}
             aria-current={index === active ? "true" : undefined}
           />
         ))}
@@ -233,32 +313,49 @@ function PhotoPanel({ mode }: { mode: Mode }) {
   )
 }
 
-function SocialPlaceholders() {
+function SocialPlaceholders({ copy }: { copy: AuthCopy }) {
   return (
     <div
-      className="auth-social"
-      aria-label="Social sign-in options coming soon"
+      className="flex justify-center gap-4"
+      aria-label={copy.socialComingSoon}
     >
       <span
-        className="auth-social-google"
-        title="Google sign-in coming soon"
+        className={socialIconClass}
+        title={copy.googleComingSoon}
         aria-hidden="true"
       >
-        G
+        <svg className="size-6" viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            fill="#4285F4"
+            d="M21.35 12.21c0-.71-.06-1.42-.19-2.1H12v3.98h5.24a4.48 4.48 0 0 1-1.95 2.94v2.54h3.16c1.85-1.71 2.9-4.23 2.9-7.36Z"
+          />
+          <path
+            fill="#34A853"
+            d="M12 21.5c2.64 0 4.86-.87 6.48-2.36l-3.16-2.54c-.88.59-2 .94-3.32.94-2.55 0-4.71-1.72-5.48-4.03H3.25v2.62A9.5 9.5 0 0 0 12 21.5Z"
+          />
+          <path
+            fill="#FBBC05"
+            d="M6.52 13.51a5.7 5.7 0 0 1 0-3.02V7.87H3.25a9.5 9.5 0 0 0 0 8.26l3.27-2.62Z"
+          />
+          <path
+            fill="#EA4335"
+            d="M12 6.46c1.44 0 2.73.5 3.75 1.47l2.81-2.81A9.13 9.13 0 0 0 12 2.5a9.5 9.5 0 0 0-8.75 5.37l3.27 2.62C7.29 8.18 9.45 6.46 12 6.46Z"
+          />
+        </svg>
       </span>
       <span
-        className="auth-social-facebook"
-        title="Facebook sign-in coming soon"
+        className={`${socialIconClass} text-[#3264d8]`}
+        title={copy.facebookComingSoon}
         aria-hidden="true"
       >
         f
       </span>
       <span
-        className="auth-social-apple"
-        title="Apple sign-in coming soon"
+        className={`${socialIconClass} text-[#111]`}
+        title={copy.appleComingSoon}
         aria-hidden="true"
       >
-        <svg viewBox="0 0 24 24" fill="currentColor">
+        <svg className="size-[21px]" viewBox="0 0 24 24" fill="currentColor">
           <path d="M17.7 12.9c0-2 1.6-2.9 1.7-3-1-1.5-2.6-1.7-3.1-1.7-1.3-.1-2.5.8-3.2.8s-1.6-.8-2.6-.8c-1.4 0-2.7.8-3.4 2.1-1.4 2.5-.4 6.2 1 8.2.7 1 1.5 2.1 2.6 2.1 1 0 1.4-.7 2.7-.7 1.2 0 1.6.7 2.7.7s1.7-1 2.4-2c.8-1.1 1.1-2.2 1.1-2.2-.1 0-1.9-.7-1.9-2.5ZM15.4 6.8c.6-.7 1-1.6.9-2.6-.9 0-1.9.6-2.5 1.3-.5.6-1 1.5-.9 2.5 1 .1 1.9-.5 2.5-1.2Z" />
         </svg>
       </span>
@@ -266,11 +363,134 @@ function SocialPlaceholders() {
   )
 }
 
-export function AuthPage({
+function LanguagePicker({
+  language,
+  copy,
+  onChange,
+}: {
+  language: AuthLanguage
+  copy: AuthCopy
+  onChange: (language: AuthLanguage) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const englishRef = useRef<HTMLButtonElement>(null)
+  const filipinoRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const selected = language === "en" ? englishRef : filipinoRef
+    selected.current?.focus()
+    function closeOnOutsideClick(event: PointerEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    document.addEventListener("pointerdown", closeOnOutsideClick)
+    return () =>
+      document.removeEventListener("pointerdown", closeOnOutsideClick)
+  }, [open, language])
+
+  function choose(next: AuthLanguage) {
+    onChange(next)
+    setOpen(false)
+    triggerRef.current?.focus()
+  }
+
+  function handleMenuKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Escape") {
+      setOpen(false)
+      triggerRef.current?.focus()
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault()
+      const current =
+        document.activeElement === englishRef.current ? "en" : "fil"
+      const next = current === "en" ? filipinoRef : englishRef
+      next.current?.focus()
+    } else if (event.key === "Home") {
+      event.preventDefault()
+      englishRef.current?.focus()
+    } else if (event.key === "End") {
+      event.preventDefault()
+      filipinoRef.current?.focus()
+    }
+  }
+
+  return (
+    <div
+      className="relative z-5 text-[#26395e] max-[420px]:text-xs"
+      ref={rootRef}
+    >
+      <button
+        ref={triggerRef}
+        className={`group inline-flex min-h-11 items-center gap-2 border-0 bg-transparent px-2 font-[inherit] text-inherit cursor-pointer ${focusOutline}`}
+        type="button"
+        aria-label={`${copy.language}: ${language === "en" ? "English" : "Filipino"}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault()
+            setOpen(true)
+          }
+        }}
+      >
+        <span>{language === "en" ? "English" : "Filipino"}</span>
+        <svg
+          className="size-3.5 fill-none stroke-current stroke-[1.8] [stroke-linecap:round] [stroke-linejoin:round] transition-transform duration-150 group-aria-expanded:rotate-180"
+          viewBox="0 0 16 16"
+          aria-hidden="true"
+        >
+          <path d="m3 6 5 5 5-5" />
+        </svg>
+      </button>
+      {open && (
+        <div
+          className="absolute top-[calc(100%+6px)] left-0 w-max min-w-full rounded-lg border border-[#d7dfed] bg-white p-1 text-inherit shadow-[0_12px_32px_rgb(20_45_97_/_13%)]"
+          role="menu"
+          aria-label={copy.language}
+          onKeyDown={handleMenuKeyDown}
+          onBlur={(event) => {
+            if (!rootRef.current?.contains(event.relatedTarget)) setOpen(false)
+          }}
+        >
+          <button
+            ref={englishRef}
+            className={`flex min-h-11 w-full items-center justify-between gap-3 rounded-md border-0 bg-transparent px-1 text-left font-[inherit] text-inherit cursor-pointer focus-visible:bg-[#eef1f8] ${focusOutline}`}
+            type="button"
+            role="menuitemradio"
+            aria-checked={language === "en"}
+            onClick={() => choose("en")}
+          >
+            English
+            {language === "en" && <span aria-hidden="true">✓</span>}
+          </button>
+          <button
+            ref={filipinoRef}
+            className={`flex min-h-11 w-full items-center justify-between gap-3 rounded-md border-0 bg-transparent px-1 text-left font-[inherit] text-inherit cursor-pointer focus-visible:bg-[#eef1f8] ${focusOutline}`}
+            type="button"
+            role="menuitemradio"
+            aria-checked={language === "fil"}
+            onClick={() => choose("fil")}
+          >
+            Filipino
+            {language === "fil" && <span aria-hidden="true">✓</span>}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function AuthContent({
   mode,
+  copy,
+  language,
   onLoggedIn,
 }: {
   mode: Mode
+  copy: AuthCopy
+  language: AuthLanguage
   onLoggedIn: () => void
 }) {
   const navigate = useNavigate()
@@ -280,18 +500,19 @@ export function AuthPage({
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
-  const [formError, setFormError] = useState("")
+  const [formError, setFormError] = useState<{
+    language: AuthLanguage
+    message: string
+  } | null>(null)
   const [submitted, setSubmitted] = useState(false)
   const [touched, setTouched] = useState<Partial<Record<Field, boolean>>>({})
   const [pending, setPending] = useState(false)
 
-  const errors = validateAuth(mode, {
-    fullName,
-    contactNumber,
-    email,
-    password,
-    confirmPassword,
-  })
+  const errors = validateAuth(
+    mode,
+    { fullName, contactNumber, email, password, confirmPassword },
+    copy,
+  )
   const visibleError = (field: Field) =>
     submitted || touched[field] ? errors[field] : undefined
 
@@ -301,14 +522,14 @@ export function AuthPage({
 
   function changeValue(setValue: (value: string) => void, value: string) {
     setValue(value)
-    setFormError("")
+    setFormError(null)
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (pending) return
     setSubmitted(true)
-    setFormError("")
+    setFormError(null)
     const firstInvalid = (Object.keys(fieldIds) as Field[]).find(
       (field) => errors[field],
     )
@@ -332,26 +553,26 @@ export function AuthPage({
         })
         navigate("/dashboard", { replace: true })
         sileo.success({
-          title: "Account created",
-          description: "Welcome to EXP.",
+          title: copy.accountCreated,
+          description: copy.welcomeToExp,
         })
       }
     } catch (caught) {
-      const message = requestErrorMessage(caught, mode)
+      const message = requestErrorMessage(caught, mode, copy)
       if (
         caught instanceof ApiError &&
         (caught.status === 400 ||
           (mode === "register" && caught.status === 409))
       ) {
-        setFormError(message)
+        setFormError({ language, message })
       } else {
         sileo.error({
           title:
             mode === "login"
               ? caught instanceof ApiError && caught.status === 401
-                ? "Sign-in failed"
-                : "Sign-in unavailable"
-              : "Account unavailable",
+                ? copy.signInFailed
+                : copy.signInUnavailable
+              : copy.accountUnavailable,
           description: message,
         })
       }
@@ -361,188 +582,267 @@ export function AuthPage({
   }
 
   return (
-    <main className="auth-page">
-      <PhotoPanel mode={mode} />
-      <section className="auth-right">
-        <header className="auth-header">
-          <span className="auth-language">English</span>
-          <nav className="auth-nav" aria-label="Account">
-            <Link to="/login" className={mode === "login" ? "is-active" : ""}>
-              Sign In
-            </Link>
-            <Link
-              to="/register"
-              className={mode === "register" ? "is-active" : ""}
-            >
-              Register
-            </Link>
-          </nav>
-        </header>
-
-        <div className="auth-content">
-          <div className="auth-card">
-            <div className="auth-intro">
-              <Brand />
-              <h2>{mode === "login" ? "Welcome Back" : "Create Account"}</h2>
-              <p>
-                {mode === "login"
-                  ? "Sign in to your EXP account"
-                  : "Begin your digital journey with EXP today."}
-              </p>
-            </div>
-
-            <form
-              ref={formRef}
-              className="auth-form"
-              noValidate
-              onSubmit={(event) => void handleSubmit(event)}
-            >
-              {mode === "register" && (
-                <>
-                  <div className="auth-field">
-                    <Label htmlFor="full-name">Full Name</Label>
-                    <Input
-                      id="full-name"
-                      type="text"
-                      value={fullName}
-                      onChange={(event) =>
-                        changeValue(setFullName, event.target.value)
-                      }
-                      onBlur={() => markTouched("fullName")}
-                      autoComplete="name"
-                      minLength={2}
-                      maxLength={100}
-                      placeholder="John Doe"
-                      required
-                      aria-invalid={Boolean(visibleError("fullName"))}
-                      aria-describedby={
-                        visibleError("fullName") ? "full-name-error" : undefined
-                      }
-                    />
-                    <FieldError
-                      id="full-name"
-                      message={visibleError("fullName")}
-                    />
-                  </div>
-                  <div className="auth-field">
-                    <Label htmlFor="contact-number">Contact No.</Label>
-                    <Input
-                      id="contact-number"
-                      type="tel"
-                      value={contactNumber}
-                      onChange={(event) =>
-                        changeValue(setContactNumber, event.target.value)
-                      }
-                      onBlur={() => markTouched("contactNumber")}
-                      autoComplete="tel"
-                      placeholder="+63"
-                      required
-                      aria-invalid={Boolean(visibleError("contactNumber"))}
-                      aria-describedby={
-                        visibleError("contactNumber")
-                          ? "contact-number-error"
-                          : undefined
-                      }
-                    />
-                    <FieldError
-                      id="contact-number"
-                      message={visibleError("contactNumber")}
-                    />
-                  </div>
-                </>
-              )}
-              <div className="auth-field">
-                <Label htmlFor="email">Email Address</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(event) =>
-                    changeValue(setEmail, event.target.value)
-                  }
-                  onBlur={() => markTouched("email")}
-                  autoComplete="email"
-                  placeholder="username@gmail.com"
-                  required
-                  aria-invalid={Boolean(visibleError("email"))}
-                  aria-describedby={
-                    visibleError("email") ? "email-error" : undefined
-                  }
-                />
-                <FieldError id="email" message={visibleError("email")} />
-              </div>
-              {mode === "login" ? (
-                <PasswordField
-                  id="password"
-                  label="Password"
-                  value={password}
-                  onChange={(value) => changeValue(setPassword, value)}
-                  onBlur={() => markTouched("password")}
-                  autoComplete="current-password"
-                  error={visibleError("password")}
-                />
-              ) : (
-                <div className="auth-password-pair">
-                  <PasswordField
-                    id="password"
-                    label="Password"
-                    value={password}
-                    onChange={(value) => changeValue(setPassword, value)}
-                    onBlur={() => markTouched("password")}
-                    autoComplete="new-password"
-                    minLength={12}
-                    error={visibleError("password")}
-                  />
-                  <PasswordField
-                    id="confirm-password"
-                    label="Confirm Password"
-                    value={confirmPassword}
-                    onChange={(value) => changeValue(setConfirmPassword, value)}
-                    onBlur={() => markTouched("confirmPassword")}
-                    autoComplete="new-password"
-                    minLength={12}
-                    error={visibleError("confirmPassword")}
-                  />
-                </div>
-              )}
-              {mode === "register" && (
-                <p className="auth-password-hint">
-                  Use at least 12 characters.
-                </p>
-              )}
-              {formError && (
-                <p className="auth-error" role="alert">
-                  {formError}
-                </p>
-              )}
-              <Button
-                className="auth-submit h-[46px] w-full rounded-[6px] bg-[#253f8c] text-sm font-bold text-white hover:bg-[#1a3276]"
-                type="submit"
-                disabled={pending}
-              >
-                {pending
-                  ? mode === "login"
-                    ? "Signing In…"
-                    : "Creating Account…"
-                  : mode === "login"
-                    ? "Sign In"
-                    : "Create Account"}
-              </Button>
-            </form>
-
-            <div className="auth-divider">
-              <span>OR</span>
-            </div>
-            <SocialPlaceholders />
-          </div>
+    <div
+      className={`flex flex-1 items-center justify-center px-8 pt-[26px] pb-[52px] max-[850px]:px-6 max-[850px]:pt-[30px] max-[850px]:pb-[58px] ${mode === "login" ? "min-[851px]:pt-12 min-[851px]:pb-[30px]" : ""}`}
+    >
+      <div className="w-[min(100%,384px)] min-w-0">
+        <div className="text-center">
+          <Brand />
+          <h2 className="inline-block bg-[linear-gradient(90deg,#172735_0%,#246ea0_55%,#1cc5d0_100%)] bg-clip-text text-[25px] leading-[1.25] font-bold tracking-[-0.03em] text-transparent">
+            {mode === "login" ? copy.loginTitle : copy.registerTitle}
+          </h2>
+          <p className="mt-[7px] text-sm leading-[1.4] text-[#5b709e]">
+            {mode === "login" ? copy.loginSubtitle : copy.registerSubtitle}
+          </p>
         </div>
 
-        <footer className="auth-footer">
-          <span>About</span>
-          <span>Terms of Use</span>
-          <span>Privacy Policy</span>
-          <span>Cookie Policy</span>
-          <span>Copyright Policy</span>
+        <form
+          ref={formRef}
+          className="mt-7 grid gap-5"
+          noValidate
+          onSubmit={(event) => void handleSubmit(event)}
+        >
+          {mode === "register" && (
+            <>
+              <div className={fieldClass}>
+                <Label className={labelClass} htmlFor="full-name">
+                  {copy.fullName}
+                </Label>
+                <Input
+                  className={inputClass}
+                  id="full-name"
+                  type="text"
+                  value={fullName}
+                  onChange={(event) =>
+                    changeValue(setFullName, event.target.value)
+                  }
+                  onBlur={() => markTouched("fullName")}
+                  autoComplete="name"
+                  minLength={2}
+                  maxLength={100}
+                  placeholder={copy.fullNamePlaceholder}
+                  required
+                  aria-invalid={Boolean(visibleError("fullName"))}
+                  aria-describedby={
+                    visibleError("fullName") ? "full-name-error" : undefined
+                  }
+                />
+                <FieldError id="full-name" message={visibleError("fullName")} />
+              </div>
+              <div className={fieldClass}>
+                <Label className={labelClass} htmlFor="contact-number">
+                  {copy.contactNumber}
+                </Label>
+                <Input
+                  className={inputClass}
+                  id="contact-number"
+                  type="tel"
+                  value={contactNumber}
+                  onChange={(event) =>
+                    changeValue(setContactNumber, event.target.value)
+                  }
+                  onBlur={() => markTouched("contactNumber")}
+                  autoComplete="tel"
+                  placeholder="+63"
+                  required
+                  aria-invalid={Boolean(visibleError("contactNumber"))}
+                  aria-describedby={
+                    visibleError("contactNumber")
+                      ? "contact-number-error"
+                      : undefined
+                  }
+                />
+                <FieldError
+                  id="contact-number"
+                  message={visibleError("contactNumber")}
+                />
+              </div>
+            </>
+          )}
+          <div className={fieldClass}>
+            <Label className={`${labelClass} font-normal`} htmlFor="email">
+              {copy.emailAddress}
+            </Label>
+            <Input
+              className={inputClass}
+              id="email"
+              type="email"
+              value={email}
+              onChange={(event) => changeValue(setEmail, event.target.value)}
+              onBlur={() => markTouched("email")}
+              autoComplete="email"
+              placeholder="user@email.com"
+              required
+              aria-invalid={Boolean(visibleError("email"))}
+              aria-describedby={
+                visibleError("email") ? "email-error" : undefined
+              }
+            />
+            <FieldError id="email" message={visibleError("email")} />
+          </div>
+          {mode === "login" ? (
+            <PasswordField
+              id="password"
+              label={copy.password}
+              value={password}
+              onChange={(value) => changeValue(setPassword, value)}
+              onBlur={() => markTouched("password")}
+              autoComplete="current-password"
+              error={visibleError("password")}
+              recoveryLink
+              copy={copy}
+            />
+          ) : (
+            <div
+              className={`grid gap-4 max-[420px]:grid-cols-1 max-[420px]:gap-5 [&_label]:whitespace-nowrap ${language === "fil" ? "grid-cols-1" : "grid-cols-2"}`}
+            >
+              <PasswordField
+                id="password"
+                label={copy.password}
+                value={password}
+                onChange={(value) => changeValue(setPassword, value)}
+                onBlur={() => markTouched("password")}
+                autoComplete="new-password"
+                minLength={12}
+                error={visibleError("password")}
+                copy={copy}
+              />
+              <PasswordField
+                id="confirm-password"
+                label={copy.confirmPassword}
+                value={confirmPassword}
+                onChange={(value) => changeValue(setConfirmPassword, value)}
+                onBlur={() => markTouched("confirmPassword")}
+                autoComplete="new-password"
+                minLength={12}
+                error={visibleError("confirmPassword")}
+                copy={copy}
+              />
+            </div>
+          )}
+          {mode === "register" && (
+            <p className="-mt-[11px] -mb-[6px] text-xs text-[#6b7e9f]">
+              {copy.passwordHint}
+            </p>
+          )}
+          {formError?.language === language && (
+            <p
+              className="-my-[3px] rounded-lg bg-[#fff0f0] px-3 py-2.5 text-[13px] leading-[1.4] text-[#a1293d]"
+              role="alert"
+            >
+              {formError.message}
+            </p>
+          )}
+          <Button
+            className={`grid h-[46px] w-full place-items-center rounded-md border-0 bg-[#253f8c] text-sm font-bold text-white transition-[background,transform] duration-150 hover:bg-[#1a3276] hover:enabled:-translate-y-px disabled:cursor-wait disabled:opacity-70 motion-reduce:transition-none ${focusOutline}`}
+            type="submit"
+            disabled={pending}
+          >
+            {pending
+              ? mode === "login"
+                ? copy.signingIn
+                : copy.creatingAccount
+              : mode === "login"
+                ? copy.signInButton
+                : copy.createAccountButton}
+          </Button>
+        </form>
+
+        <div className="mt-[23px] mb-[13px] flex items-center gap-4 text-xs text-[#7485a7] before:h-px before:flex-1 before:bg-[#dce4ee] before:content-[''] after:h-px after:flex-1 after:bg-[#dce4ee] after:content-['']">
+          <span>{copy.or}</span>
+        </div>
+        <p className="mb-3 text-center text-[13px] leading-[1.4] text-[#7485a7]">
+          {copy.continueWith}
+        </p>
+        <SocialPlaceholders copy={copy} />
+      </div>
+    </div>
+  )
+}
+
+export function AuthPage({
+  mode,
+  onLoggedIn,
+}: {
+  mode: Mode
+  onLoggedIn: () => void
+}) {
+  const [language, setLanguage] = useState<AuthLanguage>(getStoredAuthLanguage)
+  const copy = getAuthCopy(language)
+
+  function changeLanguage(next: AuthLanguage) {
+    setLanguage(next)
+    storeAuthLanguage(next)
+  }
+
+  return (
+    <main
+      className="grid min-h-svh grid-cols-[minmax(0,60%)_minmax(420px,40%)] bg-white text-[#121b28] max-[1100px]:grid-cols-[minmax(0,55%)_minmax(400px,45%)] max-[850px]:block"
+      lang={language === "fil" ? "fil" : "en"}
+    >
+      <PhotoPanel mode={mode} copy={copy} language={language} />
+      <section className="flex min-h-svh min-w-0 flex-col">
+        <header className="flex h-[73px] items-center justify-center gap-2 px-6 text-[13px] max-[420px]:justify-end max-[420px]:px-[17px]">
+          <LanguagePicker
+            language={language}
+            copy={copy}
+            onChange={changeLanguage}
+          />
+          <MotionConfig reducedMotion="user">
+            <nav
+              className="inline-flex items-center rounded-full border border-[#dce1eb] bg-[#eef1f8] p-0.5"
+              aria-label={copy.accountNavigation}
+            >
+              <Link
+                to="/login"
+                className={`${navLinkClass} ${mode === "login" ? selectedNavClass : idleNavClass}`}
+                aria-current={mode === "login" ? "page" : undefined}
+              >
+                {mode === "login" && (
+                  <motion.span
+                    layoutId="auth-active-tab"
+                    initial={false}
+                    transition={{ type: "spring", stiffness: 500, damping: 38 }}
+                    className="absolute inset-0 rounded-full bg-[#253f8c] transition-colors group-hover:bg-[#1a3276]"
+                    aria-hidden="true"
+                  />
+                )}
+                <span className="relative z-1">{copy.signInLink}</span>
+              </Link>
+              <Link
+                to="/register"
+                className={`${navLinkClass} ${mode === "register" ? selectedNavClass : idleNavClass}`}
+                aria-current={mode === "register" ? "page" : undefined}
+              >
+                {mode === "register" && (
+                  <motion.span
+                    layoutId="auth-active-tab"
+                    initial={false}
+                    transition={{ type: "spring", stiffness: 500, damping: 38 }}
+                    className="absolute inset-0 rounded-full bg-[#253f8c] transition-colors group-hover:bg-[#1a3276]"
+                    aria-hidden="true"
+                  />
+                )}
+                <span className="relative z-1">{copy.createAccountLink}</span>
+              </Link>
+            </nav>
+          </MotionConfig>
+        </header>
+
+        <AuthContent
+          key={mode}
+          mode={mode}
+          copy={copy}
+          language={language}
+          onLoggedIn={onLoggedIn}
+        />
+
+        <footer className="flex min-h-14 items-center justify-center gap-4 px-5 py-3 text-xs text-[#52688d] whitespace-nowrap max-[420px]:flex-wrap max-[420px]:gap-x-3 max-[420px]:gap-y-[5px] max-[420px]:leading-[1.4]">
+          <span>{copy.about}</span>
+          <span>{copy.terms}</span>
+          <span>{copy.privacy}</span>
+          <span>{copy.cookies}</span>
+          <span>{copy.copyright}</span>
         </footer>
       </section>
     </main>
