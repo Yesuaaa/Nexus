@@ -1,10 +1,23 @@
-import { useEffect, useRef, useState, type FormEvent } from "react"
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react"
 import { Link, useNavigate } from "react-router"
 import { sileo } from "sileo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ApiError, register, signIn } from "@/lib/auth"
+import {
+  getAuthCopy,
+  getStoredAuthLanguage,
+  storeAuthLanguage,
+  type AuthCopy,
+  type AuthLanguage,
+} from "./auth-copy"
 import "./auth.css"
 
 type Mode = "login" | "register"
@@ -20,58 +33,59 @@ const fieldIds: Record<Field, string> = {
   confirmPassword: "confirm-password",
 }
 
-function validateAuth(mode: Mode, values: Record<Field, string>): FieldErrors {
+function validateAuth(
+  mode: Mode,
+  values: Record<Field, string>,
+  copy: AuthCopy,
+): FieldErrors {
   const errors: FieldErrors = {}
   const email = values.email.trim()
 
   if (mode === "register") {
     const name = values.fullName.trim()
     const contact = values.contactNumber.trim()
-    if (!name) errors.fullName = "Enter your full name."
+    if (!name) errors.fullName = copy.nameRequired
     else if (name.length < 2 || name.length > 100)
-      errors.fullName = "Name must be 2 to 100 characters."
+      errors.fullName = copy.nameLength
 
-    if (!contact) errors.contactNumber = "Enter your contact number."
+    if (!contact) errors.contactNumber = copy.contactRequired
     else if (!/^\+?[0-9][0-9\s-]{6,19}$/.test(contact))
-      errors.contactNumber = "Enter a valid number, such as +63 912 345 6789."
+      errors.contactNumber = copy.contactInvalid
   }
 
-  if (!email) errors.email = "Enter your email address."
+  if (!email) errors.email = copy.emailRequired
   else if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-    errors.email = "Enter a valid email address, such as name@example.com."
+    errors.email = copy.emailInvalid
 
-  if (!values.password) errors.password = "Enter your password."
+  if (!values.password) errors.password = copy.passwordRequired
   else if (mode === "register" && values.password.length < 12)
-    errors.password = "Use at least 12 characters for your password."
+    errors.password = copy.passwordShort
   else if (new TextEncoder().encode(values.password).length > 1024)
-    errors.password = "Password is too long. Use fewer characters."
+    errors.password = copy.passwordLong
 
   if (mode === "register") {
-    if (!values.confirmPassword)
-      errors.confirmPassword = "Confirm your password."
+    if (!values.confirmPassword) errors.confirmPassword = copy.confirmRequired
     else if (values.confirmPassword !== values.password)
-      errors.confirmPassword =
-        "Passwords do not match. Enter the same password."
+      errors.confirmPassword = copy.passwordMismatch
   }
 
   return errors
 }
 
-function requestErrorMessage(error: unknown, mode: Mode): string {
+function requestErrorMessage(
+  error: unknown,
+  mode: Mode,
+  copy: AuthCopy,
+): string {
   if (error instanceof ApiError) {
-    if (mode === "login" && error.status === 401)
-      return "Email or password is incorrect. Please try again."
-    if (mode === "register" && error.status === 409)
-      return "This email is already registered. Sign in instead."
-    if (error.status === 429)
-      return "Too many sign-in attempts. Please wait 15 minutes and try again."
-    if (error.status >= 500)
-      return "The server is having trouble. Please try again shortly."
-    return error.message
+    if (mode === "login" && error.status === 401) return copy.badCredentials
+    if (mode === "register" && error.status === 409) return copy.emailRegistered
+    if (error.status === 429) return copy.rateLimited
+    if (error.status >= 500) return copy.serverError
+    return copy.unknownError
   }
-  if (error instanceof TypeError)
-    return "Can't reach the server. Check your connection and try again."
-  return "Something went wrong. Please try again."
+  if (error instanceof TypeError) return copy.networkError
+  return copy.unknownError
 }
 
 function FieldError({ id, message }: { id: string; message?: string }) {
@@ -118,6 +132,8 @@ function PasswordField({
   autoComplete,
   minLength,
   error,
+  recoveryLink = false,
+  copy,
 }: {
   id: string
   label: string
@@ -127,11 +143,20 @@ function PasswordField({
   autoComplete: string
   minLength?: number
   error?: string
+  recoveryLink?: boolean
+  copy: AuthCopy
 }) {
   const [visible, setVisible] = useState(false)
   return (
     <div className="auth-field">
-      <Label htmlFor={id}>{label}</Label>
+      <div className="auth-field-heading">
+        <Label htmlFor={id}>{label}</Label>
+        {recoveryLink && (
+          <Link className="auth-recovery-link" to="/forgot-password">
+            {copy.forgotPassword}
+          </Link>
+        )}
+      </div>
       <div className="auth-password-wrap">
         <Input
           id={id}
@@ -151,7 +176,7 @@ function PasswordField({
           variant="outline"
           type="button"
           onClick={() => setVisible((current) => !current)}
-          aria-label={`${visible ? "Hide" : "Show"} ${label.toLowerCase()}`}
+          aria-label={`${visible ? copy.hidePassword : copy.showPassword} ${label.toLowerCase()}`}
           aria-pressed={visible}
         >
           <EyeIcon visible={visible} />
@@ -162,7 +187,7 @@ function PasswordField({
   )
 }
 
-function PhotoPanel({ mode }: { mode: Mode }) {
+function PhotoPanel({ mode, copy }: { mode: Mode; copy: AuthCopy }) {
   const [active, setActive] = useState(0)
 
   useEffect(() => {
@@ -175,7 +200,7 @@ function PhotoPanel({ mode }: { mode: Mode }) {
   }, [])
 
   return (
-    <aside className="auth-visual" aria-label="EXP community">
+    <aside className="auth-visual" aria-label={copy.community}>
       {photos.map((src, index) => (
         <img
           key={src}
@@ -190,41 +215,33 @@ function PhotoPanel({ mode }: { mode: Mode }) {
         {mode === "login" ? (
           <>
             <h1>
-              Empower Your
+              {copy.loginHeroLine1}
               <br />
-              <span>Digital Solutions</span>
-              <br />
-              Journey
+              {copy.loginHeroLine2}
             </h1>
-            <p>
-              Access powerful tools and insights to drive your campaigns
-              forward. Sign in to continue your EXP experience.
-            </p>
+            <p>{copy.loginHeroDescription}</p>
           </>
         ) : (
           <>
             <h1>
-              Join the
+              {copy.registerHeroLine1}
               <br />
-              <span>EXP Community</span>
+              <span>{copy.registerHeroLine2}</span>
               <br />
-              Today
+              {copy.registerHeroLine3}
             </h1>
-            <p>
-              Create your account to start managing bookings and services with
-              EXP.
-            </p>
+            <p>{copy.registerHeroDescription}</p>
           </>
         )}
       </div>
-      <div className="auth-dots" aria-label="Choose photo">
+      <div className="auth-dots" aria-label={copy.choosePhoto}>
         {photos.map((_, index) => (
           <button
             key={index}
             type="button"
             className={index === active ? "is-active" : ""}
             onClick={() => setActive(index)}
-            aria-label={`Show photo ${index + 1}`}
+            aria-label={`${copy.showPhoto} ${index + 1}`}
             aria-current={index === active ? "true" : undefined}
           />
         ))}
@@ -233,35 +250,159 @@ function PhotoPanel({ mode }: { mode: Mode }) {
   )
 }
 
-function SocialPlaceholders() {
+function SocialPlaceholders({ copy }: { copy: AuthCopy }) {
   return (
-    <div
-      className="auth-social"
-      aria-label="Social sign-in options coming soon"
-    >
+    <div className="auth-social" aria-label={copy.socialComingSoon}>
       <span
         className="auth-social-google"
-        title="Google sign-in coming soon"
+        title={copy.googleComingSoon}
         aria-hidden="true"
       >
-        G
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            fill="#4285F4"
+            d="M21.35 12.21c0-.71-.06-1.42-.19-2.1H12v3.98h5.24a4.48 4.48 0 0 1-1.95 2.94v2.54h3.16c1.85-1.71 2.9-4.23 2.9-7.36Z"
+          />
+          <path
+            fill="#34A853"
+            d="M12 21.5c2.64 0 4.86-.87 6.48-2.36l-3.16-2.54c-.88.59-2 .94-3.32.94-2.55 0-4.71-1.72-5.48-4.03H3.25v2.62A9.5 9.5 0 0 0 12 21.5Z"
+          />
+          <path
+            fill="#FBBC05"
+            d="M6.52 13.51a5.7 5.7 0 0 1 0-3.02V7.87H3.25a9.5 9.5 0 0 0 0 8.26l3.27-2.62Z"
+          />
+          <path
+            fill="#EA4335"
+            d="M12 6.46c1.44 0 2.73.5 3.75 1.47l2.81-2.81A9.13 9.13 0 0 0 12 2.5a9.5 9.5 0 0 0-8.75 5.37l3.27 2.62C7.29 8.18 9.45 6.46 12 6.46Z"
+          />
+        </svg>
       </span>
       <span
         className="auth-social-facebook"
-        title="Facebook sign-in coming soon"
+        title={copy.facebookComingSoon}
         aria-hidden="true"
       >
         f
       </span>
       <span
         className="auth-social-apple"
-        title="Apple sign-in coming soon"
+        title={copy.appleComingSoon}
         aria-hidden="true"
       >
         <svg viewBox="0 0 24 24" fill="currentColor">
           <path d="M17.7 12.9c0-2 1.6-2.9 1.7-3-1-1.5-2.6-1.7-3.1-1.7-1.3-.1-2.5.8-3.2.8s-1.6-.8-2.6-.8c-1.4 0-2.7.8-3.4 2.1-1.4 2.5-.4 6.2 1 8.2.7 1 1.5 2.1 2.6 2.1 1 0 1.4-.7 2.7-.7 1.2 0 1.6.7 2.7.7s1.7-1 2.4-2c.8-1.1 1.1-2.2 1.1-2.2-.1 0-1.9-.7-1.9-2.5ZM15.4 6.8c.6-.7 1-1.6.9-2.6-.9 0-1.9.6-2.5 1.3-.5.6-1 1.5-.9 2.5 1 .1 1.9-.5 2.5-1.2Z" />
         </svg>
       </span>
+    </div>
+  )
+}
+
+function LanguagePicker({
+  language,
+  copy,
+  onChange,
+}: {
+  language: AuthLanguage
+  copy: AuthCopy
+  onChange: (language: AuthLanguage) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const englishRef = useRef<HTMLButtonElement>(null)
+  const filipinoRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const selected = language === "en" ? englishRef : filipinoRef
+    selected.current?.focus()
+    function closeOnOutsideClick(event: PointerEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    document.addEventListener("pointerdown", closeOnOutsideClick)
+    return () =>
+      document.removeEventListener("pointerdown", closeOnOutsideClick)
+  }, [open, language])
+
+  function choose(next: AuthLanguage) {
+    onChange(next)
+    setOpen(false)
+    triggerRef.current?.focus()
+  }
+
+  function handleMenuKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Escape") {
+      setOpen(false)
+      triggerRef.current?.focus()
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault()
+      const current =
+        document.activeElement === englishRef.current ? "en" : "fil"
+      const next = current === "en" ? filipinoRef : englishRef
+      next.current?.focus()
+    } else if (event.key === "Home") {
+      event.preventDefault()
+      englishRef.current?.focus()
+    } else if (event.key === "End") {
+      event.preventDefault()
+      filipinoRef.current?.focus()
+    }
+  }
+
+  return (
+    <div className="auth-language" ref={rootRef}>
+      <button
+        ref={triggerRef}
+        className="auth-language-trigger"
+        type="button"
+        aria-label={`${copy.language}: ${language === "en" ? "English" : "Filipino"}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault()
+            setOpen(true)
+          }
+        }}
+      >
+        <span>{language === "en" ? "English" : "Filipino"}</span>
+        <svg viewBox="0 0 16 16" aria-hidden="true">
+          <path d="m3 6 5 5 5-5" />
+        </svg>
+      </button>
+      {open && (
+        <div
+          className="auth-language-menu"
+          role="menu"
+          aria-label={copy.language}
+          onKeyDown={handleMenuKeyDown}
+          onBlur={(event) => {
+            if (!rootRef.current?.contains(event.relatedTarget)) setOpen(false)
+          }}
+        >
+          <button
+            ref={englishRef}
+            type="button"
+            role="menuitemradio"
+            aria-checked={language === "en"}
+            onClick={() => choose("en")}
+          >
+            English
+            {language === "en" && <span aria-hidden="true">✓</span>}
+          </button>
+          <button
+            ref={filipinoRef}
+            type="button"
+            role="menuitemradio"
+            aria-checked={language === "fil"}
+            onClick={() => choose("fil")}
+          >
+            Filipino
+            {language === "fil" && <span aria-hidden="true">✓</span>}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -275,6 +416,8 @@ export function AuthPage({
 }) {
   const navigate = useNavigate()
   const formRef = useRef<HTMLFormElement>(null)
+  const [language, setLanguage] = useState<AuthLanguage>(getStoredAuthLanguage)
+  const copy = getAuthCopy(language)
   const [fullName, setFullName] = useState("")
   const [contactNumber, setContactNumber] = useState("")
   const [email, setEmail] = useState("")
@@ -285,13 +428,11 @@ export function AuthPage({
   const [touched, setTouched] = useState<Partial<Record<Field, boolean>>>({})
   const [pending, setPending] = useState(false)
 
-  const errors = validateAuth(mode, {
-    fullName,
-    contactNumber,
-    email,
-    password,
-    confirmPassword,
-  })
+  const errors = validateAuth(
+    mode,
+    { fullName, contactNumber, email, password, confirmPassword },
+    copy,
+  )
   const visibleError = (field: Field) =>
     submitted || touched[field] ? errors[field] : undefined
 
@@ -302,6 +443,12 @@ export function AuthPage({
   function changeValue(setValue: (value: string) => void, value: string) {
     setValue(value)
     setFormError("")
+  }
+
+  function changeLanguage(next: AuthLanguage) {
+    setLanguage(next)
+    setFormError("")
+    storeAuthLanguage(next)
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -332,12 +479,12 @@ export function AuthPage({
         })
         navigate("/dashboard", { replace: true })
         sileo.success({
-          title: "Account created",
-          description: "Welcome to EXP.",
+          title: copy.accountCreated,
+          description: copy.welcomeToExp,
         })
       }
     } catch (caught) {
-      const message = requestErrorMessage(caught, mode)
+      const message = requestErrorMessage(caught, mode, copy)
       if (
         caught instanceof ApiError &&
         (caught.status === 400 ||
@@ -349,9 +496,9 @@ export function AuthPage({
           title:
             mode === "login"
               ? caught instanceof ApiError && caught.status === 401
-                ? "Sign-in failed"
-                : "Sign-in unavailable"
-              : "Account unavailable",
+                ? copy.signInFailed
+                : copy.signInUnavailable
+              : copy.accountUnavailable,
           description: message,
         })
       }
@@ -361,21 +508,25 @@ export function AuthPage({
   }
 
   return (
-    <main className="auth-page">
-      <PhotoPanel mode={mode} />
+    <main className="auth-page" lang={language === "fil" ? "fil" : "en"}>
+      <PhotoPanel mode={mode} copy={copy} />
       <section className="auth-right">
         <header className="auth-header">
-          <span className="auth-language">English</span>
-          <nav className="auth-nav" aria-label="Account">
-            <Link to="/login" className={mode === "login" ? "is-active" : ""}>
-              Sign In
-            </Link>
-            <Link
-              to="/register"
-              className={mode === "register" ? "is-active" : ""}
-            >
-              Register
-            </Link>
+          <LanguagePicker
+            language={language}
+            copy={copy}
+            onChange={changeLanguage}
+          />
+          <nav className="auth-nav" aria-label={copy.accountNavigation}>
+            {mode === "login" ? (
+              <Link to="/register" className="auth-account-link">
+                {copy.createAccountLink}
+              </Link>
+            ) : (
+              <Link to="/login" className="auth-account-link">
+                {copy.signInLink}
+              </Link>
+            )}
           </nav>
         </header>
 
@@ -383,11 +534,9 @@ export function AuthPage({
           <div className="auth-card">
             <div className="auth-intro">
               <Brand />
-              <h2>{mode === "login" ? "Welcome Back" : "Create Account"}</h2>
+              <h2>{mode === "login" ? copy.loginTitle : copy.registerTitle}</h2>
               <p>
-                {mode === "login"
-                  ? "Sign in to your EXP account"
-                  : "Begin your digital journey with EXP today."}
+                {mode === "login" ? copy.loginSubtitle : copy.registerSubtitle}
               </p>
             </div>
 
@@ -400,7 +549,7 @@ export function AuthPage({
               {mode === "register" && (
                 <>
                   <div className="auth-field">
-                    <Label htmlFor="full-name">Full Name</Label>
+                    <Label htmlFor="full-name">{copy.fullName}</Label>
                     <Input
                       id="full-name"
                       type="text"
@@ -412,7 +561,7 @@ export function AuthPage({
                       autoComplete="name"
                       minLength={2}
                       maxLength={100}
-                      placeholder="John Doe"
+                      placeholder={copy.fullNamePlaceholder}
                       required
                       aria-invalid={Boolean(visibleError("fullName"))}
                       aria-describedby={
@@ -425,7 +574,7 @@ export function AuthPage({
                     />
                   </div>
                   <div className="auth-field">
-                    <Label htmlFor="contact-number">Contact No.</Label>
+                    <Label htmlFor="contact-number">{copy.contactNumber}</Label>
                     <Input
                       id="contact-number"
                       type="tel"
@@ -452,7 +601,7 @@ export function AuthPage({
                 </>
               )}
               <div className="auth-field">
-                <Label htmlFor="email">Email Address</Label>
+                <Label htmlFor="email">{copy.emailAddress}</Label>
                 <Input
                   id="email"
                   type="email"
@@ -462,7 +611,7 @@ export function AuthPage({
                   }
                   onBlur={() => markTouched("email")}
                   autoComplete="email"
-                  placeholder="username@gmail.com"
+                  placeholder="you@example.com"
                   required
                   aria-invalid={Boolean(visibleError("email"))}
                   aria-describedby={
@@ -474,41 +623,43 @@ export function AuthPage({
               {mode === "login" ? (
                 <PasswordField
                   id="password"
-                  label="Password"
+                  label={copy.password}
                   value={password}
                   onChange={(value) => changeValue(setPassword, value)}
                   onBlur={() => markTouched("password")}
                   autoComplete="current-password"
                   error={visibleError("password")}
+                  recoveryLink
+                  copy={copy}
                 />
               ) : (
                 <div className="auth-password-pair">
                   <PasswordField
                     id="password"
-                    label="Password"
+                    label={copy.password}
                     value={password}
                     onChange={(value) => changeValue(setPassword, value)}
                     onBlur={() => markTouched("password")}
                     autoComplete="new-password"
                     minLength={12}
                     error={visibleError("password")}
+                    copy={copy}
                   />
                   <PasswordField
                     id="confirm-password"
-                    label="Confirm Password"
+                    label={copy.confirmPassword}
                     value={confirmPassword}
                     onChange={(value) => changeValue(setConfirmPassword, value)}
                     onBlur={() => markTouched("confirmPassword")}
                     autoComplete="new-password"
                     minLength={12}
                     error={visibleError("confirmPassword")}
+                    copy={copy}
                   />
                 </div>
               )}
               {mode === "register" && (
-                <p className="auth-password-hint">
-                  Use at least 12 characters.
-                </p>
+                <p className="auth-password-hint">{copy.passwordHint}</p>
               )}
               {formError && (
                 <p className="auth-error" role="alert">
@@ -522,27 +673,27 @@ export function AuthPage({
               >
                 {pending
                   ? mode === "login"
-                    ? "Signing In…"
-                    : "Creating Account…"
+                    ? copy.signingIn
+                    : copy.creatingAccount
                   : mode === "login"
-                    ? "Sign In"
-                    : "Create Account"}
+                    ? copy.signInButton
+                    : copy.createAccountButton}
               </Button>
             </form>
 
             <div className="auth-divider">
-              <span>OR</span>
+              <span>{copy.orContinueWith}</span>
             </div>
-            <SocialPlaceholders />
+            <SocialPlaceholders copy={copy} />
           </div>
         </div>
 
         <footer className="auth-footer">
-          <span>About</span>
-          <span>Terms of Use</span>
-          <span>Privacy Policy</span>
-          <span>Cookie Policy</span>
-          <span>Copyright Policy</span>
+          <span>{copy.about}</span>
+          <span>{copy.terms}</span>
+          <span>{copy.privacy}</span>
+          <span>{copy.cookies}</span>
+          <span>{copy.copyright}</span>
         </footer>
       </section>
     </main>

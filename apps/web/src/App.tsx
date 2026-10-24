@@ -6,6 +6,7 @@ import { getToken } from "@/lib/auth"
 import { AuthPage } from "@/pages/auth"
 import { DashboardPage } from "@/pages/dashboard"
 import { NotFoundPage } from "@/pages/not-found"
+import { getAuthCopy, getStoredAuthLanguage } from "@/pages/auth-copy"
 
 export default function App() {
   const navigate = useNavigate()
@@ -27,9 +28,10 @@ export default function App() {
   function finishLoginTransition() {
     setShowLoader(false)
     if (loginSucceeded) {
+      const copy = getAuthCopy(getStoredAuthLanguage())
       sileo.success({
-        title: "Welcome back",
-        description: "You're signed in to EXP.",
+        title: copy.welcomeBackToast,
+        description: copy.signedInToast,
       })
     }
   }
@@ -85,7 +87,7 @@ export default function App() {
           destinationReady={destinationReady}
           onNavigate={() => navigate("/dashboard", { replace: true })}
           onExited={finishLoginTransition}
-          ariaLabel="Opening your account"
+          ariaLabel={getAuthCopy(getStoredAuthLanguage()).openingAccount}
         />
       )}
     </>
