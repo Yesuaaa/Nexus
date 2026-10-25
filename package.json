@@ -11,6 +11,7 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "start:api": "pnpm --filter @nexus/api start",
+    "start:web": "pnpm --filter @nexus/web start",
     "preview:web": "pnpm --filter @nexus/web preview",
     "db:generate": "pnpm --filter @nexus/api db:generate",
     "db:migrate": "pnpm --filter @nexus/api db:migrate",

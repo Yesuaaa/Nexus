@@ -2,6 +2,8 @@
 
 Roles are fixed in the Prisma `Role` enum. Permissions are assigned by the API in `apps/api/src/features/auth/permissions.ts`; there is no per-account permission table or permission editor. The API returns each account's effective permissions in authentication and user responses. Portal navigation and controls use those values, while the API enforces every protected operation.
 
+The frontend's Department Management page (`/departments`) is available only to Admin accounts with the `departments:read` permission. Superadmin, Staff, and Client accounts have no Departments navigation link and are redirected to the dashboard if they open that URL. This page restriction does not change the backend's department API permissions.
+
 | Permission                               | User | Staff | Admin | Superadmin |
 | ---------------------------------------- | :--: | :---: | :---: | :--------: |
 | View Dashboard                           |  ✓   |   ✓   |   ✓   |     ✓      |

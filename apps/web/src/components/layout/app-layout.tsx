@@ -1,6 +1,8 @@
+"use client"
+
 import { useEffect, useState, type ReactNode } from "react"
 import { cn } from "@/lib/utils"
-import type { Account } from "@/features/auth/types"
+import type { Account } from "@/features/auth/model/types"
 import { Sidebar } from "./sidebar"
 import { Topbar } from "./topbar"
 
@@ -16,7 +18,8 @@ export function AppLayout({
   children: ReactNode
 }) {
   const [collapsed, setCollapsed] = useState(
-    () => window.matchMedia(tabletQuery).matches,
+    () =>
+      typeof window !== "undefined" && window.matchMedia(tabletQuery).matches,
   )
   const [drawerOpen, setDrawerOpen] = useState(false)
   const management = account.role !== "USER"
@@ -41,6 +44,7 @@ export function AppLayout({
     <div
       className="relative h-dvh overflow-hidden bg-[var(--portal-canvas)] text-sm text-foreground"
       data-variant={management ? "management" : "client"}
+      data-role={account.role}
       data-collapsed={collapsed}
       data-drawer-open={drawerOpen}
     >

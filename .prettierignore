@@ -2,6 +2,11 @@
 **/dist/
 **/coverage/
 **/.vite/
+**/.next/
+**/out/
+**/test-results/
+**/playwright-report/
+apps/web/next-env.d.ts
 apps/api/src/generated/
 pnpm-lock.yaml
 *.tsbuildinfo

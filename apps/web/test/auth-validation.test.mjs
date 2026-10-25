@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { getAuthCopy } from "../src/features/auth/copy.ts"
-import { validateAuth } from "../src/features/auth/schema.ts"
+import { getAuthCopy } from "../src/features/auth/content/auth-copy.ts"
+import { validateAuth } from "../src/features/auth/model/schema.ts"
 
 const validValues = {
   fullName: "Jane Doe",

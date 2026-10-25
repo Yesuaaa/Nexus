@@ -29,5 +29,5 @@ services:
       api:
         condition: service_healthy
     ports:
-      - "${PROD_WEB_PORT:-8080}:80"
+      - "${PROD_WEB_PORT:-8080}:5173"
     restart: unless-stopped

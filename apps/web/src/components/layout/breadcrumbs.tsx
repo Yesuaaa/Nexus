@@ -1,4 +1,7 @@
-import { Link, useLocation } from "react-router"
+"use client"
+
+import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { ChevronRightIcon, HomeIcon } from "./icons"
 import { focusRing } from "./styles"
 
@@ -18,7 +21,7 @@ function labelFor(segment: string) {
 }
 
 export function Breadcrumbs() {
-  const { pathname } = useLocation()
+  const pathname = usePathname()
   const segments = pathname.split("/").filter(Boolean)
 
   return (
@@ -26,7 +29,7 @@ export function Breadcrumbs() {
       <ol className="flex min-w-0 list-none gap-[7px] p-0 whitespace-nowrap">
         <li className="flex min-w-0 items-center gap-[7px] text-[#8a9ab3]">
           <Link
-            to="/"
+            href="/"
             className={`flex items-center gap-[5px] text-[#647a9c] no-underline hover:text-[#203a78] ${focusRing}`}
           >
             <HomeIcon width="15" height="15" />
@@ -50,7 +53,7 @@ export function Breadcrumbs() {
                 </span>
               ) : (
                 <Link
-                  to={`/${segments.slice(0, index + 1).join("/")}`}
+                  href={`/${segments.slice(0, index + 1).join("/")}`}
                   className={`flex items-center gap-[5px] text-[#647a9c] no-underline hover:text-[#203a78] ${focusRing}`}
                 >
                   {label}

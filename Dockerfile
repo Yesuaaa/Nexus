@@ -26,7 +26,8 @@ FROM deps AS web-dev
 COPY apps/web apps/web
 WORKDIR /workspace/apps/web
 EXPOSE 5173
-CMD ["pnpm", "dev", "--host", "0.0.0.0"]
+# Watchpack polling supports source mounts on Docker Desktop.
+CMD ["pnpm", "dev", "--webpack"]
 
 FROM deps AS api-build
 COPY apps/api apps/api
@@ -34,8 +35,11 @@ RUN pnpm --filter @nexus/api build
 
 FROM deps AS web-build
 COPY apps/web apps/web
-# Nginx serves /api through the internal Docker network, so the browser uses a same-origin URL.
-ENV VITE_API_URL=
+# Next.js rewrites are resolved at build time for the internal API service.
+ARG API_PROXY_TARGET=http://api:3001
+ENV API_PROXY_TARGET=$API_PROXY_TARGET
+ENV NEXT_PUBLIC_API_URL=
+ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm --filter @nexus/web build
 
 FROM base AS api
@@ -52,7 +56,12 @@ EXPOSE 3001
 USER node
 CMD ["node", "dist/index.js"]
 
-FROM nginx:stable-alpine AS web
-COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=web-build /workspace/apps/web/dist /usr/share/nginx/html
-EXPOSE 80
+FROM base AS web
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV HOSTNAME=0.0.0.0
+ENV PORT=5173
+COPY --from=web-build --chown=node:node /workspace/apps/web/.next/standalone ./
+EXPOSE 5173
+USER node
+CMD ["node", "apps/web/server.js"]

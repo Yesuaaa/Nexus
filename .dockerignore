@@ -1,5 +1,9 @@
 **/node_modules
 **/dist
+**/.next
+**/out
+**/test-results
+**/playwright-report
 apps/api/src/generated
 **/.env
 **/.env.*

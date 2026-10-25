@@ -5,7 +5,7 @@ import {
   getToken,
   signIn,
   signOut,
-} from "../src/features/auth/api.ts"
+} from "../src/features/auth/api/auth-api.ts"
 
 test("sign-in stores its session and authenticated requests send one bearer token", async (t) => {
   const values = new Map()
