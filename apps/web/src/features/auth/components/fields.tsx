@@ -159,7 +159,6 @@ export function PasswordField({
           minLength={minLength}
           aria-invalid={Boolean(error)}
           aria-describedby={error ? `${id}-error` : undefined}
-          placeholder="••••••••••••"
           required
         />
         <Button

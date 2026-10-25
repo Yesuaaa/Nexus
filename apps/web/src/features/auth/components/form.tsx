@@ -187,7 +187,7 @@ export function AuthContent({
             />
           ) : (
             <div
-              className={`grid gap-4 max-[420px]:grid-cols-1 max-[420px]:gap-5 [&_label]:whitespace-nowrap ${language === "fil" ? "grid-cols-1" : "grid-cols-2"}`}
+              className={`grid items-start gap-4 max-[420px]:grid-cols-1 max-[420px]:gap-5 [&_label]:whitespace-nowrap ${language === "fil" ? "grid-cols-1" : "grid-cols-2"}`}
             >
               <PasswordField
                 id="password"
