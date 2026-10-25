@@ -109,7 +109,7 @@ export function AuthRouteLoader({
       role="status"
       aria-live="polite"
       aria-label={ariaLabel}
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-white"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-background"
     >
       <div className="flex flex-col items-center gap-4">
         <div className="h-[72px] w-[198px]">

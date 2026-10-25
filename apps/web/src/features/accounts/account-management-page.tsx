@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react"
 import { useNavigate, useOutletContext } from "react-router"
 import { sileo } from "sileo"
+import { cn } from "@/lib/utils"
+import { contentClass } from "@/components/layout/styles"
 import { ApiError, clearToken } from "@/features/auth/api"
 import type { Account } from "@/features/auth/types"
 import { canAssignRole, canCreateRole } from "@/features/auth/permissions"
@@ -12,7 +14,13 @@ import {
 } from "./api"
 import { AccountDropdown } from "./account-dropdown"
 import { CreateAccountDialog } from "./create-account-dialog"
-import "./accounts.css"
+import {
+  accountButton,
+  accountButtonPrimary,
+  accountButtonSecondary,
+  accountFocusRing,
+  accountGrid,
+} from "./styles"
 
 const roleNames: Record<AccountRole, string> = {
   SUPERADMIN: "Superadmin",
@@ -138,36 +146,49 @@ export function AccountManagementPage() {
 
   return (
     <main
-      className="app-content account-content"
+      className={cn(contentClass, "p-[clamp(16px,2.1vw,32px)]")}
       aria-label="Account management"
     >
-      <div className="account-hero">
+      <header className="-mx-[clamp(16px,2.1vw,32px)] flex items-center justify-between gap-6 border-b border-[#eceef1] px-[clamp(16px,2.1vw,32px)] pt-0.5 pb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-4 max-[560px]:pb-[18px]">
         <div>
-          <p className="account-eyebrow">ADMINISTRATION</p>
-          <h1>Account management</h1>
-          <p>View portal accounts and manage their access.</p>
+          <h1 className="m-0 text-[clamp(21px,2vw,25px)] leading-[1.25] font-[650] tracking-[-0.03em] text-foreground">
+            Account management
+          </h1>
+          <p className="mt-[5px] mb-0 text-xs leading-[1.45] text-[#738096]">
+            View portal accounts and manage their access.
+          </p>
         </div>
         <button
           type="button"
-          className="account-button account-button-light"
+          className={cn(
+            accountButton,
+            "min-h-[34px] flex-none rounded-lg bg-[#0b0b0c] px-[13px] text-xs text-white hover:bg-[#2a2a2e]",
+          )}
           onClick={() => setCreateOpen(true)}
         >
-          <span aria-hidden="true">＋</span> Create account
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 14 14"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            aria-hidden="true"
+          >
+            <path d="M7 2.5v9M2.5 7h9" />
+          </svg>
+          Create account
         </button>
-      </div>
+      </header>
 
-      <section className="account-panel" aria-label="Accounts">
-        <div className="account-panel-header">
-          <div>
-            <h2>Accounts</h2>
-            <p>
-              {result
-                ? `${result.total} ${result.total === 1 ? "account" : "accounts"}`
-                : "Portal accounts"}
-            </p>
-          </div>
-          <div className="account-filters">
-            <label className="account-search">
+      <section
+        className="mt-[18px] min-w-0 max-[560px]:mt-[14px]"
+        aria-label="Accounts"
+      >
+        <div className="flex items-center pb-4 max-[560px]:pb-3">
+          <div className="flex min-w-0 gap-[10px] max-[1050px]:w-full max-[560px]:flex-col">
+            <label className="flex h-[34px] w-[260px] min-w-0 items-center gap-2 rounded-lg border border-[#e1e4ea] px-[11px] text-[#7b8ca7] focus-within:bg-[#f8fafd] max-[1050px]:w-[min(350px,100%)] max-[1050px]:flex-1 max-[560px]:w-full">
               <span className="sr-only">Search accounts</span>
               <svg
                 viewBox="0 0 24 24"
@@ -182,6 +203,7 @@ export function AccountManagementPage() {
                 <path d="m16 16 5 5" />
               </svg>
               <input
+                className="w-full min-w-0 border-0 bg-transparent text-foreground outline-none placeholder:text-[#8a9ab1]"
                 value={search}
                 onChange={(event) => updateSearch(event.target.value)}
                 placeholder="Search name or email"
@@ -189,7 +211,8 @@ export function AccountManagementPage() {
               />
             </label>
             <AccountDropdown
-              className="account-filter-role"
+              className="max-[560px]:w-full"
+              triggerClassName="h-[34px] min-w-[132px] border-[#e1e4ea]"
               label="Filter by role"
               value={roleFilter}
               options={[{ value: "", label: "All roles" }, ...roleOptions]}
@@ -198,127 +221,172 @@ export function AccountManagementPage() {
           </div>
         </div>
 
-        <div className="account-table-head" aria-hidden="true">
-          <span>ACCOUNT</span>
-          <span>ROLE</span>
-          <span>CREATED</span>
-          <span>ACCESS</span>
-        </div>
-        <div className="account-rows" aria-live="polite">
-          {busy && (
-            <div className="account-state" role="status">
-              Loading accounts…
-            </div>
-          )}
-          {!busy && error && (
-            <div className="account-state" role="alert">
-              <p>{error}</p>
-              <button
-                type="button"
-                className="account-text-button"
-                onClick={() => setRevision((current) => current + 1)}
+        <div className="@container min-w-0 rounded-lg border border-[#e8ebef] bg-background">
+          <div
+            className={cn(
+              accountGrid,
+              "min-h-[39px] rounded-t-[7px] border-b border-[#eceef1] bg-[#f7f7f8] px-4 text-xs font-semibold text-foreground @max-[720px]:hidden",
+            )}
+            aria-hidden="true"
+          >
+            <span>Member</span>
+            <span>Role</span>
+            <span>Created</span>
+            <span>Access</span>
+          </div>
+          <div aria-live="polite">
+            {busy && (
+              <div
+                className="grid min-h-[150px] place-content-center gap-2 p-6 text-center text-[#7183a2]"
+                role="status"
               >
-                Try again
-              </button>
-            </div>
-          )}
-          {!busy && !error && result?.users.length === 0 && (
-            <div className="account-state">No accounts match your search.</div>
-          )}
-          {!busy &&
-            !error &&
-            result?.users.map((user) => {
-              const assignableRoles = allRoles.filter((role) =>
-                canAssignRole(actor, user.role, role),
-              )
-              const editable =
-                user.id !== actor.id && assignableRoles.length > 0
-              const selectedRole = draftRoles[user.id] ?? user.role
-              return (
-                <div className="account-row" key={user.id}>
-                  <div className="account-identity">
-                    <span className="account-avatar" aria-hidden="true">
-                      {(user.fullName || user.email).slice(0, 1).toUpperCase()}
-                    </span>
-                    <div className="account-person">
-                      <strong>
-                        {user.fullName || user.email.split("@")[0]}
-                      </strong>
-                      <span>{user.email}</span>
+                Loading accounts…
+              </div>
+            )}
+            {!busy && error && (
+              <div
+                className="grid min-h-[150px] place-content-center gap-2 p-6 text-center text-[#7183a2]"
+                role="alert"
+              >
+                <p className="m-0">{error}</p>
+                <button
+                  type="button"
+                  className={cn(
+                    "cursor-pointer border-0 bg-transparent font-bold text-[#244993]",
+                    accountFocusRing,
+                  )}
+                  onClick={() => setRevision((current) => current + 1)}
+                >
+                  Try again
+                </button>
+              </div>
+            )}
+            {!busy && !error && result?.users.length === 0 && (
+              <div className="grid min-h-[150px] place-content-center gap-2 p-6 text-center text-[#7183a2]">
+                No accounts match your search.
+              </div>
+            )}
+            {!busy &&
+              !error &&
+              result?.users.map((user) => {
+                const assignableRoles = allRoles.filter((role) =>
+                  canAssignRole(actor, user.role, role),
+                )
+                const editable =
+                  user.id !== actor.id && assignableRoles.length > 0
+                const selectedRole = draftRoles[user.id] ?? user.role
+                return (
+                  <div
+                    className={cn(
+                      accountGrid,
+                      "min-h-[58px] border-b border-[#eceef1] px-4 py-[7px] text-xs text-foreground last:rounded-b-[7px] last:border-b-0 hover:bg-[#fafbfc] @max-[720px]:gap-x-4 @max-[720px]:gap-y-[10px] @max-[720px]:py-[14px] @max-[530px]:gap-[9px]",
+                    )}
+                    key={user.id}
+                  >
+                    <div className="min-w-0 @max-[720px]:col-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+                      <div className="grid min-w-0 gap-0.5">
+                        <strong className="overflow-hidden font-medium text-ellipsis whitespace-nowrap text-foreground">
+                          {user.fullName || user.email.split("@")[0]}
+                        </strong>
+                        <span className="overflow-hidden text-[11px] text-ellipsis whitespace-nowrap text-[#738096]">
+                          {user.email}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="@max-[720px]:col-start-2 @max-[720px]:row-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+                      <span className="mr-1.5 hidden text-[#738096] @max-[530px]:inline">
+                        Role
+                      </span>
+                      <span className="text-xs text-foreground">
+                        {roleNames[user.role]}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-[#738096] @max-[720px]:col-start-1 @max-[720px]:row-start-2 @max-[530px]:row-auto">
+                      <span className="mr-1.5 hidden @max-[720px]:inline">
+                        Created
+                      </span>
+                      {formatDate(user.createdAt)}
+                    </div>
+                    <div className="flex min-w-0 items-center gap-2 @max-[720px]:col-start-2 @max-[720px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+                      {editable ? (
+                        <>
+                          <AccountDropdown
+                            className="max-w-[135px] flex-1"
+                            triggerClassName="h-8 border-[#e1e4ea] text-xs"
+                            menuClassName="right-0 left-auto"
+                            label={`Role for ${user.email}`}
+                            value={selectedRole}
+                            disabled={savingId === user.id}
+                            options={assignableRoles.map((role) => ({
+                              value: role,
+                              label: roleNames[role],
+                            }))}
+                            onChange={(role) =>
+                              setDraftRoles((current) => ({
+                                ...current,
+                                [user.id]: role,
+                              }))
+                            }
+                          />
+                          <button
+                            type="button"
+                            className={cn(
+                              accountButton,
+                              accountButtonPrimary,
+                              "ml-auto min-h-8 rounded-[7px] px-[11px] text-xs",
+                            )}
+                            disabled={
+                              selectedRole === user.role || savingId === user.id
+                            }
+                            onClick={() => void saveRole(user)}
+                          >
+                            {savingId === user.id ? "Saving…" : "Save"}
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-[11px] text-[#738096]">
+                          {user.id === actor.id ? "Your account" : "View only"}
+                        </span>
+                      )}
                     </div>
                   </div>
-                  <div className="account-role-cell">
-                    <span
-                      className={`account-role account-role-${user.role.toLowerCase()}`}
-                    >
-                      {roleNames[user.role]}
-                    </span>
-                  </div>
-                  <div className="account-date">
-                    <span className="account-mobile-label">Created</span>
-                    {formatDate(user.createdAt)}
-                  </div>
-                  <div className="account-access">
-                    {editable ? (
-                      <>
-                        <AccountDropdown
-                          className="account-access-role"
-                          label={`Role for ${user.email}`}
-                          value={selectedRole}
-                          disabled={savingId === user.id}
-                          options={assignableRoles.map((role) => ({
-                            value: role,
-                            label: roleNames[role],
-                          }))}
-                          onChange={(role) =>
-                            setDraftRoles((current) => ({
-                              ...current,
-                              [user.id]: role,
-                            }))
-                          }
-                        />
-                        <button
-                          type="button"
-                          className="account-button account-button-secondary account-save"
-                          disabled={
-                            selectedRole === user.role || savingId === user.id
-                          }
-                          onClick={() => void saveRole(user)}
-                        >
-                          {savingId === user.id ? "Saving…" : "Save"}
-                        </button>
-                      </>
-                    ) : (
-                      <span className="account-readonly">
-                        {user.id === actor.id ? "Your account" : "View only"}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
+                )
+              })}
+          </div>
         </div>
         {!busy && !error && result && result.total > 0 && (
-          <div className="account-pagination">
+          <div className="flex items-center justify-between gap-3 pt-4 text-[11px] text-[#65718a] max-[560px]:flex-wrap max-[560px]:pt-[14px]">
             <span>
-              Page {page} of {totalPages}
+              Showing {(page - 1) * result.pageSize + 1}–
+              {Math.min(page * result.pageSize, result.total)} of {result.total}
             </span>
-            <div>
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                className="account-button account-button-secondary"
+                className={cn(
+                  accountButton,
+                  accountButtonSecondary,
+                  "min-h-[30px] rounded-lg border-[#e1e4ea] px-3 text-[11px] font-medium text-foreground",
+                )}
                 disabled={page <= 1}
                 onClick={() => setPage((current) => current - 1)}
               >
-                Previous
+                ← Back
               </button>
+              <span className="px-[3px] whitespace-nowrap text-foreground">
+                Page {page} of {totalPages}
+              </span>
               <button
                 type="button"
-                className="account-button account-button-secondary"
+                className={cn(
+                  accountButton,
+                  accountButtonSecondary,
+                  "min-h-[30px] rounded-lg border-[#e1e4ea] px-3 text-[11px] font-medium text-foreground",
+                )}
                 disabled={page >= totalPages}
                 onClick={() => setPage((current) => current + 1)}
               >
-                Next
+                Next →
               </button>
             </div>
           </div>
