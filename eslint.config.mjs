@@ -14,6 +14,7 @@ export default tseslint.config(
       "apps/api/src/generated/**",
       ".pnpm-store/**",
       ".localappdata/**",
+      "apps/mobile/**",
     ],
   },
   js.configs.recommended,
