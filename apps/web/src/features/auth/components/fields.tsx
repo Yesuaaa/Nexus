@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState, type FocusEvent } from "react"
 import { Link } from "react-router"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -124,8 +124,14 @@ export function PasswordField({
   copy: AuthCopy
 }) {
   const [visible, setVisible] = useState(false)
+  const fieldRef = useRef<HTMLDivElement>(null)
+  function handleFieldBlur(event: FocusEvent<HTMLDivElement>) {
+    if (!fieldRef.current?.contains(event.relatedTarget as Node | null)) {
+      onBlur()
+    }
+  }
   return (
-    <div className={fieldClass}>
+    <div className={fieldClass} ref={fieldRef} onBlur={handleFieldBlur}>
       <div className="flex items-baseline justify-between gap-3">
         <Label
           className={`${labelClass} ${id === "password" ? "font-normal" : ""}`}
@@ -149,7 +155,6 @@ export function PasswordField({
           type={visible ? "text" : "password"}
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          onBlur={onBlur}
           autoComplete={autoComplete}
           minLength={minLength}
           aria-invalid={Boolean(error)}

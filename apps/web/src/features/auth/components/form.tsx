@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent } from "react"
-import { Link, useNavigate } from "react-router"
+import { Link } from "react-router"
 import { motion, useReducedMotion } from "framer-motion"
 import { sileo } from "sileo"
 import { Button } from "@/components/ui/button"
@@ -21,9 +21,8 @@ export function AuthContent({
   mode: AuthMode
   copy: AuthCopy
   language: AuthLanguage
-  onLoggedIn: () => void
+  onLoggedIn: (mode: AuthMode) => void
 }) {
-  const navigate = useNavigate()
   const reduceMotion = useReducedMotion()
   const formRef = useRef<HTMLFormElement>(null)
   const [fullName, setFullName] = useState("")
@@ -74,7 +73,7 @@ export function AuthContent({
     try {
       if (mode === "login") {
         await signIn(email.trim(), password)
-        onLoggedIn()
+        onLoggedIn("login")
       } else {
         await register({
           fullName: fullName.trim(),
@@ -82,11 +81,7 @@ export function AuthContent({
           email: email.trim(),
           password,
         })
-        navigate("/dashboard", { replace: true })
-        sileo.success({
-          title: copy.accountCreated,
-          description: copy.welcomeToExp,
-        })
+        onLoggedIn("register")
       }
     } catch (caught) {
       const message = requestErrorMessage(caught, mode, copy)
@@ -218,7 +213,7 @@ export function AuthContent({
               />
             </div>
           )}
-          {mode === "register" && (
+          {mode === "register" && !visibleError("password") && (
             <p className="-mt-[11px] -mb-[6px] text-xs text-[#6b7e9f]">
               {copy.passwordHint}
             </p>

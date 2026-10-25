@@ -5,7 +5,7 @@ import { publicUser } from "../users/public-user.js"
 import { clearFailures, loginAllowed, recordFailure } from "./login-limiter.js"
 import { hashPassword, validPassword, verifyPassword } from "./password.js"
 import { issueSession, requireAuth } from "./session.js"
-import { normalizedEmail } from "./validation.js"
+import { normalizedEmail, validRegistrationProfile } from "./validation.js"
 
 export const authRouter = Router()
 
@@ -22,15 +22,7 @@ authRouter.post("/register", async (request, response) => {
       error: "Provide a valid email and password of at least 12 characters",
     })
   }
-  if (
-    (fullName !== undefined &&
-      (typeof fullName !== "string" ||
-        fullName.trim().length < 2 ||
-        fullName.trim().length > 100)) ||
-    (contactNumber !== undefined &&
-      (typeof contactNumber !== "string" ||
-        !/^\+?[0-9][0-9\s-]{6,19}$/.test(contactNumber.trim())))
-  ) {
+  if (!validRegistrationProfile(fullName, contactNumber)) {
     return response
       .status(400)
       .json({ error: "Provide a valid name and contact number" })
@@ -42,9 +34,8 @@ authRouter.post("/register", async (request, response) => {
     const user = await prisma.user.create({
       data: {
         email,
-        fullName: typeof fullName === "string" ? fullName.trim() : null,
-        contactNumber:
-          typeof contactNumber === "string" ? contactNumber.trim() : null,
+        fullName: fullName.trim(),
+        contactNumber: (contactNumber as string).trim(),
         passwordHash: await hashPassword(password),
         role: Role.USER,
       },
