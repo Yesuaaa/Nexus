@@ -1,16 +1,11 @@
 import { useNavigate } from "react-router"
 import { sileo } from "sileo"
-import { Button } from "@/components/ui/button"
 import { signOut } from "@/features/auth/api"
-import type { Account } from "@/features/auth/types"
+import { AppLayout } from "@/components/layout/app-layout"
 import { useAccount } from "./use-account"
 
-const roleLabels: Record<Account["role"], string> = {
-  SUPERADMIN: "Superadmin",
-  ADMIN: "Admin",
-  STAFF: "Staff",
-  USER: "User",
-}
+const stateClassName =
+  "grid min-h-dvh place-items-center bg-[#f7f9fc] px-6 text-center text-[#5a6f95]"
 
 export function DashboardPage({
   onReady,
@@ -33,57 +28,25 @@ export function DashboardPage({
     }
   }
 
+  if (error) {
+    return (
+      <main className={stateClassName} role="alert">
+        {error}
+      </main>
+    )
+  }
+
+  if (!account) {
+    return (
+      <main className={stateClassName} role="status">
+        Loading your account…
+      </main>
+    )
+  }
+
   return (
-    <main className="min-h-svh bg-[#f5f8fc] text-[#17213a]">
-      <header className="border-b border-[#e4eaf4] bg-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-5">
-          <img src="/auth/exp-logo.svg" alt="EXP" width="93" height="48" />
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => void handleSignOut()}
-            className="rounded-full border border-[#d7e0ee] px-5 py-2 text-sm font-semibold text-[#28438b] hover:bg-[#f3f7fd]"
-          >
-            Sign Out
-          </Button>
-        </div>
-      </header>
-      <div className="mx-auto max-w-5xl px-6 py-16">
-        {error ? (
-          <p
-            role="alert"
-            className="rounded-xl bg-white p-6 text-[#9e3447] shadow-sm"
-          >
-            {error}
-          </p>
-        ) : account ? (
-          <section className="rounded-2xl border border-[#e4eaf4] bg-white p-8 shadow-sm sm:p-12">
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[#20a9bf]">
-              Your account
-            </p>
-            <h1 className="mt-4 text-3xl font-bold sm:text-4xl">
-              Welcome{account.fullName ? `, ${account.fullName}` : " back"}.
-            </h1>
-            <p className="mt-4 text-[#5a6f95]">
-              You're signed in as {roleLabels[account.role]}.
-            </p>
-            <div className="mt-10 grid gap-4 border-t border-[#e9edf5] pt-8 text-sm sm:grid-cols-2">
-              <div>
-                <p className="font-semibold text-[#7b8dac]">Email address</p>
-                <p className="mt-2 break-all font-medium">{account.email}</p>
-              </div>
-              <div>
-                <p className="font-semibold text-[#7b8dac]">Account role</p>
-                <p className="mt-2 font-medium">{roleLabels[account.role]}</p>
-              </div>
-            </div>
-          </section>
-        ) : (
-          <p role="status" className="text-[#5a6f95]">
-            Loading your account…
-          </p>
-        )}
-      </div>
-    </main>
+    <AppLayout role={account.role} onSignOut={() => void handleSignOut()}>
+      <main className="app-content" aria-label="Dashboard" />
+    </AppLayout>
   )
 }
