@@ -232,14 +232,48 @@
   background: #eef1f8;
 }
 
+.account-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
 .account-table-head,
 .account-row {
   display: grid;
   grid-template-columns:
-    minmax(210px, 2fr) minmax(90px, 0.8fr) minmax(105px, 0.8fr)
-    minmax(200px, 1.3fr);
+    minmax(200px, 1.8fr)
+    minmax(85px, 0.7fr)
+    minmax(130px, 1.1fr)
+    minmax(100px, 0.8fr)
+    minmax(180px, 1.2fr);
   align-items: center;
   gap: 12px;
+  min-width: 760px;
+}
+
+.account-dept-cell {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.account-dept-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.account-dept-unassigned {
+  color: #94a3b8;
+  font-size: 13px;
 }
 
 .account-table-head {
@@ -550,13 +584,6 @@
     width: min(350px, 100%);
     flex: 1;
   }
-
-  .account-table-head,
-  .account-row {
-    grid-template-columns:
-      minmax(180px, 1.7fr) minmax(80px, 0.8fr) minmax(92px, 0.8fr)
-      minmax(170px, 1.3fr);
-  }
 }
 
 @media (max-width: 820px) {
@@ -570,6 +597,7 @@
 
   .account-row {
     grid-template-columns: minmax(0, 1fr) auto;
+    min-width: 0;
     gap: 12px;
     padding: 16px 20px;
   }
@@ -583,9 +611,16 @@
     grid-row: 1;
   }
 
-  .account-date {
+  .account-dept-cell {
     grid-column: 1;
     grid-row: 2;
+    margin-left: 50px;
+  }
+
+  .account-date {
+    grid-column: 1;
+    grid-row: 3;
+    margin-left: 50px;
   }
 
   .account-mobile-label {
@@ -595,7 +630,7 @@
 
   .account-access {
     grid-column: 2;
-    grid-row: 2;
+    grid-row: 3;
   }
 }
 

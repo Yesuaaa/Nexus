@@ -198,105 +198,148 @@ export function AccountManagementPage() {
           </div>
         </div>
 
-        <div className="account-table-head" aria-hidden="true">
-          <span>ACCOUNT</span>
-          <span>ROLE</span>
-          <span>CREATED</span>
-          <span>ACCESS</span>
-        </div>
-        <div className="account-rows" aria-live="polite">
-          {busy && (
-            <div className="account-state" role="status">
-              Loading accounts…
-            </div>
-          )}
-          {!busy && error && (
-            <div className="account-state" role="alert">
-              <p>{error}</p>
-              <button
-                type="button"
-                className="account-text-button"
-                onClick={() => setRevision((current) => current + 1)}
-              >
-                Try again
-              </button>
-            </div>
-          )}
-          {!busy && !error && result?.users.length === 0 && (
-            <div className="account-state">No accounts match your search.</div>
-          )}
-          {!busy &&
-            !error &&
-            result?.users.map((user) => {
-              const assignableRoles = allRoles.filter((role) =>
-                canAssignRole(actor, user.role, role),
-              )
-              const editable =
-                user.id !== actor.id && assignableRoles.length > 0
-              const selectedRole = draftRoles[user.id] ?? user.role
-              return (
-                <div className="account-row" key={user.id}>
-                  <div className="account-identity">
-                    <span className="account-avatar" aria-hidden="true">
-                      {(user.fullName || user.email).slice(0, 1).toUpperCase()}
-                    </span>
-                    <div className="account-person">
-                      <strong>
-                        {user.fullName || user.email.split("@")[0]}
-                      </strong>
-                      <span>{user.email}</span>
+        <div className="account-table-wrapper">
+          <div className="account-table-head" aria-hidden="true">
+            <span>ACCOUNT</span>
+            <span>ROLE</span>
+            <span>DEPARTMENT</span>
+            <span>CREATED</span>
+            <span>ACCESS</span>
+          </div>
+          <div className="account-rows" aria-live="polite">
+            {busy && (
+              <div className="account-state" role="status">
+                Loading accounts…
+              </div>
+            )}
+            {!busy && error && (
+              <div className="account-state" role="alert">
+                <p>{error}</p>
+                <button
+                  type="button"
+                  className="account-text-button"
+                  onClick={() => setRevision((current) => current + 1)}
+                >
+                  Try again
+                </button>
+              </div>
+            )}
+            {!busy && !error && result?.users.length === 0 && (
+              <div className="account-state">
+                No accounts match your search.
+              </div>
+            )}
+            {!busy &&
+              !error &&
+              result?.users.map((user) => {
+                const assignableRoles = allRoles.filter((role) =>
+                  canAssignRole(actor, user.role, role),
+                )
+                const editable =
+                  user.id !== actor.id && assignableRoles.length > 0
+                const selectedRole = draftRoles[user.id] ?? user.role
+                return (
+                  <div className="account-row" key={user.id}>
+                    <div className="account-identity">
+                      <span className="account-avatar" aria-hidden="true">
+                        {(user.fullName || user.email)
+                          .slice(0, 1)
+                          .toUpperCase()}
+                      </span>
+                      <div className="account-person">
+                        <strong>
+                          {user.fullName || user.email.split("@")[0]}
+                        </strong>
+                        <span>{user.email}</span>
+                      </div>
+                    </div>
+                    <div className="account-role-cell">
+                      <span
+                        className={`account-role account-role-${user.role.toLowerCase()}`}
+                      >
+                        {roleNames[user.role]}
+                      </span>
+                    </div>
+                    <div className="account-dept-cell">
+                      {user.department ? (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "2px",
+                            minWidth: 0,
+                          }}
+                        >
+                          <span className="account-dept-badge">
+                            {user.department.name}
+                            {user.department.code
+                              ? ` (${user.department.code})`
+                              : ""}
+                          </span>
+                          {(user.position || user.team) && (
+                            <span
+                              style={{
+                                fontSize: "11px",
+                                color: "#64748b",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {user.position}
+                              {user.position && user.team ? " • " : ""}
+                              {user.team ? user.team.name : ""}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="account-dept-unassigned">—</span>
+                      )}
+                    </div>
+                    <div className="account-date">
+                      <span className="account-mobile-label">Created</span>
+                      {formatDate(user.createdAt)}
+                    </div>
+                    <div className="account-access">
+                      {editable ? (
+                        <>
+                          <AccountDropdown
+                            className="account-access-role"
+                            label={`Role for ${user.email}`}
+                            value={selectedRole}
+                            disabled={savingId === user.id}
+                            options={assignableRoles.map((role) => ({
+                              value: role,
+                              label: roleNames[role],
+                            }))}
+                            onChange={(role) =>
+                              setDraftRoles((current) => ({
+                                ...current,
+                                [user.id]: role,
+                              }))
+                            }
+                          />
+                          <button
+                            type="button"
+                            className="account-button account-button-secondary account-save"
+                            disabled={
+                              selectedRole === user.role || savingId === user.id
+                            }
+                            onClick={() => void saveRole(user)}
+                          >
+                            {savingId === user.id ? "Saving…" : "Save"}
+                          </button>
+                        </>
+                      ) : (
+                        <span className="account-readonly">
+                          {user.id === actor.id ? "Your account" : "View only"}
+                        </span>
+                      )}
                     </div>
                   </div>
-                  <div className="account-role-cell">
-                    <span
-                      className={`account-role account-role-${user.role.toLowerCase()}`}
-                    >
-                      {roleNames[user.role]}
-                    </span>
-                  </div>
-                  <div className="account-date">
-                    <span className="account-mobile-label">Created</span>
-                    {formatDate(user.createdAt)}
-                  </div>
-                  <div className="account-access">
-                    {editable ? (
-                      <>
-                        <AccountDropdown
-                          className="account-access-role"
-                          label={`Role for ${user.email}`}
-                          value={selectedRole}
-                          disabled={savingId === user.id}
-                          options={assignableRoles.map((role) => ({
-                            value: role,
-                            label: roleNames[role],
-                          }))}
-                          onChange={(role) =>
-                            setDraftRoles((current) => ({
-                              ...current,
-                              [user.id]: role,
-                            }))
-                          }
-                        />
-                        <button
-                          type="button"
-                          className="account-button account-button-secondary account-save"
-                          disabled={
-                            selectedRole === user.role || savingId === user.id
-                          }
-                          onClick={() => void saveRole(user)}
-                        >
-                          {savingId === user.id ? "Saving…" : "Save"}
-                        </button>
-                      </>
-                    ) : (
-                      <span className="account-readonly">
-                        {user.id === actor.id ? "Your account" : "View only"}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
+                )
+              })}
+          </div>
         </div>
         {!busy && !error && result && result.total > 0 && (
           <div className="account-pagination">

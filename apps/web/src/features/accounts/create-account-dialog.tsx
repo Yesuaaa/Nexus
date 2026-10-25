@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react"
 import { ApiError } from "@/features/auth/api"
 import { createAccount, type AccountRole } from "./api"
 import { AccountDropdown } from "./account-dropdown"
+import { listDepartments, type Department } from "@/features/departments/api"
 
 const roleNames: Record<AccountRole, string> = {
   SUPERADMIN: "Superadmin",
@@ -25,6 +26,20 @@ export function CreateAccountDialog({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [role, setRole] = useState<AccountRole>("USER")
+  const [departmentId, setDepartmentId] = useState<string>("")
+  const [departments, setDepartments] = useState<Department[]>([])
+
+  useEffect(() => {
+    let active = true
+    listDepartments()
+      .then((data) => {
+        if (active) setDepartments(data)
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [])
 
   useEffect(() => {
     const dialog = dialogRef.current
@@ -56,11 +71,14 @@ export function CreateAccountDialog({
         fullName: String(fields.get("fullName") ?? "").trim(),
         contactNumber:
           String(fields.get("contactNumber") ?? "").trim() || undefined,
+        position: String(fields.get("position") ?? "").trim() || undefined,
         password,
         role,
+        departmentId: departmentId || undefined,
       })
       form.reset()
       setRole("USER")
+      setDepartmentId("")
       onCreated()
       closeDialog()
     } catch (caught) {
@@ -137,6 +155,16 @@ export function CreateAccountDialog({
               placeholder="Optional"
             />
           </label>
+          <label className="account-field">
+            <span>Job Title / Position</span>
+            <input
+              name="position"
+              type="text"
+              autoComplete="off"
+              maxLength={100}
+              placeholder="e.g. Media Buyer, SEO Specialist"
+            />
+          </label>
           <div className="account-field">
             <span>
               Role <strong>*</strong>
@@ -150,6 +178,26 @@ export function CreateAccountDialog({
                 label: roleNames[option],
               }))}
             />
+          </div>
+          <div className="account-field">
+            <span>Department</span>
+            <select
+              className="dept-select"
+              style={{
+                height: "38px",
+                borderColor: "#dce3ed",
+                borderRadius: "8px",
+              }}
+              value={departmentId}
+              onChange={(e) => setDepartmentId(e.target.value)}
+            >
+              <option value="">-- No Department Assigned --</option>
+              {departments.map((dept) => (
+                <option key={dept.id} value={dept.id}>
+                  {dept.name} {dept.code ? `(${dept.code})` : ""}
+                </option>
+              ))}
+            </select>
           </div>
           <label className="account-field">
             <span>

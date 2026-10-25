@@ -9,6 +9,9 @@ export const Permission = {
   ACCOUNTS_CREATE_PRIVILEGED: "accounts:create-privileged",
   ACCOUNTS_ASSIGN_BASIC: "accounts:assign-basic",
   ACCOUNTS_ASSIGN_PRIVILEGED: "accounts:assign-privileged",
+  DEPARTMENTS_READ: "departments:read",
+  DEPARTMENTS_MANAGE: "departments:manage",
+  DEPARTMENTS_DELETE: "departments:delete",
 } as const
 
 export type Permission = (typeof Permission)[keyof typeof Permission]
@@ -19,16 +22,23 @@ const commonPermissions = [
   Permission.PROFILE_CHANGE_PASSWORD,
 ] as const
 
-const adminPermissions = [
+const staffPermissions = [
   ...commonPermissions,
+  Permission.DEPARTMENTS_READ,
+] as const
+
+const adminPermissions = [
+  ...staffPermissions,
   Permission.ACCOUNTS_READ,
   Permission.ACCOUNTS_CREATE_BASIC,
   Permission.ACCOUNTS_ASSIGN_BASIC,
+  Permission.DEPARTMENTS_MANAGE,
+  Permission.DEPARTMENTS_DELETE,
 ] as const
 
 const rolePermissions: Record<Role, readonly Permission[]> = {
   [Role.USER]: commonPermissions,
-  [Role.STAFF]: commonPermissions,
+  [Role.STAFF]: staffPermissions,
   [Role.ADMIN]: adminPermissions,
   [Role.SUPERADMIN]: [
     ...adminPermissions,

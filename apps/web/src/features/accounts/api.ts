@@ -14,8 +14,11 @@ export type NewAccount = {
   email: string
   fullName: string
   contactNumber?: string
+  position?: string
   password: string
   role: AccountRole
+  departmentId?: string
+  teamId?: string
 }
 
 export function listAccounts(search: string, role: string, page: number) {

@@ -1,6 +1,7 @@
 import cors from "cors"
 import express, { type ErrorRequestHandler } from "express"
 import { authRouter } from "./features/auth/routes.js"
+import { departmentsRouter } from "./features/departments/routes.js"
 import { healthRouter } from "./features/health/routes.js"
 import { usersRouter } from "./features/users/routes.js"
 
@@ -11,6 +12,7 @@ export function createApp() {
   app.use("/api", noStore)
   app.use("/api/auth", authRouter)
   app.use("/api/users", usersRouter)
+  app.use("/api/departments", departmentsRouter)
   app.use("/api", healthRouter)
   app.use(handleError)
   return app
