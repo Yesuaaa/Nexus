@@ -1,6 +1,13 @@
 import { NavLink } from "react-router"
 import type { Account } from "@/features/auth/types"
-import { CloseIcon, DashboardIcon, PanelIcon, SignOutIcon } from "./icons"
+import { hasPermission, Permissions } from "@/features/auth/permissions"
+import {
+  AccountsIcon,
+  CloseIcon,
+  DashboardIcon,
+  PanelIcon,
+  SignOutIcon,
+} from "./icons"
 
 const accessLabels: Record<Account["role"], string> = {
   USER: "DIGITAL SOLUTIONS INC.",
@@ -10,14 +17,14 @@ const accessLabels: Record<Account["role"], string> = {
 }
 
 export function Sidebar({
-  role,
+  account,
   collapsed,
   drawerOpen,
   onToggleCollapse,
   onCloseDrawer,
   onSignOut,
 }: {
-  role: Account["role"]
+  account: Account
   collapsed: boolean
   drawerOpen: boolean
   onToggleCollapse: () => void
@@ -37,7 +44,9 @@ export function Sidebar({
             <div className="app-brand-image-frame">
               <img src="/auth/exp-logo.svg" alt="EXP" />
             </div>
-            <span className="app-brand-caption">{accessLabels[role]}</span>
+            <span className="app-brand-caption">
+              {accessLabels[account.role]}
+            </span>
           </div>
           <button
             type="button"
@@ -73,6 +82,20 @@ export function Sidebar({
             <DashboardIcon />
             <span className="app-sidebar-label">Dashboard</span>
           </NavLink>
+          {hasPermission(account, Permissions.ACCOUNTS_READ) && (
+            <NavLink
+              to="/accounts"
+              end
+              className={({ isActive }) =>
+                `app-nav-link${isActive ? " is-active" : ""}`
+              }
+              title={collapsed ? "Accounts" : undefined}
+              onClick={onCloseDrawer}
+            >
+              <AccountsIcon />
+              <span className="app-sidebar-label">Account Management</span>
+            </NavLink>
+          )}
         </nav>
 
         <div className="app-sidebar-footer">

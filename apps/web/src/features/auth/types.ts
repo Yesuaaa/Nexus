@@ -1,3 +1,5 @@
+import type { Permission } from "./permissions"
+
 export type AuthMode = "login" | "register"
 
 export type AuthLanguage = "en" | "fil"
@@ -8,6 +10,7 @@ export type Account = {
   fullName: string | null
   contactNumber: string | null
   role: "SUPERADMIN" | "ADMIN" | "STAFF" | "USER"
+  permissions: Permission[]
   createdAt: string
 }
 

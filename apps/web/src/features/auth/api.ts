@@ -60,6 +60,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return (response.status === 204 ? undefined : await response.json()) as T
 }
 
+export { request as apiRequest }
+
 export async function signIn(
   email: string,
   password: string,

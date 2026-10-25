@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react"
+import { CheckIcon } from "@/components/ui/check-icon"
 import type { AuthCopy } from "../copy"
 import { focusOutline } from "./styles"
 import type { AuthLanguage } from "../types"
@@ -111,7 +112,7 @@ function LanguagePicker({
             onClick={() => choose("en")}
           >
             English
-            {language === "en" && <span aria-hidden="true">✓</span>}
+            {language === "en" && <CheckIcon />}
           </button>
           <button
             ref={filipinoRef}
@@ -122,7 +123,7 @@ function LanguagePicker({
             onClick={() => choose("fil")}
           >
             Filipino
-            {language === "fil" && <span aria-hidden="true">✓</span>}
+            {language === "fil" && <CheckIcon />}
           </button>
         </div>
       )}

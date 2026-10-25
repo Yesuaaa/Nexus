@@ -4,7 +4,8 @@ import { getPrisma } from "../../lib/db.js"
 import { publicUser } from "../users/public-user.js"
 import { clearFailures, loginAllowed, recordFailure } from "./login-limiter.js"
 import { hashPassword, validPassword, verifyPassword } from "./password.js"
-import { issueSession, requireAuth } from "./session.js"
+import { Permission } from "./permissions.js"
+import { issueSession, requireAuth, requirePermission } from "./session.js"
 import { normalizedEmail, validRegistrationProfile } from "./validation.js"
 
 export const authRouter = Router()
@@ -84,40 +85,52 @@ authRouter.post("/login", async (request, response) => {
   return response.json(await issueSession(user))
 })
 
-authRouter.get("/me", requireAuth, (request, response) => {
-  response.json({ user: publicUser(request.auth!.user) })
-})
+authRouter.get(
+  "/me",
+  requireAuth,
+  requirePermission(Permission.PROFILE_READ),
+  (request, response) => {
+    response.json({ user: publicUser(request.auth!.user) })
+  },
+)
 
 authRouter.post("/logout", requireAuth, async (request, response) => {
   await getPrisma()!.session.delete({ where: { id: request.auth!.sessionId } })
   response.status(204).send()
 })
 
-authRouter.post("/change-password", requireAuth, async (request, response) => {
-  const currentPassword = request.body?.currentPassword
-  const newPassword = request.body?.newPassword
-  if (
-    typeof currentPassword !== "string" ||
-    Buffer.byteLength(currentPassword) > 1024 ||
-    !validPassword(newPassword)
-  ) {
-    return response.status(400).json({
-      error:
-        "Provide the current password and a new password of at least 12 characters",
-    })
-  }
-  if (
-    !(await verifyPassword(currentPassword, request.auth!.user.passwordHash))
-  ) {
-    return response.status(401).json({ error: "Current password is incorrect" })
-  }
-  const prisma = getPrisma()!
-  await prisma.$transaction([
-    prisma.user.update({
-      where: { id: request.auth!.user.id },
-      data: { passwordHash: await hashPassword(newPassword) },
-    }),
-    prisma.session.deleteMany({ where: { userId: request.auth!.user.id } }),
-  ])
-  return response.status(204).send()
-})
+authRouter.post(
+  "/change-password",
+  requireAuth,
+  requirePermission(Permission.PROFILE_CHANGE_PASSWORD),
+  async (request, response) => {
+    const currentPassword = request.body?.currentPassword
+    const newPassword = request.body?.newPassword
+    if (
+      typeof currentPassword !== "string" ||
+      Buffer.byteLength(currentPassword) > 1024 ||
+      !validPassword(newPassword)
+    ) {
+      return response.status(400).json({
+        error:
+          "Provide the current password and a new password of at least 12 characters",
+      })
+    }
+    if (
+      !(await verifyPassword(currentPassword, request.auth!.user.passwordHash))
+    ) {
+      return response
+        .status(401)
+        .json({ error: "Current password is incorrect" })
+    }
+    const prisma = getPrisma()!
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: request.auth!.user.id },
+        data: { passwordHash: await hashPassword(newPassword) },
+      }),
+      prisma.session.deleteMany({ where: { userId: request.auth!.user.id } }),
+    ])
+    return response.status(204).send()
+  },
+)

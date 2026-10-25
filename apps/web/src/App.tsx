@@ -6,6 +6,8 @@ import { getAuthCopy, getStoredAuthLanguage } from "@/features/auth/copy"
 import { AuthPage } from "@/features/auth/auth-page"
 import { useLoginTransition } from "@/features/auth/use-login-transition"
 import { DashboardPage } from "@/features/dashboard/dashboard-page"
+import { AccountManagementPage } from "@/features/accounts/account-management-page"
+import { PortalRoute } from "@/components/layout/portal-route"
 import { NotFoundPage } from "@/pages/not-found-page"
 
 export default function App() {
@@ -48,10 +50,10 @@ export default function App() {
             <AuthPage mode="register" onLoggedIn={beginLoginTransition} />
           }
         />
-        <Route
-          path="/dashboard"
-          element={<DashboardPage onReady={markDestinationReady} />}
-        />
+        <Route element={<PortalRoute onReady={markDestinationReady} />}>
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/accounts" element={<AccountManagementPage />} />
+        </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
       {showLoader && (

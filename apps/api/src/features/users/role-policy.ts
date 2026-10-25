@@ -1,10 +1,21 @@
 import { Role } from "../../generated/prisma/client.js"
+import { hasPermission, Permission } from "../auth/permissions.js"
+
+function isPrivileged(role: Role): boolean {
+  return role === Role.ADMIN || role === Role.SUPERADMIN
+}
 
 export function canAssignRole(actor: Role, current: Role, next: Role): boolean {
-  if (actor === Role.SUPERADMIN) return true
-  return (
-    actor === Role.ADMIN &&
-    (current === Role.STAFF || current === Role.USER) &&
-    (next === Role.STAFF || next === Role.USER)
-  )
+  const permission =
+    isPrivileged(current) || isPrivileged(next)
+      ? Permission.ACCOUNTS_ASSIGN_PRIVILEGED
+      : Permission.ACCOUNTS_ASSIGN_BASIC
+  return hasPermission(actor, permission)
+}
+
+export function canCreateRole(actor: Role, role: Role): boolean {
+  const permission = isPrivileged(role)
+    ? Permission.ACCOUNTS_CREATE_PRIVILEGED
+    : Permission.ACCOUNTS_CREATE_BASIC
+  return hasPermission(actor, permission)
 }

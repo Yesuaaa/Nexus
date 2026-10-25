@@ -15,6 +15,7 @@ test("sign-in stores its session and authenticated requests send one bearer toke
     fullName: "Jane Doe",
     contactNumber: null,
     role: "USER",
+    permissions: ["dashboard:read", "profile:read", "profile:change-password"],
     createdAt: "2026-01-01T00:00:00.000Z",
   }
   const requests = []

@@ -15,8 +15,9 @@ Nexus/
 │   │   │   │   ├── layout/         # Shared portal shell: layout, sidebar, topbar, breadcrumbs, styles
 │   │   │   │   └── ui/             # Shared UI primitives
 │   │   │   ├── features/
-│   │   │   │   ├── auth/           # Login/register pages, API calls, and auth components
-│   │   │   │   ├── dashboard/      # Empty dashboard page and account loading
+│   │   │   │   ├── accounts/       # Admin and Superadmin account management
+│   │   │   │   ├── auth/           # Login/register pages, account loading, and auth components
+│   │   │   │   ├── dashboard/      # Empty dashboard page
 │   │   │   │   └── status/         # Status page and API calls
 │   │   │   ├── lib/                # Cross-feature utilities
 │   │   │   ├── pages/              # General pages, such as the 404 page
@@ -48,7 +49,8 @@ Nexus/
 │       └── settings.gradle.kts
 ├── certs/                         # Bundled database CA certificate
 ├── docs/                          # Project documentation
-│   └── filestructure.md
+│   ├── filestructure.md
+│   └── rbac.md                     # Fixed roles and permission matrix
 ├── compose.yaml                   # Development containers
 ├── compose.prod.yaml              # Production containers
 ├── Dockerfile
