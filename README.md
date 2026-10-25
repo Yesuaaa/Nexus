@@ -42,7 +42,7 @@ The account pages are at `/login` and `/register`. They use the project's shadcn
 
 Frontend code is organized by feature under `apps/web/src/features`. Auth owns its API calls, form schema, types, localized copy, hook, layout, and components. Dashboard owns account loading and display; status owns the starter health checks. Shared shadcn/ui primitives live in `components/ui`, and cross-feature utilities in `lib`. `App.tsx` defines the routes. Run `pnpm --filter @nexus/web test` for auth API and validation checks.
 
-The API follows the same feature layout under `apps/api/src/features`: auth owns credentials, sessions, and login limits; users owns account administration and role rules; health owns service checks. `app.ts` mounts the routes and handles HTTP errors, `index.ts` starts the server, and `lib/db.ts` provides Prisma access. `seed.ts` remains the Prisma seed entry point. Run `pnpm --filter @nexus/api test` for backend checks.
+The API follows the same feature layout under `apps/api/src/features`: auth owns credentials, sessions, and login limits; users owns account administration and role rules; health owns service checks. `app.ts` mounts the routes and handles HTTP errors, `index.ts` starts the server, and `lib/db.ts` provides Prisma access. `apps/api/prisma/seed.ts` is the Prisma seed entry point. Run `pnpm --filter @nexus/api test` for backend checks.
 
 ## Backend authentication
 
