@@ -221,29 +221,17 @@ export function AccountManagementPage() {
           </div>
         </div>
 
-<<<<<<< HEAD
-        <div className="account-table-wrapper">
-          <div className="account-table-head" aria-hidden="true">
-            <span>ACCOUNT</span>
-            <span>ROLE</span>
-            <span>DEPARTMENT</span>
-            <span>CREATED</span>
-            <span>ACCESS</span>
-          </div>
-          <div className="account-rows" aria-live="polite">
-            {busy && (
-              <div className="account-state" role="status">
-=======
         <div className="@container min-w-0 rounded-lg border border-[#e8ebef] bg-background">
           <div
             className={cn(
               accountGrid,
-              "min-h-[39px] rounded-t-[7px] border-b border-[#eceef1] bg-[#f7f7f8] px-4 text-xs font-semibold text-foreground @max-[720px]:hidden",
+              "min-h-[39px] rounded-t-[7px] border-b border-[#eceef1] bg-[#f7f7f8] px-4 text-xs font-semibold text-foreground @max-[850px]:hidden",
             )}
             aria-hidden="true"
           >
             <span>Member</span>
             <span>Role</span>
+            <span>Department</span>
             <span>Created</span>
             <span>Access</span>
           </div>
@@ -253,18 +241,10 @@ export function AccountManagementPage() {
                 className="grid min-h-[150px] place-content-center gap-2 p-6 text-center text-[#7183a2]"
                 role="status"
               >
->>>>>>> origin/development
                 Loading accounts…
               </div>
             )}
             {!busy && error && (
-<<<<<<< HEAD
-              <div className="account-state" role="alert">
-                <p>{error}</p>
-                <button
-                  type="button"
-                  className="account-text-button"
-=======
               <div
                 className="grid min-h-[150px] place-content-center gap-2 p-6 text-center text-[#7183a2]"
                 role="alert"
@@ -276,7 +256,6 @@ export function AccountManagementPage() {
                     "cursor-pointer border-0 bg-transparent font-bold text-[#244993]",
                     accountFocusRing,
                   )}
->>>>>>> origin/development
                   onClick={() => setRevision((current) => current + 1)}
                 >
                   Try again
@@ -284,11 +263,7 @@ export function AccountManagementPage() {
               </div>
             )}
             {!busy && !error && result?.users.length === 0 && (
-<<<<<<< HEAD
-              <div className="account-state">
-=======
               <div className="grid min-h-[150px] place-content-center gap-2 p-6 text-center text-[#7183a2]">
->>>>>>> origin/development
                 No accounts match your search.
               </div>
             )}
@@ -302,82 +277,14 @@ export function AccountManagementPage() {
                   user.id !== actor.id && assignableRoles.length > 0
                 const selectedRole = draftRoles[user.id] ?? user.role
                 return (
-<<<<<<< HEAD
-                  <div className="account-row" key={user.id}>
-                    <div className="account-identity">
-                      <span className="account-avatar" aria-hidden="true">
-                        {(user.fullName || user.email)
-                          .slice(0, 1)
-                          .toUpperCase()}
-                      </span>
-                      <div className="account-person">
-                        <strong>
-                          {user.fullName || user.email.split("@")[0]}
-                        </strong>
-                        <span>{user.email}</span>
-                      </div>
-                    </div>
-                    <div className="account-role-cell">
-                      <span
-                        className={`account-role account-role-${user.role.toLowerCase()}`}
-                      >
-                        {roleNames[user.role]}
-                      </span>
-                    </div>
-                    <div className="account-dept-cell">
-                      {user.department ? (
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "2px",
-                            minWidth: 0,
-                          }}
-                        >
-                          <span className="account-dept-badge">
-                            {user.department.name}
-                            {user.department.code
-                              ? ` (${user.department.code})`
-                              : ""}
-                          </span>
-                          {(user.position || user.team) && (
-                            <span
-                              style={{
-                                fontSize: "11px",
-                                color: "#64748b",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {user.position}
-                              {user.position && user.team ? " • " : ""}
-                              {user.team ? user.team.name : ""}
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="account-dept-unassigned">—</span>
-                      )}
-                    </div>
-                    <div className="account-date">
-                      <span className="account-mobile-label">Created</span>
-                      {formatDate(user.createdAt)}
-                    </div>
-                    <div className="account-access">
-                      {editable ? (
-                        <>
-                          <AccountDropdown
-                            className="account-access-role"
-=======
                   <div
                     className={cn(
                       accountGrid,
-                      "min-h-[58px] border-b border-[#eceef1] px-4 py-[7px] text-xs text-foreground last:rounded-b-[7px] last:border-b-0 hover:bg-[#fafbfc] @max-[720px]:gap-x-4 @max-[720px]:gap-y-[10px] @max-[720px]:py-[14px] @max-[530px]:gap-[9px]",
+                      "min-h-[58px] border-b border-[#eceef1] px-4 py-[7px] text-xs text-foreground last:rounded-b-[7px] last:border-b-0 hover:bg-[#fafbfc] @max-[850px]:gap-x-4 @max-[850px]:gap-y-[10px] @max-[850px]:py-[14px] @max-[530px]:gap-[9px]",
                     )}
                     key={user.id}
                   >
-                    <div className="min-w-0 @max-[720px]:col-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+                    <div className="min-w-0 @max-[850px]:col-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto">
                       <div className="grid min-w-0 gap-0.5">
                         <strong className="overflow-hidden font-medium text-ellipsis whitespace-nowrap text-foreground">
                           {user.fullName || user.email.split("@")[0]}
@@ -387,7 +294,7 @@ export function AccountManagementPage() {
                         </span>
                       </div>
                     </div>
-                    <div className="@max-[720px]:col-start-2 @max-[720px]:row-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+                    <div className="@max-[850px]:col-start-2 @max-[850px]:row-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto">
                       <span className="mr-1.5 hidden text-[#738096] @max-[530px]:inline">
                         Role
                       </span>
@@ -395,20 +302,40 @@ export function AccountManagementPage() {
                         {roleNames[user.role]}
                       </span>
                     </div>
-                    <div className="text-[11px] text-[#738096] @max-[720px]:col-start-1 @max-[720px]:row-start-2 @max-[530px]:row-auto">
-                      <span className="mr-1.5 hidden @max-[720px]:inline">
+                    <div className="min-w-0 @max-[850px]:col-start-1 @max-[850px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+                      {user.department ? (
+                        <div className="flex flex-col gap-0.5 min-w-0">
+                          <span className="inline-block px-2 py-0.5 bg-[#eff6ff] text-[#1d4ed8] rounded text-xs font-semibold truncate max-w-full">
+                            {user.department.name}
+                            {user.department.code
+                              ? ` (${user.department.code})`
+                              : ""}
+                          </span>
+                          {(user.position || user.team) && (
+                            <span className="text-[11px] text-[#738096] truncate">
+                              {user.position}
+                              {user.position && user.team ? " • " : ""}
+                              {user.team ? user.team.name : ""}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-[#94a3b8]">—</span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-[#738096] @max-[850px]:col-start-1 @max-[850px]:row-start-3 @max-[530px]:row-auto">
+                      <span className="mr-1.5 hidden @max-[850px]:inline">
                         Created
                       </span>
                       {formatDate(user.createdAt)}
                     </div>
-                    <div className="flex min-w-0 items-center gap-2 @max-[720px]:col-start-2 @max-[720px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+                    <div className="flex min-w-0 items-center gap-2 @max-[850px]:col-start-2 @max-[850px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto">
                       {editable ? (
                         <>
                           <AccountDropdown
                             className="max-w-[135px] flex-1"
                             triggerClassName="h-8 border-[#e1e4ea] text-xs"
                             menuClassName="right-0 left-auto"
->>>>>>> origin/development
                             label={`Role for ${user.email}`}
                             value={selectedRole}
                             disabled={savingId === user.id}
@@ -425,15 +352,11 @@ export function AccountManagementPage() {
                           />
                           <button
                             type="button"
-<<<<<<< HEAD
-                            className="account-button account-button-secondary account-save"
-=======
                             className={cn(
                               accountButton,
                               accountButtonPrimary,
                               "ml-auto min-h-8 rounded-[7px] px-[11px] text-xs",
                             )}
->>>>>>> origin/development
                             disabled={
                               selectedRole === user.role || savingId === user.id
                             }
@@ -443,11 +366,7 @@ export function AccountManagementPage() {
                           </button>
                         </>
                       ) : (
-<<<<<<< HEAD
-                        <span className="account-readonly">
-=======
                         <span className="text-[11px] text-[#738096]">
->>>>>>> origin/development
                           {user.id === actor.id ? "Your account" : "View only"}
                         </span>
                       )}
