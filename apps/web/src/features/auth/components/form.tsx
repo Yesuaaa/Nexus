@@ -86,6 +86,7 @@ export function AuthContent({
         sileo.success({
           title: copy.accountCreated,
           description: copy.welcomeToExp,
+          position: "top-center",
         })
       }
     } catch (caught) {

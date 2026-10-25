@@ -1,7 +1,16 @@
 import { useEffect, useRef, useState, type FormEvent } from "react"
+import { cn } from "@/lib/utils"
 import { ApiError } from "@/features/auth/api"
 import { createAccount, type AccountRole } from "./api"
 import { AccountDropdown } from "./account-dropdown"
+import {
+  accountButton,
+  accountButtonPrimary,
+  accountButtonSecondary,
+  accountField,
+  accountFocusRing,
+  accountInput,
+} from "./styles"
 
 const roleNames: Record<AccountRole, string> = {
   SUPERADMIN: "Superadmin",
@@ -77,20 +86,32 @@ export function CreateAccountDialog({
   return (
     <dialog
       ref={dialogRef}
-      className="account-dialog"
+      className="fixed inset-0 m-auto max-h-[min(90dvh,780px)] w-[min(520px,calc(100vw-28px))] overflow-y-auto rounded-2xl border border-[#dce4f0] bg-background p-0 font-sans text-sm text-foreground shadow-[0_22px_75px_rgb(18_36_73_/_22%)] backdrop:bg-[rgb(13_28_57_/_48%)]"
       aria-labelledby="create-account-title"
       onClose={closeDialog}
     >
       <form onSubmit={(event) => void handleSubmit(event)}>
-        <div className="account-dialog-header">
+        <div className="flex justify-between gap-4 border-b border-[#e9edf4] px-7 pt-[26px] pb-5 max-[560px]:px-5">
           <div>
-            <p className="account-eyebrow">NEW ACCOUNT</p>
-            <h2 id="create-account-title">Create account</h2>
-            <p>Set up an account and assign its portal access.</p>
+            <p className="mt-0 mb-2 text-[11px] font-bold tracking-[0.09em] text-[#32549a]">
+              NEW ACCOUNT
+            </p>
+            <h2
+              id="create-account-title"
+              className="m-0 text-[22px] tracking-[-0.03em]"
+            >
+              Create account
+            </h2>
+            <p className="mt-[5px] mb-0 text-[#7183a2]">
+              Set up an account and assign its portal access.
+            </p>
           </div>
           <button
             type="button"
-            className="account-dialog-close"
+            className={cn(
+              "size-[30px] flex-none cursor-pointer rounded-[7px] border-0 bg-[#f3f6fa] text-[23px] leading-none text-[#526686]",
+              accountFocusRing,
+            )}
             aria-label="Close"
             onClick={closeDialog}
           >
@@ -98,12 +119,13 @@ export function CreateAccountDialog({
           </button>
         </div>
 
-        <div className="account-dialog-fields">
-          <label className="account-field">
+        <div className="grid grid-cols-2 gap-x-[14px] gap-y-[17px] px-7 py-[22px] max-[560px]:grid-cols-1 max-[560px]:p-5">
+          <label className={accountField}>
             <span>
               Email address <strong>*</strong>
             </span>
             <input
+              className={accountInput}
               name="email"
               type="email"
               autoComplete="off"
@@ -113,11 +135,12 @@ export function CreateAccountDialog({
               placeholder="name@example.com"
             />
           </label>
-          <label className="account-field">
+          <label className={accountField}>
             <span>
               Full name <strong>*</strong>
             </span>
             <input
+              className={accountInput}
               name="fullName"
               type="text"
               minLength={2}
@@ -127,9 +150,10 @@ export function CreateAccountDialog({
               placeholder="Full name"
             />
           </label>
-          <label className="account-field">
+          <label className={accountField}>
             <span>Contact number</span>
             <input
+              className={accountInput}
               name="contactNumber"
               type="tel"
               autoComplete="off"
@@ -137,11 +161,12 @@ export function CreateAccountDialog({
               placeholder="Optional"
             />
           </label>
-          <div className="account-field">
+          <div className={accountField}>
             <span>
               Role <strong>*</strong>
             </span>
             <AccountDropdown
+              triggerClassName="h-10 border-[#d6dfec] text-foreground"
               label="Role"
               value={role}
               onChange={setRole}
@@ -151,11 +176,12 @@ export function CreateAccountDialog({
               }))}
             />
           </div>
-          <label className="account-field">
+          <label className={accountField}>
             <span>
               Password <strong>*</strong>
             </span>
             <input
+              className={accountInput}
               name="password"
               type="password"
               autoComplete="new-password"
@@ -165,11 +191,12 @@ export function CreateAccountDialog({
               placeholder="At least 12 characters"
             />
           </label>
-          <label className="account-field">
+          <label className={accountField}>
             <span>
               Confirm password <strong>*</strong>
             </span>
             <input
+              className={accountInput}
               name="confirmation"
               type="password"
               autoComplete="new-password"
@@ -182,14 +209,14 @@ export function CreateAccountDialog({
         </div>
 
         {error && (
-          <p className="account-form-error" role="alert">
+          <p className="mx-7 mt-0 mb-3 text-xs text-[#bc3649]" role="alert">
             {error}
           </p>
         )}
-        <div className="account-dialog-actions">
+        <div className="flex justify-end gap-[9px] border-t border-[#e9edf4] px-7 pt-[18px] pb-6 max-[560px]:px-5">
           <button
             type="button"
-            className="account-button account-button-secondary"
+            className={cn(accountButton, accountButtonSecondary)}
             onClick={closeDialog}
             disabled={saving}
           >
@@ -197,7 +224,7 @@ export function CreateAccountDialog({
           </button>
           <button
             type="submit"
-            className="account-button account-button-primary"
+            className={cn(accountButton, accountButtonPrimary)}
             disabled={saving}
           >
             {saving ? "Creating…" : "Create account"}

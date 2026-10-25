@@ -31,6 +31,7 @@ export function useLoginTransition() {
       sileo.success({
         title: copy.welcomeBackToast,
         description: copy.signedInToast,
+        position: "top-center",
       })
     }
   }

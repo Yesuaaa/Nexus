@@ -95,7 +95,7 @@ function LanguagePicker({
       </button>
       {open && (
         <div
-          className="absolute top-[calc(100%+6px)] left-0 w-max min-w-full rounded-lg border border-[#d7dfed] bg-white p-1 text-inherit shadow-[0_12px_32px_rgb(20_45_97_/_13%)]"
+          className="absolute top-[calc(100%+6px)] left-0 w-max min-w-full rounded-lg border border-[#d7dfed] bg-background p-1 text-inherit shadow-[0_12px_32px_rgb(20_45_97_/_13%)]"
           role="menu"
           aria-label={copy.language}
           onKeyDown={handleMenuKeyDown}

@@ -6,7 +6,7 @@ import { hasPermission, Permissions } from "@/features/auth/permissions"
 import { AppLayout } from "./app-layout"
 
 const stateClassName =
-  "grid min-h-dvh place-items-center bg-[#f7f9fc] px-6 text-center text-[#5a6f95]"
+  "grid min-h-dvh place-items-center bg-[var(--portal-canvas)] px-6 text-center text-[#5a6f95]"
 
 export function PortalRoute({
   onReady,
@@ -21,7 +21,11 @@ export function PortalRoute({
     try {
       await signOut()
       navigate("/login", { replace: true })
-      sileo.success({ title: "Signed out", description: "See you next time." })
+      sileo.success({
+        title: "Signed out",
+        description: "See you next time.",
+        position: "bottom-right",
+      })
     } catch {
       sileo.error({
         title: "Couldn't sign out",

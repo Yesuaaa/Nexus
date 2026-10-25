@@ -3,9 +3,10 @@
 :root {
   font-family: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   color-scheme: light;
-  --background: oklch(0.985 0.002 250);
-  --foreground: oklch(0.18 0.01 250);
-  --card: oklch(1 0 0);
+  --background: #fafafa;
+  --portal-canvas: #f3f4f6;
+  --foreground: #070f1f;
+  --card: #fafafa;
   --muted: oklch(0.955 0.004 250);
   --muted-foreground: oklch(0.48 0.015 250);
   --border: oklch(0.9 0.007 250);
@@ -13,7 +14,7 @@
   --primary: oklch(0.23 0.025 250);
   --primary-foreground: oklch(0.99 0 0);
   --accent: oklch(0.94 0.01 250);
-  --accent-foreground: oklch(0.22 0.025 250);
+  --accent-foreground: var(--foreground);
   --ring: oklch(0.6 0.06 250);
 }
 
@@ -38,6 +39,8 @@
 }
 body {
   margin: 0;
+  background: var(--background);
+  color: var(--foreground);
 }
 
 [data-sileo-viewport] {
