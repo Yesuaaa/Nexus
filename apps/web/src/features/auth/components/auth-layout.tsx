@@ -17,11 +17,11 @@ export function AuthLayout({
 }: AuthLayoutProps) {
   return (
     <main
-      className="grid min-h-svh grid-cols-[minmax(0,60%)_minmax(420px,40%)] bg-background text-foreground max-[1100px]:grid-cols-[minmax(0,55%)_minmax(400px,45%)] max-[850px]:block"
+      className="grid h-svh overflow-hidden grid-cols-[minmax(0,57%)_minmax(440px,43%)] bg-background text-foreground max-[1100px]:grid-cols-[minmax(0,52%)_minmax(400px,48%)] max-[850px]:block max-[850px]:h-auto max-[850px]:min-h-svh max-[850px]:overflow-visible"
       lang={language}
     >
       {visual}
-      <section className="flex min-h-svh min-w-0 flex-col">
+      <section className="flex h-svh min-h-0 min-w-0 flex-col overflow-hidden max-[850px]:h-auto max-[850px]:min-h-svh max-[850px]:overflow-visible">
         {header}
         {children}
         {footer}

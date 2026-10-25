@@ -37,7 +37,7 @@ export function PhotoPanel({
 
   return (
     <aside
-      className="relative min-h-svh overflow-hidden rounded-r-[26px] bg-[#173456] max-[850px]:hidden"
+      className="relative h-svh min-h-0 overflow-hidden rounded-r-[26px] bg-[#173456] max-[850px]:hidden"
       aria-label={copy.community}
     >
       {photos.map((src, index) => (
@@ -108,28 +108,18 @@ export function PhotoPanel({
   )
 }
 
-export function SocialPlaceholders({
-  copy,
-  compact = false,
-}: {
-  copy: AuthCopy
-  compact?: boolean
-}) {
+export function SocialPlaceholders({ copy }: { copy: AuthCopy }) {
   return (
     <div
-      className={`flex justify-center gap-4 ${compact ? "[@media(min-width:851px)_and_(max-height:1100px)]:gap-3" : ""}`}
+      className="flex justify-center gap-4"
       aria-label={copy.socialComingSoon}
     >
       <span
-        className={`${socialIconClass} ${compact ? "[@media(min-width:851px)_and_(max-height:1100px)]:size-10 [@media(min-width:851px)_and_(max-height:1100px)]:rounded-[9px]" : ""}`}
+        className={socialIconClass}
         title={copy.googleComingSoon}
         aria-hidden="true"
       >
-        <svg
-          className={`size-6 ${compact ? "[@media(min-width:851px)_and_(max-height:1100px)]:size-5" : ""}`}
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-        >
+        <svg className="size-6" viewBox="0 0 24 24" aria-hidden="true">
           <path
             fill="#4285F4"
             d="M21.35 12.21c0-.71-.06-1.42-.19-2.1H12v3.98h5.24a4.48 4.48 0 0 1-1.95 2.94v2.54h3.16c1.85-1.71 2.9-4.23 2.9-7.36Z"
@@ -149,22 +139,18 @@ export function SocialPlaceholders({
         </svg>
       </span>
       <span
-        className={`${socialIconClass} text-[#3264d8] ${compact ? "[@media(min-width:851px)_and_(max-height:1100px)]:size-10 [@media(min-width:851px)_and_(max-height:1100px)]:rounded-[9px]" : ""}`}
+        className={`${socialIconClass} text-[#3264d8]`}
         title={copy.facebookComingSoon}
         aria-hidden="true"
       >
         f
       </span>
       <span
-        className={`${socialIconClass} text-[#111] ${compact ? "[@media(min-width:851px)_and_(max-height:1100px)]:size-10 [@media(min-width:851px)_and_(max-height:1100px)]:rounded-[9px]" : ""}`}
+        className={`${socialIconClass} text-[#111]`}
         title={copy.appleComingSoon}
         aria-hidden="true"
       >
-        <svg
-          className={`size-[21px] ${compact ? "[@media(min-width:851px)_and_(max-height:1100px)]:size-[18px]" : ""}`}
-          viewBox="0 0 24 24"
-          fill="currentColor"
-        >
+        <svg className="size-[21px]" viewBox="0 0 24 24" fill="currentColor">
           <path d="M17.7 12.9c0-2 1.6-2.9 1.7-3-1-1.5-2.6-1.7-3.1-1.7-1.3-.1-2.5.8-3.2.8s-1.6-.8-2.6-.8c-1.4 0-2.7.8-3.4 2.1-1.4 2.5-.4 6.2 1 8.2.7 1 1.5 2.1 2.6 2.1 1 0 1.4-.7 2.7-.7 1.2 0 1.6.7 2.7.7s1.7-1 2.4-2c.8-1.1 1.1-2.2 1.1-2.2-.1 0-1.9-.7-1.9-2.5ZM15.4 6.8c.6-.7 1-1.6.9-2.6-.9 0-1.9.6-2.5 1.3-.5.6-1 1.5-.9 2.5 1 .1 1.9-.5 2.5-1.2Z" />
         </svg>
       </span>

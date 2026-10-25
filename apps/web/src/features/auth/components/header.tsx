@@ -135,18 +135,14 @@ export function AuthHeader({
   copy,
   language,
   onLanguageChange,
-  compact = false,
 }: {
   copy: AuthCopy
   language: AuthLanguage
   onLanguageChange: (language: AuthLanguage) => void
-  compact?: boolean
 }) {
   return (
-    <header
-      className={`flex h-[73px] items-center px-8 text-[13px] max-[850px]:px-6 ${compact ? "[@media(min-width:851px)_and_(max-height:1100px)]:h-12" : ""}`}
-    >
-      <div className="mx-auto flex w-[min(100%,336px)] justify-end">
+    <header className="flex h-[73px] items-center px-8 text-[13px] max-[850px]:px-6">
+      <div className="mx-auto flex w-full max-w-[400px] justify-end">
         <LanguagePicker
           language={language}
           copy={copy}

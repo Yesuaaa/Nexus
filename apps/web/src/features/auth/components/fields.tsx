@@ -18,19 +18,20 @@ export function FieldError({
   return (
     <p
       id={`${id}-error`}
-      className={`-mt-0.5 min-h-[1lh] text-xs leading-[1.4] ${muted ? "text-[#6b7e9f]" : "text-[#a92d43]"}`}
+      className={`-mt-0.5 h-[1.4em] overflow-hidden text-ellipsis whitespace-nowrap text-xs leading-[1.4] ${muted ? "text-[#6b7e9f]" : "text-[#a92d43]"}`}
       aria-live="polite"
       aria-atomic="true"
+      title={message}
     >
       {message}
     </p>
   )
 }
 
-export function Brand({ compact = false }: { compact?: boolean }) {
+export function Brand() {
   return (
     <img
-      className={`mx-auto mb-0.5 block h-[69px] w-[134px] object-contain ${compact ? "[@media(min-width:851px)_and_(max-height:760px)]:h-10 [@media(min-width:851px)_and_(min-height:761px)_and_(max-height:820px)]:h-11 [@media(min-width:851px)_and_(min-height:821px)_and_(max-height:1100px)]:h-[48px]" : ""}`}
+      className="mx-auto -mb-1 block h-[69px] w-[134px] object-contain"
       src="/auth/exp-logo.svg"
       alt="EXP"
     />
@@ -50,7 +51,6 @@ export function TextField({
   error,
   minLength,
   maxLength,
-  compact = false,
 }: {
   id: string
   label: string
@@ -64,20 +64,14 @@ export function TextField({
   error?: string
   minLength?: number
   maxLength?: number
-  compact?: boolean
 }) {
   return (
-    <div
-      className={`${fieldClass} ${compact ? "[@media(min-width:851px)_and_(max-height:1100px)]:gap-0.5" : ""}`}
-    >
-      <Label
-        className={`${labelClass} ${compact ? "[@media(min-width:851px)_and_(max-height:1100px)]:text-xs" : ""}`}
-        htmlFor={id}
-      >
+    <div className={fieldClass}>
+      <Label className={labelClass} htmlFor={id}>
         {label}
       </Label>
       <Input
-        className={`${inputClass} ${compact ? "[@media(min-width:851px)_and_(max-height:760px)]:h-[38px] [@media(min-width:851px)_and_(min-height:761px)_and_(max-height:1100px)]:h-[42px] [@media(min-width:851px)_and_(max-height:1100px)]:text-[13px]" : ""}`}
+        className={inputClass}
         id={id}
         type={type}
         value={value}
@@ -125,7 +119,6 @@ export function PasswordField({
   minLength,
   error,
   helperText,
-  compact = false,
   recoveryLink = false,
   copy,
 }: {
@@ -139,7 +132,6 @@ export function PasswordField({
   minLength?: number
   error?: string
   helperText?: string
-  compact?: boolean
   recoveryLink?: boolean
   copy: AuthCopy
 }) {
@@ -151,16 +143,9 @@ export function PasswordField({
     }
   }
   return (
-    <div
-      className={`${fieldClass} ${compact ? "[@media(min-width:851px)_and_(max-height:1100px)]:gap-0.5" : ""}`}
-      ref={fieldRef}
-      onBlur={handleFieldBlur}
-    >
+    <div className={fieldClass} ref={fieldRef} onBlur={handleFieldBlur}>
       <div className="flex items-baseline justify-between gap-3">
-        <Label
-          className={`${labelClass} ${compact ? "[@media(min-width:851px)_and_(max-height:1100px)]:text-xs" : ""}`}
-          htmlFor={id}
-        >
+        <Label className={labelClass} htmlFor={id}>
           {label}
         </Label>
         {recoveryLink && (
@@ -174,7 +159,7 @@ export function PasswordField({
       </div>
       <div className="relative">
         <Input
-          className={`${inputClass} pr-12 ${compact ? "[@media(min-width:851px)_and_(max-height:760px)]:h-[38px] [@media(min-width:851px)_and_(min-height:761px)_and_(max-height:1100px)]:h-[42px] [@media(min-width:851px)_and_(max-height:1100px)]:text-[13px]" : ""}`}
+          className={`${inputClass} pr-12`}
           id={id}
           type={visible ? "text" : "password"}
           value={value}
@@ -187,7 +172,7 @@ export function PasswordField({
           required
         />
         <Button
-          className={`absolute top-0 right-0 grid h-[47px] w-11 place-items-center border-0 bg-transparent p-0 text-[#8b9fc0] shadow-none hover:bg-transparent hover:text-[#8b9fc0] [&_svg]:size-[19px] ${compact ? "[@media(min-width:851px)_and_(max-height:760px)]:h-[38px] [@media(min-width:851px)_and_(min-height:761px)_and_(max-height:1100px)]:h-[42px]" : ""} ${focusOutline}`}
+          className={`absolute top-0 right-0 grid h-[47px] w-11 place-items-center border-0 bg-transparent p-0 text-[#8b9fc0] shadow-none hover:bg-transparent hover:text-[#8b9fc0] [&_svg]:size-[19px] ${focusOutline}`}
           variant="outline"
           type="button"
           onClick={() => setVisible((current) => !current)}

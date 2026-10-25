@@ -22,7 +22,7 @@ export function visibleFieldAfterInteraction(
   current: Field | null,
   interaction: FieldInteraction,
 ): Field | null {
-  if (interaction.type === "focus") return null
+  if (interaction.type === "focus") return current
   if (interaction.invalid) return interaction.field
   return current === interaction.field ? null : current
 }

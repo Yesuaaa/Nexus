@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import * as authSchema from "../src/features/auth/schema.ts"
 
-test("only the most recently blurred invalid field keeps an inline error", () => {
+test("the current field error remains visible while it is being corrected", () => {
   assert.equal(typeof authSchema.visibleFieldAfterInteraction, "function")
 
   assert.equal(
@@ -10,7 +10,7 @@ test("only the most recently blurred invalid field keeps an inline error", () =>
       type: "focus",
       field: "confirmPassword",
     }),
-    null,
+    "password",
   )
   assert.equal(
     authSchema.visibleFieldAfterInteraction(null, {
