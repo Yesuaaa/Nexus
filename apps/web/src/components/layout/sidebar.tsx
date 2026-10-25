@@ -171,12 +171,19 @@ export function Sidebar({
             <Link
               href="/departments"
               aria-current={pathname === "/departments" ? "page" : undefined}
-              className={`app-nav-link${pathname === "/departments" ? " is-active" : ""}`}
-              title={collapsed ? "Departments" : undefined}
+              className={cn(
+                navLinkClass,
+                collapsed &&
+                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
+                pathname === "/departments" && "bg-[#e1e3e5]",
+              )}
               onClick={onCloseDrawer}
             >
-              <DepartmentIcon />
-              <span className="app-sidebar-label">Departments</span>
+              <DepartmentIcon className="flex-none" />
+              <span className={collapsedLabelClass}>Department Management</span>
+              {collapsed && (
+                <CollapsedTooltip>Department Management</CollapsedTooltip>
+              )}
             </Link>
           )}
         </nav>

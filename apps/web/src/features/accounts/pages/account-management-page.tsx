@@ -20,7 +20,6 @@ import { CreateAccountDialog } from "../components/create-account-dialog"
 import {
   accountButton,
   accountButtonPrimary,
-  accountButtonSecondary,
   accountFocusRing,
   accountGrid,
 } from "../styles/account-styles"
@@ -150,12 +149,12 @@ export function AccountManagementPage() {
   return (
     <main
       className={cn(contentClass, "p-[clamp(16px,2.1vw,32px)]")}
-      aria-label="Account management"
+      aria-label="Account Management"
     >
       <header className="-mx-[clamp(16px,2.1vw,32px)] flex items-center justify-between gap-6 border-b border-[#eceef1] px-[clamp(16px,2.1vw,32px)] pt-0.5 pb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-4 max-[560px]:pb-[18px]">
         <div>
           <h1 className="m-0 text-[clamp(21px,2vw,25px)] leading-[1.25] font-[650] tracking-[-0.03em] text-foreground">
-            Account management
+            Account Management
           </h1>
           <p className="mt-[5px] mb-0 text-xs leading-[1.45] text-[#738096]">
             View portal accounts and manage their access.
@@ -165,7 +164,8 @@ export function AccountManagementPage() {
           type="button"
           className={cn(
             accountButton,
-            "min-h-[34px] flex-none rounded-lg bg-[#0b0b0c] px-[13px] text-xs text-white hover:bg-[#2a2a2e]",
+            accountButtonPrimary,
+            "min-h-[34px] flex-none rounded-lg px-[13px] text-xs",
           )}
           onClick={() => setCreateOpen(true)}
         >
@@ -191,7 +191,7 @@ export function AccountManagementPage() {
       >
         <div className="flex items-center pb-4 max-[560px]:pb-3">
           <div className="flex min-w-0 gap-[10px] max-[1050px]:w-full max-[560px]:flex-col">
-            <label className="flex h-[34px] w-[260px] min-w-0 items-center gap-2 rounded-lg border border-[#e1e4ea] px-[11px] text-[#7b8ca7] focus-within:bg-[#f8fafd] max-[1050px]:w-[min(350px,100%)] max-[1050px]:flex-1 max-[560px]:w-full">
+            <label className="flex h-[34px] w-[260px] min-w-0 items-center gap-2 rounded-lg border border-[#e1e4ea] px-[11px] text-[#7b8ca7] focus-within:bg-[#f8fafd] max-[1050px]:w-[min(350px,100%)] max-[1050px]:flex-1 max-[560px]:w-full max-[560px]:flex-none">
               <span className="sr-only">Search accounts</span>
               <svg
                 viewBox="0 0 24 24"
@@ -228,7 +228,7 @@ export function AccountManagementPage() {
           <div
             className={cn(
               accountGrid,
-              "min-h-[39px] rounded-t-[7px] border-b border-[#eceef1] bg-[#f7f7f8] px-4 text-xs font-semibold text-foreground @max-[850px]:hidden",
+              "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground @max-[850px]:hidden",
             )}
             aria-hidden="true"
           >
@@ -283,7 +283,7 @@ export function AccountManagementPage() {
                   <div
                     className={cn(
                       accountGrid,
-                      "min-h-[58px] border-b border-[#eceef1] px-4 py-[7px] text-xs text-foreground last:rounded-b-[7px] last:border-b-0 hover:bg-[#fafbfc] @max-[850px]:gap-x-4 @max-[850px]:gap-y-[10px] @max-[850px]:py-[14px] @max-[530px]:gap-[9px]",
+                      "min-h-[58px] border-b border-[#eceef1] px-4 py-[7px] text-xs text-foreground last:rounded-b-[7px] last:border-b-0 hover:bg-[#e8eef2] @max-[850px]:gap-x-4 @max-[850px]:gap-y-[10px] @max-[850px]:py-[14px] @max-[530px]:gap-[9px]",
                     )}
                     key={user.id}
                   >
@@ -308,11 +308,11 @@ export function AccountManagementPage() {
                     <div className="min-w-0 @max-[850px]:col-start-1 @max-[850px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto">
                       {user.department ? (
                         <div className="flex flex-col gap-0.5 min-w-0">
-                          <span className="inline-block px-2 py-0.5 bg-[#eff6ff] text-[#1d4ed8] rounded text-xs font-semibold truncate max-w-full">
+                          <span
+                            className="inline-block w-fit max-w-full self-start truncate rounded-full bg-[#1d4ed8] px-3 py-1 text-xs font-semibold text-[#eff6ff]"
+                            title={user.department.name}
+                          >
                             {user.department.name}
-                            {user.department.code
-                              ? ` (${user.department.code})`
-                              : ""}
                           </span>
                           {(user.position || user.team) && (
                             <span className="text-[11px] text-[#738096] truncate">
@@ -390,8 +390,8 @@ export function AccountManagementPage() {
                 type="button"
                 className={cn(
                   accountButton,
-                  accountButtonSecondary,
-                  "min-h-[30px] rounded-lg border-[#e1e4ea] px-3 text-[11px] font-medium text-foreground",
+                  accountButtonPrimary,
+                  "min-h-[30px] rounded-lg px-3 text-[11px] font-medium",
                 )}
                 disabled={page <= 1}
                 onClick={() => setPage((current) => current - 1)}
@@ -405,8 +405,8 @@ export function AccountManagementPage() {
                 type="button"
                 className={cn(
                   accountButton,
-                  accountButtonSecondary,
-                  "min-h-[30px] rounded-lg border-[#e1e4ea] px-3 text-[11px] font-medium text-foreground",
+                  accountButtonPrimary,
+                  "min-h-[30px] rounded-lg px-3 text-[11px] font-medium",
                 )}
                 disabled={page >= totalPages}
                 onClick={() => setPage((current) => current + 1)}

@@ -1,5 +1,42 @@
-import { useEffect, useState } from "react"
-import { CloseIcon, PlusIcon, TrashIcon } from "@/components/layout/icons"
+import { useEffect, useRef, useState } from "react"
+import {
+  CloseIcon,
+  PlusIcon,
+  SearchIcon,
+  TrashIcon,
+} from "@/components/layout/icons"
+import { focusRing } from "@/components/layout/styles"
+import { Button } from "@/components/ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Input } from "@/components/ui/input"
+import { cn } from "@/lib/utils"
+import { EditMemberDialog } from "./edit-member-dialog"
+import {
+  panelAssignButton,
+  panelDangerButton,
+  panelEmpty,
+  panelField,
+  panelIconButton,
+  panelInput,
+  panelMuted,
+  panelPrimaryButton,
+  panelSecondaryButton,
+  panelSelectTrigger,
+} from "../styles/member-panel-styles"
 import {
   assignDepartmentMembers,
   createTeam,
@@ -15,6 +52,37 @@ import {
   type AccountList,
 } from "@/features/accounts/api/accounts-api"
 
+function MemberIdentity({
+  member,
+}: {
+  member: Pick<DepartmentMember, "fullName" | "email">
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-2.5">
+      <span
+        className="grid size-8 flex-none place-items-center rounded-full bg-[#eef0f3] text-xs font-medium text-[#65718a]"
+        aria-hidden="true"
+      >
+        {(member.fullName?.[0] || member.email[0]).toUpperCase()}
+      </span>
+      <div className="min-w-0">
+        <p
+          className="m-0 truncate text-xs font-medium"
+          title={member.fullName || member.email}
+        >
+          {member.fullName || member.email}
+        </p>
+        <p
+          className={`${panelMuted} mt-0.5 mb-0 truncate`}
+          title={member.email}
+        >
+          {member.email}
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export function ManageMembersDrawer({
   departmentId,
   canManage,
@@ -26,9 +94,13 @@ export function ManageMembersDrawer({
   onClose: () => void
   onChanged: () => void
 }) {
+  const openerRef = useRef(
+    typeof document === "undefined" ? null : document.activeElement,
+  )
   const [detail, setDetail] = useState<DepartmentDetail | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<"members" | "teams">("members")
+  const [loadError, setLoadError] = useState("")
+  const [actionError, setActionError] = useState("")
 
   // Available company accounts (for dropdown assignment)
   const [allAccounts, setAllAccounts] = useState<AccountList["users"]>([])
@@ -68,11 +140,19 @@ export function ManageMembersDrawer({
       .then((data) => {
         if (active) {
           setDetail(data)
+          setLoadError("")
           setLoading(false)
         }
       })
-      .catch(() => {
-        if (active) setLoading(false)
+      .catch((error: unknown) => {
+        if (active) {
+          setLoadError(
+            error instanceof Error
+              ? error.message
+              : "Couldn't load this department.",
+          )
+          setLoading(false)
+        }
       })
     return () => {
       active = false
@@ -81,6 +161,7 @@ export function ManageMembersDrawer({
 
   // 2. Load accounts for quick assignment
   useEffect(() => {
+    if (!canManage) return
     let active = true
     listAccounts("", "", 1)
       .then((res) => {
@@ -92,7 +173,7 @@ export function ManageMembersDrawer({
     return () => {
       active = false
     }
-  }, [revision])
+  }, [canManage, revision])
 
   // 3. Debounced search for assignable accounts
   const [debouncedAssignSearch, setDebouncedAssignSearch] = useState("")
@@ -105,7 +186,7 @@ export function ManageMembersDrawer({
   }, [assignSearch])
 
   useEffect(() => {
-    if (!debouncedAssignSearch) {
+    if (!canManage || !debouncedAssignSearch) {
       return
     }
     let active = true
@@ -122,7 +203,7 @@ export function ManageMembersDrawer({
     return () => {
       active = false
     }
-  }, [debouncedAssignSearch, detail?.members])
+  }, [canManage, debouncedAssignSearch, detail?.members])
 
   const isSearching = Boolean(
     assignSearch.trim() && assignSearch.trim() !== debouncedAssignSearch,
@@ -137,6 +218,7 @@ export function ManageMembersDrawer({
   async function handleAddMember(userId: string) {
     if (!userId) return
     try {
+      setActionError("")
       setSubmitting(true)
       await assignDepartmentMembers(departmentId, [userId])
       setAssignSearch("")
@@ -144,6 +226,12 @@ export function ManageMembersDrawer({
       setQuickAssignUserId("")
       setRevision((r) => r + 1)
       onChanged()
+    } catch (error: unknown) {
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : "Couldn't assign this employee.",
+      )
     } finally {
       setSubmitting(false)
     }
@@ -151,10 +239,15 @@ export function ManageMembersDrawer({
 
   async function handleRemoveMember(userId: string) {
     try {
+      setActionError("")
       setSubmitting(true)
       await removeDepartmentMember(departmentId, userId)
       setRevision((r) => r + 1)
       onChanged()
+    } catch (error: unknown) {
+      setActionError(
+        error instanceof Error ? error.message : "Couldn't remove this member.",
+      )
     } finally {
       setSubmitting(false)
     }
@@ -164,6 +257,7 @@ export function ManageMembersDrawer({
     e.preventDefault()
     if (!newTeamName.trim()) return
     try {
+      setActionError("")
       setSubmitting(true)
       await createTeam(departmentId, {
         name: newTeamName.trim(),
@@ -174,6 +268,10 @@ export function ManageMembersDrawer({
       setCreatingTeam(false)
       setRevision((r) => r + 1)
       onChanged()
+    } catch (error: unknown) {
+      setActionError(
+        error instanceof Error ? error.message : "Couldn't create this team.",
+      )
     } finally {
       setSubmitting(false)
     }
@@ -188,10 +286,15 @@ export function ManageMembersDrawer({
       return
     }
     try {
+      setActionError("")
       setSubmitting(true)
       await deleteTeam(departmentId, teamId)
       setRevision((r) => r + 1)
       onChanged()
+    } catch (error: unknown) {
+      setActionError(
+        error instanceof Error ? error.message : "Couldn't delete this team.",
+      )
     } finally {
       setSubmitting(false)
     }
@@ -200,11 +303,18 @@ export function ManageMembersDrawer({
   async function handleAssignMemberToTeam(teamId: string, userId: string) {
     if (!userId) return
     try {
+      setActionError("")
       setSubmitting(true)
       await updateDepartmentMember(departmentId, userId, { teamId })
       setTeamAddSelection((prev) => ({ ...prev, [teamId]: "" }))
       setRevision((r) => r + 1)
       onChanged()
+    } catch (error: unknown) {
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : "Couldn't update this team assignment.",
+      )
     } finally {
       setSubmitting(false)
     }
@@ -212,10 +322,17 @@ export function ManageMembersDrawer({
 
   async function handleRemoveMemberFromTeam(userId: string) {
     try {
+      setActionError("")
       setSubmitting(true)
       await updateDepartmentMember(departmentId, userId, { teamId: null })
       setRevision((r) => r + 1)
       onChanged()
+    } catch (error: unknown) {
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : "Couldn't remove this team assignment.",
+      )
     } finally {
       setSubmitting(false)
     }
@@ -267,797 +384,599 @@ export function ManageMembersDrawer({
   }
 
   return (
-    <div className="dept-drawer-backdrop" onClick={onClose}>
-      <aside
-        className="dept-drawer"
-        onClick={(e) => e.stopPropagation()}
-        aria-label="Department Management Drawer"
+    <Sheet
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose()
+      }}
+    >
+      <SheetContent
+        showCloseButton={false}
+        overlayClassName="bg-[rgb(13_28_57_/_40%)]"
+        className="inset-y-auto top-[15px] right-[15px] flex h-[calc(100dvh-30px)] max-h-none w-[min(600px,calc(100vw-30px))] max-w-none flex-col gap-0 overflow-hidden rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_16px_60px_rgb(18_36_73_/_18%)] sm:max-w-none max-[560px]:top-0 max-[560px]:right-0 max-[560px]:h-dvh max-[560px]:w-full max-[560px]:rounded-none max-[560px]:border-0"
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          const opener = openerRef.current
+          if (opener instanceof HTMLElement && opener.isConnected)
+            opener.focus()
+        }}
       >
-        <div className="dept-drawer-header">
-          <div>
-            <span className="dept-header-eyebrow">Department Overview</span>
-            <h2 className="dept-modal-title">
-              {detail ? detail.name : "Loading..."}
-            </h2>
-            {detail?.code && <span className="dept-badge">{detail.code}</span>}
-          </div>
-          <button
-            type="button"
-            className="dept-modal-close"
-            onClick={onClose}
-            aria-label="Close drawer"
-          >
-            <CloseIcon />
-          </button>
-        </div>
-
-        {/* Tab switcher */}
-        <div
-          style={{
-            display: "flex",
-            borderBottom: "1px solid #e2e8f0",
-            padding: "0 24px",
-            background: "#f8fafc",
-            gap: "16px",
-          }}
-        >
-          <button
-            type="button"
-            style={{
-              padding: "12px 4px",
-              background: "none",
-              border: "none",
-              borderBottom:
-                activeTab === "members"
-                  ? "2px solid #112866"
-                  : "2px solid transparent",
-              fontWeight: activeTab === "members" ? 700 : 500,
-              color: activeTab === "members" ? "#112866" : "#64748b",
-              cursor: "pointer",
-              fontSize: "0.875rem",
-            }}
-            onClick={() => setActiveTab("members")}
-          >
-            Employees ({detail?.members.length ?? 0})
-          </button>
-          <button
-            type="button"
-            style={{
-              padding: "12px 4px",
-              background: "none",
-              border: "none",
-              borderBottom:
-                activeTab === "teams"
-                  ? "2px solid #112866"
-                  : "2px solid transparent",
-              fontWeight: activeTab === "teams" ? 700 : 500,
-              color: activeTab === "teams" ? "#112866" : "#64748b",
-              cursor: "pointer",
-              fontSize: "0.875rem",
-            }}
-            onClick={() => setActiveTab("teams")}
-          >
-            Teams ({detail?.teams?.length ?? 0})
-          </button>
-        </div>
-
-        <div className="dept-drawer-content">
-          {activeTab === "members" && (
-            <>
-              {canManage && (
-                <div className="dept-meta-box">
-                  <label
-                    className="dept-label"
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                  >
-                    <span>Assign Employees to this Department</span>
-                    <span
-                      style={{
-                        fontWeight: 400,
-                        color: "#64748b",
-                        fontSize: "0.75rem",
-                      }}
-                    >
-                      {availableAccountsForQuickAssign.length} available
-                    </span>
-                  </label>
-
-                  {/* Dropdown Quick Assign */}
-                  <div style={{ display: "flex", gap: "8px" }}>
-                    <select
-                      className="dept-select"
-                      value={quickAssignUserId}
-                      onChange={(e) => setQuickAssignUserId(e.target.value)}
-                      disabled={submitting}
-                    >
-                      <option value="">-- Select employee to assign --</option>
-                      {availableAccountsForQuickAssign.map((user) => (
-                        <option key={user.id} value={user.id}>
-                          {user.fullName || user.email} ({user.role})
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      className="dept-btn-primary"
-                      style={{ flex: "none", padding: "8px 14px" }}
-                      disabled={!quickAssignUserId || submitting}
-                      onClick={() => handleAddMember(quickAssignUserId)}
-                    >
-                      <PlusIcon /> Assign
-                    </button>
-                  </div>
-
-                  {/* Filter / Search by name or email */}
-                  <div style={{ marginTop: "4px" }}>
-                    <input
-                      id="member-assign-search"
-                      className="dept-input"
-                      placeholder="Or type to search employee by name / email..."
-                      value={assignSearch}
-                      onChange={(e) => setAssignSearch(e.target.value)}
-                      disabled={submitting}
-                    />
-                  </div>
-
-                  {isSearching && (
-                    <span style={{ fontSize: "0.75rem", color: "#64748b" }}>
-                      Searching employees...
-                    </span>
-                  )}
-                  {displayedCandidates.length > 0 && (
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "6px",
-                        marginTop: "8px",
-                      }}
-                    >
-                      {displayedCandidates.slice(0, 5).map((user) => (
-                        <div
-                          key={user.id}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            padding: "8px 12px",
-                            background: "#ffffff",
-                            border: "1px solid #cbd5e1",
-                            borderRadius: "8px",
-                          }}
-                        >
-                          <div>
-                            <div
-                              style={{ fontWeight: 600, fontSize: "0.85rem" }}
-                            >
-                              {user.fullName || "Unnamed User"}
-                            </div>
-                            <div
-                              style={{ fontSize: "0.75rem", color: "#64748b" }}
-                            >
-                              {user.email} • {user.role}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            className="dept-btn-primary"
-                            style={{ flex: "none", padding: "6px 12px" }}
-                            onClick={() => handleAddMember(user.id)}
-                            disabled={submitting}
-                          >
-                            <PlusIcon /> Assign
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+        <header className="flex flex-none items-start justify-between gap-4 border-b border-[#eceef1] px-6 pt-6 pb-5 max-[560px]:px-5">
+          <div className="min-w-0">
+            <SheetTitle className="m-0 text-[22px] leading-[1.25] font-[650] tracking-[-0.03em]">
+              Members &amp; teams
+            </SheetTitle>
+            <SheetDescription className="sr-only">
+              Manage department employees and team assignments.
+            </SheetDescription>
+            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2 text-xs">
+              <span className="truncate font-medium">
+                {detail?.name || "Department"}
+              </span>
+              {detail?.code && (
+                <span className="rounded border border-[#e1e4ea] px-1.5 py-0.5 text-[10px] text-[#738096]">
+                  {detail.code}
+                </span>
               )}
+            </div>
+          </div>
+          <SheetClose asChild>
+            <button
+              type="button"
+              className={panelIconButton}
+              aria-label="Close drawer"
+            >
+              <CloseIcon width="16" height="16" />
+            </button>
+          </SheetClose>
+        </header>
 
-              <div>
-                <h3
-                  style={{
-                    fontSize: "0.95rem",
-                    fontWeight: 700,
-                    color: "#1e293b",
-                    marginBottom: "12px",
+        <Tabs defaultValue="members" className="flex min-h-0 flex-1 flex-col">
+          <TabsList
+            className="flex h-auto flex-none justify-start gap-5 rounded-none border-b border-[#eceef1] bg-transparent px-6 py-0 max-[560px]:px-5"
+            aria-label="Department sections"
+          >
+            {(["members", "teams"] as const).map((tab) => (
+              <TabsTrigger
+                key={tab}
+                value={tab}
+                className={cn(
+                  "flex min-h-[46px] cursor-pointer items-center gap-2 rounded-none border-0 border-b-2 border-transparent bg-transparent px-0 text-xs font-medium text-[#738096] shadow-none hover:text-foreground data-[state=active]:border-b-[#0b0b0c] data-[state=active]:bg-transparent data-[state=active]:shadow-none",
+                  focusRing,
+                )}
+              >
+                {tab === "members" ? "Employees" : "Teams"}
+                <span className="rounded bg-[#eef0f3] px-1.5 py-0.5 text-[10px] font-medium text-[#65718a] tabular-nums">
+                  {tab === "members"
+                    ? (detail?.members.length ?? 0)
+                    : (detail?.teams.length ?? 0)}
+                </span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5 max-[560px]:px-5">
+            {loading ? (
+              <div className={panelEmpty} role="status">
+                Loading department...
+              </div>
+            ) : loadError ? (
+              <div className={panelEmpty} role="alert">
+                <p className="m-0">{loadError}</p>
+                <button
+                  type="button"
+                  className={cn(
+                    "cursor-pointer rounded border-0 bg-transparent p-1 font-semibold text-foreground underline underline-offset-4",
+                    focusRing,
+                  )}
+                  onClick={() => {
+                    setLoading(true)
+                    setRevision((r) => r + 1)
                   }}
                 >
-                  Current Members ({detail?.members.length ?? 0})
-                </h3>
-                {loading ? (
-                  <div className="dept-empty-state">Loading members...</div>
-                ) : detail?.members.length === 0 ? (
-                  <div className="dept-empty-state">
-                    No members assigned to this department yet.
-                  </div>
-                ) : (
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "10px",
-                    }}
+                  Try again
+                </button>
+              </div>
+            ) : (
+              <>
+                {actionError && (
+                  <p
+                    className="mt-0 mb-4 rounded-lg border border-[#f4d6db] bg-[#fff6f7] p-3 text-xs text-[#bc3649]"
+                    role="alert"
                   >
-                    {[...(detail?.members || [])]
-                      .sort((a, b) => {
-                        // 1. Department Head always at the very top
-                        const isAHead = detail?.headId === a.id
-                        const isBHead = detail?.headId === b.id
-                        if (isAHead) return -1
-                        if (isBHead) return 1
-
-                        // 2. Group by Team
-                        const aTeam = a.team?.name || ""
-                        const bTeam = b.team?.name || ""
-                        if (aTeam && !bTeam) return -1
-                        if (!aTeam && bTeam) return 1
-                        if (aTeam !== bTeam) return aTeam.localeCompare(bTeam)
-
-                        // 3. Alphabetical by Name
-                        const nameA = a.fullName || a.email
-                        const nameB = b.fullName || b.email
-                        return nameA.localeCompare(nameB)
-                      })
-                      .map((member) => {
-                        const isDeptHead = detail?.headId === member.id
-                        return (
-                          <div key={member.id} className="dept-member-item">
-                            <div className="dept-member-info">
-                              <div className="dept-member-avatar">
-                                {(
-                                  member.fullName?.[0] || member.email[0]
-                                ).toUpperCase()}
-                              </div>
-                              <div>
-                                <div
-                                  style={{
-                                    fontWeight: 600,
-                                    fontSize: "0.875rem",
-                                    color: "#0f172a",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: "6px",
-                                    flexWrap: "wrap",
-                                  }}
-                                >
-                                  <span>
-                                    {member.fullName || "Unnamed User"}
-                                  </span>
-                                  {isDeptHead && (
-                                    <span
-                                      style={{
-                                        fontSize: "0.7rem",
-                                        background: "#fef3c7",
-                                        color: "#92400e",
-                                        padding: "2px 6px",
-                                        borderRadius: "4px",
-                                        fontWeight: 700,
-                                      }}
-                                    >
-                                      DEPT HEAD
-                                    </span>
-                                  )}
-                                  {member.position &&
-                                    member.position.toLowerCase() !==
-                                      "dept head" &&
-                                    member.position.toLowerCase() !==
-                                      "department head" && (
-                                      <span
-                                        style={{
-                                          fontSize: "0.75rem",
-                                          background: "#f1f5f9",
-                                          color: "#334155",
-                                          padding: "2px 6px",
-                                          borderRadius: "4px",
-                                        }}
-                                      >
-                                        {member.position}
-                                      </span>
-                                    )}
-                                </div>
-                                <div
-                                  style={{
-                                    fontSize: "0.75rem",
-                                    color: "#64748b",
-                                  }}
-                                >
-                                  {member.email} • {member.role}
-                                  {!isDeptHead && member.team && (
-                                    <span
-                                      style={{
-                                        marginLeft: "6px",
-                                        color: "#2563eb",
-                                        fontWeight: 600,
-                                      }}
-                                    >
-                                      • {member.team.name}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                            {canManage && (
-                              <div
-                                style={{
-                                  display: "flex",
-                                  gap: "6px",
-                                  alignItems: "center",
-                                }}
+                    {actionError}
+                  </p>
+                )}
+                <TabsContent value="members" className="mt-0 space-y-5">
+                  {canManage && (
+                    <section
+                      className="grid min-w-0 gap-3 rounded-lg border border-[#e8ebef] p-4"
+                      aria-label="Assign employees"
+                    >
+                      <div>
+                        <h3 className="m-0 text-xs font-semibold">
+                          Add members
+                        </h3>
+                        <p className={`${panelMuted} mt-1 mb-0`}>
+                          Assign an existing employee to this department.
+                        </p>
+                      </div>
+                      <div className="flex min-w-0 items-start gap-2">
+                        <Select
+                          value={quickAssignUserId}
+                          onValueChange={setQuickAssignUserId}
+                          disabled={submitting}
+                        >
+                          <SelectTrigger
+                            className={cn(panelSelectTrigger, "flex-1")}
+                            aria-label="Employee to assign"
+                          >
+                            <SelectValue placeholder="Select employee" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableAccountsForQuickAssign.length === 0 ? (
+                              <p className="m-0 p-3 text-xs text-muted-foreground">
+                                No employees available to assign.
+                              </p>
+                            ) : (
+                              availableAccountsForQuickAssign.map((user) => (
+                                <SelectItem key={user.id} value={user.id}>
+                                  {user.fullName || user.email} ({user.role})
+                                </SelectItem>
+                              ))
+                            )}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          className={panelAssignButton}
+                          disabled={!quickAssignUserId || submitting}
+                          onClick={() =>
+                            void handleAddMember(quickAssignUserId)
+                          }
+                        >
+                          <PlusIcon width="14" height="14" /> Assign
+                        </Button>
+                      </div>
+                      <div className="border-t border-[#eceef1] pt-3">
+                        <label className="flex h-[34px] min-w-0 items-center gap-2 rounded-lg border border-[#e1e4ea] px-[11px] text-[#7b8ca7] focus-within:bg-[#f8fafd]">
+                          <SearchIcon
+                            width="16"
+                            height="16"
+                            className="flex-none"
+                          />
+                          <span className="sr-only">
+                            Search employees to assign
+                          </span>
+                          <input
+                            id="member-assign-search"
+                            className="w-full min-w-0 border-0 bg-transparent text-xs text-foreground outline-none placeholder:text-[#8a9ab1]"
+                            placeholder="Search name or email"
+                            value={assignSearch}
+                            onChange={(event) =>
+                              setAssignSearch(event.target.value)
+                            }
+                            disabled={submitting}
+                          />
+                        </label>
+                      </div>
+                      {isSearching && (
+                        <p className={`${panelMuted} m-0`} role="status">
+                          Searching employees...
+                        </p>
+                      )}
+                      {displayedCandidates.length > 0 && !isSearching && (
+                        <ul
+                          className="m-0 grid list-none gap-2 p-0"
+                          aria-label="Employee search results"
+                        >
+                          {displayedCandidates.slice(0, 5).map((user) => (
+                            <li
+                              key={user.id}
+                              className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-[#e8ebef] p-2.5"
+                            >
+                              <MemberIdentity member={user} />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className={panelSecondaryButton}
+                                aria-label={`Assign ${user.fullName || user.email}`}
+                                onClick={() => void handleAddMember(user.id)}
+                                disabled={submitting}
                               >
-                                {!isDeptHead ? (
-                                  <>
-                                    <button
-                                      type="button"
-                                      className="dept-btn-outline"
-                                      style={{
-                                        padding: "4px 8px",
-                                        fontSize: "0.75rem",
-                                      }}
-                                      onClick={() => startEditMember(member)}
-                                    >
-                                      Edit Info
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="dept-btn-danger-icon"
-                                      title="Remove from department"
-                                      onClick={() =>
-                                        handleRemoveMember(member.id)
+                                Assign
+                              </Button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </section>
+                  )}
+
+                  <section aria-label="Current members">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <h3 className="m-0 text-xs font-semibold">
+                        Current members
+                      </h3>
+                      <span className={panelMuted}>
+                        {detail?.members.length ?? 0} members
+                      </span>
+                    </div>
+                    <div className="overflow-hidden rounded-lg border border-[#e8ebef]">
+                      {detail?.members.length === 0 ? (
+                        <p className={`${panelEmpty} m-0`}>
+                          No members assigned to this department yet.
+                        </p>
+                      ) : (
+                        <ul className="m-0 list-none divide-y divide-[#eceef1] p-0">
+                          {[...(detail?.members || [])]
+                            .sort((a, b) => {
+                              if (detail?.headId === a.id) return -1
+                              if (detail?.headId === b.id) return 1
+                              const aTeam = a.team?.name || ""
+                              const bTeam = b.team?.name || ""
+                              if (aTeam && !bTeam) return -1
+                              if (!aTeam && bTeam) return 1
+                              return (
+                                aTeam.localeCompare(bTeam) ||
+                                (a.fullName || a.email).localeCompare(
+                                  b.fullName || b.email,
+                                )
+                              )
+                            })
+                            .map((member) => {
+                              const isHead = detail?.headId === member.id
+                              const position =
+                                member.position &&
+                                !["dept head", "department head"].includes(
+                                  member.position.toLowerCase(),
+                                )
+                                  ? member.position
+                                  : null
+                              return (
+                                <li
+                                  key={member.id}
+                                  className="flex min-w-0 flex-wrap items-center justify-between gap-3 px-4 py-3 hover:bg-[#fafbfc]"
+                                >
+                                  <div className="min-w-0 flex-1 basis-[180px]">
+                                    <MemberIdentity member={member} />
+                                    <div className="mt-2 ml-[42px] flex flex-wrap items-center gap-1.5">
+                                      {isHead ? (
+                                        <span className="rounded bg-[#eef0f3] px-1.5 py-0.5 text-[10px] font-medium text-[#526686]">
+                                          Department head
+                                        </span>
+                                      ) : (
+                                        <>
+                                          {position && (
+                                            <span className="text-[11px] break-words text-[#738096]">
+                                              {position}
+                                            </span>
+                                          )}
+                                          {member.team && (
+                                            <span className="rounded border border-[#e1e4ea] px-1.5 py-0.5 text-[10px] text-[#65718a]">
+                                              {member.team.name}
+                                            </span>
+                                          )}
+                                        </>
+                                      )}
+                                      <span className="text-[10px] text-[#8a9ab1]">
+                                        {member.role}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  {canManage && !isHead && (
+                                    <div className="flex flex-none items-center gap-2">
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        className={panelSecondaryButton}
+                                        aria-label={`Edit ${member.fullName || member.email}`}
+                                        onClick={() => startEditMember(member)}
+                                        disabled={submitting}
+                                      >
+                                        Edit info
+                                      </Button>
+                                      <button
+                                        type="button"
+                                        className={panelDangerButton}
+                                        aria-label={`Remove ${member.fullName || member.email} from department`}
+                                        title="Remove from department"
+                                        disabled={submitting}
+                                        onClick={() =>
+                                          void handleRemoveMember(member.id)
+                                        }
+                                      >
+                                        <TrashIcon width="15" height="15" />
+                                      </button>
+                                    </div>
+                                  )}
+                                </li>
+                              )
+                            })}
+                        </ul>
+                      )}
+                    </div>
+                  </section>
+                </TabsContent>
+                <TabsContent value="teams" className="mt-0">
+                  <section className="grid gap-4" aria-label="Department teams">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h3 className="m-0 text-xs font-semibold">
+                          Department teams
+                        </h3>
+                        <p className={`${panelMuted} mt-1 mb-0`}>
+                          Organize employees into focused teams.
+                        </p>
+                      </div>
+                      {canManage && !creatingTeam && (
+                        <Button
+                          type="button"
+                          className={panelAssignButton}
+                          onClick={() => setCreatingTeam(true)}
+                        >
+                          <PlusIcon width="14" height="14" /> Create team
+                        </Button>
+                      )}
+                    </div>
+                    {canManage && creatingTeam && (
+                      <form
+                        onSubmit={(event) => void handleCreateTeam(event)}
+                        className="grid gap-4 rounded-lg border border-[#e8ebef] p-4"
+                      >
+                        <h4 className="m-0 text-xs font-semibold">New team</h4>
+                        <label className={panelField} htmlFor="team-name">
+                          Team name{" "}
+                          <Input
+                            id="team-name"
+                            className={panelInput}
+                            placeholder="e.g. Software engineering"
+                            value={newTeamName}
+                            onChange={(event) =>
+                              setNewTeamName(event.target.value)
+                            }
+                            required
+                            autoFocus
+                            disabled={submitting}
+                          />
+                        </label>
+                        <label className={panelField} htmlFor="team-desc">
+                          Description{" "}
+                          <span className="sr-only">(optional)</span>
+                          <Input
+                            id="team-desc"
+                            className={panelInput}
+                            placeholder="What does this team do? (optional)"
+                            value={newTeamDesc}
+                            onChange={(event) =>
+                              setNewTeamDesc(event.target.value)
+                            }
+                            disabled={submitting}
+                          />
+                        </label>
+                        <div className="flex justify-end gap-2 border-t border-[#eceef1] pt-3">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={panelSecondaryButton}
+                            onClick={() => setCreatingTeam(false)}
+                            disabled={submitting}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            type="submit"
+                            className={panelPrimaryButton}
+                            disabled={submitting}
+                          >
+                            {submitting ? "Saving..." : "Save team"}
+                          </Button>
+                        </div>
+                      </form>
+                    )}
+                    {detail?.teams.length === 0 ? (
+                      <div className="rounded-lg border border-[#e8ebef]">
+                        <p className={`${panelEmpty} m-0`}>
+                          No teams created in this department yet.
+                        </p>
+                      </div>
+                    ) : (
+                      detail?.teams.map((team) => {
+                        const teamMembers = detail.members.filter(
+                          (member) => member.teamId === team.id,
+                        )
+                        const eligibleEmployees = detail.members.filter(
+                          (member) =>
+                            member.id !== detail.headId &&
+                            member.teamId !== team.id,
+                        )
+                        const selectedUserId = teamAddSelection[team.id] || ""
+                        return (
+                          <section
+                            key={team.id}
+                            className="min-w-0 overflow-visible rounded-lg border border-[#e8ebef]"
+                            aria-label={`${team.name} team`}
+                          >
+                            <header className="flex items-start justify-between gap-3 rounded-t-lg border-b border-[#eceef1] bg-[#f7f7f8] px-4 py-3">
+                              <div className="min-w-0">
+                                <h4 className="m-0 text-xs font-semibold break-words">
+                                  {team.name}
+                                </h4>
+                                {team.description && (
+                                  <p
+                                    className={`${panelMuted} mt-1 mb-0 break-words`}
+                                  >
+                                    {team.description}
+                                  </p>
+                                )}
+                                <p className={`${panelMuted} mt-1 mb-0`}>
+                                  {teamMembers.length}{" "}
+                                  {teamMembers.length === 1
+                                    ? "member"
+                                    : "members"}
+                                </p>
+                              </div>
+                              {canManage && (
+                                <button
+                                  type="button"
+                                  className={panelDangerButton}
+                                  aria-label={`Delete ${team.name} team`}
+                                  title="Delete team"
+                                  disabled={submitting}
+                                  onClick={() =>
+                                    void handleDeleteTeam(team.id, team.name)
+                                  }
+                                >
+                                  <TrashIcon width="15" height="15" />
+                                </button>
+                              )}
+                            </header>
+                            {teamMembers.length === 0 ? (
+                              <p className="m-0 px-4 py-5 text-xs text-[#738096]">
+                                No members assigned to this team yet.
+                              </p>
+                            ) : (
+                              <ul
+                                className="m-0 list-none divide-y divide-[#eceef1] p-0"
+                                aria-label={`${team.name} members`}
+                              >
+                                {teamMembers.map((member) => (
+                                  <li
+                                    key={member.id}
+                                    className="flex min-w-0 items-center justify-between gap-3 px-4 py-3"
+                                  >
+                                    <div className="min-w-0">
+                                      <MemberIdentity member={member} />
+                                      {member.position &&
+                                        ![
+                                          "dept head",
+                                          "department head",
+                                        ].includes(
+                                          member.position.toLowerCase(),
+                                        ) && (
+                                          <p
+                                            className={`${panelMuted} mt-1 mb-0 ml-[42px] break-words`}
+                                          >
+                                            {member.position}
+                                          </p>
+                                        )}
+                                    </div>
+                                    {canManage && (
+                                      <button
+                                        type="button"
+                                        className={panelIconButton}
+                                        aria-label={`Remove ${member.fullName || member.email} from ${team.name}`}
+                                        title="Remove from team"
+                                        disabled={submitting}
+                                        onClick={() =>
+                                          void handleRemoveMemberFromTeam(
+                                            member.id,
+                                          )
+                                        }
+                                      >
+                                        <CloseIcon width="14" height="14" />
+                                      </button>
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                            {canManage && (
+                              <div className="border-t border-[#eceef1] p-3">
+                                {eligibleEmployees.length > 0 ? (
+                                  <div className="flex min-w-0 items-start gap-2">
+                                    <Select
+                                      value={selectedUserId}
+                                      onValueChange={(value) =>
+                                        setTeamAddSelection((previous) => ({
+                                          ...previous,
+                                          [team.id]: value,
+                                        }))
                                       }
                                       disabled={submitting}
                                     >
-                                      <TrashIcon />
-                                    </button>
-                                  </>
+                                      <SelectTrigger
+                                        className={cn(
+                                          panelSelectTrigger,
+                                          "flex-1",
+                                        )}
+                                        aria-label={`Add employee to ${team.name}`}
+                                      >
+                                        <SelectValue placeholder="Select department member" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {eligibleEmployees.map((member) => (
+                                          <SelectItem
+                                            key={member.id}
+                                            value={member.id}
+                                          >
+                                            {member.fullName || member.email}
+                                            {member.position
+                                              ? ` (${member.position})`
+                                              : ""}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      className={panelSecondaryButton}
+                                      aria-label={`Add selected employee to ${team.name}`}
+                                      disabled={!selectedUserId || submitting}
+                                      onClick={() =>
+                                        void handleAssignMemberToTeam(
+                                          team.id,
+                                          selectedUserId,
+                                        )
+                                      }
+                                    >
+                                      <PlusIcon width="14" height="14" /> Add
+                                    </Button>
+                                  </div>
                                 ) : (
-                                  <span className="dept-head-status">
-                                    Department Head
-                                  </span>
+                                  <p className={`${panelMuted} m-0`}>
+                                    {detail.members.filter(
+                                      (member) => member.id !== detail.headId,
+                                    ).length === 0
+                                      ? "Assign employees in the Employees tab first to add them here."
+                                      : "All department employees are already in this team."}
+                                  </p>
                                 )}
                               </div>
                             )}
-                          </div>
+                          </section>
                         )
-                      })}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-
-          {activeTab === "teams" && (
-            <div>
-              {canManage && (
-                <div style={{ marginBottom: "16px" }}>
-                  {!creatingTeam ? (
-                    <button
-                      type="button"
-                      className="dept-btn-primary"
-                      onClick={() => setCreatingTeam(true)}
-                    >
-                      <PlusIcon /> Create Team in {detail?.name}
-                    </button>
-                  ) : (
-                    <form
-                      onSubmit={handleCreateTeam}
-                      className="dept-meta-box"
-                      style={{ border: "1px solid #cbd5e1" }}
-                    >
-                      <div className="dept-field">
-                        <label className="dept-label" htmlFor="team-name">
-                          Team Name *
-                        </label>
-                        <input
-                          id="team-name"
-                          className="dept-input"
-                          placeholder="e.g. Infrastructure, Software Engineering, Campaigns"
-                          value={newTeamName}
-                          onChange={(e) => setNewTeamName(e.target.value)}
-                          required
-                          autoFocus
-                        />
-                      </div>
-                      <div className="dept-field">
-                        <label className="dept-label" htmlFor="team-desc">
-                          Description (Optional)
-                        </label>
-                        <input
-                          id="team-desc"
-                          className="dept-input"
-                          placeholder="Responsibilities of this team..."
-                          value={newTeamDesc}
-                          onChange={(e) => setNewTeamDesc(e.target.value)}
-                        />
-                      </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: "8px",
-                          justifyContent: "flex-end",
-                          marginTop: "8px",
-                        }}
-                      >
-                        <button
-                          type="button"
-                          className="dept-btn-outline"
-                          onClick={() => setCreatingTeam(false)}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="submit"
-                          className="dept-btn-primary"
-                          disabled={submitting}
-                        >
-                          Save Team
-                        </button>
-                      </div>
-                    </form>
-                  )}
-                </div>
-              )}
-
-              <h3
-                style={{
-                  fontSize: "0.95rem",
-                  fontWeight: 700,
-                  color: "#1e293b",
-                  marginBottom: "12px",
-                }}
-              >
-                Department Teams ({detail?.teams?.length ?? 0})
-              </h3>
-
-              {detail?.teams?.length === 0 ? (
-                <div className="dept-empty-state">
-                  No teams created in this department yet.
-                </div>
-              ) : (
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "14px",
-                  }}
-                >
-                  {detail?.teams?.map((team) => {
-                    const teamMembers = (detail?.members || []).filter(
-                      (m) => m.teamId === team.id,
-                    )
-                    // Eligible members for this team: in this department, not Dept Head, not already in this team
-                    const eligibleEmployees = (detail?.members || []).filter(
-                      (m) => m.id !== detail?.headId && m.teamId !== team.id,
-                    )
-                    const selectedUserId = teamAddSelection[team.id] || ""
-
-                    return (
-                      <div key={team.id} className="dept-team-box">
-                        <div className="dept-team-header">
-                          <div>
-                            <h4 className="dept-team-title">{team.name}</h4>
-                            {team.description && (
-                              <p className="dept-team-desc">
-                                {team.description}
-                              </p>
-                            )}
-                            <div
-                              style={{
-                                fontSize: "0.75rem",
-                                color: "#64748b",
-                                marginTop: "4px",
-                                fontWeight: 500,
-                              }}
-                            >
-                              {teamMembers.length}{" "}
-                              {teamMembers.length === 1 ? "member" : "members"}
-                            </div>
-                          </div>
-                          {canManage && (
-                            <button
-                              type="button"
-                              className="dept-btn-danger-icon"
-                              title="Delete team"
-                              onClick={() =>
-                                handleDeleteTeam(team.id, team.name)
-                              }
-                              disabled={submitting}
-                            >
-                              <TrashIcon />
-                            </button>
-                          )}
-                        </div>
-
-                        {/* List of current team members */}
-                        <div className="dept-team-members-section">
-                          <div
-                            style={{
-                              fontSize: "0.75rem",
-                              fontWeight: 600,
-                              color: "#475569",
-                              textTransform: "uppercase",
-                              letterSpacing: "0.04em",
-                            }}
-                          >
-                            Team Members
-                          </div>
-
-                          {teamMembers.length === 0 ? (
-                            <div
-                              style={{
-                                fontSize: "0.8rem",
-                                color: "#94a3b8",
-                                fontStyle: "italic",
-                              }}
-                            >
-                              No members assigned to this team yet.
-                            </div>
-                          ) : (
-                            <div
-                              style={{
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: "6px",
-                              }}
-                            >
-                              {teamMembers.map((m) => (
-                                <div
-                                  key={m.id}
-                                  className="dept-team-member-item"
-                                >
-                                  <div
-                                    style={{
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: "8px",
-                                    }}
-                                  >
-                                    <div
-                                      style={{
-                                        width: "24px",
-                                        height: "24px",
-                                        borderRadius: "50%",
-                                        background: "#e2e8f0",
-                                        color: "#334155",
-                                        fontWeight: 700,
-                                        fontSize: "0.7rem",
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                      }}
-                                    >
-                                      {(
-                                        m.fullName?.[0] || m.email[0]
-                                      ).toUpperCase()}
-                                    </div>
-                                    <span
-                                      style={{
-                                        fontWeight: 600,
-                                        color: "#1e293b",
-                                      }}
-                                    >
-                                      {m.fullName || m.email}
-                                    </span>
-                                    {m.position &&
-                                      m.position.toLowerCase() !==
-                                        "dept head" &&
-                                      m.position.toLowerCase() !==
-                                        "department head" && (
-                                        <span
-                                          style={{
-                                            fontSize: "0.7rem",
-                                            background: "#e2e8f0",
-                                            color: "#475569",
-                                            padding: "1px 6px",
-                                            borderRadius: "4px",
-                                          }}
-                                        >
-                                          {m.position}
-                                        </span>
-                                      )}
-                                  </div>
-                                  {canManage && (
-                                    <button
-                                      type="button"
-                                      className="dept-team-remove-member"
-                                      title="Remove from this team"
-                                      disabled={submitting}
-                                      onClick={() =>
-                                        handleRemoveMemberFromTeam(m.id)
-                                      }
-                                    >
-                                      ✕
-                                    </button>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-
-                          {/* Add Member into this Team */}
-                          {canManage && (
-                            <div style={{ marginTop: "4px" }}>
-                              {eligibleEmployees.length > 0 ? (
-                                <div className="dept-team-add-row">
-                                  <select
-                                    className="dept-select"
-                                    style={{
-                                      height: "34px",
-                                      fontSize: "0.8125rem",
-                                      padding: "4px 8px",
-                                    }}
-                                    value={selectedUserId}
-                                    onChange={(e) =>
-                                      setTeamAddSelection((prev) => ({
-                                        ...prev,
-                                        [team.id]: e.target.value,
-                                      }))
-                                    }
-                                    disabled={submitting}
-                                  >
-                                    <option value="">
-                                      -- Add employee to {team.name} --
-                                    </option>
-                                    {eligibleEmployees.map((emp) => (
-                                      <option key={emp.id} value={emp.id}>
-                                        {emp.fullName || emp.email}{" "}
-                                        {emp.position
-                                          ? `(${emp.position})`
-                                          : ""}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <button
-                                    type="button"
-                                    className="dept-btn-primary"
-                                    style={{
-                                      flex: "none",
-                                      padding: "6px 12px",
-                                      fontSize: "0.8125rem",
-                                    }}
-                                    disabled={!selectedUserId || submitting}
-                                    onClick={() =>
-                                      handleAssignMemberToTeam(
-                                        team.id,
-                                        selectedUserId,
-                                      )
-                                    }
-                                  >
-                                    <PlusIcon /> Add
-                                  </button>
-                                </div>
-                              ) : (
-                                <div
-                                  style={{
-                                    fontSize: "0.75rem",
-                                    color: "#94a3b8",
-                                    marginTop: "2px",
-                                  }}
-                                >
-                                  {(detail?.members || []).filter(
-                                    (m) => m.id !== detail?.headId,
-                                  ).length === 0
-                                    ? "Assign employees in the Employees tab first to add them here."
-                                    : "All department employees are already in this team."}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </aside>
-
-      {/* Edit Member Position & Team Dialog */}
-      {editingMember && (
-        <div
-          className="dept-modal-backdrop"
-          style={{ zIndex: 110 }}
-          onClick={() => setEditingMember(null)}
-        >
-          <div
-            className="dept-modal"
-            style={{ maxWidth: "420px" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="dept-modal-header">
-              <h3 className="dept-modal-title">Edit Member Details</h3>
-              <button
-                type="button"
-                className="dept-modal-close"
-                onClick={() => setEditingMember(null)}
-              >
-                <CloseIcon />
-              </button>
-            </div>
-            <form onSubmit={handleSaveMemberDetails}>
-              <div className="dept-modal-body">
-                {editMemberError && (
-                  <div
-                    style={{
-                      color: "#991b1b",
-                      background: "#fef2f2",
-                      padding: "8px 12px",
-                      borderRadius: "6px",
-                      fontSize: "0.8rem",
-                    }}
-                  >
-                    {editMemberError}
-                  </div>
-                )}
-                <div>
-                  <strong>
-                    {editingMember.fullName || editingMember.email}
-                  </strong>
-                  <div style={{ fontSize: "0.8rem", color: "#64748b" }}>
-                    {editingMember.email}
-                  </div>
-                </div>
-
-                <div className="dept-field">
-                  <label className="dept-label" htmlFor="mem-pos">
-                    Job Title / Position
-                  </label>
-                  <input
-                    id="mem-pos"
-                    className="dept-input"
-                    placeholder="e.g. Senior Frontend Developer, Media Buyer"
-                    value={memberPosition}
-                    onChange={(e) => setMemberPosition(e.target.value)}
-                  />
-                </div>
-
-                <div className="dept-field">
-                  <label className="dept-label" htmlFor="mem-team">
-                    Assigned Team
-                  </label>
-                  <select
-                    id="mem-team"
-                    className="dept-select"
-                    value={memberTeamId}
-                    onChange={(e) => setMemberTeamId(e.target.value)}
-                  >
-                    <option value="">-- No Specific Team --</option>
-                    {detail?.teams?.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="dept-modal-footer">
-                <button
-                  type="button"
-                  className="dept-btn-outline"
-                  onClick={() => setEditingMember(null)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="dept-btn-primary"
-                  disabled={submitting}
-                >
-                  {submitting ? "Saving..." : "Save Details"}
-                </button>
-              </div>
-            </form>
+                      })
+                    )}
+                  </section>
+                </TabsContent>
+              </>
+            )}
           </div>
-        </div>
-      )}
-    </div>
+        </Tabs>
+        <footer className="flex flex-none justify-end border-t border-[#eceef1] px-6 py-4 max-[560px]:px-5">
+          <SheetClose asChild>
+            <Button type="button" className={panelAssignButton}>
+              Done
+            </Button>
+          </SheetClose>
+        </footer>
+        {editingMember && (
+          <EditMemberDialog
+            member={editingMember}
+            teams={detail?.teams || []}
+            position={memberPosition}
+            teamId={memberTeamId}
+            error={editMemberError}
+            submitting={submitting}
+            onPositionChange={setMemberPosition}
+            onTeamChange={setMemberTeamId}
+            onClose={() => setEditingMember(null)}
+            onSubmit={(event) => void handleSaveMemberDetails(event)}
+          />
+        )}
+      </SheetContent>
+    </Sheet>
   )
 }

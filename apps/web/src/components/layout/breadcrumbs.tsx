@@ -8,6 +8,7 @@ import { focusRing } from "./styles"
 const routeLabels: Record<string, string> = {
   dashboard: "Dashboard",
   accounts: "Account Management",
+  departments: "Department Management",
 }
 
 function labelFor(segment: string) {
