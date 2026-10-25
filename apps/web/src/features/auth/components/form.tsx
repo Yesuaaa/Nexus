@@ -8,7 +8,12 @@ import type { AuthCopy } from "../copy"
 import { requestErrorMessage } from "../errors"
 import { Brand, PasswordField, TextField } from "./fields"
 import { focusOutline } from "./styles"
-import { fieldIds, validateAuth, type Field } from "../schema"
+import {
+  fieldIds,
+  validateAuth,
+  visibleFieldAfterInteraction,
+  type Field,
+} from "../schema"
 import type { AuthLanguage, AuthMode } from "../types"
 import { SocialPlaceholders } from "./visuals"
 
@@ -34,8 +39,7 @@ export function AuthContent({
     language: AuthLanguage
     message: string
   } | null>(null)
-  const [submitted, setSubmitted] = useState(false)
-  const [touched, setTouched] = useState<Partial<Record<Field, boolean>>>({})
+  const [visibleErrorField, setVisibleErrorField] = useState<Field | null>(null)
   const [pending, setPending] = useState(false)
 
   const errors = validateAuth(
@@ -44,10 +48,22 @@ export function AuthContent({
     copy,
   )
   const visibleError = (field: Field) =>
-    submitted || touched[field] ? errors[field] : undefined
+    visibleErrorField === field ? errors[field] : undefined
 
   function markTouched(field: Field) {
-    setTouched((current) => ({ ...current, [field]: true }))
+    setVisibleErrorField((current) =>
+      visibleFieldAfterInteraction(current, {
+        type: "blur",
+        field,
+        invalid: Boolean(errors[field]),
+      }),
+    )
+  }
+
+  function clearVisibleError(field: Field) {
+    setVisibleErrorField((current) =>
+      visibleFieldAfterInteraction(current, { type: "focus", field }),
+    )
   }
 
   function changeValue(setValue: (value: string) => void, value: string) {
@@ -58,7 +74,6 @@ export function AuthContent({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (pending) return
-    setSubmitted(true)
     setFormError(null)
     const firstInvalid = (Object.keys(fieldIds) as Field[]).find(
       (field) => errors[field],
@@ -67,6 +82,7 @@ export function AuthContent({
       formRef.current
         ?.querySelector<HTMLInputElement>(`#${fieldIds[firstInvalid]}`)
         ?.focus()
+      setVisibleErrorField(firstInvalid)
       return
     }
     setPending(true)
@@ -109,27 +125,31 @@ export function AuthContent({
 
   return (
     <div
-      className={`flex flex-1 items-center justify-center px-8 pt-[26px] pb-[52px] max-[850px]:px-6 max-[850px]:pt-[30px] max-[850px]:pb-[58px] ${mode === "login" ? "min-[851px]:pt-12 min-[851px]:pb-[30px]" : ""}`}
+      className={`flex flex-1 items-center justify-center px-8 pt-[26px] pb-[52px] max-[850px]:px-6 max-[850px]:pt-[30px] max-[850px]:pb-[58px] ${mode === "login" ? "min-[851px]:pt-12 min-[851px]:pb-[30px]" : ""} [@media(min-width:851px)_and_(max-height:1100px)]:pt-1 [@media(min-width:851px)_and_(max-height:1100px)]:pb-1`}
     >
       <motion.div
-        className="w-[min(100%,384px)] min-w-0"
+        className={`w-[min(100%,336px)] min-w-0 ${mode === "register" ? "[@media(min-width:851px)_and_(max-height:820px)]:relative [@media(min-width:851px)_and_(max-height:820px)]:-top-2" : ""}`}
         initial={reduceMotion ? false : { opacity: 0, x: -24 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.45, ease: "easeOut" }}
       >
         <div className="text-center">
-          <Brand />
-          <h2 className="inline-block bg-[linear-gradient(90deg,#172735_0%,#246ea0_55%,#1cc5d0_100%)] bg-clip-text text-[25px] leading-[1.25] font-bold tracking-[-0.03em] text-transparent">
+          <Brand compact={mode === "register"} />
+          <h2
+            className={`inline-block bg-[linear-gradient(90deg,#172735_0%,#246ea0_55%,#1cc5d0_100%)] bg-clip-text text-[25px] leading-[1.25] font-bold tracking-[-0.03em] text-transparent ${mode === "register" ? "[@media(min-width:851px)_and_(max-height:820px)]:text-xl [@media(min-width:851px)_and_(min-height:821px)_and_(max-height:1100px)]:text-[23px]" : ""}`}
+          >
             {mode === "login" ? copy.loginTitle : copy.registerTitle}
           </h2>
-          <p className="mt-[7px] text-sm leading-[1.4] text-[#5b709e]">
+          <p
+            className={`mt-[7px] text-sm leading-[1.4] text-[#5b709e] ${mode === "register" ? "[@media(min-width:851px)_and_(max-height:820px)]:mt-0.5 [@media(min-width:851px)_and_(max-height:820px)]:text-xs [@media(min-width:851px)_and_(min-height:821px)_and_(max-height:1100px)]:mt-1" : ""}`}
+          >
             {mode === "login" ? copy.loginSubtitle : copy.registerSubtitle}
           </p>
         </div>
 
         <form
           ref={formRef}
-          className="mt-7 grid gap-5"
+          className={`mt-7 grid gap-3 ${mode === "register" ? "[@media(min-width:851px)_and_(max-height:820px)]:mt-0 [@media(min-width:851px)_and_(max-height:820px)]:gap-1 [@media(min-width:851px)_and_(min-height:821px)_and_(max-height:1100px)]:mt-2 [@media(min-width:851px)_and_(min-height:821px)_and_(max-height:1100px)]:gap-2" : ""}`}
           noValidate
           onSubmit={(event) => void handleSubmit(event)}
         >
@@ -142,11 +162,13 @@ export function AuthContent({
                 value={fullName}
                 onChange={(value) => changeValue(setFullName, value)}
                 onBlur={() => markTouched("fullName")}
+                onFocus={() => clearVisibleError("fullName")}
                 autoComplete="name"
                 minLength={2}
                 maxLength={100}
                 placeholder={copy.fullNamePlaceholder}
                 error={visibleError("fullName")}
+                compact
               />
               <TextField
                 id="contact-number"
@@ -155,9 +177,11 @@ export function AuthContent({
                 value={contactNumber}
                 onChange={(value) => changeValue(setContactNumber, value)}
                 onBlur={() => markTouched("contactNumber")}
+                onFocus={() => clearVisibleError("contactNumber")}
                 autoComplete="tel"
                 placeholder="+63"
                 error={visibleError("contactNumber")}
+                compact
               />
             </>
           )}
@@ -168,10 +192,11 @@ export function AuthContent({
             value={email}
             onChange={(value) => changeValue(setEmail, value)}
             onBlur={() => markTouched("email")}
+            onFocus={() => clearVisibleError("email")}
             autoComplete="email"
             placeholder="user@email.com"
             error={visibleError("email")}
-            normalWeight
+            compact={mode === "register"}
           />
           {mode === "login" ? (
             <PasswordField
@@ -180,6 +205,7 @@ export function AuthContent({
               value={password}
               onChange={(value) => changeValue(setPassword, value)}
               onBlur={() => markTouched("password")}
+              onFocus={() => clearVisibleError("password")}
               autoComplete="current-password"
               error={visibleError("password")}
               recoveryLink
@@ -187,7 +213,7 @@ export function AuthContent({
             />
           ) : (
             <div
-              className={`grid items-start gap-4 max-[420px]:grid-cols-1 max-[420px]:gap-5 [&_label]:whitespace-nowrap ${language === "fil" ? "grid-cols-1" : "grid-cols-2"}`}
+              className={`grid items-start gap-4 max-[420px]:grid-cols-1 max-[420px]:gap-5 [&_label]:whitespace-nowrap ${language === "fil" ? "grid-cols-1 [@media(min-width:851px)_and_(max-height:820px)]:grid-cols-[2fr_3fr]" : "grid-cols-2"}`}
             >
               <PasswordField
                 id="password"
@@ -195,9 +221,16 @@ export function AuthContent({
                 value={password}
                 onChange={(value) => changeValue(setPassword, value)}
                 onBlur={() => markTouched("password")}
+                onFocus={() => clearVisibleError("password")}
                 autoComplete="new-password"
                 minLength={12}
                 error={visibleError("password")}
+                compact={mode === "register"}
+                helperText={
+                  mode === "register" && !visibleError("password")
+                    ? copy.passwordHint
+                    : undefined
+                }
                 copy={copy}
               />
               <PasswordField
@@ -206,17 +239,14 @@ export function AuthContent({
                 value={confirmPassword}
                 onChange={(value) => changeValue(setConfirmPassword, value)}
                 onBlur={() => markTouched("confirmPassword")}
+                onFocus={() => clearVisibleError("confirmPassword")}
                 autoComplete="new-password"
                 minLength={12}
                 error={visibleError("confirmPassword")}
+                compact
                 copy={copy}
               />
             </div>
-          )}
-          {mode === "register" && !visibleError("password") && (
-            <p className="-mt-[11px] -mb-[6px] text-xs text-[#6b7e9f]">
-              {copy.passwordHint}
-            </p>
           )}
           {formError?.language === language && (
             <p
@@ -227,7 +257,7 @@ export function AuthContent({
             </p>
           )}
           <Button
-            className={`grid h-[46px] w-full place-items-center rounded-md border-0 bg-[#253f8c] text-sm font-bold text-white transition-[background,transform] duration-150 hover:bg-[#1a3276] hover:enabled:-translate-y-px disabled:cursor-wait disabled:opacity-70 motion-reduce:transition-none ${focusOutline}`}
+            className={`grid h-[46px] w-full place-items-center rounded-md border-0 bg-[#253f8c] text-sm font-bold text-white transition-[background,transform] duration-150 hover:bg-[#1a3276] hover:enabled:-translate-y-px disabled:cursor-wait disabled:opacity-70 motion-reduce:transition-none ${mode === "register" ? "[@media(min-width:851px)_and_(max-height:820px)]:mt-2 [@media(min-width:851px)_and_(max-height:820px)]:h-[38px] [@media(min-width:851px)_and_(max-height:1100px)]:text-[13px] [@media(min-width:851px)_and_(min-height:821px)_and_(max-height:1100px)]:h-[42px]" : ""} ${focusOutline}`}
             type="submit"
             disabled={pending}
           >
@@ -241,14 +271,20 @@ export function AuthContent({
           </Button>
         </form>
 
-        <div className="mt-[23px] mb-[13px] flex items-center gap-4 text-xs text-[#7485a7] before:h-px before:flex-1 before:bg-[#dce4ee] before:content-[''] after:h-px after:flex-1 after:bg-[#dce4ee] after:content-['']">
+        <div
+          className={`mt-[23px] mb-[13px] flex items-center gap-4 text-xs text-[#7485a7] before:h-px before:flex-1 before:bg-[#dce4ee] before:content-[''] after:h-px after:flex-1 after:bg-[#dce4ee] after:content-[''] ${mode === "register" ? "[@media(min-width:851px)_and_(max-height:820px)]:mt-4 [@media(min-width:851px)_and_(max-height:820px)]:mb-2.5 [@media(min-width:851px)_and_(min-height:821px)_and_(max-height:1100px)]:mt-2 [@media(min-width:851px)_and_(min-height:821px)_and_(max-height:1100px)]:mb-1" : ""}`}
+        >
           <span>{copy.or}</span>
         </div>
-        <p className="mb-3 text-center text-[13px] leading-[1.4] text-[#7485a7]">
+        <p
+          className={`mb-3 text-center text-[13px] leading-[1.4] text-[#7485a7] ${mode === "register" ? "[@media(min-width:851px)_and_(max-height:820px)]:mb-3 [@media(min-width:851px)_and_(max-height:820px)]:text-xs [@media(min-width:851px)_and_(min-height:821px)_and_(max-height:1100px)]:mb-1" : ""}`}
+        >
           {copy.continueWith}
         </p>
-        <SocialPlaceholders copy={copy} />
-        <p className="mt-6 text-center text-sm leading-[1.4] text-[#52688d]">
+        <SocialPlaceholders copy={copy} compact={mode === "register"} />
+        <p
+          className={`mt-6 text-center text-sm leading-[1.4] text-[#52688d] ${mode === "register" ? "[@media(min-width:851px)_and_(max-height:820px)]:mt-5 [@media(min-width:851px)_and_(max-height:820px)]:text-xs [@media(min-width:851px)_and_(min-height:821px)_and_(max-height:1100px)]:mt-2" : ""}`}
+        >
           {mode === "login" ? copy.noAccountYet : copy.haveAccountYet}{" "}
           <Link
             to={mode === "login" ? "/register" : "/login"}
