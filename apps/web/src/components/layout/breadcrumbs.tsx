@@ -1,7 +1,10 @@
 import { Link, useLocation } from "react-router"
 import { ChevronRightIcon, HomeIcon } from "./icons"
 
-const routeLabels: Record<string, string> = { dashboard: "Dashboard" }
+const routeLabels: Record<string, string> = {
+  dashboard: "Dashboard",
+  accounts: "Account Management",
+}
 
 function labelFor(segment: string) {
   const decoded = decodeURIComponent(segment)

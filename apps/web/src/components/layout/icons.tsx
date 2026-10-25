@@ -32,6 +32,15 @@ export function DashboardIcon(props: IconProps) {
   )
 }
 
+export function AccountsIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="9" cy="8" r="3" />
+      <path d="M3 20v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 5v1" />
+    </Icon>
+  )
+}
+
 export function HomeIcon(props: IconProps) {
   return (
     <Icon {...props}>

@@ -1,4 +1,5 @@
 import type { User } from "../../generated/prisma/client.js"
+import { permissionsFor } from "../auth/permissions.js"
 
 export function publicUser(user: User) {
   return {
@@ -7,6 +8,7 @@ export function publicUser(user: User) {
     fullName: user.fullName,
     contactNumber: user.contactNumber,
     role: user.role,
+    permissions: permissionsFor(user.role),
     createdAt: user.createdAt,
   }
 }
