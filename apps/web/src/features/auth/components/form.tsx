@@ -1,5 +1,6 @@
 import { useRef, useState, type FormEvent } from "react"
-import { useNavigate } from "react-router"
+import { Link, useNavigate } from "react-router"
+import { motion, useReducedMotion } from "framer-motion"
 import { sileo } from "sileo"
 import { Button } from "@/components/ui/button"
 import { ApiError, register, signIn } from "../api"
@@ -23,6 +24,7 @@ export function AuthContent({
   onLoggedIn: () => void
 }) {
   const navigate = useNavigate()
+  const reduceMotion = useReducedMotion()
   const formRef = useRef<HTMLFormElement>(null)
   const [fullName, setFullName] = useState("")
   const [contactNumber, setContactNumber] = useState("")
@@ -114,7 +116,12 @@ export function AuthContent({
     <div
       className={`flex flex-1 items-center justify-center px-8 pt-[26px] pb-[52px] max-[850px]:px-6 max-[850px]:pt-[30px] max-[850px]:pb-[58px] ${mode === "login" ? "min-[851px]:pt-12 min-[851px]:pb-[30px]" : ""}`}
     >
-      <div className="w-[min(100%,384px)] min-w-0">
+      <motion.div
+        className="w-[min(100%,384px)] min-w-0"
+        initial={reduceMotion ? false : { opacity: 0, x: -24 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.45, ease: "easeOut" }}
+      >
         <div className="text-center">
           <Brand />
           <h2 className="inline-block bg-[linear-gradient(90deg,#172735_0%,#246ea0_55%,#1cc5d0_100%)] bg-clip-text text-[25px] leading-[1.25] font-bold tracking-[-0.03em] text-transparent">
@@ -246,7 +253,16 @@ export function AuthContent({
           {copy.continueWith}
         </p>
         <SocialPlaceholders copy={copy} />
-      </div>
+        <p className="mt-6 text-center text-sm leading-[1.4] text-[#52688d]">
+          {mode === "login" ? copy.noAccountYet : copy.haveAccountYet}{" "}
+          <Link
+            to={mode === "login" ? "/register" : "/login"}
+            className={`font-semibold text-[#253f8c] underline-offset-2 hover:underline ${focusOutline}`}
+          >
+            {mode === "login" ? copy.createOne : copy.signInHere}
+          </Link>
+        </p>
+      </motion.div>
     </div>
   )
 }

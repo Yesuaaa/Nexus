@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { motion, useReducedMotion } from "framer-motion"
 import type { AuthCopy } from "../copy"
 import { focusOutline, heroTitleClass, socialIconClass } from "./styles"
 import type { AuthLanguage, AuthMode } from "../types"
@@ -19,6 +20,7 @@ export function PhotoPanel({
   language: AuthLanguage
 }) {
   const [active, setActive] = useState(0)
+  const reduceMotion = useReducedMotion()
   const responsiveHeroTitleClass =
     language === "fil"
       ? "max-[1100px]:text-[clamp(32px,3.6vw,46px)]"
@@ -48,7 +50,13 @@ export function PhotoPanel({
         />
       ))}
       <div className="absolute inset-0 bg-[linear-gradient(90deg,rgb(10_30_52_/_77%)_0%,rgb(13_39_67_/_49%)_60%,rgb(12_45_77_/_38%)_100%),linear-gradient(0deg,rgb(5_31_56_/_48%),transparent_55%)]" />
-      <div className="absolute z-1 top-[37%] left-[clamp(42px,6.2%,90px)] w-[min(83%,650px)] text-white">
+      <motion.div
+        key={mode}
+        className="absolute z-1 top-[37%] left-[clamp(42px,6.2%,90px)] w-[min(83%,650px)] text-white"
+        initial={reduceMotion ? false : { opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, ease: "easeOut" }}
+      >
         {mode === "login" ? (
           <>
             <h1 className={`${heroTitleClass} ${responsiveHeroTitleClass}`}>
@@ -80,7 +88,7 @@ export function PhotoPanel({
             </p>
           </>
         )}
-      </div>
+      </motion.div>
       <div
         className="absolute right-8 bottom-5 z-2 flex items-center gap-2"
         aria-label={copy.choosePhoto}
