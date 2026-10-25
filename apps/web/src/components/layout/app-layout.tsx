@@ -1,8 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react"
+import { cn } from "@/lib/utils"
 import type { Account } from "@/features/auth/types"
 import { Sidebar } from "./sidebar"
 import { Topbar } from "./topbar"
-import "./app-shell.css"
 
 const tabletQuery = "(min-width: 768px) and (max-width: 1100px)"
 
@@ -19,6 +19,7 @@ export function AppLayout({
     () => window.matchMedia(tabletQuery).matches,
   )
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const management = account.role !== "USER"
 
   useEffect(() => {
     const query = window.matchMedia(tabletQuery)
@@ -38,15 +39,15 @@ export function AppLayout({
 
   return (
     <div
-      className="app-layout"
-      data-variant={account.role === "USER" ? "client" : "management"}
+      className="relative h-dvh overflow-hidden bg-[var(--portal-canvas)] text-sm text-foreground"
+      data-variant={management ? "management" : "client"}
       data-collapsed={collapsed}
       data-drawer-open={drawerOpen}
     >
       {drawerOpen && (
         <button
           type="button"
-          className="app-drawer-overlay"
+          className="fixed inset-0 z-20 hidden w-full cursor-pointer border-0 bg-[rgb(15_28_53_/_48%)] max-[767px]:block"
           aria-label="Close navigation menu"
           onClick={() => setDrawerOpen(false)}
         />
@@ -59,7 +60,18 @@ export function AppLayout({
         onCloseDrawer={() => setDrawerOpen(false)}
         onSignOut={onSignOut}
       />
-      <div className="app-scroll">
+      <div
+        className={cn(
+          "h-dvh min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain py-[15px] pr-[15px] pl-4 transition-[margin-left] duration-[240ms] max-[767px]:m-0 max-[767px]:p-3 motion-reduce:transition-none",
+          management
+            ? collapsed
+              ? "ml-[95px]"
+              : "ml-[311px]"
+            : collapsed
+              ? "ml-[80px]"
+              : "ml-[296px]",
+        )}
+      >
         <Topbar
           drawerOpen={drawerOpen}
           onOpenMenu={() => setDrawerOpen(true)}

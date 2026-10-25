@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react"
 import { CheckIcon } from "@/components/ui/check-icon"
+import { cn } from "@/lib/utils"
+import { accountFocusRing } from "./styles"
 
 export type AccountDropdownOption<T extends string> = {
   value: T
@@ -13,6 +15,8 @@ export function AccountDropdown<T extends string>({
   label,
   disabled = false,
   className = "",
+  triggerClassName = "",
+  menuClassName = "",
 }: {
   value: T
   options: AccountDropdownOption<T>[]
@@ -20,6 +24,8 @@ export function AccountDropdown<T extends string>({
   label: string
   disabled?: boolean
   className?: string
+  triggerClassName?: string
+  menuClassName?: string
 }) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -66,14 +72,18 @@ export function AccountDropdown<T extends string>({
 
   return (
     <div
-      className={`account-dropdown ${className}`}
+      className={cn("relative min-w-0 data-[open=true]:z-10", className)}
       data-open={open}
       ref={rootRef}
     >
       <button
         ref={triggerRef}
         type="button"
-        className="account-dropdown-trigger"
+        className={cn(
+          "flex h-[38px] w-full min-w-0 items-center justify-between gap-3 rounded-lg border border-[#dce3ed] bg-background pr-3 pl-[11px] text-left text-foreground cursor-pointer disabled:cursor-not-allowed disabled:opacity-55",
+          accountFocusRing,
+          triggerClassName,
+        )}
         aria-label={`${label}: ${options[selectedIndex]?.label ?? ""}`}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -87,13 +97,22 @@ export function AccountDropdown<T extends string>({
         }}
       >
         <span>{options[selectedIndex]?.label}</span>
-        <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+        <svg
+          className="flex-none fill-none stroke-[#526686] stroke-[1.5] [stroke-linecap:round] [stroke-linejoin:round]"
+          viewBox="0 0 12 12"
+          width="12"
+          height="12"
+          aria-hidden="true"
+        >
           <path d="m2 4 4 4 4-4" />
         </svg>
       </button>
       {open && (
         <div
-          className="account-dropdown-menu"
+          className={cn(
+            "absolute top-[calc(100%+6px)] left-0 w-max min-w-full max-w-[min(280px,calc(100vw-40px))] rounded-lg border border-[#d7dfed] bg-background p-1 shadow-[0_12px_32px_rgb(20_45_97_/_13%)]",
+            menuClassName,
+          )}
           role="menu"
           aria-label={label}
           onKeyDown={handleMenuKeyDown}
@@ -110,7 +129,10 @@ export function AccountDropdown<T extends string>({
               type="button"
               role="menuitemradio"
               aria-checked={option.value === value}
-              className="account-dropdown-option"
+              className={cn(
+                "flex min-h-[38px] w-full items-center justify-between gap-3 rounded-md border-0 bg-transparent px-[10px] text-left text-foreground cursor-pointer hover:bg-[#eef1f8] focus-visible:bg-[#eef1f8]",
+                accountFocusRing,
+              )}
               onClick={() => choose(option.value)}
             >
               <span>{option.label}</span>

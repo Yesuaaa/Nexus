@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from "react-router"
+import { Navigate, Route, Routes, useLocation } from "react-router"
 import { Toaster } from "sileo"
 import { getToken } from "@/features/auth/api"
 import { AuthRouteLoader } from "@/features/auth/components/loader"
@@ -12,6 +12,7 @@ import { PortalRoute } from "@/components/layout/portal-route"
 import { NotFoundPage } from "@/pages/not-found-page"
 
 export default function App() {
+  useLocation()
   const {
     showLoader,
     destinationReady,
@@ -20,11 +21,12 @@ export default function App() {
     navigateToDashboard,
     finishLoginTransition,
   } = useLoginTransition()
+  const toastPosition = getToken() ? "top-center" : "bottom-right"
 
   return (
     <>
       <Toaster
-        position="bottom-right"
+        position={toastPosition}
         options={{
           fill: "#253f8c",
           roundness: 12,
