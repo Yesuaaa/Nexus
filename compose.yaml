@@ -33,12 +33,13 @@ services:
       target: web-dev
     environment:
       API_PROXY_TARGET: http://api:3001
-      FILE_WATCH_POLLING: "true"
+      WATCHPACK_POLLING: "true"
     volumes:
       - ./apps/web/src:/workspace/apps/web/src
       - ./apps/web/public:/workspace/apps/web/public
-      - ./apps/web/index.html:/workspace/apps/web/index.html:ro
-      - ./apps/web/vite.config.ts:/workspace/apps/web/vite.config.ts:ro
+      - ./apps/web/next.config.ts:/workspace/apps/web/next.config.ts:ro
+      - ./apps/web/postcss.config.mjs:/workspace/apps/web/postcss.config.mjs:ro
+      - ./apps/web/tsconfig.json:/workspace/apps/web/tsconfig.json:ro
     depends_on:
       api:
         condition: service_healthy

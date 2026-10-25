@@ -1,12 +1,12 @@
 # Nexus Starter
 
-A pnpm workspace with two independent apps:
+A pnpm workspace with an independent web frontend, API, and mobile app:
 
-| App           | Stack                                                             | Default address       |
-| ------------- | ----------------------------------------------------------------- | --------------------- |
-| `apps/web`    | React, TypeScript, Vite, React Router, Tailwind CSS v4, shadcn/ui | http://localhost:5173 |
-| `apps/api`    | Express, TypeScript, Prisma, Supabase PostgreSQL                  | http://localhost:3001 |
-| `apps/mobile` | Kotlin Multiplatform (KMP), Compose Multiplatform (CMP)           | Android & iOS         |
+| App           | Stack                                                      | Default address       |
+| ------------- | ---------------------------------------------------------- | --------------------- |
+| `apps/web`    | Next.js App Router, TypeScript, Tailwind CSS v4, shadcn/ui | http://localhost:5173 |
+| `apps/api`    | Express, TypeScript, Prisma, Supabase PostgreSQL           | http://localhost:3001 |
+| `apps/mobile` | Kotlin Multiplatform (KMP), Compose Multiplatform (CMP)    | Android & iOS         |
 
 The browser calls the API over HTTP. Prisma and database credentials exist only in `apps/api`.
 
@@ -24,7 +24,7 @@ copy apps/api/.env.example apps/api/.env
 pnpm dev
 ```
 
-On macOS or Linux, use `cp` instead of `copy`. Open http://localhost:5173. The web app forwards `/api` to the API on port 3001 during development. The API health check works before database setup.
+On macOS or Linux, use `cp` instead of `copy`. Open http://localhost:5173. Next.js forwards `/api` to the existing API on port 3001 in development and production. Port 5173 is retained to preserve the backend's existing default origin. The API health check works before database setup. Optional frontend settings are documented in `apps/web/.env.example`; use `apps/web/.env.local` for local overrides.
 
 In Supabase, open **Connect** and copy the **Transaction pooler** URL into `DATABASE_URL` and the **Direct connection** URL into `DIRECT_URL` in `apps/api/.env`. Add `pgbouncer=true` to the transaction pooler URL if it is absent. For migrations from an IPv4-only network, use the **Session pooler** URL for `DIRECT_URL`. Keep these URLs out of web environment variables.
 
@@ -40,7 +40,13 @@ The `ExampleItem` model in `apps/api/prisma/schema.prisma` is a placeholder for 
 
 The account pages are at `/login` and `/register`. They use the project's shadcn/ui Button, Input, and Label components and submit to the API. Field validation appears beside inputs, while Sileo shows sign-in and account outcome toasts. Successful sign-in plays the GSAP EXP loader before opening `/dashboard`; the success toast appears after the loader exits. Registration opens the dashboard directly. The registration form saves the full name and contact number, so apply the newest migration before using it. The three community photos in `apps/web/public/auth` are temporary local assets. Social icons on the form are visual placeholders; only email and password sign-in is available.
 
-Frontend code is organized by feature under `apps/web/src/features`. Auth owns its API calls, form schema, types, localized copy, account loading, and components. Dashboard is an empty page; accounts owns the Admin and Superadmin account management page; status owns the starter health checks. The shared portal shell lives in `components/layout`, shadcn/ui primitives in `components/ui`, and cross-feature utilities in `lib`. `App.tsx` defines the routes. Run `pnpm --filter @nexus/web test` for auth API and validation checks.
+Frontend code remains organized by feature under `apps/web/src/features`. Within each feature, group code by responsibility: `pages`, `components`, `api`, `hooks`, `providers`, `model`, `content`, and `styles`, creating only the folders needed. Auth owns its API calls, form schema, types, localized copy, account loading, and components. Dashboard is an empty page; accounts owns account management; departments owns department and membership management; status retains the starter health checks. The shared portal shell lives in `components/layout`, shadcn/ui primitives in `components/ui`, and cross-feature utilities in `lib`. See [File structure](docs/filestructure.md#frontend-feature-responsibilities) for the convention and examples for future features. Run `pnpm --filter @nexus/web test` for auth API and validation checks.
+
+`apps/web/src/app` defines the Next.js App Router routes. Route entry points, the root layout, the dashboard, and the 404 page are Server Components. Interactive forms, portal account loading, navigation, and management screens use Client Components. The root auth provider persists the GSAP loader and Sileo toasts across navigation. The `(portal)` layout loads the account and provides it to feature components through context; `components/layout/role-layout.tsx` selects Superadmin, Admin, Staff, or Client layouts while reusing the existing shell and permission-based navigation. Client maps to the API's unchanged `USER` role. Existing URLs remain `/`, `/login`, `/register`, `/dashboard`, `/accounts`, and `/departments`.
+
+Authentication still uses the existing session-storage bearer token and Express endpoints. Account loading and frontend redirects therefore run on the client after hydration; the server renders a neutral loading state for protected pages. The API remains responsible for authorizing every operation. No cookie/session migration, backend changes, database changes, or duplicated Next.js authentication endpoints are introduced.
+
+Browser regression checks use mocked API responses and do not write to the database. Build the frontend first, install Chromium once with `pnpm --filter @nexus/web exec playwright install chromium`, then run `pnpm --filter @nexus/web test:e2e`. The test server uses port 5273 to avoid the development app. To use an installed Chrome browser instead, set `PLAYWRIGHT_CHANNEL=chrome` in your shell before running the tests.
 
 The API follows the same feature layout under `apps/api/src/features`: auth owns credentials, sessions, and login limits; users owns account administration and role rules; health owns service checks. `app.ts` mounts the routes and handles HTTP errors, `index.ts` starts the server, and `lib/db.ts` provides Prisma access. `apps/api/prisma/seed.ts` is the Prisma seed entry point. Run `pnpm --filter @nexus/api test` for backend checks.
 
@@ -69,7 +75,7 @@ Admins can change Staff and User accounts between those two roles. Superadmins c
 
 ## Docker
 
-The default Docker Compose setup runs Vite and the API in development mode. It watches the mounted source files, so frontend edits appear without rebuilding. Vite forwards `/api` requests to the API container. PostgreSQL stays on Supabase.
+The default Docker Compose setup runs Next.js and the API in development mode. It watches the mounted source files, so frontend edits appear without rebuilding. Next.js forwards `/api` requests to the API container. PostgreSQL stays on Supabase.
 
 ```sh
 copy docker.env.example .env
@@ -85,7 +91,7 @@ docker compose down
 
 Change `WEB_PORT` or `API_PORT` in `.env` to use other host ports. If you change the browser origin, update `WEB_ORIGIN`. Source edits reload automatically; dependency changes require `docker compose up --build -d`. Run Prisma migrations using `pnpm db:migrate --name <name>` from the host with `apps/api/.env` configured.
 
-The built Nginx version remains available with `docker compose -f compose.prod.yaml up --build -d` at http://localhost:8080. Stop the development containers first with `docker compose down`. The production runtime API image does not include Prisma CLI tooling.
+The production Next.js standalone server is available with `docker compose -f compose.prod.yaml up --build -d` at http://localhost:8080. Stop the development containers first with `docker compose down`. The web image includes the standalone server, public assets, and generated static assets. The production runtime API image does not include Prisma CLI tooling.
 
 ## Separate deployment
 
@@ -96,24 +102,28 @@ pnpm --filter @nexus/web build
 pnpm --filter @nexus/api build
 ```
 
-Deploy `apps/web/dist` to a static host. Set `VITE_API_URL` when building the web app to the public API origin, such as `https://api.example.com`. Deploy `apps/api` to a Node.js host with its production dependencies, built `dist`, and `DATABASE_URL`. Set `WEB_ORIGIN` to the web app's public origin, then run `pnpm --filter @nexus/api start`. Set `DIRECT_URL` in the environment used to run Prisma migrations.
+Deploy `apps/web` to a Next.js-compatible Node.js host or Vercel with the repository root as the workspace root. Build the web app and run `pnpm start:web`. The build prepares `.next/standalone` with the server, public assets, and generated static assets. You can deploy that directory independently and run `apps/web/server.js` with Node, setting `PORT` and `HOSTNAME` as needed. Docker uses the same standalone artifact. This is a server deployment; `apps/web/dist` is no longer produced.
 
-`VITE_API_URL` contains only the public API address. Never put Supabase database credentials in a `VITE_` variable.
+Set the server-only `API_PROXY_TARGET` before building to the Express API origin, such as `https://api.example.com`. Rewrites are resolved at build time, so rebuild when this target changes. Docker builds default to `http://api:3001` through a build argument of the same name. Leave `NEXT_PUBLIC_API_URL` empty to use same-origin `/api` calls, or set it at build time to a public API origin for direct browser requests. Direct requests require `WEB_ORIGIN` on the API to match the frontend's origin. Existing local `VITE_API_URL` settings must be renamed to `NEXT_PUBLIC_API_URL`.
+
+Deploy `apps/api` to a Node.js host with its production dependencies, built `dist`, and `DATABASE_URL`. Set `WEB_ORIGIN` to the web app's public origin, then run `pnpm --filter @nexus/api start`. Set `DIRECT_URL` in the environment used to run Prisma migrations. Database credentials belong only in the API environment; never put them in a `NEXT_PUBLIC_` variable.
 
 ## Commands
 
-| Command                            | Purpose                               |
-| ---------------------------------- | ------------------------------------- |
-| `pnpm dev`                         | Run both apps                         |
-| `pnpm build`                       | Build both apps                       |
-| `pnpm typecheck`                   | Typecheck both apps                   |
-| `pnpm --filter @nexus/web test`    | Test frontend auth behavior           |
-| `pnpm --filter @nexus/api test`    | Test API routes, passwords, and roles |
-| `pnpm --filter @nexus/api db:seed` | Seed the first Superadmin             |
-| `pnpm start:api`                   | Start the built API                   |
-| `pnpm preview:web`                 | Preview the built web app             |
-| `pnpm db:generate`                 | Generate Prisma Client                |
-| `pnpm db:migrate --name <name>`    | Create and apply a migration          |
-| `pnpm db:studio`                   | Open Prisma Studio                    |
+| Command                             | Purpose                                             |
+| ----------------------------------- | --------------------------------------------------- |
+| `pnpm dev`                          | Run both apps                                       |
+| `pnpm build`                        | Build both apps                                     |
+| `pnpm typecheck`                    | Typecheck both apps                                 |
+| `pnpm --filter @nexus/web test`     | Test frontend auth behavior                         |
+| `pnpm --filter @nexus/web test:e2e` | Test migration routes, auth, and roles in a browser |
+| `pnpm --filter @nexus/api test`     | Test API routes, passwords, and roles               |
+| `pnpm --filter @nexus/api db:seed`  | Seed the first Superadmin                           |
+| `pnpm start:api`                    | Start the built API                                 |
+| `pnpm start:web`                    | Start the built Next.js web app                     |
+| `pnpm preview:web`                  | Alias for starting the built web app                |
+| `pnpm db:generate`                  | Generate Prisma Client                              |
+| `pnpm db:migrate --name <name>`     | Create and apply a migration                        |
+| `pnpm db:studio`                    | Open Prisma Studio                                  |
 
 Add shadcn/ui components from `apps/web` with `pnpm dlx shadcn@latest add <component>`. The web app already includes a Button and `components.json`.

@@ -1,7 +1,14 @@
-import { NavLink } from "react-router"
+"use client"
+
+import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import type { Account } from "@/features/auth/types"
-import { hasPermission, Permissions } from "@/features/auth/permissions"
+import type { Account } from "@/features/auth/model/types"
+import {
+  canAccessDepartmentManagement,
+  hasPermission,
+  Permissions,
+} from "@/features/auth/model/permissions"
 import { collapsedTooltipClass, focusRing, iconButtonClass } from "./styles"
 import {
   AccountsIcon,
@@ -44,6 +51,7 @@ export function Sidebar({
   onCloseDrawer: () => void
   onSignOut: () => void
 }) {
+  const pathname = usePathname()
   const management = account.role !== "USER"
   const collapsedLabelClass = collapsed
     ? "w-0 overflow-hidden opacity-0 max-[767px]:w-auto max-[767px]:overflow-visible max-[767px]:opacity-100"
@@ -125,35 +133,31 @@ export function Sidebar({
           )}
           aria-label="Main menu"
         >
-          <NavLink
-            to="/dashboard"
-            end
-            className={({ isActive }) =>
-              cn(
-                navLinkClass,
-                collapsed &&
-                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
-                isActive && "bg-[#e1e3e5]",
-              )
-            }
+          <Link
+            href="/dashboard"
+            aria-current={pathname === "/dashboard" ? "page" : undefined}
+            className={cn(
+              navLinkClass,
+              collapsed &&
+                "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
+              pathname === "/dashboard" && "bg-[#e1e3e5]",
+            )}
             onClick={onCloseDrawer}
           >
             <DashboardIcon className="flex-none" />
             <span className={collapsedLabelClass}>Dashboard</span>
             {collapsed && <CollapsedTooltip>Dashboard</CollapsedTooltip>}
-          </NavLink>
+          </Link>
           {hasPermission(account, Permissions.ACCOUNTS_READ) && (
-            <NavLink
-              to="/accounts"
-              end
-              className={({ isActive }) =>
-                cn(
-                  navLinkClass,
-                  collapsed &&
-                    "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
-                  isActive && "bg-[#e1e3e5]",
-                )
-              }
+            <Link
+              href="/accounts"
+              aria-current={pathname === "/accounts" ? "page" : undefined}
+              className={cn(
+                navLinkClass,
+                collapsed &&
+                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
+                pathname === "/accounts" && "bg-[#e1e3e5]",
+              )}
               onClick={onCloseDrawer}
             >
               <AccountsIcon className="flex-none" />
@@ -161,21 +165,19 @@ export function Sidebar({
               {collapsed && (
                 <CollapsedTooltip>Account Management</CollapsedTooltip>
               )}
-            </NavLink>
+            </Link>
           )}
-          {hasPermission(account, Permissions.DEPARTMENTS_READ) && (
-            <NavLink
-              to="/departments"
-              end
-              className={({ isActive }) =>
-                `app-nav-link${isActive ? " is-active" : ""}`
-              }
+          {canAccessDepartmentManagement(account) && (
+            <Link
+              href="/departments"
+              aria-current={pathname === "/departments" ? "page" : undefined}
+              className={`app-nav-link${pathname === "/departments" ? " is-active" : ""}`}
               title={collapsed ? "Departments" : undefined}
               onClick={onCloseDrawer}
             >
               <DepartmentIcon />
               <span className="app-sidebar-label">Departments</span>
-            </NavLink>
+            </Link>
           )}
         </nav>
 

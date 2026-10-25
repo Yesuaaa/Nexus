@@ -2,6 +2,10 @@
 **/dist/
 **/coverage/
 **/.vite/
+**/.next/
+**/out/
+**/test-results/
+**/playwright-report/
 .env
 .env.*
 !.env.example

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import * as authSchema from "../src/features/auth/schema.ts"
+import * as authSchema from "../src/features/auth/model/schema.ts"
 
 test("the current field error remains visible while it is being corrected", () => {
   assert.equal(typeof authSchema.visibleFieldAfterInteraction, "function")
