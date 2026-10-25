@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState, type FocusEvent } from "react"
 import { Link } from "react-router"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -6,22 +6,32 @@ import { Label } from "@/components/ui/label"
 import type { AuthCopy } from "../copy"
 import { fieldClass, focusOutline, inputClass, labelClass } from "./styles"
 
-export function FieldError({ id, message }: { id: string; message?: string }) {
-  return message ? (
+export function FieldError({
+  id,
+  message,
+  muted = false,
+}: {
+  id: string
+  message?: string
+  muted?: boolean
+}) {
+  return (
     <p
       id={`${id}-error`}
-      className="-mt-0.5 text-xs leading-[1.4] text-[#a92d43]"
-      role="alert"
+      className={`-mt-0.5 h-[1.4em] overflow-hidden text-ellipsis whitespace-nowrap text-xs leading-[1.4] ${muted ? "text-[#6b7e9f]" : "text-[#a92d43]"}`}
+      aria-live="polite"
+      aria-atomic="true"
+      title={message}
     >
       {message}
     </p>
-  ) : null
+  )
 }
 
 export function Brand() {
   return (
     <img
-      className="mx-auto mb-0.5 block h-[69px] w-[134px] object-contain"
+      className="mx-auto -mb-1 block h-[69px] w-[134px] object-contain"
       src="/auth/exp-logo.svg"
       alt="EXP"
     />
@@ -35,12 +45,12 @@ export function TextField({
   value,
   onChange,
   onBlur,
+  onFocus,
   autoComplete,
   placeholder,
   error,
   minLength,
   maxLength,
-  normalWeight = false,
 }: {
   id: string
   label: string
@@ -48,19 +58,16 @@ export function TextField({
   value: string
   onChange: (value: string) => void
   onBlur: () => void
+  onFocus: () => void
   autoComplete: string
   placeholder: string
   error?: string
   minLength?: number
   maxLength?: number
-  normalWeight?: boolean
 }) {
   return (
     <div className={fieldClass}>
-      <Label
-        className={`${labelClass} ${normalWeight ? "font-normal" : ""}`}
-        htmlFor={id}
-      >
+      <Label className={labelClass} htmlFor={id}>
         {label}
       </Label>
       <Input
@@ -70,6 +77,7 @@ export function TextField({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onBlur={onBlur}
+        onFocus={onFocus}
         autoComplete={autoComplete}
         placeholder={placeholder}
         minLength={minLength}
@@ -106,9 +114,11 @@ export function PasswordField({
   value,
   onChange,
   onBlur,
+  onFocus,
   autoComplete,
   minLength,
   error,
+  helperText,
   recoveryLink = false,
   copy,
 }: {
@@ -117,20 +127,25 @@ export function PasswordField({
   value: string
   onChange: (value: string) => void
   onBlur: () => void
+  onFocus: () => void
   autoComplete: string
   minLength?: number
   error?: string
+  helperText?: string
   recoveryLink?: boolean
   copy: AuthCopy
 }) {
   const [visible, setVisible] = useState(false)
+  const fieldRef = useRef<HTMLDivElement>(null)
+  function handleFieldBlur(event: FocusEvent<HTMLDivElement>) {
+    if (!fieldRef.current?.contains(event.relatedTarget as Node | null)) {
+      onBlur()
+    }
+  }
   return (
-    <div className={fieldClass}>
+    <div className={fieldClass} ref={fieldRef} onBlur={handleFieldBlur}>
       <div className="flex items-baseline justify-between gap-3">
-        <Label
-          className={`${labelClass} ${id === "password" ? "font-normal" : ""}`}
-          htmlFor={id}
-        >
+        <Label className={labelClass} htmlFor={id}>
           {label}
         </Label>
         {recoveryLink && (
@@ -149,12 +164,11 @@ export function PasswordField({
           type={visible ? "text" : "password"}
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          onBlur={onBlur}
+          onFocus={onFocus}
           autoComplete={autoComplete}
           minLength={minLength}
           aria-invalid={Boolean(error)}
-          aria-describedby={error ? `${id}-error` : undefined}
-          placeholder="••••••••••••"
+          aria-describedby={error || helperText ? `${id}-error` : undefined}
           required
         />
         <Button
@@ -168,7 +182,11 @@ export function PasswordField({
           <EyeIcon visible={visible} />
         </Button>
       </div>
-      <FieldError id={id} message={error} />
+      <FieldError
+        id={id}
+        message={error ?? helperText}
+        muted={!error && Boolean(helperText)}
+      />
     </div>
   )
 }

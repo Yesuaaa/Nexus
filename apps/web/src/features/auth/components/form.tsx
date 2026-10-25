@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent } from "react"
-import { Link, useNavigate } from "react-router"
+import { Link } from "react-router"
 import { motion, useReducedMotion } from "framer-motion"
 import { sileo } from "sileo"
 import { Button } from "@/components/ui/button"
@@ -8,7 +8,12 @@ import type { AuthCopy } from "../copy"
 import { requestErrorMessage } from "../errors"
 import { Brand, PasswordField, TextField } from "./fields"
 import { focusOutline } from "./styles"
-import { fieldIds, validateAuth, type Field } from "../schema"
+import {
+  fieldIds,
+  validateAuth,
+  visibleFieldAfterInteraction,
+  type Field,
+} from "../schema"
 import type { AuthLanguage, AuthMode } from "../types"
 import { SocialPlaceholders } from "./visuals"
 
@@ -21,9 +26,8 @@ export function AuthContent({
   mode: AuthMode
   copy: AuthCopy
   language: AuthLanguage
-  onLoggedIn: () => void
+  onLoggedIn: (mode: AuthMode) => void
 }) {
-  const navigate = useNavigate()
   const reduceMotion = useReducedMotion()
   const formRef = useRef<HTMLFormElement>(null)
   const [fullName, setFullName] = useState("")
@@ -35,8 +39,7 @@ export function AuthContent({
     language: AuthLanguage
     message: string
   } | null>(null)
-  const [submitted, setSubmitted] = useState(false)
-  const [touched, setTouched] = useState<Partial<Record<Field, boolean>>>({})
+  const [visibleErrorField, setVisibleErrorField] = useState<Field | null>(null)
   const [pending, setPending] = useState(false)
 
   const errors = validateAuth(
@@ -45,10 +48,24 @@ export function AuthContent({
     copy,
   )
   const visibleError = (field: Field) =>
-    submitted || touched[field] ? errors[field] : undefined
+    visibleErrorField === field ? errors[field] : undefined
+  const currentFormError =
+    formError?.language === language ? formError.message : undefined
 
   function markTouched(field: Field) {
-    setTouched((current) => ({ ...current, [field]: true }))
+    setVisibleErrorField((current) =>
+      visibleFieldAfterInteraction(current, {
+        type: "blur",
+        field,
+        invalid: Boolean(errors[field]),
+      }),
+    )
+  }
+
+  function handleFieldFocus(field: Field) {
+    setVisibleErrorField((current) =>
+      visibleFieldAfterInteraction(current, { type: "focus", field }),
+    )
   }
 
   function changeValue(setValue: (value: string) => void, value: string) {
@@ -59,7 +76,6 @@ export function AuthContent({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (pending) return
-    setSubmitted(true)
     setFormError(null)
     const firstInvalid = (Object.keys(fieldIds) as Field[]).find(
       (field) => errors[field],
@@ -68,13 +84,14 @@ export function AuthContent({
       formRef.current
         ?.querySelector<HTMLInputElement>(`#${fieldIds[firstInvalid]}`)
         ?.focus()
+      setVisibleErrorField(firstInvalid)
       return
     }
     setPending(true)
     try {
       if (mode === "login") {
         await signIn(email.trim(), password)
-        onLoggedIn()
+        onLoggedIn("login")
       } else {
         await register({
           fullName: fullName.trim(),
@@ -82,12 +99,7 @@ export function AuthContent({
           email: email.trim(),
           password,
         })
-        navigate("/dashboard", { replace: true })
-        sileo.success({
-          title: copy.accountCreated,
-          description: copy.welcomeToExp,
-          position: "top-center",
-        })
+        onLoggedIn("register")
       }
     } catch (caught) {
       const message = requestErrorMessage(caught, mode, copy)
@@ -114,11 +126,9 @@ export function AuthContent({
   }
 
   return (
-    <div
-      className={`flex flex-1 items-center justify-center px-8 pt-[26px] pb-[52px] max-[850px]:px-6 max-[850px]:pt-[30px] max-[850px]:pb-[58px] ${mode === "login" ? "min-[851px]:pt-12 min-[851px]:pb-[30px]" : ""}`}
-    >
+    <div className="flex min-h-0 flex-1 justify-center overflow-y-auto px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden max-[850px]:overflow-visible max-[850px]:px-6">
       <motion.div
-        className="w-[min(100%,384px)] min-w-0"
+        className={`my-auto w-full max-w-[400px] min-w-0 max-[850px]:pt-8 max-[850px]:pb-14 ${mode === "register" ? "py-0" : "py-12"}`}
         initial={reduceMotion ? false : { opacity: 0, x: -24 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.45, ease: "easeOut" }}
@@ -128,19 +138,19 @@ export function AuthContent({
           <h2 className="inline-block bg-[linear-gradient(90deg,#172735_0%,#246ea0_55%,#1cc5d0_100%)] bg-clip-text text-[25px] leading-[1.25] font-bold tracking-[-0.03em] text-transparent">
             {mode === "login" ? copy.loginTitle : copy.registerTitle}
           </h2>
-          <p className="mt-[7px] text-sm leading-[1.4] text-[#5b709e]">
+          <p className="mt-0 text-sm leading-[1.4] text-[#5b709e]">
             {mode === "login" ? copy.loginSubtitle : copy.registerSubtitle}
           </p>
         </div>
 
         <form
           ref={formRef}
-          className="mt-7 grid gap-5"
+          className={`grid gap-2 ${mode === "register" ? "mt-7" : "mt-9"}`}
           noValidate
           onSubmit={(event) => void handleSubmit(event)}
         >
           {mode === "register" && (
-            <>
+            <div className="grid grid-cols-2 items-start gap-3 max-[420px]:grid-cols-1">
               <TextField
                 id="full-name"
                 label={copy.fullName}
@@ -148,6 +158,7 @@ export function AuthContent({
                 value={fullName}
                 onChange={(value) => changeValue(setFullName, value)}
                 onBlur={() => markTouched("fullName")}
+                onFocus={() => handleFieldFocus("fullName")}
                 autoComplete="name"
                 minLength={2}
                 maxLength={100}
@@ -161,11 +172,12 @@ export function AuthContent({
                 value={contactNumber}
                 onChange={(value) => changeValue(setContactNumber, value)}
                 onBlur={() => markTouched("contactNumber")}
+                onFocus={() => handleFieldFocus("contactNumber")}
                 autoComplete="tel"
                 placeholder="+63"
                 error={visibleError("contactNumber")}
               />
-            </>
+            </div>
           )}
           <TextField
             id="email"
@@ -174,10 +186,10 @@ export function AuthContent({
             value={email}
             onChange={(value) => changeValue(setEmail, value)}
             onBlur={() => markTouched("email")}
+            onFocus={() => handleFieldFocus("email")}
             autoComplete="email"
             placeholder="user@email.com"
             error={visibleError("email")}
-            normalWeight
           />
           {mode === "login" ? (
             <PasswordField
@@ -186,24 +198,29 @@ export function AuthContent({
               value={password}
               onChange={(value) => changeValue(setPassword, value)}
               onBlur={() => markTouched("password")}
+              onFocus={() => handleFieldFocus("password")}
               autoComplete="current-password"
               error={visibleError("password")}
               recoveryLink
               copy={copy}
             />
           ) : (
-            <div
-              className={`grid gap-4 max-[420px]:grid-cols-1 max-[420px]:gap-5 [&_label]:whitespace-nowrap ${language === "fil" ? "grid-cols-1" : "grid-cols-2"}`}
-            >
+            <div className="grid grid-cols-2 items-start gap-3 max-[420px]:grid-cols-1 [&_label]:whitespace-nowrap">
               <PasswordField
                 id="password"
                 label={copy.password}
                 value={password}
                 onChange={(value) => changeValue(setPassword, value)}
                 onBlur={() => markTouched("password")}
+                onFocus={() => handleFieldFocus("password")}
                 autoComplete="new-password"
                 minLength={12}
                 error={visibleError("password")}
+                helperText={
+                  mode === "register" && !visibleError("password")
+                    ? copy.passwordHint
+                    : undefined
+                }
                 copy={copy}
               />
               <PasswordField
@@ -212,6 +229,7 @@ export function AuthContent({
                 value={confirmPassword}
                 onChange={(value) => changeValue(setConfirmPassword, value)}
                 onBlur={() => markTouched("confirmPassword")}
+                onFocus={() => handleFieldFocus("confirmPassword")}
                 autoComplete="new-password"
                 minLength={12}
                 error={visibleError("confirmPassword")}
@@ -219,17 +237,12 @@ export function AuthContent({
               />
             </div>
           )}
-          {mode === "register" && (
-            <p className="-mt-[11px] -mb-[6px] text-xs text-[#6b7e9f]">
-              {copy.passwordHint}
-            </p>
-          )}
-          {formError?.language === language && (
+          {currentFormError && (
             <p
               className="-my-[3px] rounded-lg bg-[#fff0f0] px-3 py-2.5 text-[13px] leading-[1.4] text-[#a1293d]"
               role="alert"
             >
-              {formError.message}
+              {currentFormError}
             </p>
           )}
           <Button
@@ -247,14 +260,20 @@ export function AuthContent({
           </Button>
         </form>
 
-        <div className="mt-[23px] mb-[13px] flex items-center gap-4 text-xs text-[#7485a7] before:h-px before:flex-1 before:bg-[#dce4ee] before:content-[''] after:h-px after:flex-1 after:bg-[#dce4ee] after:content-['']">
+        <div
+          className={`flex items-center gap-4 text-xs text-[#7485a7] before:h-px before:flex-1 before:bg-[#dce4ee] before:content-[''] after:h-px after:flex-1 after:bg-[#dce4ee] after:content-[''] ${mode === "register" ? "mt-2 mb-2" : "mt-8 mb-4"}`}
+        >
           <span>{copy.or}</span>
         </div>
-        <p className="mb-3 text-center text-[13px] leading-[1.4] text-[#7485a7]">
+        <p
+          className={`text-center text-[13px] leading-[1.4] text-[#7485a7] ${mode === "register" ? "mb-2" : "mb-3"}`}
+        >
           {copy.continueWith}
         </p>
         <SocialPlaceholders copy={copy} />
-        <p className="mt-6 text-center text-sm leading-[1.4] text-[#52688d]">
+        <p
+          className={`text-center text-sm leading-[1.4] text-[#52688d] ${mode === "register" ? "mt-2" : "mt-6"}`}
+        >
           {mode === "login" ? copy.noAccountYet : copy.haveAccountYet}{" "}
           <Link
             to={mode === "login" ? "/register" : "/login"}

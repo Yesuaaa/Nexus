@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { hashPassword, validPassword, verifyPassword } from "./password.js"
-import { normalizedEmail } from "./validation.js"
+import { normalizedEmail, validRegistrationProfile } from "./validation.js"
 
 test("passwords are salted and verified", async () => {
   const first = await hashPassword("a long unique password")
@@ -17,4 +17,12 @@ test("passwords are salted and verified", async () => {
 test("email normalization accepts the same input for signup and seed", () => {
   assert.equal(normalizedEmail("  User@Example.com  "), "user@example.com")
   assert.equal(normalizedEmail("invalid"), undefined)
+})
+
+test("registration requires a valid name and contact number", () => {
+  assert.equal(validRegistrationProfile("Jane Doe", "+63 912 345 6789"), true)
+  assert.equal(validRegistrationProfile(undefined, "+63 912 345 6789"), false)
+  assert.equal(validRegistrationProfile("Jane Doe", undefined), false)
+  assert.equal(validRegistrationProfile("J", "+63 912 345 6789"), false)
+  assert.equal(validRegistrationProfile("Jane Doe", "not a number"), false)
 })

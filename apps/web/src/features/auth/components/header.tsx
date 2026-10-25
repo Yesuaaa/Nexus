@@ -142,7 +142,7 @@ export function AuthHeader({
 }) {
   return (
     <header className="flex h-[73px] items-center px-8 text-[13px] max-[850px]:px-6">
-      <div className="mx-auto flex w-[min(100%,384px)] justify-end">
+      <div className="mx-auto flex w-full max-w-[400px] justify-end">
         <LanguagePicker
           language={language}
           copy={copy}

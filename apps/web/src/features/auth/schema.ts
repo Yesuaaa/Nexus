@@ -14,6 +14,19 @@ export const fieldIds: Record<Field, string> = {
   confirmPassword: "confirm-password",
 }
 
+type FieldInteraction =
+  | { type: "focus"; field: Field }
+  | { type: "blur"; field: Field; invalid: boolean }
+
+export function visibleFieldAfterInteraction(
+  current: Field | null,
+  interaction: FieldInteraction,
+): Field | null {
+  if (interaction.type === "focus") return current
+  if (interaction.invalid) return interaction.field
+  return current === interaction.field ? null : current
+}
+
 export function validateAuth(
   mode: AuthMode,
   values: AuthFormValues,

@@ -11,7 +11,7 @@ export function AuthPage({
   onLoggedIn,
 }: {
   mode: AuthMode
-  onLoggedIn: () => void
+  onLoggedIn: (mode: AuthMode) => void
 }) {
   const [language, setLanguage] = useState<AuthLanguage>(getStoredAuthLanguage)
   const copy = getAuthCopy(language)

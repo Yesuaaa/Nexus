@@ -37,7 +37,7 @@ export function PhotoPanel({
 
   return (
     <aside
-      className="relative min-h-svh overflow-hidden rounded-r-[26px] bg-[#173456] max-[850px]:hidden"
+      className="relative h-svh min-h-0 overflow-hidden rounded-r-[26px] bg-[#173456] max-[850px]:hidden"
       aria-label={copy.community}
     >
       {photos.map((src, index) => (

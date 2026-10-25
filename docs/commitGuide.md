@@ -1,4 +1,3 @@
-
 # Semantic Commit Messages — Complete Reference
 
 A quick-reference for all conventional commit types, scopes, and modifiers.
@@ -181,7 +180,7 @@ merge: branch 'feat/user-profile' into develop
 
 ### 1. Pick the right type
 
-Ask yourself: *what kind of change is this?*
+Ask yourself: _what kind of change is this?_
 
 - Shipping something new → `feat`
 - Something was broken and you fixed it → `fix`
@@ -199,7 +198,7 @@ Ask yourself: *what kind of change is this?*
 
 ### 2. Add a scope (optional but recommended)
 
-The scope narrows *where* the change happened. Use the name of the module, feature, or layer — whatever is most meaningful in your project. Keep it short, lowercase, no spaces.
+The scope narrows _where_ the change happened. Use the name of the module, feature, or layer — whatever is most meaningful in your project. Keep it short, lowercase, no spaces.
 
 ```
 feat(auth): ...       ← scoped to auth module
@@ -215,7 +214,7 @@ Skip the scope only when the change is truly global or cross-cutting.
 - **Lowercase** after the colon
 - **No period** at the end
 - **Under 72 characters** for the subject line
-- Be specific — say *what* changed, not just *that* something changed
+- Be specific — say _what_ changed, not just _that_ something changed
 
 ```
 ✅  feat(auth): add refresh token rotation on expiry
@@ -225,7 +224,7 @@ Skip the scope only when the change is truly global or cross-cutting.
 
 ### 4. Add a body when needed
 
-The body explains *why*, not *what* (the subject already says what). Wrap at 72 characters. Leave a blank line between the subject and body.
+The body explains _why_, not _what_ (the subject already says what). Wrap at 72 characters. Leave a blank line between the subject and body.
 
 ```
 fix(email): retry failed sends up to 3 times
