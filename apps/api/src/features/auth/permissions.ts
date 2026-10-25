@@ -1,0 +1,46 @@
+import { Role } from "../../generated/prisma/client.js"
+
+export const Permission = {
+  DASHBOARD_READ: "dashboard:read",
+  PROFILE_READ: "profile:read",
+  PROFILE_CHANGE_PASSWORD: "profile:change-password",
+  ACCOUNTS_READ: "accounts:read",
+  ACCOUNTS_CREATE_BASIC: "accounts:create-basic",
+  ACCOUNTS_CREATE_PRIVILEGED: "accounts:create-privileged",
+  ACCOUNTS_ASSIGN_BASIC: "accounts:assign-basic",
+  ACCOUNTS_ASSIGN_PRIVILEGED: "accounts:assign-privileged",
+} as const
+
+export type Permission = (typeof Permission)[keyof typeof Permission]
+
+const commonPermissions = [
+  Permission.DASHBOARD_READ,
+  Permission.PROFILE_READ,
+  Permission.PROFILE_CHANGE_PASSWORD,
+] as const
+
+const adminPermissions = [
+  ...commonPermissions,
+  Permission.ACCOUNTS_READ,
+  Permission.ACCOUNTS_CREATE_BASIC,
+  Permission.ACCOUNTS_ASSIGN_BASIC,
+] as const
+
+const rolePermissions: Record<Role, readonly Permission[]> = {
+  [Role.USER]: commonPermissions,
+  [Role.STAFF]: commonPermissions,
+  [Role.ADMIN]: adminPermissions,
+  [Role.SUPERADMIN]: [
+    ...adminPermissions,
+    Permission.ACCOUNTS_CREATE_PRIVILEGED,
+    Permission.ACCOUNTS_ASSIGN_PRIVILEGED,
+  ],
+}
+
+export function permissionsFor(role: Role): Permission[] {
+  return [...rolePermissions[role]]
+}
+
+export function hasPermission(role: Role, permission: Permission): boolean {
+  return rolePermissions[role].includes(permission)
+}

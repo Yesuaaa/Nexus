@@ -7,11 +7,11 @@ import "./app-shell.css"
 const tabletQuery = "(min-width: 768px) and (max-width: 1100px)"
 
 export function AppLayout({
-  role,
+  account,
   onSignOut,
   children,
 }: {
-  role: Account["role"]
+  account: Account
   onSignOut: () => void
   children: ReactNode
 }) {
@@ -39,7 +39,7 @@ export function AppLayout({
   return (
     <div
       className="app-layout"
-      data-variant={role === "USER" ? "client" : "management"}
+      data-variant={account.role === "USER" ? "client" : "management"}
       data-collapsed={collapsed}
       data-drawer-open={drawerOpen}
     >
@@ -52,7 +52,7 @@ export function AppLayout({
         />
       )}
       <Sidebar
-        role={role}
+        account={account}
         collapsed={collapsed}
         drawerOpen={drawerOpen}
         onToggleCollapse={() => setCollapsed((current) => !current)}

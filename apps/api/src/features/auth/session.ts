@@ -1,8 +1,9 @@
 import { createHash, randomBytes } from "node:crypto"
 import type { RequestHandler } from "express"
-import { Role, type User } from "../../generated/prisma/client.js"
+import type { User } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { publicUser } from "../users/public-user.js"
+import { hasPermission, type Permission } from "./permissions.js"
 
 const sessionDays = 7
 
@@ -67,11 +68,11 @@ export const requireAuth: RequestHandler = async (request, response, next) => {
   }
 }
 
-export function requireRole(...roles: Role[]): RequestHandler {
+export function requirePermission(permission: Permission): RequestHandler {
   return (request, response, next) => {
     if (!request.auth) {
       response.status(401).json({ error: "Authentication required" })
-    } else if (!roles.includes(request.auth.user.role)) {
+    } else if (!hasPermission(request.auth.user.role, permission)) {
       response.status(403).json({ error: "Insufficient permissions" })
     } else {
       next()

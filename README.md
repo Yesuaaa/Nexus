@@ -40,27 +40,30 @@ The `ExampleItem` model in `apps/api/prisma/schema.prisma` is a placeholder for 
 
 The account pages are at `/login` and `/register`. They use the project's shadcn/ui Button, Input, and Label components and submit to the API. Field validation appears beside inputs, while Sileo shows sign-in and account outcome toasts. Successful sign-in plays the GSAP EXP loader before opening `/dashboard`; the success toast appears after the loader exits. Registration opens the dashboard directly. The registration form saves the full name and contact number, so apply the newest migration before using it. The three community photos in `apps/web/public/auth` are temporary local assets. Social icons on the form are visual placeholders; only email and password sign-in is available.
 
-Frontend code is organized by feature under `apps/web/src/features`. Auth owns its API calls, form schema, types, localized copy, hook, layout, and components. Dashboard owns account loading and display; status owns the starter health checks. Shared shadcn/ui primitives live in `components/ui`, and cross-feature utilities in `lib`. `App.tsx` defines the routes. Run `pnpm --filter @nexus/web test` for auth API and validation checks.
+Frontend code is organized by feature under `apps/web/src/features`. Auth owns its API calls, form schema, types, localized copy, account loading, and components. Dashboard is an empty page; accounts owns the Admin and Superadmin account management page; status owns the starter health checks. The shared portal shell lives in `components/layout`, shadcn/ui primitives in `components/ui`, and cross-feature utilities in `lib`. `App.tsx` defines the routes. Run `pnpm --filter @nexus/web test` for auth API and validation checks.
 
 The API follows the same feature layout under `apps/api/src/features`: auth owns credentials, sessions, and login limits; users owns account administration and role rules; health owns service checks. `app.ts` mounts the routes and handles HTTP errors, `index.ts` starts the server, and `lib/db.ts` provides Prisma access. `apps/api/prisma/seed.ts` is the Prisma seed entry point. Run `pnpm --filter @nexus/api test` for backend checks.
 
 ## Backend authentication
 
-The API stores users and sessions in PostgreSQL. Apply the migrations above before using these endpoints. Passwords require at least 12 characters. Registration always creates a `USER`; a client-supplied role is ignored. Roles are `SUPERADMIN`, `ADMIN`, `STAFF`, and `USER` in API requests and responses.
+The API stores users and sessions in PostgreSQL. Apply the migrations above before using these endpoints. New passwords require at least 12 characters. Registration always creates a `USER`; a client-supplied role is ignored. Roles are `SUPERADMIN`, `ADMIN`, `STAFF`, and `USER` in API requests and responses. Their fixed permissions are documented in [docs/rbac.md](docs/rbac.md).
 
 Set `BOOTSTRAP_EMAIL` and `BOOTSTRAP_PASSWORD` in the API environment, then run `pnpm --filter @nexus/api db:seed` to create the first Superadmin. The seed skips creation if a Superadmin already exists, so it is safe to rerun. It will not change an existing account or password. Remove the bootstrap credentials from the environment afterward. An existing Superadmin can promote other accounts through the role endpoint. Prisma 7 only runs seeds when `prisma db seed` is invoked explicitly; applying migrations does not run the seed.
 
-| Method  | Endpoint                    | Access            | Purpose                                 |
-| ------- | --------------------------- | ----------------- | --------------------------------------- |
-| `POST`  | `/api/auth/register`        | Public            | Create a User and session               |
-| `POST`  | `/api/auth/login`           | Public            | Create a session                        |
-| `GET`   | `/api/auth/me`              | Signed in         | Get the current account and role        |
-| `POST`  | `/api/auth/logout`          | Signed in         | Revoke the current session              |
-| `POST`  | `/api/auth/change-password` | Signed in         | Change password and revoke all sessions |
-| `GET`   | `/api/users`                | Admin, Superadmin | List the newest 100 accounts            |
-| `PATCH` | `/api/users/:id/role`       | Admin, Superadmin | Change an account's role                |
+To seed a separate Admin account, set `ADMIN_BOOTSTRAP_EMAIL` and `ADMIN_BOOTSTRAP_PASSWORD` (at least 12 characters) in the API environment and run the same seed command. The Admin seed is skipped unless these variables are set. It creates an `ADMIN` account if the email is unused, skips an existing `ADMIN`, and fails if that email belongs to another role. It never changes an existing account or password. Remove the Admin bootstrap credentials after seeding.
 
-Log in with JSON such as `{"email":"person@example.com","password":"a long password"}`. Registration also accepts `fullName` and `contactNumber`. Both return `{ "token", "user", "expiresIn" }`. Send the token on protected requests with `Authorization: Bearer <token>`. Sessions expire after seven days. `change-password` takes `currentPassword` and `newPassword`; the client must log in again after it succeeds. The role endpoint takes `{ "role": "STAFF" }`.
+| Method  | Endpoint                    | Access            | Purpose                                   |
+| ------- | --------------------------- | ----------------- | ----------------------------------------- |
+| `POST`  | `/api/auth/register`        | Public            | Create a User and session                 |
+| `POST`  | `/api/auth/login`           | Public            | Create a session                          |
+| `GET`   | `/api/auth/me`              | Signed in         | Get the current account and permissions   |
+| `POST`  | `/api/auth/logout`          | Signed in         | Revoke the current session                |
+| `POST`  | `/api/auth/change-password` | Signed in         | Change password and revoke all sessions   |
+| `GET`   | `/api/users`                | Admin, Superadmin | Search, filter, and page through accounts |
+| `POST`  | `/api/users`                | Admin, Superadmin | Create an account within role limits      |
+| `PATCH` | `/api/users/:id/role`       | Admin, Superadmin | Change an account's role                  |
+
+Log in with JSON such as `{"email":"person@example.com","password":"a long password"}`. Registration also accepts `fullName` and `contactNumber`. Both return `{ "token", "user", "expiresIn" }`; the user includes effective permissions. Send the token on protected requests with `Authorization: Bearer <token>`. Sessions expire after seven days. `change-password` takes `currentPassword` and `newPassword`; the client must log in again after it succeeds. `GET /api/users` accepts `search`, `role`, and `page` query parameters and returns 20 accounts per page. `POST /api/users` requires `email`, `fullName`, `password`, and `role`; `contactNumber` is optional. The role endpoint takes `{ "role": "STAFF" }`.
 
 Admins can change Staff and User accounts between those two roles. Superadmins can assign any role. Nobody can change their own role through the API. Role changes take effect on existing sessions at the next request. Keep bearer tokens out of browser persistent storage when possible, and serve deployed clients and the API over HTTPS. The API has a per-process login attempt limit; use a shared rate limiter if running multiple API replicas.
 
