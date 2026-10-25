@@ -7,6 +7,7 @@ import {
   AccountsIcon,
   CloseIcon,
   DashboardIcon,
+  DepartmentIcon,
   PanelIcon,
   SignOutIcon,
 } from "./icons"
@@ -160,6 +161,20 @@ export function Sidebar({
               {collapsed && (
                 <CollapsedTooltip>Account Management</CollapsedTooltip>
               )}
+            </NavLink>
+          )}
+          {hasPermission(account, Permissions.DEPARTMENTS_READ) && (
+            <NavLink
+              to="/departments"
+              end
+              className={({ isActive }) =>
+                `app-nav-link${isActive ? " is-active" : ""}`
+              }
+              title={collapsed ? "Departments" : undefined}
+              onClick={onCloseDrawer}
+            >
+              <DepartmentIcon />
+              <span className="app-sidebar-label">Departments</span>
             </NavLink>
           )}
         </nav>

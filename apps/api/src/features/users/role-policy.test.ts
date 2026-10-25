@@ -18,14 +18,17 @@ test("fixed roles have the expected permissions", () => {
     Permission.PROFILE_READ,
     Permission.PROFILE_CHANGE_PASSWORD,
   ]
+  const staff = [...common, Permission.DEPARTMENTS_READ]
   const admin = [
-    ...common,
+    ...staff,
     Permission.ACCOUNTS_READ,
     Permission.ACCOUNTS_CREATE_BASIC,
     Permission.ACCOUNTS_ASSIGN_BASIC,
+    Permission.DEPARTMENTS_MANAGE,
+    Permission.DEPARTMENTS_DELETE,
   ]
   assert.deepEqual(permissionsFor(Role.USER), common)
-  assert.deepEqual(permissionsFor(Role.STAFF), common)
+  assert.deepEqual(permissionsFor(Role.STAFF), staff)
   assert.deepEqual(permissionsFor(Role.ADMIN), admin)
   assert.deepEqual(permissionsFor(Role.SUPERADMIN), [
     ...admin,

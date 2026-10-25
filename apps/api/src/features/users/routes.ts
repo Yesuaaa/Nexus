@@ -47,6 +47,14 @@ usersRouter.get(
     const [users, total] = await prisma.$transaction([
       prisma.user.findMany({
         where,
+        include: {
+          department: {
+            select: { id: true, name: true, code: true },
+          },
+          team: {
+            select: { id: true, name: true },
+          },
+        },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -67,6 +75,9 @@ usersRouter.post(
     const role = request.body?.role
     const fullName = request.body?.fullName
     const contactNumber = request.body?.contactNumber
+    const position = request.body?.position
+    const departmentId = request.body?.departmentId
+    const teamId = request.body?.teamId
 
     if (
       !email ||
@@ -78,6 +89,16 @@ usersRouter.post(
         error:
           "Provide a valid email, role, and password of at least 12 characters",
       })
+    }
+
+    if (typeof position === "string" && position.trim()) {
+      const lower = position.trim().toLowerCase()
+      if (lower === "dept head" || lower === "department head") {
+        return response.status(400).json({
+          error:
+            "Cannot assign 'Department Head' as a job title during account creation. Assign the Department Head in Department Management.",
+        })
+      }
     }
     if (!canCreateRole(actor.role, role as Role)) {
       return response
@@ -104,8 +125,30 @@ usersRouter.post(
         .status(400)
         .json({ error: "Provide a valid contact number" })
     }
+    const prisma = getPrisma()!
+    if (departmentId) {
+      const dept = await prisma.department.findUnique({
+        where: { id: String(departmentId) },
+      })
+      if (!dept) {
+        return response.status(400).json({ error: "Department not found" })
+      }
+    }
+    if (teamId) {
+      const team = await prisma.team.findUnique({
+        where: { id: String(teamId) },
+      })
+      if (!team) {
+        return response.status(400).json({ error: "Team not found" })
+      }
+      if (departmentId && team.departmentId !== departmentId) {
+        return response
+          .status(400)
+          .json({ error: "Team does not belong to the selected department" })
+      }
+    }
     try {
-      const user = await getPrisma()!.user.create({
+      const user = await prisma.user.create({
         data: {
           email,
           fullName: fullName.trim(),
@@ -113,8 +156,22 @@ usersRouter.post(
             typeof contactNumber === "string" && contactNumber.trim()
               ? contactNumber.trim()
               : null,
+          position:
+            typeof position === "string" && position.trim()
+              ? position.trim()
+              : null,
           passwordHash: await hashPassword(password),
           role: role as Role,
+          departmentId: departmentId ? String(departmentId) : null,
+          teamId: teamId ? String(teamId) : null,
+        },
+        include: {
+          department: {
+            select: { id: true, name: true, code: true },
+          },
+          team: {
+            select: { id: true, name: true },
+          },
         },
       })
       return response.status(201).json({ user: publicUser(user) })
@@ -176,6 +233,11 @@ usersRouter.patch(
     }
     const updated = await prisma.user.findUniqueOrThrow({
       where: { id: target.id },
+      include: {
+        department: {
+          select: { id: true, name: true, code: true },
+        },
+      },
     })
     return response.json({ user: publicUser(updated) })
   },

@@ -225,12 +225,13 @@ export function AccountManagementPage() {
           <div
             className={cn(
               accountGrid,
-              "min-h-[39px] rounded-t-[7px] border-b border-[#eceef1] bg-[#f7f7f8] px-4 text-xs font-semibold text-foreground @max-[720px]:hidden",
+              "min-h-[39px] rounded-t-[7px] border-b border-[#eceef1] bg-[#f7f7f8] px-4 text-xs font-semibold text-foreground @max-[850px]:hidden",
             )}
             aria-hidden="true"
           >
             <span>Member</span>
             <span>Role</span>
+            <span>Department</span>
             <span>Created</span>
             <span>Access</span>
           </div>
@@ -279,11 +280,11 @@ export function AccountManagementPage() {
                   <div
                     className={cn(
                       accountGrid,
-                      "min-h-[58px] border-b border-[#eceef1] px-4 py-[7px] text-xs text-foreground last:rounded-b-[7px] last:border-b-0 hover:bg-[#fafbfc] @max-[720px]:gap-x-4 @max-[720px]:gap-y-[10px] @max-[720px]:py-[14px] @max-[530px]:gap-[9px]",
+                      "min-h-[58px] border-b border-[#eceef1] px-4 py-[7px] text-xs text-foreground last:rounded-b-[7px] last:border-b-0 hover:bg-[#fafbfc] @max-[850px]:gap-x-4 @max-[850px]:gap-y-[10px] @max-[850px]:py-[14px] @max-[530px]:gap-[9px]",
                     )}
                     key={user.id}
                   >
-                    <div className="min-w-0 @max-[720px]:col-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+                    <div className="min-w-0 @max-[850px]:col-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto">
                       <div className="grid min-w-0 gap-0.5">
                         <strong className="overflow-hidden font-medium text-ellipsis whitespace-nowrap text-foreground">
                           {user.fullName || user.email.split("@")[0]}
@@ -293,7 +294,7 @@ export function AccountManagementPage() {
                         </span>
                       </div>
                     </div>
-                    <div className="@max-[720px]:col-start-2 @max-[720px]:row-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+                    <div className="@max-[850px]:col-start-2 @max-[850px]:row-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto">
                       <span className="mr-1.5 hidden text-[#738096] @max-[530px]:inline">
                         Role
                       </span>
@@ -301,13 +302,34 @@ export function AccountManagementPage() {
                         {roleNames[user.role]}
                       </span>
                     </div>
-                    <div className="text-[11px] text-[#738096] @max-[720px]:col-start-1 @max-[720px]:row-start-2 @max-[530px]:row-auto">
-                      <span className="mr-1.5 hidden @max-[720px]:inline">
+                    <div className="min-w-0 @max-[850px]:col-start-1 @max-[850px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+                      {user.department ? (
+                        <div className="flex flex-col gap-0.5 min-w-0">
+                          <span className="inline-block px-2 py-0.5 bg-[#eff6ff] text-[#1d4ed8] rounded text-xs font-semibold truncate max-w-full">
+                            {user.department.name}
+                            {user.department.code
+                              ? ` (${user.department.code})`
+                              : ""}
+                          </span>
+                          {(user.position || user.team) && (
+                            <span className="text-[11px] text-[#738096] truncate">
+                              {user.position}
+                              {user.position && user.team ? " • " : ""}
+                              {user.team ? user.team.name : ""}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-[#94a3b8]">—</span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-[#738096] @max-[850px]:col-start-1 @max-[850px]:row-start-3 @max-[530px]:row-auto">
+                      <span className="mr-1.5 hidden @max-[850px]:inline">
                         Created
                       </span>
                       {formatDate(user.createdAt)}
                     </div>
-                    <div className="flex min-w-0 items-center gap-2 @max-[720px]:col-start-2 @max-[720px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+                    <div className="flex min-w-0 items-center gap-2 @max-[850px]:col-start-2 @max-[850px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto">
                       {editable ? (
                         <>
                           <AccountDropdown

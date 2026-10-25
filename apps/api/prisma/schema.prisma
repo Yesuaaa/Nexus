@@ -21,15 +21,57 @@ enum Role {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
+  id            String      @id @default(cuid())
+  email         String      @unique
   fullName      String?
   contactNumber String?
+  position      String?
   passwordHash  String
-  role          Role      @default(USER)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  role          Role        @default(USER)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  departmentId  String?
+  department    Department? @relation("DepartmentMembers", fields: [departmentId], references: [id], onDelete: SetNull)
+  headOf        Department? @relation("DepartmentHead")
+  teamId        String?
+  team          Team?       @relation("TeamMembers", fields: [teamId], references: [id], onDelete: SetNull)
+  leadOfTeam    Team?       @relation("TeamLead")
   sessions      Session[]
+
+  @@index([departmentId])
+  @@index([teamId])
+}
+
+model Department {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  code        String?  @unique
+  description String?
+  headId      String?  @unique
+  head        User?    @relation("DepartmentHead", fields: [headId], references: [id], onDelete: SetNull)
+  members     User[]   @relation("DepartmentMembers")
+  teams       Team[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([headId])
+}
+
+model Team {
+  id           String     @id @default(cuid())
+  name         String
+  description  String?
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  leadId       String?    @unique
+  lead         User?      @relation("TeamLead", fields: [leadId], references: [id], onDelete: SetNull)
+  members      User[]     @relation("TeamMembers")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([departmentId, name])
+  @@index([departmentId])
+  @@index([leadId])
 }
 
 model Session {

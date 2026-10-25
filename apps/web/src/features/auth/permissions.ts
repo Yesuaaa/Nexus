@@ -9,6 +9,9 @@ export const Permissions = {
   ACCOUNTS_CREATE_PRIVILEGED: "accounts:create-privileged",
   ACCOUNTS_ASSIGN_BASIC: "accounts:assign-basic",
   ACCOUNTS_ASSIGN_PRIVILEGED: "accounts:assign-privileged",
+  DEPARTMENTS_READ: "departments:read",
+  DEPARTMENTS_MANAGE: "departments:manage",
+  DEPARTMENTS_DELETE: "departments:delete",
 } as const
 
 export type Permission = (typeof Permissions)[keyof typeof Permissions]

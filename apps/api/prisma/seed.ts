@@ -73,6 +73,61 @@ async function seedAdmin(prisma: NonNullable<ReturnType<typeof getPrisma>>) {
   console.log(`Created Admin: ${email}`)
 }
 
+const DEFAULT_DEPARTMENTS = [
+  {
+    name: "Executive",
+    code: "EXEC",
+    description: "Executive leadership & strategic management",
+  },
+  {
+    name: "Administration",
+    code: "ADMIN",
+    description: "Internal operations, facilities, and administration",
+  },
+  {
+    name: "Advertising",
+    code: "ADV",
+    description: "Paid media, campaigns, and ad operations",
+  },
+  {
+    name: "Marketing",
+    code: "MKT",
+    description: "Brand strategy, growth, and communications",
+  },
+  {
+    name: "Customer Success",
+    code: "CS",
+    description: "Client relationship management and client support",
+  },
+  {
+    name: "SEO",
+    code: "SEO",
+    description: "Search engine optimization and content performance",
+  },
+  {
+    name: "Information Technology",
+    code: "IT",
+    description: "Technical infrastructure, software, and systems",
+  },
+]
+
+async function seedDepartments(
+  prisma: NonNullable<ReturnType<typeof getPrisma>>,
+) {
+  for (const dept of DEFAULT_DEPARTMENTS) {
+    await prisma.department.upsert({
+      where: { name: dept.name },
+      update: { code: dept.code, description: dept.description },
+      create: {
+        name: dept.name,
+        code: dept.code,
+        description: dept.description,
+      },
+    })
+  }
+  console.log("Seeded default company departments")
+}
+
 async function main() {
   const prisma = getPrisma()
   if (!prisma) throw new Error("Set DATABASE_URL before seeding")
@@ -80,6 +135,7 @@ async function main() {
   try {
     await seedSuperadmin(prisma)
     await seedAdmin(prisma)
+    await seedDepartments(prisma)
   } finally {
     await prisma.$disconnect()
   }

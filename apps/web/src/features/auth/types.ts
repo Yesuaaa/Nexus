@@ -10,6 +10,11 @@ export type Account = {
   fullName: string | null
   contactNumber: string | null
   role: "SUPERADMIN" | "ADMIN" | "STAFF" | "USER"
+  position?: string | null
+  departmentId?: string | null
+  department?: { id: string; name: string; code: string | null } | null
+  teamId?: string | null
+  team?: { id: string; name: string } | null
   permissions: Permission[]
   createdAt: string
 }
