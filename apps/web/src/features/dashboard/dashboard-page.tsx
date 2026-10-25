@@ -1,3 +1,5 @@
+import { contentClass } from "@/components/layout/styles"
+
 export function DashboardPage() {
-  return <main className="app-content" aria-label="Dashboard" />
+  return <main className={contentClass} aria-label="Dashboard" />
 }

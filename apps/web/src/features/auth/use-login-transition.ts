@@ -40,6 +40,7 @@ export function useLoginTransition() {
           transitionMode === "register"
             ? copy.welcomeToExp
             : copy.signedInToast,
+        position: "top-center",
       })
     }
   }
