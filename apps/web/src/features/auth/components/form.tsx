@@ -128,7 +128,7 @@ export function AuthContent({
       className={`flex flex-1 items-center justify-center px-8 pt-[26px] pb-[52px] max-[850px]:px-6 max-[850px]:pt-[30px] max-[850px]:pb-[58px] ${mode === "login" ? "min-[851px]:pt-12 min-[851px]:pb-[30px]" : ""} [@media(min-width:851px)_and_(max-height:1100px)]:pt-1 [@media(min-width:851px)_and_(max-height:1100px)]:pb-1`}
     >
       <motion.div
-        className={`w-[min(100%,336px)] min-w-0 ${mode === "register" ? "[@media(min-width:851px)_and_(max-height:820px)]:relative [@media(min-width:851px)_and_(max-height:820px)]:-top-2" : ""}`}
+        className={`w-[min(100%,336px)] min-w-0 ${mode === "register" ? "[@media(min-width:851px)_and_(max-height:820px)]:relative [@media(min-width:851px)_and_(max-height:760px)]:-top-2 [@media(min-width:851px)_and_(min-height:761px)_and_(max-height:820px)]:-top-1" : ""}`}
         initial={reduceMotion ? false : { opacity: 0, x: -24 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.45, ease: "easeOut" }}
@@ -136,12 +136,12 @@ export function AuthContent({
         <div className="text-center">
           <Brand compact={mode === "register"} />
           <h2
-            className={`inline-block bg-[linear-gradient(90deg,#172735_0%,#246ea0_55%,#1cc5d0_100%)] bg-clip-text text-[25px] leading-[1.25] font-bold tracking-[-0.03em] text-transparent ${mode === "register" ? "[@media(min-width:851px)_and_(max-height:820px)]:text-xl [@media(min-width:851px)_and_(min-height:821px)_and_(max-height:1100px)]:text-[23px]" : ""}`}
+            className={`inline-block bg-[linear-gradient(90deg,#172735_0%,#246ea0_55%,#1cc5d0_100%)] bg-clip-text text-[25px] leading-[1.25] font-bold tracking-[-0.03em] text-transparent ${mode === "register" ? "[@media(min-width:851px)_and_(max-height:760px)]:text-xl [@media(min-width:851px)_and_(min-height:761px)_and_(max-height:820px)]:text-[21px] [@media(min-width:851px)_and_(min-height:821px)_and_(max-height:1100px)]:text-[23px]" : ""}`}
           >
             {mode === "login" ? copy.loginTitle : copy.registerTitle}
           </h2>
           <p
-            className={`mt-[7px] text-sm leading-[1.4] text-[#5b709e] ${mode === "register" ? "[@media(min-width:851px)_and_(max-height:820px)]:mt-0.5 [@media(min-width:851px)_and_(max-height:820px)]:text-xs [@media(min-width:851px)_and_(min-height:821px)_and_(max-height:1100px)]:mt-1" : ""}`}
+            className={`mt-[7px] text-sm leading-[1.4] text-[#5b709e] ${mode === "register" ? "[@media(min-width:851px)_and_(max-height:760px)]:mt-0.5 [@media(min-width:851px)_and_(max-height:760px)]:text-xs [@media(min-width:851px)_and_(min-height:761px)_and_(max-height:820px)]:mt-0.5 [@media(min-width:851px)_and_(min-height:761px)_and_(max-height:820px)]:text-[13px] [@media(min-width:851px)_and_(min-height:821px)_and_(max-height:1100px)]:mt-1" : ""}`}
           >
             {mode === "login" ? copy.loginSubtitle : copy.registerSubtitle}
           </p>
@@ -149,7 +149,7 @@ export function AuthContent({
 
         <form
           ref={formRef}
-          className={`mt-7 grid gap-3 ${mode === "register" ? "[@media(min-width:851px)_and_(max-height:820px)]:mt-0 [@media(min-width:851px)_and_(max-height:820px)]:gap-1 [@media(min-width:851px)_and_(min-height:821px)_and_(max-height:1100px)]:mt-2 [@media(min-width:851px)_and_(min-height:821px)_and_(max-height:1100px)]:gap-2" : ""}`}
+          className={`mt-7 grid gap-3 ${mode === "register" ? "[@media(min-width:851px)_and_(max-height:760px)]:mt-0 [@media(min-width:851px)_and_(max-height:760px)]:gap-1 [@media(min-width:851px)_and_(min-height:761px)_and_(max-height:1100px)]:mt-2 [@media(min-width:851px)_and_(min-height:761px)_and_(max-height:1100px)]:gap-2" : ""}`}
           noValidate
           onSubmit={(event) => void handleSubmit(event)}
         >
@@ -257,7 +257,7 @@ export function AuthContent({
             </p>
           )}
           <Button
-            className={`grid h-[46px] w-full place-items-center rounded-md border-0 bg-[#253f8c] text-sm font-bold text-white transition-[background,transform] duration-150 hover:bg-[#1a3276] hover:enabled:-translate-y-px disabled:cursor-wait disabled:opacity-70 motion-reduce:transition-none ${mode === "register" ? "[@media(min-width:851px)_and_(max-height:820px)]:mt-2 [@media(min-width:851px)_and_(max-height:820px)]:h-[38px] [@media(min-width:851px)_and_(max-height:1100px)]:text-[13px] [@media(min-width:851px)_and_(min-height:821px)_and_(max-height:1100px)]:h-[42px]" : ""} ${focusOutline}`}
+            className={`grid h-[46px] w-full place-items-center rounded-md border-0 bg-[#253f8c] text-sm font-bold text-white transition-[background,transform] duration-150 hover:bg-[#1a3276] hover:enabled:-translate-y-px disabled:cursor-wait disabled:opacity-70 motion-reduce:transition-none ${mode === "register" ? "[@media(min-width:851px)_and_(max-height:820px)]:mt-2 [@media(min-width:851px)_and_(max-height:760px)]:h-[38px] [@media(min-width:851px)_and_(min-height:761px)_and_(max-height:1100px)]:h-[42px] [@media(min-width:851px)_and_(max-height:1100px)]:text-[13px]" : ""} ${focusOutline}`}
             type="submit"
             disabled={pending}
           >

@@ -34,9 +34,7 @@ export function AuthPage({
         />
       }
       footer={
-        <footer
-          className="flex min-h-14 items-center justify-center gap-4 px-5 py-3 text-xs text-[#52688d] whitespace-nowrap max-[420px]:flex-wrap max-[420px]:gap-x-3 max-[420px]:gap-y-[5px] max-[420px]:leading-[1.4] [@media(min-width:851px)_and_(max-height:1100px)]:min-h-10 [@media(min-width:851px)_and_(max-height:1100px)]:py-2"
-        >
+        <footer className="flex min-h-14 items-center justify-center gap-4 px-5 py-3 text-xs text-[#52688d] whitespace-nowrap max-[420px]:flex-wrap max-[420px]:gap-x-3 max-[420px]:gap-y-[5px] max-[420px]:leading-[1.4] [@media(min-width:851px)_and_(max-height:1100px)]:min-h-10 [@media(min-width:851px)_and_(max-height:1100px)]:py-2">
           <span>{copy.about}</span>
           <span>{copy.terms}</span>
           <span>{copy.privacy}</span>
