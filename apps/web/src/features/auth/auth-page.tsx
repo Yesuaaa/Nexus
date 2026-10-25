@@ -27,7 +27,6 @@ export function AuthPage({
       visual={<PhotoPanel mode={mode} copy={copy} language={language} />}
       header={
         <AuthHeader
-          mode={mode}
           copy={copy}
           language={language}
           onLanguageChange={changeLanguage}

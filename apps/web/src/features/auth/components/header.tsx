@@ -1,14 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react"
-import { Link } from "react-router"
-import { MotionConfig, motion } from "framer-motion"
 import type { AuthCopy } from "../copy"
-import {
-  focusOutline,
-  idleNavClass,
-  navLinkClass,
-  selectedNavClass,
-} from "./styles"
-import type { AuthLanguage, AuthMode } from "../types"
+import { focusOutline } from "./styles"
+import type { AuthLanguage } from "../types"
 
 function LanguagePicker({
   language,
@@ -82,6 +75,14 @@ function LanguagePicker({
           }
         }}
       >
+        <svg
+          className="size-4 fill-none stroke-current stroke-[1.7]"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="9" />
+          <path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3Z" />
+        </svg>
         <span>{language === "en" ? "English" : "Filipino"}</span>
         <svg
           className="size-3.5 fill-none stroke-current stroke-[1.8] [stroke-linecap:round] [stroke-linejoin:round] transition-transform duration-150 group-aria-expanded:rotate-180"
@@ -129,68 +130,24 @@ function LanguagePicker({
   )
 }
 
-function AuthTab({
-  mode,
-  currentMode,
-  label,
-}: {
-  mode: AuthMode
-  currentMode: AuthMode
-  label: string
-}) {
-  const active = mode === currentMode
-
-  return (
-    <Link
-      to={mode === "login" ? "/login" : "/register"}
-      className={`${navLinkClass} ${active ? selectedNavClass : idleNavClass}`}
-      aria-current={active ? "page" : undefined}
-    >
-      {active && (
-        <motion.span
-          layoutId="auth-active-tab"
-          initial={false}
-          transition={{ type: "spring", stiffness: 500, damping: 38 }}
-          className="absolute inset-0 rounded-full bg-[#253f8c] transition-colors group-hover:bg-[#1a3276]"
-          aria-hidden="true"
-        />
-      )}
-      <span className="relative z-1">{label}</span>
-    </Link>
-  )
-}
-
 export function AuthHeader({
-  mode,
   copy,
   language,
   onLanguageChange,
 }: {
-  mode: AuthMode
   copy: AuthCopy
   language: AuthLanguage
   onLanguageChange: (language: AuthLanguage) => void
 }) {
   return (
-    <header className="flex h-[73px] items-center justify-center gap-2 px-6 text-[13px] max-[420px]:justify-end max-[420px]:px-[17px]">
-      <LanguagePicker
-        language={language}
-        copy={copy}
-        onChange={onLanguageChange}
-      />
-      <MotionConfig reducedMotion="user">
-        <nav
-          className="inline-flex items-center rounded-full border border-[#dce1eb] bg-[#eef1f8] p-0.5"
-          aria-label={copy.accountNavigation}
-        >
-          <AuthTab mode="login" currentMode={mode} label={copy.signInLink} />
-          <AuthTab
-            mode="register"
-            currentMode={mode}
-            label={copy.createAccountLink}
-          />
-        </nav>
-      </MotionConfig>
+    <header className="flex h-[73px] items-center px-8 text-[13px] max-[850px]:px-6">
+      <div className="mx-auto flex w-[min(100%,384px)] justify-end">
+        <LanguagePicker
+          language={language}
+          copy={copy}
+          onChange={onLanguageChange}
+        />
+      </div>
     </header>
   )
 }

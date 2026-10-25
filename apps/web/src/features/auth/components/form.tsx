@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent } from "react"
-import { useNavigate } from "react-router"
+import { Link, useNavigate } from "react-router"
 import { motion, useReducedMotion } from "framer-motion"
 import { sileo } from "sileo"
 import { Button } from "@/components/ui/button"
@@ -253,6 +253,15 @@ export function AuthContent({
           {copy.continueWith}
         </p>
         <SocialPlaceholders copy={copy} />
+        <p className="mt-6 text-center text-sm leading-[1.4] text-[#52688d]">
+          {mode === "login" ? copy.noAccountYet : copy.haveAccountYet}{" "}
+          <Link
+            to={mode === "login" ? "/register" : "/login"}
+            className={`font-semibold text-[#253f8c] underline-offset-2 hover:underline ${focusOutline}`}
+          >
+            {mode === "login" ? copy.createOne : copy.signInHere}
+          </Link>
+        </p>
       </motion.div>
     </div>
   )
