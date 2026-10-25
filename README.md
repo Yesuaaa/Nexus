@@ -2,10 +2,11 @@
 
 A pnpm workspace with two independent apps:
 
-| App        | Stack                                                             | Default address       |
-| ---------- | ----------------------------------------------------------------- | --------------------- |
-| `apps/web` | React, TypeScript, Vite, React Router, Tailwind CSS v4, shadcn/ui | http://localhost:5173 |
-| `apps/api` | Express, TypeScript, Prisma, Supabase PostgreSQL                  | http://localhost:3001 |
+| App           | Stack                                                             | Default address       |
+| ------------- | ----------------------------------------------------------------- | --------------------- |
+| `apps/web`    | React, TypeScript, Vite, React Router, Tailwind CSS v4, shadcn/ui | http://localhost:5173 |
+| `apps/api`    | Express, TypeScript, Prisma, Supabase PostgreSQL                  | http://localhost:3001 |
+| `apps/mobile` | Kotlin Multiplatform (KMP), Compose Multiplatform (CMP)           | Android & iOS         |
 
 The browser calls the API over HTTP. Prisma and database credentials exist only in `apps/api`.
 
