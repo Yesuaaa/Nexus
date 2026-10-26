@@ -33,7 +33,6 @@ import {
   panelIconButton,
   panelInput,
   panelMuted,
-  panelPrimaryButton,
   panelSecondaryButton,
   panelSelectTrigger,
 } from "../styles/member-panel-styles"
@@ -513,7 +512,7 @@ export function ManageMembersDrawer({
                           >
                             <SelectValue placeholder="Select employee" />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent collisionPadding={24}>
                             {availableAccountsForQuickAssign.length === 0 ? (
                               <p className="m-0 p-3 text-xs text-muted-foreground">
                                 No employees available to assign.
@@ -668,8 +667,7 @@ export function ManageMembersDrawer({
                                     <div className="flex flex-none items-center gap-2">
                                       <Button
                                         type="button"
-                                        variant="outline"
-                                        className={panelSecondaryButton}
+                                        className={panelAssignButton}
                                         aria-label={`Edit ${member.fullName || member.email}`}
                                         onClick={() => startEditMember(member)}
                                         disabled={submitting}
@@ -766,7 +764,7 @@ export function ManageMembersDrawer({
                           </Button>
                           <Button
                             type="submit"
-                            className={panelPrimaryButton}
+                            className={panelAssignButton}
                             disabled={submitting}
                           >
                             {submitting ? "Saving..." : "Save team"}
@@ -904,7 +902,7 @@ export function ManageMembersDrawer({
                                       >
                                         <SelectValue placeholder="Select department member" />
                                       </SelectTrigger>
-                                      <SelectContent>
+                                      <SelectContent collisionPadding={24}>
                                         {eligibleEmployees.map((member) => (
                                           <SelectItem
                                             key={member.id}
@@ -920,8 +918,7 @@ export function ManageMembersDrawer({
                                     </Select>
                                     <Button
                                       type="button"
-                                      variant="outline"
-                                      className={panelSecondaryButton}
+                                      className={panelAssignButton}
                                       aria-label={`Add selected employee to ${team.name}`}
                                       disabled={!selectedUserId || submitting}
                                       onClick={() =>

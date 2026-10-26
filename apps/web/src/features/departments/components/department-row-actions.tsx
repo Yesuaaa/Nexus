@@ -90,7 +90,7 @@ export function DepartmentRowActions({
         <DropdownMenuContent
           align="end"
           sideOffset={6}
-          collisionPadding={8}
+          collisionPadding={24}
           aria-label={`Actions for ${department.name}`}
           className={cn(
             dropdownMenuClass,

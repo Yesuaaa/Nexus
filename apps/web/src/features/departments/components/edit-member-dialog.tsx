@@ -139,7 +139,7 @@ export function EditMemberDialog({
                 >
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent collisionPadding={24}>
                   <SelectItem value="unassigned">No specific team</SelectItem>
                   {teams.map((team) => (
                     <SelectItem key={team.id} value={team.id}>

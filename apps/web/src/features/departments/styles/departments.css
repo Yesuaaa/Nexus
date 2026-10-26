@@ -140,7 +140,6 @@
 }
 
 .dept-input,
-.dept-select,
 .dept-textarea {
   width: 100%;
   padding: 10px 12px;
@@ -153,10 +152,27 @@
 }
 
 .dept-input:focus,
-.dept-select:focus,
 .dept-textarea:focus {
   border-color: #2563eb;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.dept-select-trigger {
+  height: 42px;
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 0 12px;
+  color: #0f172a;
+  font-size: 0.875rem;
+  box-shadow: none;
+}
+
+.dept-select-trigger:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  outline: none;
 }
 
 .dept-textarea {

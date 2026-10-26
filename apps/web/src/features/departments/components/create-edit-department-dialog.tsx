@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react"
 import { CloseIcon } from "@/components/layout/icons"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   COMPANY_DEPARTMENT_PRESETS,
   createDepartment,
   listEligibleHeads,
@@ -144,22 +151,30 @@ export function CreateEditDepartmentDialog({
                 <label className="dept-label" htmlFor="dept-preset">
                   Company Department Preset
                 </label>
-                <select
-                  id="dept-preset"
-                  className="dept-select"
+                <Select
                   value={selectedPreset}
-                  onChange={(e) => handlePresetChange(e.target.value)}
+                  onValueChange={handlePresetChange}
                 >
-                  <option value="">
-                    -- Select from Company Departments --
-                  </option>
-                  {COMPANY_DEPARTMENT_PRESETS.map((preset) => (
-                    <option key={preset.code} value={preset.name}>
-                      {preset.name} ({preset.code})
-                    </option>
-                  ))}
-                  <option value="CUSTOM">Custom Department Name...</option>
-                </select>
+                  <SelectTrigger
+                    id="dept-preset"
+                    className="dept-select-trigger"
+                  >
+                    <SelectValue placeholder="Select from Company Departments" />
+                  </SelectTrigger>
+                  <SelectContent
+                    collisionPadding={24}
+                    className="z-[120] border-[#cbd5e1] bg-white shadow-[0_12px_32px_rgb(20_45_97_/_13%)]"
+                  >
+                    {COMPANY_DEPARTMENT_PRESETS.map((preset) => (
+                      <SelectItem key={preset.code} value={preset.name}>
+                        {preset.name} ({preset.code})
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="CUSTOM">
+                      Custom Department Name...
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             )}
 
@@ -198,23 +213,33 @@ export function CreateEditDepartmentDialog({
               <label className="dept-label" htmlFor="dept-head">
                 Department Head
               </label>
-              <select
-                id="dept-head"
-                className="dept-select"
-                value={headId}
-                onChange={(e) => setHeadId(e.target.value)}
+              <Select
+                value={headId || "unassigned"}
+                onValueChange={(value) =>
+                  setHeadId(value === "unassigned" ? "" : value)
+                }
                 disabled={loadingHeads}
               >
-                <option value="">-- No Department Head Assigned --</option>
-                {eligibleHeads.map((head) => (
-                  <option key={head.id} value={head.id}>
-                    {head.fullName || head.email} ({head.role})
-                    {head.headOf && head.headOf.id !== department?.id
-                      ? ` [Heads ${head.headOf.name}]`
-                      : ""}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger id="dept-head" className="dept-select-trigger">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent
+                  collisionPadding={24}
+                  className="z-[120] border-[#cbd5e1] bg-white shadow-[0_12px_32px_rgb(20_45_97_/_13%)]"
+                >
+                  <SelectItem value="unassigned">
+                    No Department Head Assigned
+                  </SelectItem>
+                  {eligibleHeads.map((head) => (
+                    <SelectItem key={head.id} value={head.id}>
+                      {head.fullName || head.email} ({head.role})
+                      {head.headOf && head.headOf.id !== department?.id
+                        ? ` [Heads ${head.headOf.name}]`
+                        : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="dept-field">
