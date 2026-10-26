@@ -60,6 +60,9 @@ Nexus/
 │       └── settings.gradle.kts
 ├── certs/                         # Bundled database CA certificate
 ├── docs/                          # Project documentation
+│   ├── features/                   # Dated records of completed features
+│   │   ├── README.md               # Feature record format and index
+│   │   └── employee-management.md  # Admin Employee Management, developed 2026-10-26
 │   ├── filestructure.md
 │   └── rbac.md                     # Fixed roles and permission matrix
 ├── compose.yaml                   # Development containers

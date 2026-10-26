@@ -7,6 +7,7 @@ import { signOut } from "@/features/auth/api/auth-api"
 import { useAccount } from "@/features/auth/hooks/use-account"
 import {
   canAccessDepartmentManagement,
+  canAccessEmployeeManagement,
   canAccessServiceManagement,
   hasPermission,
   Permissions,
@@ -29,6 +30,8 @@ export function PortalLayout({ children }: { children: ReactNode }) {
       !hasPermission(account, Permissions.ACCOUNTS_READ)) ||
       (pathname === "/departments" &&
         !canAccessDepartmentManagement(account)) ||
+      (pathname.startsWith("/employees") &&
+        !canAccessEmployeeManagement(account)) ||
       (pathname === "/services" && !canAccessServiceManagement(account)))
 
   useEffect(() => {

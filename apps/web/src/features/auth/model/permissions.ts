@@ -14,6 +14,8 @@ export const Permissions = {
   DEPARTMENTS_READ: "departments:read",
   DEPARTMENTS_MANAGE: "departments:manage",
   DEPARTMENTS_DELETE: "departments:delete",
+  EMPLOYEES_READ: "employees:read",
+  EMPLOYEES_MANAGE: "employees:manage",
   SERVICES_READ: "services:read",
   SERVICES_MANAGE: "services:manage",
 } as const
@@ -37,6 +39,13 @@ export function canAccessDepartmentManagement(account: Account): boolean {
   return (
     account.role === "ADMIN" &&
     hasPermission(account, Permissions.DEPARTMENTS_READ)
+  )
+}
+
+export function canAccessEmployeeManagement(account: Account): boolean {
+  return (
+    account.role === "ADMIN" &&
+    hasPermission(account, Permissions.EMPLOYEES_READ)
   )
 }
 

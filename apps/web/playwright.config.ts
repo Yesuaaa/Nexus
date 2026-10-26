@@ -19,7 +19,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "pnpm start",
+    command: "node scripts/start.mjs",
     url: "http://127.0.0.1:5273",
     env: { PORT: "5273", HOSTNAME: "127.0.0.1" },
     reuseExistingServer: !process.env.CI,

@@ -80,6 +80,7 @@ authRouter.post("/login", async (request, response) => {
   if (
     !user ||
     !user.isActive ||
+    user.accountDeletedAt !== null ||
     !(await verifyPassword(password, user.passwordHash))
   ) {
     recordFailure(attemptKey)

@@ -2,11 +2,13 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { UsersRound } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Account } from "@/features/auth/model/types"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import {
   canAccessDepartmentManagement,
+  canAccessEmployeeManagement,
   canAccessServiceManagement,
   hasPermission,
   Permissions,
@@ -182,6 +184,25 @@ export function Sidebar({
               <span className={collapsedLabelClass}>Department Management</span>
               {collapsed && (
                 <CollapsedTooltip>Department Management</CollapsedTooltip>
+              )}
+            </Link>
+          )}
+          {canAccessEmployeeManagement(account) && (
+            <Link
+              href="/employees"
+              aria-current={pathname === "/employees" ? "page" : undefined}
+              className={cn(
+                navLinkClass,
+                collapsed &&
+                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
+                pathname === "/employees" && "bg-[#e1e3e5]",
+              )}
+              onClick={onCloseDrawer}
+            >
+              <UsersRound size={20} strokeWidth={1.7} className="flex-none" />
+              <span className={collapsedLabelClass}>Employee Management</span>
+              {collapsed && (
+                <CollapsedTooltip>Employee Management</CollapsedTooltip>
               )}
             </Link>
           )}

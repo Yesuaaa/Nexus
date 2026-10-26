@@ -24,6 +24,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Pill } from "@/components/ui/pill"
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { cn } from "@/lib/utils"
 import { EditMemberDialog } from "./edit-member-dialog"
@@ -43,41 +44,39 @@ import {
   createTeam,
   deleteTeam,
   getDepartment,
+  listEmployees,
   removeDepartmentMember,
   updateDepartmentMember,
   type DepartmentDetail,
   type DepartmentMember,
 } from "../api/departments-api"
-import {
-  listAccounts,
-  type AccountList,
-} from "@/features/accounts/api/accounts-api"
 
 function MemberIdentity({
   member,
 }: {
-  member: Pick<DepartmentMember, "fullName" | "email">
+  member: Pick<DepartmentMember, "fullName" | "email" | "user">
 }) {
+  const email = member.email || member.user?.email || null
   return (
     <div className="flex min-w-0 items-center gap-2.5">
       <span
         className="grid size-8 flex-none place-items-center rounded-full bg-[#eef0f3] text-xs font-medium text-[#65718a]"
         aria-hidden="true"
       >
-        {(member.fullName?.[0] || member.email[0]).toUpperCase()}
+        {(member.fullName?.[0] || email?.[0] || "E").toUpperCase()}
       </span>
       <div className="min-w-0">
         <p
           className="m-0 truncate text-xs font-medium"
-          title={member.fullName || member.email}
+          title={member.fullName || email || "Employee"}
         >
-          {member.fullName || member.email}
+          {member.fullName || email || "Employee"}
         </p>
         <p
           className={`${panelMuted} mt-0.5 mb-0 truncate`}
-          title={member.email}
+          title={email || undefined}
         >
-          {member.email}
+          {email || "No account linked"}
         </p>
       </div>
     </div>
@@ -103,23 +102,42 @@ export function ManageMembersDrawer({
   const [loadError, setLoadError] = useState("")
   const [actionError, setActionError] = useState("")
 
-  // Available company accounts (for dropdown assignment)
-  const [allAccounts, setAllAccounts] = useState<AccountList["users"]>([])
-  const [quickAssignUserId, setQuickAssignUserId] = useState("")
+  // Available employees (for dropdown assignment)
+  const [quickAssignEmployeeId, setQuickAssignEmployeeId] = useState("")
+  const [quickAssignRetry, setQuickAssignRetry] = useState(0)
+  const [quickAssignResult, setQuickAssignResult] = useState<{
+    key: string
+    employees: DepartmentMember[]
+    error: string
+  } | null>(null)
 
   // Member search state
   const [assignSearch, setAssignSearch] = useState("")
-  const [searchCandidates, setSearchCandidates] = useState<
-    AccountList["users"]
-  >([])
+  const [debouncedAssignSearch, setDebouncedAssignSearch] = useState("")
+  const [candidatePage, setCandidatePage] = useState(1)
+  const [candidateRetry, setCandidateRetry] = useState(0)
+  const [candidateResult, setCandidateResult] = useState<{
+    key: string
+    candidates: DepartmentMember[]
+    total: number
+    pageSize: number
+    error: string
+  } | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [confirmation, setConfirmation] = useState<
+    | { type: "member"; id: string; name: string }
+    | { type: "team"; id: string; name: string }
+    | { type: "team-member"; id: string; name: string; teamName: string }
+    | null
+  >(null)
+  const [confirmationError, setConfirmationError] = useState("")
 
   // Team creation state
   const [newTeamName, setNewTeamName] = useState("")
   const [newTeamDesc, setNewTeamDesc] = useState("")
   const [creatingTeam, setCreatingTeam] = useState(false)
 
-  // Team member assignment state: mapping teamId -> selected userId
+  // Team member assignment state: mapping teamId -> selected employeeId
   const [teamAddSelection, setTeamAddSelection] = useState<
     Record<string, string>
   >({})
@@ -133,6 +151,32 @@ export function ManageMembersDrawer({
   const [editMemberError, setEditMemberError] = useState("")
 
   const [revision, setRevision] = useState(0)
+  const quickAssignRequestKey = `${departmentId}\u0000${revision}\u0000${quickAssignRetry}`
+  const candidateRequestKey = `${debouncedAssignSearch}\u0000${candidatePage}\u0000${candidateRetry}\u0000${revision}`
+  const quickAssignResultIsCurrent =
+    quickAssignResult?.key === quickAssignRequestKey
+  const candidateResultIsCurrent = candidateResult?.key === candidateRequestKey
+  const allEmployees = quickAssignResultIsCurrent
+    ? quickAssignResult.employees
+    : []
+  const quickAssignLoading = canManage && !quickAssignResultIsCurrent
+  const quickAssignError = quickAssignResultIsCurrent
+    ? quickAssignResult.error
+    : ""
+  const searchCandidates = candidateResultIsCurrent
+    ? candidateResult.candidates
+    : []
+  const candidateTotal = candidateResultIsCurrent ? candidateResult.total : 0
+  const candidatePageSize = candidateResultIsCurrent
+    ? candidateResult.pageSize
+    : 20
+  const candidateLoading = Boolean(
+    canManage && debouncedAssignSearch && !candidateResultIsCurrent,
+  )
+  const candidateError = candidateResultIsCurrent ? candidateResult.error : ""
+  const candidateResultsKey = candidateResultIsCurrent
+    ? `${debouncedAssignSearch}\u0000${candidatePage}`
+    : ""
 
   // 1. Fetch department details
   useEffect(() => {
@@ -160,71 +204,125 @@ export function ManageMembersDrawer({
     }
   }, [departmentId, revision])
 
-  // 2. Load accounts for quick assignment
+  // 2. Load the first employee page for quick assignment
   useEffect(() => {
     if (!canManage) return
     let active = true
-    listAccounts("", "STAFF", 1)
+    listEmployees("", 1)
       .then((res) => {
         if (active) {
-          setAllAccounts(res.users)
+          setQuickAssignResult({
+            key: quickAssignRequestKey,
+            employees: res.employees,
+            error: "",
+          })
         }
       })
-      .catch(() => {})
+      .catch((error: unknown) => {
+        if (active) {
+          setQuickAssignResult({
+            key: quickAssignRequestKey,
+            employees: [],
+            error:
+              error instanceof Error
+                ? error.message
+                : "Couldn't load employees to assign.",
+          })
+        }
+      })
     return () => {
       active = false
     }
-  }, [canManage, revision])
+  }, [canManage, quickAssignRequestKey])
 
-  // 3. Debounced search for assignable accounts
-  const [debouncedAssignSearch, setDebouncedAssignSearch] = useState("")
-
+  // 3. Debounced search for assignable employees
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedAssignSearch(assignSearch.trim())
+      setCandidatePage(1)
     }, 250)
     return () => clearTimeout(timer)
   }, [assignSearch])
 
   useEffect(() => {
-    if (!canManage || !debouncedAssignSearch) {
-      return
-    }
+    if (!canManage || !debouncedAssignSearch) return
     let active = true
-    const currentMemberIds = new Set(detail?.members.map((m) => m.id) || [])
-    listAccounts(debouncedAssignSearch, "STAFF", 1)
+    listEmployees(debouncedAssignSearch, candidatePage)
       .then((res) => {
         if (active) {
-          setSearchCandidates(
-            res.users.filter((u) => !currentMemberIds.has(u.id)),
-          )
+          setCandidateResult({
+            key: candidateRequestKey,
+            candidates: res.employees.filter(
+              (employee) => employee.departmentId !== departmentId,
+            ),
+            total: res.total,
+            pageSize: res.pageSize,
+            error: "",
+          })
         }
       })
-      .catch(() => {})
+      .catch((error: unknown) => {
+        if (active) {
+          setCandidateResult({
+            key: candidateRequestKey,
+            candidates: [],
+            total: 0,
+            pageSize: 20,
+            error:
+              error instanceof Error
+                ? error.message
+                : "Couldn't search employees.",
+          })
+        }
+      })
     return () => {
       active = false
     }
-  }, [canManage, debouncedAssignSearch, detail?.members])
+  }, [
+    canManage,
+    candidateRequestKey,
+    candidatePage,
+    debouncedAssignSearch,
+    departmentId,
+  ])
 
   const isSearching = Boolean(
-    assignSearch.trim() && assignSearch.trim() !== debouncedAssignSearch,
+    assignSearch.trim() &&
+    (assignSearch.trim() !== debouncedAssignSearch || candidateLoading),
   )
-  const displayedCandidates = debouncedAssignSearch ? searchCandidates : []
+  const expectedCandidateResultsKey = `${debouncedAssignSearch}\u0000${candidatePage}`
+  const displayedCandidates =
+    assignSearch.trim() &&
+    assignSearch.trim() === debouncedAssignSearch &&
+    candidateResultsKey === expectedCandidateResultsKey
+      ? searchCandidates
+      : []
 
   const currentMemberIds = new Set(detail?.members.map((m) => m.id) || [])
-  const availableAccountsForQuickAssign = allAccounts.filter(
-    (u) => !currentMemberIds.has(u.id),
+  const departmentHeadId = detail?.headId ?? null
+  const availableEmployeesForQuickAssign = allEmployees.filter(
+    (employee) =>
+      employee.departmentId !== departmentId &&
+      !currentMemberIds.has(employee.id),
+  )
+  const selectedQuickAssignEmployee = availableEmployeesForQuickAssign.find(
+    (employee) => employee.id === quickAssignEmployeeId,
   )
 
-  async function handleAddMember(userId: string) {
-    if (!userId) return
+  async function handleAddMember(employeeId: string) {
+    if (
+      !availableEmployeesForQuickAssign.some(
+        (employee) => employee.id === employeeId,
+      )
+    )
+      return
     try {
       setActionError("")
       setSubmitting(true)
-      await assignDepartmentMembers(departmentId, [userId])
+      await assignDepartmentMembers(departmentId, [employeeId])
       setAssignSearch("")
-      setSearchCandidates([])
-      setQuickAssignUserId("")
+      setQuickAssignEmployeeId("")
+      setCandidatePage(1)
       setRevision((r) => r + 1)
       onChanged()
     } catch (error: unknown) {
@@ -238,16 +336,43 @@ export function ManageMembersDrawer({
     }
   }
 
-  async function handleRemoveMember(userId: string) {
+  function handleRemoveMember(userId: string) {
+    const member = detail?.members.find((candidate) => candidate.id === userId)
+    setConfirmationError("")
+    setConfirmation({
+      type: "member",
+      id: userId,
+      name: member?.fullName || member?.email || "this employee",
+    })
+  }
+
+  async function confirmRemoval() {
+    if (!confirmation || submitting) return
     try {
       setActionError("")
+      setConfirmationError("")
       setSubmitting(true)
-      await removeDepartmentMember(departmentId, userId)
+      if (confirmation.type === "member") {
+        await removeDepartmentMember(departmentId, confirmation.id)
+      } else if (confirmation.type === "team") {
+        await deleteTeam(departmentId, confirmation.id)
+      } else {
+        await updateDepartmentMember(departmentId, confirmation.id, {
+          teamId: null,
+        })
+      }
+      setConfirmation(null)
       setRevision((r) => r + 1)
       onChanged()
     } catch (error: unknown) {
-      setActionError(
-        error instanceof Error ? error.message : "Couldn't remove this member.",
+      setConfirmationError(
+        error instanceof Error
+          ? error.message
+          : confirmation.type === "team"
+            ? "Couldn't delete this team."
+            : confirmation.type === "team-member"
+              ? "Couldn't remove this team assignment."
+              : "Couldn't remove this member.",
       )
     } finally {
       setSubmitting(false)
@@ -278,27 +403,9 @@ export function ManageMembersDrawer({
     }
   }
 
-  async function handleDeleteTeam(teamId: string, teamName: string) {
-    if (
-      !window.confirm(
-        `Delete team "${teamName}"? Members will remain in the department.`,
-      )
-    ) {
-      return
-    }
-    try {
-      setActionError("")
-      setSubmitting(true)
-      await deleteTeam(departmentId, teamId)
-      setRevision((r) => r + 1)
-      onChanged()
-    } catch (error: unknown) {
-      setActionError(
-        error instanceof Error ? error.message : "Couldn't delete this team.",
-      )
-    } finally {
-      setSubmitting(false)
-    }
+  function handleDeleteTeam(teamId: string, teamName: string) {
+    setConfirmationError("")
+    setConfirmation({ type: "team", id: teamId, name: teamName })
   }
 
   async function handleAssignMemberToTeam(teamId: string, userId: string) {
@@ -321,22 +428,17 @@ export function ManageMembersDrawer({
     }
   }
 
-  async function handleRemoveMemberFromTeam(userId: string) {
-    try {
-      setActionError("")
-      setSubmitting(true)
-      await updateDepartmentMember(departmentId, userId, { teamId: null })
-      setRevision((r) => r + 1)
-      onChanged()
-    } catch (error: unknown) {
-      setActionError(
-        error instanceof Error
-          ? error.message
-          : "Couldn't remove this team assignment.",
-      )
-    } finally {
-      setSubmitting(false)
-    }
+  function handleRemoveMemberFromTeam(userId: string) {
+    const member = detail?.members.find((candidate) => candidate.id === userId)
+    const teamId = detail?.members.find((entry) => entry.id === userId)?.teamId
+    const team = detail?.teams.find((candidate) => candidate.id === teamId)
+    setConfirmationError("")
+    setConfirmation({
+      type: "team-member",
+      id: userId,
+      name: member?.fullName || member?.email || "this employee",
+      teamName: team?.name || "this team",
+    })
   }
 
   async function handleSaveMemberDetails(e: React.FormEvent) {
@@ -372,7 +474,8 @@ export function ManageMembersDrawer({
 
   function startEditMember(member: DepartmentMember) {
     // Prevent editing the department head as a regular team member
-    if (detail?.headId === member.id) return
+    if (detail && detail.headId !== null && detail.headId === member.userId)
+      return
     setEditingMember(member)
     setEditMemberError("")
     setMemberPosition(
@@ -388,18 +491,32 @@ export function ManageMembersDrawer({
     <Sheet
       open
       onOpenChange={(open) => {
-        if (!open) onClose()
+        if (!open && !submitting) onClose()
       }}
     >
       <SheetContent
         showCloseButton={false}
         overlayClassName="bg-[rgb(13_28_57_/_40%)]"
         className="inset-y-auto top-[15px] right-[15px] flex h-[calc(100dvh-30px)] max-h-none w-[min(600px,calc(100vw-30px))] max-w-none flex-col gap-0 overflow-hidden rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_16px_60px_rgb(18_36_73_/_18%)] sm:max-w-none max-[560px]:top-0 max-[560px]:right-0 max-[560px]:h-dvh max-[560px]:w-full max-[560px]:rounded-none max-[560px]:border-0"
+        onEscapeKeyDown={(event) => {
+          if (submitting) event.preventDefault()
+        }}
+        onPointerDownOutside={(event) => {
+          if (submitting) event.preventDefault()
+        }}
         onCloseAutoFocus={(event) => {
           event.preventDefault()
           const opener = openerRef.current
-          if (opener instanceof HTMLElement && opener.isConnected)
+          if (opener instanceof HTMLElement && opener.isConnected) {
             opener.focus()
+          } else {
+            const heading = document.querySelector<HTMLElement>("main h1")
+            if (heading) {
+              if (!heading.hasAttribute("tabindex"))
+                heading.setAttribute("tabindex", "-1")
+              heading.focus()
+            }
+          }
         }}
       >
         <header className="flex flex-none items-start justify-between gap-4 border-b border-[#eceef1] px-6 pt-6 pb-5 max-[560px]:px-5">
@@ -422,6 +539,7 @@ export function ManageMembersDrawer({
               type="button"
               className={panelIconButton}
               aria-label="Close drawer"
+              disabled={submitting}
             >
               <CloseIcon width="16" height="16" />
             </button>
@@ -500,9 +618,13 @@ export function ManageMembersDrawer({
                       </div>
                       <div className="flex min-w-0 items-start gap-2">
                         <Select
-                          value={quickAssignUserId}
-                          onValueChange={setQuickAssignUserId}
-                          disabled={submitting}
+                          value={selectedQuickAssignEmployee?.id ?? ""}
+                          onValueChange={setQuickAssignEmployeeId}
+                          disabled={
+                            submitting ||
+                            quickAssignLoading ||
+                            Boolean(quickAssignError)
+                          }
                         >
                           <SelectTrigger
                             className={cn(panelSelectTrigger, "flex-1")}
@@ -511,30 +633,81 @@ export function ManageMembersDrawer({
                             <SelectValue placeholder="Select employee" />
                           </SelectTrigger>
                           <SelectContent collisionPadding={24}>
-                            {availableAccountsForQuickAssign.length === 0 ? (
+                            {quickAssignLoading ? (
+                              <p
+                                className="m-0 p-3 text-xs text-muted-foreground"
+                                role="status"
+                              >
+                                Loading employees...
+                              </p>
+                            ) : quickAssignError ? (
+                              <p
+                                className="m-0 p-3 text-xs text-destructive"
+                                role="alert"
+                              >
+                                Employee list unavailable.
+                              </p>
+                            ) : availableEmployeesForQuickAssign.length ===
+                              0 ? (
                               <p className="m-0 p-3 text-xs text-muted-foreground">
                                 No employees available to assign.
                               </p>
                             ) : (
-                              availableAccountsForQuickAssign.map((user) => (
-                                <SelectItem key={user.id} value={user.id}>
-                                  {user.fullName || user.email}
-                                </SelectItem>
-                              ))
+                              availableEmployeesForQuickAssign.map(
+                                (employee) => (
+                                  <SelectItem
+                                    key={employee.id}
+                                    value={employee.id}
+                                  >
+                                    {employee.fullName ||
+                                      employee.email ||
+                                      "Employee"}
+                                    {employee.user?.role
+                                      ? ` (${employee.user.role})`
+                                      : " (No account)"}
+                                  </SelectItem>
+                                ),
+                              )
                             )}
                           </SelectContent>
                         </Select>
                         <Button
                           type="button"
                           className={panelAssignButton}
-                          disabled={!quickAssignUserId || submitting}
+                          disabled={
+                            !selectedQuickAssignEmployee ||
+                            submitting ||
+                            quickAssignLoading ||
+                            Boolean(quickAssignError)
+                          }
                           onClick={() =>
-                            void handleAddMember(quickAssignUserId)
+                            void handleAddMember(quickAssignEmployeeId)
                           }
                         >
                           <PlusIcon width="14" height="14" /> Assign
                         </Button>
                       </div>
+                      {quickAssignError && (
+                        <div
+                          className="flex items-center justify-between gap-3 text-xs"
+                          role="alert"
+                        >
+                          <span className="text-[#bc3649]">
+                            {quickAssignError}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={panelSecondaryButton}
+                            disabled={submitting || quickAssignLoading}
+                            onClick={() =>
+                              setQuickAssignRetry((count) => count + 1)
+                            }
+                          >
+                            Retry
+                          </Button>
+                        </div>
+                      )}
                       <div className="border-t border-[#eceef1] pt-3">
                         <label className="flex h-[34px] min-w-0 items-center gap-2 rounded-lg border border-[#e1e4ea] px-[11px] text-[#7b8ca7] focus-within:bg-[#f8fafd]">
                           <SearchIcon
@@ -562,23 +735,46 @@ export function ManageMembersDrawer({
                           Searching employees...
                         </p>
                       )}
+                      {candidateError && !isSearching && (
+                        <div
+                          className="flex items-center justify-between gap-3 text-xs"
+                          role="alert"
+                        >
+                          <span className="text-[#bc3649]">
+                            {candidateError}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={panelSecondaryButton}
+                            disabled={candidateLoading || submitting}
+                            onClick={() =>
+                              setCandidateRetry((count) => count + 1)
+                            }
+                          >
+                            Retry
+                          </Button>
+                        </div>
+                      )}
                       {displayedCandidates.length > 0 && !isSearching && (
                         <ul
                           className="m-0 grid list-none gap-2 p-0"
                           aria-label="Employee search results"
                         >
-                          {displayedCandidates.slice(0, 5).map((user) => (
+                          {displayedCandidates.map((employee) => (
                             <li
-                              key={user.id}
+                              key={employee.id}
                               className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-[#e8ebef] p-2.5"
                             >
-                              <MemberIdentity member={user} />
+                              <MemberIdentity member={employee} />
                               <Button
                                 type="button"
                                 variant="outline"
                                 className={panelSecondaryButton}
-                                aria-label={`Assign ${user.fullName || user.email}`}
-                                onClick={() => void handleAddMember(user.id)}
+                                aria-label={`Assign ${employee.fullName || employee.email || "employee"}`}
+                                onClick={() =>
+                                  void handleAddMember(employee.id)
+                                }
                                 disabled={submitting}
                               >
                                 Assign
@@ -587,6 +783,63 @@ export function ManageMembersDrawer({
                           ))}
                         </ul>
                       )}
+                      {debouncedAssignSearch &&
+                        assignSearch.trim() === debouncedAssignSearch &&
+                        !isSearching &&
+                        !candidateError &&
+                        displayedCandidates.length === 0 && (
+                          <p className={`${panelMuted} m-0`}>
+                            No unassigned employees match your search.
+                          </p>
+                        )}
+                      {debouncedAssignSearch &&
+                        assignSearch.trim() === debouncedAssignSearch &&
+                        !isSearching &&
+                        !candidateError &&
+                        candidateTotal > candidatePageSize && (
+                          <div className="flex items-center justify-between text-[11px] text-[#65718a]">
+                            <span>
+                              Page {candidatePage} of{" "}
+                              {Math.max(
+                                1,
+                                Math.ceil(candidateTotal / candidatePageSize),
+                              )}
+                            </span>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                className={cn(
+                                  "cursor-pointer rounded border border-[#e1e4ea] bg-white px-2 py-1",
+                                  focusRing,
+                                )}
+                                disabled={candidatePage <= 1 || submitting}
+                                onClick={() =>
+                                  setCandidatePage((page) => page - 1)
+                                }
+                              >
+                                Previous
+                              </button>
+                              <button
+                                type="button"
+                                className={cn(
+                                  "cursor-pointer rounded border border-[#e1e4ea] bg-white px-2 py-1",
+                                  focusRing,
+                                )}
+                                disabled={
+                                  candidatePage >=
+                                    Math.ceil(
+                                      candidateTotal / candidatePageSize,
+                                    ) || submitting
+                                }
+                                onClick={() =>
+                                  setCandidatePage((page) => page + 1)
+                                }
+                              >
+                                Next
+                              </button>
+                            </div>
+                          </div>
+                        )}
                     </section>
                   )}
 
@@ -608,21 +861,36 @@ export function ManageMembersDrawer({
                         <ul className="m-0 list-none divide-y divide-[#eceef1] p-0">
                           {[...(detail?.members || [])]
                             .sort((a, b) => {
-                              if (detail?.headId === a.id) return -1
-                              if (detail?.headId === b.id) return 1
+                              if (
+                                departmentHeadId !== null &&
+                                departmentHeadId === a.userId
+                              )
+                                return -1
+                              if (
+                                departmentHeadId !== null &&
+                                departmentHeadId === b.userId
+                              )
+                                return 1
                               const aTeam = a.team?.name || ""
                               const bTeam = b.team?.name || ""
                               if (aTeam && !bTeam) return -1
                               if (!aTeam && bTeam) return 1
                               return (
                                 aTeam.localeCompare(bTeam) ||
-                                (a.fullName || a.email).localeCompare(
-                                  b.fullName || b.email,
+                                (
+                                  a.fullName ||
+                                  a.email ||
+                                  a.user?.email ||
+                                  ""
+                                ).localeCompare(
+                                  b.fullName || b.email || b.user?.email || "",
                                 )
                               )
                             })
                             .map((member) => {
-                              const isHead = detail?.headId === member.id
+                              const isHead =
+                                departmentHeadId !== null &&
+                                departmentHeadId === member.userId
                               const position =
                                 member.position &&
                                 !["dept head", "department head"].includes(
@@ -655,7 +923,7 @@ export function ManageMembersDrawer({
                                         </>
                                       )}
                                       <span className="text-[10px] text-[#8a9ab1]">
-                                        {member.role}
+                                        {member.user?.role || "No account"}
                                       </span>
                                     </div>
                                   </div>
@@ -664,7 +932,7 @@ export function ManageMembersDrawer({
                                       <Button
                                         type="button"
                                         className={panelAssignButton}
-                                        aria-label={`Edit ${member.fullName || member.email}`}
+                                        aria-label={`Edit ${member.fullName || member.email || member.user?.email || "employee"}`}
                                         onClick={() => startEditMember(member)}
                                         disabled={submitting}
                                       >
@@ -673,7 +941,8 @@ export function ManageMembersDrawer({
                                       <button
                                         type="button"
                                         className={panelDangerButton}
-                                        aria-label={`Remove ${member.fullName || member.email} from department`}
+                                        aria-label={`Remove ${member.fullName || member.email || member.user?.email || "employee"} from department`}
+                                        title="Remove from department"
                                         disabled={submitting}
                                         onClick={() =>
                                           void handleRemoveMember(member.id)
@@ -783,8 +1052,8 @@ export function ManageMembersDrawer({
                         )
                         const eligibleEmployees = detail.members.filter(
                           (member) =>
-                            member.role === "STAFF" &&
-                            member.id !== detail.headId &&
+                            (departmentHeadId === null ||
+                              member.userId !== departmentHeadId) &&
                             member.teamId !== team.id,
                         )
                         const selectedUserId = teamAddSelection[team.id] || ""
@@ -862,7 +1131,8 @@ export function ManageMembersDrawer({
                                       <button
                                         type="button"
                                         className={panelIconButton}
-                                        aria-label={`Remove ${member.fullName || member.email} from ${team.name}`}
+                                        aria-label={`Remove ${member.fullName || member.email || member.user?.email || "employee"} from ${team.name}`}
+                                        title="Remove from team"
                                         disabled={submitting}
                                         onClick={() =>
                                           void handleRemoveMemberFromTeam(
@@ -909,7 +1179,13 @@ export function ManageMembersDrawer({
                                             key={member.id}
                                             value={member.id}
                                           >
-                                            {member.fullName || member.email}
+                                            {member.fullName ||
+                                              member.email ||
+                                              member.user?.email ||
+                                              "Employee"}
+                                            {member.position
+                                              ? ` (${member.position})`
+                                              : ""}
                                           </SelectItem>
                                         ))}
                                       </SelectContent>
@@ -932,7 +1208,9 @@ export function ManageMembersDrawer({
                                 ) : (
                                   <p className={`${panelMuted} m-0`}>
                                     {detail.members.filter(
-                                      (member) => member.id !== detail.headId,
+                                      (member) =>
+                                        departmentHeadId === null ||
+                                        member.userId !== departmentHeadId,
                                     ).length === 0
                                       ? "Assign employees in the Employees tab first to add them here."
                                       : "All department employees are already in this team."}
@@ -952,7 +1230,11 @@ export function ManageMembersDrawer({
         </Tabs>
         <footer className="flex flex-none justify-end border-t border-[#eceef1] px-6 py-4 max-[560px]:px-5">
           <SheetClose asChild>
-            <Button type="button" className={panelAssignButton}>
+            <Button
+              type="button"
+              className={panelAssignButton}
+              disabled={submitting}
+            >
               Done
             </Button>
           </SheetClose>
@@ -969,6 +1251,46 @@ export function ManageMembersDrawer({
             onTeamChange={setMemberTeamId}
             onClose={() => setEditingMember(null)}
             onSubmit={(event) => void handleSaveMemberDetails(event)}
+          />
+        )}
+        {confirmation && (
+          <ConfirmationDialog
+            title={
+              confirmation.type === "team"
+                ? "Delete team?"
+                : confirmation.type === "member"
+                  ? "Remove employee from department?"
+                  : "Remove employee from team?"
+            }
+            subject={
+              confirmation.type === "team"
+                ? confirmation.name
+                : confirmation.type === "team-member"
+                  ? `${confirmation.name} · ${confirmation.teamName}`
+                  : confirmation.name
+            }
+            description={
+              confirmation.type === "team"
+                ? "Team membership will be cleared. Employees will remain in the department."
+                : confirmation.type === "member"
+                  ? "The employee record and any linked account will remain."
+                  : "The employee will remain in the department."
+            }
+            confirmLabel={
+              confirmation.type === "team" ? "Delete team" : "Remove"
+            }
+            pendingLabel={
+              confirmation.type === "team" ? "Deleting…" : "Removing…"
+            }
+            pending={submitting}
+            error={confirmationError}
+            onClose={() => {
+              if (!submitting) {
+                setConfirmation(null)
+                setConfirmationError("")
+              }
+            }}
+            onConfirm={() => void confirmRemoval()}
           />
         )}
       </SheetContent>

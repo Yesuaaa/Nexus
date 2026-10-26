@@ -53,10 +53,13 @@ export function getPrisma() {
   if (!connectionString) return undefined
 
   if (!client) {
-    const pool = new pg.Pool(databasePoolConfig(connectionString))
+    const pool = new pg.Pool({
+      ...databasePoolConfig(connectionString),
+      max: Number(process.env.DATABASE_POOL_MAX) || 10,
+    })
 
     client = new PrismaClient({
-      adapter: new PrismaPg(pool),
+      adapter: new PrismaPg(pool, { disposeExternalPool: true }),
     })
   }
 

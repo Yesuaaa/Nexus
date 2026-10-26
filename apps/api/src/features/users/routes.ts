@@ -2,10 +2,11 @@ import { Router } from "express"
 import { Prisma, Role } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { requireAuth, requirePermission } from "../auth/session.js"
-import { hasPermission, Permission } from "../auth/permissions.js"
+import { Permission } from "../auth/permissions.js"
 import { hashPassword, validPassword } from "../auth/password.js"
 import { normalizedEmail } from "../auth/validation.js"
 import { publicUser } from "./public-user.js"
+import { EmployeeError, syncEmployeeForUser } from "../employees/service.js"
 import {
   canAssignRole,
   canChangeAccountStatus,
@@ -32,7 +33,9 @@ usersRouter.patch(
     }
     const prisma = getPrisma()!
     const target = await prisma.user.findUnique({ where: { id } })
-    if (!target) return response.status(404).json({ error: "User not found" })
+    if (!target || target.accountDeletedAt) {
+      return response.status(404).json({ error: "User not found" })
+    }
     if (!canChangeAccountStatus(actor.role, target.role)) {
       return response
         .status(403)
@@ -142,6 +145,7 @@ usersRouter.get(
       return response.status(400).json({ error: "Invalid account filters" })
     }
     const where = {
+      accountDeletedAt: null,
       ...(role ? { role: role as Role } : {}),
       ...(search
         ? {
@@ -276,31 +280,36 @@ usersRouter.post(
       }
     }
     try {
-      const user = await prisma.user.create({
-        data: {
-          email,
-          fullName: fullName.trim(),
-          contactNumber:
-            typeof contactNumber === "string" && contactNumber.trim()
-              ? contactNumber.trim()
-              : null,
-          position:
-            typeof position === "string" && position.trim()
-              ? position.trim()
-              : null,
-          passwordHash: await hashPassword(password),
-          role: role as Role,
-          departmentId: departmentId ? String(departmentId) : null,
-          teamId: teamId ? String(teamId) : null,
-        },
-        include: {
-          department: {
-            select: { id: true, name: true, code: true },
+      const passwordHash = await hashPassword(password)
+      const user = await prisma.$transaction(async (tx) => {
+        const created = await tx.user.create({
+          data: {
+            email,
+            fullName: fullName.trim(),
+            contactNumber:
+              typeof contactNumber === "string" && contactNumber.trim()
+                ? contactNumber.trim()
+                : null,
+            position:
+              typeof position === "string" && position.trim()
+                ? position.trim()
+                : null,
+            passwordHash,
+            role: role as Role,
+            departmentId: departmentId ? String(departmentId) : null,
+            teamId: teamId ? String(teamId) : null,
           },
-          team: {
-            select: { id: true, name: true },
+          include: {
+            department: {
+              select: { id: true, name: true, code: true },
+            },
+            team: {
+              select: { id: true, name: true },
+            },
           },
-        },
+        })
+        await syncEmployeeForUser(tx, created.id)
+        return created
       })
       return response.status(201).json({ user: publicUser(user) })
     } catch (error) {
@@ -344,29 +353,48 @@ usersRouter.patch(
     if (!canAssignRole(actor.role, target.role, role as Role)) {
       return response.status(403).json({ error: "You cannot assign that role" })
     }
-    if (!hasPermission(actor.role, Permission.ACCOUNTS_ASSIGN_PRIVILEGED)) {
-      const result = await prisma.user.updateMany({
-        where: { id: target.id, role: { in: [Role.STAFF, Role.USER] } },
-        data: { role: role as Role },
+    try {
+      const updated = await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw(
+          Prisma.sql`SELECT "id" FROM "User" WHERE "id" = ${target.id} FOR UPDATE`,
+        )
+        if (
+          role === Role.SUPERADMIN &&
+          (await tx.employee.findUnique({ where: { userId: target.id } }))
+        ) {
+          throw new EmployeeError(
+            409,
+            "Unlink the employee record before promoting this account to Superadmin",
+          )
+        }
+        const result = await tx.user.updateMany({
+          where: { id: target.id, role: target.role },
+          data: { role: role as Role },
+        })
+        if (result.count === 0)
+          throw new EmployeeError(409, "Role changed; refresh and retry")
+        await syncEmployeeForUser(tx, target.id)
+        return tx.user.findUniqueOrThrow({
+          where: { id: target.id },
+          include: {
+            department: { select: { id: true, name: true, code: true } },
+            team: { select: { id: true, name: true } },
+          },
+        })
       })
-      if (result.count === 0)
+      return response.json({ user: publicUser(updated) })
+    } catch (error) {
+      if (error instanceof EmployeeError)
+        return response.status(error.status).json({ error: error.message })
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2034"
+      ) {
         return response
           .status(409)
-          .json({ error: "Role changed; refresh and retry" })
-    } else {
-      await prisma.user.update({
-        where: { id: target.id },
-        data: { role: role as Role },
-      })
+          .json({ error: "Account changed; refresh and retry" })
+      }
+      throw error
     }
-    const updated = await prisma.user.findUniqueOrThrow({
-      where: { id: target.id },
-      include: {
-        department: {
-          select: { id: true, name: true, code: true },
-        },
-      },
-    })
-    return response.json({ user: publicUser(updated) })
   },
 )

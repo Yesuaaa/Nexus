@@ -2,6 +2,7 @@ import cors from "cors"
 import express, { type ErrorRequestHandler } from "express"
 import { authRouter } from "./features/auth/routes.js"
 import { departmentsRouter } from "./features/departments/routes.js"
+import { employeesRouter } from "./features/employees/routes.js"
 import { healthRouter } from "./features/health/routes.js"
 import { usersRouter } from "./features/users/routes.js"
 import { servicesRouter } from "./features/services/routes.js"
@@ -14,6 +15,7 @@ export function createApp() {
   app.use("/api/auth", authRouter)
   app.use("/api/users", usersRouter)
   app.use("/api/departments", departmentsRouter)
+  app.use("/api/employees", employeesRouter)
   app.use("/api/services", servicesRouter)
   app.use("/api", healthRouter)
   app.use(handleError)

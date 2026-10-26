@@ -22,6 +22,7 @@ test("account status, deletion, and authentication enforce access", async (t) =>
     passwordHash: await hashPassword(password),
     role: Role.USER,
     isActive: true,
+    accountDeletedAt: null,
     departmentId: null,
     teamId: null,
     createdAt: new Date(),
