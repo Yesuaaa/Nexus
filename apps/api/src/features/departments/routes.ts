@@ -48,7 +48,7 @@ departmentsRouter.get(
   },
 )
 
-// GET /api/departments/eligible-heads - List staff/admin users who can be assigned as department head
+// GET /api/departments/eligible-heads - List staff users who can be assigned as department head
 departmentsRouter.get(
   "/eligible-heads",
   requirePermission(Permission.DEPARTMENTS_MANAGE),
@@ -56,7 +56,7 @@ departmentsRouter.get(
     const prisma = getPrisma()!
     const eligibleUsers = await prisma.user.findMany({
       where: {
-        role: { in: [Role.STAFF, Role.ADMIN, Role.SUPERADMIN] },
+        role: Role.STAFF,
       },
       select: {
         id: true,

@@ -77,7 +77,11 @@ authRouter.post("/login", async (request, response) => {
       .status(429)
       .json({ error: "Too many login attempts. Try again later" })
   const user = await prisma.user.findUnique({ where: { email } })
-  if (!user || !(await verifyPassword(password, user.passwordHash))) {
+  if (
+    !user ||
+    !user.isActive ||
+    !(await verifyPassword(password, user.passwordHash))
+  ) {
     recordFailure(attemptKey)
     return response.status(401).json({ error: "Invalid email or password" })
   }

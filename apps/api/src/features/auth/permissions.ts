@@ -9,6 +9,8 @@ export const Permission = {
   ACCOUNTS_CREATE_PRIVILEGED: "accounts:create-privileged",
   ACCOUNTS_ASSIGN_BASIC: "accounts:assign-basic",
   ACCOUNTS_ASSIGN_PRIVILEGED: "accounts:assign-privileged",
+  ACCOUNTS_STATUS_BASIC: "accounts:status-basic",
+  ACCOUNTS_STATUS_PRIVILEGED: "accounts:status-privileged",
   DEPARTMENTS_READ: "departments:read",
   DEPARTMENTS_MANAGE: "departments:manage",
   DEPARTMENTS_DELETE: "departments:delete",
@@ -32,6 +34,7 @@ const adminPermissions = [
   Permission.ACCOUNTS_READ,
   Permission.ACCOUNTS_CREATE_BASIC,
   Permission.ACCOUNTS_ASSIGN_BASIC,
+  Permission.ACCOUNTS_STATUS_BASIC,
   Permission.DEPARTMENTS_MANAGE,
   Permission.DEPARTMENTS_DELETE,
 ] as const
@@ -44,6 +47,7 @@ const rolePermissions: Record<Role, readonly Permission[]> = {
     ...adminPermissions,
     Permission.ACCOUNTS_CREATE_PRIVILEGED,
     Permission.ACCOUNTS_ASSIGN_PRIVILEGED,
+    Permission.ACCOUNTS_STATUS_PRIVILEGED,
   ],
 }
 

@@ -19,3 +19,12 @@ export function canCreateRole(actor: Role, role: Role): boolean {
     : Permission.ACCOUNTS_CREATE_BASIC
   return hasPermission(actor, permission)
 }
+
+export function canChangeAccountStatus(actor: Role, target: Role): boolean {
+  return hasPermission(
+    actor,
+    isPrivileged(target)
+      ? Permission.ACCOUNTS_STATUS_PRIVILEGED
+      : Permission.ACCOUNTS_STATUS_BASIC,
+  )
+}

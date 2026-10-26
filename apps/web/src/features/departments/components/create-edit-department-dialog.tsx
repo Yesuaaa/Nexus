@@ -1,5 +1,13 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { CloseIcon } from "@/components/layout/icons"
+import { focusRing } from "@/components/layout/styles"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { cn } from "@/lib/utils"
 import {
   Select,
   SelectContent,
@@ -16,17 +24,23 @@ import {
   type EligibleHead,
 } from "../api/departments-api"
 
+const fieldClass = "grid min-w-0 gap-1.5"
+const labelClass = "text-xs font-semibold"
+const inputClass = `w-full min-w-0 rounded-lg border border-[#d6dfec] bg-background px-3 text-sm text-foreground placeholder:text-[#9aa8bb] ${focusRing}`
+const buttonClass = `inline-flex min-h-[38px] cursor-pointer items-center justify-center rounded-[9px] border border-transparent px-[15px] text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none ${focusRing}`
+
 export function CreateEditDepartmentDialog({
   department,
   onClose,
   onSaved,
-  onDelete,
 }: {
   department?: Department | null
   onClose: () => void
   onSaved: () => void
-  onDelete?: (id: string, name: string) => void
 }) {
+  const openerRef = useRef(
+    typeof document === "undefined" ? null : document.activeElement,
+  )
   const isEditing = Boolean(department)
   const [selectedPreset, setSelectedPreset] = useState<string>(
     department
@@ -77,6 +91,7 @@ export function CreateEditDepartmentDialog({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (submitting) return
     if (!name.trim()) {
       setError("Please enter a department name")
       return
@@ -109,55 +124,72 @@ export function CreateEditDepartmentDialog({
   }
 
   return (
-    <div className="dept-modal-backdrop" onClick={onClose}>
-      <div
-        className="dept-modal"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !submitting) onClose()
+      }}
+    >
+      <DialogContent
+        showCloseButton={false}
+        overlayClassName="z-[110] bg-[rgb(13_28_57_/_48%)]"
+        className="z-[110] max-h-[calc(100dvh-28px)] w-[min(440px,calc(100vw-28px))] gap-0 overflow-y-auto rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_22px_75px_rgb(18_36_73_/_22%)]"
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          const opener = openerRef.current
+          if (opener instanceof HTMLElement && opener.isConnected)
+            opener.focus()
+        }}
       >
-        <div className="dept-modal-header">
-          <h2 className="dept-modal-title">
-            {isEditing ? "Edit Department" : "Create Department"}
-          </h2>
+        <div className="flex items-start justify-between gap-4 px-5 pt-5">
+          <div>
+            <DialogTitle className="m-0 text-lg font-[650] tracking-[-0.03em]">
+              {isEditing ? "Edit Department" : "Create Department"}
+            </DialogTitle>
+            <DialogDescription className="mt-2 mb-0 text-xs leading-relaxed text-[#738096]">
+              {isEditing
+                ? "Update the department details and assigned head."
+                : "Add a department and assign its head."}
+            </DialogDescription>
+          </div>
           <button
             type="button"
-            className="dept-modal-close"
+            className={cn(
+              "grid size-7 flex-none cursor-pointer place-items-center rounded-[7px] border-0 bg-background text-[#65718a] hover:enabled:bg-[#f1f5fc] disabled:cursor-not-allowed disabled:opacity-50",
+              focusRing,
+            )}
             onClick={onClose}
             aria-label="Close dialog"
+            disabled={submitting}
           >
             <CloseIcon />
           </button>
         </div>
 
         <form onSubmit={handleSubmit}>
-          <div className="dept-modal-body">
+          <fieldset
+            disabled={submitting}
+            className="m-0 grid min-w-0 gap-4 border-0 p-5 disabled:opacity-60"
+          >
             {error && (
-              <div
-                style={{
-                  background: "#fef2f2",
-                  color: "#991b1b",
-                  padding: "10px 14px",
-                  borderRadius: "8px",
-                  fontSize: "0.85rem",
-                }}
-              >
+              <p className="m-0 text-xs text-[#bc3649]" role="alert">
                 {error}
-              </div>
+              </p>
             )}
 
             {!isEditing && (
-              <div className="dept-field">
-                <label className="dept-label" htmlFor="dept-preset">
+              <div className={fieldClass}>
+                <label className={labelClass} htmlFor="dept-preset">
                   Company Department Preset
                 </label>
                 <Select
                   value={selectedPreset}
                   onValueChange={handlePresetChange}
+                  disabled={submitting}
                 >
                   <SelectTrigger
                     id="dept-preset"
-                    className="dept-select-trigger"
+                    className={cn(inputClass, "h-10 shadow-none")}
                   >
                     <SelectValue placeholder="Select from Company Departments" />
                   </SelectTrigger>
@@ -178,13 +210,14 @@ export function CreateEditDepartmentDialog({
               </div>
             )}
 
-            <div className="dept-field">
-              <label className="dept-label" htmlFor="dept-name">
+            <div className={fieldClass}>
+              <label className={labelClass} htmlFor="dept-name">
                 Department Name *
               </label>
               <input
                 id="dept-name"
-                className="dept-input"
+                className={cn(inputClass, "h-10")}
+                autoFocus
                 placeholder="e.g. Information Technology"
                 value={name}
                 onChange={(e) => {
@@ -195,13 +228,13 @@ export function CreateEditDepartmentDialog({
               />
             </div>
 
-            <div className="dept-field">
-              <label className="dept-label" htmlFor="dept-code">
+            <div className={fieldClass}>
+              <label className={labelClass} htmlFor="dept-code">
                 Department Code
               </label>
               <input
                 id="dept-code"
-                className="dept-input"
+                className={cn(inputClass, "h-10")}
                 placeholder="e.g. IT, HR, FIN"
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
@@ -209,8 +242,8 @@ export function CreateEditDepartmentDialog({
               />
             </div>
 
-            <div className="dept-field">
-              <label className="dept-label" htmlFor="dept-head">
+            <div className={fieldClass}>
+              <label className={labelClass} htmlFor="dept-head">
                 Department Head
               </label>
               <Select
@@ -218,9 +251,12 @@ export function CreateEditDepartmentDialog({
                 onValueChange={(value) =>
                   setHeadId(value === "unassigned" ? "" : value)
                 }
-                disabled={loadingHeads}
+                disabled={loadingHeads || submitting}
               >
-                <SelectTrigger id="dept-head" className="dept-select-trigger">
+                <SelectTrigger
+                  id="dept-head"
+                  className={cn(inputClass, "h-10 shadow-none")}
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent
@@ -232,7 +268,7 @@ export function CreateEditDepartmentDialog({
                   </SelectItem>
                   {eligibleHeads.map((head) => (
                     <SelectItem key={head.id} value={head.id}>
-                      {head.fullName || head.email} ({head.role})
+                      {head.fullName || head.email}
                       {head.headOf && head.headOf.id !== department?.id
                         ? ` [Heads ${head.headOf.name}]`
                         : ""}
@@ -242,42 +278,27 @@ export function CreateEditDepartmentDialog({
               </Select>
             </div>
 
-            <div className="dept-field">
-              <label className="dept-label" htmlFor="dept-desc">
+            <div className={fieldClass}>
+              <label className={labelClass} htmlFor="dept-desc">
                 Description
               </label>
               <textarea
                 id="dept-desc"
-                className="dept-textarea"
+                className={cn(inputClass, "min-h-20 resize-y py-2.5")}
                 placeholder="Briefly describe what this department manages..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />
             </div>
-          </div>
+          </fieldset>
 
-          <div className="dept-modal-footer">
-            {isEditing && onDelete && department && (
-              <button
-                type="button"
-                className="dept-btn-danger-icon"
-                style={{
-                  width: "auto",
-                  padding: "8px 12px",
-                  marginRight: "auto",
-                }}
-                onClick={() => {
-                  onClose()
-                  onDelete(department.id, department.name)
-                }}
-                disabled={submitting}
-              >
-                Delete Department
-              </button>
-            )}
+          <footer className="flex justify-end gap-2 border-t border-[#eceef1] px-5 py-4">
             <button
               type="button"
-              className="dept-btn-outline"
+              className={cn(
+                buttonClass,
+                "border-[#d7e0ee] bg-background text-[#24437e] hover:enabled:bg-[#f1f5fc]",
+              )}
               onClick={onClose}
               disabled={submitting}
             >
@@ -285,7 +306,10 @@ export function CreateEditDepartmentDialog({
             </button>
             <button
               type="submit"
-              className="dept-btn-primary"
+              className={cn(
+                buttonClass,
+                "bg-[#203f8c] text-white hover:enabled:bg-[#172f70]",
+              )}
               disabled={submitting}
             >
               {submitting
@@ -294,9 +318,9 @@ export function CreateEditDepartmentDialog({
                   ? "Update Department"
                   : "Create Department"}
             </button>
-          </div>
+          </footer>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }
