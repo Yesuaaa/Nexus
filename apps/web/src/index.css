@@ -3,8 +3,8 @@
 :root {
   font-family: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   color-scheme: light;
-  --background: #F3F7F9;
-  --portal-canvas: #DEE6EA;
+  --background: #f3f7f9;
+  --portal-canvas: #dee6ea;
   --foreground: #070f1f;
   --card: #fafafa;
   --muted: oklch(0.955 0.004 250);
