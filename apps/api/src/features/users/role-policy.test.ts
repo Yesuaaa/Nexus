@@ -31,6 +31,8 @@ test("fixed roles have the expected permissions", () => {
     Permission.ACCOUNTS_STATUS_BASIC,
     Permission.DEPARTMENTS_MANAGE,
     Permission.DEPARTMENTS_DELETE,
+    Permission.SERVICES_READ,
+    Permission.SERVICES_MANAGE,
   ]
   assert.deepEqual(permissionsFor(Role.USER), common)
   assert.deepEqual(permissionsFor(Role.STAFF), staff)
@@ -69,6 +71,13 @@ test("permission middleware denies missing permissions", async () => {
       response.json({ allowed: true })
     },
   )
+  app.post(
+    "/services",
+    requirePermission(Permission.SERVICES_MANAGE),
+    (_request, response) => {
+      response.json({ allowed: true })
+    },
+  )
   const server = app.listen(0)
   try {
     await new Promise<void>((resolve) => server.once("listening", resolve))
@@ -82,6 +91,21 @@ test("permission middleware denies missing permissions", async () => {
       [Role.SUPERADMIN, 200],
     ] as const) {
       const response = await fetch(url, {
+        headers: role ? { "x-test-role": role } : {},
+      })
+      assert.equal(response.status, expectedStatus)
+    }
+
+    const servicesUrl = `http://127.0.0.1:${address.port}/services`
+    for (const [role, expectedStatus] of [
+      [undefined, 401],
+      [Role.USER, 403],
+      [Role.STAFF, 403],
+      [Role.ADMIN, 200],
+      [Role.SUPERADMIN, 200],
+    ] as const) {
+      const response = await fetch(servicesUrl, {
+        method: "POST",
         headers: role ? { "x-test-role": role } : {},
       })
       assert.equal(response.status, expectedStatus)

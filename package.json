@@ -10,6 +10,7 @@
     "dev": "pnpm -r --parallel dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
+    "test:e2e": "pnpm --filter @nexus/web test:e2e",
     "start:api": "pnpm --filter @nexus/api start",
     "start:web": "pnpm --filter @nexus/web start",
     "preview:web": "pnpm --filter @nexus/web preview",

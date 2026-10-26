@@ -5,6 +5,7 @@ import { departmentsRouter } from "./features/departments/routes.js"
 import { employeesRouter } from "./features/employees/routes.js"
 import { healthRouter } from "./features/health/routes.js"
 import { usersRouter } from "./features/users/routes.js"
+import { servicesRouter } from "./features/services/routes.js"
 
 export function createApp() {
   const app = express()
@@ -15,6 +16,7 @@ export function createApp() {
   app.use("/api/users", usersRouter)
   app.use("/api/departments", departmentsRouter)
   app.use("/api/employees", employeesRouter)
+  app.use("/api/services", servicesRouter)
   app.use("/api", healthRouter)
   app.use(handleError)
   return app

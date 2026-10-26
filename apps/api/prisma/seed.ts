@@ -111,6 +111,98 @@ const DEFAULT_DEPARTMENTS = [
   },
 ]
 
+const DEFAULT_SERVICES = [
+  {
+    name: "Social Media Management",
+    description:
+      "Plan, publish, and monitor social media content across client channels.",
+    departmentName: "Marketing",
+  },
+  {
+    name: "Paid Ads Management",
+    description:
+      "Plan, launch, optimize, and report on paid advertising campaigns.",
+    departmentName: "Advertising",
+  },
+  {
+    name: "Customer Service",
+    description:
+      "Handle customer inquiries, support concerns, and service follow-ups.",
+    departmentName: "Customer Success",
+  },
+  {
+    name: "Video Management / Marketing",
+    description:
+      "Plan and manage video content for marketing campaigns and channels.",
+    departmentName: "Marketing",
+  },
+  {
+    name: "Website Design & Development",
+    description:
+      "Design and build responsive websites aligned with client requirements.",
+    departmentName: "Information Technology",
+  },
+  {
+    name: "Search Engine Optimization (SEO)",
+    description:
+      "Improve organic search visibility through technical and content optimization.",
+    departmentName: "SEO",
+  },
+  {
+    name: "Email Marketing",
+    description:
+      "Create, deliver, and measure email campaigns for client audiences.",
+    departmentName: "Marketing",
+  },
+  {
+    name: "Graphic Design",
+    description:
+      "Create campaign graphics, brand assets, and other visual materials.",
+    departmentName: "Advertising",
+  },
+  {
+    name: "Ecommerce Management",
+    description:
+      "Manage online storefront content, promotions, and sales operations.",
+    departmentName: "Marketing",
+  },
+  {
+    name: "Community Management",
+    description:
+      "Engage online communities, moderate conversations, and grow audiences.",
+    departmentName: "Marketing",
+  },
+  {
+    name: "Business Development",
+    description:
+      "Develop partnerships, opportunities, and strategies for business growth.",
+    departmentName: "Executive",
+  },
+  {
+    name: "Product Photography",
+    description:
+      "Produce professional product photographs for campaigns and commerce.",
+    departmentName: "Advertising",
+  },
+  {
+    name: "Video Production",
+    description: "Produce promotional, corporate, and social video content.",
+    departmentName: "Advertising",
+  },
+  {
+    name: "Digital Printing",
+    description:
+      "Prepare and produce printed marketing and business materials.",
+    departmentName: "Advertising",
+  },
+  {
+    name: "Corporate Events Management",
+    description:
+      "Plan and coordinate corporate events, logistics, and supporting resources.",
+    departmentName: "Administration",
+  },
+] as const
+
 async function seedDepartments(
   prisma: NonNullable<ReturnType<typeof getPrisma>>,
 ) {
@@ -128,14 +220,55 @@ async function seedDepartments(
   console.log("Seeded default company departments")
 }
 
+async function seedServices(prisma: NonNullable<ReturnType<typeof getPrisma>>) {
+  const departmentNames = [
+    ...new Set(DEFAULT_SERVICES.map((service) => service.departmentName)),
+  ]
+  const departments = await prisma.department.findMany({
+    where: { name: { in: departmentNames } },
+    select: { id: true, name: true },
+  })
+  const departmentIds = new Map(
+    departments.map((department) => [department.name, department.id]),
+  )
+
+  for (const service of DEFAULT_SERVICES) {
+    const departmentId = departmentIds.get(service.departmentName)
+    if (!departmentId) {
+      throw new Error(
+        `Cannot seed ${service.name}: department ${service.departmentName} was not found`,
+      )
+    }
+
+    await prisma.service.upsert({
+      where: { name: service.name },
+      update: {
+        description: service.description,
+        departments: { set: [{ id: departmentId }] },
+      },
+      create: {
+        name: service.name,
+        description: service.description,
+        departments: { connect: [{ id: departmentId }] },
+        isActive: true,
+      },
+    })
+  }
+  console.log(`Seeded ${DEFAULT_SERVICES.length} company services`)
+}
+
 async function main() {
   const prisma = getPrisma()
   if (!prisma) throw new Error("Set DATABASE_URL before seeding")
+  const servicesOnly = process.argv.includes("--services-only")
 
   try {
-    await seedSuperadmin(prisma)
-    await seedAdmin(prisma)
+    if (!servicesOnly) {
+      await seedSuperadmin(prisma)
+      await seedAdmin(prisma)
+    }
     await seedDepartments(prisma)
+    await seedServices(prisma)
   } finally {
     await prisma.$disconnect()
   }

@@ -55,6 +55,7 @@ export type Department = {
   head: DepartmentHead | null
   memberCount: number
   teamCount?: number
+  serviceCount?: number
   createdAt: string
   updatedAt: string
 }

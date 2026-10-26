@@ -47,7 +47,7 @@ function withoutTemporaryHeadTracking<
 export const departmentsRouter = Router()
 departmentsRouter.use(requireAuth)
 
-// GET /api/departments - List all departments with head, team count, and member counts
+// GET /api/departments - List departments with head and related record counts
 departmentsRouter.get(
   "/",
   requirePermission(Permission.DEPARTMENTS_READ),
@@ -65,7 +65,7 @@ departmentsRouter.get(
           },
         },
         _count: {
-          select: { employees: true, teams: true },
+          select: { employees: true, teams: true, services: true },
         },
       },
     })
@@ -80,6 +80,7 @@ departmentsRouter.get(
         head: d.head,
         memberCount: d._count.employees,
         teamCount: d._count.teams,
+        serviceCount: d._count.services,
         createdAt: d.createdAt,
         updatedAt: d.updatedAt,
       })),
@@ -597,6 +598,22 @@ departmentsRouter.post(
       return response.status(404).json({ error: "Department not found" })
     }
 
+    if (userIds !== undefined) {
+      const eligibleUsers = await prisma.user.findMany({
+        where: {
+          id: { in: userIds },
+          role: Role.STAFF,
+          accountDeletedAt: null,
+        },
+        select: { id: true },
+      })
+      if (eligibleUsers.length !== userIds.length) {
+        return response.status(400).json({
+          error: "Only active staff accounts can be assigned to a department",
+        })
+      }
+    }
+
     try {
       const updatedMembers = await prisma.$transaction(async (tx) => {
         for (const employeeId of employeeIds ?? []) {
@@ -753,6 +770,16 @@ departmentsRouter.delete(
     const dept = await prisma.department.findUnique({ where: { id } })
     if (!dept) {
       return response.status(404).json({ error: "Department not found" })
+    }
+
+    const serviceCount = await prisma.service.count({
+      where: { departments: { some: { id } } },
+    })
+    if (serviceCount > 0) {
+      return response.status(409).json({
+        error:
+          "Reassign or remove this department's services before deleting the department",
+      })
     }
 
     await prisma.$transaction(async (tx) => {
@@ -1088,6 +1115,11 @@ departmentsRouter.patch(
       return response
         .status(404)
         .json({ error: "Member not found in this department" })
+    }
+    if (user && teamId && user.role !== Role.STAFF) {
+      return response
+        .status(400)
+        .json({ error: "Only staff accounts can be assigned to a team" })
     }
     if (user && dept?.headId && dept.headId === user.id && teamId) {
       return response.status(400).json({

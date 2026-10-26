@@ -66,6 +66,14 @@ This initializes a new database from migration history or applies pending migrat
 
 Generating the client updates TypeScript code; it does not update database tables. Prisma 7 requires explicit client generation and seeding after migrations. Nexus's API `dev`, `build`, `typecheck`, and `test` scripts already generate the client. See the [Prisma 7 CLI reference](https://www.prisma.io/docs/orm/v7/reference/prisma-cli-reference).
 
+The seed script creates the standard company departments and 15 default services. Service seeds are idempotent: rerunning the script refreshes their descriptions and department assignments while preserving any active or inactive status selected in Service Management.
+
+To seed only the prerequisite departments and services without processing account bootstrap variables, run:
+
+```sh
+pnpm --filter @nexus/api db:seed:services
+```
+
 ## Changing the schema
 
 Use a development database when authoring migrations.
@@ -114,6 +122,8 @@ pnpm --filter @nexus/api exec prisma migrate status
 The first status check can exit with a nonzero status when migrations are pending; read its output. `migrate deploy` applies pending SQL migrations, does not create new migrations from schema edits, and does not need a shadow database. Run it against staging or production from a release environment with Prisma CLI dependencies and the intended `DIRECT_URL` configured. Build and restart the API with the updated client.
 
 The account deactivation feature adds `User.isActive` in `20261026090000_account_status`. Apply that migration before starting the updated API. Existing and new users default to active. Application deactivation also revokes sessions and enforces permissions; use Account Management for that action. See [the access control documentation](rbac.md).
+
+Service Management adds the `Service` table in `20261026120000_add_services`. The `20261026170000_allow_multiple_service_departments` migration converts its original single-department foreign key into a many-to-many relationship and preserves every existing assignment. Each service requires at least one valid department; the API prevents deleting a department while any service still uses it. Service deactivation keeps the row and all department relationships intact.
 
 Docker Compose supplies the runtime `DATABASE_URL` from the root `.env`. Host Prisma commands use `apps/api/.env`; these environments are separate. The production API image does not contain the Prisma CLI, so run migrations from the host or a release job with dependencies installed.
 

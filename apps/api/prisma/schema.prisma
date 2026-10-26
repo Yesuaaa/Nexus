@@ -75,10 +75,23 @@ model Department {
   members                 User[]     @relation("DepartmentMembers")
   employees               Employee[]
   teams                   Team[]
+  services                Service[]  @relation("ServiceDepartments")
   createdAt               DateTime   @default(now())
   updatedAt               DateTime   @updatedAt
 
   @@index([headId])
+}
+
+model Service {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  description String
+  isActive    Boolean      @default(true)
+  departments Department[] @relation("ServiceDepartments")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([isActive])
 }
 
 model Team {

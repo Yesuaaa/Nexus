@@ -25,6 +25,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Pill } from "@/components/ui/pill"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { cn } from "@/lib/utils"
 import { EditMemberDialog } from "./edit-member-dialog"
 import {
@@ -948,6 +949,9 @@ export function ManageMembersDrawer({
                                         }
                                       >
                                         <TrashIcon width="15" height="15" />
+                                        <HoverTooltip>
+                                          Remove from department
+                                        </HoverTooltip>
                                       </button>
                                     </div>
                                   )}
@@ -1083,13 +1087,13 @@ export function ManageMembersDrawer({
                                   type="button"
                                   className={panelDangerButton}
                                   aria-label={`Delete ${team.name} team`}
-                                  title="Delete team"
                                   disabled={submitting}
                                   onClick={() =>
                                     void handleDeleteTeam(team.id, team.name)
                                   }
                                 >
                                   <TrashIcon width="15" height="15" />
+                                  <HoverTooltip>Delete team</HoverTooltip>
                                 </button>
                               )}
                             </header>
@@ -1137,6 +1141,9 @@ export function ManageMembersDrawer({
                                         }
                                       >
                                         <CloseIcon width="14" height="14" />
+                                        <HoverTooltip>
+                                          Remove from team
+                                        </HoverTooltip>
                                       </button>
                                     )}
                                   </li>
