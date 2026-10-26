@@ -41,14 +41,22 @@ export function validateAuth(
     if (!name) errors.fullName = copy.nameRequired
     else if (name.length < 2 || name.length > 100)
       errors.fullName = copy.nameLength
+    else if (!/^\p{L}[\p{L} .'’-]*$/u.test(name))
+      errors.fullName = copy.nameInvalid
 
     if (!contact) errors.contactNumber = copy.contactRequired
-    else if (!/^\+?[0-9][0-9\s-]{6,19}$/.test(contact))
+    else if (!/^0[89]\d{9}$/.test(contact))
       errors.contactNumber = copy.contactInvalid
   }
 
   if (!email) errors.email = copy.emailRequired
-  else if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+  else if (
+    email.length > 254 ||
+    !(mode === "register"
+      ? /^[A-Za-z0-9]+([._+-][A-Za-z0-9]+)*@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.(com|ph)$/i
+      : /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    ).test(email)
+  )
     errors.email = copy.emailInvalid
 
   if (!values.password) errors.password = copy.passwordRequired
@@ -56,6 +64,14 @@ export function validateAuth(
     errors.password = copy.passwordShort
   else if (new TextEncoder().encode(values.password).length > 1024)
     errors.password = copy.passwordLong
+  else if (mode === "register" && !/[A-Z]/.test(values.password))
+    errors.password = copy.passwordCapital
+  else if (mode === "register" && !/[a-z]/.test(values.password))
+    errors.password = copy.passwordLowercase
+  else if (mode === "register" && !/[0-9]/.test(values.password))
+    errors.password = copy.passwordNumber
+  else if (mode === "register" && !/[^A-Za-z0-9]/.test(values.password))
+    errors.password = copy.passwordSpecial
 
   if (mode === "register") {
     if (!values.confirmPassword) errors.confirmPassword = copy.confirmRequired
