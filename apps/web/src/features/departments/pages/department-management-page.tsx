@@ -4,13 +4,17 @@ import { useEffect, useState } from "react"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { sileo } from "sileo"
 import { hasPermission, Permissions } from "@/features/auth/model/permissions"
-import { PlusIcon, SearchIcon } from "@/components/layout/icons"
+import { PlusIcon } from "@/components/layout/icons"
+import { contentClass, focusRing } from "@/components/layout/styles"
+import { cn } from "@/lib/utils"
 import {
   deleteDepartment,
   listDepartments,
   type Department,
 } from "../api/departments-api"
 import { CreateEditDepartmentDialog } from "../components/create-edit-department-dialog"
+import { DepartmentKpiCards } from "../components/department-kpi-cards"
+import { DepartmentTable } from "../components/department-table"
 import { ManageMembersDrawer } from "../components/manage-members-drawer"
 import "../styles/departments.css"
 
@@ -18,7 +22,6 @@ export function DepartmentManagementPage() {
   const actor = usePortalAccount()
   const [departments, setDepartments] = useState<Department[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState("")
   const [error, setError] = useState("")
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingDept, setEditingDept] = useState<Department | null>(null)
@@ -74,24 +77,17 @@ export function DepartmentManagementPage() {
     }
   }
 
-  const filteredDepartments = departments.filter((dept) => {
-    const q = search.toLowerCase().trim()
-    if (!q) return true
-    return (
-      dept.name.toLowerCase().includes(q) ||
-      dept.code?.toLowerCase().includes(q) ||
-      dept.head?.fullName?.toLowerCase().includes(q) ||
-      dept.head?.email.toLowerCase().includes(q)
-    )
-  })
-
   return (
-    <main className="dept-page">
-      <div className="dept-header-card">
+    <main
+      className={cn(contentClass, "p-[clamp(16px,2.1vw,32px)]")}
+      aria-label="Department management"
+    >
+      <header className="-mx-[clamp(16px,2.1vw,32px)] flex items-center justify-between gap-6 border-b border-[#eceef1] px-[clamp(16px,2.1vw,32px)] pt-0.5 pb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-4 max-[560px]:pb-[18px]">
         <div>
-          <div className="dept-header-eyebrow">ADMINISTRATION</div>
-          <h1 className="dept-header-title">Department Management</h1>
-          <p className="dept-header-sub">
+          <h1 className="m-0 text-[clamp(21px,2vw,25px)] leading-[1.25] font-[650] tracking-[-0.03em] text-foreground">
+            Department Management
+          </h1>
+          <p className="mt-[5px] mb-0 text-xs leading-[1.45] text-[#738096]">
             Organize departments, assign department heads, and manage employee
             assignments.
           </p>
@@ -99,121 +95,47 @@ export function DepartmentManagementPage() {
         {canManage && (
           <button
             type="button"
-            className="dept-primary-btn"
+            className={cn(
+              "inline-flex min-h-[34px] flex-none items-center justify-center gap-[7px] rounded-lg border border-transparent bg-[#203f8c] px-[13px] text-xs leading-[1.2] font-semibold whitespace-nowrap text-white cursor-pointer transition-[background-color,border-color,color] duration-150 hover:bg-[#172f70] motion-reduce:transition-none",
+              focusRing,
+            )}
             onClick={() => {
               setEditingDept(null)
               setDialogOpen(true)
             }}
           >
-            <PlusIcon /> Create Department
+            <PlusIcon width="14" height="14" /> Create Department
           </button>
         )}
+      </header>
+
+      <div className="mt-[18px] max-[560px]:mt-[14px]">
+        <DepartmentKpiCards
+          departments={departments}
+          loading={loading}
+          unavailable={Boolean(error)}
+        />
       </div>
 
-      <div className="dept-container">
-        <div className="dept-toolbar">
-          <div className="dept-search-wrapper">
-            <span className="dept-search-icon">
-              <SearchIcon />
-            </span>
-            <input
-              type="search"
-              className="dept-search-input"
-              placeholder="Search department or head..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <div style={{ color: "#64748b", fontSize: "0.875rem" }}>
-            {filteredDepartments.length}{" "}
-            {filteredDepartments.length === 1 ? "department" : "departments"}
-          </div>
-        </div>
-
-        {error && (
-          <div
-            style={{
-              padding: "12px 16px",
-              background: "#fef2f2",
-              color: "#991b1b",
-              borderRadius: "8px",
-              marginBottom: "16px",
-            }}
-          >
-            {error}
-          </div>
-        )}
-
-        {loading ? (
-          <div className="dept-empty-state">Loading departments...</div>
-        ) : filteredDepartments.length === 0 ? (
-          <div className="dept-empty-state">
-            {search
-              ? "No departments matched your search."
-              : "No departments created yet. Create one above!"}
-          </div>
-        ) : (
-          <div className="dept-grid">
-            {filteredDepartments.map((dept) => (
-              <div key={dept.id} className="dept-card">
-                <div>
-                  <div className="dept-card-top">
-                    <h3 className="dept-card-title">{dept.name}</h3>
-                    {dept.code && (
-                      <span className="dept-badge">{dept.code}</span>
-                    )}
-                  </div>
-                  <p className="dept-desc">
-                    {dept.description || "No description provided."}
-                  </p>
-
-                  <div className="dept-meta-box">
-                    <div className="dept-meta-row">
-                      <span className="dept-meta-label">Department Head</span>
-                      <span className="dept-meta-val">
-                        {dept.head
-                          ? dept.head.fullName || dept.head.email
-                          : "Unassigned"}
-                      </span>
-                    </div>
-                    <div className="dept-meta-row">
-                      <span className="dept-meta-label">Structure</span>
-                      <span className="dept-meta-val">
-                        {dept.teamCount ?? 0}{" "}
-                        {(dept.teamCount ?? 0) === 1 ? "team" : "teams"} •{" "}
-                        {dept.memberCount}{" "}
-                        {dept.memberCount === 1 ? "employee" : "employees"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="dept-card-actions">
-                  <button
-                    type="button"
-                    className="dept-btn-outline"
-                    onClick={() => setSelectedDeptIdForMembers(dept.id)}
-                  >
-                    Members & Teams ({dept.memberCount})
-                  </button>
-                  {canManage && (
-                    <button
-                      type="button"
-                      className="dept-btn-outline"
-                      onClick={() => {
-                        setEditingDept(dept)
-                        setDialogOpen(true)
-                      }}
-                    >
-                      Edit
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      <section className="mt-4 min-w-0" aria-label="Departments">
+        <DepartmentTable
+          departments={departments}
+          loading={loading}
+          error={error}
+          canManage={canManage}
+          canDelete={canDelete}
+          onEdit={(department) => {
+            setEditingDept(department)
+            setDialogOpen(true)
+          }}
+          onManageMembers={setSelectedDeptIdForMembers}
+          onDelete={handleDelete}
+          onRetry={() => {
+            setLoading(true)
+            setRevision((r) => r + 1)
+          }}
+        />
+      </section>
 
       {dialogOpen && (
         <CreateEditDepartmentDialog

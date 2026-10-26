@@ -1,18 +1,27 @@
-import { cpSync, mkdirSync } from "node:fs"
+import { cp, mkdir } from "node:fs/promises"
 import path from "node:path"
 
-const webRoot = path.resolve(import.meta.dirname, "..")
-const standaloneApp = path.join(webRoot, ".next/standalone/apps/web")
-
-// Next.js leaves these assets out of standalone output by default.
-mkdirSync(path.join(standaloneApp, ".next"), { recursive: true })
-cpSync(path.join(webRoot, "public"), path.join(standaloneApp, "public"), {
-  recursive: true,
-})
-cpSync(
-  path.join(webRoot, ".next/static"),
-  path.join(standaloneApp, ".next/static"),
-  {
-    recursive: true,
-  },
+const appRoot = path.resolve(import.meta.dirname, "..")
+const standaloneAppRoot = path.join(
+  appRoot,
+  ".next",
+  "standalone",
+  "apps",
+  "web",
 )
+
+async function copyDirectory(source, destination) {
+  await mkdir(path.dirname(destination), { recursive: true })
+  await cp(source, destination, { recursive: true, force: true })
+}
+
+await Promise.all([
+  copyDirectory(
+    path.join(appRoot, "public"),
+    path.join(standaloneAppRoot, "public"),
+  ),
+  copyDirectory(
+    path.join(appRoot, ".next", "static"),
+    path.join(standaloneAppRoot, ".next", "static"),
+  ),
+])
