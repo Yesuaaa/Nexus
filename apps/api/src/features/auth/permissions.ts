@@ -14,6 +14,8 @@ export const Permission = {
   DEPARTMENTS_READ: "departments:read",
   DEPARTMENTS_MANAGE: "departments:manage",
   DEPARTMENTS_DELETE: "departments:delete",
+  EMPLOYEES_READ: "employees:read",
+  EMPLOYEES_MANAGE: "employees:manage",
 } as const
 
 export type Permission = (typeof Permission)[keyof typeof Permission]
@@ -42,7 +44,11 @@ const adminPermissions = [
 const rolePermissions: Record<Role, readonly Permission[]> = {
   [Role.USER]: commonPermissions,
   [Role.STAFF]: staffPermissions,
-  [Role.ADMIN]: adminPermissions,
+  [Role.ADMIN]: [
+    ...adminPermissions,
+    Permission.EMPLOYEES_READ,
+    Permission.EMPLOYEES_MANAGE,
+  ],
   [Role.SUPERADMIN]: [
     ...adminPermissions,
     Permission.ACCOUNTS_CREATE_PRIVILEGED,

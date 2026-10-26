@@ -1,9 +1,36 @@
 import { Router } from "express"
-import { Role } from "../../generated/prisma/client.js"
+import { Role, type Prisma } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { requireAuth, requirePermission } from "../auth/session.js"
 import { Permission } from "../auth/permissions.js"
 import { publicUser } from "../users/public-user.js"
+import {
+  EmployeeError,
+  employeeInclude,
+  syncEmployeeForUser,
+  updateEmployee,
+} from "../employees/service.js"
+
+const departmentMemberSelect = {
+  id: true,
+  userId: true,
+  fullName: true,
+  email: true,
+  contactNumber: true,
+  position: true,
+  teamId: true,
+  team: { select: { id: true, name: true } },
+  createdAt: true,
+  user: {
+    select: {
+      id: true,
+      email: true,
+      fullName: true,
+      role: true,
+      isActive: true,
+    },
+  },
+} satisfies Prisma.EmployeeSelect
 
 export const departmentsRouter = Router()
 departmentsRouter.use(requireAuth)
@@ -26,7 +53,7 @@ departmentsRouter.get(
           },
         },
         _count: {
-          select: { members: true, teams: true },
+          select: { employees: true, teams: true },
         },
       },
     })
@@ -39,7 +66,7 @@ departmentsRouter.get(
         description: d.description,
         headId: d.headId,
         head: d.head,
-        memberCount: d._count.members,
+        memberCount: d._count.employees,
         teamCount: d._count.teams,
         createdAt: d.createdAt,
         updatedAt: d.updatedAt,
@@ -88,102 +115,108 @@ departmentsRouter.get(
   requirePermission(Permission.DEPARTMENTS_READ),
   async (request, response) => {
     const prisma = getPrisma()!
-    const department = await prisma.department.findUnique({
-      where: { id: String(request.params.id) },
-      include: {
-        head: {
-          select: {
-            id: true,
-            email: true,
-            fullName: true,
-            role: true,
-            position: true,
+    const department = await prisma.$transaction(async (tx) => {
+      const departmentId = String(request.params.id)
+      const existing = await tx.department.findUnique({
+        where: { id: departmentId },
+        select: { id: true, headId: true },
+      })
+      if (!existing) return null
+
+      const staleMembers = await tx.user.findMany({
+        where: {
+          departmentId,
+          id: { not: existing.headId ?? "" },
+          position: {
+            in: [
+              "Dept Head",
+              "dept head",
+              "Department Head",
+              "department head",
+            ],
           },
         },
-        members: {
-          select: {
-            id: true,
-            email: true,
-            fullName: true,
-            role: true,
-            position: true,
-            contactNumber: true,
-            teamId: true,
-            team: {
-              select: { id: true, name: true },
+        select: { id: true },
+      })
+      for (const member of staleMembers) {
+        await tx.user.update({
+          where: { id: member.id },
+          data: { position: null },
+        })
+        await syncEmployeeForUser(tx, member.id)
+      }
+
+      if (existing.headId) {
+        const headWithTeam = await tx.user.findFirst({
+          where: { id: existing.headId, teamId: { not: null } },
+          select: { id: true },
+        })
+        if (headWithTeam) {
+          await tx.user.update({
+            where: { id: headWithTeam.id },
+            data: { teamId: null },
+          })
+          await syncEmployeeForUser(tx, headWithTeam.id)
+        }
+      }
+
+      return tx.department.findUnique({
+        where: { id: departmentId },
+        include: {
+          head: {
+            select: {
+              id: true,
+              email: true,
+              fullName: true,
+              role: true,
+              position: true,
             },
-            createdAt: true,
-            updatedAt: true,
           },
-          orderBy: [{ role: "asc" }, { fullName: "asc" }],
-        },
-        teams: {
-          include: {
-            lead: {
-              select: {
-                id: true,
-                email: true,
-                fullName: true,
-                role: true,
-                position: true,
+          employees: {
+            select: departmentMemberSelect,
+            orderBy: [{ fullName: "asc" }, { employeeId: "asc" }],
+          },
+          teams: {
+            include: {
+              lead: {
+                select: {
+                  id: true,
+                  email: true,
+                  fullName: true,
+                  role: true,
+                  position: true,
+                },
+              },
+              _count: {
+                select: { employees: true },
               },
             },
-            _count: {
-              select: { members: true },
-            },
+            orderBy: { name: "asc" },
           },
-          orderBy: { name: "asc" },
         },
-      },
+      })
     })
 
     if (!department) {
       return response.status(404).json({ error: "Department not found" })
     }
 
-    // Clean up any stale "Dept Head" positions on members who are not the department head
-    await prisma.user.updateMany({
-      where: {
-        departmentId: department.id,
-        id: { not: department.headId ?? "" },
-        position: {
-          in: ["Dept Head", "dept head", "Department Head", "department head"],
-        },
-      },
-      data: { position: null },
-    })
-
-    if (department.headId) {
-      await prisma.user.updateMany({
-        where: { id: department.headId, teamId: { not: null } },
-        data: { teamId: null },
-      })
-    }
+    const { employees, teams, ...departmentFields } = department
 
     response.json({
       department: {
-        ...department,
-        members: department.members.map((m) => {
-          const isHead = m.id === department.headId
-          const lowerPos = m.position?.toLowerCase()
-          const hasStaleHeadPos =
-            !isHead &&
-            (lowerPos === "dept head" || lowerPos === "department head")
-          return {
-            ...m,
-            position: hasStaleHeadPos ? null : m.position,
-            teamId: isHead ? null : m.teamId,
-            team: isHead ? null : m.team,
-          }
-        }),
-        teams: department.teams.map((t) => ({
+        ...departmentFields,
+        members: employees,
+        memberCount: employees.length,
+        teamCount: teams.length,
+        teams: teams.map((t) => ({
           id: t.id,
           name: t.name,
           description: t.description,
           departmentId: t.departmentId,
           leadId: t.leadId,
           lead: t.lead,
-          memberCount: t._count.members,
+          memberCount: t._count.employees,
           createdAt: t.createdAt,
           updatedAt: t.updatedAt,
         })),
@@ -233,36 +266,52 @@ departmentsRouter.post(
           .status(400)
           .json({ error: "Selected department head user not found" })
       }
+      const teamLead = await prisma.team.findFirst({
+        where: { leadId: headId },
+        select: { id: true },
+      })
+      if (teamLead) {
+        return response.status(409).json({
+          error:
+            "Reassign this Team Lead before making them a Department Head.",
+        })
+      }
     }
 
     try {
-      const department = await prisma.department.create({
-        data: {
-          name,
-          code: code || null,
-          description: description || null,
-          headId,
-        },
-        include: {
-          head: {
-            select: { id: true, email: true, fullName: true, role: true },
+      const department = await prisma.$transaction(async (tx) => {
+        const created = await tx.department.create({
+          data: {
+            name,
+            code: code || null,
+            description: description || null,
+            headId,
           },
-          _count: { select: { members: true } },
-        },
-      })
-
-      // Also ensure that the head is a member of this department with no sub-team
-      if (headId) {
-        await prisma.user.update({
-          where: { id: headId },
-          data: { departmentId: department.id, teamId: null },
         })
-      }
+
+        if (headId) {
+          await tx.user.update({
+            where: { id: headId },
+            data: { departmentId: created.id, teamId: null },
+          })
+          await syncEmployeeForUser(tx, headId)
+        }
+
+        return tx.department.findUniqueOrThrow({
+          where: { id: created.id },
+          include: {
+            head: {
+              select: { id: true, email: true, fullName: true, role: true },
+            },
+            _count: { select: { employees: true } },
+          },
+        })
+      })
 
       return response.status(201).json({
         department: {
           ...department,
-          memberCount: department._count.members,
+          memberCount: department._count.employees,
         },
       })
     } catch (error) {
@@ -341,55 +390,75 @@ departmentsRouter.put(
           .status(400)
           .json({ error: "Selected department head user not found" })
       }
+      const teamLead = await prisma.team.findFirst({
+        where: { leadId: headId },
+        select: { id: true },
+      })
+      if (teamLead) {
+        return response.status(409).json({
+          error:
+            "Reassign this Team Lead before making them a Department Head.",
+        })
+      }
     }
 
     try {
-      const updated = await prisma.department.update({
-        where: { id },
-        data: {
-          ...(name !== undefined ? { name } : {}),
-          ...(code !== undefined ? { code } : {}),
-          ...(description !== undefined ? { description } : {}),
-          ...(headId !== undefined ? { headId } : {}),
-        },
-        include: {
-          head: {
-            select: { id: true, email: true, fullName: true, role: true },
+      const updated = await prisma.$transaction(async (tx) => {
+        const current = await tx.department.findUniqueOrThrow({ where: { id } })
+        const saved = await tx.department.update({
+          where: { id },
+          data: {
+            ...(name !== undefined ? { name } : {}),
+            ...(code !== undefined ? { code } : {}),
+            ...(description !== undefined ? { description } : {}),
+            ...(headId !== undefined ? { headId } : {}),
           },
-          _count: { select: { members: true } },
-        },
-      })
+        })
 
-      if (headId !== undefined) {
-        if (existing.headId && existing.headId !== headId) {
-          await prisma.user.updateMany({
-            where: {
-              id: existing.headId,
-              position: {
-                in: [
-                  "Dept Head",
-                  "dept head",
-                  "Department Head",
-                  "department head",
-                ],
-              },
+        if (headId !== undefined) {
+          if (current.headId && current.headId !== headId) {
+            const oldHead = await tx.user.findUnique({
+              where: { id: current.headId },
+              select: { id: true, position: true },
+            })
+            if (
+              oldHead?.position &&
+              ["dept head", "department head"].includes(
+                oldHead.position.toLowerCase(),
+              )
+            ) {
+              await tx.user.update({
+                where: { id: oldHead.id },
+                data: { position: null },
+              })
+            }
+            await syncEmployeeForUser(tx, current.headId)
+          }
+
+          if (headId) {
+            await tx.user.update({
+              where: { id: headId },
+              data: { departmentId: id, teamId: null },
+            })
+            await syncEmployeeForUser(tx, headId)
+          }
+        }
+
+        return tx.department.findUniqueOrThrow({
+          where: { id: saved.id },
+          include: {
+            head: {
+              select: { id: true, email: true, fullName: true, role: true },
             },
-            data: { position: null },
-          })
-        }
-
-        if (headId) {
-          await prisma.user.update({
-            where: { id: headId },
-            data: { departmentId: id, teamId: null },
-          })
-        }
-      }
+            _count: { select: { employees: true } },
+          },
+        })
+      })
 
       return response.json({
         department: {
           ...updated,
-          memberCount: updated._count.members,
+          memberCount: updated._count.employees,
         },
       })
     } catch (error) {
@@ -414,16 +483,35 @@ departmentsRouter.post(
   requirePermission(Permission.DEPARTMENTS_MANAGE),
   async (request, response) => {
     const id = String(request.params.id)
+    const employeeIds = request.body?.employeeIds
     const userIds = request.body?.userIds
 
     if (
-      !Array.isArray(userIds) ||
-      userIds.length === 0 ||
-      !userIds.every((uid) => typeof uid === "string")
+      (employeeIds === undefined && userIds === undefined) ||
+      (employeeIds !== undefined &&
+        (!Array.isArray(employeeIds) ||
+          employeeIds.length === 0 ||
+          employeeIds.length > 1000 ||
+          !employeeIds.every(
+            (employeeId) =>
+              typeof employeeId === "string" &&
+              employeeId.length > 0 &&
+              employeeId.length <= 80,
+          ))) ||
+      (userIds !== undefined &&
+        (!Array.isArray(userIds) ||
+          userIds.length === 0 ||
+          userIds.length > 1000 ||
+          !userIds.every(
+            (userId) =>
+              typeof userId === "string" &&
+              userId.length > 0 &&
+              userId.length <= 80,
+          )))
     ) {
       return response
         .status(400)
-        .json({ error: "Provide a list of user IDs to assign" })
+        .json({ error: "Provide a list of employee IDs to assign" })
     }
 
     const prisma = getPrisma()!
@@ -432,32 +520,97 @@ departmentsRouter.post(
       return response.status(404).json({ error: "Department not found" })
     }
 
-    await prisma.user.updateMany({
-      where: { id: { in: userIds } },
-      data: { departmentId: id },
-    })
+    try {
+      const updatedMembers = await prisma.$transaction(async (tx) => {
+        for (const employeeId of employeeIds ?? []) {
+          const employee = await tx.employee.findUnique({
+            where: { id: employeeId },
+            select: { id: true, departmentId: true, teamId: true },
+          })
+          if (!employee) {
+            throw new EmployeeError(404, "Employee not found")
+          }
+          const currentTeam = employee.teamId
+            ? await tx.team.findUnique({
+                where: { id: employee.teamId },
+                select: { departmentId: true },
+              })
+            : null
+          await updateEmployee(tx, employee.id, {
+            departmentId: id,
+            ...(currentTeam?.departmentId !== id ? { teamId: null } : {}),
+          })
+        }
 
-    const updatedMembers = await prisma.user.findMany({
-      where: { departmentId: id },
-      include: {
-        department: { select: { id: true, name: true, code: true } },
-      },
-    })
+        for (const userId of userIds ?? []) {
+          const user = await tx.user.findUnique({
+            where: { id: userId },
+            select: { id: true, teamId: true },
+          })
+          if (!user) {
+            throw new EmployeeError(404, "User not found")
+          }
+          await syncEmployeeForUser(tx, user.id)
+          const employee = await tx.employee.findUnique({
+            where: { userId: user.id },
+            select: { id: true, departmentId: true, teamId: true },
+          })
+          if (!employee) {
+            const currentTeam = user.teamId
+              ? await tx.team.findUnique({
+                  where: { id: user.teamId },
+                  select: { departmentId: true },
+                })
+              : null
+            await tx.user.update({
+              where: { id: user.id },
+              data: {
+                departmentId: id,
+                ...(currentTeam?.departmentId !== id ? { teamId: null } : {}),
+              },
+            })
+            await syncEmployeeForUser(tx, user.id)
+          } else {
+            const currentTeam = employee.teamId
+              ? await tx.team.findUnique({
+                  where: { id: employee.teamId },
+                  select: { departmentId: true },
+                })
+              : null
+            await updateEmployee(tx, employee.id, {
+              departmentId: id,
+              ...(currentTeam?.departmentId !== id ? { teamId: null } : {}),
+            })
+          }
+        }
 
-    return response.json({
-      message: "Members assigned successfully",
-      members: updatedMembers.map(publicUser),
-    })
+        return tx.employee.findMany({
+          where: { departmentId: id },
+          include: employeeInclude,
+          orderBy: [{ fullName: "asc" }, { employeeId: "asc" }],
+        })
+      })
+
+      return response.json({
+        message: "Members assigned successfully",
+        members: updatedMembers,
+      })
+    } catch (error) {
+      if (error instanceof EmployeeError) {
+        return response.status(error.status).json({ error: error.message })
+      }
+      throw error
+    }
   },
 )
 
-// DELETE /api/departments/:id/members/:userId - Remove employee from department
+// DELETE /api/departments/:id/members/:memberId - Remove employee from department
 departmentsRouter.delete(
-  "/:id/members/:userId",
+  "/:id/members/:memberId",
   requirePermission(Permission.DEPARTMENTS_MANAGE),
   async (request, response) => {
     const id = String(request.params.id)
-    const userId = String(request.params.userId)
+    const memberId = String(request.params.memberId)
 
     const prisma = getPrisma()!
     const dept = await prisma.department.findUnique({ where: { id } })
@@ -465,19 +618,49 @@ departmentsRouter.delete(
       return response.status(404).json({ error: "Department not found" })
     }
 
-    // Check if the user is the head of the department
-    if (dept.headId === userId) {
+    const employee = await prisma.employee.findFirst({
+      where: { id: memberId, departmentId: id },
+      select: { id: true, userId: true },
+    })
+
+    if (employee) {
+      if (dept.headId !== null && dept.headId === employee.userId) {
+        return response.status(400).json({
+          error:
+            "Cannot remove the Department Head from members. To remove or replace the head, use Edit Department.",
+        })
+      }
+      try {
+        await prisma.$transaction((tx) =>
+          updateEmployee(tx, employee.id, { departmentId: null, teamId: null }),
+        )
+        return response.json({ message: "Employee removed from department" })
+      } catch (error) {
+        if (error instanceof EmployeeError) {
+          return response.status(error.status).json({ error: error.message })
+        }
+        throw error
+      }
+    }
+
+    const user = await prisma.user.findFirst({
+      where: { id: memberId, departmentId: id },
+      select: { id: true },
+    })
+    if (!user) return response.status(404).json({ error: "Member not found" })
+    if (dept.headId !== null && dept.headId === user.id) {
       return response.status(400).json({
         error:
           "Cannot remove the Department Head from members. To remove or replace the head, use Edit Department.",
       })
     }
-
-    await prisma.user.updateMany({
-      where: { id: userId, departmentId: id },
-      data: { departmentId: null },
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: { departmentId: null, teamId: null },
+      })
+      await syncEmployeeForUser(tx, user.id)
     })
-
     return response.json({ message: "Employee removed from department" })
   },
 )
@@ -495,13 +678,24 @@ departmentsRouter.delete(
       return response.status(404).json({ error: "Department not found" })
     }
 
-    // Clear departmentId from all members before deletion
-    await prisma.user.updateMany({
-      where: { departmentId: id },
-      data: { departmentId: null },
+    await prisma.$transaction(async (tx) => {
+      const linkedUsers = await tx.user.findMany({
+        where: { departmentId: id },
+        select: { id: true },
+      })
+      await tx.user.updateMany({
+        where: { departmentId: id },
+        data: { departmentId: null, teamId: null },
+      })
+      await tx.employee.updateMany({
+        where: { departmentId: id },
+        data: { departmentId: null, teamId: null },
+      })
+      for (const user of linkedUsers) {
+        await syncEmployeeForUser(tx, user.id)
+      }
+      await tx.department.delete({ where: { id } })
     })
-
-    await prisma.department.delete({ where: { id } })
 
     return response.json({ message: "Department deleted successfully" })
   },
@@ -537,41 +731,63 @@ departmentsRouter.post(
     if (!dept) {
       return response.status(404).json({ error: "Department not found" })
     }
-
-    try {
-      const team = await prisma.team.create({
-        data: {
-          name,
-          description: description || null,
-          departmentId,
-          leadId,
-        },
-        include: {
-          lead: {
-            select: {
-              id: true,
-              email: true,
-              fullName: true,
-              role: true,
-              position: true,
-            },
-          },
-          _count: { select: { members: true } },
-        },
+    if (leadId) {
+      const leadDepartment = await prisma.department.findFirst({
+        where: { headId: leadId },
+        select: { id: true },
       })
-
-      // If leadId is set, ensure they belong to this department and team
-      if (leadId) {
-        await prisma.user.update({
-          where: { id: leadId },
-          data: { departmentId, teamId: team.id },
+      const otherLeadTeam = await prisma.team.findFirst({
+        where: { leadId },
+        select: { id: true },
+      })
+      if (leadDepartment || otherLeadTeam) {
+        return response.status(400).json({
+          error:
+            "Reassign the current lead role before assigning this Team Lead.",
         })
       }
+    }
+
+    try {
+      const team = await prisma.$transaction(async (tx) => {
+        const created = await tx.team.create({
+          data: {
+            name,
+            description: description || null,
+            departmentId,
+            leadId,
+          },
+        })
+
+        if (leadId) {
+          await tx.user.update({
+            where: { id: leadId },
+            data: { departmentId, teamId: created.id },
+          })
+          await syncEmployeeForUser(tx, leadId)
+        }
+
+        return tx.team.findUniqueOrThrow({
+          where: { id: created.id },
+          include: {
+            lead: {
+              select: {
+                id: true,
+                email: true,
+                fullName: true,
+                role: true,
+                position: true,
+              },
+            },
+            _count: { select: { employees: true } },
+          },
+        })
+      })
 
       return response.status(201).json({
         team: {
           ...team,
-          memberCount: team._count.members,
+          memberCount: team._count.employees,
         },
       })
     } catch (error) {
@@ -629,39 +845,69 @@ departmentsRouter.put(
       return response.status(404).json({ error: "Team not found" })
     }
 
-    try {
-      const updated = await prisma.team.update({
-        where: { id: teamId },
-        data: {
-          ...(name !== undefined ? { name } : {}),
-          ...(description !== undefined ? { description } : {}),
-          ...(leadId !== undefined ? { leadId } : {}),
-        },
-        include: {
-          lead: {
-            select: {
-              id: true,
-              email: true,
-              fullName: true,
-              role: true,
-              position: true,
-            },
-          },
-          _count: { select: { members: true } },
-        },
-      })
-
-      if (leadId) {
-        await prisma.user.update({
-          where: { id: leadId },
-          data: { departmentId, teamId },
+    if (leadId) {
+      const [leadDepartment, otherLeadTeam] = await Promise.all([
+        prisma.department.findFirst({
+          where: { headId: leadId },
+          select: { id: true },
+        }),
+        prisma.team.findFirst({
+          where: { leadId, id: { not: teamId } },
+          select: { id: true },
+        }),
+      ])
+      if (leadDepartment || otherLeadTeam) {
+        return response.status(409).json({
+          error:
+            "Reassign the current lead role before assigning this Team Lead.",
         })
       }
+    }
+
+    try {
+      const updated = await prisma.$transaction(async (tx) => {
+        await tx.team.update({
+          where: { id: teamId },
+          data: {
+            ...(name !== undefined ? { name } : {}),
+            ...(description !== undefined ? { description } : {}),
+            ...(leadId !== undefined ? { leadId } : {}),
+          },
+        })
+
+        if (existing.leadId && existing.leadId !== leadId) {
+          await syncEmployeeForUser(tx, existing.leadId)
+        }
+
+        if (leadId) {
+          await tx.user.update({
+            where: { id: leadId },
+            data: { departmentId, teamId },
+          })
+          await syncEmployeeForUser(tx, leadId)
+        }
+
+        return tx.team.findUniqueOrThrow({
+          where: { id: teamId },
+          include: {
+            lead: {
+              select: {
+                id: true,
+                email: true,
+                fullName: true,
+                role: true,
+                position: true,
+              },
+            },
+            _count: { select: { employees: true } },
+          },
+        })
+      })
 
       return response.json({
         team: {
           ...updated,
-          memberCount: updated._count.members,
+          memberCount: updated._count.employees,
         },
       })
     } catch (error) {
@@ -696,25 +942,36 @@ departmentsRouter.delete(
       return response.status(404).json({ error: "Team not found" })
     }
 
-    // Unlink members from this team
-    await prisma.user.updateMany({
-      where: { teamId },
-      data: { teamId: null },
+    await prisma.$transaction(async (tx) => {
+      const linkedUsers = await tx.user.findMany({
+        where: { teamId },
+        select: { id: true },
+      })
+      await tx.user.updateMany({
+        where: { teamId },
+        data: { teamId: null },
+      })
+      await tx.employee.updateMany({
+        where: { teamId },
+        data: { teamId: null },
+      })
+      for (const user of linkedUsers) {
+        await syncEmployeeForUser(tx, user.id)
+      }
+      await tx.team.delete({ where: { id: teamId } })
     })
-
-    await prisma.team.delete({ where: { id: teamId } })
 
     return response.json({ message: "Team deleted successfully" })
   },
 )
 
-// PATCH /api/departments/:id/members/:userId - Update member position and team
+// PATCH /api/departments/:id/members/:memberId - Update member position and team
 departmentsRouter.patch(
-  "/:id/members/:userId",
+  "/:id/members/:memberId",
   requirePermission(Permission.DEPARTMENTS_MANAGE),
   async (request, response) => {
     const departmentId = String(request.params.id)
-    const userId = String(request.params.userId)
+    const memberId = String(request.params.memberId)
     const position =
       request.body?.position !== undefined
         ? typeof request.body?.position === "string" &&
@@ -730,20 +987,32 @@ departmentsRouter.patch(
         : undefined
 
     const prisma = getPrisma()!
-    const user = await prisma.user.findFirst({
-      where: { id: userId, departmentId },
+    const employee = await prisma.employee.findFirst({
+      where: { id: memberId, departmentId },
+      select: { id: true, userId: true },
     })
-    if (!user) {
-      return response
-        .status(404)
-        .json({ error: "Member not found in this department" })
-    }
-
     const dept = await prisma.department.findUnique({
       where: { id: departmentId },
       select: { headId: true },
     })
-    if (dept?.headId === userId && teamId) {
+    if (employee && dept?.headId && dept.headId === employee.userId && teamId) {
+      return response.status(400).json({
+        error:
+          "The Department Head oversees the entire department and cannot be assigned to a sub-team",
+      })
+    }
+
+    const user = employee
+      ? null
+      : await prisma.user.findFirst({
+          where: { id: memberId, departmentId },
+        })
+    if (!employee && !user) {
+      return response
+        .status(404)
+        .json({ error: "Member not found in this department" })
+    }
+    if (user && dept?.headId && dept.headId === user.id && teamId) {
       return response.status(400).json({
         error:
           "The Department Head oversees the entire department and cannot be assigned to a sub-team",
@@ -753,7 +1022,8 @@ departmentsRouter.patch(
     if (position !== undefined && position !== null) {
       const lower = position.toLowerCase()
       if (
-        dept?.headId !== userId &&
+        (dept?.headId == null ||
+          dept.headId !== (employee?.userId ?? user?.id)) &&
         (lower === "dept head" || lower === "department head")
       ) {
         return response.status(400).json({
@@ -774,18 +1044,39 @@ departmentsRouter.patch(
       }
     }
 
-    const updated = await prisma.user.update({
-      where: { id: userId },
-      data: {
-        ...(position !== undefined ? { position } : {}),
-        ...(teamId !== undefined ? { teamId } : {}),
-      },
-      include: {
-        department: { select: { id: true, name: true, code: true } },
-        team: { select: { id: true, name: true } },
-      },
-    })
+    try {
+      if (employee) {
+        const updated = await prisma.$transaction((tx) =>
+          updateEmployee(tx, employee.id, {
+            ...(position !== undefined ? { position } : {}),
+            ...(teamId !== undefined ? { teamId } : {}),
+          }),
+        )
+        return response.json({ employee: updated })
+      }
 
-    return response.json({ user: publicUser(updated) })
+      const updated = await prisma.$transaction(async (tx) => {
+        const saved = await tx.user.update({
+          where: { id: user!.id },
+          data: {
+            ...(position !== undefined ? { position } : {}),
+            ...(teamId !== undefined ? { teamId } : {}),
+          },
+          include: {
+            department: { select: { id: true, name: true, code: true } },
+            team: { select: { id: true, name: true } },
+          },
+        })
+        await syncEmployeeForUser(tx, saved.id)
+        return saved
+      })
+
+      return response.json({ user: publicUser(updated) })
+    } catch (error) {
+      if (error instanceof EmployeeError) {
+        return response.status(error.status).json({ error: error.message })
+      }
+      throw error
+    }
   },
 )

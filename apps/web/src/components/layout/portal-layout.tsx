@@ -7,6 +7,7 @@ import { signOut } from "@/features/auth/api/auth-api"
 import { useAccount } from "@/features/auth/hooks/use-account"
 import {
   canAccessDepartmentManagement,
+  canAccessEmployeeManagement,
   hasPermission,
   Permissions,
 } from "@/features/auth/model/permissions"
@@ -26,7 +27,10 @@ export function PortalLayout({ children }: { children: ReactNode }) {
     !!account &&
     ((pathname === "/accounts" &&
       !hasPermission(account, Permissions.ACCOUNTS_READ)) ||
-      (pathname === "/departments" && !canAccessDepartmentManagement(account)))
+      (pathname === "/departments" &&
+        !canAccessDepartmentManagement(account)) ||
+      (pathname.startsWith("/employees") &&
+        !canAccessEmployeeManagement(account)))
 
   useEffect(() => {
     if (denied) router.replace("/dashboard")

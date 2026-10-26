@@ -20,6 +20,19 @@ enum Role {
   USER
 }
 
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERN
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+  ON_LEAVE
+}
+
 model User {
   id            String      @id @default(cuid())
   email         String      @unique
@@ -37,6 +50,7 @@ model User {
   teamId        String?
   team          Team?       @relation("TeamMembers", fields: [teamId], references: [id], onDelete: SetNull)
   leadOfTeam    Team?       @relation("TeamLead")
+  employee      Employee?
   sessions      Session[]
 
   @@index([departmentId])
@@ -51,6 +65,7 @@ model Department {
   headId      String?  @unique
   head        User?    @relation("DepartmentHead", fields: [headId], references: [id], onDelete: SetNull)
   members     User[]   @relation("DepartmentMembers")
+  employees   Employee[]
   teams       Team[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -67,12 +82,39 @@ model Team {
   leadId       String?    @unique
   lead         User?      @relation("TeamLead", fields: [leadId], references: [id], onDelete: SetNull)
   members      User[]     @relation("TeamMembers")
+  employees    Employee[]
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
   @@unique([departmentId, name])
   @@index([departmentId])
   @@index([leadId])
+}
+
+model Employee {
+  id             String         @id @default(cuid())
+  employeeId     String         @unique
+  fullName       String
+  email          String?
+  contactNumber  String?
+  position       String?
+  employmentType EmploymentType @default(FULL_TIME)
+  status         EmployeeStatus @default(ACTIVE)
+  startDate      DateTime?
+  departmentId   String?
+  department     Department?    @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  teamId         String?
+  team           Team?          @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  userId         String?        @unique
+  user           User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([departmentId])
+  @@index([teamId])
+  @@index([status])
+  @@index([employmentType])
+  @@index([fullName])
 }
 
 model Session {

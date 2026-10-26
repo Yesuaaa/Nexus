@@ -10,6 +10,8 @@ A pnpm workspace with an independent web frontend, API, and mobile app:
 
 The browser calls the API over HTTP. Prisma and database credentials exist only in `apps/api`.
 
+Feature development records and their dates live in [docs/features](docs/features/README.md). See [Employee Management (Admin)](docs/features/employee-management.md) for the feature's access rules, validation, and department integration.
+
 ## Requirements
 
 - Node.js 22.12+ or 24+

@@ -1,4 +1,5 @@
 import { apiRequest } from "@/features/auth/api/auth-api"
+import { listEmployees as fetchEmployees } from "@/features/employees/api/employees-api"
 
 export const COMPANY_DEPARTMENT_PRESETS = [
   {
@@ -61,14 +62,22 @@ export type Department = {
 
 export type DepartmentMember = {
   id: string
-  email: string
-  fullName: string | null
-  role: "SUPERADMIN" | "ADMIN" | "STAFF" | "USER"
+  userId: string | null
+  fullName: string
+  email: string | null
   contactNumber: string | null
   position: string | null
+  departmentId?: string | null
   teamId: string | null
   team: { id: string; name: string } | null
   createdAt: string
+  user: {
+    id: string
+    email: string
+    fullName: string | null
+    role: "SUPERADMIN" | "ADMIN" | "STAFF" | "USER"
+    isActive: boolean
+  } | null
 }
 
 export type DepartmentTeam = {
@@ -108,6 +117,19 @@ export async function getDepartment(id: string): Promise<DepartmentDetail> {
     `/api/departments/${encodeURIComponent(id)}`,
   )
   return result.department
+}
+
+export async function listEmployees(
+  search: string,
+  departmentId: string | undefined,
+  page: number,
+): Promise<{
+  employees: DepartmentMember[]
+  total: number
+  page: number
+  pageSize: number
+}> {
+  return fetchEmployees({ search: search.trim(), departmentId, page })
 }
 
 export async function listEligibleHeads(): Promise<EligibleHead[]> {
@@ -154,20 +176,20 @@ export async function updateDepartment(
 
 export async function assignDepartmentMembers(
   id: string,
-  userIds: string[],
+  employeeIds: string[],
 ): Promise<void> {
   await apiRequest(`/api/departments/${encodeURIComponent(id)}/members`, {
     method: "POST",
-    body: JSON.stringify({ userIds }),
+    body: JSON.stringify({ employeeIds }),
   })
 }
 
 export async function removeDepartmentMember(
   id: string,
-  userId: string,
+  employeeId: string,
 ): Promise<void> {
   await apiRequest(
-    `/api/departments/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`,
+    `/api/departments/${encodeURIComponent(id)}/members/${encodeURIComponent(employeeId)}`,
     {
       method: "DELETE",
     },
@@ -231,14 +253,14 @@ export async function deleteTeam(
 
 export async function updateDepartmentMember(
   departmentId: string,
-  userId: string,
+  employeeId: string,
   input: {
     position?: string | null
     teamId?: string | null
   },
 ): Promise<void> {
   await apiRequest(
-    `/api/departments/${encodeURIComponent(departmentId)}/members/${encodeURIComponent(userId)}`,
+    `/api/departments/${encodeURIComponent(departmentId)}/members/${encodeURIComponent(employeeId)}`,
     {
       method: "PATCH",
       body: JSON.stringify(input),

@@ -101,11 +101,18 @@ export function EditMemberDialog({
           <div className="grid gap-4 p-5">
             <div className="min-w-0 rounded-lg border border-[#e8ebef] p-3">
               <p className="m-0 truncate text-xs font-medium">
-                {member.fullName || member.email}
+                {member.fullName ||
+                  member.email ||
+                  member.user?.email ||
+                  "Employee"}
               </p>
-              <p className={`${panelMuted} mt-1 mb-0 break-all`}>
-                {member.email}
-              </p>
+              {member.email || member.user?.email ? (
+                <p className={`${panelMuted} mt-1 mb-0 break-all`}>
+                  {member.email || member.user?.email}
+                </p>
+              ) : (
+                <p className={`${panelMuted} mt-1 mb-0`}>No account linked</p>
+              )}
             </div>
             {error && (
               <p className="m-0 text-xs text-[#bc3649]" role="alert">
