@@ -8,7 +8,7 @@ import { publicUser } from "../users/public-user.js"
 export const departmentsRouter = Router()
 departmentsRouter.use(requireAuth)
 
-// GET /api/departments - List all departments with head, team count, and member counts
+// GET /api/departments - List departments with head and related record counts
 departmentsRouter.get(
   "/",
   requirePermission(Permission.DEPARTMENTS_READ),
@@ -26,7 +26,7 @@ departmentsRouter.get(
           },
         },
         _count: {
-          select: { members: true, teams: true },
+          select: { members: true, teams: true, services: true },
         },
       },
     })
@@ -41,6 +41,7 @@ departmentsRouter.get(
         head: d.head,
         memberCount: d._count.members,
         teamCount: d._count.teams,
+        serviceCount: d._count.services,
         createdAt: d.createdAt,
         updatedAt: d.updatedAt,
       })),
@@ -493,6 +494,16 @@ departmentsRouter.delete(
     const dept = await prisma.department.findUnique({ where: { id } })
     if (!dept) {
       return response.status(404).json({ error: "Department not found" })
+    }
+
+    const serviceCount = await prisma.service.count({
+      where: { departments: { some: { id } } },
+    })
+    if (serviceCount > 0) {
+      return response.status(409).json({
+        error:
+          "Reassign or remove this department's services before deleting the department",
+      })
     }
 
     // Clear departmentId from all members before deletion

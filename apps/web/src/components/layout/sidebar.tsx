@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 import type { Account } from "@/features/auth/model/types"
 import {
   canAccessDepartmentManagement,
+  canAccessServiceManagement,
   hasPermission,
   Permissions,
 } from "@/features/auth/model/permissions"
@@ -17,6 +18,7 @@ import {
   DepartmentIcon,
   PanelIcon,
   SignOutIcon,
+  ServiceIcon,
 } from "./icons"
 
 const accessLabels: Record<Account["role"], string> = {
@@ -183,6 +185,25 @@ export function Sidebar({
               <span className={collapsedLabelClass}>Department Management</span>
               {collapsed && (
                 <CollapsedTooltip>Department Management</CollapsedTooltip>
+              )}
+            </Link>
+          )}
+          {canAccessServiceManagement(account) && (
+            <Link
+              href="/services"
+              aria-current={pathname === "/services" ? "page" : undefined}
+              className={cn(
+                navLinkClass,
+                collapsed &&
+                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
+                pathname === "/services" && "bg-[#e1e3e5]",
+              )}
+              onClick={onCloseDrawer}
+            >
+              <ServiceIcon className="flex-none" />
+              <span className={collapsedLabelClass}>Service Management</span>
+              {collapsed && (
+                <CollapsedTooltip>Service Management</CollapsedTooltip>
               )}
             </Link>
           )}

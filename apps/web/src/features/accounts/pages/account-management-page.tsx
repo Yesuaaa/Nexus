@@ -8,6 +8,7 @@ import { sileo } from "sileo"
 import { cn } from "@/lib/utils"
 import { contentClass } from "@/components/layout/styles"
 import { Pill } from "@/components/ui/pill"
+import { TableSortButton } from "@/components/ui/table-sort-button"
 import { ApiError, clearToken } from "@/features/auth/api/auth-api"
 import type { Account } from "@/features/auth/model/types"
 import {
@@ -21,6 +22,8 @@ import {
   listAccounts,
   type AccountList,
   type AccountRole,
+  type AccountSortDirection,
+  type AccountSortKey,
 } from "../api/accounts-api"
 import { AccountDropdown } from "../components/account-dropdown"
 import { CreateAccountDialog } from "../components/create-account-dialog"
@@ -60,6 +63,9 @@ export function AccountManagementPage() {
   const [search, setSearch] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [roleFilter, setRoleFilter] = useState("")
+  const [sortKey, setSortKey] = useState<AccountSortKey>("createdAt")
+  const [sortDirection, setSortDirection] =
+    useState<AccountSortDirection>("desc")
   const [page, setPage] = useState(1)
   const [revision, setRevision] = useState(0)
   const [result, setResult] = useState<AccountList | null>(null)
@@ -77,6 +83,8 @@ export function AccountManagementPage() {
   const requestKey = JSON.stringify([
     debouncedSearch,
     roleFilter,
+    sortKey,
+    sortDirection,
     page,
     revision,
   ])
@@ -88,7 +96,7 @@ export function AccountManagementPage() {
 
   useEffect(() => {
     let active = true
-    listAccounts(debouncedSearch, roleFilter, page)
+    listAccounts(debouncedSearch, roleFilter, page, sortKey, sortDirection)
       .then((data) => {
         if (active) {
           setResult(data)
@@ -115,7 +123,16 @@ export function AccountManagementPage() {
     return () => {
       active = false
     }
-  }, [debouncedSearch, roleFilter, page, revision, router, requestKey])
+  }, [
+    debouncedSearch,
+    roleFilter,
+    page,
+    revision,
+    router,
+    requestKey,
+    sortDirection,
+    sortKey,
+  ])
 
   function updateSearch(value: string) {
     setSearch(value)
@@ -124,6 +141,16 @@ export function AccountManagementPage() {
 
   function updateRoleFilter(value: string) {
     setRoleFilter(value)
+    setPage(1)
+  }
+
+  function sortBy(key: AccountSortKey) {
+    if (sortKey === key) {
+      setSortDirection((value) => (value === "asc" ? "desc" : "asc"))
+    } else {
+      setSortKey(key)
+      setSortDirection(key === "createdAt" ? "desc" : "asc")
+    }
     setPage(1)
   }
 
@@ -330,13 +357,42 @@ export function AccountManagementPage() {
               accountGrid,
               "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground @max-[900px]:hidden",
             )}
-            aria-hidden="true"
           >
-            <span>Member</span>
-            <span>Role</span>
-            <span>Status</span>
-            <span>Department</span>
-            <span>Created</span>
+            <span>
+              <TableSortButton
+                label="Member"
+                direction={sortKey === "member" ? sortDirection : null}
+                onClick={() => sortBy("member")}
+              />
+            </span>
+            <span>
+              <TableSortButton
+                label="Role"
+                direction={sortKey === "role" ? sortDirection : null}
+                onClick={() => sortBy("role")}
+              />
+            </span>
+            <span>
+              <TableSortButton
+                label="Status"
+                direction={sortKey === "status" ? sortDirection : null}
+                onClick={() => sortBy("status")}
+              />
+            </span>
+            <span>
+              <TableSortButton
+                label="Department"
+                direction={sortKey === "department" ? sortDirection : null}
+                onClick={() => sortBy("department")}
+              />
+            </span>
+            <span>
+              <TableSortButton
+                label="Created"
+                direction={sortKey === "createdAt" ? sortDirection : null}
+                onClick={() => sortBy("createdAt")}
+              />
+            </span>
             <span>Access</span>
             <span>Actions</span>
           </div>

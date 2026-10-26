@@ -1,5 +1,5 @@
 import { Router } from "express"
-import { Role } from "../../generated/prisma/client.js"
+import { Prisma, Role } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { requireAuth, requirePermission } from "../auth/session.js"
 import { hasPermission, Permission } from "../auth/permissions.js"
@@ -77,11 +77,26 @@ usersRouter.get(
         : ""
     const role =
       typeof request.query.role === "string" ? request.query.role : ""
+    const sort =
+      typeof request.query.sort === "string" ? request.query.sort : "createdAt"
+    const direction =
+      typeof request.query.direction === "string"
+        ? request.query.direction
+        : "desc"
     const page = Number(request.query.page ?? 1)
     const pageSize = 20
+    const sortableColumns = [
+      "member",
+      "role",
+      "status",
+      "department",
+      "createdAt",
+    ]
     if (
       search.length > 100 ||
       (role && !Object.values(Role).includes(role as Role)) ||
+      !sortableColumns.includes(sort) ||
+      !["asc", "desc"].includes(direction) ||
       !Number.isSafeInteger(page) ||
       page < 1 ||
       page > 1_000_000
@@ -99,6 +114,25 @@ usersRouter.get(
           }
         : {}),
     }
+    const sortDirection = direction as Prisma.SortOrder
+    const orderBy: Prisma.UserOrderByWithRelationInput[] =
+      sort === "member"
+        ? [
+            { fullName: sortDirection },
+            { email: sortDirection },
+            { id: sortDirection },
+          ]
+        : sort === "role"
+          ? [{ role: sortDirection }, { fullName: "asc" }, { id: "asc" }]
+          : sort === "status"
+            ? [{ isActive: sortDirection }, { fullName: "asc" }, { id: "asc" }]
+            : sort === "department"
+              ? [
+                  { department: { name: sortDirection } },
+                  { fullName: "asc" },
+                  { id: "asc" },
+                ]
+              : [{ createdAt: sortDirection }, { id: sortDirection }]
     const prisma = getPrisma()!
     const [users, total] = await prisma.$transaction([
       prisma.user.findMany({
@@ -111,7 +145,7 @@ usersRouter.get(
             select: { id: true, name: true },
           },
         },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        orderBy,
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),

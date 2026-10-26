@@ -9,6 +9,9 @@ export type AccountList = {
 }
 
 export type AccountRole = Account["role"]
+export type AccountSortKey =
+  "member" | "role" | "status" | "department" | "createdAt"
+export type AccountSortDirection = "asc" | "desc"
 
 export type NewAccount = {
   email: string
@@ -21,10 +24,18 @@ export type NewAccount = {
   teamId?: string
 }
 
-export function listAccounts(search: string, role: string, page: number) {
+export function listAccounts(
+  search: string,
+  role: string,
+  page: number,
+  sort: AccountSortKey = "createdAt",
+  direction: AccountSortDirection = "desc",
+) {
   const params = new URLSearchParams({ page: String(page) })
   if (search) params.set("search", search)
   if (role) params.set("role", role)
+  if (sort !== "createdAt") params.set("sort", sort)
+  if (direction !== "desc") params.set("direction", direction)
   return apiRequest<AccountList>(`/api/users?${params}`)
 }
 

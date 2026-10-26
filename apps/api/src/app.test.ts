@@ -34,6 +34,10 @@ test("API routes and error responses remain available", async () => {
     assert.equal(users.status, 503)
     assert.equal(users.headers.get("cache-control"), "no-store")
 
+    const services = await fetch(`${base}/api/services`)
+    assert.equal(services.status, 503)
+    assert.equal(services.headers.get("cache-control"), "no-store")
+
     const malformed = await fetch(`${base}/api/auth/register`, {
       method: "POST",
       headers: { "content-type": "application/json" },

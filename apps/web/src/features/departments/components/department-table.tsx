@@ -1,7 +1,10 @@
 import { useState } from "react"
 import { SearchIcon } from "@/components/layout/icons"
-import { Dropdown } from "@/components/ui/dropdown"
 import { focusRing } from "@/components/layout/styles"
+import {
+  TableSortButton,
+  type SortDirection,
+} from "@/components/ui/table-sort-button"
 import { cn } from "@/lib/utils"
 import type { Department } from "../api/departments-api"
 import { DepartmentRowActions } from "./department-row-actions"
@@ -9,9 +12,9 @@ import { DepartmentRowActions } from "./department-row-actions"
 const pageSize = 10
 const paginationButton = `inline-flex min-h-[30px] cursor-pointer items-center justify-center rounded-lg border border-transparent bg-[#203f8c] px-3 text-[11px] font-medium leading-[1.2] whitespace-nowrap text-white transition-colors hover:enabled:bg-[#172f70] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none ${focusRing}`
 const departmentGrid =
-  "grid grid-cols-[minmax(160px,1.5fr)_minmax(130px,1.3fr)_minmax(70px,0.6fr)_minmax(90px,0.7fr)_90px] items-center gap-3.5 @max-[700px]:grid-cols-[minmax(0,1fr)_auto]"
+  "grid grid-cols-[minmax(160px,1.5fr)_minmax(130px,1.3fr)_minmax(65px,.55fr)_minmax(75px,.65fr)_minmax(70px,.6fr)_90px] items-center gap-3.5 @max-[820px]:grid-cols-[minmax(0,1fr)_auto]"
 
-type SortOrder = "name" | "name-desc" | "teams" | "employees"
+type SortKey = "name" | "teams" | "employees" | "services"
 
 export function DepartmentTable({
   departments,
@@ -35,7 +38,8 @@ export function DepartmentTable({
   onRetry: () => void
 }) {
   const [search, setSearch] = useState("")
-  const [sort, setSort] = useState<SortOrder>("name")
+  const [sortKey, setSortKey] = useState<SortKey>("name")
+  const [direction, setDirection] = useState<SortDirection>("asc")
   const [page, setPage] = useState(1)
   const query = search.trim().toLowerCase()
   const filtered = departments
@@ -52,11 +56,15 @@ export function DepartmentTable({
         sensitivity: "base",
         numeric: true,
       })
-      if (sort === "name-desc") return -byName
-      if (sort === "teams")
-        return (b.teamCount ?? 0) - (a.teamCount ?? 0) || byName
-      if (sort === "employees") return b.memberCount - a.memberCount || byName
-      return byName
+      const compared =
+        sortKey === "teams"
+          ? (a.teamCount ?? 0) - (b.teamCount ?? 0)
+          : sortKey === "employees"
+            ? a.memberCount - b.memberCount
+            : sortKey === "services"
+              ? (a.serviceCount ?? 0) - (b.serviceCount ?? 0)
+              : byName
+      return (direction === "asc" ? compared : -compared) || byName
     })
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const currentPage = Math.min(page, totalPages)
@@ -64,6 +72,16 @@ export function DepartmentTable({
     (currentPage - 1) * pageSize,
     currentPage * pageSize,
   )
+
+  function sortBy(key: SortKey) {
+    if (sortKey === key) {
+      setDirection((value) => (value === "asc" ? "desc" : "asc"))
+    } else {
+      setSortKey(key)
+      setDirection(key === "name" ? "asc" : "desc")
+    }
+    setPage(1)
+  }
 
   return (
     <>
@@ -83,22 +101,6 @@ export function DepartmentTable({
               }}
             />
           </label>
-          <Dropdown
-            className="max-[560px]:w-full"
-            triggerClassName="h-[34px] min-w-[152px] border-[#e1e4ea]"
-            label="Sort departments"
-            value={sort}
-            options={[
-              { value: "name", label: "Name: A to Z" },
-              { value: "name-desc", label: "Name: Z to A" },
-              { value: "teams", label: "Most teams" },
-              { value: "employees", label: "Most employees" },
-            ]}
-            onChange={(value) => {
-              setSort(value)
-              setPage(1)
-            }}
-          />
         </div>
       </div>
 
@@ -107,7 +109,7 @@ export function DepartmentTable({
         role="table"
         aria-label="Departments and their staffing"
       >
-        <div role="rowgroup" className="@max-[700px]:sr-only">
+        <div role="rowgroup" className="@max-[820px]:sr-only">
           <div
             role="row"
             className={cn(
@@ -115,10 +117,35 @@ export function DepartmentTable({
               "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground",
             )}
           >
-            <span role="columnheader">Department</span>
+            <span role="columnheader">
+              <TableSortButton
+                label="Department"
+                direction={sortKey === "name" ? direction : null}
+                onClick={() => sortBy("name")}
+              />
+            </span>
             <span role="columnheader">Head</span>
-            <span role="columnheader">Teams</span>
-            <span role="columnheader">Employees</span>
+            <span role="columnheader">
+              <TableSortButton
+                label="Teams"
+                direction={sortKey === "teams" ? direction : null}
+                onClick={() => sortBy("teams")}
+              />
+            </span>
+            <span role="columnheader">
+              <TableSortButton
+                label="Employees"
+                direction={sortKey === "employees" ? direction : null}
+                onClick={() => sortBy("employees")}
+              />
+            </span>
+            <span role="columnheader">
+              <TableSortButton
+                label="Services"
+                direction={sortKey === "services" ? direction : null}
+                onClick={() => sortBy("services")}
+              />
+            </span>
             <span role="columnheader">Actions</span>
           </div>
         </div>
@@ -127,7 +154,7 @@ export function DepartmentTable({
             <div role="row">
               <div
                 role="cell"
-                aria-colspan={5}
+                aria-colspan={6}
                 className="grid min-h-[150px] place-content-center gap-2 p-6 text-center text-xs text-[#7183a2]"
               >
                 {loading ? (
@@ -160,12 +187,12 @@ export function DepartmentTable({
                 key={department.id}
                 className={cn(
                   departmentGrid,
-                  "min-h-[58px] border-b border-[#eceef1] px-4 py-[7px] text-xs text-foreground last:rounded-b-[7px] last:border-b-0 hover:bg-[#e8eef2] @max-[700px]:gap-x-4 @max-[700px]:gap-y-[10px] @max-[700px]:py-[14px]",
+                  "min-h-[58px] border-b border-[#eceef1] px-4 py-[7px] text-xs text-foreground last:rounded-b-[7px] last:border-b-0 hover:bg-[#e8eef2] @max-[820px]:gap-x-4 @max-[820px]:gap-y-[10px] @max-[820px]:py-[14px]",
                 )}
               >
                 <div
                   role="rowheader"
-                  className="min-w-0 @max-[700px]:col-start-1 @max-[700px]:row-start-1"
+                  className="min-w-0 @max-[820px]:col-start-1 @max-[820px]:row-start-1"
                 >
                   <button
                     type="button"
@@ -186,9 +213,9 @@ export function DepartmentTable({
                 </div>
                 <div
                   role="cell"
-                  className="min-w-0 break-words @max-[700px]:col-start-1 @max-[700px]:row-start-2"
+                  className="min-w-0 break-words @max-[820px]:col-span-2 @max-[820px]:col-start-1 @max-[820px]:row-start-2"
                 >
-                  <span className="mr-1.5 hidden text-[#738096] @max-[700px]:inline">
+                  <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
                     Head
                   </span>
                   {department.head ? (
@@ -199,25 +226,34 @@ export function DepartmentTable({
                 </div>
                 <div
                   role="cell"
-                  className="tabular-nums @max-[700px]:col-start-1 @max-[700px]:row-start-3"
+                  className="tabular-nums @max-[820px]:col-start-1 @max-[820px]:row-start-3"
                 >
-                  <span className="mr-1.5 hidden text-[#738096] @max-[700px]:inline">
+                  <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
                     Teams
                   </span>
                   {department.teamCount ?? 0}
                 </div>
                 <div
                   role="cell"
-                  className="tabular-nums @max-[700px]:col-start-2 @max-[700px]:row-start-3"
+                  className="tabular-nums @max-[820px]:col-start-2 @max-[820px]:row-start-3"
                 >
-                  <span className="mr-1.5 hidden text-[#738096] @max-[700px]:inline">
+                  <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
                     Employees
                   </span>
                   {department.memberCount}
                 </div>
                 <div
                   role="cell"
-                  className="@max-[700px]:col-start-2 @max-[700px]:row-start-1"
+                  className="tabular-nums @max-[820px]:col-span-2 @max-[820px]:col-start-1 @max-[820px]:row-start-4"
+                >
+                  <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
+                    Services
+                  </span>
+                  {department.serviceCount ?? 0}
+                </div>
+                <div
+                  role="cell"
+                  className="@max-[820px]:col-start-2 @max-[820px]:row-start-1"
                 >
                   <DepartmentRowActions
                     department={department}

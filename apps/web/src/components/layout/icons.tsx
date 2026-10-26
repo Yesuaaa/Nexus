@@ -102,6 +102,15 @@ export function DepartmentIcon(props: IconProps) {
   )
 }
 
+export function ServiceIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m12 2 8.5 4.8v10.4L12 22l-8.5-4.8V6.8L12 2Z" />
+      <path d="m3.8 7 8.2 4.7L20.2 7M12 11.7V22" />
+    </Icon>
+  )
+}
+
 export function PlusIcon(props: IconProps) {
   return (
     <Icon {...props}>
