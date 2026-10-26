@@ -44,18 +44,31 @@ model User {
 }
 
 model Department {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  code        String?  @unique
+  id          String    @id @default(cuid())
+  name        String    @unique
+  code        String?   @unique
   description String?
-  headId      String?  @unique
-  head        User?    @relation("DepartmentHead", fields: [headId], references: [id], onDelete: SetNull)
-  members     User[]   @relation("DepartmentMembers")
+  headId      String?   @unique
+  head        User?     @relation("DepartmentHead", fields: [headId], references: [id], onDelete: SetNull)
+  members     User[]    @relation("DepartmentMembers")
   teams       Team[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  services    Service[] @relation("ServiceDepartments")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@index([headId])
+}
+
+model Service {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  description String
+  isActive    Boolean      @default(true)
+  departments Department[] @relation("ServiceDepartments")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([isActive])
 }
 
 model Team {

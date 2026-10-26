@@ -24,6 +24,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Pill } from "@/components/ui/pill"
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { cn } from "@/lib/utils"
 import { EditMemberDialog } from "./edit-member-dialog"
 import {
@@ -163,7 +164,7 @@ export function ManageMembersDrawer({
   useEffect(() => {
     if (!canManage) return
     let active = true
-    listAccounts("", "", 1)
+    listAccounts("", "STAFF", 1)
       .then((res) => {
         if (active) {
           setAllAccounts(res.users)
@@ -191,7 +192,7 @@ export function ManageMembersDrawer({
     }
     let active = true
     const currentMemberIds = new Set(detail?.members.map((m) => m.id) || [])
-    listAccounts(debouncedAssignSearch, "", 1)
+    listAccounts(debouncedAssignSearch, "STAFF", 1)
       .then((res) => {
         if (active) {
           setSearchCandidates(
@@ -517,7 +518,7 @@ export function ManageMembersDrawer({
                             ) : (
                               availableAccountsForQuickAssign.map((user) => (
                                 <SelectItem key={user.id} value={user.id}>
-                                  {user.fullName || user.email} ({user.role})
+                                  {user.fullName || user.email}
                                 </SelectItem>
                               ))
                             )}
@@ -673,13 +674,15 @@ export function ManageMembersDrawer({
                                         type="button"
                                         className={panelDangerButton}
                                         aria-label={`Remove ${member.fullName || member.email} from department`}
-                                        title="Remove from department"
                                         disabled={submitting}
                                         onClick={() =>
                                           void handleRemoveMember(member.id)
                                         }
                                       >
                                         <TrashIcon width="15" height="15" />
+                                        <HoverTooltip>
+                                          Remove from department
+                                        </HoverTooltip>
                                       </button>
                                     </div>
                                   )}
@@ -780,6 +783,7 @@ export function ManageMembersDrawer({
                         )
                         const eligibleEmployees = detail.members.filter(
                           (member) =>
+                            member.role === "STAFF" &&
                             member.id !== detail.headId &&
                             member.teamId !== team.id,
                         )
@@ -814,13 +818,13 @@ export function ManageMembersDrawer({
                                   type="button"
                                   className={panelDangerButton}
                                   aria-label={`Delete ${team.name} team`}
-                                  title="Delete team"
                                   disabled={submitting}
                                   onClick={() =>
                                     void handleDeleteTeam(team.id, team.name)
                                   }
                                 >
                                   <TrashIcon width="15" height="15" />
+                                  <HoverTooltip>Delete team</HoverTooltip>
                                 </button>
                               )}
                             </header>
@@ -859,7 +863,6 @@ export function ManageMembersDrawer({
                                         type="button"
                                         className={panelIconButton}
                                         aria-label={`Remove ${member.fullName || member.email} from ${team.name}`}
-                                        title="Remove from team"
                                         disabled={submitting}
                                         onClick={() =>
                                           void handleRemoveMemberFromTeam(
@@ -868,6 +871,9 @@ export function ManageMembersDrawer({
                                         }
                                       >
                                         <CloseIcon width="14" height="14" />
+                                        <HoverTooltip>
+                                          Remove from team
+                                        </HoverTooltip>
                                       </button>
                                     )}
                                   </li>
@@ -904,9 +910,6 @@ export function ManageMembersDrawer({
                                             value={member.id}
                                           >
                                             {member.fullName || member.email}
-                                            {member.position
-                                              ? ` (${member.position})`
-                                              : ""}
                                           </SelectItem>
                                         ))}
                                       </SelectContent>

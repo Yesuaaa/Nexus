@@ -14,6 +14,8 @@ export const Permissions = {
   DEPARTMENTS_READ: "departments:read",
   DEPARTMENTS_MANAGE: "departments:manage",
   DEPARTMENTS_DELETE: "departments:delete",
+  SERVICES_READ: "services:read",
+  SERVICES_MANAGE: "services:manage",
 } as const
 
 export type Permission = (typeof Permissions)[keyof typeof Permissions]
@@ -36,6 +38,10 @@ export function canAccessDepartmentManagement(account: Account): boolean {
     account.role === "ADMIN" &&
     hasPermission(account, Permissions.DEPARTMENTS_READ)
   )
+}
+
+export function canAccessServiceManagement(account: Account): boolean {
+  return hasPermission(account, Permissions.SERVICES_READ)
 }
 
 export function canCreateRole(actor: Account, role: Role): boolean {
