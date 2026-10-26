@@ -44,3 +44,13 @@ export function changeAccountRole(id: string, role: AccountRole) {
     },
   )
 }
+
+export function changeAccountStatus(id: string, isActive: boolean) {
+  return apiRequest<{ user: Account }>(
+    `/api/users/${encodeURIComponent(id)}/status`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ isActive }),
+    },
+  )
+}

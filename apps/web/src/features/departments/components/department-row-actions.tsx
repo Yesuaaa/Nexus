@@ -1,5 +1,5 @@
 import { useRef } from "react"
-import { focusRing } from "@/components/layout/styles"
+import { rowActionButton } from "@/components/ui/row-action-styles"
 import {
   dropdownItemClass,
   dropdownMenuClass,
@@ -12,8 +12,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import type { Department } from "../api/departments-api"
-
-const actionClass = `grid size-8 flex-none cursor-pointer place-items-center rounded-[7px] border border-[#e1e4ea] bg-background text-[#65718a] transition-colors hover:bg-[#f1f5fc] hover:text-foreground motion-reduce:transition-none ${focusRing}`
 
 export function DepartmentRowActions({
   department,
@@ -31,7 +29,7 @@ export function DepartmentRowActions({
   onDelete: (id: string, name: string) => void
 }) {
   const triggerRef = useRef<HTMLButtonElement>(null)
-  const openingSheet = useRef(false)
+  const pendingAction = useRef<"members" | "delete" | null>(null)
 
   return (
     <div className="flex items-center gap-2">
@@ -39,8 +37,8 @@ export function DepartmentRowActions({
         <button
           type="button"
           className={cn(
-            actionClass,
-            "border-[#203f8c] bg-[#203f8c] text-white hover:bg-[#172f70] hover:text-white",
+            rowActionButton,
+            "border-[#203f8c] bg-[#203f8c] text-white hover:enabled:bg-[#172f70] hover:enabled:text-white",
           )}
           aria-label={`Edit ${department.name}`}
           title="Edit department"
@@ -63,14 +61,14 @@ export function DepartmentRowActions({
       )}
       <DropdownMenu
         onOpenChange={(open) => {
-          if (open) openingSheet.current = false
+          if (open) pendingAction.current = null
         }}
       >
         <DropdownMenuTrigger asChild>
           <button
             ref={triggerRef}
             type="button"
-            className={actionClass}
+            className={rowActionButton}
             aria-label={`More actions for ${department.name}`}
             title="More actions"
           >
@@ -97,20 +95,22 @@ export function DepartmentRowActions({
             "w-48 max-w-[min(280px,calc(100vw-40px))] text-xs text-foreground outline-none",
           )}
           onCloseAutoFocus={(event) => {
-            if (openingSheet.current) {
-              // Open after the menu releases its focus trap so the sheet can
+            const action = pendingAction.current
+            if (action) {
+              // Open after the menu releases its focus trap so the dialog can
               // capture the persistent row trigger as its return target.
               event.preventDefault()
-              openingSheet.current = false
+              pendingAction.current = null
               triggerRef.current?.focus()
-              onManageMembers(department.id)
+              if (action === "members") onManageMembers(department.id)
+              else onDelete(department.id, department.name)
             }
           }}
         >
           <DropdownMenuItem
             className={cn(dropdownItemClass, "text-xs focus:bg-[#eef1f8]")}
             onSelect={() => {
-              openingSheet.current = true
+              pendingAction.current = "members"
             }}
           >
             Members &amp; teams
@@ -122,7 +122,7 @@ export function DepartmentRowActions({
                 "text-xs text-[#c33945] hover:bg-[#fff0f1] focus:bg-[#fff0f1] focus:text-[#c33945] focus-visible:bg-[#fff0f1]",
               )}
               onSelect={() => {
-                onDelete(department.id, department.name)
+                pendingAction.current = "delete"
               }}
             >
               Delete department

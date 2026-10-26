@@ -9,6 +9,8 @@ export const Permissions = {
   ACCOUNTS_CREATE_PRIVILEGED: "accounts:create-privileged",
   ACCOUNTS_ASSIGN_BASIC: "accounts:assign-basic",
   ACCOUNTS_ASSIGN_PRIVILEGED: "accounts:assign-privileged",
+  ACCOUNTS_STATUS_BASIC: "accounts:status-basic",
+  ACCOUNTS_STATUS_PRIVILEGED: "accounts:status-privileged",
   DEPARTMENTS_READ: "departments:read",
   DEPARTMENTS_MANAGE: "departments:manage",
   DEPARTMENTS_DELETE: "departments:delete",
@@ -55,5 +57,20 @@ export function canAssignRole(
     isPrivileged(current) || isPrivileged(next)
       ? Permissions.ACCOUNTS_ASSIGN_PRIVILEGED
       : Permissions.ACCOUNTS_ASSIGN_BASIC,
+  )
+}
+
+export function canChangeAccountStatus(
+  actor: Account,
+  target: Account,
+): boolean {
+  return (
+    actor.id !== target.id &&
+    hasPermission(
+      actor,
+      isPrivileged(target.role)
+        ? Permissions.ACCOUNTS_STATUS_PRIVILEGED
+        : Permissions.ACCOUNTS_STATUS_BASIC,
+    )
   )
 }

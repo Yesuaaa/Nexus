@@ -6,10 +6,66 @@ import { hasPermission, Permission } from "../auth/permissions.js"
 import { hashPassword, validPassword } from "../auth/password.js"
 import { normalizedEmail } from "../auth/validation.js"
 import { publicUser } from "./public-user.js"
-import { canAssignRole, canCreateRole } from "./role-policy.js"
+import {
+  canAssignRole,
+  canChangeAccountStatus,
+  canCreateRole,
+} from "./role-policy.js"
 
 export const usersRouter = Router()
 usersRouter.use(requireAuth)
+
+usersRouter.patch(
+  "/:id/status",
+  requirePermission(Permission.ACCOUNTS_STATUS_BASIC),
+  async (request, response) => {
+    const actor = request.auth!.user
+    const id = String(request.params.id)
+    const isActive = request.body?.isActive
+    if (typeof isActive !== "boolean") {
+      return response.status(400).json({ error: "Provide an active status" })
+    }
+    if (actor.id === id) {
+      return response
+        .status(403)
+        .json({ error: "You cannot change your own account status" })
+    }
+    const prisma = getPrisma()!
+    const target = await prisma.user.findUnique({ where: { id } })
+    if (!target) return response.status(404).json({ error: "User not found" })
+    if (!canChangeAccountStatus(actor.role, target.role)) {
+      return response
+        .status(403)
+        .json({ error: "You cannot change this account's status" })
+    }
+
+    const user = await prisma.$transaction(async (transaction) => {
+      // Check the role again in the write to prevent concurrent promotion
+      // from allowing an Admin to deactivate a privileged account.
+      const updated = await transaction.user.updateMany({
+        where: { id, role: target.role, isActive: target.isActive },
+        data: { isActive },
+      })
+      if (updated.count === 0) return null
+      if (!isActive) {
+        await transaction.session.deleteMany({ where: { userId: id } })
+      }
+      return transaction.user.findUniqueOrThrow({
+        where: { id },
+        include: {
+          department: { select: { id: true, name: true, code: true } },
+          team: { select: { id: true, name: true } },
+        },
+      })
+    })
+    if (!user) {
+      return response
+        .status(409)
+        .json({ error: "Account changed; refresh and retry" })
+    }
+    return response.json({ user: publicUser(user) })
+  },
+)
 
 usersRouter.get(
   "/",

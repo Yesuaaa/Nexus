@@ -9,7 +9,11 @@ import {
   permissionsFor,
 } from "../auth/permissions.js"
 import { requirePermission } from "../auth/session.js"
-import { canAssignRole, canCreateRole } from "./role-policy.js"
+import {
+  canAssignRole,
+  canChangeAccountStatus,
+  canCreateRole,
+} from "./role-policy.js"
 import { publicUser } from "./public-user.js"
 
 test("fixed roles have the expected permissions", () => {
@@ -24,6 +28,7 @@ test("fixed roles have the expected permissions", () => {
     Permission.ACCOUNTS_READ,
     Permission.ACCOUNTS_CREATE_BASIC,
     Permission.ACCOUNTS_ASSIGN_BASIC,
+    Permission.ACCOUNTS_STATUS_BASIC,
     Permission.DEPARTMENTS_MANAGE,
     Permission.DEPARTMENTS_DELETE,
   ]
@@ -34,6 +39,7 @@ test("fixed roles have the expected permissions", () => {
     ...admin,
     Permission.ACCOUNTS_CREATE_PRIVILEGED,
     Permission.ACCOUNTS_ASSIGN_PRIVILEGED,
+    Permission.ACCOUNTS_STATUS_PRIVILEGED,
   ])
   assert.equal(hasPermission(Role.USER, Permission.ACCOUNTS_READ), false)
   assert.equal(hasPermission(Role.ADMIN, Permission.ACCOUNTS_READ), true)
@@ -107,5 +113,17 @@ test("account creation respects the same role hierarchy", () => {
     )
     assert.equal(canCreateRole(Role.STAFF, role), false)
     assert.equal(canCreateRole(Role.USER, role), false)
+  }
+})
+
+test("account status changes respect the role hierarchy", () => {
+  for (const role of Object.values(Role)) {
+    assert.equal(canChangeAccountStatus(Role.SUPERADMIN, role), true)
+    assert.equal(
+      canChangeAccountStatus(Role.ADMIN, role),
+      role === Role.STAFF || role === Role.USER,
+    )
+    assert.equal(canChangeAccountStatus(Role.STAFF, role), false)
+    assert.equal(canChangeAccountStatus(Role.USER, role), false)
   }
 })

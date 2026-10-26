@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/sheet"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
+import { Pill } from "@/components/ui/pill"
 import { cn } from "@/lib/utils"
 import { EditMemberDialog } from "./edit-member-dialog"
 import {
@@ -412,11 +413,7 @@ export function ManageMembersDrawer({
               <span className="truncate font-medium">
                 {detail?.name || "Department"}
               </span>
-              {detail?.code && (
-                <span className="rounded border border-[#e1e4ea] px-1.5 py-0.5 text-[10px] text-[#738096]">
-                  {detail.code}
-                </span>
-              )}
+              {detail?.code && <Pill>{detail.code}</Pill>}
             </div>
           </div>
           <SheetClose asChild>
@@ -445,11 +442,11 @@ export function ManageMembersDrawer({
                 )}
               >
                 {tab === "members" ? "Employees" : "Teams"}
-                <span className="rounded bg-[#eef0f3] px-1.5 py-0.5 text-[10px] font-medium text-[#65718a] tabular-nums">
+                <Pill className="tabular-nums">
                   {tab === "members"
                     ? (detail?.members.length ?? 0)
                     : (detail?.teams.length ?? 0)}
-                </span>
+                </Pill>
               </TabsTrigger>
             ))}
           </TabsList>
@@ -641,9 +638,7 @@ export function ManageMembersDrawer({
                                     <MemberIdentity member={member} />
                                     <div className="mt-2 ml-[42px] flex flex-wrap items-center gap-1.5">
                                       {isHead ? (
-                                        <span className="rounded bg-[#eef0f3] px-1.5 py-0.5 text-[10px] font-medium text-[#526686]">
-                                          Department head
-                                        </span>
+                                        <Pill>Department head</Pill>
                                       ) : (
                                         <>
                                           {position && (
@@ -652,9 +647,9 @@ export function ManageMembersDrawer({
                                             </span>
                                           )}
                                           {member.team && (
-                                            <span className="rounded border border-[#e1e4ea] px-1.5 py-0.5 text-[10px] text-[#65718a]">
+                                            <Pill title={member.team.name}>
                                               {member.team.name}
-                                            </span>
+                                            </Pill>
                                           )}
                                         </>
                                       )}

@@ -15,3 +15,7 @@ The frontend's Department Management page (`/departments`) is available only to 
 | Change Admin or Superadmin roles         |      |       |       |     ✓      |
 
 An Admin may change a role only when both the current and requested roles are User or Staff. A Superadmin may assign any role. No one may change their own role through the account API. The API reads the user's current role from the database on each authenticated request, so a role change affects subsequent requests without changing session tokens.
+
+Account Management supports deactivation and reactivation. The `accounts:status-basic` permission lets Admins and Superadmins change User and Staff account status; `accounts:status-privileged` lets Superadmins also change Admin and Superadmin account status. No one may change their own status.
+
+`PATCH /api/users/:id/status` accepts `{ "isActive": false }` to deactivate or `{ "isActive": true }` to reactivate and returns `{ "user": ... }`. Deactivation preserves the account and department/team assignments, revokes all its sessions, and blocks login and authenticated requests. Reactivated accounts must sign in again. Account responses include `isActive`; new and existing accounts default to active. Apply the `20261026090000_account_status` migration before deploying these changes with `pnpm --filter @nexus/api exec prisma migrate deploy`.
