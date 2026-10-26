@@ -2,7 +2,10 @@ import { Prisma, Role, type User } from "../../generated/prisma/client.js"
 import { isUniqueConflict, isWriteConflict } from "../../lib/errors.js"
 import { hashPassword, validPassword } from "../auth/auth.password.js"
 import { normalizedEmail } from "../auth/auth.schema.js"
-import { EmployeeError, syncEmployeeForUser } from "../employees/employees.service.js"
+import {
+  EmployeeError,
+  syncEmployeeForUser,
+} from "../employees/employees.service.js"
 import { publicUser } from "./users.dto.js"
 import {
   canAssignRole,
@@ -84,11 +87,9 @@ export const usersService = {
     direction?: unknown
     page?: unknown
   }) {
-    const search =
-      typeof query.search === "string" ? query.search.trim() : ""
+    const search = typeof query.search === "string" ? query.search.trim() : ""
     const role = typeof query.role === "string" ? query.role : ""
-    const sort =
-      typeof query.sort === "string" ? query.sort : "createdAt"
+    const sort = typeof query.sort === "string" ? query.sort : "createdAt"
     const direction =
       typeof query.direction === "string" ? query.direction : "desc"
     const page = Number(query.page ?? 1)
@@ -204,20 +205,14 @@ export const usersService = {
       }
     }
     if (!canCreateRole(actor.role, role as Role)) {
-      throw new UsersError(
-        403,
-        "You cannot create an account with that role",
-      )
+      throw new UsersError(403, "You cannot create an account with that role")
     }
     if (
       typeof fullName !== "string" ||
       fullName.trim().length < 2 ||
       fullName.trim().length > 100
     ) {
-      throw new UsersError(
-        400,
-        "Provide a full name of 2 to 100 characters",
-      )
+      throw new UsersError(400, "Provide a full name of 2 to 100 characters")
     }
     if (
       contactNumber !== undefined &&

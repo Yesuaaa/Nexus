@@ -1,6 +1,10 @@
 import { Router } from "express"
 import { Role } from "../../generated/prisma/client.js"
-import { requireAuth, requirePermission, requireRole } from "../auth/auth.middleware.js"
+import {
+  requireAuth,
+  requirePermission,
+  requireRole,
+} from "../auth/auth.middleware.js"
 import { Permission } from "../auth/auth.permissions.js"
 import { UsersError, usersService } from "./users.service.js"
 

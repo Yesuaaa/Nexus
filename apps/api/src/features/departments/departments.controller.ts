@@ -1,10 +1,7 @@
 import { Router } from "express"
 import { requireAuth, requirePermission } from "../auth/auth.middleware.js"
 import { Permission } from "../auth/auth.permissions.js"
-import {
-  DepartmentError,
-  departmentsService,
-} from "./departments.service.js"
+import { DepartmentError, departmentsService } from "./departments.service.js"
 import { TeamError, teamsService } from "./teams.service.js"
 
 export const departmentsRouter = Router()

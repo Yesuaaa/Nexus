@@ -89,7 +89,10 @@ export const usersRepository = {
 
   async createUserWithSync(
     data: CreateUserInput,
-    syncEmployee: (tx: Prisma.TransactionClient, userId: string) => Promise<unknown>,
+    syncEmployee: (
+      tx: Prisma.TransactionClient,
+      userId: string,
+    ) => Promise<unknown>,
   ) {
     const prisma = getPrisma()!
     return prisma.$transaction(async (tx) => {
@@ -122,7 +125,10 @@ export const usersRepository = {
     targetId: string,
     currentRole: Role,
     nextRole: Role,
-    syncEmployee: (tx: Prisma.TransactionClient, userId: string) => Promise<unknown>,
+    syncEmployee: (
+      tx: Prisma.TransactionClient,
+      userId: string,
+    ) => Promise<unknown>,
   ) {
     const prisma = getPrisma()!
     return prisma.$transaction(async (tx) => {

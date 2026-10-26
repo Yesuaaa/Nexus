@@ -16,10 +16,7 @@ import { parsePage, parseQueryString } from "../../shared/query-helpers.js"
 import { requireAuth, requirePermission } from "../auth/auth.middleware.js"
 import { hashPassword } from "../auth/auth.password.js"
 import { Permission } from "../auth/auth.permissions.js"
-import {
-  employeeInclude,
-  employeesRepository,
-} from "./employees.repository.js"
+import { employeeInclude, employeesRepository } from "./employees.repository.js"
 import { validateEmployeeInput } from "./employees.schema.js"
 import {
   createEmployee,

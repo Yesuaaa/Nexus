@@ -23,6 +23,7 @@ Database (Prisma / PostgreSQL)
 ```
 
 **Golden Rules:**
+
 1. **Controllers** do not query the database directly. They delegate to Services.
 2. **Services** do not deal with Express `request` or `response` objects. They accept plain data inputs and throw domain errors (e.g. `AuthError`, `UsersError`, `EmployeeError`, `DepartmentError`, `ServicesError`).
 3. **Repositories** isolate Prisma queries, transactions, row-level locks (`SELECT ... FOR UPDATE`), and `include` projection shapes.
@@ -124,6 +125,7 @@ apps/api/src/
 ## 4. How to Add a New Feature
 
 When adding a new feature domain (e.g. `reports`):
+
 1. **Create directory**: `src/features/<feature-name>/`.
 2. **Create Schema** (`<feature-name>.schema.ts`): Define TypeScript types and pure validation functions.
 3. **Create Repository** (`<feature-name>.repository.ts`): Wrap all Prisma queries and includes.

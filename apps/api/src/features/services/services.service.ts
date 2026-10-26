@@ -104,10 +104,7 @@ export const servicesService = {
       throw new ServicesError(404, "Service not found")
     }
     if (existing.isActive) {
-      throw new ServicesError(
-        409,
-        "Deactivate the service before deleting it",
-      )
+      throw new ServicesError(409, "Deactivate the service before deleting it")
     }
 
     try {

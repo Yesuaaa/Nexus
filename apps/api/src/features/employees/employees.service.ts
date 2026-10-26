@@ -5,12 +5,8 @@ import {
   Prisma,
   Role,
 } from "../../generated/prisma/client.js"
-import { getPrisma } from "../../lib/db.js"
 import { validPassword } from "../auth/auth.password.js"
-import {
-  employeeInclude,
-  employeesRepository,
-} from "./employees.repository.js"
+import { employeeInclude } from "./employees.repository.js"
 import type { EmployeeInput } from "./employees.schema.js"
 
 export { employeeInclude }
@@ -100,9 +96,7 @@ async function listDepartmentHeadCandidates(
   return candidates.sort(compareSeniority)
 }
 
-export function validEmployeeAccountPassword(
-  value: unknown,
-): value is string {
+export function validEmployeeAccountPassword(value: unknown): value is string {
   return (
     validPassword(value) &&
     /[A-Z]/.test(value) &&

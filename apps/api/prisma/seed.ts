@@ -1,6 +1,9 @@
 import "dotenv/config"
 import { Role } from "../src/generated/prisma/client.js"
-import { hashPassword, validPassword } from "../src/features/auth/auth.password.js"
+import {
+  hashPassword,
+  validPassword,
+} from "../src/features/auth/auth.password.js"
 import { normalizedEmail } from "../src/features/auth/auth.schema.js"
 import { getPrisma } from "../src/lib/db.js"
 

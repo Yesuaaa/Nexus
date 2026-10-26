@@ -11,9 +11,10 @@ export interface TeamInput {
   leadId: string | null
 }
 
-export function validateDepartmentCreateInput(body: unknown):
-  | { value: DepartmentInput; error?: never }
-  | { value?: never; error: string } {
+export function validateDepartmentCreateInput(
+  body: unknown,
+):
+  { value: DepartmentInput; error?: never } | { value?: never; error: string } {
   const input = (body && typeof body === "object" ? body : {}) as Record<
     string,
     unknown
@@ -35,7 +36,14 @@ export function validateDepartmentCreateInput(body: unknown):
     return { error: "Department code must be between 2 and 20 characters" }
   }
 
-  return { value: { name, code: code || null, description: description || null, headId } }
+  return {
+    value: {
+      name,
+      code: code || null,
+      description: description || null,
+      headId,
+    },
+  }
 }
 
 export function validateDepartmentUpdateInput(body: unknown):
@@ -53,8 +61,7 @@ export function validateDepartmentUpdateInput(body: unknown):
     string,
     unknown
   >
-  const name =
-    typeof input.name === "string" ? input.name.trim() : undefined
+  const name = typeof input.name === "string" ? input.name.trim() : undefined
   const code =
     input.code !== undefined
       ? typeof input.code === "string" && input.code.trim()
@@ -135,9 +142,9 @@ export function validateMemberAssignmentInput(body: unknown):
   }
 }
 
-export function validateTeamCreateInput(body: unknown):
-  | { value: TeamInput; error?: never }
-  | { value?: never; error: string } {
+export function validateTeamCreateInput(
+  body: unknown,
+): { value: TeamInput; error?: never } | { value?: never; error: string } {
   const input = (body && typeof body === "object" ? body : {}) as Record<
     string,
     unknown
@@ -171,8 +178,7 @@ export function validateTeamUpdateInput(body: unknown):
     string,
     unknown
   >
-  const name =
-    typeof input.name === "string" ? input.name.trim() : undefined
+  const name = typeof input.name === "string" ? input.name.trim() : undefined
   const description =
     input.description !== undefined
       ? typeof input.description === "string" && input.description.trim()

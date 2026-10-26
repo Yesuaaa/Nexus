@@ -29,8 +29,7 @@ export class DepartmentError extends Error {
 
 export const departmentsService = {
   async listDepartments() {
-    const departments =
-      await departmentsRepository.listDepartmentsWithCounts()
+    const departments = await departmentsRepository.listDepartmentsWithCounts()
     return {
       departments: departments.map((d) => ({
         id: d.id,
@@ -98,11 +97,7 @@ export const departmentsService = {
       : {}
     const pageSize = 20
     const [employees, total] =
-      await departmentsRepository.searchEmployeeOptions(
-        where,
-        page,
-        pageSize,
-      )
+      await departmentsRepository.searchEmployeeOptions(where, page, pageSize)
     return { employees, total, page, pageSize }
   },
 
@@ -176,10 +171,7 @@ export const departmentsService = {
       }
     } catch (error) {
       if (isUniqueConflict(error)) {
-        throw new DepartmentError(
-          409,
-          "Department name or code already exists",
-        )
+        throw new DepartmentError(409, "Department name or code already exists")
       }
       throw error
     }
@@ -230,10 +222,7 @@ export const departmentsService = {
       }
     } catch (error) {
       if (isUniqueConflict(error)) {
-        throw new DepartmentError(
-          409,
-          "Department name or code already exists",
-        )
+        throw new DepartmentError(409, "Department name or code already exists")
       }
       throw error
     }
@@ -467,8 +456,7 @@ export const departmentsService = {
       throw new DepartmentError(404, "Department not found")
     }
 
-    const serviceCount =
-      await departmentsRepository.countDepartmentServices(id)
+    const serviceCount = await departmentsRepository.countDepartmentServices(id)
     if (serviceCount > 0) {
       throw new DepartmentError(
         409,
