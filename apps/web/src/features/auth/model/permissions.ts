@@ -35,6 +35,13 @@ export function hasPermission(
   return account.permissions?.includes(permission) ?? false
 }
 
+export function canAccessAccountManagement(account: Account): boolean {
+  return (
+    account.role === "SUPERADMIN" &&
+    hasPermission(account, Permissions.ACCOUNTS_READ)
+  )
+}
+
 export function canAccessDepartmentManagement(account: Account): boolean {
   return (
     account.role === "ADMIN" &&

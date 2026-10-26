@@ -7,11 +7,10 @@ import { cn } from "@/lib/utils"
 import type { Account } from "@/features/auth/model/types"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import {
+  canAccessAccountManagement,
   canAccessDepartmentManagement,
   canAccessEmployeeManagement,
   canAccessServiceManagement,
-  hasPermission,
-  Permissions,
 } from "@/features/auth/model/permissions"
 import { focusRing, iconButtonClass } from "./styles"
 import {
@@ -149,7 +148,7 @@ export function Sidebar({
             <span className={collapsedLabelClass}>Dashboard</span>
             {collapsed && <CollapsedTooltip>Dashboard</CollapsedTooltip>}
           </Link>
-          {hasPermission(account, Permissions.ACCOUNTS_READ) && (
+          {canAccessAccountManagement(account) && (
             <Link
               href="/accounts"
               aria-current={pathname === "/accounts" ? "page" : undefined}

@@ -1,4 +1,5 @@
 import { useRef } from "react"
+import { Eye, MoreHorizontal, Pencil } from "lucide-react"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import {
@@ -30,10 +31,19 @@ export function DepartmentRowActions({
   onDelete: (id: string, name: string) => void
 }) {
   const triggerRef = useRef<HTMLButtonElement>(null)
-  const pendingAction = useRef<"members" | "delete" | null>(null)
+  const deletePending = useRef(false)
 
   return (
     <div className="flex items-center gap-2">
+      <button
+        type="button"
+        className={rowActionButton}
+        aria-label={`View ${department.name} members and teams`}
+        onClick={() => onManageMembers(department.id)}
+      >
+        <Eye size={15} aria-hidden="true" />
+        <HoverTooltip>Members &amp; teams</HoverTooltip>
+      </button>
       {canManage && (
         <button
           type="button"
@@ -44,93 +54,58 @@ export function DepartmentRowActions({
           aria-label={`Edit ${department.name}`}
           onClick={() => onEdit(department)}
         >
-          <svg
-            width="15"
-            height="15"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="m16 3 5 5M4 16 17 3a2.1 2.1 0 0 1 3 3L7 19l-5 2 2-5Z" />
-          </svg>
+          <Pencil size={14} aria-hidden="true" />
           <HoverTooltip>Edit department</HoverTooltip>
         </button>
       )}
-      <DropdownMenu
-        onOpenChange={(open) => {
-          if (open) pendingAction.current = null
-        }}
-      >
-        <DropdownMenuTrigger asChild>
-          <button
-            ref={triggerRef}
-            type="button"
-            className={rowActionButton}
-            aria-label={`More actions for ${department.name}`}
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              aria-hidden="true"
-            >
-              <circle cx="5" cy="12" r="1.7" />
-              <circle cx="12" cy="12" r="1.7" />
-              <circle cx="19" cy="12" r="1.7" />
-            </svg>
-            <HoverTooltip>More actions</HoverTooltip>
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="end"
-          sideOffset={6}
-          collisionPadding={24}
-          aria-label={`Actions for ${department.name}`}
-          className={cn(
-            dropdownMenuClass,
-            "w-48 max-w-[min(280px,calc(100vw-40px))] text-xs text-foreground outline-none",
-          )}
-          onCloseAutoFocus={(event) => {
-            const action = pendingAction.current
-            if (action) {
-              // Open after the menu releases its focus trap so the dialog can
-              // capture the persistent row trigger as its return target.
-              event.preventDefault()
-              pendingAction.current = null
-              triggerRef.current?.focus()
-              if (action === "members") onManageMembers(department.id)
-              else onDelete(department.id, department.name)
-            }
+      {canDelete && (
+        <DropdownMenu
+          onOpenChange={(open) => {
+            if (open) deletePending.current = false
           }}
         >
-          <DropdownMenuItem
-            className={cn(dropdownItemClass, "text-xs focus:bg-[#eef1f8]")}
-            onSelect={() => {
-              pendingAction.current = "members"
+          <DropdownMenuTrigger asChild>
+            <button
+              ref={triggerRef}
+              type="button"
+              className={rowActionButton}
+              aria-label={`More actions for ${department.name}`}
+            >
+              <MoreHorizontal size={16} aria-hidden="true" />
+              <HoverTooltip>More actions</HoverTooltip>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            sideOffset={6}
+            collisionPadding={24}
+            aria-label={`Actions for ${department.name}`}
+            className={cn(
+              dropdownMenuClass,
+              "w-48 max-w-[min(280px,calc(100vw-40px))] text-xs text-foreground outline-none",
+            )}
+            onCloseAutoFocus={(event) => {
+              if (!deletePending.current) return
+              event.preventDefault()
+              deletePending.current = false
+              triggerRef.current?.focus()
+              onDelete(department.id, department.name)
             }}
           >
-            Members &amp; teams
-          </DropdownMenuItem>
-          {canDelete && (
             <DropdownMenuItem
               className={cn(
                 dropdownItemClass,
                 "text-xs text-[#c33945] hover:bg-[#fff0f1] focus:bg-[#fff0f1] focus:text-[#c33945] focus-visible:bg-[#fff0f1]",
               )}
               onSelect={() => {
-                pendingAction.current = "delete"
+                deletePending.current = true
               }}
             >
               Delete department
             </DropdownMenuItem>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
     </div>
   )
 }
