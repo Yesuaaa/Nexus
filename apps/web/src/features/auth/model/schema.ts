@@ -52,9 +52,10 @@ export function validateAuth(
   if (!email) errors.email = copy.emailRequired
   else if (
     email.length > 254 ||
-    !(mode === "register"
-      ? /^[A-Za-z0-9]+([._+-][A-Za-z0-9]+)*@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.(com|ph)$/i
-      : /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    !(
+      mode === "register"
+        ? /^[A-Za-z0-9]+([._+-][A-Za-z0-9]+)*@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.(com|ph)$/i
+        : /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     ).test(email)
   )
     errors.email = copy.emailInvalid

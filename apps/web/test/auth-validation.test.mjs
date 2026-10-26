@@ -70,7 +70,12 @@ test("validation uses the selected language and enforces the byte limit", () => 
 for (const language of ["en", "fil"]) {
   test(`registration matches account creation rules (${language})`, () => {
     const copy = getAuthCopy(language)
-    const valid = { ...validValues, contactNumber: "09123456789", password: "StrongPassword1!", confirmPassword: "StrongPassword1!" }
+    const valid = {
+      ...validValues,
+      contactNumber: "09123456789",
+      password: "StrongPassword1!",
+      confirmPassword: "StrongPassword1!",
+    }
     assert.deepEqual(validateAuth("register", valid, copy), {})
     for (const [field, value] of [
       ["fullName", "Jane123"],
@@ -82,10 +87,29 @@ for (const language of ["en", "fil"]) {
       ["password", "StrongPassword!!"],
       ["password", "StrongPassword12"],
     ]) {
-      assert.ok(validateAuth("register", { ...valid, [field]: value }, copy)[field], `${field}: ${value}`)
+      assert.ok(
+        validateAuth("register", { ...valid, [field]: value }, copy)[field],
+        `${field}: ${value}`,
+      )
     }
-    assert.equal(validateAuth("register", { ...valid, contactNumber: "" }, copy).contactNumber, copy.contactRequired)
-    assert.deepEqual(validateAuth("register", { ...valid, fullName: "María O’Neil-Santos Jr.", contactNumber: "08123456789", email: "jane.doe@example.com.ph" }, copy), {})
+    assert.equal(
+      validateAuth("register", { ...valid, contactNumber: "" }, copy)
+        .contactNumber,
+      copy.contactRequired,
+    )
+    assert.deepEqual(
+      validateAuth(
+        "register",
+        {
+          ...valid,
+          fullName: "María O’Neil-Santos Jr.",
+          contactNumber: "08123456789",
+          email: "jane.doe@example.com.ph",
+        },
+        copy,
+      ),
+      {},
+    )
   })
 }
 
@@ -96,6 +120,17 @@ test("registration requires a lowercase letter without changing login requiremen
     const values = { ...validValues, password, confirmPassword: password }
     assert.ok(validateAuth("register", values, copy).password)
     assert.deepEqual(validateAuth("login", values, copy), {})
-    assert.deepEqual(validateAuth("register", { ...values, password: `${password}a`, confirmPassword: `${password}a` }, copy), {})
+    assert.deepEqual(
+      validateAuth(
+        "register",
+        {
+          ...values,
+          password: `${password}a`,
+          confirmPassword: `${password}a`,
+        },
+        copy,
+      ),
+      {},
+    )
   }
 })
