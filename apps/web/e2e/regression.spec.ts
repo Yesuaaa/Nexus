@@ -41,6 +41,9 @@ function accountFor(
       Permissions.DEPARTMENTS_DELETE,
     )
   }
+  if (role === "ADMIN") {
+    permissions.push(Permissions.SERVICES_READ, Permissions.SERVICES_MANAGE)
+  }
   if (role === "SUPERADMIN") {
     permissions.push(
       Permissions.ACCOUNTS_READ,
@@ -279,6 +282,25 @@ async function mockApi(
       return
     }
 
+    if (pathname === "/api/services" && method === "GET") {
+      await route.fulfill({
+        json: {
+          services: [
+            {
+              id: "service-1",
+              name: "Test Service",
+              description: "A service used by the regression suite.",
+              isActive: true,
+              departments: [],
+              createdAt: "2026-01-01T00:00:00.000Z",
+              updatedAt: "2026-01-01T00:00:00.000Z",
+            },
+          ],
+        },
+      })
+      return
+    }
+
     if (pathname === "/api/departments" && method === "POST") {
       const body = request.postDataJSON() as {
         name: string
@@ -375,7 +397,13 @@ test("auth pages render server HTML and unknown routes return 404", async ({
 test("anonymous home and protected deep links redirect to login", async ({
   page,
 }) => {
-  for (const path of ["/", "/dashboard", "/accounts", "/departments"]) {
+  for (const path of [
+    "/",
+    "/dashboard",
+    "/accounts",
+    "/departments",
+    "/services",
+  ]) {
     await page.goto(path)
     await expect(page).toHaveURL(/\/login$/)
     await expect(
@@ -545,6 +573,9 @@ for (const role of ["SUPERADMIN", "ADMIN", "STAFF", "USER"] as const) {
     await expect(
       menu.getByRole("link", { name: "Department Management", exact: true }),
     ).toHaveCount(role === "ADMIN" ? 1 : 0)
+    await expect(
+      menu.getByRole("link", { name: "Service Management", exact: true }),
+    ).toHaveCount(role === "ADMIN" ? 1 : 0)
 
     await page.goto("/accounts")
     if (managesAccounts) {
@@ -582,6 +613,36 @@ for (const role of ["SUPERADMIN", "ADMIN", "STAFF", "USER"] as const) {
       await page.reload()
       await expect(
         page.getByRole("heading", { name: "Department Management" }),
+      ).toBeVisible()
+    }
+
+    const serviceRequests: string[] = []
+    page.on("request", (request) => {
+      if (new URL(request.url()).pathname.startsWith("/api/services")) {
+        serviceRequests.push(request.url())
+      }
+    })
+    await page.goto("/services")
+    if (role !== "ADMIN") {
+      await expect(page).toHaveURL(/\/dashboard$/)
+      await expect(
+        page.getByRole("heading", { name: "Service Management" }),
+      ).toHaveCount(0)
+      expect(serviceRequests).toEqual([])
+    } else {
+      await expect(
+        page.getByRole("heading", { name: "Service Management" }),
+      ).toBeVisible()
+      await expect(
+        page.getByText("Test Service", { exact: true }),
+      ).toBeVisible()
+      await expect(
+        page.getByRole("button", { name: "Create Service", exact: true }),
+      ).toHaveCount(1)
+      expect(serviceRequests).toHaveLength(1)
+      await page.reload()
+      await expect(
+        page.getByRole("heading", { name: "Service Management" }),
       ).toBeVisible()
     }
   })
@@ -698,7 +759,9 @@ test("admin can create, edit, delete departments and open member management", as
   await expect(
     page.getByRole("heading", { name: "Department Management" }),
   ).toBeVisible()
-  await expect(page.getByText("Engineering")).toBeVisible()
+  await expect(
+    page.getByRole("button", { name: "Engineering", exact: true }),
+  ).toBeVisible()
 
   // 1. Create a Department
   await page
