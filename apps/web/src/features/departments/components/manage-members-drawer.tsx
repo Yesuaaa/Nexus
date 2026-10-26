@@ -102,24 +102,26 @@ export function ManageMembersDrawer({
   const [actionError, setActionError] = useState("")
 
   // Available employees (for dropdown assignment)
-  const [allEmployees, setAllEmployees] = useState<DepartmentMember[]>([])
   const [quickAssignEmployeeId, setQuickAssignEmployeeId] = useState("")
-  const [quickAssignLoading, setQuickAssignLoading] = useState(true)
-  const [quickAssignError, setQuickAssignError] = useState("")
   const [quickAssignRetry, setQuickAssignRetry] = useState(0)
+  const [quickAssignResult, setQuickAssignResult] = useState<{
+    key: string
+    employees: DepartmentMember[]
+    error: string
+  } | null>(null)
 
   // Member search state
   const [assignSearch, setAssignSearch] = useState("")
-  const [searchCandidates, setSearchCandidates] = useState<DepartmentMember[]>(
-    [],
-  )
+  const [debouncedAssignSearch, setDebouncedAssignSearch] = useState("")
   const [candidatePage, setCandidatePage] = useState(1)
-  const [candidateTotal, setCandidateTotal] = useState(0)
-  const [candidatePageSize, setCandidatePageSize] = useState(20)
-  const [candidateLoading, setCandidateLoading] = useState(false)
-  const [candidateError, setCandidateError] = useState("")
   const [candidateRetry, setCandidateRetry] = useState(0)
-  const [candidateResultsKey, setCandidateResultsKey] = useState("")
+  const [candidateResult, setCandidateResult] = useState<{
+    key: string
+    candidates: DepartmentMember[]
+    total: number
+    pageSize: number
+    error: string
+  } | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [confirmation, setConfirmation] = useState<
     | { type: "member"; id: string; name: string }
@@ -148,6 +150,32 @@ export function ManageMembersDrawer({
   const [editMemberError, setEditMemberError] = useState("")
 
   const [revision, setRevision] = useState(0)
+  const quickAssignRequestKey = `${departmentId}\u0000${revision}\u0000${quickAssignRetry}`
+  const candidateRequestKey = `${debouncedAssignSearch}\u0000${candidatePage}\u0000${candidateRetry}\u0000${revision}`
+  const quickAssignResultIsCurrent =
+    quickAssignResult?.key === quickAssignRequestKey
+  const candidateResultIsCurrent = candidateResult?.key === candidateRequestKey
+  const allEmployees = quickAssignResultIsCurrent
+    ? quickAssignResult.employees
+    : []
+  const quickAssignLoading = canManage && !quickAssignResultIsCurrent
+  const quickAssignError = quickAssignResultIsCurrent
+    ? quickAssignResult.error
+    : ""
+  const searchCandidates = candidateResultIsCurrent
+    ? candidateResult.candidates
+    : []
+  const candidateTotal = candidateResultIsCurrent ? candidateResult.total : 0
+  const candidatePageSize = candidateResultIsCurrent
+    ? candidateResult.pageSize
+    : 20
+  const candidateLoading = Boolean(
+    canManage && debouncedAssignSearch && !candidateResultIsCurrent,
+  )
+  const candidateError = candidateResultIsCurrent ? candidateResult.error : ""
+  const candidateResultsKey = candidateResultIsCurrent
+    ? `${debouncedAssignSearch}\u0000${candidatePage}`
+    : ""
 
   // 1. Fetch department details
   useEffect(() => {
@@ -179,36 +207,34 @@ export function ManageMembersDrawer({
   useEffect(() => {
     if (!canManage) return
     let active = true
-    setQuickAssignLoading(true)
-    setQuickAssignError("")
-    setAllEmployees([])
-    setQuickAssignEmployeeId("")
     listEmployees("", undefined, 1)
       .then((res) => {
         if (active) {
-          setAllEmployees(res.employees)
+          setQuickAssignResult({
+            key: quickAssignRequestKey,
+            employees: res.employees,
+            error: "",
+          })
         }
       })
       .catch((error: unknown) => {
         if (active) {
-          setQuickAssignError(
-            error instanceof Error
-              ? error.message
-              : "Couldn't load employees to assign.",
-          )
+          setQuickAssignResult({
+            key: quickAssignRequestKey,
+            employees: [],
+            error:
+              error instanceof Error
+                ? error.message
+                : "Couldn't load employees to assign.",
+          })
         }
-      })
-      .finally(() => {
-        if (active) setQuickAssignLoading(false)
       })
     return () => {
       active = false
     }
-  }, [canManage, revision, quickAssignRetry])
+  }, [canManage, quickAssignRequestKey])
 
   // 3. Debounced search for assignable employees
-  const [debouncedAssignSearch, setDebouncedAssignSearch] = useState("")
-
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedAssignSearch(assignSearch.trim())
@@ -218,58 +244,50 @@ export function ManageMembersDrawer({
   }, [assignSearch])
 
   useEffect(() => {
-    if (!canManage || !debouncedAssignSearch) {
-      setCandidateLoading(false)
-      setCandidateError("")
-      setSearchCandidates([])
-      setCandidateResultsKey("")
-      return
-    }
+    if (!canManage || !debouncedAssignSearch) return
     let active = true
-    const resultsKey = `${debouncedAssignSearch}\u0000${candidatePage}`
-    setCandidateLoading(true)
-    setCandidateError("")
-    setSearchCandidates([])
-    setCandidateResultsKey("")
     listEmployees(debouncedAssignSearch, undefined, candidatePage)
       .then((res) => {
         if (active) {
-          setSearchCandidates(
-            res.employees.filter(
+          setCandidateResult({
+            key: candidateRequestKey,
+            candidates: res.employees.filter(
               (employee) => employee.departmentId !== departmentId,
             ),
-          )
-          setCandidateTotal(res.total)
-          setCandidatePageSize(res.pageSize)
-          setCandidateResultsKey(resultsKey)
+            total: res.total,
+            pageSize: res.pageSize,
+            error: "",
+          })
         }
       })
       .catch((error: unknown) => {
         if (active) {
-          setCandidateError(
-            error instanceof Error
-              ? error.message
-              : "Couldn't search employees.",
-          )
+          setCandidateResult({
+            key: candidateRequestKey,
+            candidates: [],
+            total: 0,
+            pageSize: 20,
+            error:
+              error instanceof Error
+                ? error.message
+                : "Couldn't search employees.",
+          })
         }
-      })
-      .finally(() => {
-        if (active) setCandidateLoading(false)
       })
     return () => {
       active = false
     }
   }, [
     canManage,
+    candidateRequestKey,
     candidatePage,
-    candidateRetry,
     debouncedAssignSearch,
     departmentId,
   ])
 
   const isSearching = Boolean(
     assignSearch.trim() &&
-      (assignSearch.trim() !== debouncedAssignSearch || candidateLoading),
+    (assignSearch.trim() !== debouncedAssignSearch || candidateLoading),
   )
   const expectedCandidateResultsKey = `${debouncedAssignSearch}\u0000${candidatePage}`
   const displayedCandidates =
@@ -286,15 +304,22 @@ export function ManageMembersDrawer({
       employee.departmentId !== departmentId &&
       !currentMemberIds.has(employee.id),
   )
+  const selectedQuickAssignEmployee = availableEmployeesForQuickAssign.find(
+    (employee) => employee.id === quickAssignEmployeeId,
+  )
 
   async function handleAddMember(employeeId: string) {
-    if (!employeeId) return
+    if (
+      !availableEmployeesForQuickAssign.some(
+        (employee) => employee.id === employeeId,
+      )
+    )
+      return
     try {
       setActionError("")
       setSubmitting(true)
       await assignDepartmentMembers(departmentId, [employeeId])
       setAssignSearch("")
-      setSearchCandidates([])
       setQuickAssignEmployeeId("")
       setCandidatePage(1)
       setRevision((r) => r + 1)
@@ -592,9 +617,13 @@ export function ManageMembersDrawer({
                       </div>
                       <div className="flex min-w-0 items-start gap-2">
                         <Select
-                          value={quickAssignEmployeeId}
+                          value={selectedQuickAssignEmployee?.id ?? ""}
                           onValueChange={setQuickAssignEmployeeId}
-                          disabled={submitting || quickAssignLoading || Boolean(quickAssignError)}
+                          disabled={
+                            submitting ||
+                            quickAssignLoading ||
+                            Boolean(quickAssignError)
+                          }
                         >
                           <SelectTrigger
                             className={cn(panelSelectTrigger, "flex-1")}
@@ -604,14 +633,21 @@ export function ManageMembersDrawer({
                           </SelectTrigger>
                           <SelectContent collisionPadding={24}>
                             {quickAssignLoading ? (
-                              <p className="m-0 p-3 text-xs text-muted-foreground" role="status">
+                              <p
+                                className="m-0 p-3 text-xs text-muted-foreground"
+                                role="status"
+                              >
                                 Loading employees...
                               </p>
                             ) : quickAssignError ? (
-                              <p className="m-0 p-3 text-xs text-destructive" role="alert">
+                              <p
+                                className="m-0 p-3 text-xs text-destructive"
+                                role="alert"
+                              >
                                 Employee list unavailable.
                               </p>
-                            ) : availableEmployeesForQuickAssign.length === 0 ? (
+                            ) : availableEmployeesForQuickAssign.length ===
+                              0 ? (
                               <p className="m-0 p-3 text-xs text-muted-foreground">
                                 No employees available to assign.
                               </p>
@@ -637,7 +673,12 @@ export function ManageMembersDrawer({
                         <Button
                           type="button"
                           className={panelAssignButton}
-                          disabled={!quickAssignEmployeeId || submitting}
+                          disabled={
+                            !selectedQuickAssignEmployee ||
+                            submitting ||
+                            quickAssignLoading ||
+                            Boolean(quickAssignError)
+                          }
                           onClick={() =>
                             void handleAddMember(quickAssignEmployeeId)
                           }
@@ -646,14 +687,21 @@ export function ManageMembersDrawer({
                         </Button>
                       </div>
                       {quickAssignError && (
-                        <div className="flex items-center justify-between gap-3 text-xs" role="alert">
-                          <span className="text-[#bc3649]">{quickAssignError}</span>
+                        <div
+                          className="flex items-center justify-between gap-3 text-xs"
+                          role="alert"
+                        >
+                          <span className="text-[#bc3649]">
+                            {quickAssignError}
+                          </span>
                           <Button
                             type="button"
                             variant="outline"
                             className={panelSecondaryButton}
                             disabled={submitting || quickAssignLoading}
-                            onClick={() => setQuickAssignRetry((count) => count + 1)}
+                            onClick={() =>
+                              setQuickAssignRetry((count) => count + 1)
+                            }
                           >
                             Retry
                           </Button>
@@ -687,14 +735,21 @@ export function ManageMembersDrawer({
                         </p>
                       )}
                       {candidateError && !isSearching && (
-                        <div className="flex items-center justify-between gap-3 text-xs" role="alert">
-                          <span className="text-[#bc3649]">{candidateError}</span>
+                        <div
+                          className="flex items-center justify-between gap-3 text-xs"
+                          role="alert"
+                        >
+                          <span className="text-[#bc3649]">
+                            {candidateError}
+                          </span>
                           <Button
                             type="button"
                             variant="outline"
                             className={panelSecondaryButton}
                             disabled={candidateLoading || submitting}
-                            onClick={() => setCandidateRetry((count) => count + 1)}
+                            onClick={() =>
+                              setCandidateRetry((count) => count + 1)
+                            }
                           >
                             Retry
                           </Button>
@@ -1168,7 +1223,11 @@ export function ManageMembersDrawer({
         </Tabs>
         <footer className="flex flex-none justify-end border-t border-[#eceef1] px-6 py-4 max-[560px]:px-5">
           <SheetClose asChild>
-            <Button type="button" className={panelAssignButton} disabled={submitting}>
+            <Button
+              type="button"
+              className={panelAssignButton}
+              disabled={submitting}
+            >
               Done
             </Button>
           </SheetClose>

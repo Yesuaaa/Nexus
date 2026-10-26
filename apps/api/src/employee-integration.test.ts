@@ -550,33 +550,100 @@ test(
         )
       },
     )
-    await t.test("role changes materialize employees and protect Superadmin linkage", async () => {
-      await prisma.user.create({ data: { id: "role-target", email: "role-target@example.com", fullName: "Role target", passwordHash: "unchanged-hash" } })
-      assert.equal(await prisma.employee.count({ where: { userId: "role-target" } }), 0)
-      await json("/users/role-target/role", "PATCH", { role: "STAFF" })
-      const employee = await prisma.employee.findUniqueOrThrow({ where: { userId: "role-target" } })
-      assert.equal(employee.fullName, "Role target")
-      const promotion = await request("/users/role-target/role", "PATCH", { role: "SUPERADMIN" }, "superadmin")
-      assert.equal(promotion.status, 409)
-      assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: "role-target" } })).role, "STAFF")
-      await json(`/employees/${employee.id}`, "PUT", { userId: null })
-      assert.equal((await request("/users/role-target/role", "PATCH", { role: "SUPERADMIN" }, "superadmin")).status, 200)
-      assert.equal((await prisma.employee.findUniqueOrThrow({ where: { id: employee.id } })).userId, null)
-    })
-    await t.test("directory and account search paginate without losing later results", async () => {
-      await prisma.employee.createMany({ data: Array.from({ length: 21 }, (_, index) => ({ employeeId: `PAGE-${index}`, fullName: `Pagination Person ${String(index).padStart(2, "0")}` })) })
-      const first = await json("/employees?search=Pagination&page=1")
-      const second = await json("/employees?search=Pagination&page=2")
-      assert.equal(first.total, 21)
-      assert.equal(first.employees.length, 20)
-      assert.equal(second.employees.length, 1)
-      assert.ok(!first.employees.some((employee) => employee.id === second.employees[0]?.id))
-      await prisma.user.createMany({ data: Array.from({ length: 21 }, (_, index) => ({ email: `free-fixture-${index}@example.com`, fullName: `Free fixture ${index}`, passwordHash: "unchanged-hash" })) })
-      const options = await request("/employees/account-options?search=free-fixture&page=2")
-      const body = (await options.json()) as { users: { id: string }[]; total: number }
-      assert.equal(options.status, 200)
-      assert.equal(body.total, 21)
-      assert.equal(body.users.length, 1)
-    })
+    await t.test(
+      "role changes materialize employees and protect Superadmin linkage",
+      async () => {
+        await prisma.user.create({
+          data: {
+            id: "role-target",
+            email: "role-target@example.com",
+            fullName: "Role target",
+            passwordHash: "unchanged-hash",
+          },
+        })
+        assert.equal(
+          await prisma.employee.count({ where: { userId: "role-target" } }),
+          0,
+        )
+        await json("/users/role-target/role", "PATCH", { role: "STAFF" })
+        const employee = await prisma.employee.findUniqueOrThrow({
+          where: { userId: "role-target" },
+        })
+        assert.equal(employee.fullName, "Role target")
+        const promotion = await request(
+          "/users/role-target/role",
+          "PATCH",
+          { role: "SUPERADMIN" },
+          "superadmin",
+        )
+        assert.equal(promotion.status, 409)
+        assert.equal(
+          (
+            await prisma.user.findUniqueOrThrow({
+              where: { id: "role-target" },
+            })
+          ).role,
+          "STAFF",
+        )
+        await json(`/employees/${employee.id}`, "PUT", { userId: null })
+        assert.equal(
+          (
+            await request(
+              "/users/role-target/role",
+              "PATCH",
+              { role: "SUPERADMIN" },
+              "superadmin",
+            )
+          ).status,
+          200,
+        )
+        assert.equal(
+          (
+            await prisma.employee.findUniqueOrThrow({
+              where: { id: employee.id },
+            })
+          ).userId,
+          null,
+        )
+      },
+    )
+    await t.test(
+      "directory and account search paginate without losing later results",
+      async () => {
+        await prisma.employee.createMany({
+          data: Array.from({ length: 21 }, (_, index) => ({
+            employeeId: `PAGE-${index}`,
+            fullName: `Pagination Person ${String(index).padStart(2, "0")}`,
+          })),
+        })
+        const first = await json("/employees?search=Pagination&page=1")
+        const second = await json("/employees?search=Pagination&page=2")
+        assert.equal(first.total, 21)
+        assert.equal(first.employees.length, 20)
+        assert.equal(second.employees.length, 1)
+        assert.ok(
+          !first.employees.some(
+            (employee) => employee.id === second.employees[0]?.id,
+          ),
+        )
+        await prisma.user.createMany({
+          data: Array.from({ length: 21 }, (_, index) => ({
+            email: `free-fixture-${index}@example.com`,
+            fullName: `Free fixture ${index}`,
+            passwordHash: "unchanged-hash",
+          })),
+        })
+        const options = await request(
+          "/employees/account-options?search=free-fixture&page=2",
+        )
+        const body = (await options.json()) as {
+          users: { id: string }[]
+          total: number
+        }
+        assert.equal(options.status, 200)
+        assert.equal(body.total, 21)
+        assert.equal(body.users.length, 1)
+      },
+    )
   },
 )

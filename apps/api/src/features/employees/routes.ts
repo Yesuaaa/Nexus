@@ -47,11 +47,9 @@ function sendError(response: import("express").Response, error: unknown) {
   }
   const code = prismaErrorCode(error)
   if (code === "P2003") {
-    response
-      .status(400)
-      .json({
-        error: "A selected department, team, or account no longer exists",
-      })
+    response.status(400).json({
+      error: "A selected department, team, or account no longer exists",
+    })
     return true
   }
   if (code === "P2025" || code === "P2034") {

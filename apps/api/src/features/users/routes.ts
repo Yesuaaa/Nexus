@@ -280,15 +280,24 @@ usersRouter.patch(
     }
     try {
       const updated = await prisma.$transaction(async (tx) => {
-        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "User" WHERE "id" = ${target.id} FOR UPDATE`)
-        if (role === Role.SUPERADMIN && await tx.employee.findUnique({ where: { userId: target.id } })) {
-          throw new EmployeeError(409, "Unlink the employee record before promoting this account to Superadmin")
+        await tx.$queryRaw(
+          Prisma.sql`SELECT "id" FROM "User" WHERE "id" = ${target.id} FOR UPDATE`,
+        )
+        if (
+          role === Role.SUPERADMIN &&
+          (await tx.employee.findUnique({ where: { userId: target.id } }))
+        ) {
+          throw new EmployeeError(
+            409,
+            "Unlink the employee record before promoting this account to Superadmin",
+          )
         }
         const result = await tx.user.updateMany({
           where: { id: target.id, role: target.role },
           data: { role: role as Role },
         })
-        if (result.count === 0) throw new EmployeeError(409, "Role changed; refresh and retry")
+        if (result.count === 0)
+          throw new EmployeeError(409, "Role changed; refresh and retry")
         await syncEmployeeForUser(tx, target.id)
         return tx.user.findUniqueOrThrow({
           where: { id: target.id },
@@ -300,9 +309,15 @@ usersRouter.patch(
       })
       return response.json({ user: publicUser(updated) })
     } catch (error) {
-      if (error instanceof EmployeeError) return response.status(error.status).json({ error: error.message })
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
-        return response.status(409).json({ error: "Account changed; refresh and retry" })
+      if (error instanceof EmployeeError)
+        return response.status(error.status).json({ error: error.message })
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2034"
+      ) {
+        return response
+          .status(409)
+          .json({ error: "Account changed; refresh and retry" })
       }
       throw error
     }
