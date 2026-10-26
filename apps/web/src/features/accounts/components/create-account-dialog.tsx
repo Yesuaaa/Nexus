@@ -22,14 +22,10 @@ const roleNames: Record<AccountRole, string> = {
 const NAME_RE = /^\p{L}[\p{L} .'’-]*$/u
 const EMAIL_RE =
   /^[A-Za-z0-9]+([._+-][A-Za-z0-9]+)*@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.(com|ph)$/i
-const PHONE_RE = /^[+]?[0-9](?:[0-9 ]|-){6,19}$/
+const PHONE_RE = /^0[89]\d{9}$/
 
 type FieldName =
-  | "email"
-  | "fullName"
-  | "contactNumber"
-  | "password"
-  | "confirmation"
+  "email" | "fullName" | "contactNumber" | "password" | "confirmation"
 type Values = Record<FieldName, string>
 
 const emptyValues: Values = {
@@ -44,7 +40,7 @@ function validate(values: Values): Partial<Record<FieldName, string>> {
   const errors: Partial<Record<FieldName, string>> = {}
   const email = values.email.trim()
   const name = values.fullName.trim()
-  const phone = values.contactNumber.trim()
+  const phone = values.contactNumber
   const { password, confirmation } = values
 
   if (!email) errors.email = "Email address is required."
@@ -58,11 +54,10 @@ function validate(values: Values): Partial<Record<FieldName, string>> {
     errors.fullName = "Letters, spaces, hyphens, apostrophes and periods only."
 
   if (phone && !PHONE_RE.test(phone))
-    errors.contactNumber = "Enter a valid contact number."
+    errors.contactNumber = "Enter 11 digits starting with 09 or 08."
 
   if (!password) errors.password = "Password is required."
-  else if (password.length < 12)
-    errors.password = "Use at least 12 characters."
+  else if (password.length < 12) errors.password = "Use at least 12 characters."
   else if (!/[A-Z]/.test(password))
     errors.password = "Include at least one capital letter."
   else if (!/[0-9]/.test(password))
@@ -154,7 +149,8 @@ export function CreateAccountDialog({
   }
 
   function setField(field: FieldName, value: string) {
-    setValues((current) => ({ ...current, [field]: value }))
+    const next = field === "contactNumber" ? value.replace(/\D/g, "") : value
+    setValues((current) => ({ ...current, [field]: next }))
   }
 
   function blurField(field: FieldName) {
@@ -182,7 +178,7 @@ export function CreateAccountDialog({
       await createAccount({
         email: values.email.trim(),
         fullName: values.fullName.trim(),
-        contactNumber: values.contactNumber.trim() || undefined,
+        contactNumber: values.contactNumber || undefined,
         password: values.password,
         role,
       })
@@ -279,10 +275,14 @@ export function CreateAccountDialog({
               className={inputClass("contactNumber")}
               name="contactNumber"
               type="tel"
+              inputMode="numeric"
+              maxLength={11}
               autoComplete="off"
               placeholder="Optional"
               value={values.contactNumber}
-              onChange={(event) => setField("contactNumber", event.target.value)}
+              onChange={(event) =>
+                setField("contactNumber", event.target.value)
+              }
               onBlur={() => blurField("contactNumber")}
               aria-invalid={Boolean(showError("contactNumber"))}
             />
@@ -347,7 +347,9 @@ export function CreateAccountDialog({
                 maxLength={1024}
                 placeholder="Repeat password"
                 value={values.confirmation}
-                onChange={(event) => setField("confirmation", event.target.value)}
+                onChange={(event) =>
+                  setField("confirmation", event.target.value)
+                }
                 onBlur={() => blurField("confirmation")}
                 aria-invalid={Boolean(showError("confirmation"))}
               />
