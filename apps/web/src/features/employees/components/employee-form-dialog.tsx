@@ -31,14 +31,14 @@ import {
 } from "../api/employees-api"
 import {
   validateEmployeeDraft,
+  employeeFieldAfterInteraction,
   visibleEmployeeError,
   type EmployeeDraft,
   type EmployeeField,
-  type EmployeeTouched,
 } from "../model/validation"
 
 const fieldClass =
-  "grid min-w-0 gap-[7px] text-xs font-semibold text-foreground"
+  "grid min-w-0 grid-rows-[16px_40px_16px] gap-y-[7px] text-xs font-semibold text-foreground"
 const inputClass = `h-10 min-w-0 rounded-lg border-[#d6dfec] bg-background px-[11px] text-sm placeholder:text-[#9aa8bb] ${focusRing}`
 const selectClass = `h-10 min-w-0 rounded-lg border-[#d6dfec] bg-background px-[11px] text-sm ${focusRing}`
 const employmentTypes: { value: EmploymentType; label: string }[] = [
@@ -48,13 +48,44 @@ const employmentTypes: { value: EmploymentType; label: string }[] = [
   { value: "INTERN", label: "Intern" },
 ]
 
-function FieldError({ id, message }: { id: string; message?: string }) {
-  if (!message) return null
+function RequiredFieldLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p id={id} className="m-0 text-[11px] font-normal text-[#bc3649]">
+    <span className="flex h-4 min-w-0 items-center gap-1 whitespace-nowrap leading-4">
+      {children}
+      <span aria-hidden="true" className="text-[#d04b56]">
+        *
+      </span>
+      <span className="sr-only">required</span>
+    </span>
+  )
+}
+
+function FieldError({ id, message }: { id: string; message?: string }) {
+  return (
+    <p
+      id={id}
+      className="m-0 h-4 overflow-hidden text-ellipsis whitespace-nowrap text-[11px] leading-4 text-[#bc3649]"
+      aria-live="polite"
+      aria-atomic="true"
+      title={message}
+    >
       {message}
     </p>
   )
+}
+
+const fieldIds: Record<EmployeeField, string> = {
+  employeeId: "employee-id",
+  fullName: "employee-full-name",
+  email: "employee-email",
+  contactNumber: "employee-contact-number",
+  position: "employee-position",
+  employmentType: "employee-employment-type",
+  departmentId: "employee-department",
+  teamId: "employee-team",
+  startDate: "employee-start-date",
+  password: "employee-password",
+  passwordConfirmation: "employee-password-confirmation",
 }
 
 function toDraft(employee?: Employee | null): EmployeeDraft {
@@ -64,10 +95,12 @@ function toDraft(employee?: Employee | null): EmployeeDraft {
     email: employee?.email ?? "",
     contactNumber: employee?.contactNumber ?? "",
     position: employee?.position ?? "",
-    employmentType: employee?.employmentType ?? "FULL_TIME",
+    employmentType: employee?.employmentType ?? "",
     startDate: employee?.startDate?.slice(0, 10) ?? "",
     departmentId: employee?.departmentId ?? "",
     teamId: employee?.teamId ?? "",
+    password: "",
+    passwordConfirmation: "",
   }
 }
 
@@ -81,6 +114,7 @@ export function EmployeeFormDialog({
   onSaved: (employee: Employee) => void
 }) {
   const isEditing = Boolean(employee)
+  const needsAccount = !employee?.hasAccount
   const [draft, setDraft] = useState(() => toDraft(employee))
   const [departments, setDepartments] = useState<Department[]>([])
   const [teams, setTeams] = useState<DepartmentTeam[]>([])
@@ -89,13 +123,14 @@ export function EmployeeFormDialog({
     Boolean(employee?.departmentId),
   )
   const [error, setError] = useState("")
-  const [touched, setTouched] = useState<EmployeeTouched>({})
-  const [submitted, setSubmitted] = useState(false)
+  const [visibleErrorField, setVisibleErrorField] =
+    useState<EmployeeField | null>(null)
   const [pending, setPending] = useState(false)
   const [departmentError, setDepartmentError] = useState("")
   const [departmentRevision, setDepartmentRevision] = useState(0)
   const [teamError, setTeamError] = useState("")
   const [teamRevision, setTeamRevision] = useState(0)
+  const formRef = useRef<HTMLFormElement>(null)
   const openerRef = useRef(
     typeof document === "undefined" ? null : document.activeElement,
   )
@@ -150,7 +185,7 @@ export function EmployeeFormDialog({
     }
   }, [draft.departmentId, teamRevision])
 
-  const errors = validateEmployeeDraft(draft)
+  const errors = validateEmployeeDraft(draft, needsAccount)
 
   function change<K extends keyof EmployeeDraft>(
     key: K,
@@ -161,11 +196,17 @@ export function EmployeeFormDialog({
   }
 
   function blur(field: EmployeeField) {
-    setTouched((current) => ({ ...current, [field]: true }))
+    setVisibleErrorField((current) =>
+      employeeFieldAfterInteraction(current, {
+        type: "blur",
+        field,
+        invalid: Boolean(errors[field]),
+      }),
+    )
   }
 
   function fieldError(field: EmployeeField) {
-    return visibleEmployeeError(field, draft[field], errors, touched, submitted)
+    return visibleEmployeeError(field, visibleErrorField, errors)
   }
 
   function validatedInputClass(field: EmployeeField) {
@@ -176,9 +217,16 @@ export function EmployeeFormDialog({
     )
   }
 
+  function validatedSelectClass(field: EmployeeField) {
+    return cn(
+      selectClass,
+      fieldError(field) &&
+        "border-[#d64557] focus-visible:border-[#d64557] focus-visible:ring-0",
+    )
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setSubmitted(true)
     if (
       pending ||
       loadingDepartments ||
@@ -186,7 +234,16 @@ export function EmployeeFormDialog({
       (draft.departmentId && (loadingTeams || teamError))
     )
       return
-    if (Object.keys(errors).length > 0) return
+    const firstInvalid = (Object.keys(errors) as EmployeeField[]).find(
+      (field) => errors[field],
+    )
+    if (firstInvalid) {
+      setVisibleErrorField(firstInvalid)
+      formRef.current
+        ?.querySelector<HTMLElement>(`#${fieldIds[firstInvalid]}`)
+        ?.focus()
+      return
+    }
     const employeeId = draft.employeeId.trim()
     const fullName = draft.fullName.trim()
     const email = draft.email.trim()
@@ -198,13 +255,14 @@ export function EmployeeFormDialog({
       const input = {
         employeeId,
         fullName,
-        email: email || null,
-        contactNumber: contactNumber || null,
-        position: position || null,
-        employmentType: draft.employmentType,
-        startDate: draft.startDate ? `${draft.startDate}T00:00:00.000Z` : null,
-        departmentId: draft.departmentId || null,
-        teamId: draft.teamId || null,
+        email,
+        contactNumber,
+        position,
+        employmentType: draft.employmentType as EmploymentType,
+        startDate: `${draft.startDate}T00:00:00.000Z`,
+        departmentId: draft.departmentId,
+        teamId: draft.teamId === "none" ? null : draft.teamId,
+        ...(needsAccount ? { password: draft.password } : {}),
       }
       const saved = employee
         ? await updateEmployee(employee.id, input)
@@ -245,7 +303,7 @@ export function EmployeeFormDialog({
             opener.focus()
         }}
       >
-        <form noValidate onSubmit={(event) => void submit(event)}>
+        <form ref={formRef} noValidate onSubmit={(event) => void submit(event)}>
           <header className="flex items-start justify-between gap-4 border-b border-[#eceef1] p-5 sm:px-6 sm:pt-6 sm:pb-5">
             <div className="min-w-0">
               <DialogTitle className="m-0 text-[20px] font-[650] tracking-[-0.03em]">
@@ -296,8 +354,29 @@ export function EmployeeFormDialog({
                 </Button>
               </div>
             )}
+            {teamError && draft.departmentId && (
+              <div
+                className="m-0 rounded-lg bg-[#fff0f1] p-3 text-xs text-[#bc3649] sm:col-span-2"
+                role="alert"
+              >
+                <p className="m-0">{teamError}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-2 h-auto min-h-0 border-0 bg-transparent p-0 font-bold text-[#244993] shadow-none hover:bg-transparent"
+                  disabled={loadingTeams || pending}
+                  onClick={() => {
+                    setLoadingTeams(true)
+                    setTeamError("")
+                    setTeamRevision((value) => value + 1)
+                  }}
+                >
+                  Retry teams
+                </Button>
+              </div>
+            )}
             <label className={fieldClass}>
-              Employee ID <span className="text-[#d04b56]">*</span>
+              <RequiredFieldLabel>Employee ID</RequiredFieldLabel>
               <Input
                 id="employee-id"
                 className={validatedInputClass("employeeId")}
@@ -320,7 +399,7 @@ export function EmployeeFormDialog({
               />
             </label>
             <label className={fieldClass}>
-              Full name <span className="text-[#d04b56]">*</span>
+              <RequiredFieldLabel>Full name</RequiredFieldLabel>
               <Input
                 id="employee-full-name"
                 className={validatedInputClass("fullName")}
@@ -345,7 +424,7 @@ export function EmployeeFormDialog({
               />
             </label>
             <label className={fieldClass}>
-              Email
+              <RequiredFieldLabel>Email</RequiredFieldLabel>
               <Input
                 type="email"
                 id="employee-email"
@@ -361,6 +440,7 @@ export function EmployeeFormDialog({
                 aria-describedby={
                   fieldError("email") ? "employee-email-error" : undefined
                 }
+                required
               />
               <FieldError
                 id="employee-email-error"
@@ -368,7 +448,7 @@ export function EmployeeFormDialog({
               />
             </label>
             <label className={fieldClass}>
-              Contact number
+              <RequiredFieldLabel>Contact number</RequiredFieldLabel>
               <Input
                 type="tel"
                 id="employee-contact-number"
@@ -389,6 +469,7 @@ export function EmployeeFormDialog({
                     ? "employee-contact-number-error"
                     : undefined
                 }
+                required
               />
               <FieldError
                 id="employee-contact-number-error"
@@ -396,7 +477,7 @@ export function EmployeeFormDialog({
               />
             </label>
             <label className={fieldClass}>
-              Position
+              <RequiredFieldLabel>Position</RequiredFieldLabel>
               <Input
                 id="employee-position"
                 className={validatedInputClass("position")}
@@ -410,6 +491,7 @@ export function EmployeeFormDialog({
                 aria-describedby={
                   fieldError("position") ? "employee-position-error" : undefined
                 }
+                required
               />
               <FieldError
                 id="employee-position-error"
@@ -417,19 +499,28 @@ export function EmployeeFormDialog({
               />
             </label>
             <div className={fieldClass}>
-              Employment type
+              <RequiredFieldLabel>Employment type</RequiredFieldLabel>
               <Select
-                value={draft.employmentType}
+                value={draft.employmentType || undefined}
                 onValueChange={(value) =>
                   change("employmentType", value as EmploymentType)
                 }
                 disabled={pending}
               >
                 <SelectTrigger
-                  className={selectClass}
+                  id="employee-employment-type"
+                  className={validatedSelectClass("employmentType")}
                   aria-label="Employment type"
+                  aria-required="true"
+                  aria-invalid={Boolean(fieldError("employmentType"))}
+                  aria-describedby={
+                    fieldError("employmentType")
+                      ? "employee-employment-type-error"
+                      : undefined
+                  }
+                  onBlur={() => blur("employmentType")}
                 >
-                  <SelectValue />
+                  <SelectValue placeholder="Select employment type" />
                 </SelectTrigger>
                 <SelectContent>
                   {employmentTypes.map((item) => (
@@ -439,9 +530,13 @@ export function EmployeeFormDialog({
                   ))}
                 </SelectContent>
               </Select>
+              <FieldError
+                id="employee-employment-type-error"
+                message={fieldError("employmentType")}
+              />
             </div>
             <label className={fieldClass}>
-              Start date
+              <RequiredFieldLabel>Start date</RequiredFieldLabel>
               <Input
                 type="date"
                 id="employee-start-date"
@@ -456,6 +551,7 @@ export function EmployeeFormDialog({
                     ? "employee-start-date-error"
                     : undefined
                 }
+                required
               />
               <FieldError
                 id="employee-start-date-error"
@@ -463,11 +559,11 @@ export function EmployeeFormDialog({
               />
             </label>
             <div className={fieldClass}>
-              Department
+              <RequiredFieldLabel>Department</RequiredFieldLabel>
               <Select
-                value={draft.departmentId || "none"}
+                value={draft.departmentId || undefined}
                 onValueChange={(value) => {
-                  const nextDepartmentId = value === "none" ? "" : value
+                  const nextDepartmentId = value
                   setTeams([])
                   setLoadingTeams(Boolean(nextDepartmentId))
                   setTeamError("")
@@ -477,7 +573,19 @@ export function EmployeeFormDialog({
                 }}
                 disabled={pending || loadingDepartments}
               >
-                <SelectTrigger className={selectClass} aria-label="Department">
+                <SelectTrigger
+                  id="employee-department"
+                  className={validatedSelectClass("departmentId")}
+                  aria-label="Department"
+                  aria-required="true"
+                  aria-invalid={Boolean(fieldError("departmentId"))}
+                  aria-describedby={
+                    fieldError("departmentId")
+                      ? "employee-department-error"
+                      : undefined
+                  }
+                  onBlur={() => blur("departmentId")}
+                >
                   <SelectValue
                     placeholder={
                       loadingDepartments
@@ -487,7 +595,6 @@ export function EmployeeFormDialog({
                   />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">No department</SelectItem>
                   {departments.map((department) => (
                     <SelectItem key={department.id} value={department.id}>
                       {department.name}
@@ -495,14 +602,16 @@ export function EmployeeFormDialog({
                   ))}
                 </SelectContent>
               </Select>
+              <FieldError
+                id="employee-department-error"
+                message={fieldError("departmentId")}
+              />
             </div>
             <div className={fieldClass}>
-              Team
+              <RequiredFieldLabel>Team</RequiredFieldLabel>
               <Select
-                value={draft.teamId || "none"}
-                onValueChange={(value) =>
-                  change("teamId", value === "none" ? "" : value)
-                }
+                value={draft.teamId || undefined}
+                onValueChange={(value) => change("teamId", value)}
                 disabled={
                   pending ||
                   !draft.departmentId ||
@@ -510,7 +619,17 @@ export function EmployeeFormDialog({
                   Boolean(teamError)
                 }
               >
-                <SelectTrigger className={selectClass} aria-label="Team">
+                <SelectTrigger
+                  id="employee-team"
+                  className={validatedSelectClass("teamId")}
+                  aria-label="Team"
+                  aria-required="true"
+                  aria-invalid={Boolean(fieldError("teamId"))}
+                  aria-describedby={
+                    fieldError("teamId") ? "employee-team-error" : undefined
+                  }
+                  onBlur={() => blur("teamId")}
+                >
                   <SelectValue
                     placeholder={
                       !draft.departmentId
@@ -530,28 +649,70 @@ export function EmployeeFormDialog({
                   ))}
                 </SelectContent>
               </Select>
-              {teamError && draft.departmentId && (
-                <div
-                  className="rounded-lg bg-[#fff0f1] p-2.5 text-[11px] text-[#bc3649]"
-                  role="alert"
-                >
-                  <p className="m-0">{teamError}</p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="mt-1.5 h-auto min-h-0 border-0 bg-transparent p-0 font-bold text-[#244993] shadow-none hover:bg-transparent"
-                    disabled={loadingTeams || pending}
-                    onClick={() => {
-                      setLoadingTeams(true)
-                      setTeamError("")
-                      setTeamRevision((value) => value + 1)
-                    }}
-                  >
-                    Retry teams
-                  </Button>
-                </div>
-              )}
+              <FieldError
+                id="employee-team-error"
+                message={fieldError("teamId")}
+              />
             </div>
+            {needsAccount && (
+              <>
+                <label className={fieldClass}>
+                  <RequiredFieldLabel>Password</RequiredFieldLabel>
+                  <Input
+                    type="password"
+                    id="employee-password"
+                    className={validatedInputClass("password")}
+                    value={draft.password}
+                    autoComplete="new-password"
+                    placeholder="At least 12 characters"
+                    disabled={pending}
+                    onChange={(event) => change("password", event.target.value)}
+                    onBlur={() => blur("password")}
+                    aria-invalid={Boolean(fieldError("password"))}
+                    aria-describedby={
+                      fieldError("password")
+                        ? "employee-password-error"
+                        : undefined
+                    }
+                    required
+                  />
+                  <FieldError
+                    id="employee-password-error"
+                    message={fieldError("password")}
+                  />
+                </label>
+                <label className={fieldClass}>
+                  <RequiredFieldLabel>Confirm password</RequiredFieldLabel>
+                  <Input
+                    type="password"
+                    id="employee-password-confirmation"
+                    className={validatedInputClass("passwordConfirmation")}
+                    value={draft.passwordConfirmation}
+                    autoComplete="new-password"
+                    placeholder="Enter the password again"
+                    disabled={pending}
+                    onChange={(event) =>
+                      change("passwordConfirmation", event.target.value)
+                    }
+                    onBlur={() => blur("passwordConfirmation")}
+                    aria-invalid={Boolean(fieldError("passwordConfirmation"))}
+                    aria-describedby={
+                      fieldError("passwordConfirmation")
+                        ? "employee-password-confirmation-error"
+                        : undefined
+                    }
+                    required
+                  />
+                  <FieldError
+                    id="employee-password-confirmation-error"
+                    message={fieldError("passwordConfirmation")}
+                  />
+                </label>
+                <p className="m-0 text-[11px] leading-4 font-normal text-[#738096] sm:col-span-2">
+                  Saving creates an active Staff account for this employee.
+                </p>
+              </>
+            )}
           </div>
           <footer className="flex justify-end gap-2 border-t border-[#eceef1] px-5 py-4 sm:px-6">
             <Button

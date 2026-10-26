@@ -1,5 +1,4 @@
 import { apiRequest } from "@/features/auth/api/auth-api"
-import { listEmployees as fetchEmployees } from "@/features/employees/api/employees-api"
 
 export const COMPANY_DEPARTMENT_PRESETS = [
   {
@@ -121,7 +120,6 @@ export async function getDepartment(id: string): Promise<DepartmentDetail> {
 
 export async function listEmployees(
   search: string,
-  departmentId: string | undefined,
   page: number,
 ): Promise<{
   employees: DepartmentMember[]
@@ -129,7 +127,14 @@ export async function listEmployees(
   page: number
   pageSize: number
 }> {
-  return fetchEmployees({ search: search.trim(), departmentId, page })
+  const params = new URLSearchParams({ page: String(page) })
+  if (search.trim()) params.set("search", search.trim())
+  return apiRequest<{
+    employees: DepartmentMember[]
+    total: number
+    page: number
+    pageSize: number
+  }>(`/api/departments/employee-options?${params}`)
 }
 
 export async function listEligibleHeads(): Promise<EligibleHead[]> {

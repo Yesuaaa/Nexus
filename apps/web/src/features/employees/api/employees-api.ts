@@ -15,16 +15,10 @@ export type Employee = {
   startDate: string | null
   departmentId: string | null
   teamId: string | null
-  userId: string | null
   department: { id: string; name: string; code: string | null } | null
   team: { id: string; name: string } | null
-  user: {
-    id: string
-    email: string
-    fullName: string | null
-    role: "SUPERADMIN" | "ADMIN" | "STAFF" | "USER"
-    isActive: boolean
-  } | null
+  hasAccount: boolean
+  accountIsActive: boolean | null
   createdAt: string
   updatedAt: string
 }
@@ -40,26 +34,25 @@ export type EmployeeInput = {
   startDate?: string | null
   departmentId?: string | null
   teamId?: string | null
-  userId?: string | null
+  replacementHeadEmployeeId?: string
+  password?: string
+}
+
+export type EmployeeStatusOptions = {
+  isDepartmentHead: boolean
+  replacementCandidates: {
+    id: string
+    employeeId: string
+    fullName: string
+    email: string | null
+    startDate: string | null
+  }[]
+  recommendedReplacementEmployeeId: string | null
+  willRestoreOriginalHead: boolean
 }
 
 export type EmployeeList = {
   employees: Employee[]
-  total: number
-  page: number
-  pageSize: number
-}
-
-export type EmployeeAccountOption = {
-  id: string
-  email: string
-  fullName: string | null
-  role: "ADMIN" | "STAFF" | "USER"
-  isActive: boolean
-}
-
-export type EmployeeAccountOptions = {
-  users: EmployeeAccountOption[]
   total: number
   page: number
   pageSize: number
@@ -88,6 +81,14 @@ export async function getEmployee(id: string): Promise<Employee> {
   return result.employee
 }
 
+export async function getEmployeeStatusOptions(
+  id: string,
+): Promise<EmployeeStatusOptions> {
+  return apiRequest<EmployeeStatusOptions>(
+    `/api/employees/${encodeURIComponent(id)}/status-options`,
+  )
+}
+
 export async function createEmployee(input: EmployeeInput): Promise<Employee> {
   const result = await apiRequest<{ employee: Employee }>("/api/employees", {
     method: "POST",
@@ -107,14 +108,15 @@ export async function updateEmployee(
   return result.employee
 }
 
-export function listEmployeeAccountOptions(
-  search: string,
-  page: number,
-  employeeId: string,
-): Promise<EmployeeAccountOptions> {
-  const params = new URLSearchParams({ page: String(page), employeeId })
-  if (search) params.set("search", search)
-  return apiRequest<EmployeeAccountOptions>(
-    `/api/employees/account-options?${params}`,
-  )
+export async function deactivateEmployeeLogin(id: string): Promise<void> {
+  await apiRequest(`/api/employees/${encodeURIComponent(id)}/account/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ isActive: false }),
+  })
+}
+
+export async function deleteEmployeeLogin(id: string): Promise<void> {
+  await apiRequest(`/api/employees/${encodeURIComponent(id)}/account`, {
+    method: "DELETE",
+  })
 }

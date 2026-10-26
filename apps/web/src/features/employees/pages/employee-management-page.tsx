@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { PlusIcon, SearchIcon } from "@/components/layout/icons"
 import { contentClass, focusRing } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -26,6 +27,8 @@ import { EmployeeFormDialog } from "../components/employee-form-dialog"
 import { EmployeeStatusDialog } from "../components/employee-status-dialog"
 import { EmployeeTable } from "../components/employee-table"
 import {
+  deactivateEmployeeLogin,
+  deleteEmployeeLogin,
   listEmployees,
   type Employee,
   type EmploymentStatus,
@@ -77,6 +80,9 @@ export function EmployeeManagementPage() {
   )
   const [returnEmployeeId, setReturnEmployeeId] = useState<string | null>(null)
   const [statusTarget, setStatusTarget] = useState<Employee | null>(null)
+  const [loginTarget, setLoginTarget] = useState<Employee | null>(null)
+  const [loginActionPending, setLoginActionPending] = useState(false)
+  const [loginActionError, setLoginActionError] = useState("")
   const listRequestKey = JSON.stringify({
     search: debouncedSearch,
     departmentId,
@@ -190,7 +196,7 @@ export function EmployeeManagementPage() {
             Employee Management
           </h1>
           <p className="mt-[5px] mb-0 text-xs leading-[1.45] text-[#738096]">
-            Maintain employee records, team placement, and linked accounts.
+            Maintain employee records, team placement, and employment details.
           </p>
         </div>
         <Button
@@ -343,6 +349,10 @@ export function EmployeeManagementPage() {
           onView={(employee) => setDrawerEmployeeId(employee.id)}
           onEdit={(employee) => setFormState({ employee })}
           onChangeStatus={setStatusTarget}
+          onManageLogin={(employee) => {
+            setLoginActionError("")
+            setLoginTarget(employee)
+          }}
           onManageDepartment={
             canManageDepartment ? setMembersDepartmentId : undefined
           }
@@ -417,9 +427,6 @@ export function EmployeeManagementPage() {
             setDrawerEmployeeId(null)
             setFormState({ employee })
           }}
-          onChanged={() => {
-            setRevision((value) => value + 1)
-          }}
           onManageDepartment={
             canManageDepartment
               ? (id) => {
@@ -452,6 +459,63 @@ export function EmployeeManagementPage() {
             setPage(1)
             sileo.success({ title: "Employee status updated" })
             setRevision((value) => value + 1)
+          }}
+        />
+      )}
+      {loginTarget && (
+        <ConfirmationDialog
+          title={
+            loginTarget.accountIsActive
+              ? "Deactivate login account?"
+              : "Delete login account?"
+          }
+          subject={loginTarget.fullName}
+          description={
+            loginTarget.accountIsActive
+              ? "This immediately signs the employee out and prevents login. Their employee record and all assignments remain. Deactivation is required before login deletion."
+              : "This removes the employee's portal login from Account Management. Their employee record and all department, team, position, and leadership assignments remain."
+          }
+          confirmLabel={
+            loginTarget.accountIsActive
+              ? "Deactivate login"
+              : "Delete login account"
+          }
+          pendingLabel={
+            loginTarget.accountIsActive ? "Deactivating…" : "Deleting…"
+          }
+          pending={loginActionPending}
+          error={loginActionError}
+          onClose={() => {
+            setLoginTarget(null)
+            setLoginActionError("")
+          }}
+          onConfirm={() => {
+            if (loginActionPending) return
+            const isDeactivation = loginTarget.accountIsActive === true
+            setLoginActionPending(true)
+            setLoginActionError("")
+            const action = isDeactivation
+              ? deactivateEmployeeLogin(loginTarget.id)
+              : deleteEmployeeLogin(loginTarget.id)
+            void action
+              .then(() => {
+                setLoginTarget(null)
+                sileo.success({
+                  title: isDeactivation
+                    ? "Login account deactivated"
+                    : "Login account deleted",
+                  description: `${loginTarget.fullName}'s employee record and assignments were kept.`,
+                })
+                setRevision((value) => value + 1)
+              })
+              .catch((reason: unknown) => {
+                setLoginActionError(
+                  reason instanceof Error
+                    ? reason.message
+                    : "Couldn't update this login account.",
+                )
+              })
+              .finally(() => setLoginActionPending(false))
           }}
         />
       )}

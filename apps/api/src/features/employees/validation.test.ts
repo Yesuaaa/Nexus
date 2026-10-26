@@ -2,14 +2,18 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import { validateEmployeeInput } from "./validation.js"
 
-test("employee input trims required identifiers and normalizes optional contact fields", () => {
+test("employee input requires every form field and normalizes submitted values", () => {
   const result = validateEmployeeInput(
     {
       employeeId: " EMP-000042 ",
       fullName: "  Ada Lovelace  ",
       email: " ADA@EXAMPLE.COM ",
       contactNumber: " 09123456789 ",
+      position: "  Engineer  ",
       employmentType: "FULL_TIME",
+      startDate: "2026-01-15T00:00:00.000Z",
+      departmentId: " department-1 ",
+      teamId: null,
       status: "ACTIVE",
     },
     false,
@@ -21,17 +25,23 @@ test("employee input trims required identifiers and normalizes optional contact 
       fullName: "Ada Lovelace",
       email: "ada@example.com",
       contactNumber: "09123456789",
+      position: "Engineer",
       employmentType: "FULL_TIME",
+      startDate: new Date("2026-01-15T00:00:00.000Z"),
+      departmentId: "department-1",
+      teamId: null,
       status: "ACTIVE",
     },
   })
 })
 
-test("employee updates preserve omitted fields but accept null for optional values", () => {
-  assert.deepEqual(
-    validateEmployeeInput({ email: null, departmentId: null }, true),
-    { value: { email: null, departmentId: null } },
-  )
+test("employee updates preserve omitted fields and allow an explicit No team choice", () => {
+  assert.deepEqual(validateEmployeeInput({ teamId: null }, true), {
+    value: { teamId: null },
+  })
+  assert.deepEqual(validateEmployeeInput({ email: null }, true), {
+    error: "Email is required",
+  })
 })
 
 test("employee input rejects an invalid employment type and malformed email", () => {
@@ -54,6 +64,11 @@ test("employee identity fields match registration and account creation rules", (
       fullName: "María O’Neil-Santos Jr.",
       email: "maria@example.com.ph",
       contactNumber: "08123456789",
+      position: "Designer",
+      employmentType: "FULL_TIME",
+      startDate: "2026-01-15T00:00:00.000Z",
+      departmentId: "department-1",
+      teamId: null,
     },
     false,
   )
@@ -76,7 +91,17 @@ test("employee identity fields match registration and account creation rules", (
 
 test("employee IDs accept the 40-character boundary and only supported characters", () => {
   const accepted = validateEmployeeInput(
-    { employeeId: `A${"b".repeat(39)}`, fullName: "Valid Person" },
+    {
+      employeeId: `A${"b".repeat(39)}`,
+      fullName: "Valid Person",
+      email: "valid@example.com",
+      contactNumber: "09123456789",
+      position: "Designer",
+      employmentType: "FULL_TIME",
+      startDate: "2026-01-15T00:00:00.000Z",
+      departmentId: "department-1",
+      teamId: null,
+    },
     false,
   )
   assert.equal("value" in accepted, true)

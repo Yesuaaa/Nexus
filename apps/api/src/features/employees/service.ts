@@ -17,6 +17,7 @@ export const employeeInclude = {
       fullName: true,
       role: true,
       isActive: true,
+      accountDeletedAt: true,
     },
   },
 } satisfies Prisma.EmployeeInclude
@@ -31,7 +32,125 @@ export class EmployeeError extends Error {
   }
 }
 
-export type EmployeeWriteInput = EmployeeInput
+export type EmployeeWriteInput = EmployeeInput & { userId?: string | null }
+
+const departmentHeadCandidateSelect = {
+  id: true,
+  employeeId: true,
+  fullName: true,
+  startDate: true,
+  createdAt: true,
+  departmentId: true,
+  status: true,
+  userId: true,
+  user: {
+    select: {
+      id: true,
+      email: true,
+      fullName: true,
+      role: true,
+      isActive: true,
+      headOf: { select: { id: true } },
+      leadOfTeam: { select: { id: true } },
+    },
+  },
+} satisfies Prisma.EmployeeSelect
+
+type DepartmentHeadCandidate = Prisma.EmployeeGetPayload<{
+  select: typeof departmentHeadCandidateSelect
+}>
+
+function compareSeniority(
+  left: DepartmentHeadCandidate,
+  right: DepartmentHeadCandidate,
+) {
+  if (left.startDate && right.startDate) {
+    const startDateDifference =
+      left.startDate.getTime() - right.startDate.getTime()
+    if (startDateDifference !== 0) return startDateDifference
+  } else if (left.startDate) {
+    return -1
+  } else if (right.startDate) {
+    return 1
+  }
+
+  const createdAtDifference =
+    left.createdAt.getTime() - right.createdAt.getTime()
+  if (createdAtDifference !== 0) return createdAtDifference
+  return (
+    left.employeeId.localeCompare(right.employeeId) ||
+    left.id.localeCompare(right.id)
+  )
+}
+
+async function listDepartmentHeadCandidates(
+  tx: Prisma.TransactionClient,
+  departmentId: string,
+  excludingUserId: string,
+) {
+  const candidates = await tx.employee.findMany({
+    where: {
+      departmentId,
+      status: EmployeeStatus.ACTIVE,
+      userId: { not: excludingUserId },
+      user: {
+        is: {
+          role: Role.STAFF,
+          isActive: true,
+          headOf: null,
+          leadOfTeam: null,
+        },
+      },
+    },
+    select: departmentHeadCandidateSelect,
+  })
+  return candidates.sort(compareSeniority)
+}
+
+export async function getEmployeeStatusOptions(
+  tx: Prisma.TransactionClient,
+  employeeId: string,
+) {
+  const employee = await tx.employee.findUnique({
+    where: { id: employeeId },
+    select: { id: true, departmentId: true, userId: true },
+  })
+  if (!employee) throw new EmployeeError(404, "Employee not found")
+
+  const department = employee.userId
+    ? await tx.department.findUnique({
+        where: { headId: employee.userId },
+        select: {
+          id: true,
+          headId: true,
+          temporaryHeadOriginalId: true,
+          temporaryHeadAssignedId: true,
+        },
+      })
+    : null
+  const isDepartmentHead = Boolean(employee.userId && department)
+  const candidates =
+    isDepartmentHead && department && employee.userId
+      ? await listDepartmentHeadCandidates(tx, department.id, employee.userId)
+      : []
+
+  return {
+    isDepartmentHead,
+    replacementCandidates: candidates.map((candidate) => ({
+      id: candidate.id,
+      employeeId: candidate.employeeId,
+      fullName: candidate.fullName,
+      email: candidate.user?.email ?? null,
+      startDate: candidate.startDate,
+    })),
+    recommendedReplacementEmployeeId: candidates[0]?.id ?? null,
+    willRestoreOriginalHead: Boolean(
+      employee.userId &&
+      department?.temporaryHeadOriginalId === employee.userId &&
+      department.headId === department.temporaryHeadAssignedId,
+    ),
+  }
+}
 
 function generatedEmployeeId() {
   return `EMP-${randomUUID().replaceAll("-", "").slice(0, 10).toUpperCase()}`
@@ -91,13 +210,13 @@ async function assertNoProtectedAssignmentChange(
   if (head && nextDepartmentId !== head.id) {
     throw new EmployeeError(
       409,
-      "Reassign this Department Head before changing their employee department or account link",
+      "Reassign this Department Head before changing their employee department",
     )
   }
   if (lead && nextTeamId !== lead.id) {
     throw new EmployeeError(
       409,
-      "Reassign this Team Lead before changing their employee team or account link",
+      "Reassign this Team Lead before changing their employee team",
     )
   }
 }
@@ -107,13 +226,59 @@ async function writeEmployee(
   id: string | null,
   input: EmployeeWriteInput,
 ) {
+  let statusSnapshot: {
+    departmentId: string | null
+    userId: string | null
+  } | null = null
   if (id) {
+    const snapshot = await tx.employee.findUnique({ where: { id } })
+    if (!snapshot) throw new EmployeeError(404, "Employee not found")
+    statusSnapshot = {
+      departmentId: snapshot.departmentId,
+      userId: snapshot.userId,
+    }
+
+    if (input.status !== undefined) {
+      const departmentIds = new Set<string>()
+      if (snapshot.departmentId) departmentIds.add(snapshot.departmentId)
+      if (snapshot.userId) {
+        const headedDepartment = await tx.department.findUnique({
+          where: { headId: snapshot.userId },
+          select: { id: true },
+        })
+        if (headedDepartment) departmentIds.add(headedDepartment.id)
+        const temporaryDepartments = await tx.department.findMany({
+          where: { temporaryHeadOriginalId: snapshot.userId },
+          select: { id: true },
+        })
+        for (const department of temporaryDepartments)
+          departmentIds.add(department.id)
+      }
+      for (const departmentId of [...departmentIds].sort()) {
+        await tx.$queryRaw(
+          Prisma.sql`SELECT "id" FROM "Department" WHERE "id" = ${departmentId} FOR UPDATE`,
+        )
+      }
+    }
+
     await tx.$queryRaw(
       Prisma.sql`SELECT "id" FROM "Employee" WHERE "id" = ${id} FOR UPDATE`,
     )
   }
   const existing = id ? await tx.employee.findUnique({ where: { id } }) : null
   if (id && !existing) throw new EmployeeError(404, "Employee not found")
+  if (
+    input.status !== undefined &&
+    existing &&
+    statusSnapshot &&
+    (existing.departmentId !== statusSnapshot.departmentId ||
+      existing.userId !== statusSnapshot.userId)
+  ) {
+    throw new EmployeeError(
+      409,
+      "Employee assignment changed; refresh and retry",
+    )
+  }
 
   const nextDepartmentId =
     input.departmentId !== undefined
@@ -126,8 +291,104 @@ async function writeEmployee(
   const nextPosition =
     input.position !== undefined ? input.position : (existing?.position ?? null)
   const oldUserId = existing?.userId ?? null
+  const statusChanged = Boolean(
+    existing && input.status !== undefined && input.status !== existing.status,
+  )
 
   await validateDepartmentAndTeam(tx, nextDepartmentId, nextTeamId)
+
+  const currentDepartment =
+    statusChanged && oldUserId
+      ? await tx.department.findUnique({
+          where: { headId: oldUserId },
+          select: {
+            id: true,
+            headId: true,
+            temporaryHeadOriginalId: true,
+            temporaryHeadAssignedId: true,
+          },
+        })
+      : null
+  const isDepartmentHeadLeaving = Boolean(
+    statusChanged &&
+    input.status !== EmployeeStatus.ACTIVE &&
+    oldUserId &&
+    currentDepartment?.headId === oldUserId,
+  )
+  if (input.replacementHeadEmployeeId && !isDepartmentHeadLeaving) {
+    throw new EmployeeError(
+      400,
+      "A temporary Department Head can only be selected when the current head changes to a non-active status",
+    )
+  }
+
+  let replacementHeadCandidate: DepartmentHeadCandidate | null = null
+  if (isDepartmentHeadLeaving && currentDepartment && oldUserId) {
+    const candidates = await listDepartmentHeadCandidates(
+      tx,
+      currentDepartment.id,
+      oldUserId,
+    )
+    replacementHeadCandidate = input.replacementHeadEmployeeId
+      ? (candidates.find(
+          (candidate) => candidate.id === input.replacementHeadEmployeeId,
+        ) ?? null)
+      : (candidates[0] ?? null)
+    if (!replacementHeadCandidate) {
+      throw new EmployeeError(
+        input.replacementHeadEmployeeId ? 400 : 409,
+        input.replacementHeadEmployeeId
+          ? "Choose an active Staff member with an EXP account in this department"
+          : "No active Staff member with an EXP account is available to temporarily lead this department",
+      )
+    }
+    await tx.$queryRaw(
+      Prisma.sql`SELECT "id" FROM "Employee" WHERE "id" = ${replacementHeadCandidate.id} FOR UPDATE`,
+    )
+    const refreshedCandidate = await tx.employee.findUnique({
+      where: { id: replacementHeadCandidate.id },
+      select: departmentHeadCandidateSelect,
+    })
+    if (
+      !refreshedCandidate ||
+      refreshedCandidate.departmentId !== currentDepartment.id ||
+      refreshedCandidate.status !== EmployeeStatus.ACTIVE ||
+      refreshedCandidate.userId !== replacementHeadCandidate.userId
+    ) {
+      throw new EmployeeError(
+        409,
+        "The selected temporary head changed; refresh and choose again",
+      )
+    }
+    replacementHeadCandidate = refreshedCandidate
+  }
+
+  const returningDepartment =
+    statusChanged && input.status === EmployeeStatus.ACTIVE && oldUserId
+      ? await tx.department.findFirst({
+          where: { temporaryHeadOriginalId: oldUserId },
+          select: {
+            id: true,
+            headId: true,
+            temporaryHeadOriginalId: true,
+            temporaryHeadAssignedId: true,
+          },
+        })
+      : null
+
+  const originalTemporaryDepartment =
+    oldUserId &&
+    existing &&
+    nextDepartmentId &&
+    isDepartmentHeadTitle(nextPosition)
+      ? await tx.department.findFirst({
+          where: {
+            id: nextDepartmentId,
+            temporaryHeadOriginalId: oldUserId,
+          },
+          select: { id: true },
+        })
+      : null
 
   if (isDepartmentHeadTitle(nextPosition)) {
     if (!nextUserId) {
@@ -142,7 +403,10 @@ async function writeEmployee(
           select: { headId: true },
         })
       : null
-    if (department?.headId !== nextUserId) {
+    const unchangedTemporaryHeadTitle = Boolean(
+      existing?.position === nextPosition && originalTemporaryDepartment,
+    )
+    if (department?.headId !== nextUserId && !unchangedTemporaryHeadTitle) {
       throw new EmployeeError(
         400,
         "Only the assigned Department Head can have the title 'Department Head'",
@@ -150,9 +414,13 @@ async function writeEmployee(
     }
   }
 
-  const linkedUserIds = [...new Set([oldUserId, nextUserId].filter(Boolean))]
-    .map((userId) => userId as string)
-    .sort()
+  const linkedUserIds = [
+    ...new Set(
+      [oldUserId, nextUserId, replacementHeadCandidate?.userId].filter(
+        (userId): userId is string => Boolean(userId),
+      ),
+    ),
+  ].sort()
   for (const userId of linkedUserIds) {
     await tx.$queryRaw(
       Prisma.sql`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE`,
@@ -165,21 +433,11 @@ async function writeEmployee(
       where: { id: nextUserId },
       select: { id: true, role: true },
     })
-    if (!nextUser) throw new EmployeeError(400, "Selected account not found")
+    if (!nextUser) throw new EmployeeError(400, "Employee account not found")
     if (nextUser.role === Role.SUPERADMIN) {
       throw new EmployeeError(
         403,
-        "Superadmin accounts cannot be linked to employees",
-      )
-    }
-    const linkedToAnother = await tx.employee.findFirst({
-      where: { userId: nextUserId, ...(id ? { id: { not: id } } : {}) },
-      select: { id: true },
-    })
-    if (linkedToAnother) {
-      throw new EmployeeError(
-        409,
-        "This account is already linked to another employee",
+        "Superadmin accounts cannot have employee records",
       )
     }
   }
@@ -204,7 +462,7 @@ async function writeEmployee(
     if (accountDepartment && accountDepartment.id !== nextDepartmentId) {
       throw new EmployeeError(
         409,
-        "Reassign this Department Head before changing their employee department or account link",
+        "Reassign this Department Head before changing their employee department",
       )
     }
     const accountTeam = await tx.team.findFirst({
@@ -214,14 +472,85 @@ async function writeEmployee(
     if (accountTeam && accountTeam.id !== nextTeamId) {
       throw new EmployeeError(
         409,
-        "Reassign this Team Lead before changing their employee team or account link",
+        "Reassign this Team Lead before changing their employee team",
       )
     }
   }
 
-  if (oldUserId && oldUserId !== nextUserId) {
-    await assertNoProtectedAssignmentChange(tx, oldUserId, null, null)
-  } else if (oldUserId && nextUserId === oldUserId) {
+  if (isDepartmentHeadLeaving && currentDepartment && oldUserId) {
+    const replacementHead = replacementHeadCandidate
+    const candidateUserId = replacementHead?.userId
+    if (!replacementHead || !candidateUserId) {
+      throw new EmployeeError(
+        409,
+        "The selected temporary head needs an active Staff account",
+      )
+    }
+    const candidateAccount = await tx.user.findUnique({
+      where: { id: candidateUserId },
+      select: {
+        id: true,
+        role: true,
+        isActive: true,
+        headOf: { select: { id: true } },
+        leadOfTeam: { select: { id: true } },
+      },
+    })
+    if (
+      !candidateAccount ||
+      candidateAccount.role !== Role.STAFF ||
+      !candidateAccount.isActive ||
+      candidateAccount.headOf ||
+      candidateAccount.leadOfTeam
+    ) {
+      throw new EmployeeError(
+        409,
+        "The selected temporary head is no longer eligible; refresh and choose again",
+      )
+    }
+
+    const canRestoreOriginal =
+      nextDepartmentId === currentDepartment.id && nextUserId === oldUserId
+    const originalHeadId =
+      currentDepartment.temporaryHeadOriginalId ??
+      (canRestoreOriginal ? oldUserId : null)
+
+    await tx.department.update({
+      where: { id: currentDepartment.id },
+      data: {
+        headId: candidateAccount.id,
+        temporaryHeadOriginalId: originalHeadId,
+        temporaryHeadAssignedId: originalHeadId ? candidateAccount.id : null,
+      },
+    })
+    await tx.user.update({
+      where: { id: candidateAccount.id },
+      data: { departmentId: currentDepartment.id, teamId: null },
+    })
+    await tx.employee.update({
+      where: { id: replacementHead.id },
+      data: { teamId: null },
+    })
+  }
+
+  if (returningDepartment && oldUserId) {
+    const restoreOriginal = Boolean(
+      nextDepartmentId === returningDepartment.id &&
+      nextUserId === oldUserId &&
+      returningDepartment.headId ===
+        returningDepartment.temporaryHeadAssignedId,
+    )
+    await tx.department.update({
+      where: { id: returningDepartment.id },
+      data: {
+        ...(restoreOriginal ? { headId: oldUserId } : {}),
+        temporaryHeadOriginalId: null,
+        temporaryHeadAssignedId: null,
+      },
+    })
+  }
+
+  if (oldUserId) {
     await assertNoProtectedAssignmentChange(
       tx,
       oldUserId,
@@ -262,12 +591,6 @@ async function writeEmployee(
       })
     : await tx.employee.create({ data, include: employeeInclude })
 
-  if (oldUserId && oldUserId !== nextUserId) {
-    await tx.user.update({
-      where: { id: oldUserId },
-      data: { departmentId: null, teamId: null, position: null },
-    })
-  }
   if (nextUserId) {
     await tx.user.update({
       where: { id: nextUserId },

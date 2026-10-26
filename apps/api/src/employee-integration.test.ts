@@ -10,8 +10,9 @@ import { createApp } from "./app.js"
 import { getPrisma } from "./lib/db.js"
 
 type Payload = {
-  employee: { id: string; userId: string | null }
+  employee: { id: string; hasAccount?: boolean }
   employees: { id: string }[]
+  users: { email: string }[]
   total: number
   department: {
     members: { id: string }[]
@@ -20,7 +21,7 @@ type Payload = {
 }
 
 test(
-  "employee records, account links and department membership stay consistent",
+  "employee records and department membership stay consistent",
   { timeout: 120_000 },
   async (t) => {
     const originalUrl = process.env.DATABASE_URL
@@ -203,7 +204,7 @@ test(
       },
     )
     await t.test(
-      "create a person without an account and search/filter the directory",
+      "create an employee and Staff account together and search/filter the directory",
       async () => {
         const result = await json(
           "/employees",
@@ -212,16 +213,35 @@ test(
             employeeId: "EMP-9001",
             fullName: "Jordan Reyes",
             email: "jordan.hr@example.com",
+            contactNumber: "09123456789",
             departmentId: "product",
             position: "Designer",
             employmentType: "CONTRACT",
+            startDate: "2026-01-15T00:00:00.000Z",
+            teamId: null,
             status: "ACTIVE",
+            password: "ValidPassword1!",
           },
           201,
         )
         employeeId = result.employee.id
-        assert.equal(result.employee.userId, null)
-        assert.equal(await prisma.user.count(), 5)
+        assert.equal(await prisma.user.count(), 6)
+        const account = await prisma.user.findUniqueOrThrow({
+          where: { email: "jordan.hr@example.com" },
+        })
+        assert.equal(account.role, "STAFF")
+        assert.equal(result.employee.hasAccount, true)
+        assert.equal(
+          (
+            await prisma.employee.findUniqueOrThrow({
+              where: { id: employeeId },
+            })
+          ).userId,
+          account.id,
+        )
+        const accounts = await json("/users?search=Jordan")
+        assert.equal(accounts.total, 1)
+        assert.equal(accounts.users[0].email, "jordan.hr@example.com")
         const filtered = await json(
           "/employees?search=Jordan&departmentId=product&employmentType=CONTRACT&status=ACTIVE",
         )
@@ -239,10 +259,38 @@ test(
       "invalid/duplicate data leaves no partial records",
       async () => {
         const before = await prisma.employee.count()
+        const usersBefore = await prisma.user.count()
         await json(
           "/employees",
           "POST",
-          { employeeId: "EMP-9001", fullName: "Duplicate Person" },
+          {
+            employeeId: "NO-PASSWORD",
+            fullName: "No Password",
+            email: "no.password@example.com",
+            contactNumber: "09123456789",
+            position: "Designer",
+            employmentType: "FULL_TIME",
+            startDate: "2026-01-15T00:00:00.000Z",
+            departmentId: "product",
+            teamId: null,
+          },
+          400,
+        )
+        await json(
+          "/employees",
+          "POST",
+          {
+            employeeId: "EMP-9001",
+            fullName: "Duplicate Person",
+            email: "duplicate@example.com",
+            contactNumber: "09123456789",
+            position: "Designer",
+            employmentType: "FULL_TIME",
+            startDate: "2026-01-15T00:00:00.000Z",
+            departmentId: "product",
+            teamId: null,
+            password: "ValidPassword1!",
+          },
           409,
         )
         await json(
@@ -252,10 +300,18 @@ test(
             employeeId: "BAD-EMAIL",
             fullName: "Bad Email",
             email: "not-an-email",
+            contactNumber: "09123456789",
+            position: "Designer",
+            employmentType: "FULL_TIME",
+            startDate: "2026-01-15T00:00:00.000Z",
+            departmentId: "product",
+            teamId: null,
+            password: "ValidPassword1!",
           },
           400,
         )
         assert.equal(await prisma.employee.count(), before)
+        assert.equal(await prisma.user.count(), usersBefore)
         await json(
           `/employees/${employeeId}`,
           "PUT",
@@ -273,7 +329,7 @@ test(
       },
     )
     await t.test(
-      "standalone employees participate in department/team membership",
+      "employees with accounts participate in department/team membership",
       async () => {
         await json(`/employees/${employeeId}`, "PUT", {
           teamId: "product-team",
@@ -310,7 +366,7 @@ test(
       },
     )
     await t.test(
-      "unlinked employees work in headless departments and team membership stays consistent",
+      "employees work in headless departments and team membership stays consistent",
       async () => {
         const created = await json(
           "/employees",
@@ -318,7 +374,14 @@ test(
           {
             employeeId: "EMP-9003",
             fullName: "Casey Morgan",
+            email: "casey@example.com",
+            contactNumber: "09123456789",
+            position: "Support Specialist",
+            employmentType: "FULL_TIME",
+            startDate: "2026-01-15T00:00:00.000Z",
             departmentId: "operations",
+            teamId: null,
+            password: "ValidPassword1!",
           },
           201,
         )
@@ -337,17 +400,16 @@ test(
         await json("/departments/operations/members", "POST", {
           employeeIds: [headlessEmployeeId],
         })
-        const linked = await json(
-          "/employees",
+        const assignment = await request(
+          "/departments/operations/members",
           "POST",
-          {
-            employeeId: "EMP-9004",
-            fullName: "Linked User",
-            userId: "user",
-            departmentId: "operations",
-          },
-          201,
+          { userIds: ["user"] },
         )
+        assert.equal(assignment.status, 200)
+        const linkedEmployee = await prisma.employee.findUniqueOrThrow({
+          where: { userId: "user" },
+          select: { id: true },
+        })
         const teamResponse = await request(
           "/departments/operations/teams",
           "POST",
@@ -362,7 +424,7 @@ test(
           { teamId: team.team.id },
         )
         await json(
-          `/departments/operations/members/${linked.employee.id}`,
+          `/departments/operations/members/${linkedEmployee.id}`,
           "PATCH",
           { teamId: team.team.id },
         )
@@ -409,7 +471,7 @@ test(
         assert.equal(
           (
             await prisma.employee.findUniqueOrThrow({
-              where: { id: linked.employee.id },
+              where: { id: linkedEmployee.id },
             })
           ).teamId,
           null,
@@ -417,72 +479,7 @@ test(
       },
     )
     await t.test(
-      "linking is explicit and unique; employment changes preserve login permissions",
-      async () => {
-        const before = await prisma.user.findUniqueOrThrow({
-          where: { id: "link-target" },
-        })
-        await json(`/employees/${employeeId}`, "PUT", {
-          userId: "link-target",
-          status: "INACTIVE",
-        })
-        const account = await prisma.user.findUniqueOrThrow({
-          where: { id: "link-target" },
-        })
-        assert.equal(account.departmentId, "product")
-        assert.equal(account.position, "Designer")
-        assert.equal(account.email, before.email)
-        assert.equal(account.passwordHash, before.passwordHash)
-        assert.equal(account.role, before.role)
-        assert.equal(account.isActive, true)
-        const beforeCount = await prisma.employee.count()
-        await json(
-          "/employees",
-          "POST",
-          {
-            employeeId: "EMP-9002",
-            fullName: "Another Person",
-            userId: "link-target",
-          },
-          409,
-        )
-        assert.equal(await prisma.employee.count(), beforeCount)
-        await json(
-          `/employees/${employeeId}`,
-          "PUT",
-          { userId: "superadmin" },
-          403,
-        )
-        assert.equal(
-          (
-            await prisma.employee.findUniqueOrThrow({
-              where: { id: employeeId },
-            })
-          ).userId,
-          "link-target",
-        )
-      },
-    )
-    await t.test(
-      "unlink preserves the employee/account and clears mirrored assignments",
-      async () => {
-        await json(`/employees/${employeeId}`, "PUT", { userId: null })
-        const employee = await prisma.employee.findUniqueOrThrow({
-          where: { id: employeeId },
-        })
-        assert.equal(employee.userId, null)
-        assert.equal(employee.departmentId, "product")
-        const account = await prisma.user.findUniqueOrThrow({
-          where: { id: "link-target" },
-        })
-        assert.equal(account.departmentId, null)
-        assert.equal(account.teamId, null)
-        assert.equal(account.isActive, true)
-        assert.equal(await prisma.user.count(), 5)
-      },
-    )
-    await t.test(
-      "a department head cannot be stranded by a transfer or unlink",
+      "a department head cannot be stranded by an employee transfer",
       async () => {
         const head = await prisma.employee.findUniqueOrThrow({
           where: { userId: "staff" },
@@ -493,11 +490,6 @@ test(
               departmentId: "operations",
             })
           ).status,
-          409,
-        )
-        assert.equal(
-          (await request(`/employees/${head.id}`, "PUT", { userId: null }))
-            .status,
           409,
         )
         assert.equal(
@@ -585,30 +577,10 @@ test(
           ).role,
           "STAFF",
         )
-        await json(`/employees/${employee.id}`, "PUT", { userId: null })
-        assert.equal(
-          (
-            await request(
-              "/users/role-target/role",
-              "PATCH",
-              { role: "SUPERADMIN" },
-              "superadmin",
-            )
-          ).status,
-          200,
-        )
-        assert.equal(
-          (
-            await prisma.employee.findUniqueOrThrow({
-              where: { id: employee.id },
-            })
-          ).userId,
-          null,
-        )
       },
     )
     await t.test(
-      "directory and account search paginate without losing later results",
+      "directory search paginates without losing later results",
       async () => {
         await prisma.employee.createMany({
           data: Array.from({ length: 21 }, (_, index) => ({
@@ -626,23 +598,6 @@ test(
             (employee) => employee.id === second.employees[0]?.id,
           ),
         )
-        await prisma.user.createMany({
-          data: Array.from({ length: 21 }, (_, index) => ({
-            email: `free-fixture-${index}@example.com`,
-            fullName: `Free fixture ${index}`,
-            passwordHash: "unchanged-hash",
-          })),
-        })
-        const options = await request(
-          "/employees/account-options?search=free-fixture&page=2",
-        )
-        const body = (await options.json()) as {
-          users: { id: string }[]
-          total: number
-        }
-        assert.equal(options.status, 200)
-        assert.equal(body.total, 21)
-        assert.equal(body.users.length, 1)
       },
     )
   },

@@ -16,13 +16,6 @@ async function setup(page: Page, role = "ADMIN", failFirstList = false) {
     createdAt: "2026-10-01T00:00:00Z",
     updatedAt: "2026-10-01T00:00:00Z",
   }
-  const freeAccount = {
-    id: "user-free",
-    fullName: "Taylor Garcia",
-    email: "taylor@example.com",
-    role: "STAFF" as const,
-    isActive: true,
-  }
   const initial: Employee = {
     id: "employee-jamie",
     employeeId: "EMP-1001",
@@ -37,8 +30,8 @@ async function setup(page: Page, role = "ADMIN", failFirstList = false) {
     department,
     teamId: null,
     team: null,
-    userId: null,
-    user: null,
+    hasAccount: true,
+    accountIsActive: true,
     createdAt: "2026-10-01T00:00:00Z",
     updatedAt: "2026-10-01T00:00:00Z",
   }
@@ -116,10 +109,6 @@ async function setup(page: Page, role = "ADMIN", failFirstList = false) {
           },
         },
       })
-    if (path === "/api/employees/account-options")
-      return route.fulfill({
-        json: { users: [freeAccount], total: 1, page: 1, pageSize: 20 },
-      })
     if (path === "/api/employees" && method === "GET") {
       if (fail) {
         fail = false
@@ -165,6 +154,15 @@ async function setup(page: Page, role = "ADMIN", failFirstList = false) {
       return route.fulfill({ status: 201, json: { employee } })
     }
     if (path.startsWith("/api/employees/")) {
+      if (path.endsWith("/status-options"))
+        return route.fulfill({
+          json: {
+            isDepartmentHead: false,
+            replacementCandidates: [],
+            recommendedReplacementEmployeeId: null,
+            willRestoreOriginalHead: false,
+          },
+        })
       const index = employees.findIndex(
         (employee) => employee.id === path.split("/").at(-1),
       )
@@ -176,13 +174,7 @@ async function setup(page: Page, role = "ADMIN", failFirstList = false) {
       if (method === "PUT") {
         const body = route.request().postDataJSON()
         mutations.push({ method, body })
-        employees[index] = {
-          ...employees[index],
-          ...body,
-          ...(body.userId !== undefined
-            ? { user: body.userId ? freeAccount : null }
-            : {}),
-        }
+        employees[index] = { ...employees[index], ...body }
       }
       return route.fulfill({ json: { employee: employees[index] } })
     }
@@ -231,7 +223,7 @@ test("Superadmin is redirected and has no Employee Management navigation", async
   ).toHaveCount(0)
 })
 
-test("Admin can create an employee without creating an account", async ({
+test("Admin creates an employee and Staff account together", async ({
   page,
 }) => {
   const state = await setup(page)
@@ -244,14 +236,23 @@ test("Admin can create an employee without creating an account", async ({
   await form.locator("#employee-contact-number").fill("07123456789")
   await form.getByRole("button", { name: "Add employee", exact: true }).click()
   await expect(form.getByText(/hyphens, or underscores only/)).toBeVisible()
-  await expect(form.getByText(/Letters, spaces, hyphens/)).toBeVisible()
-  await expect(form.getByText(/valid .com or .ph email/)).toBeVisible()
-  await expect(form.getByText(/11 digits starting with 09 or 08/)).toBeVisible()
+  await expect(form.locator("#employee-id")).toBeFocused()
   expect(state.mutations).toHaveLength(0)
   await form.locator("#employee-id").fill("EMP-2001")
   await form.locator("#employee-full-name").fill("Alex Dela Cruz")
   await form.locator("#employee-email").fill("alex@example.com")
   await form.locator("#employee-contact-number").fill("09123456789")
+  await form.locator("#employee-position").fill("Designer")
+  await form.locator("#employee-start-date").fill("2026-01-15")
+  await form.getByRole("combobox", { name: "Employment type" }).click()
+  await page.getByRole("option", { name: "Full time", exact: true }).click()
+  await form.getByRole("combobox", { name: "Department" }).click()
+  await page.getByRole("option", { name: "Product", exact: true }).click()
+  await expect(form.getByRole("combobox", { name: "Team" })).toBeEnabled()
+  await form.getByRole("combobox", { name: "Team" }).click()
+  await page.getByRole("option", { name: "No team", exact: true }).click()
+  await form.locator("#employee-password").fill("ValidPassword1!")
+  await form.locator("#employee-password-confirmation").fill("ValidPassword1!")
   await form.getByRole("button", { name: "Add employee", exact: true }).click()
   await expect(form).toHaveCount(0)
   await expect(
@@ -260,64 +261,20 @@ test("Admin can create an employee without creating an account", async ({
   expect(state.mutations[0].body).toMatchObject({
     employeeId: "EMP-2001",
     fullName: "Alex Dela Cruz",
+    email: "alex@example.com",
+    contactNumber: "09123456789",
+    position: "Designer",
+    employmentType: "FULL_TIME",
+    startDate: "2026-01-15T00:00:00.000Z",
+    departmentId: "product",
+    teamId: null,
+    password: "ValidPassword1!",
   })
-  expect(state.mutations[0].body).not.toHaveProperty("password")
+  expect(state.mutations[0].body).not.toHaveProperty("passwordConfirmation")
   expect(state.mutations[0].body).not.toHaveProperty("userId")
 })
 
-test("drawer links and unlinks only after explicit confirmation", async ({
-  page,
-}) => {
-  const state = await setup(page)
-  await page.goto("/employees")
-  await page
-    .getByRole("button", { name: "More actions for Jamie Rivera" })
-    .click()
-  await page
-    .getByRole("menuitem", { name: "View details", exact: true })
-    .click()
-  const drawer = page.getByRole("dialog", {
-    name: "Employee details",
-    exact: true,
-  })
-  await expect(
-    drawer.getByText("Jamie Rivera", { exact: true }).first(),
-  ).toBeVisible()
-  await drawer.getByRole("tab", { name: "Account", exact: true }).click()
-  await drawer.getByRole("button", { name: "Link", exact: true }).click()
-  expect(state.mutations).toHaveLength(0)
-  const confirm = page.getByRole("dialog", {
-    name: "Link account?",
-    exact: true,
-  })
-  await confirm
-    .getByRole("button", { name: "Link account", exact: true })
-    .click()
-  await expect(
-    drawer.getByText("Account active", { exact: true }),
-  ).toBeVisible()
-  expect(state.mutations[0].body).toEqual({ userId: "user-free" })
-  await drawer
-    .getByRole("button", { name: "Unlink account", exact: true })
-    .click()
-  await page
-    .getByRole("dialog", { name: "Unlink account?", exact: true })
-    .getByRole("button", { name: "Unlink account", exact: true })
-    .click()
-  await expect(
-    drawer.getByText("No account is linked to this employee.", { exact: true }),
-  ).toBeVisible()
-  expect(state.mutations[1].body).toEqual({ userId: null })
-  await drawer.getByRole("button", { name: "Done", exact: true }).click()
-  await expect(drawer).toHaveCount(0)
-  await expect(
-    page.getByRole("button", { name: "More actions for Jamie Rivera" }),
-  ).toBeFocused()
-})
-
-test("employment status change requires confirmation and preserves account fields", async ({
-  page,
-}) => {
+test("employment status change requires confirmation", async ({ page }) => {
   const state = await setup(page)
   await page.goto("/employees")
   await page

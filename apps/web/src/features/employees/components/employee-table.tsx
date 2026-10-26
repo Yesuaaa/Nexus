@@ -59,6 +59,7 @@ export function EmployeeTable({
   onView,
   onEdit,
   onChangeStatus,
+  onManageLogin,
   onManageDepartment,
 }: {
   employees: Employee[]
@@ -69,6 +70,7 @@ export function EmployeeTable({
   onView: (employee: Employee) => void
   onEdit: (employee: Employee) => void
   onChangeStatus: (employee: Employee) => void
+  onManageLogin: (employee: Employee) => void
   onManageDepartment?: (departmentId: string) => void
 }) {
   if (loading || error || employees.length === 0) {
@@ -96,9 +98,9 @@ export function EmployeeTable({
   }
 
   return (
-    <div className="@container min-w-0 overflow-hidden rounded-lg border border-[#e8ebef] bg-background">
+    <div className="@container max-h-[max(280px,calc(100dvh-350px))] min-w-0 overflow-auto overscroll-contain rounded-lg border border-[#e8ebef] bg-background max-[560px]:max-h-[55dvh] [&>div]:overflow-visible">
       <Table aria-label="Employees" className="@max-[1000px]:block">
-        <TableHeader className="bg-[#e8eef2] @max-[1000px]:hidden">
+        <TableHeader className="sticky top-0 z-10 bg-[#e8eef2] @max-[1000px]:hidden">
           <TableRow className="border-[#dfe6eb] hover:bg-transparent">
             <TableHead>Employee ID</TableHead>
             <TableHead>Employee</TableHead>
@@ -107,9 +109,8 @@ export function EmployeeTable({
             <TableHead>Type</TableHead>
             <TableHead>Start date</TableHead>
             <TableHead>Status</TableHead>
-            <TableHead>Account</TableHead>
-            <TableHead className="w-12">
-              <span className="sr-only">Actions</span>
+            <TableHead className="w-[112px] min-w-[112px] text-right">
+              Actions
             </TableHead>
           </TableRow>
         </TableHeader>
@@ -207,17 +208,6 @@ export function EmployeeTable({
                 </span>
                 <StatusPill status={employee.status} />
               </TableCell>
-              <TableCell
-                className="max-w-36 truncate text-[#52627a] @max-[1000px]:col-start-2 @max-[1000px]:row-start-3 @max-[1000px]:p-0"
-                title={employee.user?.email ?? undefined}
-              >
-                <span className="hidden text-[#738096] @max-[1000px]:inline">
-                  Account{" "}
-                </span>
-                {employee.user?.email || (
-                  <span className="text-[#94a3b8]">Not linked</span>
-                )}
-              </TableCell>
               <TableCell className="flex justify-end @max-[1000px]:col-start-2 @max-[1000px]:row-start-4 @max-[1000px]:row-span-2 @max-[1000px]:items-start @max-[1000px]:p-0">
                 <EmployeeRowActions
                   employee={employee}
@@ -225,6 +215,7 @@ export function EmployeeTable({
                   onView={() => onView(employee)}
                   onEdit={() => onEdit(employee)}
                   onChangeStatus={() => onChangeStatus(employee)}
+                  onManageLogin={() => onManageLogin(employee)}
                 />
               </TableCell>
             </TableRow>

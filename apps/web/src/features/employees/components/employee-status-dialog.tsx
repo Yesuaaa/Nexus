@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -15,8 +15,10 @@ import {
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import {
+  getEmployeeStatusOptions,
   updateEmployee,
   type Employee,
+  type EmployeeStatusOptions,
   type EmploymentStatus,
 } from "../api/employees-api"
 
@@ -36,15 +38,64 @@ export function EmployeeStatusDialog({
   onSaved: () => void
 }) {
   const [status, setStatus] = useState<EmploymentStatus>(employee.status)
+  const [replacementHeadEmployeeId, setReplacementHeadEmployeeId] = useState("")
+  const [statusOptions, setStatusOptions] =
+    useState<EmployeeStatusOptions | null>(null)
+  const [optionsLoading, setOptionsLoading] = useState(true)
+  const [optionsError, setOptionsError] = useState("")
+  const [optionsRevision, setOptionsRevision] = useState(0)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState("")
 
+  useEffect(() => {
+    let active = true
+    getEmployeeStatusOptions(employee.id)
+      .then((options) => {
+        if (!active) return
+        setStatusOptions(options)
+        setReplacementHeadEmployeeId(
+          options.recommendedReplacementEmployeeId ?? "",
+        )
+        setOptionsError("")
+      })
+      .catch((reason: unknown) => {
+        if (active) {
+          setOptionsError(
+            reason instanceof Error
+              ? reason.message
+              : "Couldn't load department head options.",
+          )
+        }
+      })
+      .finally(() => {
+        if (active) setOptionsLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [employee.departmentId, employee.id, optionsRevision])
+
+  const changingHeadStatus = Boolean(
+    status !== "ACTIVE" &&
+    status !== employee.status &&
+    statusOptions?.isDepartmentHead,
+  )
+
   async function submit() {
-    if (pending || status === employee.status) return
+    if (
+      pending ||
+      status === employee.status ||
+      !statusOptions ||
+      (changingHeadStatus && !replacementHeadEmployeeId)
+    )
+      return
     setPending(true)
     setError("")
     try {
-      await updateEmployee(employee.id, { status })
+      await updateEmployee(employee.id, {
+        status,
+        ...(changingHeadStatus ? { replacementHeadEmployeeId } : {}),
+      })
       onSaved()
     } catch (reason: unknown) {
       setError(
@@ -92,7 +143,10 @@ export function EmployeeStatusDialog({
             Status
             <Select
               value={status}
-              onValueChange={(value) => setStatus(value as EmploymentStatus)}
+              onValueChange={(value) => {
+                setStatus(value as EmploymentStatus)
+                setError("")
+              }}
               disabled={pending}
             >
               <SelectTrigger
@@ -110,6 +164,89 @@ export function EmployeeStatusDialog({
               </SelectContent>
             </Select>
           </label>
+          {optionsLoading && (
+            <p className="m-0 text-xs text-[#738096]" role="status">
+              Checking department head assignment…
+            </p>
+          )}
+          {optionsError && (
+            <div
+              className="grid gap-2 rounded-lg bg-[#fff0f1] p-3 text-xs text-[#bc3649]"
+              role="alert"
+            >
+              <p className="m-0">{optionsError}</p>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-auto min-h-0 w-fit border-0 bg-transparent p-0 font-semibold text-[#244993] shadow-none hover:bg-transparent"
+                disabled={optionsLoading || pending}
+                onClick={() => {
+                  setOptionsLoading(true)
+                  setOptionsError("")
+                  setOptionsRevision((value) => value + 1)
+                }}
+              >
+                Try again
+              </Button>
+            </div>
+          )}
+          {changingHeadStatus && statusOptions && (
+            <div className="grid gap-2">
+              <label
+                className="grid gap-1.5 text-xs font-semibold"
+                htmlFor="temporary-department-head"
+              >
+                Temporary department head
+                {statusOptions.replacementCandidates.length > 0 ? (
+                  <Select
+                    value={replacementHeadEmployeeId}
+                    onValueChange={(value) => {
+                      setReplacementHeadEmployeeId(value)
+                      setError("")
+                    }}
+                    disabled={pending}
+                  >
+                    <SelectTrigger
+                      id="temporary-department-head"
+                      className="h-10 rounded-lg border-[#d6dfec] bg-background px-[11px] text-sm"
+                    >
+                      <SelectValue placeholder="Choose a department member" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {statusOptions.replacementCandidates.map(
+                        (candidate, index) => (
+                          <SelectItem key={candidate.id} value={candidate.id}>
+                            {candidate.fullName}
+                            {candidate.email ? ` — ${candidate.email}` : ""}
+                            {index === 0 ? " · Most senior" : ""}
+                          </SelectItem>
+                        ),
+                      )}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <span className="rounded-lg bg-[#fff0f1] p-3 font-normal text-[#bc3649]">
+                    No active Staff member with an EXP account is available.
+                    Assign a department head first.
+                  </span>
+                )}
+              </label>
+              {statusOptions.replacementCandidates.length > 0 && (
+                <p className="m-0 text-[11px] font-normal text-[#738096]">
+                  The longest-serving active member is selected by default. You
+                  can choose someone else before confirming.
+                </p>
+              )}
+            </div>
+          )}
+          {status === "ACTIVE" &&
+            status !== employee.status &&
+            statusOptions?.willRestoreOriginalHead && (
+              <p className="m-0 rounded-lg bg-[#eef4ff] p-3 text-xs text-[#24437e]">
+                Returning to Active will restore {employee.fullName} as the
+                department head and remove the temporary assignment.
+              </p>
+            )}
           {error && (
             <p
               className="m-0 rounded-lg bg-[#fff0f1] p-3 text-xs text-[#bc3649]"
@@ -136,7 +273,13 @@ export function EmployeeStatusDialog({
             className={cn(
               "h-auto min-h-[38px] cursor-pointer rounded-[9px] border border-transparent bg-[#203f8c] px-[15px] text-xs font-semibold text-white shadow-none transition-colors hover:enabled:bg-[#172f70]",
             )}
-            disabled={pending || status === employee.status}
+            disabled={
+              pending ||
+              status === employee.status ||
+              optionsLoading ||
+              !statusOptions ||
+              (changingHeadStatus && !replacementHeadEmployeeId)
+            }
             onClick={() => void submit()}
           >
             {pending ? "Saving…" : "Confirm status"}

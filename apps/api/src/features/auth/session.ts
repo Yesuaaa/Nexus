@@ -57,7 +57,12 @@ export const requireAuth: RequestHandler = async (request, response, next) => {
       where: { tokenHash: tokenHash(match[1]) },
       include: { user: true },
     })
-    if (!session || session.expiresAt <= new Date() || !session.user.isActive) {
+    if (
+      !session ||
+      session.expiresAt <= new Date() ||
+      !session.user.isActive ||
+      session.user.accountDeletedAt !== null
+    ) {
       response.status(401).json({ error: "Invalid or expired session" })
       return
     }

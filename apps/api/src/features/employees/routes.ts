@@ -8,16 +8,28 @@ import {
 import { getPrisma } from "../../lib/db.js"
 import { requireAuth, requirePermission } from "../auth/session.js"
 import { Permission } from "../auth/permissions.js"
+import { hashPassword, validPassword } from "../auth/password.js"
 import {
   createEmployee,
   EmployeeError,
   employeeInclude,
+  getEmployeeStatusOptions,
   updateEmployee,
 } from "./service.js"
 import { validateEmployeeInput } from "./validation.js"
 
 export const employeesRouter = Router()
 employeesRouter.use(requireAuth)
+
+function validEmployeeAccountPassword(value: unknown): value is string {
+  return (
+    validPassword(value) &&
+    /[A-Z]/.test(value) &&
+    /[a-z]/.test(value) &&
+    /[0-9]/.test(value) &&
+    /[^A-Za-z0-9]/.test(value)
+  )
+}
 
 function isUniqueConflict(error: unknown) {
   return (
@@ -42,23 +54,63 @@ function sendError(response: import("express").Response, error: unknown) {
   if (isUniqueConflict(error)) {
     response
       .status(409)
-      .json({ error: "Employee ID or account link already exists" })
+      .json({ error: "Employee ID or account email already exists" })
     return true
   }
   const code = prismaErrorCode(error)
   if (code === "P2003") {
     response.status(400).json({
-      error: "A selected department, team, or account no longer exists",
+      error: "A selected department or team no longer exists",
     })
     return true
   }
   if (code === "P2025" || code === "P2034") {
-    response
-      .status(409)
-      .json({ error: "Employee or account changed; refresh and retry" })
+    response.status(409).json({ error: "Employee changed; refresh and retry" })
     return true
   }
   return false
+}
+
+function withoutEmployeeAccountDetails<
+  T extends {
+    userId: string | null
+    user?: { isActive: boolean; accountDeletedAt: Date | null } | null
+  },
+>(record: T) {
+  const { userId: omittedUserId, user: omittedUser, ...employee } = record
+  const hasAccount = Boolean(omittedUserId && !omittedUser?.accountDeletedAt)
+  const accountIsActive = hasAccount ? (omittedUser?.isActive ?? false) : null
+  return { ...employee, hasAccount, accountIsActive }
+}
+
+async function createStaffAccount(
+  tx: Prisma.TransactionClient,
+  employee: {
+    email: string | null
+    fullName: string
+    contactNumber: string | null
+    position: string | null
+    departmentId: string | null
+    teamId: string | null
+  },
+  passwordHash: string,
+) {
+  if (!employee.email) {
+    throw new EmployeeError(400, "Email is required to create an account")
+  }
+  return tx.user.create({
+    data: {
+      email: employee.email,
+      fullName: employee.fullName,
+      contactNumber: employee.contactNumber,
+      position: employee.position,
+      passwordHash,
+      role: Role.STAFF,
+      isActive: true,
+      departmentId: employee.departmentId,
+      teamId: employee.teamId,
+    },
+  })
 }
 
 function parsePage(value: unknown) {
@@ -74,75 +126,6 @@ function parseQueryString(value: unknown) {
   if (value === undefined) return ""
   return typeof value === "string" ? value.trim() : null
 }
-
-// GET /api/employees/account-options - Search linkable user accounts.
-employeesRouter.get(
-  "/account-options",
-  requirePermission(Permission.EMPLOYEES_MANAGE),
-  async (request, response) => {
-    const search = parseQueryString(request.query.search)
-    const page = parsePage(request.query.page)
-    const employeeId = parseQueryString(request.query.employeeId)
-    if (
-      search === null ||
-      employeeId === null ||
-      search.length > 100 ||
-      page === null ||
-      employeeId.length > 80
-    ) {
-      return response.status(400).json({ error: "Invalid account filters" })
-    }
-
-    const prisma = getPrisma()!
-    if (employeeId) {
-      const employee = await prisma.employee.findUnique({
-        where: { id: employeeId },
-        select: { id: true },
-      })
-      if (!employee)
-        return response.status(404).json({ error: "Employee not found" })
-    }
-
-    const clauses: Prisma.UserWhereInput[] = [
-      {
-        OR: [
-          { employee: { is: null } },
-          ...(employeeId ? [{ employee: { is: { id: employeeId } } }] : []),
-        ],
-      },
-    ]
-    if (search) {
-      clauses.push({
-        OR: [
-          { email: { contains: search, mode: "insensitive" } },
-          { fullName: { contains: search, mode: "insensitive" } },
-        ],
-      })
-    }
-    const where: Prisma.UserWhereInput = {
-      role: { not: Role.SUPERADMIN },
-      AND: clauses,
-    }
-    const pageSize = 20
-    const [users, total] = await prisma.$transaction([
-      prisma.user.findMany({
-        where,
-        select: {
-          id: true,
-          email: true,
-          fullName: true,
-          role: true,
-          isActive: true,
-        },
-        orderBy: [{ fullName: "asc" }, { id: "asc" }],
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      }),
-      prisma.user.count({ where }),
-    ])
-    return response.json({ users, total, page, pageSize })
-  },
-)
 
 // GET /api/employees - Search and paginate employee records.
 employeesRouter.get(
@@ -202,11 +185,16 @@ employeesRouter.get(
       }),
       prisma.employee.count({ where }),
     ])
-    return response.json({ employees, total, page, pageSize })
+    return response.json({
+      employees: employees.map(withoutEmployeeAccountDetails),
+      total,
+      page,
+      pageSize,
+    })
   },
 )
 
-// POST /api/employees - Create an employee record, optionally linked to an account.
+// POST /api/employees - Create an employee record.
 employeesRouter.post(
   "/",
   requirePermission(Permission.EMPLOYEES_MANAGE),
@@ -214,11 +202,50 @@ employeesRouter.post(
     const parsed = validateEmployeeInput(request.body, false)
     if ("error" in parsed)
       return response.status(400).json({ error: parsed.error })
+    const password = request.body?.password
+    if (!validEmployeeAccountPassword(password)) {
+      return response.status(400).json({
+        error:
+          "Password must be at least 12 characters with uppercase, lowercase, number, and special character",
+      })
+    }
     try {
-      const employee = await getPrisma()!.$transaction((tx) =>
-        createEmployee(tx, parsed.value),
+      const passwordHash = await hashPassword(password)
+      const employee = await getPrisma()!.$transaction(async (tx) => {
+        const account = await createStaffAccount(
+          tx,
+          {
+            email: parsed.value.email ?? null,
+            fullName: parsed.value.fullName ?? "",
+            contactNumber: parsed.value.contactNumber ?? null,
+            position: parsed.value.position ?? null,
+            departmentId: parsed.value.departmentId ?? null,
+            teamId: parsed.value.teamId ?? null,
+          },
+          passwordHash,
+        )
+        return createEmployee(tx, { ...parsed.value, userId: account.id })
+      })
+      return response
+        .status(201)
+        .json({ employee: withoutEmployeeAccountDetails(employee) })
+    } catch (error) {
+      if (sendError(response, error)) return
+      throw error
+    }
+  },
+)
+
+// GET /api/employees/:id/status-options - Read department head handoff choices.
+employeesRouter.get(
+  "/:id/status-options",
+  requirePermission(Permission.EMPLOYEES_MANAGE),
+  async (request, response) => {
+    try {
+      const options = await getPrisma()!.$transaction((tx) =>
+        getEmployeeStatusOptions(tx, String(request.params.id)),
       )
-      return response.status(201).json({ employee })
+      return response.json(options)
     } catch (error) {
       if (sendError(response, error)) return
       throw error
@@ -237,11 +264,11 @@ employeesRouter.get(
     })
     if (!employee)
       return response.status(404).json({ error: "Employee not found" })
-    return response.json({ employee })
+    return response.json({ employee: withoutEmployeeAccountDetails(employee) })
   },
 )
 
-// PUT /api/employees/:id - Partially update employee data and account linkage.
+// PUT /api/employees/:id - Partially update employee data.
 employeesRouter.put(
   "/:id",
   requirePermission(Permission.EMPLOYEES_MANAGE),
@@ -249,11 +276,161 @@ employeesRouter.put(
     const parsed = validateEmployeeInput(request.body, true)
     if ("error" in parsed)
       return response.status(400).json({ error: parsed.error })
+    const password = request.body?.password
+    if (password !== undefined && !validEmployeeAccountPassword(password)) {
+      return response.status(400).json({
+        error:
+          "Password must be at least 12 characters with uppercase, lowercase, number, and special character",
+      })
+    }
     try {
-      const employee = await getPrisma()!.$transaction((tx) =>
-        updateEmployee(tx, String(request.params.id), parsed.value),
-      )
-      return response.json({ employee })
+      const passwordHash =
+        typeof password === "string" ? await hashPassword(password) : null
+      const employee = await getPrisma()!.$transaction(async (tx) => {
+        const updated = await updateEmployee(
+          tx,
+          String(request.params.id),
+          parsed.value,
+        )
+        if (!passwordHash) return updated
+        if (updated.userId && !updated.user?.accountDeletedAt) {
+          throw new EmployeeError(409, "Employee already has a portal account")
+        }
+        if (updated.userId) {
+          await tx.user.update({
+            where: { id: updated.userId },
+            data: {
+              passwordHash,
+              isActive: true,
+              accountDeletedAt: null,
+              email: updated.email!,
+              fullName: updated.fullName,
+              contactNumber: updated.contactNumber,
+              position: updated.position,
+              departmentId: updated.departmentId,
+              teamId: updated.teamId,
+            },
+          })
+          return tx.employee.findUniqueOrThrow({
+            where: { id: updated.id },
+            include: employeeInclude,
+          })
+        }
+        const account = await createStaffAccount(tx, updated, passwordHash)
+        return updateEmployee(tx, updated.id, { userId: account.id })
+      })
+      return response.json({
+        employee: withoutEmployeeAccountDetails(employee),
+      })
+    } catch (error) {
+      if (sendError(response, error)) return
+      throw error
+    }
+  },
+)
+
+employeesRouter.patch(
+  "/:id/account/status",
+  requirePermission(Permission.EMPLOYEES_MANAGE),
+  async (request, response) => {
+    if (request.body?.isActive !== false) {
+      return response
+        .status(400)
+        .json({ error: "Only account deactivation is supported here" })
+    }
+    const actor = request.auth!.user
+    try {
+      await getPrisma()!.$transaction(async (tx) => {
+        const employee = await tx.employee.findUnique({
+          where: { id: String(request.params.id) },
+          select: {
+            user: { select: { id: true, role: true, accountDeletedAt: true } },
+          },
+        })
+        if (!employee) throw new EmployeeError(404, "Employee not found")
+        if (!employee.user || employee.user.accountDeletedAt) {
+          throw new EmployeeError(409, "Employee has no login account")
+        }
+        if (employee.user.id === actor.id) {
+          throw new EmployeeError(
+            403,
+            "You cannot deactivate your own login account",
+          )
+        }
+        if (
+          employee.user.role === Role.ADMIN ||
+          employee.user.role === Role.SUPERADMIN
+        ) {
+          throw new EmployeeError(
+            403,
+            "Admin accounts must be managed from Account Management",
+          )
+        }
+        await tx.user.update({
+          where: { id: employee.user.id },
+          data: { isActive: false },
+        })
+        await tx.session.deleteMany({ where: { userId: employee.user.id } })
+      })
+      return response.status(204).send()
+    } catch (error) {
+      if (sendError(response, error)) return
+      throw error
+    }
+  },
+)
+
+employeesRouter.delete(
+  "/:id/account",
+  requirePermission(Permission.EMPLOYEES_MANAGE),
+  async (request, response) => {
+    const actor = request.auth!.user
+    try {
+      await getPrisma()!.$transaction(async (tx) => {
+        const employee = await tx.employee.findUnique({
+          where: { id: String(request.params.id) },
+          select: {
+            user: {
+              select: {
+                id: true,
+                role: true,
+                isActive: true,
+                accountDeletedAt: true,
+              },
+            },
+          },
+        })
+        if (!employee) throw new EmployeeError(404, "Employee not found")
+        if (!employee.user || employee.user.accountDeletedAt) {
+          throw new EmployeeError(409, "Employee has no login account")
+        }
+        if (employee.user.id === actor.id) {
+          throw new EmployeeError(
+            403,
+            "You cannot delete your own login account",
+          )
+        }
+        if (
+          employee.user.role === Role.ADMIN ||
+          employee.user.role === Role.SUPERADMIN
+        ) {
+          throw new EmployeeError(
+            403,
+            "Admin accounts must be managed from Account Management",
+          )
+        }
+        if (employee.user.isActive) {
+          throw new EmployeeError(
+            409,
+            "Deactivate this login account before deleting it",
+          )
+        }
+        await tx.user.update({
+          where: { id: employee.user.id },
+          data: { accountDeletedAt: new Date() },
+        })
+      })
+      return response.status(204).send()
     } catch (error) {
       if (sendError(response, error)) return
       throw error

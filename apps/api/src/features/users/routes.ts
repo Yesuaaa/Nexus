@@ -33,7 +33,9 @@ usersRouter.patch(
     }
     const prisma = getPrisma()!
     const target = await prisma.user.findUnique({ where: { id } })
-    if (!target) return response.status(404).json({ error: "User not found" })
+    if (!target || target.accountDeletedAt) {
+      return response.status(404).json({ error: "User not found" })
+    }
     if (!canChangeAccountStatus(actor.role, target.role)) {
       return response
         .status(403)
@@ -90,6 +92,7 @@ usersRouter.get(
       return response.status(400).json({ error: "Invalid account filters" })
     }
     const where = {
+      accountDeletedAt: null,
       ...(role ? { role: role as Role } : {}),
       ...(search
         ? {

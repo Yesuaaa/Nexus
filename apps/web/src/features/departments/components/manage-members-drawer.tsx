@@ -207,7 +207,7 @@ export function ManageMembersDrawer({
   useEffect(() => {
     if (!canManage) return
     let active = true
-    listEmployees("", undefined, 1)
+    listEmployees("", 1)
       .then((res) => {
         if (active) {
           setQuickAssignResult({
@@ -246,7 +246,7 @@ export function ManageMembersDrawer({
   useEffect(() => {
     if (!canManage || !debouncedAssignSearch) return
     let active = true
-    listEmployees(debouncedAssignSearch, undefined, candidatePage)
+    listEmployees(debouncedAssignSearch, candidatePage)
       .then((res) => {
         if (active) {
           setCandidateResult({

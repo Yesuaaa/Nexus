@@ -1,5 +1,5 @@
 import { Router } from "express"
-import { Role, type Prisma } from "../../generated/prisma/client.js"
+import { Prisma, Role } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { requireAuth, requirePermission } from "../auth/session.js"
 import { Permission } from "../auth/permissions.js"
@@ -31,6 +31,18 @@ const departmentMemberSelect = {
     },
   },
 } satisfies Prisma.EmployeeSelect
+
+function withoutTemporaryHeadTracking<
+  T extends {
+    temporaryHeadOriginalId: string | null
+    temporaryHeadAssignedId: string | null
+  },
+>(department: T) {
+  const fields = { ...department }
+  Reflect.deleteProperty(fields, "temporaryHeadOriginalId")
+  Reflect.deleteProperty(fields, "temporaryHeadAssignedId")
+  return fields
+}
 
 export const departmentsRouter = Router()
 departmentsRouter.use(requireAuth)
@@ -106,6 +118,61 @@ departmentsRouter.get(
         headOf: u.headOf,
       })),
     })
+  },
+)
+
+// GET /api/departments/employee-options - Search employee records for department assignment.
+departmentsRouter.get(
+  "/employee-options",
+  requirePermission(Permission.DEPARTMENTS_READ),
+  async (request, response) => {
+    const search =
+      request.query.search === undefined
+        ? ""
+        : typeof request.query.search === "string"
+          ? request.query.search.trim()
+          : null
+    const pageValue = request.query.page
+    const page =
+      pageValue === undefined
+        ? 1
+        : typeof pageValue === "string" && /^\d+$/.test(pageValue)
+          ? Number(pageValue)
+          : null
+    if (
+      search === null ||
+      search.length > 100 ||
+      page === null ||
+      !Number.isSafeInteger(page) ||
+      page < 1 ||
+      page > 1_000_000
+    ) {
+      return response.status(400).json({ error: "Invalid employee filters" })
+    }
+
+    const where: Prisma.EmployeeWhereInput = search
+      ? {
+          OR: [
+            { employeeId: { contains: search, mode: "insensitive" } },
+            { fullName: { contains: search, mode: "insensitive" } },
+            { email: { contains: search, mode: "insensitive" } },
+            { contactNumber: { contains: search, mode: "insensitive" } },
+          ],
+        }
+      : {}
+    const prisma = getPrisma()!
+    const pageSize = 20
+    const [employees, total] = await prisma.$transaction([
+      prisma.employee.findMany({
+        where,
+        include: employeeInclude,
+        orderBy: [{ fullName: "asc" }, { employeeId: "asc" }, { id: "asc" }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      prisma.employee.count({ where }),
+    ])
+    return response.json({ employees, total, page, pageSize })
   },
 )
 
@@ -205,7 +272,7 @@ departmentsRouter.get(
 
     response.json({
       department: {
-        ...departmentFields,
+        ...withoutTemporaryHeadTracking(departmentFields),
         members: employees,
         memberCount: employees.length,
         teamCount: teams.length,
@@ -310,7 +377,7 @@ departmentsRouter.post(
 
       return response.status(201).json({
         department: {
-          ...department,
+          ...withoutTemporaryHeadTracking(department),
           memberCount: department._count.employees,
         },
       })
@@ -404,7 +471,11 @@ departmentsRouter.put(
 
     try {
       const updated = await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw(
+          Prisma.sql`SELECT "id" FROM "Department" WHERE "id" = ${id} FOR UPDATE`,
+        )
         const current = await tx.department.findUniqueOrThrow({ where: { id } })
+        const headChanged = headId !== undefined && current.headId !== headId
         const saved = await tx.department.update({
           where: { id },
           data: {
@@ -412,6 +483,12 @@ departmentsRouter.put(
             ...(code !== undefined ? { code } : {}),
             ...(description !== undefined ? { description } : {}),
             ...(headId !== undefined ? { headId } : {}),
+            ...(headChanged
+              ? {
+                  temporaryHeadOriginalId: null,
+                  temporaryHeadAssignedId: null,
+                }
+              : {}),
           },
         })
 
@@ -457,7 +534,7 @@ departmentsRouter.put(
 
       return response.json({
         department: {
-          ...updated,
+          ...withoutTemporaryHeadTracking(updated),
           memberCount: updated._count.employees,
         },
       })

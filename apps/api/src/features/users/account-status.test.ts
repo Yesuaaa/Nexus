@@ -22,6 +22,7 @@ test("account deactivation, reactivation, and authentication enforce access", as
     passwordHash: await hashPassword(password),
     role: Role.USER,
     isActive: true,
+    accountDeletedAt: null,
     departmentId: null,
     teamId: null,
     createdAt: new Date(),

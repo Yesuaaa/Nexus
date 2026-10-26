@@ -34,41 +34,49 @@ enum EmployeeStatus {
 }
 
 model User {
-  id            String      @id @default(cuid())
-  email         String      @unique
-  fullName      String?
-  contactNumber String?
-  position      String?
-  passwordHash  String
-  role          Role        @default(USER)
-  isActive      Boolean     @default(true)
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  departmentId  String?
-  department    Department? @relation("DepartmentMembers", fields: [departmentId], references: [id], onDelete: SetNull)
-  headOf        Department? @relation("DepartmentHead")
-  teamId        String?
-  team          Team?       @relation("TeamMembers", fields: [teamId], references: [id], onDelete: SetNull)
-  leadOfTeam    Team?       @relation("TeamLead")
-  employee      Employee?
-  sessions      Session[]
+  id                                String      @id @default(cuid())
+  email                             String      @unique
+  fullName                          String?
+  contactNumber                     String?
+  position                          String?
+  passwordHash                      String
+  role                              Role        @default(USER)
+  isActive                          Boolean     @default(true)
+  accountDeletedAt                  DateTime?
+  createdAt                         DateTime    @default(now())
+  updatedAt                         DateTime    @updatedAt
+  departmentId                      String?
+  department                        Department? @relation("DepartmentMembers", fields: [departmentId], references: [id], onDelete: SetNull)
+  headOf                            Department? @relation("DepartmentHead")
+  teamId                            String?
+  team                              Team?       @relation("TeamMembers", fields: [teamId], references: [id], onDelete: SetNull)
+  leadOfTeam                        Team?       @relation("TeamLead")
+  employee                          Employee?
+  temporaryOriginalDepartmentHeadOf Department? @relation("DepartmentTemporaryOriginalHead")
+  temporaryAssignedDepartmentHeadOf Department? @relation("DepartmentTemporaryAssignedHead")
+  sessions                          Session[]
 
   @@index([departmentId])
   @@index([teamId])
+  @@index([accountDeletedAt])
 }
 
 model Department {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  code        String?  @unique
-  description String?
-  headId      String?  @unique
-  head        User?    @relation("DepartmentHead", fields: [headId], references: [id], onDelete: SetNull)
-  members     User[]   @relation("DepartmentMembers")
-  employees   Employee[]
-  teams       Team[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                      String     @id @default(cuid())
+  name                    String     @unique
+  code                    String?    @unique
+  description             String?
+  headId                  String?    @unique
+  head                    User?      @relation("DepartmentHead", fields: [headId], references: [id], onDelete: SetNull)
+  temporaryHeadOriginalId String?    @unique
+  temporaryHeadOriginal   User?      @relation("DepartmentTemporaryOriginalHead", fields: [temporaryHeadOriginalId], references: [id], onDelete: SetNull)
+  temporaryHeadAssignedId String?    @unique
+  temporaryHeadAssigned   User?      @relation("DepartmentTemporaryAssignedHead", fields: [temporaryHeadAssignedId], references: [id], onDelete: SetNull)
+  members                 User[]     @relation("DepartmentMembers")
+  employees               Employee[]
+  teams                   Team[]
+  createdAt               DateTime   @default(now())
+  updatedAt               DateTime   @updatedAt
 
   @@index([headId])
 }

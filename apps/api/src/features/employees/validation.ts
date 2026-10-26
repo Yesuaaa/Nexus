@@ -19,17 +19,13 @@ export type EmployeeInput = {
   startDate?: Date | null
   departmentId?: string | null
   teamId?: string | null
-  userId?: string | null
+  replacementHeadEmployeeId?: string
 }
 
-const optionalNullableFields = [
-  "email",
-  "contactNumber",
-  "position",
+const requiredAssignmentFields = [
   "startDate",
   "departmentId",
   "teamId",
-  "userId",
 ] as const
 
 export function validateEmployeeInput(
@@ -41,6 +37,11 @@ export function validateEmployeeInput(
   }
 
   const body = input as Record<string, unknown>
+  if (Object.prototype.hasOwnProperty.call(body, "userId")) {
+    return {
+      error: "Account associations are managed outside Employee Management",
+    }
+  }
   const value: EmployeeInput = {}
 
   if (body.employeeId !== undefined || !partial) {
@@ -73,10 +74,10 @@ export function validateEmployeeInput(
     value.fullName = body.fullName.trim()
   }
 
-  if (body.email !== undefined) {
-    if (body.email === null || body.email === "") value.email = null
-    else if (
-      typeof body.email !== "string" ||
+  if (body.email !== undefined || !partial) {
+    if (typeof body.email !== "string" || !body.email.trim()) {
+      return { error: "Email is required" }
+    } else if (
       body.email.trim().length > 254 ||
       !EMAIL_RE.test(body.email.trim())
     ) {
@@ -84,28 +85,23 @@ export function validateEmployeeInput(
     } else value.email = body.email.trim().toLowerCase()
   }
 
-  if (body.contactNumber !== undefined) {
-    if (body.contactNumber === null || body.contactNumber === "") {
-      value.contactNumber = null
-    } else if (
-      typeof body.contactNumber !== "string" ||
-      !PHONE_RE.test(body.contactNumber.trim())
-    ) {
+  if (body.contactNumber !== undefined || !partial) {
+    if (typeof body.contactNumber !== "string" || !body.contactNumber.trim()) {
+      return { error: "Contact number is required" }
+    } else if (!PHONE_RE.test(body.contactNumber.trim())) {
       return { error: "Provide 11 digits starting with 09 or 08" }
     } else value.contactNumber = body.contactNumber.trim()
   }
 
-  if (body.position !== undefined) {
-    if (body.position === null || body.position === "") value.position = null
-    else if (
-      typeof body.position !== "string" ||
-      body.position.trim().length > 100
-    ) {
+  if (body.position !== undefined || !partial) {
+    if (typeof body.position !== "string" || !body.position.trim()) {
+      return { error: "Position is required" }
+    } else if (body.position.trim().length > 100) {
       return { error: "Position must be 100 characters or fewer" }
     } else value.position = body.position.trim()
   }
 
-  if (body.employmentType !== undefined) {
+  if (body.employmentType !== undefined || !partial) {
     if (
       typeof body.employmentType !== "string" ||
       !Object.values(EmploymentType).includes(
@@ -127,12 +123,44 @@ export function validateEmployeeInput(
     value.status = body.status as EmployeeStatus
   }
 
-  for (const field of optionalNullableFields) {
-    if (body[field] === undefined) continue
-    if (body[field] === null || body[field] === "") {
-      if (field === "startDate") value.startDate = null
-      else value[field] = null
+  if (body.replacementHeadEmployeeId !== undefined) {
+    if (
+      typeof body.replacementHeadEmployeeId !== "string" ||
+      !body.replacementHeadEmployeeId.trim() ||
+      body.replacementHeadEmployeeId.trim().length > 80
+    ) {
+      return { error: "Provide a valid temporary Department Head" }
+    }
+    value.replacementHeadEmployeeId = body.replacementHeadEmployeeId.trim()
+  }
+
+  for (const field of requiredAssignmentFields) {
+    if (body[field] === undefined) {
+      if (!partial) {
+        return {
+          error:
+            field === "startDate"
+              ? "Start date is required"
+              : field === "departmentId"
+                ? "Select a department"
+                : "Choose a team or No team",
+        }
+      }
       continue
+    }
+    if (field === "teamId" && body.teamId === null) {
+      value.teamId = null
+      continue
+    }
+    if (body[field] === null || body[field] === "") {
+      return {
+        error:
+          field === "startDate"
+            ? "Start date is required"
+            : field === "departmentId"
+              ? "Select a department"
+              : "Choose a team or No team",
+      }
     }
 
     if (field === "startDate") {
@@ -151,7 +179,7 @@ export function validateEmployeeInput(
       continue
     }
 
-    if (field === "departmentId" || field === "teamId" || field === "userId") {
+    if (field === "departmentId" || field === "teamId") {
       if (typeof body[field] !== "string" || !body[field].trim()) {
         return { error: `Provide a valid ${field}` }
       }
