@@ -64,6 +64,11 @@ body {
   color: #d4e0f8;
 }
 
+[data-sileo-viewport][data-position="top-center"]
+  [data-sileo-description].exp-toast-description {
+  text-align: center;
+}
+
 [data-sileo-toast] [data-sileo-svg] {
   filter: drop-shadow(0 8px 20px rgb(23 39 53 / 14%));
 }
