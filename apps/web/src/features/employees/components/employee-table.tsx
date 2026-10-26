@@ -109,9 +109,7 @@ export function EmployeeTable({
             <TableHead>Type</TableHead>
             <TableHead>Start date</TableHead>
             <TableHead>Status</TableHead>
-            <TableHead className="w-[112px] min-w-[112px]">
-              Actions
-            </TableHead>
+            <TableHead className="w-[112px] min-w-[112px]">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody className="@max-[1000px]:block">

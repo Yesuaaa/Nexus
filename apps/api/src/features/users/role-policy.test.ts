@@ -143,13 +143,9 @@ test("role middleware limits account routes to Superadmin", async () => {
     }
     next()
   })
-  app.get(
-    "/accounts",
-    requireRole(Role.SUPERADMIN),
-    (_request, response) => {
-      response.json({ allowed: true })
-    },
-  )
+  app.get("/accounts", requireRole(Role.SUPERADMIN), (_request, response) => {
+    response.json({ allowed: true })
+  })
 
   const server = app.listen(0)
   try {
@@ -179,10 +175,7 @@ test("role changes follow the account hierarchy", () => {
   for (const target of Object.values(Role)) {
     for (const next of Object.values(Role)) {
       assert.equal(canAssignRole(Role.SUPERADMIN, target, next), true)
-      assert.equal(
-        canAssignRole(Role.ADMIN, target, next),
-        false,
-      )
+      assert.equal(canAssignRole(Role.ADMIN, target, next), false)
       assert.equal(canAssignRole(Role.STAFF, target, next), false)
       assert.equal(canAssignRole(Role.USER, target, next), false)
     }
@@ -192,10 +185,7 @@ test("role changes follow the account hierarchy", () => {
 test("account creation respects the same role hierarchy", () => {
   for (const role of Object.values(Role)) {
     assert.equal(canCreateRole(Role.SUPERADMIN, role), true)
-    assert.equal(
-      canCreateRole(Role.ADMIN, role),
-      false,
-    )
+    assert.equal(canCreateRole(Role.ADMIN, role), false)
     assert.equal(canCreateRole(Role.STAFF, role), false)
     assert.equal(canCreateRole(Role.USER, role), false)
   }
@@ -204,10 +194,7 @@ test("account creation respects the same role hierarchy", () => {
 test("account status changes respect the role hierarchy", () => {
   for (const role of Object.values(Role)) {
     assert.equal(canChangeAccountStatus(Role.SUPERADMIN, role), true)
-    assert.equal(
-      canChangeAccountStatus(Role.ADMIN, role),
-      false,
-    )
+    assert.equal(canChangeAccountStatus(Role.ADMIN, role), false)
     assert.equal(canChangeAccountStatus(Role.STAFF, role), false)
     assert.equal(canChangeAccountStatus(Role.USER, role), false)
   }

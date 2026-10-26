@@ -1,11 +1,7 @@
 import { Router } from "express"
 import { Prisma, Role } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
-import {
-  requireAuth,
-  requirePermission,
-  requireRole,
-} from "../auth/session.js"
+import { requireAuth, requirePermission, requireRole } from "../auth/session.js"
 import { Permission } from "../auth/permissions.js"
 import { hashPassword, validPassword } from "../auth/password.js"
 import { normalizedEmail } from "../auth/validation.js"
