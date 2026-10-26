@@ -4,13 +4,14 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import type { Account } from "@/features/auth/model/types"
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import {
   canAccessDepartmentManagement,
   canAccessServiceManagement,
   hasPermission,
   Permissions,
 } from "@/features/auth/model/permissions"
-import { collapsedTooltipClass, focusRing, iconButtonClass } from "./styles"
+import { focusRing, iconButtonClass } from "./styles"
 import {
   AccountsIcon,
   CloseIcon,
@@ -31,11 +32,7 @@ const accessLabels: Record<Account["role"], string> = {
 const navLinkClass = `group relative flex min-h-10 w-full items-center gap-[13px] rounded-md border-0 bg-transparent px-[13px] text-left font-semibold text-foreground no-underline whitespace-nowrap cursor-pointer transition-colors duration-150 hover:bg-[#e1e3e5] max-[767px]:min-h-10 max-[767px]:w-full max-[767px]:justify-start max-[767px]:gap-[13px] max-[767px]:px-[13px] max-[767px]:aspect-auto motion-reduce:transition-none ${focusRing}`
 
 function CollapsedTooltip({ children }: { children: string }) {
-  return (
-    <span className={collapsedTooltipClass} aria-hidden="true">
-      {children}
-    </span>
-  )
+  return <HoverTooltip side="right">{children}</HoverTooltip>
 }
 
 export function Sidebar({

@@ -14,6 +14,7 @@ import {
   dropdownMenuClass,
 } from "@/components/ui/dropdown-styles"
 import { Pill } from "@/components/ui/pill"
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import {
   TableSortButton,
@@ -90,10 +91,10 @@ function ServiceActions({
         type="button"
         className={rowActionButton}
         aria-label={`View ${service.name}`}
-        title="View details"
         onClick={() => onView(service)}
       >
         <Eye size={15} aria-hidden="true" />
+        <HoverTooltip>View details</HoverTooltip>
       </button>
       {canManage && (
         <button
@@ -103,10 +104,10 @@ function ServiceActions({
             "border-[#203f8c] bg-[#203f8c] text-white hover:enabled:bg-[#172f70] hover:enabled:text-white",
           )}
           aria-label={`Edit ${service.name}`}
-          title="Edit service"
           onClick={() => onEdit(service)}
         >
           <Pencil size={14} aria-hidden="true" />
+          <HoverTooltip>Edit service</HoverTooltip>
         </button>
       )}
       {canManage && (
@@ -121,9 +122,9 @@ function ServiceActions({
               type="button"
               className={rowActionButton}
               aria-label={`More actions for ${service.name}`}
-              title="More actions"
             >
               <MoreHorizontal size={16} aria-hidden="true" />
+              <HoverTooltip>More actions</HoverTooltip>
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent

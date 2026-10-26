@@ -5,6 +5,7 @@ import {
   TableSortButton,
   type SortDirection,
 } from "@/components/ui/table-sort-button"
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { cn } from "@/lib/utils"
 import type { Department } from "../api/departments-api"
 import { DepartmentRowActions } from "./department-row-actions"
@@ -194,17 +195,23 @@ export function DepartmentTable({
                   role="rowheader"
                   className="min-w-0 @max-[820px]:col-start-1 @max-[820px]:row-start-1"
                 >
-                  <button
-                    type="button"
-                    className={cn(
-                      "max-w-full cursor-pointer truncate rounded-sm border-0 bg-transparent p-0 text-left font-medium text-foreground hover:underline hover:underline-offset-4",
-                      focusRing,
+                  <span className="group relative inline-block max-w-full">
+                    <button
+                      type="button"
+                      className={cn(
+                        "max-w-full cursor-pointer truncate rounded-sm border-0 bg-transparent p-0 text-left font-medium text-foreground hover:underline hover:underline-offset-4",
+                        focusRing,
+                      )}
+                      onClick={() => onManageMembers(department.id)}
+                    >
+                      {department.name}
+                    </button>
+                    {department.description && (
+                      <HoverTooltip className="left-0 max-w-64 translate-x-0 whitespace-normal text-left leading-4 group-hover:translate-x-0 group-focus-visible:translate-x-0 group-focus-within:translate-x-0">
+                        {department.description}
+                      </HoverTooltip>
                     )}
-                    title={department.description || undefined}
-                    onClick={() => onManageMembers(department.id)}
-                  >
-                    {department.name}
-                  </button>
+                  </span>
                   {department.code && (
                     <span className="mt-0.5 block truncate text-[11px] text-[#738096]">
                       {department.code}
