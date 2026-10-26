@@ -31,7 +31,7 @@ const staffPermissions = [
   Permission.DEPARTMENTS_READ,
 ] as const
 
-const adminPermissions = [
+const managementPermissions = [
   ...staffPermissions,
   Permission.ACCOUNTS_READ,
   Permission.ACCOUNTS_CREATE_BASIC,
@@ -39,6 +39,10 @@ const adminPermissions = [
   Permission.ACCOUNTS_STATUS_BASIC,
   Permission.DEPARTMENTS_MANAGE,
   Permission.DEPARTMENTS_DELETE,
+] as const
+
+const adminPermissions = [
+  ...managementPermissions,
   Permission.SERVICES_READ,
   Permission.SERVICES_MANAGE,
 ] as const
@@ -48,7 +52,7 @@ const rolePermissions: Record<Role, readonly Permission[]> = {
   [Role.STAFF]: staffPermissions,
   [Role.ADMIN]: adminPermissions,
   [Role.SUPERADMIN]: [
-    ...adminPermissions,
+    ...managementPermissions,
     Permission.ACCOUNTS_CREATE_PRIVILEGED,
     Permission.ACCOUNTS_ASSIGN_PRIVILEGED,
     Permission.ACCOUNTS_STATUS_PRIVILEGED,

@@ -41,7 +41,10 @@ export function canAccessDepartmentManagement(account: Account): boolean {
 }
 
 export function canAccessServiceManagement(account: Account): boolean {
-  return hasPermission(account, Permissions.SERVICES_READ)
+  return (
+    account.role === "ADMIN" &&
+    hasPermission(account, Permissions.SERVICES_READ)
+  )
 }
 
 export function canCreateRole(actor: Account, role: Role): boolean {
