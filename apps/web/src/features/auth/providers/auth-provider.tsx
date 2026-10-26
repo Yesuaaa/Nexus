@@ -34,17 +34,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         markDestinationReady: transition.markDestinationReady,
       }}
     >
-      <Toaster
-        position={authPage ? "bottom-right" : "top-center"}
-        options={{
-          fill: "#253f8c",
-          roundness: 12,
-          styles: {
-            title: "exp-toast-title",
-            description: "exp-toast-description",
-          },
-        }}
-      />
+      <div className={authPage ? "auth-toast-region" : undefined}>
+        <Toaster
+          position="top-center"
+          options={{
+            fill: "#253f8c",
+            roundness: 12,
+            styles: {
+              title: "exp-toast-title",
+              description: "exp-toast-description",
+            },
+          }}
+        />
+      </div>
       {children}
       {transition.showLoader && (
         <AuthRouteLoader
