@@ -37,18 +37,18 @@ function accountFor(
   if (role !== "USER") permissions.push(Permissions.DEPARTMENTS_READ)
   if (role === "ADMIN" || role === "SUPERADMIN") {
     permissions.push(
-      Permissions.ACCOUNTS_READ,
-      Permissions.ACCOUNTS_CREATE_BASIC,
-      Permissions.ACCOUNTS_ASSIGN_BASIC,
-      Permissions.ACCOUNTS_STATUS_BASIC,
       Permissions.DEPARTMENTS_MANAGE,
       Permissions.DEPARTMENTS_DELETE,
     )
   }
   if (role === "SUPERADMIN") {
     permissions.push(
+      Permissions.ACCOUNTS_READ,
+      Permissions.ACCOUNTS_CREATE_BASIC,
       Permissions.ACCOUNTS_CREATE_PRIVILEGED,
+      Permissions.ACCOUNTS_ASSIGN_BASIC,
       Permissions.ACCOUNTS_ASSIGN_PRIVILEGED,
+      Permissions.ACCOUNTS_STATUS_BASIC,
       Permissions.ACCOUNTS_STATUS_PRIVILEGED,
     )
   }
@@ -538,7 +538,7 @@ for (const role of ["SUPERADMIN", "ADMIN", "STAFF", "USER"] as const) {
     await expect(page).toHaveURL(/\/dashboard$/)
     await expect(page.locator(`[data-role="${role}"]`)).toBeVisible()
     const menu = page.getByRole("navigation", { name: "Main menu" })
-    const managesAccounts = role === "SUPERADMIN" || role === "ADMIN"
+    const managesAccounts = role === "SUPERADMIN"
     await expect(
       menu.getByRole("link", { name: "Account Management", exact: true }),
     ).toHaveCount(managesAccounts ? 1 : 0)

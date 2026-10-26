@@ -6,11 +6,10 @@ import { sileo } from "sileo"
 import { signOut } from "@/features/auth/api/auth-api"
 import { useAccount } from "@/features/auth/hooks/use-account"
 import {
+  canAccessAccountManagement,
   canAccessDepartmentManagement,
   canAccessEmployeeManagement,
   canAccessServiceManagement,
-  hasPermission,
-  Permissions,
 } from "@/features/auth/model/permissions"
 import { AccountContext } from "@/features/auth/providers/account-context"
 import { useAuthTransition } from "@/features/auth/providers/auth-provider"
@@ -26,8 +25,8 @@ export function PortalLayout({ children }: { children: ReactNode }) {
   const { account, error } = useAccount(markDestinationReady)
   const denied =
     !!account &&
-    ((pathname === "/accounts" &&
-      !hasPermission(account, Permissions.ACCOUNTS_READ)) ||
+    ((pathname.startsWith("/accounts") &&
+      !canAccessAccountManagement(account)) ||
       (pathname === "/departments" &&
         !canAccessDepartmentManagement(account)) ||
       (pathname.startsWith("/employees") &&

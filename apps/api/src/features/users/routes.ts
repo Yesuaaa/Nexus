@@ -1,7 +1,7 @@
 import { Router } from "express"
 import { Prisma, Role } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
-import { requireAuth, requirePermission } from "../auth/session.js"
+import { requireAuth, requirePermission, requireRole } from "../auth/session.js"
 import { Permission } from "../auth/permissions.js"
 import { hashPassword, validPassword } from "../auth/password.js"
 import { normalizedEmail } from "../auth/validation.js"
@@ -15,6 +15,7 @@ import {
 
 export const usersRouter = Router()
 usersRouter.use(requireAuth)
+usersRouter.use(requireRole(Role.SUPERADMIN))
 
 usersRouter.patch(
   "/:id/status",
@@ -43,8 +44,8 @@ usersRouter.patch(
     }
 
     const user = await prisma.$transaction(async (transaction) => {
-      // Check the role again in the write to prevent concurrent promotion
-      // from allowing an Admin to deactivate a privileged account.
+      // Check the role again in the write so a concurrent target-role change
+      // cannot bypass the authorization decision made above.
       const updated = await transaction.user.updateMany({
         where: { id, role: target.role, isActive: target.isActive },
         data: { isActive },

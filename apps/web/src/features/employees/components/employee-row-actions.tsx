@@ -5,11 +5,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Button } from "@/components/ui/button"
 import {
   dropdownItemClass,
   dropdownMenuClass,
 } from "@/components/ui/dropdown-styles"
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import type { Employee } from "../api/employees-api"
 import { cn } from "@/lib/utils"
@@ -33,14 +33,12 @@ export function EmployeeRowActions({
   const nextAction = useRef<"status" | "login" | null>(null)
 
   return (
-    <div className="flex items-center justify-end gap-1">
-      <Button
-        variant="outline"
+    <div className="flex items-center gap-2">
+      <button
         type="button"
-        className={cn(rowActionButton, "size-7 rounded-[5px]")}
+        className={rowActionButton}
         disabled={disabled}
         aria-label={`View ${employee.fullName}`}
-        title="View details"
         onClick={onView}
       >
         <svg
@@ -57,17 +55,16 @@ export function EmployeeRowActions({
           <path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z" />
           <circle cx="12" cy="12" r="2.5" />
         </svg>
-      </Button>
-      <Button
-        variant="outline"
+        <HoverTooltip>View details</HoverTooltip>
+      </button>
+      <button
         type="button"
         className={cn(
           rowActionButton,
-          "size-7 rounded-[5px] border-[#203f8c] bg-[#203f8c] text-white hover:enabled:bg-[#172f70] hover:enabled:text-white",
+          "border-[#203f8c] bg-[#203f8c] text-white hover:enabled:bg-[#172f70] hover:enabled:text-white",
         )}
         disabled={disabled}
         aria-label={`Edit ${employee.fullName}`}
-        title="Edit employee"
         onClick={onEdit}
       >
         <svg
@@ -83,21 +80,20 @@ export function EmployeeRowActions({
         >
           <path d="m16 3 5 5M4 16 17 3a2.1 2.1 0 0 1 3 3L7 19l-5 2 2-5Z" />
         </svg>
-      </Button>
+        <HoverTooltip>Edit employee</HoverTooltip>
+      </button>
       <DropdownMenu
         onOpenChange={(open) => {
           if (open) nextAction.current = null
         }}
       >
         <DropdownMenuTrigger asChild>
-          <Button
-            variant="outline"
+          <button
             ref={triggerRef}
             type="button"
-            className={cn(rowActionButton, "size-7 rounded-[5px]")}
+            className={rowActionButton}
             disabled={disabled}
             aria-label={`More actions for ${employee.fullName}`}
-            title="More actions"
             id={`employee-actions-${employee.id}`}
           >
             <svg
@@ -111,7 +107,8 @@ export function EmployeeRowActions({
               <circle cx="12" cy="12" r="1.7" />
               <circle cx="19" cy="12" r="1.7" />
             </svg>
-          </Button>
+            <HoverTooltip>More actions</HoverTooltip>
+          </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="end"

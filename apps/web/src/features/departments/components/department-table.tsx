@@ -13,7 +13,7 @@ import { DepartmentRowActions } from "./department-row-actions"
 const pageSize = 10
 const paginationButton = `inline-flex min-h-[30px] cursor-pointer items-center justify-center rounded-lg border border-transparent bg-[#203f8c] px-3 text-[11px] font-medium leading-[1.2] whitespace-nowrap text-white transition-colors hover:enabled:bg-[#172f70] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none ${focusRing}`
 const departmentGrid =
-  "grid grid-cols-[minmax(160px,1.5fr)_minmax(130px,1.3fr)_minmax(65px,.55fr)_minmax(75px,.65fr)_minmax(70px,.6fr)_90px] items-center gap-3.5 @max-[820px]:grid-cols-[minmax(0,1fr)_auto]"
+  "grid grid-cols-[minmax(160px,1.5fr)_minmax(130px,1.3fr)_minmax(65px,.55fr)_minmax(75px,.65fr)_minmax(70px,.6fr)_112px] items-center gap-3.5 @max-[820px]:grid-cols-[minmax(0,1fr)_auto]"
 
 type SortKey = "name" | "teams" | "employees" | "services"
 
@@ -199,7 +199,7 @@ export function DepartmentTable({
                     <button
                       type="button"
                       className={cn(
-                        "max-w-full cursor-pointer truncate rounded-sm border-0 bg-transparent p-0 text-left font-medium text-foreground hover:underline hover:underline-offset-4",
+                        "max-w-full cursor-pointer truncate rounded-sm border-0 bg-transparent p-0 text-left font-semibold text-foreground hover:underline hover:underline-offset-4",
                         focusRing,
                       )}
                       onClick={() => onManageMembers(department.id)}
@@ -260,7 +260,7 @@ export function DepartmentTable({
                 </div>
                 <div
                   role="cell"
-                  className="@max-[820px]:col-start-2 @max-[820px]:row-start-1"
+                  className="@max-[820px]:col-start-2 @max-[820px]:row-start-1 @max-[820px]:justify-self-end"
                 >
                   <DepartmentRowActions
                     department={department}
@@ -297,7 +297,7 @@ export function DepartmentTable({
                 disabled={currentPage === 1}
                 onClick={() => setPage(currentPage - 1)}
               >
-                ← Back
+                Back
               </button>
               <span
                 className="px-[3px] whitespace-nowrap text-foreground"
@@ -313,7 +313,7 @@ export function DepartmentTable({
                 disabled={currentPage === totalPages}
                 onClick={() => setPage(currentPage + 1)}
               >
-                Next →
+                Next
               </button>
             </nav>
           )}

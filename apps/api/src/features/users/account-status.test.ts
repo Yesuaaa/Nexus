@@ -28,7 +28,7 @@ test("account status, deletion, and authentication enforce access", async (t) =>
     createdAt: new Date(),
     updatedAt: new Date(),
   }
-  let actor: User = { ...user, id: "actor", role: Role.ADMIN }
+  let actor: User = { ...user, id: "actor", role: Role.SUPERADMIN }
   const target = { ...user }
   let targetExists = true
   let conflict = false
@@ -114,19 +114,16 @@ test("account status, deletion, and authentication enforce access", async (t) =>
     assert.equal((await changeStatus(false)).status, 404)
     targetExists = true
 
-    for (const role of [Role.ADMIN, Role.SUPERADMIN]) {
-      target.role = role
-      assert.equal((await changeStatus(false)).status, 403)
-    }
-    target.role = Role.USER
-    for (const role of [Role.USER, Role.STAFF]) {
+    for (const role of [Role.ADMIN, Role.STAFF, Role.USER]) {
       actor.role = role
       assert.equal((await changeStatus(false)).status, 403)
+      assert.equal((await deleteAccount()).status, 403)
     }
+    actor.role = Role.SUPERADMIN
+    target.role = Role.USER
     assert.equal(update.mock.callCount(), 0)
     assert.equal(revoke.mock.callCount(), 0)
 
-    actor.role = Role.ADMIN
     conflict = true
     assert.equal((await changeStatus(false)).status, 409)
     assert.equal(revoke.mock.callCount(), 0)
@@ -154,7 +151,7 @@ test("account status, deletion, and authentication enforce access", async (t) =>
     actor = { ...target }
     assert.equal((await fetch(`${base}/api/auth/me`, { headers })).status, 401)
 
-    actor = { ...user, id: "actor", role: Role.ADMIN }
+    actor = { ...user, id: "actor", role: Role.SUPERADMIN }
     const reactivated = await changeStatus(true)
     assert.equal(reactivated.status, 200)
     assert.equal(target.isActive, true)

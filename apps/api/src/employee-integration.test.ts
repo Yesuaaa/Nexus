@@ -136,8 +136,9 @@ test(
       method = "GET",
       body?: unknown,
       status = 200,
+      actor = "admin",
     ) {
-      const response = await request(path, method, body)
+      const response = await request(path, method, body, actor)
       const result = (await response.json()) as Payload
       assert.equal(response.status, status, JSON.stringify(result))
       return result
@@ -165,6 +166,29 @@ test(
         }
       },
     )
+    await t.test("only Superadmin may use the account API", async () => {
+      for (const actor of ["admin", "staff", "user"]) {
+        assert.equal(
+          (await request("/users", "GET", undefined, actor)).status,
+          403,
+        )
+        assert.equal(
+          (
+            await request(
+              "/users",
+              "POST",
+              { email: "denied@example.com" },
+              actor,
+            )
+          ).status,
+          403,
+        )
+      }
+      assert.equal(
+        (await request("/users", "GET", undefined, "superadmin")).status,
+        200,
+      )
+    })
     await t.test(
       "migration preserves existing members and creates no credentials",
       async () => {
@@ -239,7 +263,13 @@ test(
           ).userId,
           account.id,
         )
-        const accounts = await json("/users?search=Jordan")
+        const accounts = await json(
+          "/users?search=Jordan",
+          "GET",
+          undefined,
+          200,
+          "superadmin",
+        )
         assert.equal(accounts.total, 1)
         assert.equal(accounts.users[0].email, "jordan.hr@example.com")
         const filtered = await json(
@@ -557,7 +587,13 @@ test(
           await prisma.employee.count({ where: { userId: "role-target" } }),
           0,
         )
-        await json("/users/role-target/role", "PATCH", { role: "STAFF" })
+        await json(
+          "/users/role-target/role",
+          "PATCH",
+          { role: "STAFF" },
+          200,
+          "superadmin",
+        )
         const employee = await prisma.employee.findUniqueOrThrow({
           where: { userId: "role-target" },
         })
