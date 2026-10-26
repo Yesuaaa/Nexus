@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto"
 import type { RequestHandler } from "express"
-import type { User } from "../../generated/prisma/client.js"
+import type { Prisma, User } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { publicUser } from "../users/public-user.js"
 import { hasPermission, type Permission } from "./permissions.js"
@@ -23,8 +23,10 @@ function tokenHash(token: string): string {
   return createHash("sha256").update(token).digest("hex")
 }
 
-export async function issueSession(user: User) {
-  const prisma = getPrisma()!
+export async function issueSession(
+  user: User,
+  prisma: Prisma.TransactionClient = getPrisma()!,
+) {
   const token = randomBytes(32).toString("base64url")
   await prisma.session.create({
     data: {

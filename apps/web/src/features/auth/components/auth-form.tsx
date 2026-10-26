@@ -15,7 +15,7 @@ import {
   type Field,
 } from "../model/schema"
 import type { AuthLanguage, AuthMode } from "../model/types"
-import { SocialPlaceholders } from "./auth-visuals"
+import { SocialSignInButtons } from "./auth-visuals"
 
 export function AuthContent({
   mode,
@@ -270,7 +270,7 @@ export function AuthContent({
         >
           {copy.continueWith}
         </p>
-        <SocialPlaceholders copy={copy} />
+        <SocialSignInButtons copy={copy} />
         <p
           className={`text-center text-sm leading-[1.4] text-[#52688d] ${mode === "register" ? "mt-2" : "mt-6"}`}
         >

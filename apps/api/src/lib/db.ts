@@ -16,11 +16,12 @@ export function getPrisma() {
 
     const pool = new pg.Pool({
       connectionString,
+      max: Number(process.env.DATABASE_POOL_MAX) || 10,
       ssl: isLocalOrSupabase ? { rejectUnauthorized: false } : undefined,
     })
 
     client = new PrismaClient({
-      adapter: new PrismaPg(pool),
+      adapter: new PrismaPg(pool, { disposeExternalPool: true }),
     })
   }
 

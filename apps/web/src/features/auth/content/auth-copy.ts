@@ -62,10 +62,32 @@ const copy = {
     createAccountButton: "Create Account",
     or: "OR",
     continueWith: "Continue with",
-    socialComingSoon: "Social sign-in options coming soon",
-    googleComingSoon: "Google sign-in coming soon",
-    facebookComingSoon: "Facebook sign-in coming soon",
-    appleComingSoon: "Apple sign-in coming soon",
+    continueWithGoogle: "Continue with Google",
+    continueWithFacebook: "Continue with Facebook",
+    continueWithApple: "Continue with Apple",
+    socialOptionsUnavailable:
+      "Social sign-in options couldn't be loaded. Try again.",
+    socialUnavailable: "Social sign-in is not available right now.",
+    socialRetry: "Try again",
+    socialStartFailed: "Couldn't start social sign-in. Please try again.",
+    socialCompleting: "Finishing social sign-in…",
+    socialCompleteTitle: "Complete your account",
+    socialFullName: "Full name",
+    socialEmailCode: "Email verification code",
+    socialSendCode: "Send email code",
+    socialCodeSent: "We sent a verification code to your email address.",
+    socialContinue: "Continue",
+    socialCancelled:
+      "Sign-in was cancelled. You can try again whenever you're ready.",
+    socialFailed: "Social sign-in didn't finish. Please try again.",
+    socialExistingAccount:
+      "This email is already linked to an account. Sign in with that account, then connect this provider in Settings.",
+    socialMissingFlow:
+      "This sign-in link has expired or is incomplete. Start again from the sign-in page.",
+    socialEmailCodeSentError:
+      "Couldn't send a verification code. Check the email address and try again.",
+    socialCompleteError:
+      "Couldn't finish setting up your account. Please try again.",
     about: "About",
     terms: "Terms of Use",
     privacy: "Privacy Policy",
@@ -141,10 +163,32 @@ const copy = {
     createAccountButton: "Gumawa ng Account",
     or: "O",
     continueWith: "Magpatuloy gamit ang",
-    socialComingSoon: "Paparating ang social sign-in",
-    googleComingSoon: "Paparating ang Google sign-in",
-    facebookComingSoon: "Paparating ang Facebook sign-in",
-    appleComingSoon: "Paparating ang Apple sign-in",
+    continueWithGoogle: "Magpatuloy gamit ang Google",
+    continueWithFacebook: "Magpatuloy gamit ang Facebook",
+    continueWithApple: "Magpatuloy gamit ang Apple",
+    socialOptionsUnavailable: "Hindi ma-load ang social sign-in. Subukan muli.",
+    socialUnavailable: "Hindi available ang social sign-in sa ngayon.",
+    socialRetry: "Subukan muli",
+    socialStartFailed: "Hindi masimulan ang social sign-in. Subukan muli.",
+    socialCompleting: "Kinukumpleto ang social sign-in…",
+    socialCompleteTitle: "Kumpletuhin ang iyong account",
+    socialFullName: "Buong pangalan",
+    socialEmailCode: "Email verification code",
+    socialSendCode: "Magpadala ng email code",
+    socialCodeSent:
+      "Nagpadala kami ng verification code sa iyong email address.",
+    socialContinue: "Magpatuloy",
+    socialCancelled:
+      "Kinansela ang pag-sign in. Maaari kang sumubok muli anumang oras.",
+    socialFailed: "Hindi natapos ang social sign-in. Subukan muli.",
+    socialExistingAccount:
+      "Naka-link na ang email na ito sa isang account. Mag-sign in sa account na iyon, saka ikonekta ang provider na ito sa Settings.",
+    socialMissingFlow:
+      "Nag-expire o hindi kumpleto ang sign-in link. Magsimula muli sa sign-in page.",
+    socialEmailCodeSentError:
+      "Hindi makapagpadala ng verification code. Suriin ang email at subukan muli.",
+    socialCompleteError:
+      "Hindi makumpleto ang pag-set up ng account. Subukan muli.",
     about: "Tungkol sa Amin",
     terms: "Mga Tuntunin sa Paggamit",
     privacy: "Patakaran sa Privacy",

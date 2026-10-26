@@ -14,6 +14,10 @@ test("passwords are salted and verified", async () => {
   assert.equal(validPassword("twelve chars"), true)
 })
 
+test("social-only accounts cannot authenticate with a password", async () => {
+  assert.equal(await verifyPassword("anything", null), false)
+})
+
 test("email normalization accepts the same input for signup and seed", () => {
   assert.equal(normalizedEmail("  User@Example.com  "), "user@example.com")
   assert.equal(normalizedEmail("invalid"), undefined)

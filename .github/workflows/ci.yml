@@ -31,6 +31,10 @@ jobs:
             command: pnpm lint
           - name: Typecheck and build
             command: pnpm typecheck && pnpm build
+          - name: Authentication tests
+            command: pnpm --filter @nexus/api test && pnpm --filter @nexus/web test
+          - name: Browser authentication tests
+            command: pnpm --filter @nexus/web build && pnpm --filter @nexus/web exec playwright install --with-deps chromium && pnpm --filter @nexus/web test:e2e
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

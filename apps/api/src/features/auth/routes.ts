@@ -7,8 +7,10 @@ import { hashPassword, validPassword, verifyPassword } from "./password.js"
 import { Permission } from "./permissions.js"
 import { issueSession, requireAuth, requirePermission } from "./session.js"
 import { normalizedEmail, validRegistrationProfile } from "./validation.js"
+import { socialRouter } from "./social/routes.js"
 
 export const authRouter = Router()
+authRouter.use("/social", socialRouter)
 
 authRouter.post("/register", async (request, response) => {
   const prisma = getPrisma()

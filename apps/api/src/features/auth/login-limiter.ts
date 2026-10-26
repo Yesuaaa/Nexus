@@ -1,16 +1,16 @@
 // This limits repeated guesses in a single API process. Use a shared limiter for multiple replicas.
 const loginAttempts = new Map<string, { count: number; until: number }>()
 
-export function loginAllowed(key: string): boolean {
+export function loginAllowed(key: string, limit = 10): boolean {
   const attempt = loginAttempts.get(key)
   if (!attempt || attempt.until < Date.now()) {
     loginAttempts.delete(key)
     return true
   }
-  return attempt.count < 10
+  return attempt.count < limit
 }
 
-export function recordFailure(key: string) {
+export function recordFailure(key: string, windowMs = 15 * 60 * 1000) {
   const now = Date.now()
   const attempt = loginAttempts.get(key)
   if (loginAttempts.size >= 10000) {
@@ -24,8 +24,7 @@ export function recordFailure(key: string) {
   }
   loginAttempts.set(key, {
     count: attempt && attempt.until >= now ? attempt.count + 1 : 1,
-    until:
-      attempt && attempt.until >= now ? attempt.until : now + 15 * 60 * 1000,
+    until: attempt && attempt.until >= now ? attempt.until : now + windowMs,
   })
 }
 

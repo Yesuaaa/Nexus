@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { Link2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Account } from "@/features/auth/model/types"
 import {
@@ -147,6 +148,23 @@ export function Sidebar({
             <DashboardIcon className="flex-none" />
             <span className={collapsedLabelClass}>Dashboard</span>
             {collapsed && <CollapsedTooltip>Dashboard</CollapsedTooltip>}
+          </Link>
+          <Link
+            href="/settings/connections"
+            aria-current={
+              pathname === "/settings/connections" ? "page" : undefined
+            }
+            className={cn(
+              navLinkClass,
+              collapsed &&
+                "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
+              pathname === "/settings/connections" && "bg-[#e1e3e5]",
+            )}
+            onClick={onCloseDrawer}
+          >
+            <Link2 className="size-5 flex-none" aria-hidden="true" />
+            <span className={collapsedLabelClass}>Sign-in Methods</span>
+            {collapsed && <CollapsedTooltip>Sign-in Methods</CollapsedTooltip>}
           </Link>
           {hasPermission(account, Permissions.ACCOUNTS_READ) && (
             <Link

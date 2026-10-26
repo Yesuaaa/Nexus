@@ -26,7 +26,7 @@ model User {
   fullName      String?
   contactNumber String?
   position      String?
-  passwordHash  String
+  passwordHash  String?
   role          Role        @default(USER)
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
@@ -37,6 +37,7 @@ model User {
   team          Team?       @relation("TeamMembers", fields: [teamId], references: [id], onDelete: SetNull)
   leadOfTeam    Team?       @relation("TeamLead")
   sessions      Session[]
+  socialIdentities SocialIdentity[]
 
   @@index([departmentId])
   @@index([teamId])
@@ -80,8 +81,59 @@ model Session {
   userId    String
   expiresAt DateTime
   createdAt DateTime @default(now())
+  reauthenticatedAt DateTime?
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([expiresAt])
+}
+
+enum SocialProvider {
+  google
+  facebook
+  apple
+}
+
+model SocialIdentity {
+  id String @id @default(cuid())
+  userId String
+  provider SocialProvider
+  subject String
+  email String?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([provider, subject])
+  @@unique([userId, provider])
+}
+
+model OAuthAttempt {
+  id String @id
+  provider SocialProvider
+  purpose String
+  verifierHash String
+  nonce String
+  codeVerifier String
+  userId String?
+  sessionId String?
+  expiresAt DateTime
+  @@index([expiresAt])
+}
+
+model SocialCompletion {
+  id String @id
+  provider SocialProvider
+  subject String
+  email String?
+  emailVerified Boolean
+  fullName String?
+  verifierHash String
+  purpose String
+  userId String?
+  sessionId String?
+  expiresAt DateTime
+  emailCodeHash String?
+  emailCodeExpiresAt DateTime?
+  emailCodeAttempts Int @default(0)
+  emailSentAt DateTime?
   @@index([expiresAt])
 }
