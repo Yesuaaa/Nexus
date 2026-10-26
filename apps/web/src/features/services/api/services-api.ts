@@ -64,3 +64,9 @@ export async function changeServiceStatus(
   )
   return result.service
 }
+
+export async function deleteService(id: string): Promise<void> {
+  await apiRequest(`/api/services/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  })
+}

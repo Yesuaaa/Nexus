@@ -65,3 +65,9 @@ export function changeAccountStatus(id: string, isActive: boolean) {
     },
   )
 }
+
+export async function deleteAccount(id: string): Promise<void> {
+  await apiRequest(`/api/users/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  })
+}

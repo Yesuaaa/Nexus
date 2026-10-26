@@ -67,6 +67,44 @@ usersRouter.patch(
   },
 )
 
+usersRouter.delete(
+  "/:id",
+  requirePermission(Permission.ACCOUNTS_STATUS_BASIC),
+  async (request, response) => {
+    const actor = request.auth!.user
+    const id = String(request.params.id)
+    if (actor.id === id) {
+      return response
+        .status(403)
+        .json({ error: "You cannot delete your own account" })
+    }
+
+    const prisma = getPrisma()!
+    const target = await prisma.user.findUnique({ where: { id } })
+    if (!target) return response.status(404).json({ error: "User not found" })
+    if (!canChangeAccountStatus(actor.role, target.role)) {
+      return response
+        .status(403)
+        .json({ error: "You cannot delete this account" })
+    }
+    if (target.isActive) {
+      return response
+        .status(409)
+        .json({ error: "Deactivate the account before deleting it" })
+    }
+
+    const deleted = await prisma.user.deleteMany({
+      where: { id, role: target.role, isActive: false },
+    })
+    if (deleted.count === 0) {
+      return response
+        .status(409)
+        .json({ error: "Account changed; refresh and retry" })
+    }
+    return response.json({ message: "Account deleted successfully" })
+  },
+)
+
 usersRouter.get(
   "/",
   requirePermission(Permission.ACCOUNTS_READ),

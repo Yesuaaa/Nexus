@@ -163,7 +163,7 @@ export function ManageMembersDrawer({
   useEffect(() => {
     if (!canManage) return
     let active = true
-    listAccounts("", "", 1)
+    listAccounts("", "STAFF", 1)
       .then((res) => {
         if (active) {
           setAllAccounts(res.users)
@@ -191,7 +191,7 @@ export function ManageMembersDrawer({
     }
     let active = true
     const currentMemberIds = new Set(detail?.members.map((m) => m.id) || [])
-    listAccounts(debouncedAssignSearch, "", 1)
+    listAccounts(debouncedAssignSearch, "STAFF", 1)
       .then((res) => {
         if (active) {
           setSearchCandidates(
@@ -517,7 +517,7 @@ export function ManageMembersDrawer({
                             ) : (
                               availableAccountsForQuickAssign.map((user) => (
                                 <SelectItem key={user.id} value={user.id}>
-                                  {user.fullName || user.email} ({user.role})
+                                  {user.fullName || user.email}
                                 </SelectItem>
                               ))
                             )}
@@ -780,6 +780,7 @@ export function ManageMembersDrawer({
                         )
                         const eligibleEmployees = detail.members.filter(
                           (member) =>
+                            member.role === "STAFF" &&
                             member.id !== detail.headId &&
                             member.teamId !== team.id,
                         )
@@ -904,9 +905,6 @@ export function ManageMembersDrawer({
                                             value={member.id}
                                           >
                                             {member.fullName || member.email}
-                                            {member.position
-                                              ? ` (${member.position})`
-                                              : ""}
                                           </SelectItem>
                                         ))}
                                       </SelectContent>

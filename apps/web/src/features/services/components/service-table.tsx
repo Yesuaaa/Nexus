@@ -72,15 +72,17 @@ function ServiceActions({
   onView,
   onEdit,
   onStatus,
+  onDelete,
 }: {
   service: Service
   canManage: boolean
   onView: (service: Service) => void
   onEdit: (service: Service) => void
   onStatus: (service: Service) => void
+  onDelete: (service: Service) => void
 }) {
   const triggerRef = useRef<HTMLButtonElement>(null)
-  const pendingStatus = useRef(false)
+  const pendingAction = useRef<"status" | "delete" | null>(null)
 
   return (
     <div className="flex items-center gap-2">
@@ -110,7 +112,7 @@ function ServiceActions({
       {canManage && (
         <DropdownMenu
           onOpenChange={(open) => {
-            if (open) pendingStatus.current = false
+            if (open) pendingAction.current = null
           }}
         >
           <DropdownMenuTrigger asChild>
@@ -130,11 +132,13 @@ function ServiceActions({
             collisionPadding={24}
             className={cn(dropdownMenuClass, "w-48 text-xs")}
             onCloseAutoFocus={(event) => {
-              if (!pendingStatus.current) return
+              const action = pendingAction.current
+              if (!action) return
               event.preventDefault()
-              pendingStatus.current = false
+              pendingAction.current = null
               triggerRef.current?.focus()
-              onStatus(service)
+              if (action === "status") onStatus(service)
+              else onDelete(service)
             }}
           >
             <DropdownMenuItem
@@ -145,11 +149,24 @@ function ServiceActions({
                   : "text-[#247044] focus:bg-[#edf8f1] focus:text-[#247044]",
               )}
               onSelect={() => {
-                pendingStatus.current = true
+                pendingAction.current = "status"
               }}
             >
               {service.isActive ? "Deactivate service" : "Activate service"}
             </DropdownMenuItem>
+            {!service.isActive && (
+              <DropdownMenuItem
+                className={cn(
+                  dropdownItemClass,
+                  "text-[#c33945] focus:bg-[#fff0f1] focus:text-[#c33945]",
+                )}
+                onSelect={() => {
+                  pendingAction.current = "delete"
+                }}
+              >
+                Delete service
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       )}
@@ -166,6 +183,7 @@ export function ServiceTable({
   onView,
   onEdit,
   onStatus,
+  onDelete,
   onRetry,
 }: {
   services: Service[]
@@ -176,6 +194,7 @@ export function ServiceTable({
   onView: (service: Service) => void
   onEdit: (service: Service) => void
   onStatus: (service: Service) => void
+  onDelete: (service: Service) => void
   onRetry: () => void
 }) {
   const [search, setSearch] = useState("")
@@ -430,6 +449,7 @@ export function ServiceTable({
                     onView={onView}
                     onEdit={onEdit}
                     onStatus={onStatus}
+                    onDelete={onDelete}
                   />
                 </div>
               </div>

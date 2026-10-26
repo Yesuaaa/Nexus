@@ -433,8 +433,18 @@ departmentsRouter.post(
       return response.status(404).json({ error: "Department not found" })
     }
 
+    const eligibleUsers = await prisma.user.findMany({
+      where: { id: { in: userIds }, role: Role.STAFF },
+      select: { id: true },
+    })
+    if (eligibleUsers.length !== new Set(userIds).size) {
+      return response
+        .status(400)
+        .json({ error: "Only staff accounts can be assigned to a department" })
+    }
+
     await prisma.user.updateMany({
-      where: { id: { in: userIds } },
+      where: { id: { in: userIds }, role: Role.STAFF },
       data: { departmentId: id },
     })
 
@@ -748,6 +758,12 @@ departmentsRouter.patch(
       return response
         .status(404)
         .json({ error: "Member not found in this department" })
+    }
+
+    if (teamId && user.role !== Role.STAFF) {
+      return response
+        .status(400)
+        .json({ error: "Only staff accounts can be assigned to a team" })
     }
 
     const dept = await prisma.department.findUnique({

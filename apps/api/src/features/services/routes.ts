@@ -167,6 +167,52 @@ servicesRouter.patch(
   },
 )
 
+servicesRouter.delete(
+  "/:id",
+  requirePermission(Permission.SERVICES_MANAGE),
+  async (request, response) => {
+    const id = String(request.params.id)
+    const prisma = getPrisma()!
+    const existing = await prisma.service.findUnique({
+      where: { id },
+      select: { id: true, isActive: true },
+    })
+
+    if (!existing)
+      return response.status(404).json({ error: "Service not found" })
+    if (existing.isActive) {
+      return response
+        .status(409)
+        .json({ error: "Deactivate the service before deleting it" })
+    }
+
+    try {
+      const deleted = await prisma.service.deleteMany({
+        where: { id, isActive: false },
+      })
+      if (deleted.count === 0) {
+        return response
+          .status(409)
+          .json({ error: "Deactivate the service before deleting it" })
+      }
+      return response.json({ message: "Service deleted successfully" })
+    } catch (error) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        error.code === "P2003"
+      ) {
+        return response.status(409).json({
+          error:
+            "This service cannot be deleted because existing records use it",
+        })
+      }
+      throw error
+    }
+  },
+)
+
 function isUniqueConstraintError(error: unknown): boolean {
   return Boolean(
     error &&

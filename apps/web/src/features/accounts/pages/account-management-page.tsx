@@ -19,6 +19,7 @@ import {
 import {
   changeAccountRole,
   changeAccountStatus,
+  deleteAccount,
   listAccounts,
   type AccountList,
   type AccountRole,
@@ -26,9 +27,10 @@ import {
   type AccountSortKey,
 } from "../api/accounts-api"
 import { AccountDropdown } from "../components/account-dropdown"
-import { CreateAccountDialog } from "../components/create-account-dialog"
 import { AccountStatusDialog } from "../components/account-status-dialog"
 import { AccountRowActions } from "../components/account-row-actions"
+import { CreateAccountDialog } from "../components/create-account-dialog"
+import { DeleteAccountDialog } from "../components/delete-account-dialog"
 import {
   accountButton,
   accountButtonPrimary,
@@ -80,6 +82,9 @@ export function AccountManagementPage() {
   const [statusTarget, setStatusTarget] = useState<Account | null>(null)
   const [statusSaving, setStatusSaving] = useState(false)
   const [statusError, setStatusError] = useState("")
+  const [deleteTarget, setDeleteTarget] = useState<Account | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState("")
   const requestKey = JSON.stringify([
     debouncedSearch,
     roleFilter,
@@ -156,7 +161,14 @@ export function AccountManagementPage() {
 
   async function saveAccessChanges() {
     const changes = Object.entries(draftRoles)
-    if (changes.length === 0 || savingAccess || statusSaving || busy) return
+    if (
+      changes.length === 0 ||
+      savingAccess ||
+      statusSaving ||
+      deleting ||
+      busy
+    )
+      return
     setSavingAccess(true)
     setAccessError("")
     const savedIds: string[] = []
@@ -231,6 +243,44 @@ export function AccountManagementPage() {
     }
   }
 
+  async function removeAccount() {
+    if (!deleteTarget || deleteTarget.isActive || deleting) return
+    setDeleting(true)
+    setDeleteError("")
+    try {
+      await deleteAccount(deleteTarget.id)
+      const deletedEmail = deleteTarget.email
+      setDraftRoles((current) => {
+        const next = { ...current }
+        delete next[deleteTarget.id]
+        return next
+      })
+      setDeleteTarget(null)
+      sileo.success({
+        title: "Account deleted",
+        description: `${deletedEmail} was permanently deleted.`,
+      })
+      if ((result?.users.length ?? 0) === 1 && page > 1) {
+        setPage((current) => current - 1)
+      } else {
+        setRevision((current) => current + 1)
+      }
+    } catch (caught) {
+      if (caught instanceof ApiError && caught.status === 401) {
+        clearToken()
+        router.replace("/login")
+        return
+      }
+      setDeleteError(
+        caught instanceof ApiError
+          ? caught.message
+          : "Couldn't delete the account. Please try again.",
+      )
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const totalPages = result
     ? Math.max(1, Math.ceil(result.total / result.pageSize))
     : 1
@@ -259,7 +309,7 @@ export function AccountManagementPage() {
             "min-h-[34px] flex-none rounded-lg px-[13px] text-xs",
           )}
           onClick={() => setCreateOpen(true)}
-          disabled={savingAccess || statusSaving}
+          disabled={savingAccess || statusSaving || deleting}
         >
           <svg
             width="14"
@@ -303,7 +353,7 @@ export function AccountManagementPage() {
                 onChange={(event) => updateSearch(event.target.value)}
                 placeholder="Search name or email"
                 maxLength={100}
-                disabled={savingAccess || statusSaving}
+                disabled={savingAccess || statusSaving || deleting}
               />
             </label>
             <AccountDropdown
@@ -313,7 +363,7 @@ export function AccountManagementPage() {
               value={roleFilter}
               options={[{ value: "", label: "All roles" }, ...roleOptions]}
               onChange={updateRoleFilter}
-              disabled={savingAccess || statusSaving}
+              disabled={savingAccess || statusSaving || deleting}
             />
           </div>
           <button
@@ -327,6 +377,7 @@ export function AccountManagementPage() {
               Object.keys(draftRoles).length === 0 ||
               savingAccess ||
               statusSaving ||
+              deleting ||
               busy
             }
             aria-busy={savingAccess}
@@ -502,7 +553,7 @@ export function AccountManagementPage() {
                           menuClassName="right-0 left-auto"
                           label={`Role for ${user.email}`}
                           value={selectedRole}
-                          disabled={savingAccess || statusSaving}
+                          disabled={savingAccess || statusSaving || deleting}
                           options={assignableRoles.map((role) => ({
                             value: role,
                             label: roleNames[role],
@@ -530,10 +581,15 @@ export function AccountManagementPage() {
                       {canChangeAccountStatus(actor, user) ? (
                         <AccountRowActions
                           account={user}
-                          disabled={savingAccess || statusSaving}
+                          disabled={savingAccess || statusSaving || deleting}
                           onChangeStatus={() => {
                             setStatusError("")
                             setStatusTarget(user)
+                          }}
+                          onDelete={() => {
+                            if (user.isActive) return
+                            setDeleteError("")
+                            setDeleteTarget(user)
                           }}
                         />
                       ) : (
@@ -559,7 +615,7 @@ export function AccountManagementPage() {
                   accountButtonPrimary,
                   "min-h-[30px] rounded-lg px-3 text-[11px] font-medium",
                 )}
-                disabled={page <= 1 || savingAccess || statusSaving}
+                disabled={page <= 1 || savingAccess || statusSaving || deleting}
                 onClick={() => setPage((current) => current - 1)}
               >
                 ← Back
@@ -574,7 +630,9 @@ export function AccountManagementPage() {
                   accountButtonPrimary,
                   "min-h-[30px] rounded-lg px-3 text-[11px] font-medium",
                 )}
-                disabled={page >= totalPages || savingAccess || statusSaving}
+                disabled={
+                  page >= totalPages || savingAccess || statusSaving || deleting
+                }
                 onClick={() => setPage((current) => current + 1)}
               >
                 Next →
@@ -591,6 +649,17 @@ export function AccountManagementPage() {
           error={statusError}
           onClose={() => setStatusTarget(null)}
           onConfirm={() => void saveStatus()}
+        />
+      )}
+      {deleteTarget && (
+        <DeleteAccountDialog
+          account={deleteTarget}
+          deleting={deleting}
+          error={deleteError}
+          onClose={() => {
+            if (!deleting) setDeleteTarget(null)
+          }}
+          onConfirm={() => void removeAccount()}
         />
       )}
       <CreateAccountDialog

@@ -13,10 +13,12 @@ import {
 import { cn } from "@/lib/utils"
 import {
   changeServiceStatus,
+  deleteService,
   listServices,
   type Service,
 } from "../api/services-api"
 import { ServiceDetailsDialog } from "../components/service-details-dialog"
+import { DeleteServiceDialog } from "../components/delete-service-dialog"
 import { ServiceFormDialog } from "../components/service-form-dialog"
 import { ServiceKpiCards } from "../components/service-kpi-cards"
 import { ServiceStatusDialog } from "../components/service-status-dialog"
@@ -35,6 +37,9 @@ export function ServiceManagementPage() {
   const [statusTarget, setStatusTarget] = useState<Service | null>(null)
   const [statusSaving, setStatusSaving] = useState(false)
   const [statusError, setStatusError] = useState("")
+  const [deleteTarget, setDeleteTarget] = useState<Service | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState("")
 
   useEffect(() => {
     let active = true
@@ -106,6 +111,32 @@ export function ServiceManagementPage() {
     }
   }
 
+  async function removeService() {
+    if (!deleteTarget || deleteTarget.isActive || deleting || !canManage) return
+    setDeleting(true)
+    setDeleteError("")
+    try {
+      await deleteService(deleteTarget.id)
+      setServices((current) =>
+        current.filter((service) => service.id !== deleteTarget.id),
+      )
+      const deletedName = deleteTarget.name
+      setDeleteTarget(null)
+      sileo.success({
+        title: "Service deleted",
+        description: `${deletedName} was permanently deleted.`,
+      })
+    } catch (caught) {
+      setDeleteError(
+        caught instanceof Error
+          ? caught.message
+          : "Couldn't delete the service. Please try again.",
+      )
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <main
       className={cn(contentClass, "p-[clamp(16px,2.1vw,32px)]")}
@@ -156,6 +187,11 @@ export function ServiceManagementPage() {
             setStatusError("")
             setStatusTarget(service)
           }}
+          onDelete={(service) => {
+            if (service.isActive) return
+            setDeleteError("")
+            setDeleteTarget(service)
+          }}
           onRetry={() => {
             setLoading(true)
             setRevision((current) => current + 1)
@@ -186,6 +222,17 @@ export function ServiceManagementPage() {
             if (!statusSaving) setStatusTarget(null)
           }}
           onConfirm={() => void saveStatus()}
+        />
+      )}
+      {deleteTarget && (
+        <DeleteServiceDialog
+          service={deleteTarget}
+          deleting={deleting}
+          error={deleteError}
+          onClose={() => {
+            if (!deleting) setDeleteTarget(null)
+          }}
+          onConfirm={() => void removeService()}
         />
       )}
     </main>

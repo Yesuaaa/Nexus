@@ -6,7 +6,7 @@ import { Role, type Prisma, type User } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { hashPassword } from "../auth/password.js"
 
-test("account deactivation, reactivation, and authentication enforce access", async (t) => {
+test("account status, deletion, and authentication enforce access", async (t) => {
   const previousUrl = process.env.DATABASE_URL
   // All database operations below are mocked; never connect to a real database.
   process.env.DATABASE_URL = "postgresql://test:test@127.0.0.1:1/test"
@@ -45,6 +45,13 @@ test("account deactivation, reactivation, and authentication enforce access", as
     target.isActive = args.data.isActive as boolean
     return { count: 1 }
   })
+  const remove = t.mock.fn(async (args: Prisma.UserDeleteManyArgs) => {
+    assert.equal(args.where?.id, "target")
+    assert.equal(args.where?.role, target.role)
+    assert.equal(args.where?.isActive, false)
+    targetExists = false
+    return { count: 1 }
+  })
   // Replace Prisma's proxy delegates with in-memory operations.
   const originalUser = prisma.user
   const originalSession = prisma.session
@@ -61,6 +68,7 @@ test("account deactivation, reactivation, and authentication enforce access", as
   Reflect.set(prisma, "user", {
     findUnique: async () => (targetExists ? { ...target } : null),
     updateMany: update,
+    deleteMany: remove,
     findUniqueOrThrow: async () => ({ ...target }),
   })
   Reflect.set(
@@ -91,6 +99,8 @@ test("account deactivation, reactivation, and authentication enforce access", as
         headers,
         body: JSON.stringify({ isActive }),
       })
+    const deleteAccount = (id = "target") =>
+      fetch(`${base}/api/users/${id}`, { method: "DELETE", headers })
 
     assert.equal(
       (await fetch(`${base}/api/users/target/status`, { method: "PATCH" }))
@@ -153,8 +163,13 @@ test("account deactivation, reactivation, and authentication enforce access", as
 
     actor.role = Role.SUPERADMIN
     target.role = Role.ADMIN
+    assert.equal((await deleteAccount()).status, 409)
     assert.equal((await changeStatus(false)).status, 200)
     assert.equal(revoke.mock.callCount(), 2)
+    assert.equal((await deleteAccount(actor.id)).status, 403)
+    assert.equal((await deleteAccount()).status, 200)
+    assert.equal(remove.mock.callCount(), 1)
+    assert.equal((await deleteAccount()).status, 404)
   } finally {
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),
