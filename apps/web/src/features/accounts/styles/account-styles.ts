@@ -10,7 +10,7 @@ export const accountButtonSecondary =
   "border-[#d7e0ee] bg-background text-[#24437e] hover:enabled:bg-[#f1f5fc]"
 
 export const accountGrid =
-  "grid grid-cols-[minmax(180px,1.5fr)_minmax(90px,0.7fr)_minmax(130px,1.1fr)_minmax(100px,0.8fr)_minmax(180px,1.2fr)] items-center gap-3.5 @max-[850px]:grid-cols-[minmax(0,1fr)_auto] @max-[530px]:grid-cols-[minmax(0,1fr)]"
+  "grid grid-cols-[minmax(180px,1.5fr)_minmax(70px,0.6fr)_minmax(70px,0.6fr)_minmax(130px,1.1fr)_minmax(100px,0.8fr)_minmax(112px,1fr)_minmax(90px,0.7fr)] items-center gap-3.5 @max-[900px]:grid-cols-[minmax(0,1fr)_auto] @max-[530px]:grid-cols-[minmax(0,1fr)]"
 
 export const accountField =
   "grid min-w-0 gap-[7px] [&>span]:text-xs [&>span]:font-[650] [&>span]:text-foreground [&_strong]:text-[#d04b56]"

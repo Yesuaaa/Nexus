@@ -10,6 +10,7 @@ export type Account = {
   fullName: string | null
   contactNumber: string | null
   role: "SUPERADMIN" | "ADMIN" | "STAFF" | "USER"
+  isActive: boolean
   position?: string | null
   departmentId?: string | null
   department?: { id: string; name: string; code: string | null } | null

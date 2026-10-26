@@ -2,21 +2,30 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { LoaderCircle } from "lucide-react"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { sileo } from "sileo"
 import { cn } from "@/lib/utils"
 import { contentClass } from "@/components/layout/styles"
+import { Pill } from "@/components/ui/pill"
 import { ApiError, clearToken } from "@/features/auth/api/auth-api"
 import type { Account } from "@/features/auth/model/types"
-import { canAssignRole, canCreateRole } from "@/features/auth/model/permissions"
+import {
+  canAssignRole,
+  canChangeAccountStatus,
+  canCreateRole,
+} from "@/features/auth/model/permissions"
 import {
   changeAccountRole,
+  changeAccountStatus,
   listAccounts,
   type AccountList,
   type AccountRole,
 } from "../api/accounts-api"
 import { AccountDropdown } from "../components/account-dropdown"
 import { CreateAccountDialog } from "../components/create-account-dialog"
+import { AccountStatusDialog } from "../components/account-status-dialog"
+import { AccountRowActions } from "../components/account-row-actions"
 import {
   accountButton,
   accountButtonPrimary,
@@ -57,8 +66,14 @@ export function AccountManagementPage() {
   const [resolvedKey, setResolvedKey] = useState("")
   const [error, setError] = useState("")
   const [createOpen, setCreateOpen] = useState(false)
-  const [draftRoles, setDraftRoles] = useState<Record<string, AccountRole>>({})
-  const [savingId, setSavingId] = useState<string | null>(null)
+  const [draftRoles, setDraftRoles] = useState<
+    Record<string, { role: AccountRole; email: string }>
+  >({})
+  const [savingAccess, setSavingAccess] = useState(false)
+  const [accessError, setAccessError] = useState("")
+  const [statusTarget, setStatusTarget] = useState<Account | null>(null)
+  const [statusSaving, setStatusSaving] = useState(false)
+  const [statusError, setStatusError] = useState("")
   const requestKey = JSON.stringify([
     debouncedSearch,
     roleFilter,
@@ -77,7 +92,6 @@ export function AccountManagementPage() {
       .then((data) => {
         if (active) {
           setResult(data)
-          setDraftRoles({})
           setError("")
           setResolvedKey(requestKey)
         }
@@ -113,16 +127,66 @@ export function AccountManagementPage() {
     setPage(1)
   }
 
-  async function saveRole(target: Account) {
-    const role = draftRoles[target.id]
-    if (!role || role === target.role) return
-    setSavingId(target.id)
+  async function saveAccessChanges() {
+    const changes = Object.entries(draftRoles)
+    if (changes.length === 0 || savingAccess || statusSaving || busy) return
+    setSavingAccess(true)
+    setAccessError("")
+    const savedIds: string[] = []
+    const failures: string[] = []
     try {
-      await changeAccountRole(target.id, role)
+      for (const [id, change] of changes) {
+        try {
+          await changeAccountRole(id, change.role)
+          savedIds.push(id)
+        } catch (caught) {
+          if (caught instanceof ApiError && caught.status === 401) {
+            clearToken()
+            router.replace("/login")
+            return
+          }
+          failures.push(
+            `${change.email}: ${caught instanceof ApiError ? caught.message : "Please try again."}`,
+          )
+        }
+      }
+      if (failures.length > 0) {
+        setAccessError(
+          `${savedIds.length > 0 ? `Saved ${savedIds.length} access ${savedIds.length === 1 ? "change" : "changes"}. ` : ""}Couldn't save ${failures.length} ${failures.length === 1 ? "change" : "changes"}. ${failures.join(" ")}`,
+        )
+      } else {
+        sileo.success({
+          title: "Access updated",
+          description: `Saved ${savedIds.length} access ${savedIds.length === 1 ? "change" : "changes"}.`,
+        })
+      }
+    } finally {
+      if (savedIds.length > 0) {
+        setDraftRoles((current) => {
+          const next = { ...current }
+          for (const id of savedIds) delete next[id]
+          return next
+        })
+        setRevision((current) => current + 1)
+      }
+      setSavingAccess(false)
+    }
+  }
+
+  async function saveStatus() {
+    if (!statusTarget || statusSaving) return
+    setStatusSaving(true)
+    setStatusError("")
+    try {
+      const isActive = !statusTarget.isActive
+      await changeAccountStatus(statusTarget.id, isActive)
       sileo.success({
-        title: "Role updated",
-        description: `${target.email} is now ${roleNames[role]}.`,
+        title: isActive ? "Account reactivated" : "Account deactivated",
+        description: isActive
+          ? `${statusTarget.email} can sign in again.`
+          : `${statusTarget.email} can no longer sign in.`,
       })
+      setStatusTarget(null)
       setRevision((current) => current + 1)
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 401) {
@@ -130,13 +194,13 @@ export function AccountManagementPage() {
         router.replace("/login")
         return
       }
-      sileo.error({
-        title: "Couldn't update role",
-        description:
-          caught instanceof ApiError ? caught.message : "Please try again.",
-      })
+      setStatusError(
+        caught instanceof ApiError
+          ? caught.message
+          : "Couldn't update account status. Please try again.",
+      )
     } finally {
-      setSavingId(null)
+      setStatusSaving(false)
     }
   }
 
@@ -168,6 +232,7 @@ export function AccountManagementPage() {
             "min-h-[34px] flex-none rounded-lg px-[13px] text-xs",
           )}
           onClick={() => setCreateOpen(true)}
+          disabled={savingAccess || statusSaving}
         >
           <svg
             width="14"
@@ -189,8 +254,8 @@ export function AccountManagementPage() {
         className="mt-[18px] min-w-0 max-[560px]:mt-[14px]"
         aria-label="Accounts"
       >
-        <div className="flex items-center pb-4 max-[560px]:pb-3">
-          <div className="flex min-w-0 gap-[10px] max-[1050px]:w-full max-[560px]:flex-col">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 pb-4 max-[560px]:pb-3">
+          <div className="flex min-w-0 gap-[10px] max-[560px]:flex-col">
             <label className="flex h-[34px] w-[260px] min-w-0 items-center gap-2 rounded-lg border border-[#e1e4ea] px-[11px] text-[#7b8ca7] focus-within:bg-[#f8fafd] max-[1050px]:w-[min(350px,100%)] max-[1050px]:flex-1 max-[560px]:w-full max-[560px]:flex-none">
               <span className="sr-only">Search accounts</span>
               <svg
@@ -211,32 +276,69 @@ export function AccountManagementPage() {
                 onChange={(event) => updateSearch(event.target.value)}
                 placeholder="Search name or email"
                 maxLength={100}
+                disabled={savingAccess || statusSaving}
               />
             </label>
             <AccountDropdown
               className="max-[560px]:w-full"
-              triggerClassName="h-[34px] min-w-[132px] border-[#e1e4ea]"
+              triggerClassName="h-[34px] min-w-[132px] border-[#e1e4ea] max-[560px]:min-w-0"
               label="Filter by role"
               value={roleFilter}
               options={[{ value: "", label: "All roles" }, ...roleOptions]}
               onChange={updateRoleFilter}
+              disabled={savingAccess || statusSaving}
             />
           </div>
+          <button
+            type="button"
+            className={cn(
+              accountButton,
+              accountButtonPrimary,
+              "min-h-[34px] rounded-lg px-[13px] text-xs",
+            )}
+            disabled={
+              Object.keys(draftRoles).length === 0 ||
+              savingAccess ||
+              statusSaving ||
+              busy
+            }
+            aria-busy={savingAccess}
+            onClick={() => void saveAccessChanges()}
+          >
+            {savingAccess && (
+              <LoaderCircle
+                size={14}
+                className="animate-spin motion-reduce:animate-none"
+                aria-hidden="true"
+              />
+            )}
+            Save changes
+          </button>
         </div>
+        {accessError && (
+          <p
+            className="mt-0 mb-3 rounded-lg bg-[#fff0f1] p-3 text-xs break-words text-[#bc3649]"
+            role="alert"
+          >
+            {accessError}
+          </p>
+        )}
 
         <div className="@container min-w-0 rounded-lg border border-[#e8ebef] bg-background">
           <div
             className={cn(
               accountGrid,
-              "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground @max-[850px]:hidden",
+              "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground @max-[900px]:hidden",
             )}
             aria-hidden="true"
           >
             <span>Member</span>
             <span>Role</span>
+            <span>Status</span>
             <span>Department</span>
             <span>Created</span>
             <span>Access</span>
+            <span>Actions</span>
           </div>
           <div aria-live="polite">
             {busy && (
@@ -278,18 +380,18 @@ export function AccountManagementPage() {
                 )
                 const editable =
                   user.id !== actor.id && assignableRoles.length > 0
-                const selectedRole = draftRoles[user.id] ?? user.role
+                const selectedRole = draftRoles[user.id]?.role ?? user.role
                 return (
                   <div
                     className={cn(
                       accountGrid,
-                      "min-h-[58px] border-b border-[#eceef1] px-4 py-[7px] text-xs text-foreground last:rounded-b-[7px] last:border-b-0 hover:bg-[#e8eef2] @max-[850px]:gap-x-4 @max-[850px]:gap-y-[10px] @max-[850px]:py-[14px] @max-[530px]:gap-[9px]",
+                      "min-h-[58px] border-b border-[#eceef1] px-4 py-[7px] text-xs text-foreground last:rounded-b-[7px] last:border-b-0 hover:bg-[#e8eef2] @max-[900px]:gap-x-4 @max-[900px]:gap-y-[10px] @max-[900px]:py-[14px] @max-[530px]:gap-[9px]",
                     )}
                     key={user.id}
                   >
-                    <div className="min-w-0 @max-[850px]:col-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+                    <div className="min-w-0 @max-[900px]:col-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto">
                       <div className="grid min-w-0 gap-0.5">
-                        <strong className="overflow-hidden font-medium text-ellipsis whitespace-nowrap text-foreground">
+                        <strong className="min-w-0 truncate font-medium text-foreground">
                           {user.fullName || user.email.split("@")[0]}
                         </strong>
                         <span className="overflow-hidden text-[11px] text-ellipsis whitespace-nowrap text-[#738096]">
@@ -297,7 +399,7 @@ export function AccountManagementPage() {
                         </span>
                       </div>
                     </div>
-                    <div className="@max-[850px]:col-start-2 @max-[850px]:row-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+                    <div className="@max-[900px]:col-start-2 @max-[900px]:row-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto">
                       <span className="mr-1.5 hidden text-[#738096] @max-[530px]:inline">
                         Role
                       </span>
@@ -305,20 +407,24 @@ export function AccountManagementPage() {
                         {roleNames[user.role]}
                       </span>
                     </div>
-                    <div className="min-w-0 @max-[850px]:col-start-1 @max-[850px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+                    <div className="flex min-w-0 items-center gap-2 @max-[900px]:col-start-2 @max-[900px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+                      <span className="hidden text-[#738096] @max-[900px]:inline">
+                        Status
+                      </span>
+                      <Pill>{user.isActive ? "Active" : "Inactive"}</Pill>
+                    </div>
+                    <div className="min-w-0 @max-[900px]:col-start-1 @max-[900px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto">
                       {user.department ? (
                         <div className="flex flex-col gap-0.5 min-w-0">
-                          <span
-                            className="inline-block w-fit max-w-full self-start truncate rounded-full bg-[#1d4ed8] px-3 py-1 text-xs font-semibold text-[#eff6ff]"
+                          <Pill
+                            className="self-start"
                             title={user.department.name}
                           >
                             {user.department.name}
-                          </span>
-                          {(user.position || user.team) && (
+                          </Pill>
+                          {user.team && (
                             <span className="text-[11px] text-[#738096] truncate">
-                              {user.position}
-                              {user.position && user.team ? " • " : ""}
-                              {user.team ? user.team.name : ""}
+                              {user.team.name}
                             </span>
                           )}
                         </div>
@@ -326,52 +432,56 @@ export function AccountManagementPage() {
                         <span className="text-xs text-[#94a3b8]">—</span>
                       )}
                     </div>
-                    <div className="text-[11px] text-[#738096] @max-[850px]:col-start-1 @max-[850px]:row-start-3 @max-[530px]:row-auto">
-                      <span className="mr-1.5 hidden @max-[850px]:inline">
+                    <div className="text-[11px] text-[#738096] @max-[900px]:col-start-1 @max-[900px]:row-start-3 @max-[530px]:row-auto">
+                      <span className="mr-1.5 hidden @max-[900px]:inline">
                         Created
                       </span>
                       {formatDate(user.createdAt)}
                     </div>
-                    <div className="flex min-w-0 items-center gap-2 @max-[850px]:col-start-2 @max-[850px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+                    <div className="flex min-w-0 items-center @max-[900px]:col-start-2 @max-[900px]:row-start-3 @max-[530px]:col-start-1 @max-[530px]:row-auto">
                       {editable ? (
-                        <>
-                          <AccountDropdown
-                            className="max-w-[135px] flex-1"
-                            triggerClassName="h-8 border-[#e1e4ea] text-xs"
-                            menuClassName="right-0 left-auto"
-                            label={`Role for ${user.email}`}
-                            value={selectedRole}
-                            disabled={savingId === user.id}
-                            options={assignableRoles.map((role) => ({
-                              value: role,
-                              label: roleNames[role],
-                            }))}
-                            onChange={(role) =>
-                              setDraftRoles((current) => ({
-                                ...current,
-                                [user.id]: role,
-                              }))
-                            }
-                          />
-                          <button
-                            type="button"
-                            className={cn(
-                              accountButton,
-                              accountButtonPrimary,
-                              "ml-auto min-h-8 rounded-[7px] px-[11px] text-xs",
-                            )}
-                            disabled={
-                              selectedRole === user.role || savingId === user.id
-                            }
-                            onClick={() => void saveRole(user)}
-                          >
-                            {savingId === user.id ? "Saving…" : "Save"}
-                          </button>
-                        </>
+                        <AccountDropdown
+                          className="w-full max-w-[112px]"
+                          triggerClassName="h-8 border-[#e1e4ea] text-xs"
+                          menuClassName="right-0 left-auto"
+                          label={`Role for ${user.email}`}
+                          value={selectedRole}
+                          disabled={savingAccess || statusSaving}
+                          options={assignableRoles.map((role) => ({
+                            value: role,
+                            label: roleNames[role],
+                          }))}
+                          onChange={(role) => {
+                            setAccessError("")
+                            setDraftRoles((current) => {
+                              const next = { ...current }
+                              if (role === user.role) delete next[user.id]
+                              else next[user.id] = { role, email: user.email }
+                              return next
+                            })
+                          }}
+                        />
                       ) : (
                         <span className="text-[11px] text-[#738096]">
                           {user.id === actor.id ? "Your account" : "View only"}
                         </span>
+                      )}
+                    </div>
+                    <div className="flex min-w-0 items-center gap-2 @max-[900px]:col-start-2 @max-[900px]:row-start-4 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+                      <span className="hidden text-[#738096] @max-[530px]:inline">
+                        Actions
+                      </span>
+                      {canChangeAccountStatus(actor, user) ? (
+                        <AccountRowActions
+                          account={user}
+                          disabled={savingAccess || statusSaving}
+                          onChangeStatus={() => {
+                            setStatusError("")
+                            setStatusTarget(user)
+                          }}
+                        />
+                      ) : (
+                        <span className="text-[11px] text-[#94a3b8]">—</span>
                       )}
                     </div>
                   </div>
@@ -393,7 +503,7 @@ export function AccountManagementPage() {
                   accountButtonPrimary,
                   "min-h-[30px] rounded-lg px-3 text-[11px] font-medium",
                 )}
-                disabled={page <= 1}
+                disabled={page <= 1 || savingAccess || statusSaving}
                 onClick={() => setPage((current) => current - 1)}
               >
                 ← Back
@@ -408,7 +518,7 @@ export function AccountManagementPage() {
                   accountButtonPrimary,
                   "min-h-[30px] rounded-lg px-3 text-[11px] font-medium",
                 )}
-                disabled={page >= totalPages}
+                disabled={page >= totalPages || savingAccess || statusSaving}
                 onClick={() => setPage((current) => current + 1)}
               >
                 Next →
@@ -418,6 +528,15 @@ export function AccountManagementPage() {
         )}
       </section>
 
+      {statusTarget && (
+        <AccountStatusDialog
+          account={statusTarget}
+          saving={statusSaving}
+          error={statusError}
+          onClose={() => setStatusTarget(null)}
+          onConfirm={() => void saveStatus()}
+        />
+      )}
       <CreateAccountDialog
         open={createOpen}
         roles={creatableRoles}

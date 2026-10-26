@@ -13,6 +13,7 @@ import {
   type Department,
 } from "../api/departments-api"
 import { CreateEditDepartmentDialog } from "../components/create-edit-department-dialog"
+import { DeleteDepartmentDialog } from "../components/delete-department-dialog"
 import { DepartmentKpiCards } from "../components/department-kpi-cards"
 import { DepartmentTable } from "../components/department-table"
 import { ManageMembersDrawer } from "../components/manage-members-drawer"
@@ -25,6 +26,12 @@ export function DepartmentManagementPage() {
   const [error, setError] = useState("")
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingDept, setEditingDept] = useState<Department | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string
+    name: string
+  } | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState("")
   const [selectedDeptIdForMembers, setSelectedDeptIdForMembers] = useState<
     string | null
   >(null)
@@ -57,23 +64,30 @@ export function DepartmentManagementPage() {
     }
   }, [revision])
 
-  async function handleDelete(id: string, name: string) {
-    if (
-      !window.confirm(
-        `Are you sure you want to delete the department "${name}"? Members will be unassigned.`,
-      )
-    ) {
-      return
-    }
+  function requestDelete(id: string, name: string) {
+    if (!canDelete || deleting) return
+    setDeleteError("")
+    setDeleteTarget({ id, name })
+  }
+
+  async function handleDelete() {
+    if (!deleteTarget || deleting || !canDelete) return
+    setDeleting(true)
+    setDeleteError("")
     try {
-      await deleteDepartment(id)
+      await deleteDepartment(deleteTarget.id)
+      setDeleteTarget(null)
+      if (editingDept?.id === deleteTarget.id) setDialogOpen(false)
+      if (selectedDeptIdForMembers === deleteTarget.id)
+        setSelectedDeptIdForMembers(null)
       sileo.success({ title: "Department deleted" })
       setRevision((r) => r + 1)
     } catch (err: unknown) {
-      sileo.error({
-        title: "Delete failed",
-        description: err instanceof Error ? err.message : "Failed to delete",
-      })
+      setDeleteError(
+        err instanceof Error ? err.message : "Failed to delete department",
+      )
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -129,7 +143,7 @@ export function DepartmentManagementPage() {
             setDialogOpen(true)
           }}
           onManageMembers={setSelectedDeptIdForMembers}
-          onDelete={handleDelete}
+          onDelete={requestDelete}
           onRetry={() => {
             setLoading(true)
             setRevision((r) => r + 1)
@@ -141,7 +155,6 @@ export function DepartmentManagementPage() {
         <CreateEditDepartmentDialog
           department={editingDept}
           onClose={() => setDialogOpen(false)}
-          onDelete={canDelete ? handleDelete : undefined}
           onSaved={() => {
             setDialogOpen(false)
             setRevision((r) => r + 1)
@@ -160,6 +173,18 @@ export function DepartmentManagementPage() {
           canManage={canManage}
           onClose={() => setSelectedDeptIdForMembers(null)}
           onChanged={() => setRevision((r) => r + 1)}
+        />
+      )}
+
+      {deleteTarget && (
+        <DeleteDepartmentDialog
+          name={deleteTarget.name}
+          deleting={deleting}
+          error={deleteError}
+          onClose={() => {
+            if (!deleting) setDeleteTarget(null)
+          }}
+          onConfirm={handleDelete}
         />
       )}
     </main>

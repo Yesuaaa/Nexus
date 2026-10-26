@@ -14,6 +14,7 @@ export function publicUser(
     contactNumber: user.contactNumber,
     position: user.position ?? null,
     role: user.role,
+    isActive: user.isActive,
     departmentId: user.departmentId ?? null,
     department: user.department
       ? {
