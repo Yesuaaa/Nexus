@@ -7,14 +7,14 @@ import {
   hasPermission,
   Permission,
   permissionsFor,
-} from "../auth/permissions.js"
-import { requirePermission, requireRole } from "../auth/session.js"
+} from "../auth/auth.permissions.js"
+import { requirePermission, requireRole } from "../auth/auth.middleware.js"
 import {
   canAssignRole,
   canChangeAccountStatus,
   canCreateRole,
-} from "./role-policy.js"
-import { publicUser } from "./public-user.js"
+} from "./users.policy.js"
+import { publicUser } from "./users.dto.js"
 
 test("fixed roles have the expected permissions", () => {
   const common = [

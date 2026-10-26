@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { validateServiceInput } from "./validation.js"
+import { validateServiceInput } from "./services.schema.js"
 
 test("service input trims and accepts all required fields", () => {
   assert.deepEqual(

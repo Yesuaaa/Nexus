@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { validateEmployeeInput } from "./validation.js"
+import { validateEmployeeInput } from "./employees.schema.js"
 
 test("employee input requires every form field and normalizes submitted values", () => {
   const result = validateEmployeeInput(

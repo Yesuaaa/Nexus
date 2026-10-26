@@ -1,7 +1,7 @@
 import "dotenv/config"
 import { Role } from "../src/generated/prisma/client.js"
-import { hashPassword, validPassword } from "../src/features/auth/password.js"
-import { normalizedEmail } from "../src/features/auth/validation.js"
+import { hashPassword, validPassword } from "../src/features/auth/auth.password.js"
+import { normalizedEmail } from "../src/features/auth/auth.schema.js"
 import { getPrisma } from "../src/lib/db.js"
 
 async function seedSuperadmin(
