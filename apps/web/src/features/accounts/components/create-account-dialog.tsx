@@ -19,6 +19,86 @@ const roleNames: Record<AccountRole, string> = {
   USER: "User",
 }
 
+const NAME_RE = /^\p{L}[\p{L} .'’-]*$/u
+const EMAIL_RE =
+  /^[A-Za-z0-9]+([._+-][A-Za-z0-9]+)*@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.(com|ph)$/i
+const PHONE_RE = /^0[89]\d{9}$/
+
+type FieldName =
+  "email" | "fullName" | "contactNumber" | "password" | "confirmation"
+type Values = Record<FieldName, string>
+
+const emptyValues: Values = {
+  email: "",
+  fullName: "",
+  contactNumber: "",
+  password: "",
+  confirmation: "",
+}
+
+function validate(values: Values): Partial<Record<FieldName, string>> {
+  const errors: Partial<Record<FieldName, string>> = {}
+  const email = values.email.trim()
+  const name = values.fullName.trim()
+  const phone = values.contactNumber
+  const { password, confirmation } = values
+
+  if (!email) errors.email = "Email address is required."
+  else if (!EMAIL_RE.test(email))
+    errors.email = "Enter a valid email like name@example.com."
+
+  if (!name) errors.fullName = "Full name is required."
+  else if (name.length < 2)
+    errors.fullName = "Full name must be at least 2 characters."
+  else if (!NAME_RE.test(name))
+    errors.fullName = "Letters, spaces, hyphens, apostrophes and periods only."
+
+  if (phone && !PHONE_RE.test(phone))
+    errors.contactNumber = "Enter 11 digits starting with 09 or 08."
+
+  if (!password) errors.password = "Password is required."
+  else if (password.length < 12) errors.password = "Use at least 12 characters."
+  else if (!/[A-Z]/.test(password))
+    errors.password = "Include at least one capital letter."
+  else if (!/[a-z]/.test(password))
+    errors.password = "Include at least one lowercase letter."
+  else if (!/[0-9]/.test(password))
+    errors.password = "Include at least one number."
+  else if (!/[^A-Za-z0-9]/.test(password))
+    errors.password = "Include at least one special character."
+
+  if (!confirmation) errors.confirmation = "Please confirm your password."
+  else if (password !== confirmation)
+    errors.confirmation = "Passwords do not match."
+
+  return errors
+}
+
+function EyeIcon({ off }: { off: boolean }) {
+  return (
+    <svg
+      width="17"
+      height="17"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+      <circle cx="12" cy="12" r="3" />
+      {off && <path d="m4 4 16 16" />}
+    </svg>
+  )
+}
+
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null
+  return <p className="m-0 text-[11px] font-normal text-[#bc3649]">{message}</p>
+}
+
 export function CreateAccountDialog({
   open,
   roles,
@@ -34,6 +114,14 @@ export function CreateAccountDialog({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [role, setRole] = useState<AccountRole>("USER")
+  const [values, setValues] = useState<Values>(emptyValues)
+  const [touched, setTouched] = useState<Partial<Record<FieldName, boolean>>>(
+    {},
+  )
+  const [submitted, setSubmitted] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmation, setShowConfirmation] = useState(false)
+  const errors = validate(values)
 
   useEffect(() => {
     const dialog = dialogRef.current
@@ -42,34 +130,60 @@ export function CreateAccountDialog({
     if (!open && dialog.open) dialog.close()
   }, [open])
 
-  function closeDialog() {
+  function resetForm() {
+    setValues(emptyValues)
+    setTouched({})
+    setSubmitted(false)
+    setShowPassword(false)
+    setShowConfirmation(false)
+    setRole("USER")
     setError("")
+  }
+
+  function closeDialog() {
+    resetForm()
     onClose()
+  }
+
+  function showError(field: FieldName) {
+    const hasValue = values[field].length > 0
+    return hasValue || touched[field] || submitted ? errors[field] : undefined
+  }
+
+  function setField(field: FieldName, value: string) {
+    const next = field === "contactNumber" ? value.replace(/\D/g, "") : value
+    setValues((current) => ({ ...current, [field]: next }))
+  }
+
+  function blurField(field: FieldName) {
+    setTouched((current) => ({ ...current, [field]: true }))
+  }
+
+  function inputClass(field: FieldName) {
+    return cn(
+      accountInput,
+      showError(field) && [
+        "border-[#d64557] focus:border-[#d64557] focus-visible:border-[#d64557]",
+        "outline-none focus:outline-none focus-visible:outline-none",
+        "focus:ring-0 focus-visible:ring-0 focus:shadow-none focus-visible:shadow-none",
+      ],
+    )
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const form = event.currentTarget
-    const fields = new FormData(form)
-    const password = String(fields.get("password") ?? "")
-    const confirmation = String(fields.get("confirmation") ?? "")
-    if (password !== confirmation) {
-      setError("Passwords do not match.")
-      return
-    }
+    setSubmitted(true)
+    if (Object.keys(errors).length > 0) return
     setSaving(true)
     setError("")
     try {
       await createAccount({
-        email: String(fields.get("email") ?? "").trim(),
-        fullName: String(fields.get("fullName") ?? "").trim(),
-        contactNumber:
-          String(fields.get("contactNumber") ?? "").trim() || undefined,
-        password,
+        email: values.email.trim(),
+        fullName: values.fullName.trim(),
+        contactNumber: values.contactNumber || undefined,
+        password: values.password,
         role,
       })
-      form.reset()
-      setRole("USER")
       onCreated()
       closeDialog()
     } catch (caught) {
@@ -90,7 +204,7 @@ export function CreateAccountDialog({
       aria-labelledby="create-account-title"
       onClose={closeDialog}
     >
-      <form onSubmit={(event) => void handleSubmit(event)}>
+      <form noValidate onSubmit={(event) => void handleSubmit(event)}>
         <div className="flex justify-between gap-4 border-b border-[#e9edf4] px-7 pt-[26px] pb-5 max-[560px]:px-5">
           <div>
             <p className="mt-0 mb-2 text-[11px] font-bold tracking-[0.09em] text-[#32549a]">
@@ -119,47 +233,62 @@ export function CreateAccountDialog({
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-x-[14px] gap-y-[17px] px-7 py-[22px] max-[560px]:grid-cols-1 max-[560px]:p-5">
+        <div className="grid grid-cols-2 items-start gap-x-[14px] gap-y-[17px] px-7 py-[22px] max-[560px]:grid-cols-1 max-[560px]:p-5">
           <label className={accountField}>
             <span>
               Email address <strong>*</strong>
             </span>
             <input
-              className={accountInput}
+              className={inputClass("email")}
               name="email"
               type="email"
               autoComplete="off"
               maxLength={254}
-              required
               autoFocus
               placeholder="name@example.com"
+              value={values.email}
+              onChange={(event) => setField("email", event.target.value)}
+              onBlur={() => blurField("email")}
+              aria-invalid={Boolean(showError("email"))}
             />
+            <FieldError message={showError("email")} />
           </label>
           <label className={accountField}>
             <span>
               Full name <strong>*</strong>
             </span>
             <input
-              className={accountInput}
+              className={inputClass("fullName")}
               name="fullName"
               type="text"
-              minLength={2}
               maxLength={100}
               autoComplete="off"
-              required
               placeholder="Full name"
+              value={values.fullName}
+              onChange={(event) => setField("fullName", event.target.value)}
+              onBlur={() => blurField("fullName")}
+              aria-invalid={Boolean(showError("fullName"))}
             />
+            <FieldError message={showError("fullName")} />
           </label>
           <label className={accountField}>
             <span>Contact number</span>
             <input
-              className={accountInput}
+              className={inputClass("contactNumber")}
               name="contactNumber"
               type="tel"
+              inputMode="numeric"
+              maxLength={11}
               autoComplete="off"
-              pattern="[+]?[0-9](?:[0-9 ]|-){6,19}"
               placeholder="Optional"
+              value={values.contactNumber}
+              onChange={(event) =>
+                setField("contactNumber", event.target.value)
+              }
+              onBlur={() => blurField("contactNumber")}
+              aria-invalid={Boolean(showError("contactNumber"))}
             />
+            <FieldError message={showError("contactNumber")} />
           </label>
           <div className={accountField}>
             <span>
@@ -180,31 +309,67 @@ export function CreateAccountDialog({
             <span>
               Password <strong>*</strong>
             </span>
-            <input
-              className={accountInput}
-              name="password"
-              type="password"
-              autoComplete="new-password"
-              minLength={12}
-              maxLength={1024}
-              required
-              placeholder="At least 12 characters"
-            />
+            <div className="relative">
+              <input
+                className={cn(inputClass("password"), "pr-10")}
+                name="password"
+                type={showPassword ? "text" : "password"}
+                autoComplete="new-password"
+                maxLength={1024}
+                placeholder="At least 12 characters"
+                value={values.password}
+                onChange={(event) => setField("password", event.target.value)}
+                onBlur={() => blurField("password")}
+                aria-invalid={Boolean(showError("password"))}
+              />
+              <button
+                type="button"
+                className={cn(
+                  "absolute top-1/2 right-3 -translate-y-1/2 cursor-pointer border-0 bg-transparent p-0 text-[#7183a2] hover:text-[#32549a]",
+                  accountFocusRing,
+                )}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                onClick={() => setShowPassword((current) => !current)}
+              >
+                <EyeIcon off={showPassword} />
+              </button>
+            </div>
+            <FieldError message={showError("password")} />
           </label>
           <label className={accountField}>
             <span>
               Confirm password <strong>*</strong>
             </span>
-            <input
-              className={accountInput}
-              name="confirmation"
-              type="password"
-              autoComplete="new-password"
-              minLength={12}
-              maxLength={1024}
-              required
-              placeholder="Repeat password"
-            />
+            <div className="relative">
+              <input
+                className={cn(inputClass("confirmation"), "pr-10")}
+                name="confirmation"
+                type={showConfirmation ? "text" : "password"}
+                autoComplete="new-password"
+                maxLength={1024}
+                placeholder="Repeat password"
+                value={values.confirmation}
+                onChange={(event) =>
+                  setField("confirmation", event.target.value)
+                }
+                onBlur={() => blurField("confirmation")}
+                aria-invalid={Boolean(showError("confirmation"))}
+              />
+              <button
+                type="button"
+                className={cn(
+                  "absolute top-1/2 right-3 -translate-y-1/2 cursor-pointer border-0 bg-transparent p-0 text-[#7183a2] hover:text-[#32549a]",
+                  accountFocusRing,
+                )}
+                aria-label={
+                  showConfirmation ? "Hide password" : "Show password"
+                }
+                onClick={() => setShowConfirmation((current) => !current)}
+              >
+                <EyeIcon off={showConfirmation} />
+              </button>
+            </div>
+            <FieldError message={showError("confirmation")} />
           </label>
         </div>
 

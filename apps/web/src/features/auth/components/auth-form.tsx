@@ -170,11 +170,14 @@ export function AuthContent({
                 label={copy.contactNumber}
                 type="tel"
                 value={contactNumber}
-                onChange={(value) => changeValue(setContactNumber, value)}
+                onChange={(value) =>
+                  changeValue(setContactNumber, value.replace(/\D/g, ""))
+                }
                 onBlur={() => markTouched("contactNumber")}
                 onFocus={() => handleFieldFocus("contactNumber")}
                 autoComplete="tel"
-                placeholder="+63"
+                placeholder="09123456789"
+                maxLength={11}
                 error={visibleError("contactNumber")}
               />
             </div>
@@ -189,6 +192,7 @@ export function AuthContent({
             onFocus={() => handleFieldFocus("email")}
             autoComplete="email"
             placeholder="user@email.com"
+            maxLength={254}
             error={visibleError("email")}
           />
           {mode === "login" ? (
