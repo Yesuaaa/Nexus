@@ -1,4 +1,6 @@
+import { focusRing } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
+import { DepartmentPill } from "@/components/ui/department-pill.tsx"
 import {
   Table,
   TableBody,
@@ -31,15 +33,11 @@ const statusNames: Record<EmploymentStatus, string> = {
 function StatusPill({ status }: { status: EmploymentStatus }) {
   const style =
     status === "ACTIVE"
-      ? "bg-[#e8f5ed] text-[#246342]"
+      ? "bg-[#dcf5e5] text-[#19703a]"
       : status === "ON_LEAVE"
         ? "bg-[#fff3df] text-[#805316]"
-        : "bg-[#edf0f4] text-[#667085]"
-  return (
-    <Pill className={cn("rounded-md px-2 py-1 text-[11px]", style)}>
-      {statusNames[status]}
-    </Pill>
-  )
+        : "bg-[#fde4ea] text-[#b4234d]"
+  return <Pill className={style}>{statusNames[status]}</Pill>
 }
 
 function formatDate(value: string | null) {
@@ -104,8 +102,8 @@ export function EmployeeTable({
           <TableRow className="border-[#dfe6eb] hover:bg-transparent">
             <TableHead>Employee ID</TableHead>
             <TableHead>Employee</TableHead>
-            <TableHead>Department / team</TableHead>
-            <TableHead>Position</TableHead>
+            <TableHead>Department</TableHead>
+            <TableHead>Position / team</TableHead>
             <TableHead>Type</TableHead>
             <TableHead>Start date</TableHead>
             <TableHead>Status</TableHead>
@@ -151,42 +149,49 @@ export function EmployeeTable({
               </TableCell>
               <TableCell className="min-w-0 px-4 py-[7px] @max-[1000px]:col-span-2 @max-[1000px]:row-start-3 @max-[1000px]:p-0">
                 <span className="hidden text-[#738096] @max-[1000px]:inline">
-                  Department / team{" "}
+                  Department{" "}
                 </span>
                 {employee.department && onManageDepartment ? (
-                  <Button
+                  <button
                     type="button"
-                    variant="outline"
-                    className="h-auto max-w-full justify-start truncate border-0 bg-transparent p-0 text-xs font-normal text-foreground shadow-none hover:bg-transparent hover:underline"
+                    className={cn(
+                      "max-w-full cursor-pointer rounded-md border-0 bg-transparent p-0 text-left hover:opacity-80",
+                      focusRing,
+                    )}
                     aria-label={`Manage ${employee.department.name} members and teams`}
                     onClick={() => onManageDepartment(employee.department!.id)}
                   >
-                    {employee.department.name}
-                  </Button>
+                    <DepartmentPill department={employee.department} />
+                  </button>
+                ) : employee.department ? (
+                  <DepartmentPill department={employee.department} />
                 ) : (
-                  <p className="m-0 truncate" title={employee.department?.name}>
-                    {employee.department?.name || (
-                      <span className="text-[#94a3b8]">Unassigned</span>
-                    )}
-                  </p>
-                )}
-                {employee.team && (
-                  <p
-                    className="mt-0.5 mb-0 truncate text-[11px] text-[#738096]"
-                    title={employee.team.name}
-                  >
-                    {employee.team.name}
-                  </p>
+                  <span className="text-[#94a3b8]">Unassigned</span>
                 )}
               </TableCell>
-              <TableCell
-                className="min-w-0 truncate px-4 py-[7px] text-[#52627a] @max-[1000px]:col-start-1 @max-[1000px]:row-start-4 @max-[1000px]:p-0"
-                title={employee.position ?? undefined}
-              >
+              <TableCell className="min-w-0 px-4 py-[7px] text-[#52627a] @max-[1000px]:col-start-1 @max-[1000px]:row-start-4 @max-[1000px]:p-0">
                 <span className="hidden text-[#738096] @max-[1000px]:inline">
-                  Position{" "}
+                  Position / team{" "}
                 </span>
-                {employee.position || <span className="text-[#94a3b8]">—</span>}
+                {employee.position || employee.team ? (
+                  <>
+                    {employee.position && (
+                      <p className="m-0 truncate" title={employee.position}>
+                        {employee.position}
+                      </p>
+                    )}
+                    {employee.team && (
+                      <p
+                        className="mt-0.5 mb-0 truncate text-[11px] text-[#738096]"
+                        title={employee.team.name}
+                      >
+                        {employee.team.name}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-[#94a3b8]">—</span>
+                )}
               </TableCell>
               <TableCell className="px-4 py-[7px] text-[#52627a] @max-[1000px]:col-start-1 @max-[1000px]:row-start-5 @max-[1000px]:p-0">
                 <span className="hidden text-[#738096] @max-[1000px]:inline">

@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react"
 import { Eye, MoreHorizontal, Pencil } from "lucide-react"
 import { SearchIcon } from "@/components/layout/icons"
 import { focusRing } from "@/components/layout/styles"
+import { DepartmentPill } from "@/components/ui/department-pill.tsx"
 import { Dropdown } from "@/components/ui/dropdown"
 import {
   DropdownMenu,
@@ -46,9 +47,7 @@ function DepartmentPills({ service }: { service: Service }) {
   return (
     <span className="inline-flex max-w-full items-center gap-1">
       {visibleDepartments.map((department) => (
-        <Pill key={department.id} title={department.name}>
-          {department.name}
-        </Pill>
+        <DepartmentPill key={department.id} department={department} />
       ))}
       {remainingCount > 0 && (
         <Pill

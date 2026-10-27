@@ -26,5 +26,8 @@
     "globals": "^16.5.0",
     "prettier": "^3.9.10",
     "typescript-eslint": "^8.72.0"
+  },
+  "dependencies": {
+    "lucide-react": "^1.61.0"
   }
 }
