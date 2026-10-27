@@ -33,6 +33,21 @@ enum EmployeeStatus {
   ON_LEAVE
 }
 
+enum ServiceRequestStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum ProjectStatus {
+  PLANNED
+  IN_PROGRESS
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
 model User {
   id                                String      @id @default(cuid())
   email                             String      @unique
@@ -55,6 +70,8 @@ model User {
   temporaryOriginalDepartmentHeadOf Department? @relation("DepartmentTemporaryOriginalHead")
   temporaryAssignedDepartmentHeadOf Department? @relation("DepartmentTemporaryAssignedHead")
   sessions                          Session[]
+  serviceRequests                   ServiceRequest[]
+  projects                          Project[]
 
   @@index([departmentId])
   @@index([teamId])
@@ -90,8 +107,39 @@ model Service {
   departments Department[] @relation("ServiceDepartments")
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
+  serviceRequests ServiceRequest[]
 
   @@index([isActive])
+}
+
+model ServiceRequest {
+  id          String               @id @default(cuid())
+  clientId    String
+  client      User                 @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  serviceId   String
+  service     Service              @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  title       String
+  description String?
+  status      ServiceRequestStatus @default(PENDING)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@index([clientId, createdAt, id])
+  @@index([serviceId])
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  clientId    String
+  client      User          @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  name        String
+  description String?
+  status      ProjectStatus @default(PLANNED)
+  startDate   DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([clientId, createdAt, id])
 }
 
 model Team {

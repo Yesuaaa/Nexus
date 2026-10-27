@@ -18,6 +18,7 @@ export const Permissions = {
   EMPLOYEES_MANAGE: "employees:manage",
   SERVICES_READ: "services:read",
   SERVICES_MANAGE: "services:manage",
+  CLIENTS_READ: "clients:read",
 } as const
 
 export type Permission = (typeof Permissions)[keyof typeof Permissions]
@@ -60,6 +61,13 @@ export function canAccessServiceManagement(account: Account): boolean {
   return (
     account.role === "ADMIN" &&
     hasPermission(account, Permissions.SERVICES_READ)
+  )
+}
+
+export function canAccessClientManagement(account: Account): boolean {
+  return (
+    isPrivileged(account.role) &&
+    hasPermission(account, Permissions.CLIENTS_READ)
   )
 }
 
