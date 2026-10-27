@@ -38,31 +38,14 @@ function formatDate(value: string) {
   }).format(new Date(value))
 }
 
-function DepartmentPills({ service }: { service: Service }) {
-  const visibleDepartments = service.departments.slice(0, 2)
-  const remainingDepartments = service.departments.slice(2)
-  const remainingCount = remainingDepartments.length
+function DepartmentNames({ service }: { service: Service }) {
+  const names = service.departments
+    .map((department) => department.name)
+    .join(", ")
 
   return (
-    <span className="inline-flex max-w-full items-center gap-1">
-      {visibleDepartments.map((department) => (
-        <Pill key={department.id} title={department.name}>
-          {department.name}
-        </Pill>
-      ))}
-      {remainingCount > 0 && (
-        <Pill
-          className="shrink-0 bg-[#e8eef9] font-semibold text-[#244993]"
-          title={remainingDepartments
-            .map((department) => department.name)
-            .join(", ")}
-          aria-label={`${remainingCount} more departments: ${remainingDepartments
-            .map((department) => department.name)
-            .join(", ")}`}
-        >
-          +{remainingCount}
-        </Pill>
-      )}
+    <span className="text-[#526686]" title={names || undefined}>
+      {names || "—"}
     </span>
   )
 }
@@ -410,12 +393,12 @@ export function ServiceTable({
                 </div>
                 <div
                   role="cell"
-                  className="min-w-0 @max-[920px]:col-start-1 @max-[920px]:row-start-3"
+                  className="min-w-0 truncate @max-[920px]:col-start-1 @max-[920px]:row-start-3"
                 >
                   <span className="mr-1.5 hidden text-[#738096] @max-[920px]:inline">
                     Departments
                   </span>
-                  <DepartmentPills service={service} />
+                  <DepartmentNames service={service} />
                 </div>
                 <div
                   role="cell"

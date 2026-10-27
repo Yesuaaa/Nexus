@@ -518,19 +518,27 @@ export function AccountManagementPage() {
                       <span className="hidden text-[#738096] @max-[900px]:inline">
                         Status
                       </span>
-                      <Pill>{user.isActive ? "Active" : "Inactive"}</Pill>
+                      <Pill
+                        className={
+                          user.isActive
+                            ? "bg-[#dcf5e5] text-[#19703a]"
+                            : "bg-[#fde4ea] text-[#b4234d]"
+                        }
+                      >
+                        {user.isActive ? "Active" : "Inactive"}
+                      </Pill>
                     </div>
                     <div className="min-w-0 @max-[900px]:col-start-1 @max-[900px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto">
                       {user.department ? (
-                        <div className="flex flex-col gap-0.5 min-w-0">
-                          <Pill
-                            className="self-start"
+                        <div className="flex min-w-0 flex-col gap-0.5">
+                          <span
+                            className="truncate text-xs text-foreground"
                             title={user.department.name}
                           >
                             {user.department.name}
-                          </Pill>
+                          </span>
                           {user.team && (
-                            <span className="text-[11px] text-[#738096] truncate">
+                            <span className="truncate text-[11px] text-[#738096]">
                               {user.team.name}
                             </span>
                           )}

@@ -8,7 +8,6 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Pill } from "@/components/ui/pill"
-import { cn } from "@/lib/utils"
 import type {
   Employee,
   EmploymentStatus,
@@ -31,15 +30,11 @@ const statusNames: Record<EmploymentStatus, string> = {
 function StatusPill({ status }: { status: EmploymentStatus }) {
   const style =
     status === "ACTIVE"
-      ? "bg-[#e8f5ed] text-[#246342]"
+      ? "bg-[#dcf5e5] text-[#19703a]"
       : status === "ON_LEAVE"
         ? "bg-[#fff3df] text-[#805316]"
-        : "bg-[#edf0f4] text-[#667085]"
-  return (
-    <Pill className={cn("rounded-md px-2 py-1 text-[11px]", style)}>
-      {statusNames[status]}
-    </Pill>
-  )
+        : "bg-[#fde4ea] text-[#b4234d]"
+  return <Pill className={style}>{statusNames[status]}</Pill>
 }
 
 function formatDate(value: string | null) {
