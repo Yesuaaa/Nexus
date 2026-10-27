@@ -9,6 +9,8 @@ export const metadata: Metadata = {
   description: "Sign in or create your EXP account.",
 }
 
+export const dynamic = "force-dynamic"
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
