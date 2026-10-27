@@ -70,10 +70,13 @@ To seed a separate Admin account, set `ADMIN_BOOTSTRAP_EMAIL` and `ADMIN_BOOTSTR
 | `GET`   | `/api/users`                | Admin, Superadmin | Search, filter, and page through accounts |
 | `POST`  | `/api/users`                | Admin, Superadmin | Create an account within role limits      |
 | `PATCH` | `/api/users/:id/role`       | Admin, Superadmin | Change an account's role                  |
+| `PATCH` | `/api/users/:id/password`   | Superadmin        | Reset another account password            |
 
 Log in with JSON such as `{"email":"person@example.com","password":"a long password"}`. Registration also accepts `fullName` and `contactNumber`. Both return `{ "token", "user", "expiresIn" }`; the user includes effective permissions. Send the token on protected requests with `Authorization: Bearer <token>`. Sessions expire after seven days. `change-password` takes `currentPassword` and `newPassword`; the client must log in again after it succeeds. `GET /api/users` accepts `search`, `role`, and `page` query parameters and returns 20 accounts per page. `POST /api/users` requires `email`, `fullName`, `password`, and `role`; `contactNumber` is optional. The role endpoint takes `{ "role": "STAFF" }`.
 
 Admins can change Staff and User accounts between those two roles. Superadmins can assign any role. Nobody can change their own role through the API. Role changes take effect on existing sessions at the next request. Keep bearer tokens out of browser persistent storage when possible, and serve deployed clients and the API over HTTPS. The API has a per-process login attempt limit; use a shared rate limiter if running multiple API replicas.
+
+Superadmins can reset another account's password from Account Management. The endpoint accepts only `newPassword`; confirmation stays in the client as a usability check. It requires 12–1024 bytes with uppercase, lowercase, numeric, and special characters. The API scrypt-hashes the value, revokes all target sessions, and creates a password-free audit entry. It never returns, logs, or stores plaintext passwords outside the request lifecycle.
 
 ## Docker
 
