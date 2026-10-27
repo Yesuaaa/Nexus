@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test"
 import type { Account } from "../src/features/auth/model/types"
 import { Permissions } from "../src/features/auth/model/permissions"
 import type { Department } from "../src/features/departments/api/departments-api"
+import type { Employee } from "../src/features/employees/api/employees-api"
 
 const pageErrors = new WeakMap<Page, string[]>()
 
@@ -42,7 +43,12 @@ function accountFor(
     )
   }
   if (role === "ADMIN") {
-    permissions.push(Permissions.SERVICES_READ, Permissions.SERVICES_MANAGE)
+    permissions.push(
+      Permissions.EMPLOYEES_READ,
+      Permissions.EMPLOYEES_MANAGE,
+      Permissions.SERVICES_READ,
+      Permissions.SERVICES_MANAGE,
+    )
   }
   if (role === "SUPERADMIN") {
     permissions.push(
@@ -71,6 +77,7 @@ function accountFor(
 type MockApiOptions = {
   initialUsers?: Account[]
   initialDepartments?: Department[]
+  initialEmployees?: Employee[]
 }
 
 async function mockApi(
@@ -91,6 +98,10 @@ async function mockApi(
       Permissions.PROFILE_READ,
       Permissions.PROFILE_CHANGE_PASSWORD,
     ],
+    departmentId: "dept-1",
+    department: { id: "dept-1", name: "Engineering", code: "ENG" },
+    teamId: null,
+    team: null,
     createdAt: "2026-01-02T00:00:00.000Z",
   }
 
@@ -111,6 +122,28 @@ async function mockApi(
       teamCount: 1,
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
+    },
+  ]
+
+  const employees: Employee[] = options?.initialEmployees ?? [
+    {
+      id: "employee-1",
+      employeeId: "EMP-001",
+      fullName: "Alex Employee",
+      email: "alex.employee@example.com",
+      contactNumber: "09123456789",
+      position: "Support Specialist",
+      employmentType: "FULL_TIME",
+      status: "ACTIVE",
+      startDate: "2026-01-15",
+      departmentId: "dept-1",
+      teamId: null,
+      department: { id: "dept-1", name: "Engineering", code: "ENG" },
+      team: null,
+      hasAccount: true,
+      accountIsActive: true,
+      createdAt: "2026-01-15T00:00:00.000Z",
+      updatedAt: "2026-01-15T00:00:00.000Z",
     },
   ]
 
@@ -185,6 +218,26 @@ async function mockApi(
       await route.fulfill({
         json: {
           users: filtered,
+          total: filtered.length,
+          page: 1,
+          pageSize: 20,
+        },
+      })
+      return
+    }
+
+    if (pathname === "/api/employees" && method === "GET") {
+      const search = url.searchParams.get("search")?.toLowerCase() ?? ""
+      const filtered = employees.filter(
+        (employee) =>
+          !search ||
+          employee.fullName.toLowerCase().includes(search) ||
+          employee.employeeId.toLowerCase().includes(search) ||
+          (employee.email?.toLowerCase().includes(search) ?? false),
+      )
+      await route.fulfill({
+        json: {
+          employees: filtered,
           total: filtered.length,
           page: 1,
           pageSize: 20,
@@ -291,7 +344,7 @@ async function mockApi(
               name: "Test Service",
               description: "A service used by the regression suite.",
               isActive: true,
-              departments: [],
+              departments: [{ id: "dept-1", name: "Engineering", code: "ENG" }],
               createdAt: "2026-01-01T00:00:00.000Z",
               updatedAt: "2026-01-01T00:00:00.000Z",
             },
@@ -402,6 +455,7 @@ test("anonymous home and protected deep links redirect to login", async ({
     "/dashboard",
     "/accounts",
     "/departments",
+    "/employees",
     "/services",
   ]) {
     await page.goto(path)
@@ -574,6 +628,9 @@ for (const role of ["SUPERADMIN", "ADMIN", "STAFF", "USER"] as const) {
       menu.getByRole("link", { name: "Department Management", exact: true }),
     ).toHaveCount(role === "ADMIN" ? 1 : 0)
     await expect(
+      menu.getByRole("link", { name: "Employee Management", exact: true }),
+    ).toHaveCount(role === "ADMIN" ? 1 : 0)
+    await expect(
       menu.getByRole("link", { name: "Service Management", exact: true }),
     ).toHaveCount(role === "ADMIN" ? 1 : 0)
 
@@ -614,6 +671,32 @@ for (const role of ["SUPERADMIN", "ADMIN", "STAFF", "USER"] as const) {
       await expect(
         page.getByRole("heading", { name: "Department Management" }),
       ).toBeVisible()
+    }
+
+    const employeeRequests: string[] = []
+    page.on("request", (request) => {
+      if (new URL(request.url()).pathname.startsWith("/api/employees")) {
+        employeeRequests.push(request.url())
+      }
+    })
+    await page.goto("/employees")
+    if (role !== "ADMIN") {
+      await expect(page).toHaveURL(/\/dashboard$/)
+      await expect(
+        page.getByRole("heading", { name: "Employee Management" }),
+      ).toHaveCount(0)
+      expect(employeeRequests).toEqual([])
+    } else {
+      await expect(
+        page.getByRole("heading", { name: "Employee Management" }),
+      ).toBeVisible()
+      await expect(
+        page.getByText("Alex Employee", { exact: true }),
+      ).toBeVisible()
+      await expect(
+        page.getByRole("button", { name: "Add employee", exact: true }),
+      ).toHaveCount(1)
+      expect(employeeRequests).toHaveLength(1)
     }
 
     const serviceRequests: string[] = []
@@ -773,12 +856,24 @@ test("admin can create, edit, delete departments and open member management", as
 
   await page.getByLabel("Department Name").fill("Customer Support")
   await page.getByLabel("Department Code").fill("CS")
+  await expect(
+    page.getByRole("radiogroup", { name: "Department color" }),
+  ).toBeVisible()
+  await page.getByRole("radio", { name: "Green", exact: true }).click()
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "Create Department" })
     .click()
 
   await expect(page.getByText("Customer Support")).toBeVisible()
+  expect(
+    await page.evaluate(
+      () =>
+        JSON.parse(localStorage.getItem("department-colors") ?? "{}")[
+          "customer support"
+        ],
+    ),
+  ).toBe("green")
 
   // 2. Edit the Department
   await page.getByRole("button", { name: "Edit Customer Support" }).click()
@@ -795,12 +890,13 @@ test("admin can create, edit, delete departments and open member management", as
 
   // 3. Open Member Management Sheet
   await page
-    .getByRole("button", { name: "More actions for Client Success" })
+    .getByRole("button", { name: "Client Success", exact: true })
     .click()
-  await page.getByRole("menuitem", { name: "Members & teams" }).click()
 
   // Member Management Drawer / Sheet opens
-  await expect(page.getByText("Members & teams").first()).toBeVisible()
+  await expect(
+    page.getByRole("heading", { name: "Members & teams" }),
+  ).toBeVisible()
   await page.getByRole("button", { name: "Close drawer" }).click()
   await expect(
     page.getByRole("heading", { name: "Members & teams" }),
