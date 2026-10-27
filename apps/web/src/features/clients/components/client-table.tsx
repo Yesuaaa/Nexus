@@ -1,4 +1,5 @@
-import { AnimatePresence, motion } from "framer-motion"
+import type { ReactNode } from "react"
+import { AnimatePresence } from "framer-motion"
 import { AnimatedTableRow } from "@/components/ui/animated-data-row"
 import { TableSortButton } from "@/components/ui/table-sort-button"
 import { Pill } from "@/components/ui/pill"
@@ -74,6 +75,7 @@ function ClientRowActions({
 export function ClientTable({
   clients,
   viewKey,
+  animateRows,
   emptyMessage,
   sortBy,
   sortOrder,
@@ -82,7 +84,8 @@ export function ClientTable({
 }: {
   clients: Client[]
   viewKey: string
-  emptyMessage: string
+  animateRows: boolean
+  emptyMessage: ReactNode
   sortBy: ClientSort
   sortOrder: "asc" | "desc"
   onSort: (key: ClientSort) => void
@@ -124,16 +127,16 @@ export function ClientTable({
             <TableHead className="w-[72px]">View</TableHead>
           </TableRow>
         </TableHeader>
-        <motion.tbody
-          className="[&_tr:last-child]:border-0 @max-[800px]:block"
-          layout="size"
-          transition={{ layout: { duration: 0.22, ease: "easeOut" } }}
-        >
-          <AnimatePresence initial={false} mode="popLayout">
+        <tbody className="[&_tr:last-child]:border-0 @max-[800px]:block">
+          <AnimatePresence
+            custom={animateRows}
+            initial={false}
+            mode={animateRows ? "popLayout" : "sync"}
+          >
             {clients.length === 0 ? (
               <AnimatedTableRow
                 key={`empty-${viewKey}`}
-                index={0}
+                animateRows={animateRows}
                 className="text-center text-xs text-[#52627a]"
               >
                 <TableCell colSpan={6} className="min-h-[150px] py-10">
@@ -141,10 +144,10 @@ export function ClientTable({
                 </TableCell>
               </AnimatedTableRow>
             ) : (
-              clients.map((client, index) => (
+              clients.map((client) => (
                 <AnimatedTableRow
                   key={`${viewKey}:${client.id}`}
-                  index={index}
+                  animateRows={animateRows}
                   className="text-xs @max-[800px]:grid @max-[800px]:grid-cols-[minmax(0,1fr)_auto] @max-[800px]:gap-x-3 @max-[800px]:gap-y-1.5 @max-[800px]:px-4 @max-[800px]:py-3"
                 >
                   <TableCell className="px-4 py-2.5 @max-[800px]:col-start-1 @max-[800px]:row-start-1 @max-[800px]:p-0">
@@ -198,7 +201,7 @@ export function ClientTable({
               ))
             )}
           </AnimatePresence>
-        </motion.tbody>
+        </tbody>
       </Table>
     </div>
   )

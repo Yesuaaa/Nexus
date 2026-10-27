@@ -1,35 +1,51 @@
 "use client"
 
-import { forwardRef, type ReactNode } from "react"
-import { motion, useIsPresent, useReducedMotion } from "framer-motion"
+import {
+  forwardRef,
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  type CSSProperties,
+  type ReactNode,
+} from "react"
+import {
+  motion,
+  useIsPresent,
+  usePresenceData,
+  useReducedMotion,
+} from "framer-motion"
 
 type AnimatedRowProps = {
   children: ReactNode
   className?: string
-  index: number
+  animateRows: boolean
 }
 
-function motionValues(index: number, reduceMotion: boolean) {
-  const stagger = reduceMotion ? 0 : Math.min(index, 9) * 40
-  const enterDelay = stagger + (reduceMotion ? 0 : 100)
+function motionValues(reduceMotion: boolean, animateRows: boolean) {
+  if (!animateRows) {
+    return {
+      initial: false,
+      animate: {
+        opacity: 1,
+        transition: { duration: 0 },
+      },
+    }
+  }
 
   return {
-    initial: { opacity: 0, x: reduceMotion ? 0 : -48 },
+    initial: { opacity: 0 },
     animate: {
       opacity: 1,
-      x: 0,
       transition: {
-        delay: enterDelay / 1000,
-        duration: reduceMotion ? 0.12 : 0.26,
+        delay: reduceMotion ? 0 : 0.04,
+        duration: reduceMotion ? 0.12 : 0.18,
         ease: "easeOut" as const,
       },
     },
     exit: {
       opacity: 0,
-      x: reduceMotion ? 0 : 48,
       transition: {
-        delay: stagger / 1000,
-        duration: reduceMotion ? 0.12 : 0.22,
+        duration: reduceMotion ? 0.12 : 0.14,
         ease: "easeIn" as const,
       },
     },
@@ -37,23 +53,24 @@ function motionValues(index: number, reduceMotion: boolean) {
 }
 
 export const AnimatedGridRow = forwardRef<HTMLDivElement, AnimatedRowProps>(
-  function AnimatedGridRow({ children, className, index }, ref) {
+  function AnimatedGridRow({ children, className, animateRows }, ref) {
     const present = useIsPresent()
+    const presenceData = usePresenceData() as boolean | null
     const reduceMotion = useReducedMotion() ?? false
-    const values = motionValues(index, reduceMotion)
+    const shouldAnimate = present ? animateRows : (presenceData ?? animateRows)
+    const values = motionValues(reduceMotion, shouldAnimate)
 
     return (
       <motion.div
         ref={ref}
         role="row"
         className={className}
-        layout
-        initial={values.initial}
-        animate={values.animate}
-        exit={values.exit}
         aria-hidden={!present}
         inert={!present}
         style={{ pointerEvents: present ? "auto" : "none" }}
+        initial={values.initial}
+        animate={values.animate}
+        exit={values.exit}
       >
         {children}
       </motion.div>
@@ -64,22 +81,70 @@ export const AnimatedGridRow = forwardRef<HTMLDivElement, AnimatedRowProps>(
 export const AnimatedTableRow = forwardRef<
   HTMLTableRowElement,
   AnimatedRowProps
->(function AnimatedTableRow({ children, className, index }, ref) {
+>(function AnimatedTableRow({ children, className, animateRows }, ref) {
   const present = useIsPresent()
+  const presenceData = usePresenceData() as boolean | null
   const reduceMotion = useReducedMotion() ?? false
-  const values = motionValues(index, reduceMotion)
+  const rowRef = useRef<HTMLTableRowElement>(null)
+  const cachedLayout = useRef<{ isTableRow: boolean; columns: number[] }>({
+    isTableRow: false,
+    columns: [],
+  })
+  const setRowRef = useCallback(
+    (row: HTMLTableRowElement | null) => {
+      rowRef.current = row
+      if (typeof ref === "function") ref(row)
+      else if (ref) ref.current = row
+    },
+    [ref],
+  )
+  useLayoutEffect(() => {
+    const row = rowRef.current
+    if (!present || !row) return
+
+    const measure = () => {
+      const display = window.getComputedStyle(row).display
+      cachedLayout.current = {
+        isTableRow: display === "table-row",
+        columns: Array.from(
+          row.cells,
+          (cell) => cell.getBoundingClientRect().width,
+        ),
+      }
+    }
+
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(row)
+    return () => observer.disconnect()
+  }, [present])
+  const shouldAnimate = present ? animateRows : (presenceData ?? animateRows)
+  const values = motionValues(reduceMotion, shouldAnimate)
+  const frozenLayout: CSSProperties =
+    !present && cachedLayout.current.isTableRow
+      ? {
+          display: "grid",
+          gridTemplateColumns: cachedLayout.current.columns
+            .map((width) => width + "px")
+            .join(" "),
+          alignItems: "center",
+          boxSizing: "border-box",
+        }
+      : {}
 
   return (
     <motion.tr
-      ref={ref}
+      ref={setRowRef}
       className={className}
-      layout
+      aria-hidden={!present}
+      inert={!present}
+      style={{
+        ...frozenLayout,
+        pointerEvents: present ? "auto" : "none",
+      }}
       initial={values.initial}
       animate={values.animate}
       exit={values.exit}
-      aria-hidden={!present}
-      inert={!present}
-      style={{ pointerEvents: present ? "auto" : "none" }}
     >
       {children}
     </motion.tr>

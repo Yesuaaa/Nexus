@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react"
-import { AnimatePresence, motion } from "framer-motion"
+import { AnimatePresence } from "framer-motion"
 import { SearchIcon } from "@/components/layout/icons"
 import { focusRing } from "@/components/layout/styles"
 import { AnimatedGridRow } from "@/components/ui/animated-data-row"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
+import { SearchEmptyState } from "@/components/ui/search-empty-state"
 import {
   TableSortButton,
   type SortDirection,
@@ -45,6 +46,7 @@ export function DepartmentTable({
   const [sortKey, setSortKey] = useState<SortKey>("name")
   const [direction, setDirection] = useState<SortDirection>("asc")
   const [page, setPage] = useState(1)
+  const [animateRows, setAnimateRows] = useState(true)
   const query = debouncedSearch.trim().toLowerCase()
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -85,6 +87,7 @@ export function DepartmentTable({
   )
   const viewKey = JSON.stringify([query, sortKey, direction, currentPage])
   function sortBy(key: SortKey) {
+    setAnimateRows(true)
     if (sortKey === key) {
       setDirection((value) => (value === "asc" ? "desc" : "asc"))
     } else {
@@ -107,6 +110,7 @@ export function DepartmentTable({
               placeholder="Search departments..."
               value={search}
               onChange={(event) => {
+                setAnimateRows(true)
                 setSearch(event.target.value)
               }}
             />
@@ -159,11 +163,9 @@ export function DepartmentTable({
             <span role="columnheader">Actions</span>
           </div>
         </div>
-        <motion.div
+        <div
           role="rowgroup"
           aria-live="polite"
-          layout="size"
-          transition={{ layout: { duration: 0.22, ease: "easeOut" } }}
           className="relative overflow-x-clip"
         >
           {loading || error ? (
@@ -193,24 +195,30 @@ export function DepartmentTable({
               </div>
             </div>
           ) : (
-            <AnimatePresence initial={false} mode="popLayout">
+            <AnimatePresence
+              custom={animateRows}
+              initial={false}
+              mode={animateRows ? "popLayout" : "sync"}
+            >
               {visible.length === 0 ? (
                 <AnimatedGridRow
                   key={`empty-${viewKey}`}
-                  index={0}
+                  animateRows={animateRows}
                   className="grid min-h-[150px] place-content-center p-6 text-center text-xs text-[#7183a2]"
                 >
                   <div role="cell" aria-colspan={6}>
-                    {query
-                      ? "No departments matched your search."
-                      : "No departments created yet."}
+                    {query ? (
+                      <SearchEmptyState query={debouncedSearch.trim()} />
+                    ) : (
+                      "No departments created yet."
+                    )}
                   </div>
                 </AnimatedGridRow>
               ) : (
-                visible.map((department, index) => (
+                visible.map((department) => (
                   <AnimatedGridRow
                     key={`${viewKey}:${department.id}`}
-                    index={index}
+                    animateRows={animateRows}
                     className={cn(
                       departmentGrid,
                       "min-h-[58px] border-b border-[#eceef1] px-4 py-[7px] text-xs text-foreground last:rounded-b-[7px] last:border-b-0 hover:bg-[#e8eef2] @max-[820px]:gap-x-4 @max-[820px]:gap-y-[10px] @max-[820px]:py-[14px]",
@@ -301,7 +309,7 @@ export function DepartmentTable({
               )}
             </AnimatePresence>
           )}
-        </motion.div>
+        </div>
       </div>
 
       {!loading && !error && (
@@ -318,7 +326,10 @@ export function DepartmentTable({
               totalPages={totalPages}
               disabled={loading}
               label="Department pages"
-              onPageChange={setPage}
+              onPageChange={(nextPage) => {
+                setAnimateRows(true)
+                setPage(nextPage)
+              }}
             />
           )}
         </footer>

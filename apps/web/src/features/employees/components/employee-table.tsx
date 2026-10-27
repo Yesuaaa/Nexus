@@ -1,4 +1,5 @@
-import { AnimatePresence, motion } from "framer-motion"
+import type { ReactNode } from "react"
+import { AnimatePresence } from "framer-motion"
 import { focusRing } from "@/components/layout/styles"
 import { AnimatedTableRow } from "@/components/ui/animated-data-row"
 import { Button } from "@/components/ui/button"
@@ -52,6 +53,7 @@ function formatDate(value: string | null) {
 export function EmployeeTable({
   employees,
   viewKey,
+  animateRows,
   loading,
   error,
   emptyMessage,
@@ -64,9 +66,10 @@ export function EmployeeTable({
 }: {
   employees: Employee[]
   viewKey: string
+  animateRows: boolean
   loading: boolean
   error: string
-  emptyMessage: string
+  emptyMessage: ReactNode
   onRetry: () => void
   onView: (employee: Employee) => void
   onEdit: (employee: Employee) => void
@@ -116,16 +119,16 @@ export function EmployeeTable({
             <TableHead className="w-[112px] min-w-[112px]">Actions</TableHead>
           </TableRow>
         </TableHeader>
-        <motion.tbody
-          className="[&_tr:last-child]:border-0 @max-[1000px]:block"
-          layout="size"
-          transition={{ layout: { duration: 0.22, ease: "easeOut" } }}
-        >
-          <AnimatePresence initial={false} mode="popLayout">
+        <tbody className="[&_tr:last-child]:border-0 @max-[1000px]:block">
+          <AnimatePresence
+            custom={animateRows}
+            initial={false}
+            mode={animateRows ? "popLayout" : "sync"}
+          >
             {employees.length === 0 ? (
               <AnimatedTableRow
                 key={`empty-${viewKey}`}
-                index={0}
+                animateRows={animateRows}
                 className="text-center text-xs text-[#7183a2]"
               >
                 <TableCell colSpan={8} className="min-h-[150px] py-10">
@@ -133,10 +136,10 @@ export function EmployeeTable({
                 </TableCell>
               </AnimatedTableRow>
             ) : (
-              employees.map((employee, index) => (
+              employees.map((employee) => (
                 <AnimatedTableRow
                   key={`${viewKey}:${employee.id}`}
-                  index={index}
+                  animateRows={animateRows}
                   className="text-xs hover:bg-[#e8eef2] @max-[1000px]:grid @max-[1000px]:grid-cols-[minmax(0,1fr)_minmax(105px,.65fr)] @max-[1000px]:gap-x-3 @max-[1000px]:gap-y-2 @max-[1000px]:px-4 @max-[1000px]:py-3 @max-[1000px]:hover:bg-transparent"
                 >
                   <TableCell
@@ -250,7 +253,7 @@ export function EmployeeTable({
               ))
             )}
           </AnimatePresence>
-        </motion.tbody>
+        </tbody>
       </Table>
     </div>
   )

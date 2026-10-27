@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { Input } from "@/components/ui/input"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
+import { SearchEmptyState } from "@/components/ui/search-empty-state"
 import {
   Select,
   SelectContent,
@@ -61,6 +62,7 @@ export function EmployeeManagementPage() {
   const [pageSize, setPageSize] = useState(10)
   const [page, setPage] = useState(1)
   const [resolvedPage, setResolvedPage] = useState(1)
+  const [animateRows, setAnimateRows] = useState(true)
   const [search, setSearch] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [departmentId, setDepartmentId] = useState("")
@@ -183,6 +185,7 @@ export function EmployeeManagementPage() {
 
   function updateFilters(update: () => void) {
     update()
+    setAnimateRows(true)
     setPage(1)
   }
 
@@ -239,6 +242,7 @@ export function EmployeeManagementPage() {
                 value={search}
                 maxLength={100}
                 onChange={(event) => {
+                  setAnimateRows(true)
                   setSearch(event.target.value)
                 }}
               />
@@ -349,12 +353,17 @@ export function EmployeeManagementPage() {
         <EmployeeTable
           employees={employees}
           viewKey={resolvedViewKey}
+          animateRows={animateRows}
           loading={isLoading}
           error={error}
           emptyMessage={
-            hasFilters
-              ? "No employees match these filters. Try clearing a filter or search term."
-              : "No employee records yet. Add an employee to get started."
+            debouncedSearch ? (
+              <SearchEmptyState query={debouncedSearch} />
+            ) : hasFilters ? (
+              "No employees match these filters. Try clearing a filter or search term."
+            ) : (
+              "No employee records yet. Add an employee to get started."
+            )
           }
           onRetry={() => {
             setRevision((value) => value + 1)
@@ -380,7 +389,10 @@ export function EmployeeManagementPage() {
               totalPages={totalPages}
               disabled={isLoading}
               label="Employee pages"
-              onPageChange={setPage}
+              onPageChange={(nextPage) => {
+                setAnimateRows(true)
+                setPage(nextPage)
+              }}
             />
           </footer>
         )}

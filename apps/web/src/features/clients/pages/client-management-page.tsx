@@ -6,6 +6,7 @@ import { contentClass } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
+import { SearchEmptyState } from "@/components/ui/search-empty-state"
 import {
   Select,
   SelectContent,
@@ -47,6 +48,7 @@ export function ClientManagementPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [status, setStatus] = useState<ClientStatus>("")
   const [page, setPage] = useState(1)
+  const [animateRows, setAnimateRows] = useState(true)
   const [sortBy, setSortBy] = useState<ClientSort>("createdAt")
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
   const [revision, setRevision] = useState(0)
@@ -122,11 +124,13 @@ export function ClientManagementPage() {
   ])
 
   function sort(key: ClientSort) {
+    setAnimateRows(true)
     setSortOrder(sortBy === key && sortOrder === "asc" ? "desc" : "asc")
     setSortBy(key)
     setPage(1)
   }
   function clearFilters() {
+    setAnimateRows(true)
     setSearch("")
     setDebouncedSearch("")
     setStatus("")
@@ -168,6 +172,7 @@ export function ClientManagementPage() {
               value={search}
               maxLength={100}
               onChange={(event) => {
+                setAnimateRows(true)
                 setSearch(event.target.value)
                 setPage(1)
               }}
@@ -178,6 +183,7 @@ export function ClientManagementPage() {
           <Select
             value={status || "all"}
             onValueChange={(value) => {
+              setAnimateRows(true)
               setStatus(value === "all" ? "" : (value as ClientStatus))
               setPage(1)
             }}
@@ -198,6 +204,7 @@ export function ClientManagementPage() {
             <Select
               value={`${sortBy}:${sortOrder}`}
               onValueChange={(value) => {
+                setAnimateRows(true)
                 const [key, order] = value.split(":")
                 setSortBy(key as ClientSort)
                 setSortOrder(order as "asc" | "desc")
@@ -251,10 +258,15 @@ export function ClientManagementPage() {
             <ClientTable
               clients={result.clients}
               viewKey={resolvedViewKey}
+              animateRows={animateRows}
               emptyMessage={
-                filtered
-                  ? "No clients match your search or filters."
-                  : "No clients registered yet."
+                debouncedSearch ? (
+                  <SearchEmptyState query={debouncedSearch} />
+                ) : filtered ? (
+                  "No clients match the selected filters."
+                ) : (
+                  "No clients registered yet."
+                )
               }
               sortBy={sortBy}
               sortOrder={sortOrder}
@@ -275,7 +287,10 @@ export function ClientManagementPage() {
               totalPages={pages}
               disabled={loading}
               label="Client pages"
-              onPageChange={setPage}
+              onPageChange={(nextPage) => {
+                setAnimateRows(true)
+                setPage(nextPage)
+              }}
             />
           </footer>
         )}

@@ -3,6 +3,7 @@ import { CloseIcon } from "@/components/layout/icons"
 import { Button } from "@/components/ui/button"
 import { Pill } from "@/components/ui/pill"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useAnimatedPanelClose } from "@/components/ui/use-animated-panel-close"
 import {
   Sheet,
   SheetClose,
@@ -196,6 +197,7 @@ export function ClientDetailsDrawer({
   initialTab?: ClientDetailsTab
   onClose: () => void
 }) {
+  const { open, handleOpenChange } = useAnimatedPanelClose(onClose)
   const openerRef = useRef(
     typeof document === "undefined" ? null : document.activeElement,
   )
@@ -301,16 +303,11 @@ export function ClientDetailsDrawer({
   }
 
   return (
-    <Sheet
-      open
-      onOpenChange={(open) => {
-        if (!open) onClose()
-      }}
-    >
+    <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent
         showCloseButton={false}
-        overlayClassName="bg-[rgb(13_28_57_/_40%)]"
-        className="inset-y-auto top-[15px] right-[15px] flex h-[calc(100dvh-30px)] max-h-none w-[min(600px,calc(100vw-30px))] max-w-none flex-col gap-0 overflow-hidden rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_16px_60px_rgb(18_36_73_/_18%)] sm:max-w-none max-[560px]:top-0 max-[560px]:right-0 max-[560px]:h-dvh max-[560px]:w-full max-[560px]:rounded-none max-[560px]:border-0"
+        overlayClassName="nexus-panel-overlay bg-[rgb(13_28_57_/_40%)]"
+        className="nexus-side-panel inset-y-auto top-[15px] right-[15px] flex h-[calc(100dvh-30px)] max-h-none w-[min(600px,calc(100vw-30px))] max-w-none flex-col gap-0 overflow-hidden rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_16px_60px_rgb(18_36_73_/_18%)] sm:max-w-none max-[560px]:top-0 max-[560px]:right-0 max-[560px]:h-dvh max-[560px]:w-full max-[560px]:rounded-none max-[560px]:border-0"
         onCloseAutoFocus={(event) => {
           event.preventDefault()
           const opener = openerRef.current

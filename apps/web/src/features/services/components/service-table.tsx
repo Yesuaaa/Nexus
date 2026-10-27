@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Eye, MoreHorizontal, Pencil } from "lucide-react"
-import { AnimatePresence, motion } from "framer-motion"
+import { AnimatePresence } from "framer-motion"
 import { SearchIcon } from "@/components/layout/icons"
 import { focusRing } from "@/components/layout/styles"
 import { AnimatedGridRow } from "@/components/ui/animated-data-row"
 import { DepartmentPill } from "@/components/ui/department-pill.tsx"
+import { SearchEmptyState } from "@/components/ui/search-empty-state"
 import { Dropdown } from "@/components/ui/dropdown"
 import {
   DropdownMenu,
@@ -207,6 +208,7 @@ export function ServiceTable({
   const [sortKey, setSortKey] = useState<SortKey>("createdAt")
   const [direction, setDirection] = useState<SortDirection>("desc")
   const [page, setPage] = useState(1)
+  const [animateRows, setAnimateRows] = useState(true)
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setDebouncedSearch(search)
@@ -263,6 +265,7 @@ export function ServiceTable({
     currentPage,
   ])
   function sortBy(key: SortKey) {
+    setAnimateRows(true)
     if (sortKey === key)
       setDirection((value) => (value === "asc" ? "desc" : "asc"))
     else {
@@ -287,6 +290,7 @@ export function ServiceTable({
             value={search}
             maxLength={100}
             onChange={(event) => {
+              setAnimateRows(true)
               setSearch(event.target.value)
             }}
           />
@@ -305,6 +309,7 @@ export function ServiceTable({
               })),
             ]}
             onChange={(value) => {
+              setAnimateRows(true)
               setDepartmentId(value)
               setPage(1)
             }}
@@ -320,6 +325,7 @@ export function ServiceTable({
               { value: "inactive", label: "Inactive" },
             ]}
             onChange={(value) => {
+              setAnimateRows(true)
               setStatus(value)
               setPage(1)
             }}
@@ -366,11 +372,9 @@ export function ServiceTable({
             <span role="columnheader">Actions</span>
           </div>
         </div>
-        <motion.div
+        <div
           role="rowgroup"
           aria-live="polite"
-          layout="size"
-          transition={{ layout: { duration: 0.22, ease: "easeOut" } }}
           className="relative overflow-x-clip"
         >
           {loading || error ? (
@@ -400,24 +404,32 @@ export function ServiceTable({
               </div>
             </div>
           ) : (
-            <AnimatePresence initial={false} mode="popLayout">
+            <AnimatePresence
+              custom={animateRows}
+              initial={false}
+              mode={animateRows ? "popLayout" : "sync"}
+            >
               {visible.length === 0 ? (
                 <AnimatedGridRow
                   key={`empty-${viewKey}`}
-                  index={0}
+                  animateRows={animateRows}
                   className="grid min-h-[170px] place-content-center gap-3 p-6 text-center text-xs text-[#7183a2]"
                 >
                   <div role="cell" aria-colspan={6}>
-                    {filteredState
-                      ? "No services match the selected filters."
-                      : "No services have been created yet."}
+                    {debouncedSearch.trim() ? (
+                      <SearchEmptyState query={debouncedSearch.trim()} />
+                    ) : filteredState ? (
+                      "No services match the selected filters."
+                    ) : (
+                      "No services have been created yet."
+                    )}
                   </div>
                 </AnimatedGridRow>
               ) : (
-                visible.map((service, index) => (
+                visible.map((service) => (
                   <AnimatedGridRow
                     key={`${viewKey}:${service.id}`}
-                    index={index}
+                    animateRows={animateRows}
                     className={cn(
                       serviceGrid,
                       "min-h-[58px] border-b border-[#eceef1] px-4 py-[8px] text-xs last:rounded-b-[7px] last:border-b-0 hover:bg-[#f3f6f8] @max-[920px]:gap-x-4 @max-[920px]:gap-y-2 @max-[920px]:py-3.5",
@@ -490,7 +502,7 @@ export function ServiceTable({
               )}
             </AnimatePresence>
           )}
-        </motion.div>
+        </div>
       </div>
 
       {!loading && !error && (
@@ -507,7 +519,10 @@ export function ServiceTable({
               totalPages={totalPages}
               disabled={loading}
               label="Service pages"
-              onPageChange={setPage}
+              onPageChange={(nextPage) => {
+                setAnimateRows(true)
+                setPage(nextPage)
+              }}
             />
           )}
         </footer>
