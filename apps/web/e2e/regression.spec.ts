@@ -3,6 +3,10 @@ import type { Account } from "../src/features/auth/model/types"
 import { Permissions } from "../src/features/auth/model/permissions"
 import type { Department } from "../src/features/departments/api/departments-api"
 import type { Employee } from "../src/features/employees/api/employees-api"
+import type {
+  Service,
+  ServiceInput,
+} from "../src/features/services/api/services-api"
 
 const pageErrors = new WeakMap<Page, string[]>()
 
@@ -38,6 +42,7 @@ function accountFor(
   if (role !== "USER") permissions.push(Permissions.DEPARTMENTS_READ)
   if (role === "ADMIN" || role === "SUPERADMIN") {
     permissions.push(
+      Permissions.CLIENTS_READ,
       Permissions.DEPARTMENTS_MANAGE,
       Permissions.DEPARTMENTS_DELETE,
     )
@@ -75,6 +80,8 @@ function accountFor(
 }
 
 type MockApiOptions = {
+  account?: Partial<Account>
+  initialServices?: Service[]
   initialUsers?: Account[]
   initialDepartments?: Department[]
   initialEmployees?: Employee[]
@@ -85,7 +92,18 @@ async function mockApi(
   role: Account["role"],
   options?: MockApiOptions,
 ) {
-  const currentUser = accountFor(role)
+  const currentUser = accountFor(role, options?.account)
+  const services: Service[] = options?.initialServices ?? [
+    {
+      id: "service-1",
+      name: "Test Service",
+      description: "A service used by the regression suite.",
+      isActive: true,
+      departments: [{ id: "dept-1", name: "Engineering", code: "ENG" }],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    },
+  ]
   const defaultManagedUser: Account = {
     id: "user-target",
     email: "target@example.com",
@@ -152,6 +170,7 @@ async function mockApi(
     const method = request.method()
     const url = new URL(request.url())
     const pathname = url.pathname
+    expect(url.origin).toBe(new URL(page.url()).origin)
 
     if (pathname === "/api/auth/login" && method === "POST") {
       const data = request.postDataJSON() as {
@@ -203,6 +222,47 @@ async function mockApi(
       return
     }
 
+    if (pathname === "/api/clients" && method === "GET") {
+      const search = url.searchParams.get("search")?.toLowerCase() ?? ""
+      const clients = users.filter(
+        (user) =>
+          user.role === "USER" &&
+          `${user.fullName} ${user.email}`.toLowerCase().includes(search),
+      )
+      await route.fulfill({
+        json: { clients, total: clients.length, page: 1, pageSize: 10 },
+      })
+      return
+    }
+    const clientMatch = pathname.match(
+      /^\/api\/clients\/([^/]+)(?:\/(projects|service-requests))?$/,
+    )
+    if (clientMatch && method === "GET") {
+      const client = users.find(
+        (user) => user.id === clientMatch[1] && user.role === "USER",
+      )
+      if (!client)
+        await route.fulfill({
+          status: 404,
+          json: { error: "Client not found" },
+        })
+      else if (clientMatch[2])
+        await route.fulfill({
+          json: {
+            [clientMatch[2] === "projects" ? "projects" : "serviceRequests"]:
+              [],
+            total: 0,
+            page: 1,
+            pageSize: 10,
+          },
+        })
+      else
+        await route.fulfill({
+          json: { client, serviceRequestCount: 0, projectCount: 0 },
+        })
+      return
+    }
+
     // --- Users / Accounts endpoints ---
     if (pathname === "/api/users" && method === "GET") {
       const search = url.searchParams.get("search")?.toLowerCase() ?? ""
@@ -243,6 +303,17 @@ async function mockApi(
           pageSize: 20,
         },
       })
+      return
+    }
+
+    const employeeMatch = pathname.match(/^\/api\/employees\/([^/]+)$/)
+    if (employeeMatch && method === "GET") {
+      const employee = employees.find((item) => item.id === employeeMatch[1])
+      await route.fulfill(
+        employee
+          ? { json: { employee } }
+          : { status: 404, json: { error: "Employee not found" } },
+      )
       return
     }
 
@@ -336,21 +407,51 @@ async function mockApi(
     }
 
     if (pathname === "/api/services" && method === "GET") {
-      await route.fulfill({
-        json: {
-          services: [
-            {
-              id: "service-1",
-              name: "Test Service",
-              description: "A service used by the regression suite.",
-              isActive: true,
-              departments: [{ id: "dept-1", name: "Engineering", code: "ENG" }],
-              createdAt: "2026-01-01T00:00:00.000Z",
-              updatedAt: "2026-01-01T00:00:00.000Z",
-            },
-          ],
-        },
-      })
+      await route.fulfill({ json: { services } })
+      return
+    }
+    if (pathname === "/api/services" && method === "POST") {
+      const body = request.postDataJSON() as ServiceInput
+      const service: Service = {
+        id: `service-${services.length + 1}`,
+        name: body.name,
+        description: body.description,
+        isActive: body.isActive,
+        departments: departments.filter((department) =>
+          body.departmentIds.includes(department.id),
+        ),
+        createdAt: "2026-01-02T00:00:00.000Z",
+        updatedAt: "2026-01-02T00:00:00.000Z",
+      }
+      services.push(service)
+      await route.fulfill({ status: 201, json: { service } })
+      return
+    }
+    const serviceMatch = pathname.match(/^\/api\/services\/([^/]+)(\/status)?$/)
+    if (serviceMatch && ["PUT", "PATCH", "DELETE"].includes(method)) {
+      const service = services.find((item) => item.id === serviceMatch[1])
+      expect(
+        service,
+        "Service mutation must target an existing fixture",
+      ).toBeDefined()
+      if (method === "DELETE") {
+        services.splice(services.indexOf(service!), 1)
+        await route.fulfill({ json: { success: true } })
+      } else {
+        const body = request.postDataJSON() as Partial<ServiceInput>
+        Object.assign(
+          service!,
+          body,
+          body.departmentIds
+            ? {
+                departments: departments.filter((department) =>
+                  body.departmentIds!.includes(department.id),
+                ),
+              }
+            : {},
+        )
+        await route.fulfill({ json: { service } })
+      }
       return
     }
 
@@ -409,6 +510,7 @@ async function mockApi(
       return
     }
 
+    pageErrors.get(page)?.push(`Unhandled API request: ${method} ${pathname}`)
     await route.fulfill({
       status: 404,
       json: { error: "Unknown test endpoint" },
@@ -426,6 +528,444 @@ async function restoreSession(
     sessionStorage.setItem("nexus.auth.token", "test-session")
   })
 }
+
+// These tests exercise the real browser guards against controlled API responses.
+// Backend authorization, transactions, and session revocation are covered by
+// the API's offline PGlite integration tests, not by these mock handlers.
+const managementRoutes = [
+  {
+    path: "/accounts",
+    endpoint: "/api/users",
+    role: "SUPERADMIN",
+    permission: Permissions.ACCOUNTS_READ,
+    title: "Account Management",
+  },
+  {
+    path: "/departments",
+    endpoint: "/api/departments",
+    role: "ADMIN",
+    permission: Permissions.DEPARTMENTS_READ,
+    title: "Department Management",
+  },
+  {
+    path: "/employees",
+    endpoint: "/api/employees",
+    role: "ADMIN",
+    permission: Permissions.EMPLOYEES_READ,
+    title: "Employee Management",
+  },
+  {
+    path: "/services",
+    endpoint: "/api/services",
+    role: "ADMIN",
+    permission: Permissions.SERVICES_READ,
+    title: "Service Management",
+  },
+  {
+    path: "/clients",
+    endpoint: "/api/clients",
+    role: "ADMIN",
+    permission: Permissions.CLIENTS_READ,
+    title: "Client Management",
+  },
+] as const
+
+for (const feature of managementRoutes) {
+  test(`${feature.path} denies access when the server withholds its read permission`, async ({
+    page,
+  }) => {
+    const requests: string[] = []
+    await restoreSession(page, feature.role, {
+      account: {
+        permissions: accountFor(feature.role).permissions.filter(
+          (permission) => permission !== feature.permission,
+        ),
+      },
+    })
+    page.on("request", (request) => {
+      if (new URL(request.url()).pathname.startsWith(feature.endpoint))
+        requests.push(request.url())
+    })
+    await page.goto(feature.path)
+    await expect(page).toHaveURL(/\/dashboard$/)
+    await expect(
+      page.getByRole("heading", { name: feature.title }),
+    ).toHaveCount(0)
+    expect(requests).toEqual([])
+  })
+
+  test(`${feature.path} does not expose protected content when session lookup fails`, async ({
+    page,
+  }) => {
+    await restoreSession(page, feature.role)
+    await page.route("**/api/auth/me", (route) =>
+      route.fulfill({ status: 503, json: { error: "Unavailable" } }),
+    )
+    await page.goto(feature.path)
+    await expect(
+      page.getByText(
+        "We couldn't load your account. Please refresh to try again.",
+      ),
+    ).toBeVisible()
+    await expect(
+      page.getByRole("heading", { name: feature.title }),
+    ).toHaveCount(0)
+  })
+}
+
+for (const role of ["SUPERADMIN", "ADMIN", "STAFF", "USER"] as const) {
+  test(`${role} client directory access and related records respect navigation guards`, async ({
+    page,
+  }) => {
+    await restoreSession(page, role)
+    const requests: string[] = []
+    page.on("request", (request) => {
+      if (new URL(request.url()).pathname.startsWith("/api/clients"))
+        requests.push(request.url())
+    })
+    await page.goto("/clients")
+    if (role === "STAFF" || role === "USER") {
+      await expect(page).toHaveURL(/\/dashboard$/)
+      expect(requests).toEqual([])
+      return
+    }
+    await expect(
+      page.getByRole("heading", { name: "Client Management" }),
+    ).toBeVisible()
+    await page.getByRole("button", { name: /View.*Target User/i }).click()
+    await expect(page.getByRole("dialog")).toContainText("target@example.com")
+    await page
+      .getByRole("tab", { name: "Service requests", exact: true })
+      .click()
+    await expect(
+      page.getByText("No service requests are linked to this client yet."),
+    ).toBeVisible()
+    await page.getByRole("tab", { name: "Projects", exact: true }).click()
+    await expect(
+      page.getByText("No projects are linked to this client yet."),
+    ).toBeVisible()
+    await page.getByRole("button", { name: "Close client details" }).click()
+    await page
+      .getByRole("searchbox", { name: "Search clients" })
+      .fill("missing-client")
+    await expect(
+      page.getByText("No clients match your search or filters."),
+    ).toBeVisible()
+    await page.getByRole("button", { name: "Clear filters" }).click()
+    await expect(page.getByText("Target User", { exact: true })).toBeVisible()
+  })
+}
+
+test("superadmin cannot edit their own role or account status", async ({
+  page,
+}) => {
+  await restoreSession(page, "SUPERADMIN")
+  await page.goto("/accounts")
+  await expect(page.getByText("Your account", { exact: true })).toBeVisible()
+  await expect(
+    page.getByRole("button", { name: /Role for person@example.com/ }),
+  ).toHaveCount(0)
+  await expect(
+    page.getByRole("button", { name: "More actions for person@example.com" }),
+  ).toHaveCount(0)
+  await page
+    .getByRole("button", { name: "More actions for target@example.com" })
+    .click()
+  await expect(
+    page.getByRole("menuitem", { name: "Delete account", exact: true }),
+  ).toHaveCount(0)
+})
+
+test("persistent storage cannot restore an authenticated session", async ({
+  page,
+}) => {
+  const requests: string[] = []
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.startsWith("/api/"))
+      requests.push(request.url())
+  })
+  await page.addInitScript(() =>
+    localStorage.setItem("nexus.auth.token", "test-session"),
+  )
+  await page.goto("/accounts")
+  await expect(page).toHaveURL(/\/login$/)
+  expect(requests).toEqual([])
+})
+
+test("read-only service permission hides every mutation action", async ({
+  page,
+}) => {
+  await restoreSession(page, "ADMIN", {
+    account: {
+      permissions: [Permissions.SERVICES_READ, Permissions.DEPARTMENTS_READ],
+    },
+  })
+  await page.goto("/services")
+  await expect(
+    page.getByRole("rowheader", { name: "Test Service" }),
+  ).toBeVisible()
+  for (const name of [
+    "Create Service",
+    "Edit Test Service",
+    "More actions for Test Service",
+  ]) {
+    await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0)
+  }
+  await page.getByRole("button", { name: "View Test Service" }).click()
+  await expect(page.getByRole("dialog")).toContainText(
+    "A service used by the regression suite.",
+  )
+})
+
+test("service creation validates department selection and preserves rejected edits", async ({
+  page,
+}) => {
+  await restoreSession(page, "ADMIN")
+  await page.goto("/services")
+  await page
+    .getByRole("button", { name: "Create Service", exact: true })
+    .click()
+  const dialog = page.getByRole("dialog")
+  await dialog.getByLabel("Service Name").fill("Consulting")
+  await dialog
+    .getByLabel("Description", { exact: false })
+    .fill("Business consulting")
+  await dialog
+    .getByRole("button", { name: "Create Service", exact: true })
+    .click()
+  await expect(dialog.getByRole("alert")).toHaveText(
+    "Please select at least one responsible department",
+  )
+  await page
+    .getByRole("button", { name: "Select responsible departments" })
+    .click()
+  await page.getByRole("menuitemcheckbox", { name: "Engineering" }).click()
+  await page.keyboard.press("Escape")
+  const created = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" &&
+      new URL(request.url()).pathname === "/api/services",
+  )
+  await dialog
+    .getByRole("button", { name: "Create Service", exact: true })
+    .click()
+  expect((await created).postDataJSON()).toEqual({
+    name: "Consulting",
+    description: "Business consulting",
+    departmentIds: ["dept-1"],
+    isActive: true,
+  })
+  await expect(
+    page.getByRole("rowheader", { name: "Consulting", exact: true }),
+  ).toBeVisible()
+  await page
+    .getByRole("button", { name: "Edit Consulting", exact: true })
+    .click()
+  await dialog.getByLabel("Service Name").fill("Updated Consulting")
+  await page.route("**/api/services/service-2", (route) =>
+    route.fulfill({ status: 403, json: { error: "Permission revoked" } }),
+  )
+  await dialog.getByRole("button", { name: "Save Changes" }).click()
+  await expect(dialog.getByRole("alert")).toHaveText("Permission revoked")
+  await expect(dialog.getByLabel("Service Name")).toHaveValue(
+    "Updated Consulting",
+  )
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click()
+  await expect(
+    page.getByRole("rowheader", { name: "Consulting", exact: true }),
+  ).toBeVisible()
+})
+
+test("service deletion requires deactivation and explicit confirmation", async ({
+  page,
+}) => {
+  await restoreSession(page, "ADMIN")
+  await page.goto("/services")
+  const actions = page.getByRole("button", {
+    name: "More actions for Test Service",
+  })
+  await actions.click()
+  await expect(
+    page.getByRole("menuitem", { name: "Delete service" }),
+  ).toHaveCount(0)
+  await page.getByRole("menuitem", { name: "Deactivate service" }).click()
+  await page
+    .getByRole("button", { name: "Deactivate service", exact: true })
+    .click()
+  await expect(
+    page.getByRole("row").filter({ hasText: "Test Service" }),
+  ).toContainText("Inactive")
+  await actions.click()
+  await page.getByRole("menuitem", { name: "Delete service" }).click()
+  await page.getByRole("button", { name: "Cancel", exact: true }).click()
+  await expect(
+    page.getByRole("rowheader", { name: "Test Service" }),
+  ).toBeVisible()
+  await actions.click()
+  await page.getByRole("menuitem", { name: "Delete service" }).click()
+  await page
+    .getByRole("button", { name: "Delete service", exact: true })
+    .click()
+  await expect(
+    page.getByText("No services have been created yet."),
+  ).toBeVisible()
+})
+
+test("service descriptions render untrusted markup as text", async ({
+  page,
+}) => {
+  const payload = '<img src=x onerror="window.__regressionXss=true">'
+  await restoreSession(page, "ADMIN", {
+    initialServices: [
+      {
+        id: "unsafe",
+        name: "Untrusted service",
+        description: payload,
+        isActive: true,
+        departments: [],
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ],
+  })
+  await page.goto("/services")
+  await expect(page.getByText(payload, { exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "View Untrusted service" }).click()
+  await expect(page.getByRole("dialog")).toContainText(payload)
+  expect(
+    await page.evaluate(() => Reflect.get(window, "__regressionXss")),
+  ).toBeUndefined()
+  await expect(page.locator('img[src="x"]')).toHaveCount(0)
+})
+
+test("employee search, details, and login retirement controls preserve HR records", async ({
+  page,
+}) => {
+  await restoreSession(page, "ADMIN")
+  await page.goto("/employees")
+  await page.getByRole("button", { name: "View Alex Employee" }).click()
+  await expect(page.getByRole("dialog")).toContainText("EMP-001")
+  await expect(page.getByRole("dialog")).toContainText(
+    "alex.employee@example.com",
+  )
+  await page.getByRole("button", { name: "Close employee details" }).click()
+  await page
+    .getByRole("button", { name: "More actions for Alex Employee" })
+    .click()
+  await expect(
+    page.getByRole("menuitem", { name: "Deactivate login" }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("menuitem", { name: "Delete login account" }),
+  ).toHaveCount(0)
+  await page.keyboard.press("Escape")
+  await page.getByPlaceholder("Search name, ID, email…").fill("EMP-001")
+  await expect(page.getByText("Alex Employee", { exact: true })).toBeVisible()
+})
+
+test("department head status changes are blocked without an eligible replacement", async ({
+  page,
+}) => {
+  await restoreSession(page, "ADMIN")
+  await page.route("**/api/employees/employee-1/status-options", (route) =>
+    route.fulfill({
+      json: {
+        isDepartmentHead: true,
+        replacementCandidates: [],
+        recommendedReplacementEmployeeId: null,
+        willRestoreOriginalHead: false,
+      },
+    }),
+  )
+  await page.goto("/employees")
+  await page
+    .getByRole("button", { name: "More actions for Alex Employee" })
+    .click()
+  await page.getByRole("menuitem", { name: "Change status" }).click()
+  await page.getByRole("combobox", { name: "Status", exact: true }).click()
+  await page.getByRole("option", { name: "On leave", exact: false }).click()
+  await expect(
+    page.getByText("No active Staff member with an EXP account is available.", {
+      exact: false,
+    }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("button", { name: "Confirm status" }),
+  ).toBeDisabled()
+})
+
+test("department team creation reports authorization errors without adding a team", async ({
+  page,
+}) => {
+  await restoreSession(page, "ADMIN")
+  await page.route("**/api/departments/dept-1/teams", (route) =>
+    route.fulfill({ status: 403, json: { error: "Team permission revoked" } }),
+  )
+  await page.goto("/departments")
+  await page.getByRole("button", { name: "Engineering", exact: true }).click()
+  await page.getByRole("tab", { name: /Teams/ }).click()
+  await page.getByRole("button", { name: "Create team", exact: true }).click()
+  await page.getByLabel("Team name").fill("Restricted Team")
+  const request = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" &&
+      new URL(request.url()).pathname.endsWith("/dept-1/teams"),
+  )
+  await page.getByRole("button", { name: "Save team" }).click()
+  expect((await request).postDataJSON()).toMatchObject({
+    name: "Restricted Team",
+  })
+  await expect(page.getByText("Team permission revoked")).toBeVisible()
+  await expect(
+    page.getByText("No teams created in this department yet."),
+  ).toBeVisible()
+})
+
+for (const status of [403, 500]) {
+  test(`service list handles HTTP ${status} and recovers on retry`, async ({
+    page,
+  }) => {
+    await restoreSession(page, "ADMIN")
+    await page.route(
+      "**/api/services",
+      (route) =>
+        route.fulfill({ status, json: { error: "Service list unavailable" } }),
+      { times: 1 },
+    )
+    await page.goto("/services")
+    await expect(
+      page.getByRole("table", { name: "Services" }).getByRole("alert"),
+    ).toContainText("Service list unavailable")
+    await expect(
+      page.getByRole("rowheader", { name: "Test Service" }),
+    ).toHaveCount(0)
+    await page.getByRole("button", { name: "Try again" }).click()
+    await expect(
+      page.getByRole("rowheader", { name: "Test Service" }),
+    ).toBeVisible()
+  })
+}
+
+test("services cannot be created without a responsible department", async ({
+  page,
+}) => {
+  await restoreSession(page, "ADMIN", {
+    initialDepartments: [],
+    initialServices: [],
+  })
+  await page.goto("/services")
+  await page
+    .getByRole("button", { name: "Create Service", exact: true })
+    .click()
+  await expect(
+    page.getByText("Create a department before creating a service."),
+  ).toBeVisible()
+  await expect(
+    page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Create Service", exact: true }),
+  ).toBeDisabled()
+})
 
 // -----------------------------------------------------------------------------
 // 1. Core SSR & Route Security
@@ -457,6 +997,7 @@ test("anonymous home and protected deep links redirect to login", async ({
     "/departments",
     "/employees",
     "/services",
+    "/clients",
   ]) {
     await page.goto(path)
     await expect(page).toHaveURL(/\/login$/)
@@ -490,6 +1031,14 @@ test("login preserves the loader, session, success toast, and sign-out", async (
   expect(
     await page.evaluate(() => sessionStorage.getItem("nexus.auth.token")),
   ).toBe("test-session")
+  expect(
+    await page.evaluate(() => localStorage.getItem("nexus.auth.token")),
+  ).toBeNull()
+  expect(
+    (await page.context().cookies()).some(
+      (cookie) => cookie.value === "test-session",
+    ),
+  ).toBe(false)
   await expect(page.getByText("Welcome back", { exact: true })).toBeVisible()
   await page.getByRole("button", { name: "Sign Out", exact: true }).click()
   await expect(page).toHaveURL(/\/login$/)

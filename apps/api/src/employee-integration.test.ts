@@ -145,6 +145,172 @@ test(
     }
     let employeeId = ""
     await t.test(
+      "service reads and writes enforce permissions for every role",
+      async () => {
+        const protectedRoutes = [
+          ["GET", "/services"],
+          ["GET", "/services/missing"],
+          ["POST", "/services"],
+          ["PUT", "/services/missing"],
+          ["PATCH", "/services/missing/status"],
+          ["DELETE", "/services/missing"],
+        ] as const
+        for (const [method, path] of protectedRoutes) {
+          for (const actor of ["superadmin", "staff", "user"]) {
+            assert.equal(
+              (await request(path, method, undefined, actor)).status,
+              403,
+              `${actor}: ${method} ${path}`,
+            )
+          }
+          assert.equal(
+            (await request(path, method, undefined, "anonymous")).status,
+            401,
+          )
+        }
+        for (const actor of ["admin", "superadmin", "staff", "user"]) {
+          assert.equal(
+            (await request("/services/available", "GET", undefined, actor))
+              .status,
+            200,
+          )
+        }
+        assert.equal(
+          (await request("/services/available", "GET", undefined, "anonymous"))
+            .status,
+          401,
+        )
+      },
+    )
+    await t.test(
+      "service lifecycle validates department links and prevents deleting active services",
+      async (subtest) => {
+        const input = {
+          name: "Security regression service",
+          description: "Offline integration fixture",
+          departmentIds: ["product", "operations"],
+          isActive: true,
+        }
+        assert.equal(
+          (
+            await request("/services", "POST", {
+              ...input,
+              departmentIds: ["missing"],
+            })
+          ).status,
+          400,
+        )
+        const response = await request("/services", "POST", input)
+        assert.equal(response.status, 201)
+        const { service } = (await response.json()) as {
+          service: { id: string; departments: { id: string }[] }
+        }
+        subtest.after(async () => {
+          await prisma.service.deleteMany({ where: { id: service.id } })
+        })
+        assert.deepEqual(
+          service.departments.map((department) => department.id).sort(),
+          ["operations", "product"],
+        )
+        assert.equal((await request("/services", "POST", input)).status, 409)
+        assert.equal(
+          (await request(`/services/${service.id}`, "DELETE")).status,
+          409,
+        )
+        assert.equal(
+          (
+            await request(`/services/${service.id}/status`, "PATCH", {
+              isActive: "false",
+            })
+          ).status,
+          400,
+        )
+        assert.equal(
+          (
+            await request(`/services/${service.id}/status`, "PATCH", {
+              isActive: false,
+            })
+          ).status,
+          200,
+        )
+        const available = (await (
+          await request("/services/available", "GET", undefined, "user")
+        ).json()) as { services: { id: string }[] }
+        assert.equal(
+          available.services.some((item) => item.id === service.id),
+          false,
+        )
+        assert.equal(
+          (await request(`/services/${service.id}`, "DELETE")).status,
+          200,
+        )
+        assert.equal(
+          (await request(`/services/${service.id}`, "GET")).status,
+          404,
+        )
+      },
+    )
+    await t.test(
+      "department mutations reject Staff and User even when directly requested",
+      async () => {
+        for (const actor of ["staff", "user"]) {
+          for (const [method, path] of [
+            ["POST", "/departments"],
+            ["PUT", "/departments/product"],
+            ["DELETE", "/departments/product"],
+            ["POST", "/departments/product/members"],
+            ["PATCH", "/departments/product/members/missing"],
+            ["DELETE", "/departments/product/members/missing"],
+            ["POST", "/departments/product/teams"],
+            ["PUT", "/departments/product/teams/product-team"],
+            ["DELETE", "/departments/product/teams/product-team"],
+          ]) {
+            assert.equal(
+              (await request(path, method, undefined, actor)).status,
+              403,
+              `${actor}: ${method} ${path}`,
+            )
+          }
+        }
+      },
+    )
+    await t.test(
+      "inactive Staff accounts cannot be assigned through legacy user IDs",
+      async (subtest) => {
+        await prisma.user.create({
+          data: {
+            id: "inactive-staff",
+            email: "inactive-staff@example.com",
+            fullName: "Inactive Staff",
+            passwordHash: "unused-test-hash",
+            role: "STAFF",
+            isActive: false,
+          },
+        })
+        subtest.after(async () => {
+          await prisma.user.delete({ where: { id: "inactive-staff" } })
+        })
+        const before = await prisma.employee.count()
+        assert.equal(
+          (
+            await request("/departments/operations/members", "POST", {
+              userIds: ["inactive-staff"],
+            })
+          ).status,
+          400,
+        )
+        assert.equal(await prisma.employee.count(), before)
+        assert.equal(
+          (
+            await prisma.user.findUniqueOrThrow({
+              where: { id: "inactive-staff" },
+            })
+          ).departmentId,
+          null,
+        )
+      },
+    )
+    await t.test(
       "only Admin may use the employee API, including direct writes",
       async () => {
         for (const actor of ["superadmin", "staff", "user"]) {
@@ -435,9 +601,25 @@ test(
           "POST",
           { userIds: ["user"] },
         )
-        assert.equal(assignment.status, 200)
+        assert.equal(assignment.status, 400)
+        assert.equal(
+          await prisma.employee.count({ where: { userId: "user" } }),
+          0,
+        )
+        await prisma.user.create({
+          data: {
+            id: "operations-staff",
+            email: "operations-staff@example.com",
+            fullName: "Operations Staff",
+            passwordHash: "unused-test-hash",
+            role: "STAFF",
+          },
+        })
+        await json("/departments/operations/members", "POST", {
+          userIds: ["operations-staff"],
+        })
         const linkedEmployee = await prisma.employee.findUniqueOrThrow({
-          where: { userId: "user" },
+          where: { userId: "operations-staff" },
           select: { id: true },
         })
         const teamResponse = await request(
@@ -471,8 +653,11 @@ test(
           2,
         )
         assert.equal(
-          (await prisma.user.findUniqueOrThrow({ where: { id: "user" } }))
-            .teamId,
+          (
+            await prisma.user.findUniqueOrThrow({
+              where: { id: "operations-staff" },
+            })
+          ).teamId,
           team.team.id,
         )
 
@@ -494,8 +679,11 @@ test(
         assert.equal(employee.departmentId, "operations")
         assert.equal(employee.teamId, null)
         assert.equal(
-          (await prisma.user.findUniqueOrThrow({ where: { id: "user" } }))
-            .teamId,
+          (
+            await prisma.user.findUniqueOrThrow({
+              where: { id: "operations-staff" },
+            })
+          ).teamId,
           null,
         )
         assert.equal(
@@ -547,7 +735,7 @@ test(
               userIds: ["link-target", "missing-user"],
             })
           ).status,
-          404,
+          400,
         )
         assert.equal(
           (
