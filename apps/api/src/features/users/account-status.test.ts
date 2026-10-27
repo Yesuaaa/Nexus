@@ -4,7 +4,7 @@ import { test } from "node:test"
 import { createApp } from "../../app.js"
 import { Role, type Prisma, type User } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
-import { hashPassword } from "../auth/password.js"
+import { hashPassword } from "../auth/auth.password.js"
 
 test("account status, deletion, and authentication enforce access", async (t) => {
   const previousUrl = process.env.DATABASE_URL

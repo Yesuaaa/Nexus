@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { hashPassword, validPassword, verifyPassword } from "./password.js"
-import { normalizedEmail, validRegistrationProfile } from "./validation.js"
+import { hashPassword, validPassword, verifyPassword } from "./auth.password.js"
+import { normalizedEmail, validRegistrationProfile } from "./auth.schema.js"
 
 test("passwords are salted and verified", async () => {
   const first = await hashPassword("a long unique password")

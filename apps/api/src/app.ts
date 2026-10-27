@@ -1,11 +1,11 @@
 import cors from "cors"
 import express, { type ErrorRequestHandler } from "express"
-import { authRouter } from "./features/auth/routes.js"
-import { departmentsRouter } from "./features/departments/routes.js"
-import { employeesRouter } from "./features/employees/routes.js"
-import { healthRouter } from "./features/health/routes.js"
-import { usersRouter } from "./features/users/routes.js"
-import { servicesRouter } from "./features/services/routes.js"
+import { authRouter } from "./features/auth/auth.controller.js"
+import { departmentsRouter } from "./features/departments/departments.controller.js"
+import { employeesRouter } from "./features/employees/employees.controller.js"
+import { healthRouter } from "./features/health/health.controller.js"
+import { usersRouter } from "./features/users/users.controller.js"
+import { servicesRouter } from "./features/services/services.controller.js"
 
 export function createApp() {
   const app = express()
