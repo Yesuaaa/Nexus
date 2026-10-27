@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
+import { buildContentSecurityPolicy } from "@/lib/content-security-policy"
 
 function getApiOrigin() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL
@@ -22,19 +23,7 @@ function getApiOrigin() {
 export function proxy(request: NextRequest) {
   const nonce = Buffer.from(randomUUID()).toString("base64")
   const apiOrigin = getApiOrigin()
-  const csp = [
-    "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
-    `style-src 'self' 'nonce-${nonce}'`,
-    "style-src-attr 'unsafe-inline'",
-    "img-src 'self' data: blob:",
-    "font-src 'self' data:",
-    `connect-src 'self'${apiOrigin ? ` ${apiOrigin}` : ""}`,
-    "object-src 'none'",
-    "base-uri 'self'",
-    "form-action 'self'",
-    "frame-ancestors 'none'",
-  ].join("; ")
+  const csp = buildContentSecurityPolicy(nonce, apiOrigin)
 
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set("x-nonce", nonce)

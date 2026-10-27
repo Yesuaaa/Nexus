@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import type { ReactNode } from "react"
 import { AuthProvider } from "@/features/auth/providers/auth-provider"
 import "@fontsource-variable/inter/wght.css"
+import "sileo/styles.css"
 import "../index.css"
 
 export const metadata: Metadata = {
