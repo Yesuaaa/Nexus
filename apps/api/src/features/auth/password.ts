@@ -58,3 +58,18 @@ export function validPassword(value: unknown): value is string {
     Buffer.byteLength(value) <= 1024
   )
 }
+
+/**
+ * Account-management credentials use the stronger policy already presented by
+ * the web application. Keep this separate from the legacy minimum-length
+ * rule so existing authentication flows do not silently change policy.
+ */
+export function validStrongPassword(value: unknown): value is string {
+  return (
+    validPassword(value) &&
+    /[A-Z]/.test(value) &&
+    /[a-z]/.test(value) &&
+    /[0-9]/.test(value) &&
+    /[^A-Za-z0-9]/.test(value)
+  )
+}

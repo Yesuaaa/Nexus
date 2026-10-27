@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react"
 import { cn } from "@/lib/utils"
 import { ApiError } from "@/features/auth/api/auth-api"
 import { createAccount, type AccountRole } from "../api/accounts-api"
+import { validateStrongPassword } from "../model/password-validation"
 import { AccountDropdown } from "./account-dropdown"
 import {
   accountButton,
@@ -56,20 +57,7 @@ function validate(values: Values): Partial<Record<FieldName, string>> {
   if (phone && !PHONE_RE.test(phone))
     errors.contactNumber = "Enter 11 digits starting with 09 or 08."
 
-  if (!password) errors.password = "Password is required."
-  else if (password.length < 12) errors.password = "Use at least 12 characters."
-  else if (!/[A-Z]/.test(password))
-    errors.password = "Include at least one capital letter."
-  else if (!/[a-z]/.test(password))
-    errors.password = "Include at least one lowercase letter."
-  else if (!/[0-9]/.test(password))
-    errors.password = "Include at least one number."
-  else if (!/[^A-Za-z0-9]/.test(password))
-    errors.password = "Include at least one special character."
-
-  if (!confirmation) errors.confirmation = "Please confirm your password."
-  else if (password !== confirmation)
-    errors.confirmation = "Passwords do not match."
+  Object.assign(errors, validateStrongPassword({ password, confirmation }))
 
   return errors
 }

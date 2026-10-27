@@ -11,6 +11,7 @@ export const Permission = {
   ACCOUNTS_ASSIGN_PRIVILEGED: "accounts:assign-privileged",
   ACCOUNTS_STATUS_BASIC: "accounts:status-basic",
   ACCOUNTS_STATUS_PRIVILEGED: "accounts:status-privileged",
+  ACCOUNTS_RESET_PASSWORD: "accounts:reset-password",
   DEPARTMENTS_READ: "departments:read",
   DEPARTMENTS_MANAGE: "departments:manage",
   DEPARTMENTS_DELETE: "departments:delete",
@@ -53,6 +54,7 @@ const accountManagementPermissions = [
   Permission.ACCOUNTS_ASSIGN_PRIVILEGED,
   Permission.ACCOUNTS_STATUS_BASIC,
   Permission.ACCOUNTS_STATUS_PRIVILEGED,
+  Permission.ACCOUNTS_RESET_PASSWORD,
 ] as const
 
 const rolePermissions: Record<Role, readonly Permission[]> = {

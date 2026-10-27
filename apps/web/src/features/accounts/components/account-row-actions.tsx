@@ -19,14 +19,16 @@ export function AccountRowActions({
   disabled,
   onChangeStatus,
   onDelete,
+  onResetPassword,
 }: {
   account: Account
   disabled: boolean
   onChangeStatus: () => void
   onDelete: () => void
+  onResetPassword: () => void
 }) {
   const triggerRef = useRef<HTMLButtonElement>(null)
-  const pendingAction = useRef<"status" | "delete" | null>(null)
+  const pendingAction = useRef<"status" | "delete" | "password" | null>(null)
   const action = account.isActive ? "Deactivate" : "Reactivate"
 
   return (
@@ -73,9 +75,18 @@ export function AccountRowActions({
           pendingAction.current = null
           triggerRef.current?.focus()
           if (selectedAction === "status") onChangeStatus()
-          else onDelete()
+          else if (selectedAction === "delete") onDelete()
+          else onResetPassword()
         }}
       >
+        <DropdownMenuItem
+          className={cn(dropdownItemClass, "text-xs focus:bg-[#eef1f8]")}
+          onSelect={() => {
+            pendingAction.current = "password"
+          }}
+        >
+          Reset password
+        </DropdownMenuItem>
         <DropdownMenuItem
           className={cn(
             dropdownItemClass,

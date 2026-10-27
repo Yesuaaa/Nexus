@@ -66,6 +66,16 @@ export function changeAccountStatus(id: string, isActive: boolean) {
   )
 }
 
+export async function resetAccountPassword(
+  id: string,
+  newPassword: string,
+): Promise<void> {
+  await apiRequest(`/api/users/${encodeURIComponent(id)}/password`, {
+    method: "PATCH",
+    body: JSON.stringify({ newPassword }),
+  })
+}
+
 export async function deleteAccount(id: string): Promise<void> {
   await apiRequest(`/api/users/${encodeURIComponent(id)}`, {
     method: "DELETE",

@@ -31,6 +31,7 @@ import { AccountStatusDialog } from "../components/account-status-dialog"
 import { AccountRowActions } from "../components/account-row-actions"
 import { CreateAccountDialog } from "../components/create-account-dialog"
 import { DeleteAccountDialog } from "../components/delete-account-dialog"
+import { ResetPasswordDialog } from "../components/reset-password-dialog"
 import {
   accountButton,
   accountButtonPrimary,
@@ -85,6 +86,7 @@ export function AccountManagementPage() {
   const [deleteTarget, setDeleteTarget] = useState<Account | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState("")
+  const [resetTarget, setResetTarget] = useState<Account | null>(null)
   const requestKey = JSON.stringify([
     debouncedSearch,
     roleFilter,
@@ -578,7 +580,8 @@ export function AccountManagementPage() {
                       <span className="hidden text-[#738096] @max-[530px]:inline">
                         Actions
                       </span>
-                      {canChangeAccountStatus(actor, user) ? (
+                      {canChangeAccountStatus(actor, user) ||
+                      user.id !== actor.id ? (
                         <AccountRowActions
                           account={user}
                           disabled={savingAccess || statusSaving || deleting}
@@ -591,6 +594,7 @@ export function AccountManagementPage() {
                             setDeleteError("")
                             setDeleteTarget(user)
                           }}
+                          onResetPassword={() => setResetTarget(user)}
                         />
                       ) : (
                         <span className="text-[11px] text-[#94a3b8]">—</span>
@@ -660,6 +664,19 @@ export function AccountManagementPage() {
             if (!deleting) setDeleteTarget(null)
           }}
           onConfirm={() => void removeAccount()}
+        />
+      )}
+      {resetTarget && (
+        <ResetPasswordDialog
+          account={resetTarget}
+          onClose={() => setResetTarget(null)}
+          onReset={() => {
+            setResetTarget(null)
+            sileo.success({
+              title: "Password reset",
+              description: `The password for ${resetTarget.email} has been reset.`,
+            })
+          }}
         />
       )}
       <CreateAccountDialog

@@ -33,6 +33,10 @@ enum EmployeeStatus {
   ON_LEAVE
 }
 
+enum AuditAction {
+  PASSWORD_RESET
+}
+
 model User {
   id                                String      @id @default(cuid())
   email                             String      @unique
@@ -55,10 +59,26 @@ model User {
   temporaryOriginalDepartmentHeadOf Department? @relation("DepartmentTemporaryOriginalHead")
   temporaryAssignedDepartmentHeadOf Department? @relation("DepartmentTemporaryAssignedHead")
   sessions                          Session[]
+  passwordResetAuditEvents          AuditLog[]  @relation("PasswordResetTarget")
+  passwordResetActions              AuditLog[]  @relation("PasswordResetActor")
 
   @@index([departmentId])
   @@index([teamId])
   @@index([accountDeletedAt])
+}
+
+model AuditLog {
+  id           String      @id @default(cuid())
+  action       AuditAction
+  actorId      String?
+  actor        User?       @relation("PasswordResetActor", fields: [actorId], references: [id], onDelete: SetNull)
+  targetUserId String?
+  targetUser   User?       @relation("PasswordResetTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+  createdAt    DateTime    @default(now())
+
+  @@index([actorId])
+  @@index([targetUserId])
+  @@index([action, createdAt])
 }
 
 model Department {

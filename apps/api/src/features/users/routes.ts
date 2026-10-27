@@ -1,9 +1,13 @@
 import { Router } from "express"
-import { Prisma, Role } from "../../generated/prisma/client.js"
+import { AuditAction, Prisma, Role } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { requireAuth, requirePermission, requireRole } from "../auth/session.js"
 import { Permission } from "../auth/permissions.js"
-import { hashPassword, validPassword } from "../auth/password.js"
+import {
+  hashPassword,
+  validPassword,
+  validStrongPassword,
+} from "../auth/password.js"
 import { normalizedEmail } from "../auth/validation.js"
 import { publicUser } from "./public-user.js"
 import { EmployeeError, syncEmployeeForUser } from "../employees/service.js"
@@ -16,6 +20,58 @@ import {
 export const usersRouter = Router()
 usersRouter.use(requireAuth)
 usersRouter.use(requireRole(Role.SUPERADMIN))
+
+usersRouter.patch(
+  "/:id/password",
+  requirePermission(Permission.ACCOUNTS_RESET_PASSWORD),
+  async (request, response) => {
+    const actor = request.auth!.user
+    const id = String(request.params.id)
+    const newPassword = request.body?.newPassword
+
+    if (!validStrongPassword(newPassword)) {
+      return response.status(400).json({
+        error:
+          "Provide a password with at least 12 characters, uppercase, lowercase, number, and special character",
+      })
+    }
+    if (actor.id === id) {
+      return response.status(403).json({
+        error: "Use Change Password to update your own password",
+      })
+    }
+
+    const prisma = getPrisma()!
+    const target = await prisma.user.findUnique({ where: { id } })
+    if (!target || target.accountDeletedAt) {
+      return response.status(404).json({ error: "User not found" })
+    }
+
+    const passwordHash = await hashPassword(newPassword)
+    const reset = await prisma.$transaction(async (transaction) => {
+      const updated = await transaction.user.updateMany({
+        where: { id, accountDeletedAt: null },
+        data: { passwordHash },
+      })
+      if (updated.count === 0) return false
+      await transaction.session.deleteMany({ where: { userId: id } })
+      await transaction.auditLog.create({
+        data: {
+          action: AuditAction.PASSWORD_RESET,
+          actorId: actor.id,
+          targetUserId: id,
+        },
+      })
+      return true
+    })
+    if (!reset) {
+      return response
+        .status(409)
+        .json({ error: "Account changed; refresh and retry" })
+    }
+    return response.status(204).send()
+  },
+)
 
 usersRouter.patch(
   "/:id/status",

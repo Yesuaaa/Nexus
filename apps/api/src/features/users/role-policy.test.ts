@@ -50,6 +50,7 @@ test("fixed roles have the expected permissions", () => {
     Permission.ACCOUNTS_ASSIGN_PRIVILEGED,
     Permission.ACCOUNTS_STATUS_BASIC,
     Permission.ACCOUNTS_STATUS_PRIVILEGED,
+    Permission.ACCOUNTS_RESET_PASSWORD,
   ])
   assert.equal(hasPermission(Role.USER, Permission.ACCOUNTS_READ), false)
   assert.equal(hasPermission(Role.ADMIN, Permission.ACCOUNTS_READ), false)
