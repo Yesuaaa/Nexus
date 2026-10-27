@@ -45,13 +45,9 @@ test("employee updates preserve omitted fields and allow an explicit No team cho
 })
 
 test("employee input rejects an invalid employment type and malformed email", () => {
-  assert.deepEqual(
-    validateEmployeeInput(
-      { employeeId: "EMP-1", fullName: "A Person", employmentType: "TEMP" },
-      false,
-    ),
-    { error: "Invalid employment type" },
-  )
+  assert.deepEqual(validateEmployeeInput({ employmentType: "TEMP" }, true), {
+    error: "Invalid employment type",
+  })
   assert.deepEqual(validateEmployeeInput({ email: "bad-email" }, true), {
     error: "Provide a valid email address",
   })

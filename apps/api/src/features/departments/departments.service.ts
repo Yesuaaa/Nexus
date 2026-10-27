@@ -247,6 +247,7 @@ export const departmentsService = {
         where: {
           id: { in: userIds },
           role: Role.STAFF,
+          isActive: true,
           accountDeletedAt: null,
         },
         select: { id: true },
