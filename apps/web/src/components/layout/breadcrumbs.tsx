@@ -11,6 +11,7 @@ const routeLabels: Record<string, string> = {
   departments: "Department Management",
   employees: "Employee Management",
   services: "Service Management",
+  clients: "Client Management",
 }
 
 function labelFor(segment: string) {

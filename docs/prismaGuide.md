@@ -1,5 +1,11 @@
 # Prisma Guide
 
+## Client Management related records
+
+The `20261027100000_client_related_records` migration adds `ServiceRequest` and `Project` tables, status enums, and client lookup indexes. Both `clientId` foreign keys reference `User.id`; requests also reference `Service.id` through `serviceId`. Deleting a referenced client or service is restricted to preserve history. Existing client accounts remain `User` records with role `USER`. No existing account rows are transformed and no sample data is inserted. See [Client Management](features/client-management.md) for fields, statuses and read endpoints.
+
+Apply with `pnpm --filter @nexus/api exec prisma migrate deploy`, then regenerate with `pnpm db:generate` and restart the API. The client drawer will show saved records associated with the selected client's User ID; an account with no related rows has a genuine empty tab. Requests/projects created through Prisma receive generated CUIDs and maintained timestamps; raw SQL inserts must provide `id` and `updatedAt` as well as required foreign keys.
+
 This guide covers the Prisma 7 setup in Nexus. Run all commands from the repository root. The API uses PostgreSQL through Prisma Client and the `@prisma/adapter-pg` driver adapter.
 
 ## Project files

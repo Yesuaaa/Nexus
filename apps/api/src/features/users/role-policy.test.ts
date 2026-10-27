@@ -34,6 +34,7 @@ test("fixed roles have the expected permissions", () => {
   assert.deepEqual(permissionsFor(Role.STAFF), staff)
   assert.deepEqual(permissionsFor(Role.ADMIN), [
     ...admin,
+    Permission.CLIENTS_READ,
     Permission.EMPLOYEES_READ,
     Permission.EMPLOYEES_MANAGE,
   ])
@@ -43,6 +44,7 @@ test("fixed roles have the expected permissions", () => {
         permission !== Permission.SERVICES_READ &&
         permission !== Permission.SERVICES_MANAGE,
     ),
+    Permission.CLIENTS_READ,
     Permission.ACCOUNTS_READ,
     Permission.ACCOUNTS_CREATE_BASIC,
     Permission.ACCOUNTS_CREATE_PRIVILEGED,
@@ -75,6 +77,11 @@ test("permission middleware denies missing permissions", async () => {
     (_request, response) => {
       response.json({ allowed: true })
     },
+  )
+  app.get(
+    "/clients",
+    requirePermission(Permission.CLIENTS_READ),
+    (_request, response) => response.json({ allowed: true }),
   )
   app.post(
     "/services",

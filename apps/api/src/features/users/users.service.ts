@@ -1,5 +1,9 @@
 import { Prisma, Role, type User } from "../../generated/prisma/client.js"
-import { isUniqueConflict, isWriteConflict } from "../../lib/errors.js"
+import {
+  isForeignKeyViolation,
+  isUniqueConflict,
+  isWriteConflict,
+} from "../../lib/errors.js"
 import { hashPassword, validPassword } from "../auth/auth.password.js"
 import { normalizedEmail } from "../auth/auth.schema.js"
 import {
@@ -70,12 +74,22 @@ export const usersService = {
     if (target.isActive) {
       throw new UsersError(409, "Deactivate the account before deleting it")
     }
-    const deleted = await usersRepository.deleteInactiveUser(
-      targetId,
-      target.role,
-    )
-    if (deleted.count === 0) {
-      throw new UsersError(409, "Account changed; refresh and retry")
+    try {
+      const deleted = await usersRepository.deleteInactiveUser(
+        targetId,
+        target.role,
+      )
+      if (deleted.count === 0) {
+        throw new UsersError(409, "Account changed; refresh and retry")
+      }
+    } catch (error) {
+      if (isForeignKeyViolation(error)) {
+        throw new UsersError(
+          409,
+          "This account has related records and cannot be deleted. Keep it inactive to preserve its history.",
+        )
+      }
+      throw error
     }
     return { message: "Account deleted successfully" }
   },
