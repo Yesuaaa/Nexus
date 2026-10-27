@@ -2,11 +2,19 @@ import { useEffect, useRef, useState } from "react"
 import { CloseIcon } from "@/components/layout/icons"
 import { focusRing } from "@/components/layout/styles"
 import {
+  autoDepartmentColor,
+  DepartmentColorPicker,
+  getDepartmentColorValue,
+  resolveDepartmentColor,
+  saveDepartmentColor,
+} from "@/components/ui/department-pill"
+import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Pill } from "@/components/ui/pill"
 import { cn } from "@/lib/utils"
 import {
   Select,
@@ -53,6 +61,11 @@ export function CreateEditDepartmentDialog({
   const [code, setCode] = useState(department?.code ?? "")
   const [description, setDescription] = useState(department?.description ?? "")
   const [headId, setHeadId] = useState(department?.headId ?? "")
+  const [color, setColor] = useState<string>(
+    department ? getDepartmentColorValue(department) : autoDepartmentColor(""),
+  )
+  // Once the user picks a color manually, stop following the name.
+  const [colorTouched, setColorTouched] = useState(isEditing)
   const [eligibleHeads, setEligibleHeads] = useState<EligibleHead[]>([])
   const [loadingHeads, setLoadingHeads] = useState(true)
   const [error, setError] = useState("")
@@ -65,18 +78,17 @@ export function CreateEditDepartmentDialog({
       .finally(() => setLoadingHeads(false))
   }, [])
 
+  function syncColor(nextName: string) {
+    if (!colorTouched) setColor(autoDepartmentColor(nextName))
+  }
+
   function handlePresetChange(presetName: string) {
     setSelectedPreset(presetName)
-    if (!presetName) {
+    if (!presetName || presetName === "CUSTOM") {
       setName("")
       setCode("")
       setDescription("")
-      return
-    }
-    if (presetName === "CUSTOM") {
-      setName("")
-      setCode("")
-      setDescription("")
+      syncColor("")
       return
     }
     const matched = COMPANY_DEPARTMENT_PRESETS.find(
@@ -86,6 +98,7 @@ export function CreateEditDepartmentDialog({
       setName(matched.name)
       setCode(matched.code)
       setDescription(matched.description)
+      syncColor(matched.name)
     }
   }
 
@@ -115,6 +128,8 @@ export function CreateEditDepartmentDialog({
           headId: headId || null,
         })
       }
+      // Front-end only: color is stored locally, keyed by department name.
+      saveDepartmentColor(name.trim(), color)
       onSaved()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to save department")
@@ -122,6 +137,8 @@ export function CreateEditDepartmentDialog({
       setSubmitting(false)
     }
   }
+
+  const previewColor = resolveDepartmentColor(color, name)
 
   return (
     <Dialog
@@ -222,6 +239,7 @@ export function CreateEditDepartmentDialog({
                 value={name}
                 onChange={(e) => {
                   setName(e.target.value)
+                  syncColor(e.target.value)
                   if (selectedPreset !== "CUSTOM") setSelectedPreset("CUSTOM")
                 }}
                 required
@@ -240,6 +258,25 @@ export function CreateEditDepartmentDialog({
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
                 maxLength={20}
               />
+            </div>
+
+            {/* Color picker: directly below Department Code */}
+            <div className={fieldClass}>
+              <span className={labelClass}>Department Color</span>
+              <DepartmentColorPicker
+                value={color}
+                onChange={(value) => {
+                  setColor(value)
+                  setColorTouched(true)
+                }}
+                disabled={submitting}
+              />
+              <div className="mt-1 flex items-center gap-2 text-xs text-[#738096]">
+                <span>Table preview:</span>
+                <Pill className={previewColor.pill}>
+                  {name.trim() || "Department"}
+                </Pill>
+              </div>
             </div>
 
             <div className={fieldClass}>

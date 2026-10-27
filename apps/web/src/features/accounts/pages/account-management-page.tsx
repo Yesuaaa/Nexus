@@ -7,6 +7,7 @@ import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { sileo } from "sileo"
 import { cn } from "@/lib/utils"
 import { contentClass } from "@/components/layout/styles"
+import { DepartmentPill } from "@/components/ui/department-pill.tsx"
 import { Pill } from "@/components/ui/pill"
 import { TableSortButton } from "@/components/ui/table-sort-button"
 import { ApiError, clearToken } from "@/features/auth/api/auth-api"
@@ -531,12 +532,10 @@ export function AccountManagementPage() {
                     <div className="min-w-0 @max-[900px]:col-start-1 @max-[900px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto">
                       {user.department ? (
                         <div className="flex min-w-0 flex-col gap-0.5">
-                          <span
-                            className="truncate text-xs text-foreground"
-                            title={user.department.name}
-                          >
-                            {user.department.name}
-                          </span>
+                          <DepartmentPill
+                            className="self-start"
+                            department={user.department}
+                          />
                           {user.team && (
                             <span className="truncate text-[11px] text-[#738096]">
                               {user.team.name}
