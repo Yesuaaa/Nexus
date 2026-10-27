@@ -268,20 +268,14 @@ test("mobile directory fits the viewport and retains sorting", async ({
 })
 
 for (const role of ["SUPERADMIN", "STAFF", "USER"]) {
-  test(`${role} client directory access`, async ({ page }) => {
+  test(`${role} cannot access client directory`, async ({ page }) => {
     const api = await setup(page, role)
     await page.goto("/clients")
-    if (role === "SUPERADMIN")
-      await expect(
-        page.getByText("Maria Santos", { exact: true }),
-      ).toBeVisible()
-    else {
-      await expect(page).toHaveURL(/\/dashboard$/)
-      await expect(
-        page.getByRole("link", { name: "Client Management" }),
-      ).toHaveCount(0)
-      expect(api.queries).toHaveLength(0)
-    }
+    await expect(page).toHaveURL(/\/dashboard$/)
+    await expect(
+      page.getByRole("link", { name: "Client Management" }),
+    ).toHaveCount(0)
+    expect(api.queries).toHaveLength(0)
   })
 }
 

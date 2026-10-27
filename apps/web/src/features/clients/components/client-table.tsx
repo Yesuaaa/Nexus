@@ -1,3 +1,6 @@
+import { useLayoutEffect, useRef } from "react"
+import { AnimatePresence, motion } from "framer-motion"
+import { AnimatedTableRow } from "@/components/ui/animated-data-row"
 import { TableSortButton } from "@/components/ui/table-sort-button"
 import { Pill } from "@/components/ui/pill"
 import { rowActionButton } from "@/components/ui/row-action-styles"
@@ -5,7 +8,6 @@ import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { cn } from "@/lib/utils"
 import {
   Table,
-  TableBody,
   TableCell,
   TableHead,
   TableHeader,
@@ -72,17 +74,26 @@ function ClientRowActions({
 
 export function ClientTable({
   clients,
+  viewKey,
+  emptyMessage,
   sortBy,
   sortOrder,
   onSort,
   onView,
 }: {
   clients: Client[]
+  viewKey: string
+  emptyMessage: string
   sortBy: ClientSort
   sortOrder: "asc" | "desc"
   onSort: (key: ClientSort) => void
   onView: (client: Client) => void
 }) {
+  const previousRowCount = useRef(clients.length)
+  useLayoutEffect(() => {
+    previousRowCount.current = clients.length
+  }, [clients.length, viewKey])
+
   function heading(key: ClientSort) {
     return (
       <TableHead
@@ -119,12 +130,31 @@ export function ClientTable({
             <TableHead className="w-[72px]">View</TableHead>
           </TableRow>
         </TableHeader>
-        <TableBody className="@max-[800px]:block">
-          {clients.map((client) => (
-            <TableRow
-              key={client.id}
-              className="text-xs @max-[800px]:grid @max-[800px]:grid-cols-[minmax(0,1fr)_auto] @max-[800px]:gap-x-3 @max-[800px]:gap-y-1.5 @max-[800px]:px-4 @max-[800px]:py-3"
-            >
+        <motion.tbody
+          className="[&_tr:last-child]:border-0 @max-[800px]:block"
+          layout="size"
+          transition={{ layout: { duration: 0.22, ease: "easeOut" } }}
+        >
+          <AnimatePresence initial={false} mode="popLayout">
+            {clients.length === 0 ? (
+              <AnimatedTableRow
+                key={`empty-${viewKey}`}
+                index={0}
+                previousRowCount={previousRowCount.current}
+                className="text-center text-xs text-[#52627a]"
+              >
+                <TableCell colSpan={6} className="min-h-[150px] py-10">
+                  {emptyMessage}
+                </TableCell>
+              </AnimatedTableRow>
+            ) : (
+              clients.map((client, index) => (
+                <AnimatedTableRow
+                  key={`${viewKey}:${client.id}`}
+                  index={index}
+                  previousRowCount={previousRowCount.current}
+                  className="text-xs @max-[800px]:grid @max-[800px]:grid-cols-[minmax(0,1fr)_auto] @max-[800px]:gap-x-3 @max-[800px]:gap-y-1.5 @max-[800px]:px-4 @max-[800px]:py-3"
+                >
               <TableCell className="px-4 py-2.5 @max-[800px]:col-start-1 @max-[800px]:row-start-1 @max-[800px]:p-0">
                 <div className="flex min-w-0 items-center gap-2.5">
                   <span
@@ -167,9 +197,11 @@ export function ClientTable({
               <TableCell className="px-4 py-2.5 @max-[800px]:col-start-2 @max-[800px]:row-start-4 @max-[800px]:p-0">
                 <ClientRowActions client={client} onView={onView} />
               </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
+                </AnimatedTableRow>
+              ))
+            )}
+          </AnimatePresence>
+        </motion.tbody>
       </Table>
     </div>
   )

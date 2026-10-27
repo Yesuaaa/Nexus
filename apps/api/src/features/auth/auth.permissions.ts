@@ -67,7 +67,6 @@ const rolePermissions: Record<Role, readonly Permission[]> = {
   ],
   [Role.SUPERADMIN]: [
     ...departmentManagementPermissions,
-    Permission.CLIENTS_READ,
     ...accountManagementPermissions,
   ],
 }

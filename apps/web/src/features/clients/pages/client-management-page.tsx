@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react"
 import { SearchIcon } from "@/components/layout/icons"
-import { contentClass, focusRing } from "@/components/layout/styles"
+import { contentClass } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { NumberedPagination } from "@/components/ui/numbered-pagination"
 import {
   Select,
   SelectContent,
@@ -26,7 +27,6 @@ import {
   type ClientDetailsTab,
 } from "../components/client-details-drawer"
 
-const pageButton = `min-h-[32px] cursor-pointer rounded-lg bg-[#203f8c] px-3 text-[11px] font-medium text-white hover:enabled:bg-[#172f70] disabled:cursor-not-allowed disabled:opacity-50 max-[560px]:min-h-11 ${focusRing}`
 const sortOptions: { value: string; label: string }[] = [
   { value: "createdAt:desc", label: "Newest registered" },
   { value: "createdAt:asc", label: "Oldest registered" },
@@ -57,6 +57,7 @@ export function ClientManagementPage() {
     pageSize: 10,
   })
   const [resolvedKey, setResolvedKey] = useState("")
+  const [resolvedViewKey, setResolvedViewKey] = useState("")
   const [error, setError] = useState("")
   const requestKey = JSON.stringify({
     search: debouncedSearch,
@@ -66,6 +67,13 @@ export function ClientManagementPage() {
     sortOrder,
     revision,
   })
+  const viewKey = JSON.stringify({
+    search: debouncedSearch,
+    status,
+    page,
+    sortBy,
+    sortOrder,
+  })
   const loading =
     resolvedKey !== requestKey || search.trim() !== debouncedSearch
   const filtered = Boolean(search.trim() || status)
@@ -73,7 +81,7 @@ export function ClientManagementPage() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search.trim())
-    }, 250)
+    }, 150)
     return () => clearTimeout(timer)
   }, [search])
 
@@ -90,6 +98,7 @@ export function ClientManagementPage() {
         setResult(data)
         setError("")
         setResolvedKey(requestKey)
+        setResolvedViewKey(viewKey)
       })
       .catch((reason: unknown) => {
         if (!active) return
@@ -101,7 +110,7 @@ export function ClientManagementPage() {
     return () => {
       active = false
     }
-  }, [debouncedSearch, status, page, sortBy, sortOrder, revision, requestKey])
+  }, [debouncedSearch, status, page, sortBy, sortOrder, revision, requestKey, viewKey])
 
   function sort(key: ClientSort) {
     setSortOrder(sortBy === key && sortOrder === "asc" ? "desc" : "asc")
@@ -115,8 +124,9 @@ export function ClientManagementPage() {
     setPage(1)
   }
   const pages = Math.max(1, Math.ceil(result.total / result.pageSize))
-  const from = result.total === 0 ? 0 : (page - 1) * result.pageSize + 1
-  const to = (page - 1) * result.pageSize + result.clients.length
+  const from =
+    result.total === 0 ? 0 : (result.page - 1) * result.pageSize + 1
+  const to = (result.page - 1) * result.pageSize + result.clients.length
 
   return (
     <main
@@ -212,11 +222,9 @@ export function ClientManagementPage() {
           )}
         </div>
         <div aria-busy={loading}>
-          {loading || error || result.clients.length === 0 ? (
+          {error || resolvedKey === "" ? (
             <div className="grid min-h-[180px] place-content-center gap-3 rounded-lg border border-[#e8ebef] p-6 text-center text-xs text-[#52627a]">
-              {loading ? (
-                <p role="status">Loading clients...</p>
-              ) : error ? (
+              {error ? (
                 <div role="alert" className="grid justify-items-center gap-3">
                   <p>{error}</p>
                   <Button
@@ -228,16 +236,18 @@ export function ClientManagementPage() {
                   </Button>
                 </div>
               ) : (
-                <p role="status">
-                  {filtered
-                    ? "No clients match your search or filters."
-                    : "No clients registered yet."}
-                </p>
+                <p role="status">Loading clients...</p>
               )}
             </div>
           ) : (
             <ClientTable
               clients={result.clients}
+              viewKey={resolvedViewKey}
+              emptyMessage={
+                filtered
+                  ? "No clients match your search or filters."
+                  : "No clients registered yet."
+              }
               sortBy={sortBy}
               sortOrder={sortOrder}
               onSort={sort}
@@ -247,30 +257,18 @@ export function ClientManagementPage() {
             />
           )}
         </div>
-        {!loading && !error && result.total > 0 && (
+        {!error && result.total > 0 && (
           <footer className="flex flex-wrap items-center justify-between gap-3 pt-4 text-[11px] text-[#52627a]">
             <span role="status" aria-live="polite" aria-atomic="true">
               Showing {from}–{to} of {result.total}
             </span>
-            <nav aria-label="Client pages" className="flex items-center gap-2">
-              <Button
-                className={pageButton}
-                disabled={page <= 1}
-                onClick={() => setPage((value) => value - 1)}
-              >
-                Back
-              </Button>
-              <span aria-current="page">
-                Page {page} of {pages}
-              </span>
-              <Button
-                className={pageButton}
-                disabled={page >= pages}
-                onClick={() => setPage((value) => value + 1)}
-              >
-                Next
-              </Button>
-            </nav>
+            <NumberedPagination
+              page={result.page}
+              totalPages={pages}
+              disabled={loading}
+              label="Client pages"
+              onPageChange={setPage}
+            />
           </footer>
         )}
       </section>

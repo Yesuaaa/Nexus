@@ -1,6 +1,6 @@
 # Client Management
 
-The directory at `/clients` gives Admin and Superadmin accounts read-only access to registered clients. It follows Employee Management's layout with name/email search, Active/Inactive filtering, sorting and server pagination (10 records per page). The default order is newest registered first; an account ID tie-breaker keeps equal values ordered consistently. Narrow screens use stacked rows and a sort selector.
+The directory at `/clients` gives Admin accounts read-only access to registered clients. Superadmin, Staff and User accounts cannot access it. It follows Employee Management's layout with name/email search, Active/Inactive filtering, sorting and server pagination (10 records per page). The default order is newest registered first; an account ID tie-breaker keeps equal values ordered consistently. Narrow screens use stacked rows and a sort selector.
 
 The eye action opens the client's details drawer. The row menu can open Service requests or Projects directly. The drawer loads current account details, displays related record counts in Overview, and provides working tabs with paginated records. It preserves directory filters, sorting and page, closes with Escape or its close button, and restores focus to the row action. On phones it fills the screen. Each read has loading, empty and retryable error states; superseded responses cannot overwrite a newer selection. The module has no create, edit or delete actions.
 
@@ -20,7 +20,7 @@ The response contains only `id`, `fullName`, `email`, `contactNumber`, `isActive
 
 ## API
 
-`GET /api/clients` requires a valid bearer session and `clients:read`. Only Admin and Superadmin receive that permission. Staff and User receive 403, missing/invalid sessions receive 401, malformed filters receive 400, and an unavailable database receives 503. Responses use `Cache-Control: no-store`.
+`GET /api/clients` requires a valid bearer session and `clients:read`. Only Admin receives that permission. Superadmin, Staff and User receive 403, missing/invalid sessions receive 401, malformed filters receive 400, and an unavailable database receives 503. Responses use `Cache-Control: no-store`.
 
 | Parameter   | Accepted values                                                            | Default     |
 | ----------- | -------------------------------------------------------------------------- | ----------- |
@@ -34,7 +34,7 @@ Repeated or structured values for supported parameters are invalid. Unknown para
 
 ## Related records API
 
-All endpoints below require the same `clients:read` permission and valid bearer session. Only Admin and Superadmin have access. Unknown, deleted or non-USER client IDs return 404. IDs must contain 1-80 ASCII letters, digits, hyphens or underscores; malformed IDs return 400. Related lists accept `page` using the same bounds as the directory, reject repeated/structured pagination values, and use 10 records per page, newest first with an ID tie-breaker. Unknown query parameters are ignored. Out-of-range pages return empty arrays. Reads validate the parent and query within one repeatable-read transaction. None expose credentials or records owned by a different client.
+All endpoints below require the same `clients:read` permission and valid bearer session. Only Admin has access; Superadmin, Staff and User receive 403. Unknown, deleted or non-USER client IDs return 404. IDs must contain 1-80 ASCII letters, digits, hyphens or underscores; malformed IDs return 400. Related lists accept `page` using the same bounds as the directory, reject repeated/structured pagination values, and use 10 records per page, newest first with an ID tie-breaker. Unknown query parameters are ignored. Out-of-range pages return empty arrays. Reads validate the parent and query within one repeatable-read transaction. None expose credentials or records owned by a different client.
 
 | Endpoint                                       | Response                                                                               |
 | ---------------------------------------------- | -------------------------------------------------------------------------------------- |

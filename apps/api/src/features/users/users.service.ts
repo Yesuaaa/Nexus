@@ -107,7 +107,7 @@ export const usersService = {
     const direction =
       typeof query.direction === "string" ? query.direction : "desc"
     const page = Number(query.page ?? 1)
-    const pageSize = 20
+    const pageSize = 10
     const sortableColumns = [
       "member",
       "role",

@@ -1,6 +1,9 @@
-import { useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import { AnimatePresence, motion } from "framer-motion"
 import { SearchIcon } from "@/components/layout/icons"
 import { focusRing } from "@/components/layout/styles"
+import { AnimatedGridRow } from "@/components/ui/animated-data-row"
+import { NumberedPagination } from "@/components/ui/numbered-pagination"
 import {
   TableSortButton,
   type SortDirection,
@@ -11,7 +14,6 @@ import type { Department } from "../api/departments-api"
 import { DepartmentRowActions } from "./department-row-actions"
 
 const pageSize = 10
-const paginationButton = `inline-flex min-h-[30px] cursor-pointer items-center justify-center rounded-lg border border-transparent bg-[#203f8c] px-3 text-[11px] font-medium leading-[1.2] whitespace-nowrap text-white transition-colors hover:enabled:bg-[#172f70] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none ${focusRing}`
 const departmentGrid =
   "grid grid-cols-[minmax(160px,1.5fr)_minmax(130px,1.3fr)_minmax(65px,.55fr)_minmax(75px,.65fr)_minmax(70px,.6fr)_112px] items-center gap-3.5 @max-[820px]:grid-cols-[minmax(0,1fr)_auto]"
 
@@ -39,10 +41,18 @@ export function DepartmentTable({
   onRetry: () => void
 }) {
   const [search, setSearch] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
   const [sortKey, setSortKey] = useState<SortKey>("name")
   const [direction, setDirection] = useState<SortDirection>("asc")
   const [page, setPage] = useState(1)
-  const query = search.trim().toLowerCase()
+  const query = debouncedSearch.trim().toLowerCase()
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search)
+      setPage(1)
+    }, 150)
+    return () => window.clearTimeout(timer)
+  }, [search])
   const filtered = departments
     .filter((department) =>
       [
@@ -73,6 +83,11 @@ export function DepartmentTable({
     (currentPage - 1) * pageSize,
     currentPage * pageSize,
   )
+  const viewKey = JSON.stringify([query, sortKey, direction, currentPage])
+  const previousVisibleCount = useRef(visible.length)
+  useLayoutEffect(() => {
+    previousVisibleCount.current = visible.length
+  }, [viewKey, visible.length])
 
   function sortBy(key: SortKey) {
     if (sortKey === key) {
@@ -98,7 +113,6 @@ export function DepartmentTable({
               value={search}
               onChange={(event) => {
                 setSearch(event.target.value)
-                setPage(1)
               }}
             />
           </label>
@@ -106,7 +120,7 @@ export function DepartmentTable({
       </div>
 
       <div
-        className="@container min-w-0 rounded-lg border border-[#e8ebef] bg-background"
+        className="@container min-w-0 overflow-x-clip rounded-lg border border-[#e8ebef] bg-background"
         role="table"
         aria-label="Departments and their staffing"
       >
@@ -150,8 +164,14 @@ export function DepartmentTable({
             <span role="columnheader">Actions</span>
           </div>
         </div>
-        <div role="rowgroup" aria-live="polite">
-          {loading || error || filtered.length === 0 ? (
+        <motion.div
+          role="rowgroup"
+          aria-live="polite"
+          layout="size"
+          transition={{ layout: { duration: 0.22, ease: "easeOut" } }}
+          className="relative overflow-x-clip"
+        >
+          {loading || error ? (
             <div role="row">
               <div
                 role="cell"
@@ -174,23 +194,35 @@ export function DepartmentTable({
                       Try again
                     </button>
                   </div>
-                ) : query ? (
-                  "No departments matched your search."
-                ) : (
-                  "No departments created yet."
-                )}
+                ) : null}
               </div>
             </div>
           ) : (
-            visible.map((department) => (
-              <div
-                role="row"
-                key={department.id}
-                className={cn(
-                  departmentGrid,
-                  "min-h-[58px] border-b border-[#eceef1] px-4 py-[7px] text-xs text-foreground last:rounded-b-[7px] last:border-b-0 hover:bg-[#e8eef2] @max-[820px]:gap-x-4 @max-[820px]:gap-y-[10px] @max-[820px]:py-[14px]",
-                )}
-              >
+            <AnimatePresence initial={false} mode="popLayout">
+              {visible.length === 0 ? (
+                <AnimatedGridRow
+                  key={`empty-${viewKey}`}
+                  index={0}
+                  previousRowCount={previousVisibleCount.current}
+                  className="grid min-h-[150px] place-content-center p-6 text-center text-xs text-[#7183a2]"
+                >
+                  <div role="cell" aria-colspan={6}>
+                    {query
+                      ? "No departments matched your search."
+                      : "No departments created yet."}
+                  </div>
+                </AnimatedGridRow>
+              ) : (
+                visible.map((department, index) => (
+                  <AnimatedGridRow
+                    key={`${viewKey}:${department.id}`}
+                    index={index}
+                    previousRowCount={previousVisibleCount.current}
+                    className={cn(
+                      departmentGrid,
+                      "min-h-[58px] border-b border-[#eceef1] px-4 py-[7px] text-xs text-foreground last:rounded-b-[7px] last:border-b-0 hover:bg-[#e8eef2] @max-[820px]:gap-x-4 @max-[820px]:gap-y-[10px] @max-[820px]:py-[14px]",
+                    )}
+                  >
                 <div
                   role="rowheader"
                   className="min-w-0 @max-[820px]:col-start-1 @max-[820px]:row-start-1"
@@ -271,10 +303,12 @@ export function DepartmentTable({
                     onDelete={onDelete}
                   />
                 </div>
-              </div>
-            ))
+                  </AnimatedGridRow>
+                ))
+              )}
+            </AnimatePresence>
           )}
-        </div>
+        </motion.div>
       </div>
 
       {!loading && !error && (
@@ -286,36 +320,13 @@ export function DepartmentTable({
             {filtered.length}
           </span>
           {filtered.length > 0 && (
-            <nav
-              className="flex items-center gap-2"
-              aria-label="Department pages"
-            >
-              <button
-                type="button"
-                className={paginationButton}
-                aria-label="Previous page"
-                disabled={currentPage === 1}
-                onClick={() => setPage(currentPage - 1)}
-              >
-                Back
-              </button>
-              <span
-                className="px-[3px] whitespace-nowrap text-foreground"
-                aria-current="page"
-                aria-label={`Page ${currentPage} of ${totalPages}`}
-              >
-                Page {currentPage} of {totalPages}
-              </span>
-              <button
-                type="button"
-                className={paginationButton}
-                aria-label="Next page"
-                disabled={currentPage === totalPages}
-                onClick={() => setPage(currentPage + 1)}
-              >
-                Next
-              </button>
-            </nav>
+            <NumberedPagination
+              page={currentPage}
+              totalPages={totalPages}
+              disabled={loading}
+              label="Department pages"
+              onPageChange={setPage}
+            />
           )}
         </footer>
       )}

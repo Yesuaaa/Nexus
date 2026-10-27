@@ -1,7 +1,9 @@
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { Eye, MoreHorizontal, Pencil } from "lucide-react"
+import { AnimatePresence, motion } from "framer-motion"
 import { SearchIcon } from "@/components/layout/icons"
 import { focusRing } from "@/components/layout/styles"
+import { AnimatedGridRow } from "@/components/ui/animated-data-row"
 import { DepartmentPill } from "@/components/ui/department-pill.tsx"
 import { Dropdown } from "@/components/ui/dropdown"
 import {
@@ -16,6 +18,7 @@ import {
 } from "@/components/ui/dropdown-styles"
 import { Pill } from "@/components/ui/pill"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
+import { NumberedPagination } from "@/components/ui/numbered-pagination"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import {
   TableSortButton,
@@ -198,14 +201,22 @@ export function ServiceTable({
   onRetry: () => void
 }) {
   const [search, setSearch] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
   const [departmentId, setDepartmentId] = useState("")
   const [status, setStatus] = useState("")
   const [sortKey, setSortKey] = useState<SortKey>("createdAt")
   const [direction, setDirection] = useState<SortDirection>("desc")
   const [page, setPage] = useState(1)
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search)
+      setPage(1)
+    }, 150)
+    return () => window.clearTimeout(timer)
+  }, [search])
 
   const filtered = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase()
+    const query = debouncedSearch.trim().toLocaleLowerCase()
     return services
       .filter(
         (service) =>
@@ -235,7 +246,7 @@ export function ServiceTable({
             : String(a).localeCompare(String(b))
         return direction === "asc" ? compared : -compared
       })
-  }, [departmentId, direction, search, services, sortKey, status])
+  }, [departmentId, debouncedSearch, direction, services, sortKey, status])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const currentPage = Math.min(page, totalPages)
@@ -243,6 +254,18 @@ export function ServiceTable({
     (currentPage - 1) * pageSize,
     currentPage * pageSize,
   )
+  const viewKey = JSON.stringify([
+    debouncedSearch,
+    departmentId,
+    status,
+    sortKey,
+    direction,
+    currentPage,
+  ])
+  const previousVisibleCount = useRef(visible.length)
+  useLayoutEffect(() => {
+    previousVisibleCount.current = visible.length
+  }, [viewKey, visible.length])
 
   function sortBy(key: SortKey) {
     if (sortKey === key)
@@ -254,7 +277,7 @@ export function ServiceTable({
     setPage(1)
   }
 
-  const filteredState = Boolean(search || departmentId || status)
+  const filteredState = Boolean(debouncedSearch || departmentId || status)
 
   return (
     <>
@@ -270,7 +293,6 @@ export function ServiceTable({
             maxLength={100}
             onChange={(event) => {
               setSearch(event.target.value)
-              setPage(1)
             }}
           />
         </label>
@@ -311,7 +333,7 @@ export function ServiceTable({
       </div>
 
       <div
-        className="@container min-w-0 rounded-lg border border-[#e8ebef] bg-background"
+        className="@container min-w-0 overflow-x-clip rounded-lg border border-[#e8ebef] bg-background"
         role="table"
         aria-label="Services"
       >
@@ -349,8 +371,14 @@ export function ServiceTable({
             <span role="columnheader">Actions</span>
           </div>
         </div>
-        <div role="rowgroup" aria-live="polite">
-          {loading || error || filtered.length === 0 ? (
+        <motion.div
+          role="rowgroup"
+          aria-live="polite"
+          layout="size"
+          transition={{ layout: { duration: 0.22, ease: "easeOut" } }}
+          className="relative overflow-x-clip"
+        >
+          {loading || error ? (
             <div role="row">
               <div
                 role="cell"
@@ -373,23 +401,35 @@ export function ServiceTable({
                       Try again
                     </button>
                   </div>
-                ) : filteredState ? (
-                  "No services match the selected filters."
-                ) : (
-                  "No services have been created yet."
-                )}
+                ) : null}
               </div>
             </div>
           ) : (
-            visible.map((service) => (
-              <div
-                role="row"
-                key={service.id}
-                className={cn(
-                  serviceGrid,
-                  "min-h-[58px] border-b border-[#eceef1] px-4 py-[8px] text-xs last:rounded-b-[7px] last:border-b-0 hover:bg-[#f3f6f8] @max-[920px]:gap-x-4 @max-[920px]:gap-y-2 @max-[920px]:py-3.5",
-                )}
-              >
+            <AnimatePresence initial={false} mode="popLayout">
+              {visible.length === 0 ? (
+                <AnimatedGridRow
+                  key={`empty-${viewKey}`}
+                  index={0}
+                  previousRowCount={previousVisibleCount.current}
+                  className="grid min-h-[170px] place-content-center gap-3 p-6 text-center text-xs text-[#7183a2]"
+                >
+                  <div role="cell" aria-colspan={6}>
+                    {filteredState
+                      ? "No services match the selected filters."
+                      : "No services have been created yet."}
+                  </div>
+                </AnimatedGridRow>
+              ) : (
+                visible.map((service, index) => (
+                  <AnimatedGridRow
+                    key={`${viewKey}:${service.id}`}
+                    index={index}
+                    previousRowCount={previousVisibleCount.current}
+                    className={cn(
+                      serviceGrid,
+                      "min-h-[58px] border-b border-[#eceef1] px-4 py-[8px] text-xs last:rounded-b-[7px] last:border-b-0 hover:bg-[#f3f6f8] @max-[920px]:gap-x-4 @max-[920px]:gap-y-2 @max-[920px]:py-3.5",
+                    )}
+                  >
                 <button
                   type="button"
                   role="rowheader"
@@ -452,10 +492,12 @@ export function ServiceTable({
                     onDelete={onDelete}
                   />
                 </div>
-              </div>
-            ))
+                  </AnimatedGridRow>
+                ))
+              )}
+            </AnimatePresence>
           )}
-        </div>
+        </motion.div>
       </div>
 
       {!loading && !error && (
@@ -467,33 +509,13 @@ export function ServiceTable({
             {filtered.length} services
           </span>
           {filtered.length > 0 && (
-            <nav className="flex items-center gap-2" aria-label="Service pages">
-              <button
-                type="button"
-                className={cn(
-                  "h-8 cursor-pointer rounded-lg border border-[#d7e0ee] bg-background px-3 disabled:cursor-not-allowed disabled:opacity-45",
-                  focusRing,
-                )}
-                disabled={currentPage === 1}
-                onClick={() => setPage(currentPage - 1)}
-              >
-                Back
-              </button>
-              <span className="text-foreground tabular-nums">
-                Page {currentPage} of {totalPages}
-              </span>
-              <button
-                type="button"
-                className={cn(
-                  "h-8 cursor-pointer rounded-lg border border-[#d7e0ee] bg-background px-3 disabled:cursor-not-allowed disabled:opacity-45",
-                  focusRing,
-                )}
-                disabled={currentPage === totalPages}
-                onClick={() => setPage(currentPage + 1)}
-              >
-                Next
-              </button>
-            </nav>
+            <NumberedPagination
+              page={currentPage}
+              totalPages={totalPages}
+              disabled={loading}
+              label="Service pages"
+              onPageChange={setPage}
+            />
           )}
         </footer>
       )}

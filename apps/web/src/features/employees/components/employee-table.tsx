@@ -1,9 +1,11 @@
+import { useLayoutEffect, useRef } from "react"
+import { AnimatePresence, motion } from "framer-motion"
 import { focusRing } from "@/components/layout/styles"
+import { AnimatedTableRow } from "@/components/ui/animated-data-row"
 import { Button } from "@/components/ui/button"
 import { DepartmentPill } from "@/components/ui/department-pill.tsx"
 import {
   Table,
-  TableBody,
   TableCell,
   TableHead,
   TableHeader,
@@ -50,6 +52,7 @@ function formatDate(value: string | null) {
 
 export function EmployeeTable({
   employees,
+  viewKey,
   loading,
   error,
   emptyMessage,
@@ -61,6 +64,7 @@ export function EmployeeTable({
   onManageDepartment,
 }: {
   employees: Employee[]
+  viewKey: string
   loading: boolean
   error: string
   emptyMessage: string
@@ -71,7 +75,12 @@ export function EmployeeTable({
   onManageLogin: (employee: Employee) => void
   onManageDepartment?: (departmentId: string) => void
 }) {
-  if (loading || error || employees.length === 0) {
+  const previousRowCount = useRef(employees.length)
+  useLayoutEffect(() => {
+    previousRowCount.current = employees.length
+  }, [employees.length, viewKey])
+
+  if ((loading && employees.length === 0) || error) {
     return (
       <div className="grid min-h-[150px] place-content-center gap-3 rounded-lg border border-[#e8ebef] bg-background p-6 text-center text-xs text-[#7183a2]">
         {loading ? (
@@ -96,7 +105,10 @@ export function EmployeeTable({
   }
 
   return (
-    <div className="@container min-w-0 overflow-visible rounded-lg border border-[#e8ebef] bg-background [&>div]:overflow-visible">
+    <div
+      aria-busy={loading}
+      className="@container min-w-0 overflow-visible rounded-lg border border-[#e8ebef] bg-background [&>div]:overflow-visible"
+    >
       <Table aria-label="Employees" className="@max-[1000px]:block">
         <TableHeader className="bg-[#e8eef2] @max-[1000px]:hidden">
           <TableRow className="border-[#dfe6eb] hover:bg-transparent">
@@ -110,12 +122,31 @@ export function EmployeeTable({
             <TableHead className="w-[112px] min-w-[112px]">Actions</TableHead>
           </TableRow>
         </TableHeader>
-        <TableBody className="@max-[1000px]:block">
-          {employees.map((employee) => (
-            <TableRow
-              key={employee.id}
-              className="text-xs hover:bg-[#e8eef2] @max-[1000px]:grid @max-[1000px]:grid-cols-[minmax(0,1fr)_minmax(105px,.65fr)] @max-[1000px]:gap-x-3 @max-[1000px]:gap-y-2 @max-[1000px]:px-4 @max-[1000px]:py-3 @max-[1000px]:hover:bg-transparent"
-            >
+        <motion.tbody
+          className="[&_tr:last-child]:border-0 @max-[1000px]:block"
+          layout="size"
+          transition={{ layout: { duration: 0.22, ease: "easeOut" } }}
+        >
+          <AnimatePresence initial={false} mode="popLayout">
+            {employees.length === 0 ? (
+              <AnimatedTableRow
+                key={`empty-${viewKey}`}
+                index={0}
+                previousRowCount={previousRowCount.current}
+                className="text-center text-xs text-[#7183a2]"
+              >
+                <TableCell colSpan={8} className="min-h-[150px] py-10">
+                  {emptyMessage}
+                </TableCell>
+              </AnimatedTableRow>
+            ) : (
+              employees.map((employee, index) => (
+                <AnimatedTableRow
+                  key={`${viewKey}:${employee.id}`}
+                  index={index}
+                  previousRowCount={previousRowCount.current}
+                  className="text-xs hover:bg-[#e8eef2] @max-[1000px]:grid @max-[1000px]:grid-cols-[minmax(0,1fr)_minmax(105px,.65fr)] @max-[1000px]:gap-x-3 @max-[1000px]:gap-y-2 @max-[1000px]:px-4 @max-[1000px]:py-3 @max-[1000px]:hover:bg-transparent"
+                >
               <TableCell
                 className="min-w-0 truncate px-4 py-[7px] font-medium text-[#34445e] @max-[1000px]:p-0"
                 title={employee.employeeId}
@@ -221,9 +252,11 @@ export function EmployeeTable({
                   onManageLogin={() => onManageLogin(employee)}
                 />
               </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
+                </AnimatedTableRow>
+              ))
+            )}
+          </AnimatePresence>
+        </motion.tbody>
       </Table>
     </div>
   )
