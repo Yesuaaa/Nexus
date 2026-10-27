@@ -7,6 +7,9 @@ import "../index.css"
 export const metadata: Metadata = {
   title: "EXP Digital Solutions",
   description: "Sign in or create your EXP account.",
+  icons: {
+    icon: "/favicon.svg",
+  },
 }
 
 export default function RootLayout({ children }: { children: ReactNode }) {
