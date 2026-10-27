@@ -58,7 +58,7 @@ export function EmployeeManagementPage() {
   )
   const [employees, setEmployees] = useState<Employee[]>([])
   const [total, setTotal] = useState(0)
-  const [pageSize, setPageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(10)
   const [page, setPage] = useState(1)
   const [resolvedPage, setResolvedPage] = useState(1)
   const [search, setSearch] = useState("")

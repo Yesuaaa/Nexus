@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { SearchIcon } from "@/components/layout/icons"
 import { focusRing } from "@/components/layout/styles"
@@ -84,11 +84,6 @@ export function DepartmentTable({
     currentPage * pageSize,
   )
   const viewKey = JSON.stringify([query, sortKey, direction, currentPage])
-  const previousVisibleCount = useRef(visible.length)
-  useLayoutEffect(() => {
-    previousVisibleCount.current = visible.length
-  }, [viewKey, visible.length])
-
   function sortBy(key: SortKey) {
     if (sortKey === key) {
       setDirection((value) => (value === "asc" ? "desc" : "asc"))
@@ -203,7 +198,6 @@ export function DepartmentTable({
                 <AnimatedGridRow
                   key={`empty-${viewKey}`}
                   index={0}
-                  previousRowCount={previousVisibleCount.current}
                   className="grid min-h-[150px] place-content-center p-6 text-center text-xs text-[#7183a2]"
                 >
                   <div role="cell" aria-colspan={6}>
@@ -217,92 +211,91 @@ export function DepartmentTable({
                   <AnimatedGridRow
                     key={`${viewKey}:${department.id}`}
                     index={index}
-                    previousRowCount={previousVisibleCount.current}
                     className={cn(
                       departmentGrid,
                       "min-h-[58px] border-b border-[#eceef1] px-4 py-[7px] text-xs text-foreground last:rounded-b-[7px] last:border-b-0 hover:bg-[#e8eef2] @max-[820px]:gap-x-4 @max-[820px]:gap-y-[10px] @max-[820px]:py-[14px]",
                     )}
                   >
-                <div
-                  role="rowheader"
-                  className="min-w-0 @max-[820px]:col-start-1 @max-[820px]:row-start-1"
-                >
-                  <span className="group relative inline-block max-w-full">
-                    <button
-                      type="button"
-                      className={cn(
-                        "max-w-full cursor-pointer truncate rounded-sm border-0 bg-transparent p-0 text-left font-semibold text-foreground hover:underline hover:underline-offset-4",
-                        focusRing,
-                      )}
-                      onClick={() => onManageMembers(department.id)}
+                    <div
+                      role="rowheader"
+                      className="min-w-0 @max-[820px]:col-start-1 @max-[820px]:row-start-1"
                     >
-                      {department.name}
-                    </button>
-                    {department.description && (
-                      <HoverTooltip className="left-0 max-w-64 translate-x-0 whitespace-normal text-left leading-4 group-hover:translate-x-0 group-focus-visible:translate-x-0 group-focus-within:translate-x-0">
-                        {department.description}
-                      </HoverTooltip>
-                    )}
-                  </span>
-                  {department.code && (
-                    <span className="mt-0.5 block truncate text-[11px] text-[#738096]">
-                      {department.code}
-                    </span>
-                  )}
-                </div>
-                <div
-                  role="cell"
-                  className="min-w-0 break-words @max-[820px]:col-span-2 @max-[820px]:col-start-1 @max-[820px]:row-start-2"
-                >
-                  <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
-                    Head
-                  </span>
-                  {department.head ? (
-                    department.head.fullName || department.head.email
-                  ) : (
-                    <span className="text-[#738096]">Unassigned</span>
-                  )}
-                </div>
-                <div
-                  role="cell"
-                  className="tabular-nums @max-[820px]:col-start-1 @max-[820px]:row-start-3"
-                >
-                  <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
-                    Teams
-                  </span>
-                  {department.teamCount ?? 0}
-                </div>
-                <div
-                  role="cell"
-                  className="tabular-nums @max-[820px]:col-start-2 @max-[820px]:row-start-3"
-                >
-                  <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
-                    Employees
-                  </span>
-                  {department.memberCount}
-                </div>
-                <div
-                  role="cell"
-                  className="tabular-nums @max-[820px]:col-span-2 @max-[820px]:col-start-1 @max-[820px]:row-start-4"
-                >
-                  <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
-                    Services
-                  </span>
-                  {department.serviceCount ?? 0}
-                </div>
-                <div
-                  role="cell"
-                  className="@max-[820px]:col-start-2 @max-[820px]:row-start-1 @max-[820px]:justify-self-end"
-                >
-                  <DepartmentRowActions
-                    department={department}
-                    canManage={canManage}
-                    canDelete={canDelete}
-                    onEdit={onEdit}
-                    onManageMembers={onManageMembers}
-                    onDelete={onDelete}
-                  />
-                </div>
+                      <span className="group relative inline-block max-w-full">
+                        <button
+                          type="button"
+                          className={cn(
+                            "max-w-full cursor-pointer truncate rounded-sm border-0 bg-transparent p-0 text-left font-semibold text-foreground hover:underline hover:underline-offset-4",
+                            focusRing,
+                          )}
+                          onClick={() => onManageMembers(department.id)}
+                        >
+                          {department.name}
+                        </button>
+                        {department.description && (
+                          <HoverTooltip className="left-0 max-w-64 translate-x-0 whitespace-normal text-left leading-4 group-hover:translate-x-0 group-focus-visible:translate-x-0 group-focus-within:translate-x-0">
+                            {department.description}
+                          </HoverTooltip>
+                        )}
+                      </span>
+                      {department.code && (
+                        <span className="mt-0.5 block truncate text-[11px] text-[#738096]">
+                          {department.code}
+                        </span>
+                      )}
+                    </div>
+                    <div
+                      role="cell"
+                      className="min-w-0 break-words @max-[820px]:col-span-2 @max-[820px]:col-start-1 @max-[820px]:row-start-2"
+                    >
+                      <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
+                        Head
+                      </span>
+                      {department.head ? (
+                        department.head.fullName || department.head.email
+                      ) : (
+                        <span className="text-[#738096]">Unassigned</span>
+                      )}
+                    </div>
+                    <div
+                      role="cell"
+                      className="tabular-nums @max-[820px]:col-start-1 @max-[820px]:row-start-3"
+                    >
+                      <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
+                        Teams
+                      </span>
+                      {department.teamCount ?? 0}
+                    </div>
+                    <div
+                      role="cell"
+                      className="tabular-nums @max-[820px]:col-start-2 @max-[820px]:row-start-3"
+                    >
+                      <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
+                        Employees
+                      </span>
+                      {department.memberCount}
+                    </div>
+                    <div
+                      role="cell"
+                      className="tabular-nums @max-[820px]:col-span-2 @max-[820px]:col-start-1 @max-[820px]:row-start-4"
+                    >
+                      <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
+                        Services
+                      </span>
+                      {department.serviceCount ?? 0}
+                    </div>
+                    <div
+                      role="cell"
+                      className="@max-[820px]:col-start-2 @max-[820px]:row-start-1 @max-[820px]:justify-self-end"
+                    >
+                      <DepartmentRowActions
+                        department={department}
+                        canManage={canManage}
+                        canDelete={canDelete}
+                        onEdit={onEdit}
+                        onManageMembers={onManageMembers}
+                        onDelete={onDelete}
+                      />
+                    </div>
                   </AnimatedGridRow>
                 ))
               )}

@@ -7,13 +7,11 @@ type AnimatedRowProps = {
   children: ReactNode
   className?: string
   index: number
-  previousRowCount: number
 }
 
-function motionValues(index: number, previousRowCount: number, reduceMotion: boolean) {
+function motionValues(index: number, reduceMotion: boolean) {
   const stagger = reduceMotion ? 0 : Math.min(index, 9) * 40
-  const enterDelay =
-    stagger + (index < previousRowCount && !reduceMotion ? 100 : 0)
+  const enterDelay = stagger + (reduceMotion ? 0 : 100)
 
   return {
     initial: { opacity: 0, x: reduceMotion ? 0 : -48 },
@@ -39,13 +37,10 @@ function motionValues(index: number, previousRowCount: number, reduceMotion: boo
 }
 
 export const AnimatedGridRow = forwardRef<HTMLDivElement, AnimatedRowProps>(
-  function AnimatedGridRow(
-    { children, className, index, previousRowCount },
-    ref,
-  ) {
+  function AnimatedGridRow({ children, className, index }, ref) {
     const present = useIsPresent()
     const reduceMotion = useReducedMotion() ?? false
-    const values = motionValues(index, previousRowCount, reduceMotion)
+    const values = motionValues(index, reduceMotion)
 
     return (
       <motion.div
@@ -66,29 +61,27 @@ export const AnimatedGridRow = forwardRef<HTMLDivElement, AnimatedRowProps>(
   },
 )
 
-export const AnimatedTableRow = forwardRef<HTMLTableRowElement, AnimatedRowProps>(
-  function AnimatedTableRow(
-    { children, className, index, previousRowCount },
-    ref,
-  ) {
-    const present = useIsPresent()
-    const reduceMotion = useReducedMotion() ?? false
-    const values = motionValues(index, previousRowCount, reduceMotion)
+export const AnimatedTableRow = forwardRef<
+  HTMLTableRowElement,
+  AnimatedRowProps
+>(function AnimatedTableRow({ children, className, index }, ref) {
+  const present = useIsPresent()
+  const reduceMotion = useReducedMotion() ?? false
+  const values = motionValues(index, reduceMotion)
 
-    return (
-      <motion.tr
-        ref={ref}
-        className={className}
-        layout
-        initial={values.initial}
-        animate={values.animate}
-        exit={values.exit}
-        aria-hidden={!present}
-        inert={!present}
-        style={{ pointerEvents: present ? "auto" : "none" }}
-      >
-        {children}
-      </motion.tr>
-    )
-  },
-)
+  return (
+    <motion.tr
+      ref={ref}
+      className={className}
+      layout
+      initial={values.initial}
+      animate={values.animate}
+      exit={values.exit}
+      aria-hidden={!present}
+      inert={!present}
+      style={{ pointerEvents: present ? "auto" : "none" }}
+    >
+      {children}
+    </motion.tr>
+  )
+})

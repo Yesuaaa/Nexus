@@ -14,6 +14,7 @@ type Payload = {
   employees: { id: string }[]
   users: { email: string }[]
   total: number
+  pageSize?: number
   department: {
     members: { id: string }[]
     teams: { id: string; memberCount: number }[]
@@ -619,16 +620,17 @@ test(
       "directory search paginates without losing later results",
       async () => {
         await prisma.employee.createMany({
-          data: Array.from({ length: 21 }, (_, index) => ({
+          data: Array.from({ length: 13 }, (_, index) => ({
             employeeId: `PAGE-${index}`,
             fullName: `Pagination Person ${String(index).padStart(2, "0")}`,
           })),
         })
         const first = await json("/employees?search=Pagination&page=1")
         const second = await json("/employees?search=Pagination&page=2")
-        assert.equal(first.total, 21)
-        assert.equal(first.employees.length, 20)
-        assert.equal(second.employees.length, 1)
+        assert.equal(first.total, 13)
+        assert.equal(first.pageSize, 10)
+        assert.equal(first.employees.length, 10)
+        assert.equal(second.employees.length, 3)
         assert.ok(
           !first.employees.some(
             (employee) => employee.id === second.employees[0]?.id,

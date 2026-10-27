@@ -97,58 +97,57 @@ function swapAccountRows(
   const slotCount = Math.max(currentRows.length, users.length)
   let animationDuration = 0
 
-  const slots: AccountRowSlot[] = Array.from({
-    length: slotCount,
-  }, (_, index): AccountRowSlot => {
-    const current = currentRows[index] ?? null
-    const next = users[index] ?? null
-    const unchanged = current?.user.id === next?.id
-    const stagger = reduceMotion
-      ? 0
-      : Math.min(index, quick ? 5 : 9) * (quick ? 20 : 40)
-    const enterDelay =
-      stagger +
-      (current && next && !reduceMotion ? (quick ? 50 : 100) : 0)
-    const exitDuration = reduceMotion ? 120 : quick ? 140 : 220
-    const enterDuration = reduceMotion ? 120 : quick ? 170 : 260
+  const slots: AccountRowSlot[] = Array.from(
+    {
+      length: slotCount,
+    },
+    (_, index): AccountRowSlot => {
+      const current = currentRows[index] ?? null
+      const next = users[index] ?? null
+      const unchanged = current?.user.id === next?.id
+      const stagger = reduceMotion
+        ? 0
+        : Math.min(index, quick ? 5 : 9) * (quick ? 20 : 40)
+      const enterDelay =
+        stagger + (current && next && !reduceMotion ? (quick ? 50 : 100) : 0)
+      const exitDuration = reduceMotion ? 120 : quick ? 140 : 220
+      const enterDuration = reduceMotion ? 120 : quick ? 170 : 260
 
-    if (current && !unchanged) {
-      animationDuration = Math.max(
-        animationDuration,
-        stagger + exitDuration,
-      )
-    }
-    if (next && !unchanged) {
-      animationDuration = Math.max(
-        animationDuration,
-        enterDelay + enterDuration,
-      )
-    }
+      if (current && !unchanged) {
+        animationDuration = Math.max(animationDuration, stagger + exitDuration)
+      }
+      if (next && !unchanged) {
+        animationDuration = Math.max(
+          animationDuration,
+          enterDelay + enterDuration,
+        )
+      }
 
-    return {
-      index,
-      exiting:
-        current && !unchanged
+      return {
+        index,
+        exiting:
+          current && !unchanged
+            ? {
+                ...current,
+                index,
+                phase: "exit" as const,
+                runId,
+                quick,
+                delayMs: stagger,
+              }
+            : null,
+        entering: next
           ? {
-              ...current,
+              user: next,
               index,
-              phase: "exit" as const,
-              runId,
+              phase: unchanged ? ("steady" as const) : ("enter" as const),
               quick,
-              delayMs: stagger,
+              delayMs: enterDelay,
             }
           : null,
-      entering: next
-        ? {
-            user: next,
-            index,
-            phase: unchanged ? ("steady" as const) : ("enter" as const),
-            quick,
-            delayMs: enterDelay,
-          }
-        : null,
-    }
-  })
+      }
+    },
+  )
 
   return { slots, animationDuration }
 }
@@ -359,7 +358,6 @@ export function AccountManagementPage() {
   const reduceMotion = useReducedMotion() ?? false
   const [search, setSearch] = useState("")
   const searchRef = useRef(search)
-  searchRef.current = search
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [roleFilter, setRoleFilter] = useState("")
   const [sortKey, setSortKey] = useState<AccountSortKey>("createdAt")
@@ -382,7 +380,10 @@ export function AccountManagementPage() {
   const lastResolvedSearch = useRef<string | null>(null)
   const [result, setResult] = useState<AccountList | null>(null)
   const [resolvedKey, setResolvedKey] = useState("")
-  const [error, setError] = useState("")
+  const [errorState, setErrorState] = useState<{
+    requestKey: string
+    message: string
+  } | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [draftRoles, setDraftRoles] = useState<
     Record<string, { role: AccountRole; email: string }>
@@ -410,6 +411,10 @@ export function AccountManagementPage() {
     sortDirection,
     page,
   ])
+  const error =
+    search === debouncedSearch && errorState?.requestKey === requestKey
+      ? errorState.message
+      : ""
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -432,9 +437,8 @@ export function AccountManagementPage() {
   )
 
   useLayoutEffect(() => {
-    const firstRow = rowsBodyRef.current?.querySelector<HTMLElement>(
-      "[data-account-row]",
-    )
+    const firstRow =
+      rowsBodyRef.current?.querySelector<HTMLElement>("[data-account-row]")
     if (!firstRow) return
 
     const updateHeight = () => {
@@ -460,7 +464,6 @@ export function AccountManagementPage() {
 
   useEffect(() => {
     let active = true
-    setError("")
     listAccounts(debouncedSearch, roleFilter, page, sortKey, sortDirection)
       .then((data) => {
         if (active) {
@@ -474,7 +477,7 @@ export function AccountManagementPage() {
             searchRef.current === debouncedSearch
 
           setResult(data)
-          setError("")
+          setErrorState(null)
           setResolvedKey(requestKey)
           lastResolvedViewKey.current = viewKey
           lastResolvedSearch.current = debouncedSearch
@@ -490,7 +493,8 @@ export function AccountManagementPage() {
               quick,
             )
             const hasRowSwap = nextSlots.some(
-              (slot) => slot.exiting !== null || slot.entering?.phase === "enter",
+              (slot) =>
+                slot.exiting !== null || slot.entering?.phase === "enter",
             )
 
             if (hasRowSwap && animationDuration > 0) {
@@ -554,11 +558,13 @@ export function AccountManagementPage() {
         } else if (caught instanceof ApiError && caught.status === 403) {
           window.location.replace("/dashboard")
         } else {
-          setError(
-            caught instanceof ApiError
-              ? caught.message
-              : "Couldn't load accounts. Please try again.",
-          )
+          setErrorState({
+            requestKey,
+            message:
+              caught instanceof ApiError
+                ? caught.message
+                : "Couldn't load accounts. Please try again.",
+          })
           setResolvedKey(requestKey)
         }
       })
@@ -579,6 +585,7 @@ export function AccountManagementPage() {
   ])
 
   function updateSearch(value: string) {
+    searchRef.current = value
     setSearch(value)
   }
 
@@ -1017,12 +1024,12 @@ export function AccountManagementPage() {
                       renderAccountRow(
                         slot.entering,
                         slot.entering.delayMs ??
-                          (stagger +
+                          stagger +
                             (slot.exiting && !reduceMotion
                               ? quick
                                 ? 50
                                 : 100
-                              : 0)),
+                              : 0),
                         slot.index === rowSlots.length - 1,
                       )}
                   </div>
@@ -1037,13 +1044,18 @@ export function AccountManagementPage() {
               {Math.min(
                 footerResult.page * footerResult.pageSize,
                 footerResult.total,
-              )} of {footerResult.total}
+              )}{" "}
+              of {footerResult.total}
             </span>
             <NumberedPagination
               page={footerResult.page}
               totalPages={totalPages}
               disabled={
-                busy || isAnimatingRows || savingAccess || statusSaving || deleting
+                busy ||
+                isAnimatingRows ||
+                savingAccess ||
+                statusSaving ||
+                deleting
               }
               label="Account pages"
               onPageChange={setPage}

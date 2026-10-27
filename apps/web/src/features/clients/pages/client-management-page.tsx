@@ -110,7 +110,16 @@ export function ClientManagementPage() {
     return () => {
       active = false
     }
-  }, [debouncedSearch, status, page, sortBy, sortOrder, revision, requestKey, viewKey])
+  }, [
+    debouncedSearch,
+    status,
+    page,
+    sortBy,
+    sortOrder,
+    revision,
+    requestKey,
+    viewKey,
+  ])
 
   function sort(key: ClientSort) {
     setSortOrder(sortBy === key && sortOrder === "asc" ? "desc" : "asc")
@@ -124,8 +133,7 @@ export function ClientManagementPage() {
     setPage(1)
   }
   const pages = Math.max(1, Math.ceil(result.total / result.pageSize))
-  const from =
-    result.total === 0 ? 0 : (result.page - 1) * result.pageSize + 1
+  const from = result.total === 0 ? 0 : (result.page - 1) * result.pageSize + 1
   const to = (result.page - 1) * result.pageSize + result.clients.length
 
   return (

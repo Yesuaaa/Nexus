@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Eye, MoreHorizontal, Pencil } from "lucide-react"
 import { AnimatePresence, motion } from "framer-motion"
 import { SearchIcon } from "@/components/layout/icons"
@@ -30,7 +30,7 @@ import type { Service } from "../api/services-api"
 
 type SortKey = "name" | "status" | "createdAt"
 
-const pageSize = 5
+const pageSize = 10
 const serviceGrid =
   "grid grid-cols-[minmax(180px,1.25fr)_minmax(220px,1.6fr)_minmax(120px,.8fr)_90px_125px_112px] items-center gap-3.5 @max-[920px]:grid-cols-[minmax(0,1fr)_auto]"
 
@@ -262,11 +262,6 @@ export function ServiceTable({
     direction,
     currentPage,
   ])
-  const previousVisibleCount = useRef(visible.length)
-  useLayoutEffect(() => {
-    previousVisibleCount.current = visible.length
-  }, [viewKey, visible.length])
-
   function sortBy(key: SortKey) {
     if (sortKey === key)
       setDirection((value) => (value === "asc" ? "desc" : "asc"))
@@ -410,7 +405,6 @@ export function ServiceTable({
                 <AnimatedGridRow
                   key={`empty-${viewKey}`}
                   index={0}
-                  previousRowCount={previousVisibleCount.current}
                   className="grid min-h-[170px] place-content-center gap-3 p-6 text-center text-xs text-[#7183a2]"
                 >
                   <div role="cell" aria-colspan={6}>
@@ -424,74 +418,73 @@ export function ServiceTable({
                   <AnimatedGridRow
                     key={`${viewKey}:${service.id}`}
                     index={index}
-                    previousRowCount={previousVisibleCount.current}
                     className={cn(
                       serviceGrid,
                       "min-h-[58px] border-b border-[#eceef1] px-4 py-[8px] text-xs last:rounded-b-[7px] last:border-b-0 hover:bg-[#f3f6f8] @max-[920px]:gap-x-4 @max-[920px]:gap-y-2 @max-[920px]:py-3.5",
                     )}
                   >
-                <button
-                  type="button"
-                  role="rowheader"
-                  className={cn(
-                    "min-w-0 cursor-pointer truncate rounded-sm border-0 bg-transparent p-0 text-left font-semibold hover:underline hover:underline-offset-4 @max-[920px]:col-start-1 @max-[920px]:row-start-1",
-                    focusRing,
-                  )}
-                  onClick={() => onView(service)}
-                >
-                  {service.name}
-                </button>
-                <div
-                  role="cell"
-                  className="min-w-0 truncate text-[#526686] @max-[920px]:col-span-2 @max-[920px]:row-start-2 @max-[920px]:whitespace-normal"
-                >
-                  {service.description}
-                </div>
-                <div
-                  role="cell"
-                  className="min-w-0 @max-[920px]:col-start-1 @max-[920px]:row-start-3"
-                >
-                  <span className="mr-1.5 hidden text-[#738096] @max-[920px]:inline">
-                    Departments
-                  </span>
-                  <DepartmentPills service={service} />
-                </div>
-                <div
-                  role="cell"
-                  className="@max-[920px]:col-start-2 @max-[920px]:row-start-3 @max-[920px]:justify-self-end"
-                >
-                  <Pill
-                    className={
-                      service.isActive
-                        ? "bg-[#dcf5e5] text-[#19703a]"
-                        : "bg-[#fde4ea] text-[#b4234d]"
-                    }
-                  >
-                    {service.isActive ? "Active" : "Inactive"}
-                  </Pill>
-                </div>
-                <div
-                  role="cell"
-                  className="text-[#526686] tabular-nums @max-[920px]:col-start-1 @max-[920px]:row-start-4"
-                >
-                  <span className="mr-1.5 hidden text-[#738096] @max-[920px]:inline">
-                    Created
-                  </span>
-                  {formatDate(service.createdAt)}
-                </div>
-                <div
-                  role="cell"
-                  className="@max-[920px]:col-start-2 @max-[920px]:row-start-1 @max-[920px]:justify-self-end"
-                >
-                  <ServiceActions
-                    service={service}
-                    canManage={canManage}
-                    onView={onView}
-                    onEdit={onEdit}
-                    onStatus={onStatus}
-                    onDelete={onDelete}
-                  />
-                </div>
+                    <button
+                      type="button"
+                      role="rowheader"
+                      className={cn(
+                        "min-w-0 cursor-pointer truncate rounded-sm border-0 bg-transparent p-0 text-left font-semibold hover:underline hover:underline-offset-4 @max-[920px]:col-start-1 @max-[920px]:row-start-1",
+                        focusRing,
+                      )}
+                      onClick={() => onView(service)}
+                    >
+                      {service.name}
+                    </button>
+                    <div
+                      role="cell"
+                      className="min-w-0 truncate text-[#526686] @max-[920px]:col-span-2 @max-[920px]:row-start-2 @max-[920px]:whitespace-normal"
+                    >
+                      {service.description}
+                    </div>
+                    <div
+                      role="cell"
+                      className="min-w-0 @max-[920px]:col-start-1 @max-[920px]:row-start-3"
+                    >
+                      <span className="mr-1.5 hidden text-[#738096] @max-[920px]:inline">
+                        Departments
+                      </span>
+                      <DepartmentPills service={service} />
+                    </div>
+                    <div
+                      role="cell"
+                      className="@max-[920px]:col-start-2 @max-[920px]:row-start-3 @max-[920px]:justify-self-end"
+                    >
+                      <Pill
+                        className={
+                          service.isActive
+                            ? "bg-[#dcf5e5] text-[#19703a]"
+                            : "bg-[#fde4ea] text-[#b4234d]"
+                        }
+                      >
+                        {service.isActive ? "Active" : "Inactive"}
+                      </Pill>
+                    </div>
+                    <div
+                      role="cell"
+                      className="text-[#526686] tabular-nums @max-[920px]:col-start-1 @max-[920px]:row-start-4"
+                    >
+                      <span className="mr-1.5 hidden text-[#738096] @max-[920px]:inline">
+                        Created
+                      </span>
+                      {formatDate(service.createdAt)}
+                    </div>
+                    <div
+                      role="cell"
+                      className="@max-[920px]:col-start-2 @max-[920px]:row-start-1 @max-[920px]:justify-self-end"
+                    >
+                      <ServiceActions
+                        service={service}
+                        canManage={canManage}
+                        onView={onView}
+                        onEdit={onEdit}
+                        onStatus={onStatus}
+                        onDelete={onDelete}
+                      />
+                    </div>
                   </AnimatedGridRow>
                 ))
               )}

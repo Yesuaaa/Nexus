@@ -1,4 +1,3 @@
-import { useLayoutEffect, useRef } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { AnimatedTableRow } from "@/components/ui/animated-data-row"
 import { TableSortButton } from "@/components/ui/table-sort-button"
@@ -89,11 +88,6 @@ export function ClientTable({
   onSort: (key: ClientSort) => void
   onView: (client: Client) => void
 }) {
-  const previousRowCount = useRef(clients.length)
-  useLayoutEffect(() => {
-    previousRowCount.current = clients.length
-  }, [clients.length, viewKey])
-
   function heading(key: ClientSort) {
     return (
       <TableHead
@@ -140,7 +134,6 @@ export function ClientTable({
               <AnimatedTableRow
                 key={`empty-${viewKey}`}
                 index={0}
-                previousRowCount={previousRowCount.current}
                 className="text-center text-xs text-[#52627a]"
               >
                 <TableCell colSpan={6} className="min-h-[150px] py-10">
@@ -152,51 +145,55 @@ export function ClientTable({
                 <AnimatedTableRow
                   key={`${viewKey}:${client.id}`}
                   index={index}
-                  previousRowCount={previousRowCount.current}
                   className="text-xs @max-[800px]:grid @max-[800px]:grid-cols-[minmax(0,1fr)_auto] @max-[800px]:gap-x-3 @max-[800px]:gap-y-1.5 @max-[800px]:px-4 @max-[800px]:py-3"
                 >
-              <TableCell className="px-4 py-2.5 @max-[800px]:col-start-1 @max-[800px]:row-start-1 @max-[800px]:p-0">
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <span
-                    aria-hidden="true"
-                    className="grid size-8 flex-none place-items-center rounded-full bg-[#eef0f3] font-medium text-[#52627a]"
-                  >
-                    {(client.fullName?.trim() || client.email)[0].toUpperCase()}
-                  </span>
-                  <span className="min-w-0 break-words font-semibold">
-                    {client.fullName?.trim() || "Name not provided"}
-                  </span>
-                </div>
-              </TableCell>
-              <TableCell className="break-all px-4 py-2.5 text-[#52627a] @max-[800px]:col-span-2 @max-[800px]:row-start-2 @max-[800px]:p-0">
-                {client.email}
-              </TableCell>
-              <TableCell className="px-4 py-2.5 text-[#52627a] @max-[800px]:col-span-2 @max-[800px]:row-start-3 @max-[800px]:p-0">
-                <span className="hidden @max-[800px]:inline">Contact: </span>
-                <span className="break-all">
-                  {client.contactNumber?.trim() || "Not provided"}
-                </span>
-              </TableCell>
-              <TableCell className="px-4 py-2.5 @max-[800px]:col-start-2 @max-[800px]:row-start-1 @max-[800px]:p-0">
-                <Pill
-                  className={
-                    client.isActive
-                      ? "bg-[#e5f4ed] text-[#116348]"
-                      : "bg-[#e9edf2] text-[#52627a]"
-                  }
-                >
-                  {client.isActive ? "Active" : "Inactive"}
-                </Pill>
-              </TableCell>
-              <TableCell className="px-4 py-2.5 text-[#52627a] @max-[800px]:whitespace-normal @max-[800px]:col-start-1 @max-[800px]:row-start-4 @max-[800px]:self-center @max-[800px]:p-0">
-                <span className="hidden @max-[800px]:inline">Registered: </span>
-                <time dateTime={client.createdAt}>
-                  {registeredDate(client.createdAt)}
-                </time>
-              </TableCell>
-              <TableCell className="px-4 py-2.5 @max-[800px]:col-start-2 @max-[800px]:row-start-4 @max-[800px]:p-0">
-                <ClientRowActions client={client} onView={onView} />
-              </TableCell>
+                  <TableCell className="px-4 py-2.5 @max-[800px]:col-start-1 @max-[800px]:row-start-1 @max-[800px]:p-0">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <span
+                        aria-hidden="true"
+                        className="grid size-8 flex-none place-items-center rounded-full bg-[#eef0f3] font-medium text-[#52627a]"
+                      >
+                        {(client.fullName?.trim() ||
+                          client.email)[0].toUpperCase()}
+                      </span>
+                      <span className="min-w-0 break-words font-semibold">
+                        {client.fullName?.trim() || "Name not provided"}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="break-all px-4 py-2.5 text-[#52627a] @max-[800px]:col-span-2 @max-[800px]:row-start-2 @max-[800px]:p-0">
+                    {client.email}
+                  </TableCell>
+                  <TableCell className="px-4 py-2.5 text-[#52627a] @max-[800px]:col-span-2 @max-[800px]:row-start-3 @max-[800px]:p-0">
+                    <span className="hidden @max-[800px]:inline">
+                      Contact:{" "}
+                    </span>
+                    <span className="break-all">
+                      {client.contactNumber?.trim() || "Not provided"}
+                    </span>
+                  </TableCell>
+                  <TableCell className="px-4 py-2.5 @max-[800px]:col-start-2 @max-[800px]:row-start-1 @max-[800px]:p-0">
+                    <Pill
+                      className={
+                        client.isActive
+                          ? "bg-[#e5f4ed] text-[#116348]"
+                          : "bg-[#e9edf2] text-[#52627a]"
+                      }
+                    >
+                      {client.isActive ? "Active" : "Inactive"}
+                    </Pill>
+                  </TableCell>
+                  <TableCell className="px-4 py-2.5 text-[#52627a] @max-[800px]:whitespace-normal @max-[800px]:col-start-1 @max-[800px]:row-start-4 @max-[800px]:self-center @max-[800px]:p-0">
+                    <span className="hidden @max-[800px]:inline">
+                      Registered:{" "}
+                    </span>
+                    <time dateTime={client.createdAt}>
+                      {registeredDate(client.createdAt)}
+                    </time>
+                  </TableCell>
+                  <TableCell className="px-4 py-2.5 @max-[800px]:col-start-2 @max-[800px]:row-start-4 @max-[800px]:p-0">
+                    <ClientRowActions client={client} onView={onView} />
+                  </TableCell>
                 </AnimatedTableRow>
               ))
             )}

@@ -169,7 +169,7 @@ export function ManageMembersDrawer({
   const candidateTotal = candidateResultIsCurrent ? candidateResult.total : 0
   const candidatePageSize = candidateResultIsCurrent
     ? candidateResult.pageSize
-    : 20
+    : 10
   const candidateLoading = Boolean(
     canManage && debouncedAssignSearch && !candidateResultIsCurrent,
   )
@@ -267,7 +267,7 @@ export function ManageMembersDrawer({
             key: candidateRequestKey,
             candidates: [],
             total: 0,
-            pageSize: 20,
+            pageSize: 10,
             error:
               error instanceof Error
                 ? error.message
