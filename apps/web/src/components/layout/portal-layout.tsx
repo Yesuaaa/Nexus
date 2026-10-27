@@ -44,7 +44,6 @@ export function PortalLayout({ children }: { children: ReactNode }) {
       sileo.success({
         title: "Signed out",
         description: "See you next time.",
-        position: "bottom-right",
       })
     } catch {
       sileo.error({

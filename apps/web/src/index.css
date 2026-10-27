@@ -73,7 +73,7 @@ body {
   filter: drop-shadow(0 8px 20px rgb(23 39 53 / 14%));
 }
 
-/* Keep auth toasts centered over the form column in AuthLayout. */
+/* Center auth toasts above the form near the top of the page. */
 .auth-toast-region [data-sileo-viewport][data-position="top-center"] {
   left: 78.5%;
 }

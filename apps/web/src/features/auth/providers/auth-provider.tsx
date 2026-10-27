@@ -37,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       <div className={authPage ? "auth-toast-region" : undefined}>
         <Toaster
           position="top-center"
+          offset={{ top: 24 }}
           options={{
             fill: "#253f8c",
             roundness: 12,
