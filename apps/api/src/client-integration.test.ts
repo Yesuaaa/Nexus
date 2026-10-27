@@ -226,11 +226,18 @@ test(
       async () => {
         const first = await list()
         const second = await list("?page=2")
-        assert.equal(first.clients.length, 20)
-        assert.equal(second.clients.length, 3)
+        const third = await list("?page=3")
+        assert.equal(first.pageSize, 10)
+        assert.equal(second.pageSize, 10)
+        assert.equal(third.pageSize, 10)
+        assert.equal(first.clients.length, 10)
+        assert.equal(second.clients.length, 10)
+        assert.equal(third.clients.length, 3)
         assert.equal(
           new Set(
-            [...first.clients, ...second.clients].map((client) => client.id),
+            [...first.clients, ...second.clients, ...third.clients].map(
+              (client) => client.id,
+            ),
           ).size,
           23,
         )

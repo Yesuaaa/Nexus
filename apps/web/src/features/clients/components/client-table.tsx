@@ -1,17 +1,7 @@
-import { useRef } from "react"
 import { TableSortButton } from "@/components/ui/table-sort-button"
 import { Pill } from "@/components/ui/pill"
 import { rowActionButton } from "@/components/ui/row-action-styles"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
-  dropdownItemClass,
-  dropdownMenuClass,
-} from "@/components/ui/dropdown-styles"
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { cn } from "@/lib/utils"
 import {
   Table,
@@ -22,7 +12,6 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import type { Client, ClientSort } from "../api/clients-api"
-import type { ClientDetailsTab } from "./client-details-drawer"
 
 export const clientColumns: { key: ClientSort; label: string }[] = [
   { key: "fullName", label: "Client name" },
@@ -45,98 +34,39 @@ function ClientRowActions({
   onView,
 }: {
   client: Client
-  onView: (client: Client, tab?: ClientDetailsTab) => void
+  onView: (client: Client) => void
 }) {
-  const triggerRef = useRef<HTMLButtonElement>(null)
-  const nextTab = useRef<ClientDetailsTab | null>(null)
   const label = client.fullName?.trim() || client.email
+  const actionLabel = `View details for ${label}`
   return (
-    <div className="flex items-center gap-2">
-      <button
-        type="button"
-        id={`client-view-${client.id}`}
-        className={`${rowActionButton} max-[560px]:size-11`}
-        aria-label={`View details for ${label}`}
-        onClick={() => onView(client, "overview")}
+    <button
+      type="button"
+      id={`client-view-${client.id}`}
+      className={cn(
+        rowActionButton,
+        "text-[#203f8c] hover:enabled:text-[#172f70] max-[560px]:size-11",
+      )}
+      aria-label={actionLabel}
+      onClick={() => onView(client)}
+    >
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
       >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.7"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z" />
-          <circle cx="12" cy="12" r="2.5" />
-        </svg>
-      </button>
-      <DropdownMenu
-        onOpenChange={(open) => {
-          if (open) nextTab.current = null
-        }}
-      >
-        <DropdownMenuTrigger asChild>
-          <button
-            ref={triggerRef}
-            type="button"
-            className={`${rowActionButton} max-[560px]:size-11`}
-            aria-label={`More actions for ${label}`}
-            id={`client-actions-${client.id}`}
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              aria-hidden="true"
-            >
-              <circle cx="5" cy="12" r="1.7" />
-              <circle cx="12" cy="12" r="1.7" />
-              <circle cx="19" cy="12" r="1.7" />
-            </svg>
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="end"
-          sideOffset={6}
-          collisionPadding={24}
-          aria-label={`Actions for ${label}`}
-          className={cn(
-            dropdownMenuClass,
-            "w-48 max-w-[min(280px,calc(100vw-40px))] text-xs text-foreground outline-none",
-          )}
-          onCloseAutoFocus={(event) => {
-            const tab = nextTab.current
-            if (!tab) return
-            event.preventDefault()
-            nextTab.current = null
-            triggerRef.current?.focus()
-            onView(client, tab)
-          }}
-        >
-          <DropdownMenuItem
-            className={cn(dropdownItemClass, "text-xs focus:bg-[#eef1f8]")}
-            onSelect={() => {
-              nextTab.current = "service-requests"
-            }}
-          >
-            View service requests
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            className={cn(dropdownItemClass, "text-xs focus:bg-[#eef1f8]")}
-            onSelect={() => {
-              nextTab.current = "projects"
-            }}
-          >
-            View projects
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
+        <path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z" />
+        <circle cx="12" cy="12" r="2.5" />
+      </svg>
+      <HoverTooltip className="right-0 left-auto translate-x-0 group-hover:translate-x-0 group-focus-visible:translate-x-0 group-focus-within:translate-x-0">
+        View details
+      </HoverTooltip>
+    </button>
   )
 }
 
@@ -151,7 +81,7 @@ export function ClientTable({
   sortBy: ClientSort
   sortOrder: "asc" | "desc"
   onSort: (key: ClientSort) => void
-  onView: (client: Client, tab?: ClientDetailsTab) => void
+  onView: (client: Client) => void
 }) {
   function heading(key: ClientSort) {
     return (
@@ -186,7 +116,7 @@ export function ClientTable({
             <TableHead>Contact number</TableHead>
             {heading("isActive")}
             {heading("createdAt")}
-            <TableHead className="w-[112px]">Actions</TableHead>
+            <TableHead className="w-[72px]">View</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody className="@max-[800px]:block">

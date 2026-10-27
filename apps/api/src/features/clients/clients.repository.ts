@@ -31,7 +31,7 @@ export const clientsRepository = {
       { [filters.sortBy]: filters.sortOrder },
       { id: "asc" },
     ]
-    const pageSize = 20
+    const pageSize = 10
     const [clients, total] = await prisma.$transaction(
       [
         prisma.user.findMany({

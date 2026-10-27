@@ -74,7 +74,7 @@ async function setup(
               ),
           total: empty ? 0 : 21,
           page: pageNumber,
-          pageSize: 20,
+          pageSize: 10,
         },
       })
     } else if (/^\/api\/clients\/[^/]+$/.test(url.pathname)) {
@@ -230,7 +230,7 @@ test("directory searches, filters, sorts, paginates and recovers from errors", a
 test("desktop directory retains the approved shell", async ({
   page,
 }, testInfo) => {
-  await setup(page, "ADMIN", true, 20)
+  await setup(page, "ADMIN", true, 10)
   await page.setViewportSize({ width: 1866, height: 995 })
   await page.goto("/clients")
   await expect(page.getByText("Maria Santos", { exact: true })).toBeVisible()
@@ -246,7 +246,7 @@ test("desktop directory retains the approved shell", async ({
 test("mobile directory fits the viewport and retains sorting", async ({
   page,
 }, testInfo) => {
-  await setup(page, "ADMIN", true, 20)
+  await setup(page, "ADMIN", true, 10)
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto("/clients")
   await expect(page.getByText("Maria Santos", { exact: true })).toBeVisible()
@@ -318,7 +318,7 @@ test("directory ignores a late response from a superseded search", async ({
         ],
         total: 1,
         page: 1,
-        pageSize: 20,
+        pageSize: 10,
       },
     })
   })
@@ -400,7 +400,7 @@ for (const width of [1866, 390]) {
 }
 
 for (const width of [1866, 390]) {
-  test(`client related records tabs and direct actions work at ${width}px`, async ({
+  test(`client related records tabs work at ${width}px`, async ({
     page,
   }, testInfo) => {
     const api = await setup(page)
@@ -408,14 +408,14 @@ for (const width of [1866, 390]) {
     await page.goto("/clients")
     await page
       .getByRole("button", {
-        name: "More actions for Maria Santos",
+        name: "View details for Maria Santos",
         exact: true,
       })
       .click()
-    await page
-      .getByRole("menuitem", { name: "View service requests", exact: true })
-      .click()
     const drawer = page.getByRole("dialog", { name: "Client details" })
+    await drawer
+      .getByRole("tab", { name: "Service requests", exact: true })
+      .click()
     await expect(
       drawer.getByRole("tab", { name: "Service requests", exact: true }),
     ).toHaveAttribute("aria-selected", "true")
@@ -464,19 +464,17 @@ for (const width of [1866, 390]) {
     await expect(drawer).toHaveCount(0)
     await expect(
       page.getByRole("button", {
-        name: "More actions for Maria Santos",
+        name: "View details for Maria Santos",
         exact: true,
       }),
     ).toBeFocused()
     await page
       .getByRole("button", {
-        name: "More actions for Maria Santos",
+        name: "View details for Maria Santos",
         exact: true,
       })
       .click()
-    await page
-      .getByRole("menuitem", { name: "View projects", exact: true })
-      .click()
+    await drawer.getByRole("tab", { name: "Projects", exact: true }).click()
     await expect(
       drawer.getByRole("tab", { name: "Projects", exact: true }),
     ).toHaveAttribute("aria-selected", "true")

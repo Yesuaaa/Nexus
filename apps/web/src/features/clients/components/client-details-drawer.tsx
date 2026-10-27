@@ -477,8 +477,8 @@ export function ClientDetailsDrawer({
                         </div>
                         <Button
                           type="button"
-                          variant="outline"
-                          className="h-9 flex-none text-xs"
+                          variant="default"
+                          className="h-9 flex-none bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
                           onClick={() => changeTab("service-requests")}
                         >
                           View service requests
@@ -494,8 +494,8 @@ export function ClientDetailsDrawer({
                         </div>
                         <Button
                           type="button"
-                          variant="outline"
-                          className="h-9 flex-none text-xs"
+                          variant="default"
+                          className="h-9 flex-none bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
                           onClick={() => changeTab("projects")}
                         >
                           View projects

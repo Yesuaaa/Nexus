@@ -54,7 +54,7 @@ export function ClientManagementPage() {
     clients: [],
     total: 0,
     page: 1,
-    pageSize: 20,
+    pageSize: 10,
   })
   const [resolvedKey, setResolvedKey] = useState("")
   const [error, setError] = useState("")
@@ -241,8 +241,8 @@ export function ClientManagementPage() {
               sortBy={sortBy}
               sortOrder={sortOrder}
               onSort={sort}
-              onView={(client, tab = "overview") =>
-                setSelectedClient({ client, tab })
+              onView={(client) =>
+                setSelectedClient({ client, tab: "overview" })
               }
             />
           )}
