@@ -16,6 +16,8 @@ test("API routes and error responses remain available", async () => {
     const health = await fetch(`${base}/api/health`)
     assert.equal(health.status, 200)
     assert.equal(health.headers.get("cache-control"), "no-store")
+    assert.equal(health.headers.get("x-content-type-options"), "nosniff")
+    assert.equal(health.headers.has("x-powered-by"), false)
     assert.deepEqual(await health.json(), { status: "ok" })
 
     const database = await fetch(`${base}/api/db-check`)

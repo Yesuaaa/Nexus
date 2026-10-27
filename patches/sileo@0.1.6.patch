@@ -1,0 +1,34 @@
+diff --git a/dist/index.js b/dist/index.js
+index d7ba539a84b30b739451b736efb5499127039779..76332ba67e2ee7c378a07160a1f7e9f6998b8b8e 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1,11 +1,6 @@
+ 'use client';
+ function __insertCSS(code) {
+-  if (!code || typeof document == 'undefined') return
+-  let head = document.head || document.getElementsByTagName('head')[0]
+-  let style = document.createElement('style')
+-  style.type = 'text/css'
+-  head.appendChild(style)
+-  ;style.styleSheet ? (style.styleSheet.cssText = code) : style.appendChild(document.createTextNode(code))
++  void code
+ }
+ 
+ Object.defineProperty(exports, '__esModule', { value: true });
+diff --git a/dist/index.mjs b/dist/index.mjs
+index a94df6d4b85662348f03bc8e3d47e72a0277123e..ba861cc21277615de7e9bb47b112d5a44c84e1c7 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -1,11 +1,6 @@
+ 'use client';
+ function __insertCSS(code) {
+-  if (!code || typeof document == 'undefined') return
+-  let head = document.head || document.getElementsByTagName('head')[0]
+-  let style = document.createElement('style')
+-  style.type = 'text/css'
+-  head.appendChild(style)
+-  ;style.styleSheet ? (style.styleSheet.cssText = code) : style.appendChild(document.createTextNode(code))
++  void code
+ }
+ 
+ import { _ as _extends, a as _object_without_properties_loose } from './cc-jcBWjyOA.mjs';
