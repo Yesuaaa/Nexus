@@ -166,16 +166,16 @@ for (const width of [1440, 390]) {
     await dialog
       .getByRole("combobox", { name: "Employment type", exact: true })
       .click()
-    await page.getByRole("option", { name: "Full time", exact: true }).click()
+    await page.getByRole("option", { name: "Full Time", exact: true }).click()
     await dialog.locator("#employee-start-date").fill("2026-01-15")
     await dialog
       .getByRole("combobox", { name: "Department", exact: true })
       .click()
     await page.getByRole("option", { name: "Engineering", exact: true }).click()
     await dialog.getByRole("combobox", { name: "Team", exact: true }).click()
-    await page.getByRole("option", { name: "No team", exact: true }).click()
+    await page.getByRole("option", { name: "No Team", exact: true }).click()
     await dialog
-      .getByRole("button", { name: "Save employee", exact: true })
+      .getByRole("button", { name: "Save Employee", exact: true })
       .click()
     await expect(dialog).toHaveCount(0)
     async function menu(label: string) {
@@ -251,7 +251,7 @@ for (const width of [1440, 390]) {
       page.getByText("No archived accounts.", { exact: true }),
     ).toBeVisible()
     await page
-      .getByRole("button", { name: "Back to employees", exact: true })
+      .getByRole("button", { name: "Back to Employees", exact: true })
       .click()
     await page
       .getByRole("button", { name: "Create Employee", exact: true })

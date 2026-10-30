@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { createHash } from "node:crypto"
+import { randomBytes } from "node:crypto"
 import { readdir, readFile } from "node:fs/promises"
 import type { AddressInfo } from "node:net"
 import { test } from "node:test"
@@ -8,6 +8,7 @@ import { PGLiteSocketServer } from "@electric-sql/pglite-socket"
 import { createApp } from "./app.js"
 import { Role, type User } from "./generated/prisma/client.js"
 import { getPrisma } from "./lib/db.js"
+import { issueSession } from "./features/auth/auth.service.js"
 
 test(
   "Client portal service request submission and dynamic requirements validation",
@@ -17,7 +18,9 @@ test(
       DATABASE_URL: process.env.DATABASE_URL,
       DIRECT_URL: process.env.DIRECT_URL,
       DATABASE_POOL_MAX: process.env.DATABASE_POOL_MAX,
+      JWT_SECRET: process.env.JWT_SECRET,
     }
+    process.env.JWT_SECRET = randomBytes(32).toString("base64url")
     const db = new PGlite()
     const socket = new PGLiteSocketServer({ db, port: 0, host: "127.0.0.1" })
     const cleanup: {
@@ -72,15 +75,8 @@ test(
         },
       })
       users.set(role, user)
-      const token = createHash("sha256").update(role).digest("base64url")
+      const { token } = await issueSession(user)
       tokens.set(role, token)
-      await prisma.session.create({
-        data: {
-          userId: user.id,
-          tokenHash: createHash("sha256").update(token).digest("hex"),
-          expiresAt: new Date(Date.now() + 120_000),
-        },
-      })
     }
 
     // Seed a second client to test multi-tenant request isolation
@@ -93,17 +89,8 @@ test(
         isActive: true,
       },
     })
-    const clientBToken = createHash("sha256")
-      .update("CLIENT_B")
-      .digest("base64url")
+    const { token: clientBToken } = await issueSession(clientB)
     tokens.set("CLIENT_B", clientBToken)
-    await prisma.session.create({
-      data: {
-        userId: clientB.id,
-        tokenHash: createHash("sha256").update(clientBToken).digest("hex"),
-        expiresAt: new Date(Date.now() + 120_000),
-      },
-    })
 
     // Seed Department
     const departmentA = await prisma.department.create({

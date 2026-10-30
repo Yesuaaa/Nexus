@@ -524,7 +524,7 @@ export function ManageMembersDrawer({
         <header className="flex flex-none items-start justify-between gap-4 border-b border-[#eceef1] px-6 pt-6 pb-5 max-[560px]:px-5">
           <div className="min-w-0">
             <SheetTitle className="m-0 text-[22px] leading-[1.25] font-[650] tracking-[-0.03em]">
-              Members &amp; teams
+              Members &amp; Teams
             </SheetTitle>
             <SheetDescription className="sr-only">
               Manage department employees and team assignments.
@@ -612,7 +612,7 @@ export function ManageMembersDrawer({
                     >
                       <div>
                         <h3 className="m-0 text-xs font-semibold">
-                          Add members
+                          Add Members
                         </h3>
                         <p className={`${panelMuted} mt-1 mb-0`}>
                           Assign an existing employee to this department.
@@ -632,7 +632,7 @@ export function ManageMembersDrawer({
                             className={cn(panelSelectTrigger, "flex-1")}
                             aria-label="Employee to assign"
                           >
-                            <SelectValue placeholder="Select employee" />
+                            <SelectValue placeholder="Select Employee" />
                           </SelectTrigger>
                           <SelectContent collisionPadding={24}>
                             {quickAssignLoading ? (
@@ -848,10 +848,10 @@ export function ManageMembersDrawer({
                   <section aria-label="Current members">
                     <div className="mb-3 flex items-center justify-between gap-3">
                       <h3 className="m-0 text-xs font-semibold">
-                        Current members
+                        Current Members
                       </h3>
                       <span className={panelMuted}>
-                        {detail?.members.length ?? 0} members
+                        {detail?.members.length ?? 0} Members
                       </span>
                     </div>
                     <div className="overflow-hidden rounded-lg border border-[#e8ebef]">
@@ -970,7 +970,7 @@ export function ManageMembersDrawer({
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <h3 className="m-0 text-xs font-semibold">
-                          Department teams
+                          Department Teams
                         </h3>
                         <p className={`${panelMuted} mt-1 mb-0`}>
                           Organize employees into focused teams.
@@ -982,7 +982,7 @@ export function ManageMembersDrawer({
                           className={panelAssignButton}
                           onClick={() => setCreatingTeam(true)}
                         >
-                          <PlusIcon width="14" height="14" /> Create team
+                          <PlusIcon width="14" height="14" /> Create Team
                         </Button>
                       )}
                     </div>

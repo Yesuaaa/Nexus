@@ -8,6 +8,7 @@ import { usersRouter } from "./features/users/users.controller.js"
 import { servicesRouter } from "./features/services/services.controller.js"
 import { clientsRouter } from "./features/clients/clients.controller.js"
 import { clientServicesRouter } from "./features/client-services/client-services.controller.js"
+import { serviceRequestsRouter } from "./features/service-requests/service-requests.controller.js"
 
 export function createApp() {
   const app = express()
@@ -16,6 +17,11 @@ export function createApp() {
   app.use(cors({ origin: process.env.WEB_ORIGIN || "http://localhost:5173" }))
   app.use("/api", noStore)
   app.use("/api/services", servicesRouter)
+  app.use(
+    "/api/service-requests",
+    express.json({ limit: "64kb" }),
+    serviceRequestsRouter,
+  )
   app.use(express.json({ limit: "16kb" }))
   app.use("/api/auth", authRouter)
   app.use("/api/users", usersRouter)

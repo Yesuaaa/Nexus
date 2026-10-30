@@ -45,6 +45,7 @@ test("fixed roles have the expected permissions", () => {
         permission !== Permission.SERVICES_MANAGE,
     ),
     Permission.ACCOUNTS_READ,
+    Permission.ACCOUNTS_RESET_PASSWORD,
     Permission.ACCOUNTS_CREATE_BASIC,
     Permission.ACCOUNTS_CREATE_PRIVILEGED,
     Permission.ACCOUNTS_ASSIGN_BASIC,

@@ -13,6 +13,27 @@ export interface CreateUserInput {
 }
 
 export const usersRepository = {
+  async changePasswordAndRevokeSessions(
+    id: string,
+    currentPasswordHash: string,
+    passwordHash: string,
+  ) {
+    const prisma = getPrisma()!
+    return prisma.$transaction(async (transaction) => {
+      const updated = await transaction.user.updateMany({
+        where: {
+          id,
+          passwordHash: currentPasswordHash,
+          accountDeletedAt: null,
+        },
+        data: { passwordHash },
+      })
+      if (updated.count === 0) return false
+      await transaction.session.deleteMany({ where: { userId: id } })
+      return true
+    })
+  },
+
   async findById(id: string): Promise<User | null> {
     const prisma = getPrisma()!
     return prisma.user.findUnique({ where: { id } })
@@ -62,6 +83,27 @@ export const usersRepository = {
         await transaction.session.deleteMany({ where: { userId: id } })
       }
       return deleted
+    })
+  },
+
+  async restoreUser(id: string, role: Role, accountDeletedAt: Date) {
+    const prisma = getPrisma()!
+    return prisma.$transaction(async (transaction) => {
+      const updated = await transaction.user.updateMany({
+        where: { id, role, isActive: false, accountDeletedAt },
+        data: { accountDeletedAt: null },
+      })
+      if (updated.count === 0) return null
+      await transaction.session.deleteMany({ where: { userId: id } })
+      return transaction.user.findUniqueOrThrow({
+        where: { id },
+        include: {
+          department: {
+            select: { id: true, name: true, code: true, color: true },
+          },
+          team: { select: { id: true, name: true } },
+        },
+      })
     })
   },
 

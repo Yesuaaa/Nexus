@@ -5,6 +5,7 @@ export const Permissions = {
   PROFILE_READ: "profile:read",
   PROFILE_CHANGE_PASSWORD: "profile:change-password",
   ACCOUNTS_READ: "accounts:read",
+  ACCOUNTS_RESET_PASSWORD: "accounts:reset-password",
   ACCOUNTS_CREATE_BASIC: "accounts:create-basic",
   ACCOUNTS_CREATE_PRIVILEGED: "accounts:create-privileged",
   ACCOUNTS_ASSIGN_BASIC: "accounts:assign-basic",
@@ -64,6 +65,10 @@ export function canAccessServiceManagement(account: Account): boolean {
   )
 }
 
+export function canAccessServiceCatalog(account: Account): boolean {
+  return account.role === "USER"
+}
+
 export function canAccessClientManagement(account: Account): boolean {
   return (
     account.role === "ADMIN" && hasPermission(account, Permissions.CLIENTS_READ)
@@ -104,5 +109,17 @@ export function canChangeAccountStatus(
         ? Permissions.ACCOUNTS_STATUS_PRIVILEGED
         : Permissions.ACCOUNTS_STATUS_BASIC,
     )
+  )
+}
+
+export function canChangeAccountPassword(
+  actor: Account,
+  target: Account,
+): boolean {
+  return (
+    actor.role === "SUPERADMIN" &&
+    actor.id !== target.id &&
+    !target.accountDeletedAt &&
+    hasPermission(actor, Permissions.ACCOUNTS_RESET_PASSWORD)
   )
 }

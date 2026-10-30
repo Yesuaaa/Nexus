@@ -44,6 +44,20 @@ servicesRouter.get(
   },
 )
 
+servicesRouter.get("/:id/specialists", async (request, response, next) => {
+  try {
+    const specialists = await servicesService.getSpecialists(
+      String(request.params.id),
+    )
+    response.json({ specialists })
+  } catch (error) {
+    if (error instanceof ServicesError) {
+      return response.status(error.status).json({ error: error.message })
+    }
+    next(error)
+  }
+})
+
 servicesRouter.get(
   "/:id",
   requirePermission(Permission.SERVICES_READ),

@@ -1,4 +1,4 @@
-import { useRef } from "react"
+import { useRef, useState } from "react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,6 +9,7 @@ import {
   dropdownItemClass,
   dropdownMenuClass,
 } from "@/components/ui/dropdown-styles"
+import { useExclusiveMenu } from "@/components/ui/dropdown"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import type { Account } from "@/features/auth/model/types"
@@ -19,22 +20,43 @@ export function AccountRowActions({
   disabled,
   onChangeStatus,
   onDelete,
+  onChangePassword,
+  canChangeStatus = true,
   trashView = false,
 }: {
   account: Account
   disabled: boolean
   onChangeStatus: () => void
   onDelete: () => void
+  onChangePassword?: () => void
+  canChangeStatus?: boolean
   trashView?: boolean
 }) {
+  const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
-  const pendingAction = useRef<"status" | "delete" | null>(null)
-  const action = account.isActive ? "Deactivate" : "Reactivate"
+  const pendingAction = useRef<"status" | "delete" | "password" | null>(null)
+  const closedByOther = useRef(false)
+  const action = trashView
+    ? "Restore"
+    : account.isActive
+      ? "Deactivate"
+      : "Reactivate"
+
+  // Close this menu whenever any other menu (dropdown or row actions) opens.
+  useExclusiveMenu(open, () => {
+    closedByOther.current = true
+    setOpen(false)
+  })
 
   return (
     <DropdownMenu
-      onOpenChange={(open) => {
-        if (open) pendingAction.current = null
+      open={open}
+      onOpenChange={(next) => {
+        if (next) {
+          pendingAction.current = null
+          closedByOther.current = false
+        }
+        setOpen(next)
       }}
     >
       <DropdownMenuTrigger asChild>
@@ -69,16 +91,33 @@ export function AccountRowActions({
           "w-48 max-w-[min(280px,calc(100vw-40px))] text-xs text-foreground outline-none",
         )}
         onCloseAutoFocus={(event) => {
+          // Another menu took over: don't pull focus back to this trigger.
+          if (closedByOther.current) {
+            closedByOther.current = false
+            event.preventDefault()
+            return
+          }
           const selectedAction = pendingAction.current
           if (!selectedAction) return
           event.preventDefault()
           pendingAction.current = null
           triggerRef.current?.focus()
           if (selectedAction === "status") onChangeStatus()
+          else if (selectedAction === "password") onChangePassword?.()
           else onDelete()
         }}
       >
-        {!trashView && (
+        {!trashView && onChangePassword && (
+          <DropdownMenuItem
+            className={cn(dropdownItemClass, "text-xs focus:bg-[#eef1f8]")}
+            onSelect={() => {
+              pendingAction.current = "password"
+            }}
+          >
+            Change password
+          </DropdownMenuItem>
+        )}
+        {canChangeStatus && (
           <DropdownMenuItem
             className={cn(
               dropdownItemClass,
@@ -93,7 +132,7 @@ export function AccountRowActions({
             {action} account
           </DropdownMenuItem>
         )}
-        {(trashView || !account.isActive) && (
+        {canChangeStatus && (trashView || !account.isActive) && (
           <DropdownMenuItem
             className={cn(
               dropdownItemClass,
@@ -103,7 +142,7 @@ export function AccountRowActions({
               pendingAction.current = "delete"
             }}
           >
-            {trashView ? "Delete permanently" : "Move to trash"}
+            {trashView ? "Delete Permanently" : "Move to trash"}
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>
