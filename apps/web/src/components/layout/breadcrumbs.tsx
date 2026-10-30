@@ -10,7 +10,7 @@ const routeLabels: Record<string, string> = {
   accounts: "Account Management",
   departments: "Department Management",
   employees: "Employee Management",
-  services: "Service Management",
+  services: "Services",
   clients: "Client Management",
 }
 

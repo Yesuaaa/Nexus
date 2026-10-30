@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { useState, type ReactNode } from "react"
 import { focusRing } from "@/components/layout/styles"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { Button } from "@/components/ui/button"
@@ -16,15 +16,15 @@ const employeeGrid =
   "grid grid-cols-[minmax(100px,.75fr)_minmax(180px,1.35fr)_minmax(120px,1fr)_minmax(160px,1.2fr)_minmax(82px,.7fr)_minmax(90px,.7fr)_minmax(78px,.65fr)_112px] items-center gap-3.5 @max-[1000px]:grid-cols-[minmax(0,1fr)_minmax(105px,.65fr)]"
 
 const typeNames: Record<EmploymentType, string> = {
-  FULL_TIME: "Full time",
-  PART_TIME: "Part time",
+  FULL_TIME: "Full Time",
+  PART_TIME: "Part Time",
   CONTRACT: "Contract",
   INTERN: "Intern",
 }
 const statusNames: Record<EmploymentStatus, string> = {
   ACTIVE: "Active",
   INACTIVE: "Inactive",
-  ON_LEAVE: "On leave",
+  ON_LEAVE: "On Leave",
 }
 
 function StatusPill({ status }: { status: EmploymentStatus }) {
@@ -63,6 +63,7 @@ function employeeRowClass(
 
 export function EmployeeTable({
   employees,
+  archiveView = false,
   viewKey,
   quickKey,
   animateRows,
@@ -75,8 +76,10 @@ export function EmployeeTable({
   onChangeStatus,
   onManageLogin,
   onManageDepartment,
+  onRowsSettled,
 }: {
   employees: Employee[]
+  archiveView?: boolean
   viewKey: string
   quickKey: string
   animateRows: boolean
@@ -87,9 +90,14 @@ export function EmployeeTable({
   onView: (employee: Employee) => void
   onEdit: (employee: Employee) => void
   onChangeStatus: (employee: Employee) => void
-  onManageLogin: (employee: Employee) => void
+  onManageLogin: (
+    employee: Employee,
+    action: "create" | "deactivate" | "reactivate" | "delete" | "permanent",
+  ) => void
   onManageDepartment?: (departmentId: string) => void
+  onRowsSettled?: () => void
 }) {
+  const [openMenuKey, setOpenMenuKey] = useState<string | null>(null)
   const initialLoading = loading && employees.length === 0
 
   return (
@@ -110,9 +118,11 @@ export function EmployeeTable({
           <span role="columnheader">Employee ID</span>
           <span role="columnheader">Employee</span>
           <span role="columnheader">Department</span>
-          <span role="columnheader">Position / team</span>
+          <span role="columnheader">Position / Team</span>
           <span role="columnheader">Type</span>
-          <span role="columnheader">Start date</span>
+          <span role="columnheader">
+            {archiveView ? "Date Archived" : "Start Date"}
+          </span>
           <span role="columnheader">Status</span>
           <span role="columnheader">Actions</span>
         </div>
@@ -146,6 +156,7 @@ export function EmployeeTable({
         </div>
       ) : (
         <AnimatedSlotGridBody
+          onRowsSettled={onRowsSettled}
           items={employees}
           viewKey={viewKey}
           quickKey={quickKey}
@@ -160,12 +171,12 @@ export function EmployeeTable({
               <div
                 role="cell"
                 className="min-w-0 truncate font-medium text-[#34445e] @max-[1000px]:col-start-1 @max-[1000px]:row-start-1"
-                title={employee.employeeId}
+                title={employee.employeeId || "Not set"}
               >
                 <span className="hidden text-[#738096] @max-[1000px]:inline">
                   ID{" "}
                 </span>
-                {employee.employeeId}
+                {employee.employeeId || "Not set"}
               </div>
               <div
                 role="cell"
@@ -251,32 +262,56 @@ export function EmployeeTable({
                 <span className="hidden text-[#738096] @max-[1000px]:inline">
                   Type{" "}
                 </span>
-                {typeNames[employee.employmentType]}
+                {employee.employmentType
+                  ? typeNames[employee.employmentType]
+                  : "Not Set"}
               </div>
               <div
                 role="cell"
                 className="text-[11px] text-[#738096] @max-[1000px]:col-start-2 @max-[1000px]:row-start-5 @max-[1000px]:justify-self-end"
               >
-                <span className="hidden @max-[1000px]:inline">Start date </span>
-                {formatDate(employee.startDate)}
+                <span className="hidden @max-[1000px]:inline">
+                  {archiveView ? "Archived " : "Start date "}
+                </span>
+                {formatDate(
+                  archiveView
+                    ? (employee.accountDeletedAt ?? null)
+                    : employee.startDate,
+                )}
               </div>
               <div
                 role="cell"
                 className="@max-[1000px]:col-start-2 @max-[1000px]:row-start-1 @max-[1000px]:justify-self-end"
               >
-                <StatusPill status={employee.status} />
+                {archiveView ? (
+                  <Pill className="bg-[#eef0f3] text-[#596579]">Archived</Pill>
+                ) : employee.status ? (
+                  <StatusPill status={employee.status} />
+                ) : (
+                  <span className="text-[#738096]">Not Set</span>
+                )}
               </div>
               <div
                 role="cell"
                 className="flex justify-start @max-[1000px]:col-start-2 @max-[1000px]:row-start-4 @max-[1000px]:justify-self-end"
               >
                 <EmployeeRowActions
+                  open={
+                    openMenuKey === `${viewKey}:${archiveView}:${employee.id}`
+                  }
+                  onOpenChange={(open) => {
+                    const key = `${viewKey}:${archiveView}:${employee.id}`
+                    setOpenMenuKey((current) =>
+                      open ? key : current === key ? null : current,
+                    )
+                  }}
+                  archiveView={archiveView}
                   employee={employee}
                   disabled={false}
                   onView={() => onView(employee)}
                   onEdit={() => onEdit(employee)}
                   onChangeStatus={() => onChangeStatus(employee)}
-                  onManageLogin={() => onManageLogin(employee)}
+                  onManageLogin={(action) => onManageLogin(employee, action)}
                 />
               </div>
             </>

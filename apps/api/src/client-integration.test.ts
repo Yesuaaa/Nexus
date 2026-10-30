@@ -251,7 +251,7 @@ test(
       },
     )
     await t.test(
-      "rejects malformed filters and exposes no write endpoints",
+      "rejects malformed filters and unsupported collection methods",
       async () => {
         for (const query of [
           "?page=0",
@@ -266,22 +266,9 @@ test(
         ]) {
           assert.equal((await request(query)).status, 400, query)
         }
-        for (const actor of ["ADMIN"]) {
-          for (const method of ["POST", "PATCH", "PUT", "DELETE"])
-            assert.equal((await request("", actor, method)).status, 404)
-          for (const method of ["POST", "PATCH", "PUT", "DELETE"])
-            assert.equal(
-              (
-                await fetch(`${base}/client-00`, {
-                  method,
-                  headers: {
-                    authorization: `Bearer ${tokens.get(actor)}`,
-                  },
-                })
-              ).status,
-              404,
-            )
-        }
+        for (const method of ["PATCH", "PUT", "DELETE"])
+          assert.equal((await request("", "ADMIN", method)).status, 404)
+        assert.equal((await request("", "ADMIN", "POST")).status, 400)
       },
     )
     await t.test(
@@ -368,6 +355,10 @@ test(
           projects.projects.some((project) => project.startDate === null),
           true,
         )
+        assert.equal(
+          (await related("client-00", "/projects", "", "SUPERADMIN")).status,
+          403,
+        )
 
         const isolated = (await (
           await related("client-01", "/service-requests")
@@ -410,6 +401,121 @@ test(
           )
         }
         assert.equal((await fetch(`${base}/client-00/projects`)).status, 401)
+      },
+    )
+    await t.test(
+      "client mutations validate input, enforce admin access, and preserve history",
+      async () => {
+        const mutate = (
+          path: string,
+          method: string,
+          body?: unknown,
+          actor = "ADMIN",
+        ) =>
+          fetch(`${base}${path}`, {
+            method,
+            headers: {
+              authorization: `Bearer ${tokens.get(actor)}`,
+              "content-type": "application/json",
+            },
+            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+          })
+        const input = {
+          fullName: "New Client",
+          email: "New.Client@example.com",
+          contactNumber: "+63 917 123 4567",
+          isActive: true,
+          password: "client initial password",
+        }
+        for (const actor of ["STAFF", "USER", "SUPERADMIN"]) {
+          assert.equal((await mutate("", "POST", input, actor)).status, 403)
+          assert.equal(
+            (await mutate("/client-02", "PATCH", input, actor)).status,
+            403,
+          )
+          assert.equal(
+            (await mutate("/client-02", "DELETE", undefined, actor)).status,
+            403,
+          )
+        }
+        assert.equal(
+          (await mutate("", "POST", { ...input, password: "short" })).status,
+          400,
+        )
+        assert.equal(
+          (await mutate("", "POST", { ...input, contactNumber: "bad" })).status,
+          400,
+        )
+        const created = await mutate("", "POST", {
+          ...input,
+          role: "SUPERADMIN",
+        })
+        assert.equal(created.status, 201)
+        const { client } = (await created.json()) as {
+          client: { id: string; email: string }
+        }
+        assert.equal(client.email, "new.client@example.com")
+        assert.equal("passwordHash" in client, false)
+        const stored = await prisma.user.findUniqueOrThrow({
+          where: { id: client.id },
+        })
+        assert.equal(stored.role, "USER")
+        assert.notEqual(stored.passwordHash, input.password)
+        assert.equal((await mutate("", "POST", input)).status, 409)
+        assert.equal(
+          (
+            await mutate(`/${client.id}`, "PATCH", {
+              ...input,
+              email: "ADMIN@example.com",
+            })
+          ).status,
+          409,
+        )
+        const session = await prisma.session.create({
+          data: {
+            userId: client.id,
+            tokenHash: "client-session",
+            expiresAt: new Date(Date.now() + 60000),
+          },
+        })
+        assert.equal(
+          (
+            await mutate(`/${client.id}`, "PATCH", {
+              ...input,
+              fullName: "Updated Client",
+              isActive: false,
+              password: "ignored password",
+            })
+          ).status,
+          200,
+        )
+        assert.equal(
+          await prisma.session.count({ where: { id: session.id } }),
+          0,
+        )
+        const updated = await prisma.user.findUniqueOrThrow({
+          where: { id: client.id },
+        })
+        assert.equal(updated.fullName, "Updated Client")
+        assert.equal(updated.passwordHash, stored.passwordHash)
+        assert.equal(
+          (await mutate(`/${adminUser.id}`, "PATCH", input)).status,
+          404,
+        )
+        assert.equal((await mutate(`/${adminUser.id}`, "DELETE")).status, 404)
+        assert.equal((await mutate("/client-00", "DELETE")).status, 409)
+        assert.equal(
+          await prisma.project.count({ where: { clientId: "client-00" } }),
+          12,
+        )
+        assert.equal((await mutate(`/${client.id}`, "DELETE")).status, 204)
+        assert.equal((await related(client.id)).status, 404)
+        assert.equal(
+          (await mutate(`/${client.id}`, "PATCH", input)).status,
+          404,
+        )
+        assert.equal((await mutate(`/${client.id}`, "DELETE")).status, 404)
+        assert.equal((await mutate("", "POST", input)).status, 409)
       },
     )
     await t.test(

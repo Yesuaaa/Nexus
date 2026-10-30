@@ -1,4 +1,29 @@
 import { parsePage, parseQueryString } from "../../shared/query-helpers.js"
+import {
+  normalizedEmail,
+  validRegistrationProfile,
+} from "../auth/auth.schema.js"
+import { validPassword } from "../auth/auth.password.js"
+
+export function parseClientInput(value: unknown, creating: boolean) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+  const input = value as Record<string, unknown>
+  const email = normalizedEmail(input.email)
+  if (
+    !email ||
+    !validRegistrationProfile(input.fullName, input.contactNumber) ||
+    typeof input.isActive !== "boolean" ||
+    (creating && !validPassword(input.password))
+  )
+    return null
+  return {
+    email,
+    fullName: (input.fullName as string).trim(),
+    contactNumber: (input.contactNumber as string).trim(),
+    isActive: input.isActive,
+    ...(creating ? { password: input.password as string } : {}),
+  }
+}
 
 export type ClientSort = "fullName" | "email" | "isActive" | "createdAt"
 export type ClientFilters = {

@@ -762,7 +762,7 @@ export function AccountManagementPage() {
               }}
             >
               <Trash2 size={14} aria-hidden="true" />
-              {trashView ? "Back to accounts" : "Trash"}
+              {trashView ? "Back to Accounts" : "Trash"}
             </button>
             <button
               type="button"
@@ -789,7 +789,7 @@ export function AccountManagementPage() {
                   aria-hidden="true"
                 />
               )}
-              Save changes
+              Save Changes
             </button>
           </div>
         </div>

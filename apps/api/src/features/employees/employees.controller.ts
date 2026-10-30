@@ -3,7 +3,6 @@ import {
   EmployeeStatus,
   EmploymentType,
   Role,
-  type Prisma,
 } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import {
@@ -16,7 +15,11 @@ import { parsePage, parseQueryString } from "../../shared/query-helpers.js"
 import { requireAuth, requirePermission } from "../auth/auth.middleware.js"
 import { hashPassword } from "../auth/auth.password.js"
 import { Permission } from "../auth/auth.permissions.js"
-import { employeeInclude, employeesRepository } from "./employees.repository.js"
+import {
+  directoryLogin,
+  employeeInclude,
+  employeesRepository,
+} from "./employees.repository.js"
 import { validateEmployeeInput } from "./employees.schema.js"
 import {
   createEmployee,
@@ -65,8 +68,11 @@ employeesRouter.get(
     const employmentType = parseQueryString(request.query.employmentType)
     const status = parseQueryString(request.query.status)
     const page = parsePage(request.query.page)
+    const archived = parseQueryString(request.query.archived)
 
     if (
+      archived === null ||
+      !["", "true", "false"].includes(archived) ||
       search === null ||
       departmentId === null ||
       employmentType === null ||
@@ -84,38 +90,16 @@ employeesRouter.get(
       return response.status(400).json({ error: "Invalid employee filters" })
     }
 
-    const where: Prisma.EmployeeWhereInput = {
-      ...(departmentId ? { departmentId } : {}),
-      ...(employmentType
-        ? { employmentType: employmentType as EmploymentType }
-        : {}),
-      ...(status ? { status: status as EmployeeStatus } : {}),
-      ...(search
-        ? {
-            OR: [
-              { employeeId: { contains: search, mode: "insensitive" } },
-              { fullName: { contains: search, mode: "insensitive" } },
-              { email: { contains: search, mode: "insensitive" } },
-              { contactNumber: { contains: search, mode: "insensitive" } },
-            ],
-          }
-        : {}),
-    }
-
-    const pageSize = 10
-    const [employees, total] = await employeesRepository.findManyWithCount(
-      where,
-      [{ fullName: "asc" }, { employeeId: "asc" }, { id: "asc" }],
-      (page - 1) * pageSize,
-      pageSize,
+    return response.json(
+      await employeesRepository.listAccounts({
+        search,
+        departmentId,
+        employmentType,
+        status,
+        page,
+        archived: archived === "true",
+      }),
     )
-
-    return response.json({
-      employees: employees.map(withoutEmployeeAccountDetails),
-      total,
-      page,
-      pageSize,
-    })
   },
 )
 
@@ -190,7 +174,55 @@ employeesRouter.get(
     if (!employee) {
       return response.status(404).json({ error: "Employee not found" })
     }
-    return response.json({ employee: withoutEmployeeAccountDetails(employee) })
+    return response.json({ employee })
+  },
+)
+
+employeesRouter.post(
+  "/accounts/:accountId/profile",
+  requirePermission(Permission.EMPLOYEES_MANAGE),
+  async (request, response, next) => {
+    const parsed = validateEmployeeInput(request.body, false)
+    if ("error" in parsed)
+      return response.status(400).json({ error: parsed.error })
+    if (request.body?.password !== undefined)
+      return response
+        .status(400)
+        .json({ error: "This account already has login credentials" })
+    try {
+      const employee = await getPrisma()!.$transaction(
+        async (tx) => {
+          const user = await tx.user.findFirst({
+            where: {
+              id: String(request.params.accountId),
+              role: { in: [Role.ADMIN, Role.STAFF] },
+              accountDeletedAt: null,
+            },
+            select: {
+              id: true,
+              email: true,
+              fullName: true,
+              contactNumber: true,
+              employee: { select: { id: true } },
+            },
+          })
+          if (!user) throw new EmployeeError(404, "Account not found")
+          if (user.employee)
+            throw new EmployeeError(
+              409,
+              "This account already has employee details. Refresh and try again.",
+            )
+          return createEmployee(tx, { ...parsed.value, userId: user.id })
+        },
+        { isolationLevel: "Serializable" },
+      )
+      return response
+        .status(201)
+        .json({ employee: withoutEmployeeAccountDetails(employee) })
+    } catch (error) {
+      if (sendError(response, error)) return
+      next(error)
+    }
   },
 )
 
@@ -203,52 +235,56 @@ employeesRouter.put(
     if ("error" in parsed) {
       return response.status(400).json({ error: parsed.error })
     }
+    if (request.body?.password !== undefined)
+      return response.status(400).json({
+        error: "Create a login account using the separate account form.",
+      })
+    try {
+      const employee = await getPrisma()!.$transaction((tx) =>
+        updateEmployee(tx, String(request.params.id), parsed.value),
+      )
+      return response.json({
+        employee: withoutEmployeeAccountDetails(employee),
+      })
+    } catch (error) {
+      if (sendError(response, error)) return
+      next(error)
+    }
+  },
+)
+
+employeesRouter.post(
+  "/:id/account",
+  requirePermission(Permission.EMPLOYEES_MANAGE),
+  async (request, response, next) => {
     const password = request.body?.password
-    if (password !== undefined && !validEmployeeAccountPassword(password)) {
+    if (!validEmployeeAccountPassword(password))
       return response.status(400).json({
         error:
           "Password must be at least 12 characters with uppercase, lowercase, number, and special character",
       })
-    }
     try {
-      const passwordHash =
-        typeof password === "string" ? await hashPassword(password) : null
-      const employee = await getPrisma()!.$transaction(async (tx) => {
-        const updated = await updateEmployee(
-          tx,
-          String(request.params.id),
-          parsed.value,
-        )
-        if (!passwordHash) return updated
-        if (updated.userId && !updated.user?.accountDeletedAt) {
-          throw new EmployeeError(409, "Employee already has a portal account")
-        }
-        if (updated.userId) {
-          await tx.user.update({
-            where: { id: updated.userId },
-            data: {
-              passwordHash,
-              isActive: true,
-              accountDeletedAt: null,
-              email: updated.email!,
-              fullName: updated.fullName,
-              contactNumber: updated.contactNumber,
-              position: updated.position,
-              departmentId: updated.departmentId,
-              teamId: updated.teamId,
-            },
-          })
-          return tx.employee.findUniqueOrThrow({
-            where: { id: updated.id },
+      const passwordHash = await hashPassword(password)
+      const employee = await getPrisma()!.$transaction(
+        async (tx) => {
+          const existing = await tx.employee.findUnique({
+            where: { id: String(request.params.id) },
             include: employeeInclude,
           })
-        }
-        const account = await createStaffAccount(tx, updated, passwordHash)
-        return updateEmployee(tx, updated.id, { userId: account.id })
-      })
-      return response.json({
-        employee: withoutEmployeeAccountDetails(employee),
-      })
+          if (!existing) throw new EmployeeError(404, "Employee not found")
+          if (existing.user)
+            throw new EmployeeError(
+              409,
+              "Employee already has an account. Manage archived accounts from Archive.",
+            )
+          const account = await createStaffAccount(tx, existing, passwordHash)
+          return updateEmployee(tx, existing.id, { userId: account.id })
+        },
+        { isolationLevel: "Serializable" },
+      )
+      return response
+        .status(201)
+        .json({ employee: withoutEmployeeAccountDetails(employee) })
     } catch (error) {
       if (sendError(response, error)) return
       next(error)
@@ -260,45 +296,41 @@ employeesRouter.patch(
   "/:id/account/status",
   requirePermission(Permission.EMPLOYEES_MANAGE),
   async (request, response, next) => {
-    if (request.body?.isActive !== false) {
+    if (typeof request.body?.isActive !== "boolean") {
       return response
         .status(400)
-        .json({ error: "Only account deactivation is supported here" })
+        .json({ error: "Provide a valid account status" })
     }
     const actor = request.auth!.user
     try {
-      await getPrisma()!.$transaction(async (tx) => {
-        const employee = await tx.employee.findUnique({
-          where: { id: String(request.params.id) },
-          select: {
-            user: { select: { id: true, role: true, accountDeletedAt: true } },
-          },
-        })
-        if (!employee) throw new EmployeeError(404, "Employee not found")
-        if (!employee.user || employee.user.accountDeletedAt) {
-          throw new EmployeeError(409, "Employee has no login account")
-        }
-        if (employee.user.id === actor.id) {
-          throw new EmployeeError(
-            403,
-            "You cannot deactivate your own login account",
-          )
-        }
-        if (
-          employee.user.role === Role.ADMIN ||
-          employee.user.role === Role.SUPERADMIN
-        ) {
-          throw new EmployeeError(
-            403,
-            "Admin accounts must be managed from Account Management",
-          )
-        }
-        await tx.user.update({
-          where: { id: employee.user.id },
-          data: { isActive: false },
-        })
-        await tx.session.deleteMany({ where: { userId: employee.user.id } })
-      })
+      await getPrisma()!.$transaction(
+        async (tx) => {
+          const employee = await directoryLogin(tx, String(request.params.id))
+          if (!employee) throw new EmployeeError(404, "Employee not found")
+          if (!employee.user || employee.user.accountDeletedAt) {
+            throw new EmployeeError(409, "Employee has no login account")
+          }
+          if (employee.user.id === actor.id) {
+            throw new EmployeeError(
+              403,
+              "You cannot change your own login status",
+            )
+          }
+          if (employee.user.role !== Role.STAFF) {
+            throw new EmployeeError(
+              403,
+              "Admin accounts must be managed from Account Management",
+            )
+          }
+          await tx.user.update({
+            where: { id: employee.user.id },
+            data: { isActive: request.body.isActive },
+          })
+          if (!request.body.isActive)
+            await tx.session.deleteMany({ where: { userId: employee.user.id } })
+        },
+        { isolationLevel: "Serializable" },
+      )
       return response.status(204).send()
     } catch (error) {
       if (sendError(response, error)) return
@@ -307,60 +339,69 @@ employeesRouter.patch(
   },
 )
 
-employeesRouter.delete(
-  "/:id/account",
-  requirePermission(Permission.EMPLOYEES_MANAGE),
-  async (request, response, next) => {
-    const actor = request.auth!.user
-    try {
-      await getPrisma()!.$transaction(async (tx) => {
-        const employee = await tx.employee.findUnique({
-          where: { id: String(request.params.id) },
-          select: {
-            user: {
-              select: {
-                id: true,
-                role: true,
-                isActive: true,
-                accountDeletedAt: true,
-              },
-            },
+for (const permanent of [false, true]) {
+  employeesRouter.delete(
+    permanent ? "/:id/account/permanent" : "/:id/account",
+    requirePermission(Permission.EMPLOYEES_MANAGE),
+    async (request, response, next) => {
+      const actor = request.auth!.user
+      try {
+        await getPrisma()!.$transaction(
+          async (tx) => {
+            const employee = await directoryLogin(tx, String(request.params.id))
+            if (!employee) throw new EmployeeError(404, "Employee not found")
+            if (
+              !employee.user ||
+              (!permanent && employee.user.accountDeletedAt)
+            ) {
+              throw new EmployeeError(409, "Employee has no login account")
+            }
+            if (employee.user.id === actor.id) {
+              throw new EmployeeError(
+                403,
+                "You cannot delete your own login account",
+              )
+            }
+            if (employee.user.role !== Role.STAFF) {
+              throw new EmployeeError(
+                403,
+                "Admin accounts must be managed from Account Management",
+              )
+            }
+            if (employee.user.isActive)
+              throw new EmployeeError(
+                409,
+                "Deactivate the account before moving it to Archive",
+              )
+            if (permanent) {
+              if (!employee.user.accountDeletedAt)
+                throw new EmployeeError(
+                  409,
+                  "Move the account to Archive before deleting it permanently",
+                )
+              await tx.user.delete({ where: { id: employee.user.id } })
+            } else {
+              await tx.user.update({
+                where: { id: employee.user.id },
+                data: { accountDeletedAt: new Date() },
+              })
+              await tx.session.deleteMany({
+                where: { userId: employee.user.id },
+              })
+            }
           },
-        })
-        if (!employee) throw new EmployeeError(404, "Employee not found")
-        if (!employee.user || employee.user.accountDeletedAt) {
-          throw new EmployeeError(409, "Employee has no login account")
-        }
-        if (employee.user.id === actor.id) {
-          throw new EmployeeError(
-            403,
-            "You cannot delete your own login account",
-          )
-        }
-        if (
-          employee.user.role === Role.ADMIN ||
-          employee.user.role === Role.SUPERADMIN
-        ) {
-          throw new EmployeeError(
-            403,
-            "Admin accounts must be managed from Account Management",
-          )
-        }
-        if (employee.user.isActive) {
-          throw new EmployeeError(
-            409,
-            "Deactivate this login account before deleting it",
-          )
-        }
-        await tx.user.update({
-          where: { id: employee.user.id },
-          data: { accountDeletedAt: new Date() },
-        })
-      })
-      return response.status(204).send()
-    } catch (error) {
-      if (sendError(response, error)) return
-      next(error)
-    }
-  },
-)
+          { isolationLevel: "Serializable" },
+        )
+        return response.status(204).send()
+      } catch (error) {
+        if (permanent && isForeignKeyViolation(error))
+          return response.status(409).json({
+            error:
+              "This account has related records and cannot be permanently deleted. Keep it in Archive to preserve its history.",
+          })
+        if (sendError(response, error)) return
+        next(error)
+      }
+    },
+  )
+}

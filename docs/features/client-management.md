@@ -1,8 +1,8 @@
 # Client Management
 
-The directory at `/clients` gives Admin accounts read-only access to registered clients. Superadmin, Staff and User accounts cannot access it. It follows Employee Management's layout with name/email search, Active/Inactive filtering, sorting and server pagination (10 records per page). The default order is newest registered first; an account ID tie-breaker keeps equal values ordered consistently. Narrow screens use stacked rows and a sort selector.
+The directory at `/clients` gives Admin accounts access to create, edit, delete and view client accounts. Superadmin, Staff and User accounts cannot access it. It follows Employee Management's layout with name/email search, Active/Inactive filtering, sorting and server pagination (10 records per page). The default order is newest registered first; an account ID tie-breaker keeps equal values ordered consistently. Narrow screens use stacked rows and a sort selector.
 
-The eye action opens the client's details drawer. The row menu can open Service requests or Projects directly. The drawer loads current account details, displays related record counts in Overview, and provides working tabs with paginated records. It preserves directory filters, sorting and page, closes with Escape or its close button, and restores focus to the row action. On phones it fills the screen. Each read has loading, empty and retryable error states; superseded responses cannot overwrite a newer selection. The module has no create, edit or delete actions.
+The eye action opens the client's details drawer. The row menu can open Service requests or Projects directly. The drawer loads current account details, displays related record counts in Overview, and provides working tabs with paginated records. It preserves directory filters, sorting and page, closes with Escape or its close button, and restores focus to the row action. On phones it fills the screen. Each read has loading, empty and retryable error states; superseded responses cannot overwrite a newer selection. The header provides Create Client; row actions provide editing and deletion. Forms use the existing admin dialog styling and retain entered values on failure. Successful changes refresh the directory and display a confirmation toast.
 
 ## Account fields
 
@@ -42,11 +42,11 @@ All endpoints below require the same `clients:read` permission and valid bearer 
 | `GET /api/clients/:id/service-requests?page=1` | `{ serviceRequests, total, page, pageSize: 10 }`                                       |
 | `GET /api/clients/:id/projects?page=1`         | `{ projects, total, page, pageSize: 10 }`                                              |
 
-Requests expose `id`, `title`, `status`, `createdAt` and `service: { id, name }`. Projects expose `id`, `name`, `status`, nullable `startDate` and `createdAt`. Descriptions are stored for future request/project workflows but are excluded from this compact read API. These endpoints are read-only; unsupported writes have no route.
+Requests expose `id`, `title`, `status`, `createdAt` and `service: { id, name }`. Projects expose `id`, `name`, `status`, nullable `startDate` and `createdAt`. Descriptions are stored for future request/project workflows but are excluded from this compact read API. Related-record endpoints remain read-only.
 
 ## Database relationships
 
-`ServiceRequest.clientId` and `Project.clientId` reference `User.id`. `ServiceRequest.serviceId` references `Service.id`. One client can have many service requests and projects, and one service can have many requests. Projects do not require a request. Foreign keys preserve referential integrity and prevent deleting a referenced client or service. The existing account API returns 409 when deletion would remove a client with related records; this module does not expose account deletion. Deactivation retains the records.
+`ServiceRequest.clientId` and `Project.clientId` reference `User.id`. `ServiceRequest.serviceId` references `Service.id`. One client can have many service requests and projects, and one service can have many requests. Projects do not require a request. Foreign keys preserve referential integrity and prevent deleting a referenced client or service. The existing account API returns 409 when deletion would remove a client with related records; client deletion also returns 409 for linked records. Deactivation retains the records.
 
 | Model            | Fields                                                                                                                                          |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -55,8 +55,16 @@ Requests expose `id`, `title`, `status`, `createdAt` and `service: { id, name }`
 
 Request statuses: `PENDING`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`. Project statuses: `PLANNED`, `IN_PROGRESS`, `ON_HOLD`, `COMPLETED`, `CANCELLED`. The UI displays readable status names. Both models have an index on `(clientId, createdAt, id)`; requests also index `serviceId`.
 
-The migration adds two enums, two tables, indexes and foreign keys without changing existing rows. Deploy it before starting the regenerated API. Prisma generates CUIDs and manages `updatedAt`; direct SQL inserts must supply IDs and `updatedAt` explicitly. No sample rows are inserted into the configured database. New tables initially show genuine empty states until records are created through the corresponding future business workflows or imported with valid foreign keys. Creating and managing requests/projects is outside this read-only Client Management issue.
+The migration adds two enums, two tables, indexes and foreign keys without changing existing rows. Deploy it before starting the regenerated API. Prisma generates CUIDs and manages `updatedAt`; direct SQL inserts must supply IDs and `updatedAt` explicitly. No sample rows are inserted into the configured database. New tables initially show genuine empty states until records are created through the corresponding future business workflows or imported with valid foreign keys. Creating and managing requests/projects is outside the Client Management scope.
 
 ## Verification
 
-`apps/api/src/client-integration.test.ts` uses a temporary PGlite database to exercise authentication, read permissions, safe field projection, filtering, sorting, pagination, related-record ownership, unsupported writes and foreign-key deletion protection. `apps/web/e2e/clients.spec.ts` checks directory controls, related tabs, states, focus and role restrictions. No production database is seeded or modified by these tests.
+`apps/api/src/client-integration.test.ts` uses a temporary PGlite database to exercise authentication, read permissions, safe field projection, filtering, sorting, pagination, related-record ownership, input validation, admin-only mutations, duplicate emails, password preservation, session revocation and deletion protection. `apps/web/e2e/clients.spec.ts` checks directory controls, related tabs, states, focus and role restrictions. No production database is seeded or modified by these tests.
+
+## Client account changes
+
+- `POST /api/clients` creates a USER account from fullName (2–100 characters), normalized email, contactNumber (7–20 characters, digits/spaces/hyphens with an optional leading +), isActive and an initial password (at least 12 characters, up to 1024 UTF-8 bytes). Passwords use the existing scrypt hashing implementation.
+- `PATCH /api/clients/:id` updates the same profile fields and status, without changing passwords or roles. Inactive status revokes existing sessions.
+- `DELETE /api/clients/:id` retires the account with accountDeletedAt and isActive=false, revokes sessions, and excludes it from the directory. Email remains reserved. Linked service requests or projects prevent deletion with 409; use inactive status instead.
+
+All mutations require an authenticated Admin. Other roles receive 403. Missing/deleted/non-client targets return 404. Duplicate emails (case-insensitive across all accounts, including retired accounts) return 409. Validation errors return 400. Serializable transactions protect changes; concurrent conflicts return 409 for retry. Responses never expose credentials. No database migration is needed.

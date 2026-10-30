@@ -49,11 +49,11 @@ export function validateEmployeeInput(
       typeof body.employeeId !== "string" ||
       body.employeeId.trim().length < 2 ||
       body.employeeId.trim().length > 40 ||
-      !/^[A-Za-z0-9_-]+$/.test(body.employeeId.trim())
+      !/^EXP-[A-Za-z0-9_-]+$/.test(body.employeeId.trim())
     ) {
       return {
         error:
-          "Employee ID must be 2 to 40 characters using letters, numbers, underscores, or hyphens",
+          "Employee ID must start with EXP- and contain up to 40 characters using letters, numbers, underscores, or hyphens",
       }
     }
     value.employeeId = body.employeeId.trim()

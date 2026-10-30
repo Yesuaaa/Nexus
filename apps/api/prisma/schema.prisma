@@ -139,6 +139,7 @@ model Service {
   id                   String           @id @default(cuid())
   name                 String           @unique
   description          String
+  iconKey              String           @default("sparkles") @db.VarChar(32)
   imagePath            String?
   imageAltText         String?
   clientRequirements   String[]         @default([])
@@ -148,6 +149,7 @@ model Service {
   pricingTemplateId    String?
   pricingTemplate      PricingTemplate? @relation(fields: [pricingTemplateId], references: [id], onDelete: SetNull)
   departments          Department[]     @relation("ServiceDepartments")
+  keyBenefits          ServiceBenefit[]
   packages             ServicePackage[]
   createdAt            DateTime         @default(now())
   updatedAt            DateTime         @updatedAt
@@ -155,6 +157,17 @@ model Service {
 
   @@index([isActive])
   @@index([pricingTemplateId])
+}
+
+model ServiceBenefit {
+  id           String  @id @default(cuid())
+  serviceId    String
+  service      Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  title        String
+  description  String
+  displayOrder Int     @default(0)
+
+  @@index([serviceId, displayOrder])
 }
 
 model PricingTemplate {
@@ -189,30 +202,45 @@ model ServicePackage {
   isRecommended    Boolean          @default(false)
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
+  serviceRequests  ServiceRequest[]
 
   @@unique([serviceId, name])
   @@index([serviceId, isActive, displayOrder])
 }
 
 model ServiceRequest {
-  id              String               @id @default(cuid())
-  clientId        String
-  client          User                 @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  serviceId       String
-  service         Service              @relation(fields: [serviceId], references: [id], onDelete: Restrict)
-  title           String
-  description     String?
-  status          ServiceRequestStatus @default(PENDING)
-  pricingModel    PricingModel?
-  agreedPrice     Decimal?             @db.Decimal(12, 2)
-  currency        String?
-  billingInterval BillingInterval?
-  packageName     String?
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
+  id                      String               @id @default(cuid())
+  clientId                String
+  client                  User                 @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  serviceId               String
+  service                 Service              @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  title                   String
+  description             String?
+  status                  ServiceRequestStatus @default(PENDING)
+  pricingModel            PricingModel?
+  agreedPrice             Decimal?             @db.Decimal(12, 2)
+  currency                String?
+  billingInterval         BillingInterval?
+  packageName             String?
+  packageId               String?
+  package                 ServicePackage?      @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  projectGoals            String               @default("")
+  projectRequirements     String               @default("")
+  expectedTimeline        String               @default("") @db.VarChar(300)
+  additionalDetails       String?
+  preferredSpecialistId   String?
+  preferredSpecialist     Employee?            @relation(fields: [preferredSpecialistId], references: [id], onDelete: SetNull)
+  preferredSpecialistName String?
+  quotedPrice             Decimal?             @db.Decimal(12, 2)
+  submissionKey           String?              @db.VarChar(36)
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
 
+  @@unique([clientId, submissionKey])
   @@index([clientId, createdAt, id])
   @@index([serviceId])
+  @@index([packageId])
+  @@index([preferredSpecialistId])
 }
 
 model Project {
@@ -248,23 +276,24 @@ model Team {
 }
 
 model Employee {
-  id             String         @id @default(cuid())
-  employeeId     String         @unique
-  fullName       String
-  email          String?
-  contactNumber  String?
-  position       String?
-  employmentType EmploymentType @default(FULL_TIME)
-  status         EmployeeStatus @default(ACTIVE)
-  startDate      DateTime?
-  departmentId   String?
-  department     Department?    @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  teamId         String?
-  team           Team?          @relation(fields: [teamId], references: [id], onDelete: SetNull)
-  userId         String?        @unique
-  user           User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  id                       String           @id @default(cuid())
+  employeeId               String           @unique
+  fullName                 String
+  email                    String?
+  contactNumber            String?
+  position                 String?
+  employmentType           EmploymentType   @default(FULL_TIME)
+  status                   EmployeeStatus   @default(ACTIVE)
+  startDate                DateTime?
+  departmentId             String?
+  department               Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  teamId                   String?
+  team                     Team?            @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  userId                   String?          @unique
+  user                     User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt                DateTime         @default(now())
+  updatedAt                DateTime         @updatedAt
+  preferredServiceRequests ServiceRequest[]
 
   @@index([departmentId])
   @@index([teamId])

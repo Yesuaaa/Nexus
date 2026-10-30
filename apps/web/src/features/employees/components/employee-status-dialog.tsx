@@ -25,7 +25,7 @@ import {
 const statusLabels: Record<EmploymentStatus, string> = {
   ACTIVE: "Active",
   INACTIVE: "Inactive",
-  ON_LEAVE: "On leave",
+  ON_LEAVE: "On Leave",
 }
 
 export function EmployeeStatusDialog({
@@ -37,7 +37,9 @@ export function EmployeeStatusDialog({
   onClose: () => void
   onSaved: () => void
 }) {
-  const [status, setStatus] = useState<EmploymentStatus>(employee.status)
+  const [status, setStatus] = useState<EmploymentStatus>(
+    employee.status ?? "ACTIVE",
+  )
   const [replacementHeadEmployeeId, setReplacementHeadEmployeeId] = useState("")
   const [statusOptions, setStatusOptions] =
     useState<EmployeeStatusOptions | null>(null)
