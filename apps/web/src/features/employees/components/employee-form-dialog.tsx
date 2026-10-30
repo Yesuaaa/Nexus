@@ -44,8 +44,8 @@ const fieldClass =
 const inputClass = `h-10 min-w-0 rounded-lg border-[#d6dfec] bg-background px-[11px] text-sm placeholder:text-[#9aa8bb] ${focusRing}`
 const selectClass = `h-10 min-w-0 rounded-lg border-[#d6dfec] bg-background px-[11px] text-sm ${focusRing}`
 const employmentTypes: { value: EmploymentType; label: string }[] = [
-  { value: "FULL_TIME", label: "Full time" },
-  { value: "PART_TIME", label: "Part time" },
+  { value: "FULL_TIME", label: "Full Time" },
+  { value: "PART_TIME", label: "Part Time" },
   { value: "CONTRACT", label: "Contract" },
   { value: "INTERN", label: "Intern" },
 ]
@@ -315,8 +315,8 @@ export function EmployeeFormDialog({
                 {employee?.hasEmployeeRecord === false
                   ? "Complete employee details"
                   : isEditing
-                    ? "Edit employee"
-                    : "Add employee"}
+                    ? "Edit Employee"
+                    : "Add Employee"}
               </DialogTitle>
               <DialogDescription className="mt-1 mb-0 text-xs text-[#738096]">
                 Keep employment details and team placement up to date.
@@ -421,14 +421,14 @@ export function EmployeeFormDialog({
               />
             </label>
             <label className={fieldClass}>
-              <RequiredFieldLabel>Full name</RequiredFieldLabel>
+              <RequiredFieldLabel>Full Name</RequiredFieldLabel>
               <Input
                 id="employee-full-name"
                 className={validatedInputClass("fullName")}
                 value={draft.fullName}
                 maxLength={100}
                 autoComplete="name"
-                placeholder="Employee name"
+                placeholder="Employee Name"
                 disabled={pending}
                 onChange={(event) => change("fullName", event.target.value)}
                 onBlur={() => blur("fullName")}
@@ -470,7 +470,7 @@ export function EmployeeFormDialog({
               />
             </label>
             <label className={fieldClass}>
-              <RequiredFieldLabel>Contact number</RequiredFieldLabel>
+              <RequiredFieldLabel>Contact Number</RequiredFieldLabel>
               <Input
                 type="tel"
                 id="employee-contact-number"
@@ -505,7 +505,7 @@ export function EmployeeFormDialog({
                 className={validatedInputClass("position")}
                 value={draft.position}
                 maxLength={100}
-                placeholder="Job title"
+                placeholder="Job Title"
                 disabled={pending}
                 onChange={(event) => change("position", event.target.value)}
                 onBlur={() => blur("position")}
@@ -521,7 +521,7 @@ export function EmployeeFormDialog({
               />
             </label>
             <div className={fieldClass}>
-              <RequiredFieldLabel>Employment type</RequiredFieldLabel>
+              <RequiredFieldLabel>Employment Type</RequiredFieldLabel>
               <Select
                 value={draft.employmentType}
                 onValueChange={(value) =>
@@ -558,7 +558,7 @@ export function EmployeeFormDialog({
               />
             </div>
             <label className={fieldClass}>
-              <RequiredFieldLabel>Start date</RequiredFieldLabel>
+              <RequiredFieldLabel>Start Date</RequiredFieldLabel>
               <Input
                 type="date"
                 id="employee-start-date"
@@ -663,7 +663,7 @@ export function EmployeeFormDialog({
                   />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">No team</SelectItem>
+                  <SelectItem value="none">No Team</SelectItem>
                   {teams.map((team) => (
                     <SelectItem key={team.id} value={team.id}>
                       {team.name}
@@ -812,8 +812,8 @@ export function EmployeeFormDialog({
               {pending
                 ? "Saving…"
                 : isEditing
-                  ? "Save employee"
-                  : "Add employee"}
+                  ? "Save Employee"
+                  : "Add Employee"}
             </Button>
           </footer>
         </form>

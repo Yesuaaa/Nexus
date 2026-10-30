@@ -25,6 +25,7 @@ import type { Account } from "@/features/auth/model/types"
 import {
   canAssignRole,
   canChangeAccountStatus,
+  canChangeAccountPassword,
   canCreateRole,
 } from "@/features/auth/model/permissions"
 import {
@@ -33,6 +34,7 @@ import {
   listAccounts,
   moveAccountToTrash,
   permanentlyDeleteAccount,
+  restoreAccount,
   type AccountList,
   type AccountRole,
   type AccountSortDirection,
@@ -42,6 +44,7 @@ import { AccountDropdown } from "../components/account-dropdown"
 import { AccountStatusDialog } from "../components/account-status-dialog"
 import { AccountRowActions } from "../components/account-row-actions"
 import { CreateAccountDialog } from "../components/create-account-dialog"
+import { ChangePasswordDialog } from "../components/change-password-dialog"
 import { DeleteAccountDialog } from "../components/delete-account-dialog"
 import {
   accountButton,
@@ -73,6 +76,7 @@ function AccountRowContents({
   disabled,
   onRoleChange,
   onChangeStatus,
+  onChangePassword,
   onDelete,
   trashView,
 }: {
@@ -82,6 +86,7 @@ function AccountRowContents({
   disabled: boolean
   onRoleChange: (user: Account, role: AccountRole) => void
   onChangeStatus: (user: Account) => void
+  onChangePassword: (user: Account) => void
   onDelete: (user: Account) => void
   trashView: boolean
 }) {
@@ -179,11 +184,18 @@ function AccountRowContents({
         <span className="hidden text-[#738096] @max-[530px]:inline">
           Actions
         </span>
-        {canChangeAccountStatus(actor, user) ? (
+        {canChangeAccountStatus(actor, user) ||
+        (!trashView && canChangeAccountPassword(actor, user)) ? (
           <AccountRowActions
             account={user}
             disabled={disabled}
             onChangeStatus={() => onChangeStatus(user)}
+            canChangeStatus={canChangeAccountStatus(actor, user)}
+            onChangePassword={
+              canChangeAccountPassword(actor, user)
+                ? () => onChangePassword(user)
+                : undefined
+            }
             onDelete={() => onDelete(user)}
             trashView={trashView}
           />
@@ -237,6 +249,7 @@ export function AccountManagementPage() {
     message: string
   } | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
+  const [passwordTarget, setPasswordTarget] = useState<Account | null>(null)
   const [draftRoles, setDraftRoles] = useState<
     Record<string, { role: AccountRole; email: string }>
   >({})
@@ -526,6 +539,20 @@ export function AccountManagementPage() {
     setStatusSaving(true)
     setStatusError("")
     try {
+      if (statusTarget.accountDeletedAt) {
+        await restoreAccount(statusTarget.id)
+        sileo.success({
+          title: "Account restored",
+          description: `${statusTarget.email} is back in Account Management as inactive.`,
+        })
+        setStatusTarget(null)
+        if ((result?.users.length ?? 0) === 1 && page > 1) {
+          setPage((current) => current - 1)
+        } else {
+          setRevision((current) => current + 1)
+        }
+        return
+      }
       const isActive = !statusTarget.isActive
       await changeAccountStatus(statusTarget.id, isActive)
       sileo.success({
@@ -661,6 +688,7 @@ export function AccountManagementPage() {
             setStatusError("")
             setStatusTarget(account)
           }}
+          onChangePassword={setPasswordTarget}
           onDelete={(account) => {
             if (!trashView && account.isActive) return
             setDeleteError("")
@@ -755,7 +783,7 @@ export function AccountManagementPage() {
               }}
             >
               <Trash2 size={14} aria-hidden="true" />
-              {trashView ? "Back to accounts" : "Trash"}
+              {trashView ? "Back to Accounts" : "Trash"}
             </button>
             <button
               type="button"
@@ -782,7 +810,7 @@ export function AccountManagementPage() {
                   aria-hidden="true"
                 />
               )}
-              Save changes
+              Save Changes
             </button>
           </div>
         </div>
@@ -951,6 +979,13 @@ export function AccountManagementPage() {
         )}
       </section>
 
+      {passwordTarget && (
+        <ChangePasswordDialog
+          key={passwordTarget.id}
+          account={passwordTarget}
+          onClose={() => setPasswordTarget(null)}
+        />
+      )}
       {statusTarget && (
         <AccountStatusDialog
           account={statusTarget}

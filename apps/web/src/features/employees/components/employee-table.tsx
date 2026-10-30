@@ -16,15 +16,15 @@ const employeeGrid =
   "grid grid-cols-[minmax(100px,.75fr)_minmax(180px,1.35fr)_minmax(120px,1fr)_minmax(160px,1.2fr)_minmax(82px,.7fr)_minmax(90px,.7fr)_minmax(78px,.65fr)_112px] items-center gap-3.5 @max-[1000px]:grid-cols-[minmax(0,1fr)_minmax(105px,.65fr)]"
 
 const typeNames: Record<EmploymentType, string> = {
-  FULL_TIME: "Full time",
-  PART_TIME: "Part time",
+  FULL_TIME: "Full Time",
+  PART_TIME: "Part Time",
   CONTRACT: "Contract",
   INTERN: "Intern",
 }
 const statusNames: Record<EmploymentStatus, string> = {
   ACTIVE: "Active",
   INACTIVE: "Inactive",
-  ON_LEAVE: "On leave",
+  ON_LEAVE: "On Leave",
 }
 
 function StatusPill({ status }: { status: EmploymentStatus }) {
@@ -118,10 +118,10 @@ export function EmployeeTable({
           <span role="columnheader">Employee ID</span>
           <span role="columnheader">Employee</span>
           <span role="columnheader">Department</span>
-          <span role="columnheader">Position / team</span>
+          <span role="columnheader">Position / Team</span>
           <span role="columnheader">Type</span>
           <span role="columnheader">
-            {archiveView ? "Date archived" : "Start date"}
+            {archiveView ? "Date Archived" : "Start Date"}
           </span>
           <span role="columnheader">Status</span>
           <span role="columnheader">Actions</span>
@@ -264,7 +264,7 @@ export function EmployeeTable({
                 </span>
                 {employee.employmentType
                   ? typeNames[employee.employmentType]
-                  : "Not set"}
+                  : "Not Set"}
               </div>
               <div
                 role="cell"
@@ -288,7 +288,7 @@ export function EmployeeTable({
                 ) : employee.status ? (
                   <StatusPill status={employee.status} />
                 ) : (
-                  <span className="text-[#738096]">Not set</span>
+                  <span className="text-[#738096]">Not Set</span>
                 )}
               </div>
               <div

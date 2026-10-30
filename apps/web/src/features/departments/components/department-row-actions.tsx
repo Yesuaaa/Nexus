@@ -1,4 +1,4 @@
-import { useRef } from "react"
+import { useRef, useState } from "react"
 import { Eye, MoreHorizontal, Pencil } from "lucide-react"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
@@ -6,6 +6,7 @@ import {
   dropdownItemClass,
   dropdownMenuClass,
 } from "@/components/ui/dropdown-styles"
+import { useExclusiveMenu } from "@/components/ui/dropdown"
 import { cn } from "@/lib/utils"
 import {
   DropdownMenu,
@@ -30,8 +31,16 @@ export function DepartmentRowActions({
   onManageMembers: (id: string) => void
   onDelete: (id: string, name: string) => void
 }) {
+  const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const deletePending = useRef(false)
+  const closedByOther = useRef(false)
+
+  // Close this menu whenever any other menu opens.
+  useExclusiveMenu(open, () => {
+    closedByOther.current = true
+    setOpen(false)
+  })
 
   return (
     <div className="flex items-center gap-2">
@@ -60,8 +69,13 @@ export function DepartmentRowActions({
       )}
       {canDelete && (
         <DropdownMenu
-          onOpenChange={(open) => {
-            if (open) deletePending.current = false
+          open={open}
+          onOpenChange={(next) => {
+            if (next) {
+              deletePending.current = false
+              closedByOther.current = false
+            }
+            setOpen(next)
           }}
         >
           <DropdownMenuTrigger asChild>
@@ -85,6 +99,12 @@ export function DepartmentRowActions({
               "w-48 max-w-[min(280px,calc(100vw-40px))] text-xs text-foreground outline-none",
             )}
             onCloseAutoFocus={(event) => {
+              // Another menu took over: don't pull focus back to this trigger.
+              if (closedByOther.current) {
+                closedByOther.current = false
+                event.preventDefault()
+                return
+              }
               if (!deletePending.current) return
               event.preventDefault()
               deletePending.current = false
@@ -101,7 +121,7 @@ export function DepartmentRowActions({
                 deletePending.current = true
               }}
             >
-              Delete department
+              Delete Department
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
