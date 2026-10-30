@@ -536,13 +536,15 @@ test.describe("mocked regression", () => {
       if (pathname === "/api/users" && method === "GET") {
         const search = url.searchParams.get("search")?.toLowerCase() ?? ""
         const roleFilter = url.searchParams.get("role") ?? ""
+        const deleted = url.searchParams.get("deleted") === "true"
         const filtered = users.filter((u) => {
           const matchesSearch =
             !search ||
             u.email.toLowerCase().includes(search) ||
             (u.fullName?.toLowerCase().includes(search) ?? false)
           const matchesRole = !roleFilter || u.role === roleFilter
-          return matchesSearch && matchesRole
+          const matchesDeletionState = Boolean(u.accountDeletedAt) === deleted
+          return matchesSearch && matchesRole && matchesDeletionState
         })
         await route.fulfill({
           json: {
@@ -638,6 +640,42 @@ test.describe("mocked regression", () => {
           await route.fulfill({
             status: 404,
             json: { error: "User not found" },
+          })
+        }
+        return
+      }
+
+      const permanentAccountMatch = pathname.match(
+        /^\/api\/users\/([^/]+)\/permanent$/,
+      )
+      if (permanentAccountMatch && method === "DELETE") {
+        const targetId = decodeURIComponent(permanentAccountMatch[1])
+        const targetIndex = users.findIndex((u) => u.id === targetId)
+        if (targetIndex >= 0 && users[targetIndex]?.accountDeletedAt) {
+          users.splice(targetIndex, 1)
+          await route.fulfill({
+            json: { message: "Account permanently deleted" },
+          })
+        } else {
+          await route.fulfill({
+            status: 409,
+            json: { error: "Move the account to trash first" },
+          })
+        }
+        return
+      }
+
+      const accountMatch = pathname.match(/^\/api\/users\/([^/]+)$/)
+      if (accountMatch && method === "DELETE") {
+        const targetId = decodeURIComponent(accountMatch[1])
+        const target = users.find((u) => u.id === targetId)
+        if (target && !target.isActive && !target.accountDeletedAt) {
+          target.accountDeletedAt = new Date().toISOString()
+          await route.fulfill({ json: { message: "Account moved to trash" } })
+        } else {
+          await route.fulfill({
+            status: 409,
+            json: { error: "Deactivate the account before moving it to trash" },
           })
         }
         return
@@ -1851,6 +1889,44 @@ test.describe("mocked regression", () => {
 
     // Status pill reflects Active again
     await expect(page.getByText("Active").first()).toBeVisible()
+  })
+
+  test("superadmin can move an inactive account to Trash and delete it permanently", async ({
+    page,
+  }) => {
+    await restoreSession(page, "SUPERADMIN")
+    await page.goto("/accounts")
+
+    const searchInput = page.getByPlaceholder("Search name or email")
+    await searchInput.fill("Target")
+
+    await page
+      .getByRole("button", { name: "More actions for target@example.com" })
+      .click()
+    await page.getByRole("menuitem", { name: "Deactivate account" }).click()
+    await page
+      .getByRole("button", { name: "Deactivate account", exact: true })
+      .click()
+
+    await page
+      .getByRole("button", { name: "More actions for target@example.com" })
+      .click()
+    await page.getByRole("menuitem", { name: "Move to trash" }).click()
+    await expect(page.getByText("Move account to Trash?")).toBeVisible()
+    await page.getByRole("button", { name: "Move to Trash" }).click()
+    await expect(page.getByText("Target User")).toBeHidden()
+
+    await page.getByRole("button", { name: "Trash" }).click()
+    await expect(page.getByText("Target User")).toBeVisible()
+    await expect(page.getByText("Deleted").first()).toBeVisible()
+
+    await page
+      .getByRole("button", { name: "More actions for target@example.com" })
+      .click()
+    await page.getByRole("menuitem", { name: "Delete permanently" }).click()
+    await expect(page.getByText("Permanently delete account?")).toBeVisible()
+    await page.getByRole("button", { name: "Delete permanently" }).click()
+    await expect(page.getByText("Target User")).toBeHidden()
   })
 
   // -----------------------------------------------------------------------------

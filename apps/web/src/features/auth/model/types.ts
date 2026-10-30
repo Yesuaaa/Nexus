@@ -12,6 +12,7 @@ export type Account = {
   contactNumber: string | null
   role: "SUPERADMIN" | "ADMIN" | "STAFF" | "USER"
   isActive: boolean
+  accountDeletedAt?: string | null
   position?: string | null
   departmentId?: string | null
   department?: {

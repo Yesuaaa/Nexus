@@ -60,22 +60,55 @@ export const usersService = {
     return { user: publicUser(user) }
   },
 
-  async deleteUser(actor: User, targetId: string) {
+  async softDeleteUser(actor: User, targetId: string) {
     if (actor.id === targetId) {
-      throw new UsersError(403, "You cannot delete your own account")
+      throw new UsersError(403, "You cannot move your own account to trash")
+    }
+    const target = await usersRepository.findById(targetId)
+    if (!target || target.accountDeletedAt) {
+      throw new UsersError(404, "User not found")
+    }
+    if (!canChangeAccountStatus(actor.role, target.role)) {
+      throw new UsersError(403, "You cannot move this account to trash")
+    }
+    if (target.isActive) {
+      throw new UsersError(
+        409,
+        "Deactivate the account before moving it to trash",
+      )
+    }
+    const deleted = await usersRepository.softDeleteInactiveUser(
+      targetId,
+      target.role,
+    )
+    if (deleted.count === 0) {
+      throw new UsersError(409, "Account changed; refresh and retry")
+    }
+    return { message: "Account moved to trash" }
+  },
+
+  async permanentlyDeleteUser(actor: User, targetId: string) {
+    if (actor.id === targetId) {
+      throw new UsersError(
+        403,
+        "You cannot permanently delete your own account",
+      )
     }
     const target = await usersRepository.findById(targetId)
     if (!target) {
       throw new UsersError(404, "User not found")
     }
     if (!canChangeAccountStatus(actor.role, target.role)) {
-      throw new UsersError(403, "You cannot delete this account")
+      throw new UsersError(403, "You cannot permanently delete this account")
     }
-    if (target.isActive) {
-      throw new UsersError(409, "Deactivate the account before deleting it")
+    if (!target.accountDeletedAt) {
+      throw new UsersError(
+        409,
+        "Move the account to trash before deleting it permanently",
+      )
     }
     try {
-      const deleted = await usersRepository.deleteInactiveUser(
+      const deleted = await usersRepository.permanentlyDeleteUser(
         targetId,
         target.role,
       )
@@ -86,12 +119,12 @@ export const usersService = {
       if (isForeignKeyViolation(error)) {
         throw new UsersError(
           409,
-          "This account has related records and cannot be deleted. Keep it inactive to preserve its history.",
+          "This account has related records and cannot be permanently deleted. Keep it in Trash to preserve its history.",
         )
       }
       throw error
     }
-    return { message: "Account deleted successfully" }
+    return { message: "Account permanently deleted" }
   },
 
   async listUsers(query: {
@@ -100,6 +133,7 @@ export const usersService = {
     sort?: unknown
     direction?: unknown
     page?: unknown
+    deleted?: unknown
   }) {
     const search = typeof query.search === "string" ? query.search.trim() : ""
     const role = typeof query.role === "string" ? query.role : ""
@@ -107,6 +141,7 @@ export const usersService = {
     const direction =
       typeof query.direction === "string" ? query.direction : "desc"
     const page = Number(query.page ?? 1)
+    const deleted = query.deleted === "true"
     const pageSize = 10
     const sortableColumns = [
       "member",
@@ -114,6 +149,7 @@ export const usersService = {
       "status",
       "department",
       "createdAt",
+      "deletedAt",
     ]
     if (
       search.length > 100 ||
@@ -128,7 +164,7 @@ export const usersService = {
     }
 
     const where: Prisma.UserWhereInput = {
-      accountDeletedAt: null,
+      accountDeletedAt: deleted ? { not: null } : null,
       ...(role ? { role: role as Role } : {}),
       ...(search
         ? {
@@ -158,7 +194,9 @@ export const usersService = {
                   { fullName: "asc" },
                   { id: "asc" },
                 ]
-              : [{ createdAt: sortDirection }, { id: sortDirection }]
+              : sort === "deletedAt"
+                ? [{ accountDeletedAt: sortDirection }, { id: sortDirection }]
+                : [{ createdAt: sortDirection }, { id: sortDirection }]
 
     const [users, total] = await usersRepository.findUsersWithCount(
       where,
@@ -300,7 +338,7 @@ export const usersService = {
       throw new UsersError(403, "You cannot change your own role")
     }
     const target = await usersRepository.findById(targetId)
-    if (!target) {
+    if (!target || target.accountDeletedAt) {
       throw new UsersError(404, "User not found")
     }
     if (!canAssignRole(actor.role, target.role, role as Role)) {

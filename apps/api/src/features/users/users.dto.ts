@@ -20,6 +20,7 @@ export function publicUser(
     position: user.position ?? null,
     role: user.role,
     isActive: user.isActive,
+    accountDeletedAt: user.accountDeletedAt,
     departmentId: user.departmentId ?? null,
     department: user.department
       ? {
