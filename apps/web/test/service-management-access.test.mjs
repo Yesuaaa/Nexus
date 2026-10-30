@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import {
+  canAccessBookedServices,
+  canAccessRequestInbox,
   canAccessServiceManagement,
   Permissions,
 } from "../src/features/auth/model/permissions.ts"
@@ -34,4 +36,23 @@ test("service management is limited to the admin role", () => {
 
 test("an admin role still requires the service read permission", () => {
   assert.equal(canAccessServiceManagement(account("ADMIN")), false)
+})
+
+test("booked services remain private to client accounts", () => {
+  assert.equal(canAccessBookedServices(account("USER")), true)
+  for (const role of ["ADMIN", "STAFF", "SUPERADMIN"]) {
+    assert.equal(
+      canAccessBookedServices(account(role, [Permissions.SERVICES_READ])),
+      false,
+    )
+  }
+})
+
+test("request inbox requires a current staff department head assignment", () => {
+  const headOf = { id: "department-1", name: "Design" }
+  assert.equal(canAccessRequestInbox({ ...account("STAFF"), headOf }), true)
+  assert.equal(canAccessRequestInbox(account("STAFF")), false)
+  for (const role of ["USER", "ADMIN", "SUPERADMIN"]) {
+    assert.equal(canAccessRequestInbox({ ...account(role), headOf }), false)
+  }
 })

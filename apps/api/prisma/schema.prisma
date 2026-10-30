@@ -38,6 +38,11 @@ enum ServiceRequestStatus {
   IN_PROGRESS
   COMPLETED
   CANCELLED
+  SUBMITTED
+  UNDER_REVIEW
+  CLOSED
+  AWAITING_CLIENT_INFO
+  READY_FOR_QUOTATION
 }
 
 enum PricingModel {
@@ -196,7 +201,8 @@ model ServiceRequest {
   service                 Service              @relation(fields: [serviceId], references: [id], onDelete: Restrict)
   title                   String
   description             String?
-  status                  ServiceRequestStatus @default(PENDING)
+  // Keep the database's existing initial status (PENDING or SUBMITTED).
+  status                  ServiceRequestStatus @default(dbgenerated())
   pricingModel            PricingModel?
   agreedPrice             Decimal?             @db.Decimal(12, 2)
   currency                String?

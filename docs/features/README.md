@@ -7,3 +7,5 @@ Use the date the feature was completed, and keep later implementation changes in
 ## Records
 
 - [Employee Management (Admin)](employee-management.md), developed 2026-10-26.
+- [Client Booked Services](client-service-requests.md), developed 2026-10-30.
+- [Department Head Request Inbox](department-request-inbox.md), developed 2026-10-30.

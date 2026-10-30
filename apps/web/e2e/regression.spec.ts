@@ -2895,6 +2895,9 @@ test.describe("mocked regression", () => {
           additionalDetails: "",
         })
         expect(submissions[attempt - 1]).not.toHaveProperty("clientId")
+        await expect(
+          page.getByRole("link", { name: "View booked service", exact: true }),
+        ).toHaveAttribute("href", `/booked-services?booking=request-${attempt}`)
         await page
           .getByRole("button", { name: "Start another request", exact: true })
           .click()

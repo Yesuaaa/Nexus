@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef } from "react"
+import Link from "next/link"
 import { CheckCircle2 } from "lucide-react"
 import { focusRing } from "@/components/layout/styles"
 import { cn } from "@/lib/utils"
@@ -62,6 +63,15 @@ export function ServiceRequestConfirmation({
           </div>
         ))}
       </dl>
+      <Link
+        href={`/booked-services?booking=${encodeURIComponent(receipt.id)}`}
+        className={cn(
+          "mt-4 mr-3 inline-flex min-h-11 items-center justify-center rounded-xl border border-[#dce3ee] px-5 text-sm font-semibold text-[#294c96] hover:bg-[#f8fafd] max-[560px]:mr-0 max-[560px]:w-full",
+          focusRing,
+        )}
+      >
+        View booked service
+      </Link>
       <button
         type="button"
         onClick={onNewRequest}

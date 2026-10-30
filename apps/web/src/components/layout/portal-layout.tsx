@@ -7,6 +7,8 @@ import { signOut } from "@/features/auth/api/auth-api"
 import { useAccount } from "@/features/auth/hooks/use-account"
 import {
   canAccessAccountManagement,
+  canAccessBookedServices,
+  canAccessRequestInbox,
   canAccessDepartmentManagement,
   canAccessEmployeeManagement,
   canAccessServiceCatalog,
@@ -36,7 +38,12 @@ export function PortalLayout({ children }: { children: ReactNode }) {
       (pathname === "/services" &&
         !canAccessServiceCatalog(account) &&
         !canAccessServiceManagement(account)) ||
-      (pathname.startsWith("/clients") && !canAccessClientManagement(account)))
+      (pathname.startsWith("/clients") &&
+        !canAccessClientManagement(account)) ||
+      (pathname.startsWith("/booked-services") &&
+        !canAccessBookedServices(account)) ||
+      (pathname.startsWith("/request-inbox") &&
+        !canAccessRequestInbox(account)))
 
   useEffect(() => {
     if (denied) router.replace("/dashboard")
