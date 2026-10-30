@@ -1,5 +1,26 @@
+export const departmentColors = [
+  "blue",
+  "violet",
+  "pink",
+  "orange",
+  "teal",
+  "amber",
+  "slate",
+  "green",
+  "red",
+  "brown",
+  "cyan",
+] as const
+
+export type DepartmentColor = (typeof departmentColors)[number]
+
+function isDepartmentColor(value: unknown): value is DepartmentColor {
+  return departmentColors.some((color) => color === value)
+}
+
 export interface DepartmentInput {
   name: string
+  color: DepartmentColor
   code: string | null
   description: string | null
   headId: string | null
@@ -20,6 +41,7 @@ export function validateDepartmentCreateInput(
     unknown
   >
   const name = typeof input.name === "string" ? input.name.trim() : ""
+  const color = input.color === undefined ? "blue" : input.color
   const code =
     typeof input.code === "string" ? input.code.trim().toUpperCase() : null
   const description =
@@ -32,6 +54,9 @@ export function validateDepartmentCreateInput(
   if (!name || name.length < 2 || name.length > 80) {
     return { error: "Department name must be between 2 and 80 characters" }
   }
+  if (!isDepartmentColor(color)) {
+    return { error: "Invalid department color" }
+  }
   if (code && (code.length < 2 || code.length > 20)) {
     return { error: "Department code must be between 2 and 20 characters" }
   }
@@ -39,6 +64,7 @@ export function validateDepartmentCreateInput(
   return {
     value: {
       name,
+      color,
       code: code || null,
       description: description || null,
       headId,
@@ -50,6 +76,7 @@ export function validateDepartmentUpdateInput(body: unknown):
   | {
       value: {
         name?: string
+        color?: DepartmentColor
         code?: string | null
         description?: string | null
         headId?: string | null
@@ -62,6 +89,7 @@ export function validateDepartmentUpdateInput(body: unknown):
     unknown
   >
   const name = typeof input.name === "string" ? input.name.trim() : undefined
+  const color = input.color
   const code =
     input.code !== undefined
       ? typeof input.code === "string" && input.code.trim()
@@ -84,6 +112,9 @@ export function validateDepartmentUpdateInput(body: unknown):
   if (name !== undefined && (name.length < 2 || name.length > 80)) {
     return { error: "Department name must be between 2 and 80 characters" }
   }
+  if (color !== undefined && !isDepartmentColor(color)) {
+    return { error: "Invalid department color" }
+  }
   if (
     code !== undefined &&
     code !== null &&
@@ -92,7 +123,7 @@ export function validateDepartmentUpdateInput(body: unknown):
     return { error: "Department code must be between 2 and 20 characters" }
   }
 
-  return { value: { name, code, description, headId } }
+  return { value: { name, color, code, description, headId } }
 }
 
 export function validateMemberAssignmentInput(body: unknown):

@@ -4,6 +4,7 @@ import { Permissions } from "../src/features/auth/model/permissions"
 import type { Department } from "../src/features/departments/api/departments-api"
 import type { Employee } from "../src/features/employees/api/employees-api"
 import type {
+  PricingTemplate,
   Service,
   ServiceInput,
 } from "../src/features/services/api/services-api"
@@ -89,7 +90,7 @@ test.describe("live test accounts", () => {
       path: "/clients",
       endpoint: "/api/clients",
       title: "Client Management",
-      roles: ["ADMIN", "SUPERADMIN"],
+      roles: ["ADMIN"],
     },
   ]
 
@@ -259,13 +260,13 @@ test.describe("mocked regression", () => {
     if (role !== "USER") permissions.push(Permissions.DEPARTMENTS_READ)
     if (role === "ADMIN" || role === "SUPERADMIN") {
       permissions.push(
-        Permissions.CLIENTS_READ,
         Permissions.DEPARTMENTS_MANAGE,
         Permissions.DEPARTMENTS_DELETE,
       )
     }
     if (role === "ADMIN") {
       permissions.push(
+        Permissions.CLIENTS_READ,
         Permissions.EMPLOYEES_READ,
         Permissions.EMPLOYEES_MANAGE,
         Permissions.SERVICES_READ,
@@ -297,6 +298,7 @@ test.describe("mocked regression", () => {
   }
 
   type MockApiOptions = {
+    pricingTemplates?: PricingTemplate[]
     account?: Partial<Account>
     initialServices?: Service[]
     initialUsers?: Account[]
@@ -310,6 +312,33 @@ test.describe("mocked regression", () => {
     options?: MockApiOptions,
   ) {
     const currentUser = accountFor(role, options?.account)
+    const pricingTemplates = [...(options?.pricingTemplates ?? [])]
+    function pricingFields(body: ServiceInput) {
+      const timestamp = "2026-01-02T00:00:00.000Z"
+      const template = body.pricingTemplate
+        ? {
+            ...body.pricingTemplate,
+            id: `pricing-${pricingTemplates.length + 1}`,
+            amount: body.pricingTemplate.amount?.toFixed(2) ?? null,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          }
+        : (pricingTemplates.find(
+            (item) => item.id === body.pricingTemplateId,
+          ) ?? null)
+      if (body.pricingTemplate && template) pricingTemplates.push(template)
+      return {
+        pricingTemplateId: template?.id ?? null,
+        pricingTemplate: template,
+        packages: body.packages.map((item, index) => ({
+          ...item,
+          id: item.id ?? `package-${index + 1}`,
+          amount: item.amount?.toFixed(2) ?? null,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        })),
+      }
+    }
     const services: Service[] = options?.initialServices ?? [
       {
         id: "service-1",
@@ -324,7 +353,9 @@ test.describe("mocked regression", () => {
         pricingTemplateId: null,
         pricingTemplate: null,
         packages: [],
-        departments: [{ id: "dept-1", name: "Engineering", code: "ENG" }],
+        departments: [
+          { id: "dept-1", name: "Engineering", code: "ENG", color: "teal" },
+        ],
         createdAt: "2026-01-01T00:00:00.000Z",
         updatedAt: "2026-01-01T00:00:00.000Z",
       },
@@ -342,7 +373,12 @@ test.describe("mocked regression", () => {
         Permissions.PROFILE_CHANGE_PASSWORD,
       ],
       departmentId: "dept-1",
-      department: { id: "dept-1", name: "Engineering", code: "ENG" },
+      department: {
+        id: "dept-1",
+        name: "Engineering",
+        code: "ENG",
+        color: "teal",
+      },
       teamId: null,
       team: null,
       createdAt: "2026-01-02T00:00:00.000Z",
@@ -357,6 +393,7 @@ test.describe("mocked regression", () => {
       {
         id: "dept-1",
         name: "Engineering",
+        color: "teal",
         code: "ENG",
         description: "Engineering department",
         headId: null,
@@ -381,7 +418,12 @@ test.describe("mocked regression", () => {
         startDate: "2026-01-15",
         departmentId: "dept-1",
         teamId: null,
-        department: { id: "dept-1", name: "Engineering", code: "ENG" },
+        department: {
+          id: "dept-1",
+          name: "Engineering",
+          code: "ENG",
+          color: "teal",
+        },
         team: null,
         hasAccount: true,
         accountIsActive: true,
@@ -494,13 +536,15 @@ test.describe("mocked regression", () => {
       if (pathname === "/api/users" && method === "GET") {
         const search = url.searchParams.get("search")?.toLowerCase() ?? ""
         const roleFilter = url.searchParams.get("role") ?? ""
+        const deleted = url.searchParams.get("deleted") === "true"
         const filtered = users.filter((u) => {
           const matchesSearch =
             !search ||
             u.email.toLowerCase().includes(search) ||
             (u.fullName?.toLowerCase().includes(search) ?? false)
           const matchesRole = !roleFilter || u.role === roleFilter
-          return matchesSearch && matchesRole
+          const matchesDeletionState = Boolean(u.accountDeletedAt) === deleted
+          return matchesSearch && matchesRole && matchesDeletionState
         })
         await route.fulfill({
           json: {
@@ -601,6 +645,42 @@ test.describe("mocked regression", () => {
         return
       }
 
+      const permanentAccountMatch = pathname.match(
+        /^\/api\/users\/([^/]+)\/permanent$/,
+      )
+      if (permanentAccountMatch && method === "DELETE") {
+        const targetId = decodeURIComponent(permanentAccountMatch[1])
+        const targetIndex = users.findIndex((u) => u.id === targetId)
+        if (targetIndex >= 0 && users[targetIndex]?.accountDeletedAt) {
+          users.splice(targetIndex, 1)
+          await route.fulfill({
+            json: { message: "Account permanently deleted" },
+          })
+        } else {
+          await route.fulfill({
+            status: 409,
+            json: { error: "Move the account to trash first" },
+          })
+        }
+        return
+      }
+
+      const accountMatch = pathname.match(/^\/api\/users\/([^/]+)$/)
+      if (accountMatch && method === "DELETE") {
+        const targetId = decodeURIComponent(accountMatch[1])
+        const target = users.find((u) => u.id === targetId)
+        if (target && !target.isActive && !target.accountDeletedAt) {
+          target.accountDeletedAt = new Date().toISOString()
+          await route.fulfill({ json: { message: "Account moved to trash" } })
+        } else {
+          await route.fulfill({
+            status: 409,
+            json: { error: "Deactivate the account before moving it to trash" },
+          })
+        }
+        return
+      }
+
       // --- Departments endpoints ---
       if (pathname === "/api/departments/eligible-heads" && method === "GET") {
         await route.fulfill({
@@ -644,7 +724,7 @@ test.describe("mocked regression", () => {
         return
       }
       if (pathname === "/api/services/pricing-templates" && method === "GET") {
-        await route.fulfill({ json: { pricingTemplates: [] } })
+        await route.fulfill({ json: { pricingTemplates } })
         return
       }
       if (pathname === "/api/services" && method === "POST") {
@@ -659,9 +739,7 @@ test.describe("mocked regression", () => {
           requiresConsultation: body.requiresConsultation,
           consultationNotes: body.consultationNotes,
           isActive: body.isActive,
-          pricingTemplateId: body.pricingTemplateId,
-          pricingTemplate: null,
-          packages: [],
+          ...pricingFields(body),
           departments: departments.filter((department) =>
             body.departmentIds.includes(department.id),
           ),
@@ -689,6 +767,7 @@ test.describe("mocked regression", () => {
           Object.assign(
             service!,
             body,
+            method === "PUT" ? pricingFields(body as ServiceInput) : {},
             body.departmentIds
               ? {
                   departments: departments.filter((department) =>
@@ -705,6 +784,7 @@ test.describe("mocked regression", () => {
       if (pathname === "/api/departments" && method === "POST") {
         const body = request.postDataJSON() as {
           name: string
+          color: Department["color"]
           code?: string
           description?: string
           headId?: string | null
@@ -712,6 +792,7 @@ test.describe("mocked regression", () => {
         const created: Department = {
           id: `dept-${Date.now()}`,
           name: body.name,
+          color: body.color,
           code: body.code ?? null,
           description: body.description ?? null,
           headId: body.headId ?? null,
@@ -871,7 +952,7 @@ test.describe("mocked regression", () => {
           requests.push(request.url())
       })
       await page.goto("/clients")
-      if (role === "STAFF" || role === "USER") {
+      if (role !== "ADMIN") {
         await expect(page).toHaveURL(/\/dashboard$/)
         expect(requests).toEqual([])
         return
@@ -896,7 +977,9 @@ test.describe("mocked regression", () => {
         .getByRole("searchbox", { name: "Search clients" })
         .fill("missing-client")
       await expect(
-        page.getByText("No clients match your search or filters."),
+        page
+          .getByRole("status")
+          .filter({ hasText: /No results for.*missing-client.*found/ }),
       ).toBeVisible()
       await page.getByRole("button", { name: "Clear filters" }).click()
       await expect(page.getByText("Target User", { exact: true })).toBeVisible()
@@ -981,9 +1064,7 @@ test.describe("mocked regression", () => {
     await dialog
       .getByLabel("Description", { exact: false })
       .fill("Business consulting")
-    await dialog
-      .getByRole("button", { name: "Create Service", exact: true })
-      .click()
+    await dialog.getByRole("button", { name: "Continue", exact: true }).click()
     await expect(dialog.getByRole("alert")).toHaveText(
       "Please select at least one responsible department",
     )
@@ -992,6 +1073,11 @@ test.describe("mocked regression", () => {
       .click()
     await page.getByRole("menuitemcheckbox", { name: "Engineering" }).click()
     await page.keyboard.press("Escape")
+    for (let step = 0; step < 3; step++) {
+      await dialog
+        .getByRole("button", { name: "Continue", exact: true })
+        .click()
+    }
     const created = page.waitForRequest(
       (request) =>
         request.method() === "POST" &&
@@ -1025,8 +1111,16 @@ test.describe("mocked regression", () => {
     await page.route("**/api/services/service-2", (route) =>
       route.fulfill({ status: 403, json: { error: "Permission revoked" } }),
     )
+    for (let step = 0; step < 3; step++) {
+      await dialog
+        .getByRole("button", { name: "Continue", exact: true })
+        .click()
+    }
     await dialog.getByRole("button", { name: "Save Changes" }).click()
     await expect(dialog.getByRole("alert")).toHaveText("Permission revoked")
+    for (let step = 0; step < 3; step++) {
+      await dialog.getByRole("button", { name: "Back", exact: true }).click()
+    }
     await expect(dialog.getByLabel("Service Name")).toHaveValue(
       "Updated Consulting",
     )
@@ -1035,6 +1129,144 @@ test.describe("mocked regression", () => {
       page.getByRole("rowheader", { name: "Consulting", exact: true }),
     ).toBeVisible()
   })
+
+  test("service wizard persists consultation, recurring pricing, and packages after reload", async ({
+    page,
+  }) => {
+    await restoreSession(page, "ADMIN")
+    await page.goto("/services")
+    await page
+      .getByRole("button", { name: "Edit Test Service", exact: true })
+      .click()
+    const dialog = page.getByRole("dialog")
+    const next = () =>
+      dialog.getByRole("button", { name: "Continue", exact: true }).click()
+    await next()
+    await dialog
+      .getByRole("textbox", { name: /Client Requirements/ })
+      .fill("  Brand guide  \n\nProject brief")
+    await dialog
+      .getByLabel("Consultation is required before proceeding")
+      .check()
+    await dialog.getByLabel("Consultation Notes").fill("Discuss project scope")
+    await next()
+    await dialog.getByLabel("Pricing Template", { exact: true }).click()
+    await page
+      .getByRole("option", { name: "Create a reusable template" })
+      .click()
+    await dialog
+      .getByLabel("Template Name", { exact: true })
+      .fill("Monthly support")
+    await dialog.getByLabel("Pricing Model", { exact: true }).click()
+    await page.getByRole("option", { name: "Recurring", exact: true }).click()
+    await dialog.getByLabel("Amount (PHP)").fill("1500.50")
+    await next()
+    await expect(dialog.getByRole("alert")).toHaveText(
+      "Select a billing interval",
+    )
+    await dialog.getByLabel("Billing Interval").click()
+    await page.getByRole("option", { name: "Monthly", exact: true }).click()
+    await next()
+    await dialog.getByRole("button", { name: "Add Package" }).click()
+    await dialog.getByLabel("Package Name").fill("Starter")
+    await dialog
+      .getByLabel("Description", { exact: true })
+      .fill("Starter support package")
+    await dialog
+      .getByLabel("Included Features")
+      .fill(" Email support \n\nMonthly review")
+    await dialog.getByLabel("Recommended", { exact: true }).check()
+    const saved = page.waitForRequest(
+      (request) =>
+        request.method() === "PUT" &&
+        new URL(request.url()).pathname === "/api/services/service-1",
+    )
+    await dialog.getByRole("button", { name: "Save Changes" }).click()
+    expect((await saved).postDataJSON()).toMatchObject({
+      clientRequirements: ["Brand guide", "Project brief"],
+      requiresConsultation: true,
+      consultationNotes: "Discuss project scope",
+      pricingTemplateId: null,
+      pricingTemplate: {
+        name: "Monthly support",
+        pricingModel: "RECURRING",
+        amount: 1500.5,
+        currency: "PHP",
+        billingInterval: "MONTHLY",
+        isPublic: true,
+      },
+      packages: [
+        expect.objectContaining({
+          name: "Starter",
+          includedFeatures: ["Email support", "Monthly review"],
+          isRecommended: true,
+        }),
+      ],
+    })
+    await expect(dialog).toHaveCount(0)
+    await page.reload()
+    await page
+      .getByRole("button", { name: "View Test Service", exact: true })
+      .click()
+    for (const text of [
+      "Brand guide; Project brief",
+      "Discuss project scope",
+      "Starter support package",
+      "Email support",
+      "Recommended",
+    ]) {
+      await expect(dialog).toContainText(text)
+    }
+    await dialog.getByRole("button", { name: "Close details" }).click()
+    await page
+      .getByRole("button", { name: "Edit Test Service", exact: true })
+      .click()
+    await next()
+    await expect(dialog.getByLabel("Consultation Notes")).toHaveValue(
+      "Discuss project scope",
+    )
+    await dialog
+      .getByLabel("Consultation is required before proceeding")
+      .uncheck()
+    await next()
+    await expect(
+      dialog.getByLabel("Pricing Template", { exact: true }),
+    ).toContainText("Monthly support")
+    await next()
+    await expect(dialog.getByLabel("Package Name")).toHaveValue("Starter")
+    const updated = page.waitForRequest(
+      (request) =>
+        request.method() === "PUT" &&
+        new URL(request.url()).pathname === "/api/services/service-1",
+    )
+    await dialog.getByRole("button", { name: "Save Changes" }).click()
+    expect((await updated).postDataJSON()).toMatchObject({
+      requiresConsultation: false,
+      consultationNotes: null,
+      pricingTemplateId: "pricing-1",
+      pricingTemplate: null,
+      packages: [expect.objectContaining({ id: "package-1", name: "Starter" })],
+    })
+    await expect(dialog).toHaveCount(0)
+  })
+
+  for (const path of ["/login", "/register"]) {
+    test(`${path} offers email authentication without removed social providers`, async ({
+      page,
+    }) => {
+      await mockApi(page, "USER")
+      await page.goto(path)
+      await expect(
+        page.getByLabel("Email address", { exact: true }),
+      ).toBeVisible()
+      await expect(
+        page.getByRole("button", { name: /google|facebook|apple/i }),
+      ).toHaveCount(0)
+      await expect(
+        page.getByRole("link", { name: /google|facebook|apple/i }),
+      ).toHaveCount(0)
+    })
+  }
 
   test("service deletion requires deactivation and explicit confirmation", async ({
     page,
@@ -1240,7 +1472,7 @@ test.describe("mocked regression", () => {
     await expect(
       page
         .getByRole("dialog")
-        .getByRole("button", { name: "Create Service", exact: true }),
+        .getByRole("button", { name: "Continue", exact: true }),
     ).toBeDisabled()
   })
 
@@ -1522,7 +1754,7 @@ test.describe("mocked regression", () => {
           page.getByText("Alex Employee", { exact: true }),
         ).toBeVisible()
         await expect(
-          page.getByRole("button", { name: "Add employee", exact: true }),
+          page.getByRole("button", { name: "Create Employee", exact: true }),
         ).toHaveCount(1)
         expect(employeeRequests).toHaveLength(1)
       }
@@ -1550,7 +1782,9 @@ test.describe("mocked regression", () => {
         await expect(
           page.getByRole("button", { name: "Create Service", exact: true }),
         ).toHaveCount(1)
-        expect(serviceRequests).toHaveLength(1)
+        expect(
+          serviceRequests.map((url) => new URL(url).pathname).sort(),
+        ).toEqual(["/api/services", "/api/services/pricing-templates"])
         await page.reload()
         await expect(
           page.getByRole("heading", { name: "Service Management" }),
@@ -1655,6 +1889,44 @@ test.describe("mocked regression", () => {
 
     // Status pill reflects Active again
     await expect(page.getByText("Active").first()).toBeVisible()
+  })
+
+  test("superadmin can move an inactive account to Trash and delete it permanently", async ({
+    page,
+  }) => {
+    await restoreSession(page, "SUPERADMIN")
+    await page.goto("/accounts")
+
+    const searchInput = page.getByPlaceholder("Search name or email")
+    await searchInput.fill("Target")
+
+    await page
+      .getByRole("button", { name: "More actions for target@example.com" })
+      .click()
+    await page.getByRole("menuitem", { name: "Deactivate account" }).click()
+    await page
+      .getByRole("button", { name: "Deactivate account", exact: true })
+      .click()
+
+    await page
+      .getByRole("button", { name: "More actions for target@example.com" })
+      .click()
+    await page.getByRole("menuitem", { name: "Move to trash" }).click()
+    await expect(page.getByText("Move account to Trash?")).toBeVisible()
+    await page.getByRole("button", { name: "Move to Trash" }).click()
+    await expect(page.getByText("Target User")).toBeHidden()
+
+    await page.getByRole("button", { name: "Trash" }).click()
+    await expect(page.getByText("Target User")).toBeVisible()
+    await expect(page.getByText("Deleted").first()).toBeVisible()
+
+    await page
+      .getByRole("button", { name: "More actions for target@example.com" })
+      .click()
+    await page.getByRole("menuitem", { name: "Delete permanently" }).click()
+    await expect(page.getByText("Permanently delete account?")).toBeVisible()
+    await page.getByRole("button", { name: "Delete permanently" }).click()
+    await expect(page.getByText("Target User")).toBeHidden()
   })
 
   // -----------------------------------------------------------------------------

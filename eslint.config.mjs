@@ -18,6 +18,7 @@ export default tseslint.config(
       "apps/web/next-env.d.ts",
       "apps/api/src/generated/**",
       ".pnpm-store/**",
+      ".ci-tools/**",
       ".localappdata/**",
       "apps/mobile/**",
     ],

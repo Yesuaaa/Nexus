@@ -1,4 +1,5 @@
 import { apiRequest } from "@/features/auth/api/auth-api"
+import type { DepartmentColor } from "@/features/departments/model/department-color"
 
 export type PricingModel =
   "FIXED" | "STARTING" | "CUSTOM_QUOTE" | "RECURRING" | "HOURLY"
@@ -9,6 +10,7 @@ export type ServiceDepartment = {
   id: string
   name: string
   code: string | null
+  color: DepartmentColor
 }
 
 export type PricingTemplate = {

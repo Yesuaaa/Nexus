@@ -3,7 +3,12 @@ import { permissionsFor } from "../auth/auth.permissions.js"
 
 export function publicUser(
   user: User & {
-    department?: { id: string; name: string; code: string | null } | null
+    department?: {
+      id: string
+      name: string
+      code: string | null
+      color: string
+    } | null
     team?: { id: string; name: string } | null
   },
 ) {
@@ -15,12 +20,14 @@ export function publicUser(
     position: user.position ?? null,
     role: user.role,
     isActive: user.isActive,
+    accountDeletedAt: user.accountDeletedAt,
     departmentId: user.departmentId ?? null,
     department: user.department
       ? {
           id: user.department.id,
           name: user.department.name,
           code: user.department.code,
+          color: user.department.color,
         }
       : null,
     teamId: user.teamId ?? null,

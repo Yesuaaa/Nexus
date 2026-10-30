@@ -1,4 +1,5 @@
 import { apiRequest } from "@/features/auth/api/auth-api"
+import type { DepartmentColor } from "@/features/departments/model/department-color"
 
 export type EmploymentType = "FULL_TIME" | "PART_TIME" | "CONTRACT" | "INTERN"
 export type EmploymentStatus = "ACTIVE" | "INACTIVE" | "ON_LEAVE"
@@ -17,7 +18,12 @@ export type Employee = {
   startDate: string | null
   departmentId: string | null
   teamId: string | null
-  department: { id: string; name: string; code: string | null } | null
+  department: {
+    id: string
+    name: string
+    code: string | null
+    color: DepartmentColor
+  } | null
   team: { id: string; name: string } | null
   hasAccount: boolean
   accountIsActive: boolean | null

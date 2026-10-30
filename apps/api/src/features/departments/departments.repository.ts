@@ -207,6 +207,7 @@ export const departmentsRepository = {
       const created = await tx.department.create({
         data: {
           name: data.name,
+          color: data.color,
           code: data.code || null,
           description: data.description || null,
           headId: data.headId,
@@ -237,6 +238,7 @@ export const departmentsRepository = {
     id: string,
     data: {
       name?: string
+      color?: string
       code?: string | null
       description?: string | null
       headId?: string | null
@@ -254,6 +256,7 @@ export const departmentsRepository = {
         where: { id },
         data: {
           ...(data.name !== undefined ? { name: data.name } : {}),
+          ...(data.color !== undefined ? { color: data.color } : {}),
           ...(data.code !== undefined ? { code: data.code } : {}),
           ...(data.description !== undefined
             ? { description: data.description }

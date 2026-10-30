@@ -7,7 +7,9 @@ import {
 import { getPrisma } from "../../lib/db.js"
 
 export const employeeInclude = {
-  department: { select: { id: true, name: true, code: true } },
+  department: {
+    select: { id: true, name: true, code: true, color: true },
+  },
   team: { select: { id: true, name: true } },
   user: {
     select: {

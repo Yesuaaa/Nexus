@@ -37,17 +37,43 @@ export const usersRepository = {
       return transaction.user.findUniqueOrThrow({
         where: { id },
         include: {
-          department: { select: { id: true, name: true, code: true } },
+          department: {
+            select: { id: true, name: true, code: true, color: true },
+          },
           team: { select: { id: true, name: true } },
         },
       })
     })
   },
 
-  async deleteInactiveUser(id: string, role: Role) {
+  async softDeleteInactiveUser(id: string, role: Role) {
+    const prisma = getPrisma()!
+    return prisma.$transaction(async (transaction) => {
+      const deleted = await transaction.user.updateMany({
+        where: {
+          id,
+          role,
+          isActive: false,
+          accountDeletedAt: null,
+        },
+        data: { accountDeletedAt: new Date() },
+      })
+      if (deleted.count > 0) {
+        await transaction.session.deleteMany({ where: { userId: id } })
+      }
+      return deleted
+    })
+  },
+
+  async permanentlyDeleteUser(id: string, role: Role) {
     const prisma = getPrisma()!
     return prisma.user.deleteMany({
-      where: { id, role, isActive: false },
+      where: {
+        id,
+        role,
+        isActive: false,
+        accountDeletedAt: { not: null },
+      },
     })
   },
 
@@ -73,7 +99,7 @@ export const usersRepository = {
         where,
         include: {
           department: {
-            select: { id: true, name: true, code: true },
+            select: { id: true, name: true, code: true, color: true },
           },
           team: {
             select: { id: true, name: true },
@@ -109,7 +135,7 @@ export const usersRepository = {
         },
         include: {
           department: {
-            select: { id: true, name: true, code: true },
+            select: { id: true, name: true, code: true, color: true },
           },
           team: {
             select: { id: true, name: true },
@@ -154,7 +180,9 @@ export const usersRepository = {
       return tx.user.findUniqueOrThrow({
         where: { id: targetId },
         include: {
-          department: { select: { id: true, name: true, code: true } },
+          department: {
+            select: { id: true, name: true, code: true, color: true },
+          },
           team: { select: { id: true, name: true } },
         },
       })
