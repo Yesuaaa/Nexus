@@ -109,6 +109,8 @@ export function ClientFormDialog({
           )
             opener.current.focus()
         }}
+        onInteractOutside={(event) => event.preventDefault()}
+        onEscapeKeyDown={(event) => event.preventDefault()}
       >
         <header className="flex items-start justify-between gap-4 border-b border-[#eceef1] p-5 sm:px-6 sm:pt-6 sm:pb-5">
           <div className="min-w-0">
