@@ -475,7 +475,9 @@ export function ClientServicesPage() {
             variant="outline"
             className="h-8 text-xs"
             onClick={() => {
-              const service = services.find((item) => item.id === detailState.id)
+              const service = services.find(
+                (item) => item.id === detailState.id,
+              )
               if (service) void selectService(service)
             }}
           >
@@ -489,7 +491,8 @@ export function ClientServicesPage() {
           "flex items-center gap-4",
           currentStep === 1 ? "mt-[clamp(30px,4vw,52px)]" : "mt-3",
         )}
-      >        <div
+      >
+        <div
           className="h-1 flex-1 overflow-hidden rounded-full bg-[#e4ebfa]"
           role="progressbar"
           aria-label="Service request progress"
