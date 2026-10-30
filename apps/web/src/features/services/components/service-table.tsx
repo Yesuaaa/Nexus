@@ -1,3 +1,4 @@
+import Image from "next/image"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Eye, MoreHorizontal, Pencil } from "lucide-react"
 import { AnimatePresence } from "framer-motion"
@@ -437,12 +438,23 @@ export function ServiceTable({
                       type="button"
                       role="rowheader"
                       className={cn(
-                        "min-w-0 cursor-pointer truncate rounded-sm border-0 bg-transparent p-0 text-left font-semibold hover:underline hover:underline-offset-4 @max-[920px]:col-start-1 @max-[920px]:row-start-1",
+                        "flex min-w-0 cursor-pointer items-center gap-2 rounded-sm border-0 bg-transparent p-0 text-left font-semibold hover:underline hover:underline-offset-4 @max-[920px]:col-start-1 @max-[920px]:row-start-1",
                         focusRing,
                       )}
                       onClick={() => onView(service)}
                     >
-                      {service.name}
+                      <span className="relative size-8 flex-none overflow-hidden rounded-md bg-[#e8eef7]">
+                        {service.imageUrl ? (
+                          <Image
+                            src={service.imageUrl}
+                            alt=""
+                            fill
+                            unoptimized
+                            className="object-cover"
+                          />
+                        ) : null}
+                      </span>
+                      <span className="truncate">{service.name}</span>
                     </button>
                     <div
                       role="cell"

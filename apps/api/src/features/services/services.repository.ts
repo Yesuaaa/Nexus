@@ -1,41 +1,73 @@
+import type { Prisma } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
-import type { ServiceInput } from "./services.schema.js"
+import type {
+  ServicePackageInput,
+  ServicePersistenceInput,
+} from "./services.schema.js"
 
 export const departmentSelect = { id: true, name: true, code: true } as const
-export const departmentsInclude = {
+export const serviceInclude = {
   departments: {
     orderBy: { name: "asc" as const },
     select: departmentSelect,
   },
-} as const
+  pricingTemplate: true,
+  packages: {
+    orderBy: [{ displayOrder: "asc" as const }, { name: "asc" as const }],
+  },
+} satisfies Prisma.ServiceInclude
+
+const availableServiceInclude = {
+  ...serviceInclude,
+  packages: {
+    where: { isActive: true },
+    orderBy: [{ displayOrder: "asc" as const }, { name: "asc" as const }],
+  },
+} satisfies Prisma.ServiceInclude
+
+function packageData(item: ServicePackageInput) {
+  return {
+    name: item.name,
+    description: item.description,
+    includedFeatures: item.includedFeatures,
+    pricingModel: item.pricingModel,
+    currency: item.currency,
+    amount: item.amount,
+    billingInterval: item.billingInterval,
+    isPricingPublic: item.isPricingPublic,
+    isActive: item.isActive,
+    displayOrder: item.displayOrder,
+    isRecommended: item.isRecommended,
+  }
+}
 
 export const servicesRepository = {
   async findAvailable() {
     return getPrisma()!.service.findMany({
       where: { isActive: true },
       orderBy: { name: "asc" },
-      include: departmentsInclude,
+      include: availableServiceInclude,
     })
   },
 
   async findAll() {
     return getPrisma()!.service.findMany({
       orderBy: [{ createdAt: "desc" }, { name: "asc" }],
-      include: departmentsInclude,
+      include: serviceInclude,
     })
   },
 
   async findById(id: string) {
     return getPrisma()!.service.findUnique({
       where: { id },
-      include: departmentsInclude,
+      include: serviceInclude,
     })
   },
 
   async findHeaderById(id: string) {
     return getPrisma()!.service.findUnique({
       where: { id },
-      select: { id: true, isActive: true },
+      select: { id: true, isActive: true, imagePath: true },
     })
   },
 
@@ -46,30 +78,99 @@ export const servicesRepository = {
     })
   },
 
-  async create(data: ServiceInput) {
-    const { departmentIds, ...serviceInput } = data
-    return getPrisma()!.service.create({
-      data: {
-        ...serviceInput,
-        departments: {
-          connect: departmentIds.map((id) => ({ id })),
-        },
-      },
-      include: departmentsInclude,
+  async findPricingTemplateById(id: string) {
+    return getPrisma()!.pricingTemplate.findUnique({
+      where: { id },
+      select: { id: true },
     })
   },
 
-  async update(id: string, data: ServiceInput) {
-    const { departmentIds, ...serviceInput } = data
-    return getPrisma()!.service.update({
-      where: { id },
-      data: {
-        ...serviceInput,
-        departments: {
-          set: departmentIds.map((departmentId) => ({ id: departmentId })),
+  async findPricingTemplates() {
+    return getPrisma()!.pricingTemplate.findMany({
+      orderBy: [{ name: "asc" }],
+    })
+  },
+
+  async findPackageIds(serviceId: string) {
+    return getPrisma()!.servicePackage.findMany({
+      where: { serviceId },
+      select: { id: true },
+    })
+  },
+
+  async create(data: ServicePersistenceInput) {
+    const prisma = getPrisma()!
+    return prisma.$transaction(async (tx) => {
+      const {
+        departmentIds,
+        packages,
+        pricingTemplate,
+        pricingTemplateId,
+        ...serviceInput
+      } = data
+      const createdTemplate = pricingTemplate
+        ? await tx.pricingTemplate.create({ data: pricingTemplate })
+        : null
+      return tx.service.create({
+        data: {
+          ...serviceInput,
+          pricingTemplateId: createdTemplate?.id ?? pricingTemplateId,
+          departments: {
+            connect: departmentIds.map((id) => ({ id })),
+          },
+          packages: {
+            create: packages.map(packageData),
+          },
         },
-      },
-      include: departmentsInclude,
+        include: serviceInclude,
+      })
+    })
+  },
+
+  async update(id: string, data: ServicePersistenceInput) {
+    const prisma = getPrisma()!
+    return prisma.$transaction(async (tx) => {
+      const {
+        departmentIds,
+        packages,
+        pricingTemplate,
+        pricingTemplateId,
+        ...serviceInput
+      } = data
+      const createdTemplate = pricingTemplate
+        ? await tx.pricingTemplate.create({ data: pricingTemplate })
+        : null
+
+      if (packages.some((item) => item.isRecommended)) {
+        await tx.servicePackage.updateMany({
+          where: { serviceId: id },
+          data: { isRecommended: false },
+        })
+      }
+      for (const item of packages) {
+        if (item.id) {
+          await tx.servicePackage.update({
+            where: { id: item.id },
+            data: packageData(item),
+          })
+        } else {
+          await tx.servicePackage.create({
+            data: { ...packageData(item), serviceId: id },
+          })
+        }
+      }
+
+      return tx.service.update({
+        where: { id },
+        data: {
+          ...serviceInput,
+          pricingTemplateId: createdTemplate?.id ?? pricingTemplateId,
+          departments: {
+            set: departmentIds.map((departmentId) => ({ id: departmentId })),
+          },
+        },
+        include: serviceInclude,
+      })
     })
   },
 
@@ -77,7 +178,7 @@ export const servicesRepository = {
     return getPrisma()!.service.update({
       where: { id },
       data: { isActive },
-      include: departmentsInclude,
+      include: serviceInclude,
     })
   },
 

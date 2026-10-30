@@ -1,10 +1,11 @@
-import { Router } from "express"
+import { json, Router } from "express"
 import { requireAuth, requirePermission } from "../auth/auth.middleware.js"
 import { Permission } from "../auth/auth.permissions.js"
 import { ServicesError, servicesService } from "./services.service.js"
 
 export const servicesRouter = Router()
 servicesRouter.use(requireAuth)
+servicesRouter.use(json({ limit: "3mb" }))
 
 // Active services are the only options exposed to new client-request forms.
 // Historical records can continue to reference a service after it is deactivated.
@@ -24,6 +25,19 @@ servicesRouter.get(
     try {
       const services = await servicesService.getAll()
       response.json({ services })
+    } catch (error) {
+      next(error)
+    }
+  },
+)
+
+servicesRouter.get(
+  "/pricing-templates",
+  requirePermission(Permission.SERVICES_READ),
+  async (_request, response, next) => {
+    try {
+      const pricingTemplates = await servicesService.getPricingTemplates()
+      response.json({ pricingTemplates })
     } catch (error) {
       next(error)
     }

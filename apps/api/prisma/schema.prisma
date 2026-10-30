@@ -40,6 +40,21 @@ enum ServiceRequestStatus {
   CANCELLED
 }
 
+enum PricingModel {
+  FIXED
+  STARTING
+  CUSTOM_QUOTE
+  RECURRING
+  HOURLY
+}
+
+enum BillingInterval {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
 enum ProjectStatus {
   PLANNED
   IN_PROGRESS
@@ -49,26 +64,26 @@ enum ProjectStatus {
 }
 
 model User {
-  id                                String      @id @default(cuid())
-  email                             String      @unique
+  id                                String           @id @default(cuid())
+  email                             String           @unique
   fullName                          String?
   contactNumber                     String?
   position                          String?
   passwordHash                      String
-  role                              Role        @default(USER)
-  isActive                          Boolean     @default(true)
+  role                              Role             @default(USER)
+  isActive                          Boolean          @default(true)
   accountDeletedAt                  DateTime?
-  createdAt                         DateTime    @default(now())
-  updatedAt                         DateTime    @updatedAt
+  createdAt                         DateTime         @default(now())
+  updatedAt                         DateTime         @updatedAt
   departmentId                      String?
-  department                        Department? @relation("DepartmentMembers", fields: [departmentId], references: [id], onDelete: SetNull)
-  headOf                            Department? @relation("DepartmentHead")
+  department                        Department?      @relation("DepartmentMembers", fields: [departmentId], references: [id], onDelete: SetNull)
+  headOf                            Department?      @relation("DepartmentHead")
   teamId                            String?
-  team                              Team?       @relation("TeamMembers", fields: [teamId], references: [id], onDelete: SetNull)
-  leadOfTeam                        Team?       @relation("TeamLead")
+  team                              Team?            @relation("TeamMembers", fields: [teamId], references: [id], onDelete: SetNull)
+  leadOfTeam                        Team?            @relation("TeamLead")
   employee                          Employee?
-  temporaryOriginalDepartmentHeadOf Department? @relation("DepartmentTemporaryOriginalHead")
-  temporaryAssignedDepartmentHeadOf Department? @relation("DepartmentTemporaryAssignedHead")
+  temporaryOriginalDepartmentHeadOf Department?      @relation("DepartmentTemporaryOriginalHead")
+  temporaryAssignedDepartmentHeadOf Department?      @relation("DepartmentTemporaryAssignedHead")
   sessions                          Session[]
   serviceRequests                   ServiceRequest[]
   projects                          Project[]
@@ -100,29 +115,80 @@ model Department {
 }
 
 model Service {
-  id          String       @id @default(cuid())
-  name        String       @unique
-  description String
-  isActive    Boolean      @default(true)
-  departments Department[] @relation("ServiceDepartments")
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  serviceRequests ServiceRequest[]
+  id                   String           @id @default(cuid())
+  name                 String           @unique
+  description          String
+  imagePath            String?
+  imageAltText         String?
+  clientRequirements   String[]         @default([])
+  requiresConsultation Boolean          @default(false)
+  consultationNotes    String?
+  isActive             Boolean          @default(true)
+  pricingTemplateId    String?
+  pricingTemplate      PricingTemplate? @relation(fields: [pricingTemplateId], references: [id], onDelete: SetNull)
+  departments          Department[]     @relation("ServiceDepartments")
+  packages             ServicePackage[]
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  serviceRequests      ServiceRequest[]
 
   @@index([isActive])
+  @@index([pricingTemplateId])
+}
+
+model PricingTemplate {
+  id              String           @id @default(cuid())
+  name            String           @unique
+  pricingModel    PricingModel
+  currency        String           @default("PHP")
+  amount          Decimal?         @db.Decimal(12, 2)
+  billingInterval BillingInterval?
+  isPublic        Boolean          @default(true)
+  services        Service[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([pricingModel])
+}
+
+model ServicePackage {
+  id               String           @id @default(cuid())
+  serviceId        String
+  service          Service          @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  name             String
+  description      String
+  includedFeatures String[]         @default([])
+  pricingModel     PricingModel
+  currency         String           @default("PHP")
+  amount           Decimal?         @db.Decimal(12, 2)
+  billingInterval  BillingInterval?
+  isPricingPublic  Boolean          @default(true)
+  isActive         Boolean          @default(true)
+  displayOrder     Int              @default(0)
+  isRecommended    Boolean          @default(false)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@unique([serviceId, name])
+  @@index([serviceId, isActive, displayOrder])
 }
 
 model ServiceRequest {
-  id          String               @id @default(cuid())
-  clientId    String
-  client      User                 @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  serviceId   String
-  service     Service              @relation(fields: [serviceId], references: [id], onDelete: Restrict)
-  title       String
-  description String?
-  status      ServiceRequestStatus @default(PENDING)
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+  id              String               @id @default(cuid())
+  clientId        String
+  client          User                 @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  serviceId       String
+  service         Service              @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  title           String
+  description     String?
+  status          ServiceRequestStatus @default(PENDING)
+  pricingModel    PricingModel?
+  agreedPrice     Decimal?             @db.Decimal(12, 2)
+  currency        String?
+  billingInterval BillingInterval?
+  packageName     String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
 
   @@index([clientId, createdAt, id])
   @@index([serviceId])

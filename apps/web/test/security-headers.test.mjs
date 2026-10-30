@@ -45,4 +45,5 @@ test("page CSP permits dynamic presentation styles without weakening scripts", (
   )
   assert.doesNotMatch(productionCsp, /(?:^|; )style-src [^;]*'unsafe-inline'/)
   assert.doesNotMatch(productionCsp, /script-src[^;]*'unsafe-inline'/)
+  assert.match(productionCsp, /img-src[^;]*https:\/\/\*\.supabase\.co/)
 })
