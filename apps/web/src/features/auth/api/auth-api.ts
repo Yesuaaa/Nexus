@@ -96,3 +96,22 @@ export async function signOut(): Promise<void> {
   }
   clearToken()
 }
+
+export async function requestPasswordReset(
+  email: string,
+): Promise<{ message: string }> {
+  return request<{ message: string }>("/api/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  })
+}
+
+export async function resetPasswordWithToken(
+  token: string,
+  newPassword: string,
+): Promise<void> {
+  await request<void>("/api/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ token, newPassword }),
+  })
+}

@@ -2,10 +2,22 @@ import { createHash, randomBytes } from "node:crypto"
 import { Role, type User } from "../../generated/prisma/client.js"
 import { isUniqueConflict } from "../../lib/errors.js"
 import { publicUser } from "../users/users.dto.js"
-import { clearFailures, loginAllowed, recordFailure } from "./auth.limiter.js"
-import { hashPassword, validPassword, verifyPassword } from "./auth.password.js"
+import {
+  clearFailures,
+  loginAllowed,
+  recordFailure,
+  passwordRecoveryAllowed,
+  recordPasswordRecoveryAttempt,
+} from "./auth.limiter.js"
+import {
+  hashPassword,
+  validPassword,
+  validStrongPassword,
+  verifyPassword,
+} from "./auth.password.js"
 import { authRepository } from "./auth.repository.js"
 import { normalizedEmail, validRegistrationProfile } from "./auth.schema.js"
+import { sendPasswordResetEmail } from "../../lib/email.js"
 
 export const SESSION_DAYS = 7
 
@@ -145,5 +157,97 @@ export const authService = {
       input.userId,
       newPasswordHash,
     )
+  },
+
+  async forgotPassword(input: { email?: unknown; clientIp: string }) {
+    if (!authRepository.isDatabaseAvailable()) {
+      throw new AuthError(503, "Database unavailable")
+    }
+
+    const cleanEmail = normalizedEmail(input.email)
+    if (!cleanEmail) {
+      throw new AuthError(400, "Provide a valid email address")
+    }
+
+    const rateKey = `${input.clientIp}:${cleanEmail}`
+    if (!passwordRecoveryAllowed(rateKey)) {
+      throw new AuthError(
+        429,
+        "Too many password reset requests. Please try again later.",
+      )
+    }
+    recordPasswordRecoveryAttempt(rateKey)
+
+    const genericResponse = {
+      message:
+        "If an account exists with this email, you will receive password reset instructions.",
+    }
+
+    const user = await authRepository.findUserByEmail(cleanEmail)
+    if (!user || user.accountDeletedAt || !user.isActive) {
+      // Return 200 without creating token to avoid user enumeration
+      return genericResponse
+    }
+
+    const rawToken = randomBytes(32).toString("base64url")
+    const hash = tokenHash(rawToken)
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000) // 15 minutes
+
+    await authRepository.createPasswordResetToken({
+      tokenHash: hash,
+      userId: user.id,
+      expiresAt,
+    })
+
+    await sendPasswordResetEmail({
+      email: cleanEmail,
+      token: rawToken,
+    })
+
+    return genericResponse
+  },
+
+  async resetPassword(input: {
+    token?: unknown
+    newPassword?: unknown
+    clientIp: string
+  }) {
+    if (!authRepository.isDatabaseAvailable()) {
+      throw new AuthError(503, "Database unavailable")
+    }
+
+    const token = input.token
+    const newPassword = input.newPassword
+
+    if (typeof token !== "string" || !token.trim()) {
+      throw new AuthError(400, "Invalid or expired reset token")
+    }
+
+    if (!validStrongPassword(newPassword)) {
+      throw new AuthError(
+        400,
+        "Provide a password with at least 12 characters, uppercase, lowercase, number, and special character",
+      )
+    }
+
+    const hash = tokenHash(token.trim())
+    const record = await authRepository.findPasswordResetTokenByHash(hash)
+
+    if (
+      !record ||
+      record.usedAt !== null ||
+      record.expiresAt < new Date() ||
+      !record.user ||
+      record.user.accountDeletedAt
+    ) {
+      throw new AuthError(400, "Invalid or expired reset token")
+    }
+
+    const newPasswordHash = await hashPassword(newPassword)
+    await authRepository.resetPasswordWithToken({
+      tokenId: record.id,
+      userId: record.userId,
+      passwordHash: newPasswordHash,
+    })
   },
 }

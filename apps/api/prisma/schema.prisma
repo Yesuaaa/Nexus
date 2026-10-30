@@ -89,6 +89,7 @@ model User {
   temporaryOriginalDepartmentHeadOf Department?      @relation("DepartmentTemporaryOriginalHead")
   temporaryAssignedDepartmentHeadOf Department?      @relation("DepartmentTemporaryAssignedHead")
   sessions                          Session[]
+  passwordResetTokens               PasswordResetToken[]
   passwordResetAuditEvents          AuditLog[]       @relation("PasswordResetTarget")
   passwordResetActions              AuditLog[]       @relation("PasswordResetActor")
   serviceRequests                   ServiceRequest[]
@@ -111,6 +112,19 @@ model AuditLog {
   @@index([actorId])
   @@index([targetUserId])
   @@index([action, createdAt])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([tokenHash])
 }
 
 model Department {

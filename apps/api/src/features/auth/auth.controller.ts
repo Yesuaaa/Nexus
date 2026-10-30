@@ -73,3 +73,34 @@ authRouter.post(
     }
   },
 )
+
+authRouter.post("/forgot-password", async (request, response, next) => {
+  try {
+    const result = await authService.forgotPassword({
+      email: request.body?.email,
+      clientIp: request.ip || "unknown",
+    })
+    return response.json(result)
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return response.status(error.status).json({ error: error.message })
+    }
+    next(error)
+  }
+})
+
+authRouter.post("/reset-password", async (request, response, next) => {
+  try {
+    await authService.resetPassword({
+      token: request.body?.token,
+      newPassword: request.body?.newPassword,
+      clientIp: request.ip || "unknown",
+    })
+    return response.status(204).send()
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return response.status(error.status).json({ error: error.message })
+    }
+    next(error)
+  }
+})

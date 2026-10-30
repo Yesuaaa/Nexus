@@ -32,3 +32,40 @@ export function recordFailure(key: string) {
 export function clearFailures(key: string) {
   loginAttempts.delete(key)
 }
+
+const passwordRecoveryAttempts = new Map<
+  string,
+  { count: number; until: number }
+>()
+
+export function passwordRecoveryAllowed(key: string): boolean {
+  const attempt = passwordRecoveryAttempts.get(key)
+  if (!attempt || attempt.until < Date.now()) {
+    passwordRecoveryAttempts.delete(key)
+    return true
+  }
+  return attempt.count < 5
+}
+
+export function recordPasswordRecoveryAttempt(key: string) {
+  const now = Date.now()
+  const attempt = passwordRecoveryAttempts.get(key)
+  if (passwordRecoveryAttempts.size >= 10000) {
+    for (const [k, value] of passwordRecoveryAttempts) {
+      if (value.until < now) passwordRecoveryAttempts.delete(k)
+    }
+    if (passwordRecoveryAttempts.size >= 10000) {
+      const oldest = passwordRecoveryAttempts.keys().next().value
+      if (oldest) passwordRecoveryAttempts.delete(oldest)
+    }
+  }
+  passwordRecoveryAttempts.set(key, {
+    count: attempt && attempt.until >= now ? attempt.count + 1 : 1,
+    until:
+      attempt && attempt.until >= now ? attempt.until : now + 15 * 60 * 1000,
+  })
+}
+
+export function clearPasswordRecoveryAttempts(key: string) {
+  passwordRecoveryAttempts.delete(key)
+}
