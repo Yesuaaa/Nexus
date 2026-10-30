@@ -73,9 +73,13 @@ test(
     const directories = (await readdir(migrations))
       .filter((name) => /^\d/.test(name))
       .sort()
-    for (const name of directories.filter(
-      (name) => !name.endsWith("employee_management"),
-    )) {
+    const employeeMigrationIndex = directories.findIndex((name) =>
+      name.endsWith("employee_management"),
+    )
+    assert.notEqual(employeeMigrationIndex, -1)
+    // Seed legacy accounts before the employee backfill, then apply it and
+    // all dependent migrations in chronological order.
+    for (const name of directories.slice(0, employeeMigrationIndex)) {
       await database.exec(
         await readFile(new URL(`${name}/migration.sql`, migrations), "utf8"),
       )
@@ -101,9 +105,7 @@ test(
     await database.exec(`INSERT INTO "Department" (id,name,"headId","updatedAt") VALUES ('product','Product','staff',NOW()),('operations','Operations',NULL,NOW());
     INSERT INTO "Team" (id,name,"departmentId","updatedAt") VALUES ('product-team','Design','product',NOW()),('operations-team','Support','operations',NOW());
     UPDATE "User" SET "departmentId"='product' WHERE id='staff';`)
-    for (const name of directories.filter((name) =>
-      name.endsWith("employee_management"),
-    )) {
+    for (const name of directories.slice(employeeMigrationIndex)) {
       await database.exec(
         await readFile(new URL(`${name}/migration.sql`, migrations), "utf8"),
       )
