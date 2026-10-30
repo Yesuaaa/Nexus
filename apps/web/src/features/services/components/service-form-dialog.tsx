@@ -533,596 +533,610 @@ export function ServiceFormDialog({
         </nav>
 
         <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
-          <fieldset
-            disabled={submitting}
-            className="m-0 grid min-h-0 min-w-0 flex-1 content-start gap-5 overflow-y-auto border-0 p-5 disabled:opacity-60"
-          >
-            {error && (
-              <p
-                className="m-0 rounded-lg bg-[#fff0f1] p-3 text-xs text-[#bc3649]"
-                role="alert"
-              >
-                {error}
-              </p>
-            )}
-
-            {currentStep === 0 && (
-              <section
-                className="grid gap-3"
-                aria-labelledby="service-details-heading"
-              >
-                <h3
-                  id="service-details-heading"
-                  className="m-0 text-sm font-[650]"
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <fieldset
+              disabled={submitting}
+              className="m-0 grid min-w-0 content-start gap-5 border-0 p-5 disabled:opacity-60"
+            >
+              {error && (
+                <p
+                  className="m-0 rounded-lg bg-[#fff0f1] p-3 text-xs text-[#bc3649]"
+                  role="alert"
                 >
-                  Service Details
-                </h3>
-                <div className="grid grid-cols-[150px_minmax(0,1fr)] gap-4 max-[560px]:grid-cols-1">
-                  <div className="grid content-start gap-2">
-                    <div className="relative grid aspect-[4/3] place-items-center overflow-hidden rounded-lg border border-dashed border-[#c9d4e5] bg-[#f5f7fb] text-[#738096]">
-                      {imagePreviewUrl ? (
-                        <Image
-                          src={imagePreviewUrl}
-                          alt={imageAltText || "Service preview"}
-                          fill
-                          unoptimized
-                          className="object-cover"
-                        />
-                      ) : (
-                        <ImagePlus size={26} aria-hidden="true" />
-                      )}
-                    </div>
-                    <input
-                      ref={imageInputRef}
-                      id="service-image"
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      className="sr-only"
-                      onChange={(event) => handleImage(event.target.files?.[0])}
-                    />
-                    <label
-                      htmlFor="service-image"
-                      className={cn(
-                        buttonClass,
-                        "border-[#d7e0ee] bg-white text-[#24437e] hover:bg-[#f1f5fc]",
-                      )}
-                    >
-                      Choose Image
-                    </label>
-                    {imagePreviewUrl && (
-                      <button
-                        type="button"
-                        className="cursor-pointer border-0 bg-transparent text-xs font-semibold text-[#b4234d]"
-                        onClick={() => {
-                          setImageDataUrl(null)
-                          setImagePreviewUrl(null)
-                          setImageAltText("")
-                          setRemoveImage(true)
-                          if (imageInputRef.current)
-                            imageInputRef.current.value = ""
-                        }}
-                      >
-                        Remove image
-                      </button>
-                    )}
-                    <p className="m-0 text-[10px] leading-relaxed text-[#8290a5]">
-                      JPG, PNG, or WebP. Maximum 2 MB.
-                    </p>
-                  </div>
-                  <div className="grid content-start gap-4">
-                    <div className={fieldClass}>
-                      <label className={labelClass} htmlFor="service-name">
-                        Service Name{" "}
-                        <strong className="text-[#d04b56]">*</strong>
-                      </label>
+                  {error}
+                </p>
+              )}
+
+              {currentStep === 0 && (
+                <section
+                  className="grid gap-3"
+                  aria-labelledby="service-details-heading"
+                >
+                  <h3
+                    id="service-details-heading"
+                    className="m-0 text-sm font-[650]"
+                  >
+                    Service Details
+                  </h3>
+                  <div className="grid grid-cols-[150px_minmax(0,1fr)] gap-4 max-[560px]:grid-cols-1">
+                    <div className="grid content-start gap-2">
+                      <div className="relative grid aspect-[4/3] place-items-center overflow-hidden rounded-lg border border-dashed border-[#c9d4e5] bg-[#f5f7fb] text-[#738096]">
+                        {imagePreviewUrl ? (
+                          <Image
+                            src={imagePreviewUrl}
+                            alt={imageAltText || "Service preview"}
+                            fill
+                            unoptimized
+                            className="object-cover"
+                          />
+                        ) : (
+                          <ImagePlus size={26} aria-hidden="true" />
+                        )}
+                      </div>
                       <input
-                        id="service-name"
-                        className={cn(inputClass, "h-10")}
-                        value={name}
-                        onChange={(event) => setName(event.target.value)}
-                        maxLength={100}
-                        required
-                        autoFocus
+                        ref={imageInputRef}
+                        id="service-image"
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="sr-only"
+                        onChange={(event) =>
+                          handleImage(event.target.files?.[0])
+                        }
                       />
-                    </div>
-                    <div className={fieldClass}>
                       <label
-                        className={labelClass}
-                        htmlFor="service-description"
+                        htmlFor="service-image"
+                        className={cn(
+                          buttonClass,
+                          "border-[#d7e0ee] bg-white text-[#24437e] hover:bg-[#f1f5fc]",
+                        )}
                       >
-                        Description{" "}
-                        <strong className="text-[#d04b56]">*</strong>
+                        Choose Image
                       </label>
-                      <textarea
-                        id="service-description"
-                        className={cn(inputClass, "min-h-24 resize-y py-2.5")}
-                        value={description}
-                        onChange={(event) => setDescription(event.target.value)}
-                        maxLength={500}
-                        required
-                      />
-                    </div>
-                    {imagePreviewUrl && (
-                      <div className={fieldClass}>
-                        <label
-                          className={labelClass}
-                          htmlFor="service-image-alt"
+                      {imagePreviewUrl && (
+                        <button
+                          type="button"
+                          className="cursor-pointer border-0 bg-transparent text-xs font-semibold text-[#b4234d]"
+                          onClick={() => {
+                            setImageDataUrl(null)
+                            setImagePreviewUrl(null)
+                            setImageAltText("")
+                            setRemoveImage(true)
+                            if (imageInputRef.current)
+                              imageInputRef.current.value = ""
+                          }}
                         >
-                          Image Alternative Text{" "}
+                          Remove image
+                        </button>
+                      )}
+                      <p className="m-0 text-[10px] leading-relaxed text-[#8290a5]">
+                        JPG, PNG, or WebP. Maximum 2 MB.
+                      </p>
+                    </div>
+                    <div className="grid content-start gap-4">
+                      <div className={fieldClass}>
+                        <label className={labelClass} htmlFor="service-name">
+                          Service Name{" "}
                           <strong className="text-[#d04b56]">*</strong>
                         </label>
                         <input
-                          id="service-image-alt"
+                          id="service-name"
                           className={cn(inputClass, "h-10")}
-                          value={imageAltText}
+                          value={name}
+                          onChange={(event) => setName(event.target.value)}
+                          maxLength={100}
+                          required
+                          autoFocus
+                        />
+                      </div>
+                      <div className={fieldClass}>
+                        <label
+                          className={labelClass}
+                          htmlFor="service-description"
+                        >
+                          Description{" "}
+                          <strong className="text-[#d04b56]">*</strong>
+                        </label>
+                        <textarea
+                          id="service-description"
+                          className={cn(inputClass, "min-h-24 resize-y py-2.5")}
+                          value={description}
                           onChange={(event) =>
-                            setImageAltText(event.target.value)
+                            setDescription(event.target.value)
                           }
-                          maxLength={160}
+                          maxLength={500}
                           required
                         />
                       </div>
-                    )}
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3 max-[560px]:grid-cols-1">
-                  <div className={fieldClass}>
-                    <label className={labelClass} htmlFor="service-departments">
-                      Responsible Departments{" "}
-                      <strong className="text-[#d04b56]">*</strong>
-                    </label>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button
-                          id="service-departments"
-                          type="button"
-                          className={cn(
-                            inputClass,
-                            "flex h-10 cursor-pointer items-center justify-between gap-2 text-left shadow-none",
-                          )}
-                          aria-label="Select responsible departments"
-                        >
-                          <span
-                            className={cn(
-                              "truncate",
-                              departmentIds.length === 0 && "text-[#9aa8bb]",
-                            )}
+                      {imagePreviewUrl && (
+                        <div className={fieldClass}>
+                          <label
+                            className={labelClass}
+                            htmlFor="service-image-alt"
                           >
-                            {departmentIds.length === 0
-                              ? "Select departments"
-                              : `${departmentIds.length} selected`}
-                          </span>
-                          <ChevronDown size={15} aria-hidden="true" />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent
-                        align="start"
-                        className="z-[130] w-[var(--radix-dropdown-menu-trigger-width)] bg-white"
-                      >
-                        {departments.map((department) => (
-                          <DropdownMenuCheckboxItem
-                            key={department.id}
-                            checked={departmentIds.includes(department.id)}
-                            onCheckedChange={(checked) =>
-                              setDepartmentIds((current) =>
-                                checked
-                                  ? [...current, department.id]
-                                  : current.filter(
-                                      (id) => id !== department.id,
-                                    ),
-                              )
+                            Image Alternative Text{" "}
+                            <strong className="text-[#d04b56]">*</strong>
+                          </label>
+                          <input
+                            id="service-image-alt"
+                            className={cn(inputClass, "h-10")}
+                            value={imageAltText}
+                            onChange={(event) =>
+                              setImageAltText(event.target.value)
                             }
-                            onSelect={(event) => event.preventDefault()}
+                            maxLength={160}
+                            required
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 max-[560px]:grid-cols-1">
+                    <div className={fieldClass}>
+                      <label
+                        className={labelClass}
+                        htmlFor="service-departments"
+                      >
+                        Responsible Departments{" "}
+                        <strong className="text-[#d04b56]">*</strong>
+                      </label>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            id="service-departments"
+                            type="button"
+                            className={cn(
+                              inputClass,
+                              "flex h-10 cursor-pointer items-center justify-between gap-2 text-left shadow-none",
+                            )}
+                            aria-label="Select responsible departments"
                           >
-                            {department.name}
-                          </DropdownMenuCheckboxItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                    {departments.length === 0 && (
-                      <p className="m-0 text-[11px] text-[#bc3649]">
-                        Create a department before creating a service.
-                      </p>
-                    )}
+                            <span
+                              className={cn(
+                                "truncate",
+                                departmentIds.length === 0 && "text-[#9aa8bb]",
+                              )}
+                            >
+                              {departmentIds.length === 0
+                                ? "Select departments"
+                                : `${departmentIds.length} selected`}
+                            </span>
+                            <ChevronDown size={15} aria-hidden="true" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align="start"
+                          className="z-[130] w-[var(--radix-dropdown-menu-trigger-width)] bg-white"
+                        >
+                          {departments.map((department) => (
+                            <DropdownMenuCheckboxItem
+                              key={department.id}
+                              checked={departmentIds.includes(department.id)}
+                              onCheckedChange={(checked) =>
+                                setDepartmentIds((current) =>
+                                  checked
+                                    ? [...current, department.id]
+                                    : current.filter(
+                                        (id) => id !== department.id,
+                                      ),
+                                )
+                              }
+                              onSelect={(event) => event.preventDefault()}
+                            >
+                              {department.name}
+                            </DropdownMenuCheckboxItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      {departments.length === 0 && (
+                        <p className="m-0 text-[11px] text-[#bc3649]">
+                          Create a department before creating a service.
+                        </p>
+                      )}
+                    </div>
+                    <div className={fieldClass}>
+                      <label className={labelClass} htmlFor="service-status">
+                        Status
+                      </label>
+                      <Select
+                        value={isActive ? "active" : "inactive"}
+                        onValueChange={(value) =>
+                          setIsActive(value === "active")
+                        }
+                      >
+                        <SelectTrigger
+                          id="service-status"
+                          className={cn(inputClass, "h-10 shadow-none")}
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="z-[130] bg-white">
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="inactive">Inactive</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {currentStep === 1 && (
+                <section
+                  className="grid gap-3"
+                  aria-labelledby="service-requirements-heading"
+                >
+                  <div>
+                    <h3
+                      id="service-requirements-heading"
+                      className="m-0 text-sm font-[650]"
+                    >
+                      Client Requirements & Consultation
+                    </h3>
+                    <p className="mt-1 mb-0 text-[11px] text-[#738096]">
+                      Define what clients should provide before a request
+                      proceeds.
+                    </p>
                   </div>
                   <div className={fieldClass}>
-                    <label className={labelClass} htmlFor="service-status">
-                      Status
+                    <label className={labelClass} htmlFor="client-requirements">
+                      Client Requirements{" "}
+                      <span className="font-normal text-[#8290a5]">
+                        (one per line)
+                      </span>
+                    </label>
+                    <textarea
+                      id="client-requirements"
+                      className={cn(inputClass, "min-h-24 resize-y py-2.5")}
+                      value={clientRequirements}
+                      onChange={(event) =>
+                        setClientRequirements(event.target.value)
+                      }
+                      placeholder="Brand guidelines&#10;Project brief&#10;Target launch date"
+                    />
+                  </div>
+                  <label className="flex items-center gap-2 text-xs font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={requiresConsultation}
+                      onChange={(event) =>
+                        setRequiresConsultation(event.target.checked)
+                      }
+                    />
+                    Consultation is required before proceeding
+                  </label>
+                  {requiresConsultation && (
+                    <div className={fieldClass}>
+                      <label
+                        className={labelClass}
+                        htmlFor="consultation-notes"
+                      >
+                        Consultation Notes
+                      </label>
+                      <textarea
+                        id="consultation-notes"
+                        className={cn(inputClass, "min-h-20 resize-y py-2.5")}
+                        value={consultationNotes}
+                        onChange={(event) =>
+                          setConsultationNotes(event.target.value)
+                        }
+                        maxLength={500}
+                        placeholder="Explain the consultation process or preparation needed."
+                      />
+                    </div>
+                  )}
+                </section>
+              )}
+
+              {currentStep === 2 && (
+                <section
+                  className="grid gap-3"
+                  aria-labelledby="service-pricing-heading"
+                >
+                  <div>
+                    <h3
+                      id="service-pricing-heading"
+                      className="m-0 text-sm font-[650]"
+                    >
+                      Pricing
+                    </h3>
+                    <p className="mt-1 mb-0 text-[11px] text-[#738096]">
+                      Reuse a template across services or create a new PHP
+                      pricing configuration.
+                    </p>
+                  </div>
+                  <div className={fieldClass}>
+                    <label className={labelClass} htmlFor="pricing-template">
+                      Pricing Template
                     </label>
                     <Select
-                      value={isActive ? "active" : "inactive"}
-                      onValueChange={(value) => setIsActive(value === "active")}
+                      value={pricingChoice}
+                      onValueChange={setPricingChoice}
                     >
                       <SelectTrigger
-                        id="service-status"
+                        id="pricing-template"
                         className={cn(inputClass, "h-10 shadow-none")}
                       >
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="z-[130] bg-white">
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="inactive">Inactive</SelectItem>
+                        <SelectItem value="none">
+                          No pricing configured
+                        </SelectItem>
+                        <SelectItem value="new">
+                          Create a reusable template
+                        </SelectItem>
+                        {pricingTemplates.map((template) => (
+                          <SelectItem key={template.id} value={template.id}>
+                            {template.name}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
-                </div>
-              </section>
-            )}
-
-            {currentStep === 1 && (
-              <section
-                className="grid gap-3"
-                aria-labelledby="service-requirements-heading"
-              >
-                <div>
-                  <h3
-                    id="service-requirements-heading"
-                    className="m-0 text-sm font-[650]"
-                  >
-                    Client Requirements & Consultation
-                  </h3>
-                  <p className="mt-1 mb-0 text-[11px] text-[#738096]">
-                    Define what clients should provide before a request
-                    proceeds.
-                  </p>
-                </div>
-                <div className={fieldClass}>
-                  <label className={labelClass} htmlFor="client-requirements">
-                    Client Requirements{" "}
-                    <span className="font-normal text-[#8290a5]">
-                      (one per line)
-                    </span>
-                  </label>
-                  <textarea
-                    id="client-requirements"
-                    className={cn(inputClass, "min-h-24 resize-y py-2.5")}
-                    value={clientRequirements}
-                    onChange={(event) =>
-                      setClientRequirements(event.target.value)
-                    }
-                    placeholder="Brand guidelines&#10;Project brief&#10;Target launch date"
-                  />
-                </div>
-                <label className="flex items-center gap-2 text-xs font-semibold">
-                  <input
-                    type="checkbox"
-                    checked={requiresConsultation}
-                    onChange={(event) =>
-                      setRequiresConsultation(event.target.checked)
-                    }
-                  />
-                  Consultation is required before proceeding
-                </label>
-                {requiresConsultation && (
-                  <div className={fieldClass}>
-                    <label className={labelClass} htmlFor="consultation-notes">
-                      Consultation Notes
-                    </label>
-                    <textarea
-                      id="consultation-notes"
-                      className={cn(inputClass, "min-h-20 resize-y py-2.5")}
-                      value={consultationNotes}
-                      onChange={(event) =>
-                        setConsultationNotes(event.target.value)
-                      }
-                      maxLength={500}
-                      placeholder="Explain the consultation process or preparation needed."
-                    />
-                  </div>
-                )}
-              </section>
-            )}
-
-            {currentStep === 2 && (
-              <section
-                className="grid gap-3"
-                aria-labelledby="service-pricing-heading"
-              >
-                <div>
-                  <h3
-                    id="service-pricing-heading"
-                    className="m-0 text-sm font-[650]"
-                  >
-                    Pricing
-                  </h3>
-                  <p className="mt-1 mb-0 text-[11px] text-[#738096]">
-                    Reuse a template across services or create a new PHP pricing
-                    configuration.
-                  </p>
-                </div>
-                <div className={fieldClass}>
-                  <label className={labelClass} htmlFor="pricing-template">
-                    Pricing Template
-                  </label>
-                  <Select
-                    value={pricingChoice}
-                    onValueChange={setPricingChoice}
-                  >
-                    <SelectTrigger
-                      id="pricing-template"
-                      className={cn(inputClass, "h-10 shadow-none")}
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="z-[130] bg-white">
-                      <SelectItem value="none">
-                        No pricing configured
-                      </SelectItem>
-                      <SelectItem value="new">
-                        Create a reusable template
-                      </SelectItem>
-                      {pricingTemplates.map((template) => (
-                        <SelectItem key={template.id} value={template.id}>
-                          {template.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {pricingChoice === "new" && (
-                  <div className="grid gap-3 rounded-lg border border-[#dfe6ef] bg-[#f8fafc] p-3">
-                    <div className={fieldClass}>
-                      <label
-                        className={labelClass}
-                        htmlFor="pricing-template-name"
-                      >
-                        Template Name
-                      </label>
-                      <input
-                        id="pricing-template-name"
-                        className={cn(inputClass, "h-10")}
-                        value={templateName}
-                        onChange={(event) =>
-                          setTemplateName(event.target.value)
-                        }
-                        maxLength={100}
-                        required
-                      />
-                    </div>
-                    <PriceFields
-                      idPrefix="service-pricing"
-                      model={pricingModel}
-                      amount={amount}
-                      billingInterval={billingInterval}
-                      onModelChange={(value) => {
-                        setPricingModel(value)
-                        if (value !== "RECURRING") setBillingInterval(null)
-                      }}
-                      onAmountChange={setAmount}
-                      onBillingIntervalChange={setBillingInterval}
-                    />
-                    <label className="flex items-center gap-2 text-xs">
-                      <input
-                        type="checkbox"
-                        checked={isPricingPublic}
-                        onChange={(event) =>
-                          setIsPricingPublic(event.target.checked)
-                        }
-                      />{" "}
-                      Display pricing publicly
-                    </label>
-                  </div>
-                )}
-              </section>
-            )}
-
-            {currentStep === 3 && (
-              <section
-                className="grid gap-3"
-                aria-labelledby="service-packages-heading"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3
-                      id="service-packages-heading"
-                      className="m-0 text-sm font-[650]"
-                    >
-                      Service Packages
-                    </h3>
-                    <p className="mt-1 mb-0 text-[11px] text-[#738096]">
-                      Packages are optional and appear publicly in display
-                      order.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className={cn(
-                      buttonClass,
-                      "gap-1.5 border-[#d7e0ee] bg-white text-[#24437e] hover:bg-[#f1f5fc]",
-                    )}
-                    onClick={() =>
-                      setPackages((current) => [
-                        ...current,
-                        newPackage(current.length),
-                      ])
-                    }
-                  >
-                    <Plus size={14} aria-hidden="true" /> Add Package
-                  </button>
-                </div>
-                {packages.length === 0 && (
-                  <p className="m-0 rounded-lg border border-dashed border-[#d6dfec] p-4 text-center text-xs text-[#738096]">
-                    No packages configured.
-                  </p>
-                )}
-                {packages.map((servicePackage, index) => (
-                  <article
-                    key={servicePackage.id}
-                    className="grid gap-3 rounded-lg border border-[#dfe6ef] p-3"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <h4 className="m-0 text-xs font-[650]">
-                        Package {index + 1}
-                      </h4>
-                      {servicePackage.isNew && (
-                        <button
-                          type="button"
-                          className="inline-flex cursor-pointer items-center gap-1 border-0 bg-transparent text-xs font-semibold text-[#b4234d]"
-                          onClick={() =>
-                            setPackages((current) =>
-                              current.filter(
-                                (item) => item.id !== servicePackage.id,
-                              ),
-                            )
-                          }
-                        >
-                          <Trash2 size={13} aria-hidden="true" /> Remove
-                        </button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-2 gap-3 max-[560px]:grid-cols-1">
+                  {pricingChoice === "new" && (
+                    <div className="grid gap-3 rounded-lg border border-[#dfe6ef] bg-[#f8fafc] p-3">
                       <div className={fieldClass}>
                         <label
                           className={labelClass}
-                          htmlFor={`${servicePackage.id}-name`}
+                          htmlFor="pricing-template-name"
                         >
-                          Package Name
+                          Template Name
                         </label>
                         <input
-                          id={`${servicePackage.id}-name`}
+                          id="pricing-template-name"
                           className={cn(inputClass, "h-10")}
-                          value={servicePackage.name}
+                          value={templateName}
                           onChange={(event) =>
-                            updatePackage(servicePackage.id, {
-                              name: event.target.value,
-                            })
+                            setTemplateName(event.target.value)
                           }
-                          maxLength={80}
+                          maxLength={100}
                           required
                         />
                       </div>
-                      <div className={fieldClass}>
-                        <label
-                          className={labelClass}
-                          htmlFor={`${servicePackage.id}-order`}
-                        >
-                          Display Order
-                        </label>
-                        <input
-                          id={`${servicePackage.id}-order`}
-                          type="number"
-                          min="0"
-                          max="10000"
-                          className={cn(inputClass, "h-10")}
-                          value={servicePackage.displayOrder}
-                          onChange={(event) =>
-                            updatePackage(servicePackage.id, {
-                              displayOrder: Number(event.target.value),
-                            })
-                          }
-                          required
-                        />
-                      </div>
-                    </div>
-                    <div className={fieldClass}>
-                      <label
-                        className={labelClass}
-                        htmlFor={`${servicePackage.id}-description`}
-                      >
-                        Description
-                      </label>
-                      <textarea
-                        id={`${servicePackage.id}-description`}
-                        className={cn(inputClass, "min-h-20 resize-y py-2.5")}
-                        value={servicePackage.description}
-                        onChange={(event) =>
-                          updatePackage(servicePackage.id, {
-                            description: event.target.value,
-                          })
-                        }
-                        maxLength={500}
-                        required
+                      <PriceFields
+                        idPrefix="service-pricing"
+                        model={pricingModel}
+                        amount={amount}
+                        billingInterval={billingInterval}
+                        onModelChange={(value) => {
+                          setPricingModel(value)
+                          if (value !== "RECURRING") setBillingInterval(null)
+                        }}
+                        onAmountChange={setAmount}
+                        onBillingIntervalChange={setBillingInterval}
                       />
-                    </div>
-                    <div className={fieldClass}>
-                      <label
-                        className={labelClass}
-                        htmlFor={`${servicePackage.id}-features`}
-                      >
-                        Included Features{" "}
-                        <span className="font-normal text-[#8290a5]">
-                          (one per line)
-                        </span>
-                      </label>
-                      <textarea
-                        id={`${servicePackage.id}-features`}
-                        className={cn(inputClass, "min-h-24 resize-y py-2.5")}
-                        value={servicePackage.featuresText}
-                        onChange={(event) =>
-                          updatePackage(servicePackage.id, {
-                            featuresText: event.target.value,
-                          })
-                        }
-                        required
-                      />
-                    </div>
-                    <PriceFields
-                      idPrefix={servicePackage.id}
-                      model={servicePackage.pricingModel}
-                      amount={servicePackage.amount}
-                      billingInterval={servicePackage.billingInterval}
-                      onModelChange={(value) =>
-                        updatePackage(servicePackage.id, {
-                          pricingModel: value,
-                          ...(value === "RECURRING"
-                            ? {}
-                            : { billingInterval: null }),
-                        })
-                      }
-                      onAmountChange={(value) =>
-                        updatePackage(servicePackage.id, { amount: value })
-                      }
-                      onBillingIntervalChange={(value) =>
-                        updatePackage(servicePackage.id, {
-                          billingInterval: value,
-                        })
-                      }
-                    />
-                    <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs">
-                      <label className="flex items-center gap-2">
+                      <label className="flex items-center gap-2 text-xs">
                         <input
                           type="checkbox"
-                          checked={servicePackage.isActive}
+                          checked={isPricingPublic}
                           onChange={(event) =>
-                            updatePackage(servicePackage.id, {
-                              isActive: event.target.checked,
-                            })
-                          }
-                        />{" "}
-                        Active
-                      </label>
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={servicePackage.isPricingPublic}
-                          onChange={(event) =>
-                            updatePackage(servicePackage.id, {
-                              isPricingPublic: event.target.checked,
-                            })
+                            setIsPricingPublic(event.target.checked)
                           }
                         />{" "}
                         Display pricing publicly
                       </label>
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={servicePackage.isRecommended}
-                          onChange={(event) =>
-                            selectRecommended(
-                              servicePackage.id,
-                              event.target.checked,
-                            )
-                          }
-                        />{" "}
-                        Recommended
-                      </label>
                     </div>
-                  </article>
-                ))}
-              </section>
-            )}
-          </fieldset>
-          <footer className="flex items-center justify-between gap-3 border-t border-[#eceef1] bg-white px-5 py-4">
+                  )}
+                </section>
+              )}
+
+              {currentStep === 3 && (
+                <section
+                  className="grid gap-3"
+                  aria-labelledby="service-packages-heading"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3
+                        id="service-packages-heading"
+                        className="m-0 text-sm font-[650]"
+                      >
+                        Service Packages
+                      </h3>
+                      <p className="mt-1 mb-0 text-[11px] text-[#738096]">
+                        Packages are optional and appear publicly in display
+                        order.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className={cn(
+                        buttonClass,
+                        "gap-1.5 border-[#d7e0ee] bg-white text-[#24437e] hover:bg-[#f1f5fc]",
+                      )}
+                      onClick={() =>
+                        setPackages((current) => [
+                          ...current,
+                          newPackage(current.length),
+                        ])
+                      }
+                    >
+                      <Plus size={14} aria-hidden="true" /> Add Package
+                    </button>
+                  </div>
+                  {packages.length === 0 && (
+                    <p className="m-0 rounded-lg border border-dashed border-[#d6dfec] p-4 text-center text-xs text-[#738096]">
+                      No packages configured.
+                    </p>
+                  )}
+                  {packages.map((servicePackage, index) => (
+                    <article
+                      key={servicePackage.id}
+                      className="grid gap-3 rounded-lg border border-[#dfe6ef] p-3"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <h4 className="m-0 text-xs font-[650]">
+                          Package {index + 1}
+                        </h4>
+                        {servicePackage.isNew && (
+                          <button
+                            type="button"
+                            className="inline-flex cursor-pointer items-center gap-1 border-0 bg-transparent text-xs font-semibold text-[#b4234d]"
+                            onClick={() =>
+                              setPackages((current) =>
+                                current.filter(
+                                  (item) => item.id !== servicePackage.id,
+                                ),
+                              )
+                            }
+                          >
+                            <Trash2 size={13} aria-hidden="true" /> Remove
+                          </button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 max-[560px]:grid-cols-1">
+                        <div className={fieldClass}>
+                          <label
+                            className={labelClass}
+                            htmlFor={`${servicePackage.id}-name`}
+                          >
+                            Package Name
+                          </label>
+                          <input
+                            id={`${servicePackage.id}-name`}
+                            className={cn(inputClass, "h-10")}
+                            value={servicePackage.name}
+                            onChange={(event) =>
+                              updatePackage(servicePackage.id, {
+                                name: event.target.value,
+                              })
+                            }
+                            maxLength={80}
+                            required
+                          />
+                        </div>
+                        <div className={fieldClass}>
+                          <label
+                            className={labelClass}
+                            htmlFor={`${servicePackage.id}-order`}
+                          >
+                            Display Order
+                          </label>
+                          <input
+                            id={`${servicePackage.id}-order`}
+                            type="number"
+                            min="0"
+                            max="10000"
+                            className={cn(inputClass, "h-10")}
+                            value={servicePackage.displayOrder}
+                            onChange={(event) =>
+                              updatePackage(servicePackage.id, {
+                                displayOrder: Number(event.target.value),
+                              })
+                            }
+                            required
+                          />
+                        </div>
+                      </div>
+                      <div className={fieldClass}>
+                        <label
+                          className={labelClass}
+                          htmlFor={`${servicePackage.id}-description`}
+                        >
+                          Description
+                        </label>
+                        <textarea
+                          id={`${servicePackage.id}-description`}
+                          className={cn(inputClass, "min-h-20 resize-y py-2.5")}
+                          value={servicePackage.description}
+                          onChange={(event) =>
+                            updatePackage(servicePackage.id, {
+                              description: event.target.value,
+                            })
+                          }
+                          maxLength={500}
+                          required
+                        />
+                      </div>
+                      <div className={fieldClass}>
+                        <label
+                          className={labelClass}
+                          htmlFor={`${servicePackage.id}-features`}
+                        >
+                          Included Features{" "}
+                          <span className="font-normal text-[#8290a5]">
+                            (one per line)
+                          </span>
+                        </label>
+                        <textarea
+                          id={`${servicePackage.id}-features`}
+                          className={cn(inputClass, "min-h-24 resize-y py-2.5")}
+                          value={servicePackage.featuresText}
+                          onChange={(event) =>
+                            updatePackage(servicePackage.id, {
+                              featuresText: event.target.value,
+                            })
+                          }
+                          required
+                        />
+                      </div>
+                      <PriceFields
+                        idPrefix={servicePackage.id}
+                        model={servicePackage.pricingModel}
+                        amount={servicePackage.amount}
+                        billingInterval={servicePackage.billingInterval}
+                        onModelChange={(value) =>
+                          updatePackage(servicePackage.id, {
+                            pricingModel: value,
+                            ...(value === "RECURRING"
+                              ? {}
+                              : { billingInterval: null }),
+                          })
+                        }
+                        onAmountChange={(value) =>
+                          updatePackage(servicePackage.id, { amount: value })
+                        }
+                        onBillingIntervalChange={(value) =>
+                          updatePackage(servicePackage.id, {
+                            billingInterval: value,
+                          })
+                        }
+                      />
+                      <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs">
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={servicePackage.isActive}
+                            onChange={(event) =>
+                              updatePackage(servicePackage.id, {
+                                isActive: event.target.checked,
+                              })
+                            }
+                          />{" "}
+                          Active
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={servicePackage.isPricingPublic}
+                            onChange={(event) =>
+                              updatePackage(servicePackage.id, {
+                                isPricingPublic: event.target.checked,
+                              })
+                            }
+                          />{" "}
+                          Display pricing publicly
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={servicePackage.isRecommended}
+                            onChange={(event) =>
+                              selectRecommended(
+                                servicePackage.id,
+                                event.target.checked,
+                              )
+                            }
+                          />{" "}
+                          Recommended
+                        </label>
+                      </div>
+                    </article>
+                  ))}
+                </section>
+              )}
+            </fieldset>
+          </div>
+          <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-[#eceef1] bg-white px-5 py-4">
             <div>
               {currentStep > 0 && (
                 <button
