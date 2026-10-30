@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { randomBytes } from "node:crypto"
+import { randomBytes, randomUUID } from "node:crypto"
 import { readdir, readFile } from "node:fs/promises"
 import type { AddressInfo } from "node:net"
 import { test } from "node:test"
@@ -202,7 +202,7 @@ test(
       serviceId: activeService.id,
       packageId: activePackage.id,
       preferredSpecialistId: specialistA.id,
-      submissionKey: "a5fe6c7e-310f-4f70-a003-5b44ff2722fb",
+      submissionKey: randomUUID(),
       goals: "Improve accessibility and conversion.",
       requirements: "Build an accessible client portal.",
       expectedTimeline: "Within three months",

@@ -1,0 +1,3 @@
+# Non-secret UUID used as a request deduplication key in an offline test fixture.
+# Ignore only this historical finding; new findings remain subject to scanning.
+ba51e389f5576d73dbee28dc76f8df2b39072c7e:apps/api/src/client-requests.test.ts:generic-api-key:205
