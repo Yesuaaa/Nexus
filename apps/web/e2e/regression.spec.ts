@@ -137,10 +137,14 @@ test.describe("live test accounts", () => {
           await page.evaluate(() => localStorage.getItem("nexus.auth.token")),
         ).toBeNull()
         for (const feature of features) {
-          if (feature.roles.includes(role)) {
+          const clientCatalog = role === "USER" && feature.path === "/services"
+          const pageEndpoint = clientCatalog
+            ? "/api/services/available"
+            : feature.endpoint
+          if (feature.roles.includes(role) || clientCatalog) {
             const loaded = page.waitForResponse(
               (response) =>
-                new URL(response.url()).pathname === feature.endpoint &&
+                new URL(response.url()).pathname === pageEndpoint &&
                 response.request().method() === "GET",
             )
             await page.goto(feature.path)
@@ -148,7 +152,12 @@ test.describe("live test accounts", () => {
               200,
             )
             await expect(
-              page.getByRole("heading", { name: feature.title, exact: true }),
+              page.getByRole("heading", {
+                name: clientCatalog
+                  ? "Build Your Brand with EXP"
+                  : feature.title,
+                exact: true,
+              }),
             ).toBeVisible()
             await expect(page.getByRole("main").getByRole("alert")).toHaveCount(
               0,
@@ -1281,16 +1290,8 @@ test.describe("mocked regression", () => {
     await page.route("**/api/services/service-2", (route) =>
       route.fulfill({ status: 403, json: { error: "Permission revoked" } }),
     )
-    for (let step = 0; step < 4; step++) {
-      await dialog
-        .getByRole("button", { name: "Continue", exact: true })
-        .click()
-    }
     await dialog.getByRole("button", { name: "Save Changes" }).click()
     await expect(dialog.getByRole("alert")).toHaveText("Permission revoked")
-    for (let step = 0; step < 4; step++) {
-      await dialog.getByRole("button", { name: "Back", exact: true }).click()
-    }
     await expect(dialog.getByLabel("Service Name")).toHaveValue(
       "Updated Consulting",
     )
@@ -1309,15 +1310,23 @@ test.describe("mocked regression", () => {
       .getByRole("button", { name: "Edit Test Service", exact: true })
       .click()
     const dialog = page.getByRole("dialog")
-    const next = () =>
-      dialog.getByRole("button", { name: "Continue", exact: true }).click()
-    await next()
+    const selectStep = (name: string) =>
+      dialog
+        .getByRole("navigation", { name: "Service form progress" })
+        .getByRole("button", { name })
+        .click()
+    await selectStep("Benefits")
     await dialog.getByRole("button", { name: "Add Benefit" }).click()
     await dialog.getByLabel("Benefit Title").fill("Launch with confidence")
     await dialog
       .getByLabel("Benefit Description")
       .fill("A guided process from discovery through delivery.")
-    await next()
+    await page.mouse.click(2, 2)
+    await page.keyboard.press("Escape")
+    await expect(dialog.getByLabel("Benefit Title")).toHaveValue(
+      "Launch with confidence",
+    )
+    await selectStep("Requirements")
     await dialog
       .getByRole("textbox", { name: /Client Requirements/ })
       .fill("  Brand guide  \n\nProject brief")
@@ -1325,7 +1334,7 @@ test.describe("mocked regression", () => {
       .getByLabel("Consultation is required before proceeding")
       .check()
     await dialog.getByLabel("Consultation Notes").fill("Discuss project scope")
-    await next()
+    await selectStep("Pricing")
     await dialog.getByLabel("Pricing Template", { exact: true }).click()
     await page
       .getByRole("option", { name: "Create a reusable template" })
@@ -1336,13 +1345,13 @@ test.describe("mocked regression", () => {
     await dialog.getByLabel("Pricing Model", { exact: true }).click()
     await page.getByRole("option", { name: "Recurring", exact: true }).click()
     await dialog.getByLabel("Amount (PHP)").fill("1500.50")
-    await next()
+    await dialog.getByRole("button", { name: "Save Changes" }).click()
     await expect(dialog.getByRole("alert")).toHaveText(
       "Select a billing interval",
     )
     await dialog.getByLabel("Billing Interval").click()
     await page.getByRole("option", { name: "Monthly", exact: true }).click()
-    await next()
+    await selectStep("Packages")
     await dialog.getByRole("button", { name: "Add Package" }).click()
     await dialog.getByLabel("Package Name").fill("Starter")
     await dialog
@@ -1403,22 +1412,22 @@ test.describe("mocked regression", () => {
     await page
       .getByRole("button", { name: "Edit Test Service", exact: true })
       .click()
-    await next()
+    await selectStep("Benefits")
     await expect(dialog.getByLabel("Benefit Title")).toHaveValue(
       "Launch with confidence",
     )
-    await next()
+    await selectStep("Requirements")
     await expect(dialog.getByLabel("Consultation Notes")).toHaveValue(
       "Discuss project scope",
     )
     await dialog
       .getByLabel("Consultation is required before proceeding")
       .uncheck()
-    await next()
+    await selectStep("Pricing")
     await expect(
       dialog.getByLabel("Pricing Template", { exact: true }),
     ).toContainText("Monthly support")
-    await next()
+    await selectStep("Packages")
     await expect(dialog.getByLabel("Package Name")).toHaveValue("Starter")
     const updated = page.waitForRequest(
       (request) =>
@@ -1468,7 +1477,7 @@ test.describe("mocked regression", () => {
     ).toHaveCount(0)
     await page.getByRole("menuitem", { name: "Deactivate service" }).click()
     await page
-      .getByRole("button", { name: "Deactivate service", exact: true })
+      .getByRole("button", { name: "Deactivate Service", exact: true })
       .click()
     await expect(
       page.getByRole("row").filter({ hasText: "Test Service" }),
@@ -1739,7 +1748,7 @@ test.describe("mocked regression", () => {
     await page.goto("/departments")
     await page.getByRole("button", { name: "Engineering", exact: true }).click()
     await page.getByRole("tab", { name: /Teams/ }).click()
-    await page.getByRole("button", { name: "Create team", exact: true }).click()
+    await page.getByRole("button", { name: "Create Team", exact: true }).click()
     await page.getByLabel("Team name").fill("Restricted Team")
     const request = page.waitForRequest(
       (request) =>
@@ -2721,6 +2730,209 @@ test.describe("mocked regression", () => {
   // 4. Internationalization & Session Expiry
   // -----------------------------------------------------------------------------
 
+  test("client catalog retries failures and resets pagination when filtering", async ({
+    page,
+  }) => {
+    const timestamp = "2026-10-30T00:00:00.000Z"
+    const services: Service[] = Array.from({ length: 10 }, (_, index) => ({
+      id: `catalog-${index}`,
+      name: `Catalog Service ${index + 1}`,
+      description: "Business support",
+      iconKey: "sparkles",
+      imageUrl: null,
+      imageAltText: null,
+      clientRequirements: [],
+      requiresConsultation: false,
+      consultationNotes: null,
+      keyBenefits: [],
+      isActive: true,
+      pricingTemplateId: null,
+      pricingTemplate: null,
+      packages: [],
+      departments: [
+        {
+          id: index < 8 ? "engineering" : "marketing",
+          name: index < 8 ? "Engineering" : "Marketing",
+          code: null,
+          color: "teal",
+        },
+      ],
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }))
+    await restoreSession(page, "USER", { initialServices: services })
+    await page.route(
+      "**/api/services/available",
+      (route) =>
+        route.fulfill({
+          status: 503,
+          json: { error: "Catalog temporarily unavailable" },
+        }),
+      { times: 1 },
+    )
+    await page.goto("/services")
+    await expect(page.getByRole("main").getByRole("alert")).toContainText(
+      "Catalog temporarily unavailable",
+    )
+    await page.getByRole("button", { name: "Try again", exact: true }).click()
+    await expect(
+      page.getByRole("button", { name: /^Explore Catalog Service/ }),
+    ).toHaveCount(8)
+    await page.getByRole("button", { name: "Next page", exact: true }).click()
+    await expect(
+      page.getByRole("button", { name: /^Explore Catalog Service/ }),
+    ).toHaveCount(2)
+    await page
+      .getByRole("combobox", { name: "Filter services by department" })
+      .click()
+    await page.getByRole("option", { name: "Engineering", exact: true }).click()
+    await expect(
+      page.getByRole("button", { name: "Page 1", exact: true }),
+    ).toHaveAttribute("aria-current", "page")
+    await expect(
+      page.getByRole("button", { name: /^Explore Catalog Service/ }),
+    ).toHaveCount(8)
+    await page
+      .getByRole("searchbox", { name: "Search services" })
+      .fill("' OR 1=1 --")
+    await expect(
+      page.getByText("No services found", { exact: true }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole("button", { name: /^Explore Catalog Service/ }),
+    ).toHaveCount(0)
+    await page
+      .getByRole("searchbox", { name: "Search services" })
+      .fill("Catalog Service 3")
+    await expect(
+      page.getByRole("button", { name: /^Explore Catalog Service/ }),
+    ).toHaveCount(1)
+    await expect(
+      page.getByRole("button", {
+        name: "Explore Catalog Service 3",
+        exact: true,
+      }),
+    ).toBeVisible()
+  })
+
+  for (const width of [1280, 390]) {
+    test(`client submits standard service and starts a clean request at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 })
+      await restoreSession(page, "USER")
+      await page.route("**/api/services/service-1/specialists", (route) =>
+        route.fulfill({ json: { specialists: [] } }),
+      )
+      const submissions: Record<string, unknown>[] = []
+      await page.route("**/api/service-requests", async (route) => {
+        expect(route.request().method()).toBe("POST")
+        submissions.push(
+          route.request().postDataJSON() as Record<string, unknown>,
+        )
+        await route.fulfill({
+          status: 201,
+          json: {
+            serviceRequest: {
+              id: `request-${submissions.length}`,
+              status: "PENDING",
+              createdAt: "2026-10-30T00:00:00.000Z",
+            },
+          },
+        })
+      })
+      await page.goto("/services")
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        await page
+          .getByRole("button", { name: "Explore Test Service", exact: true })
+          .click()
+        await page
+          .getByRole("dialog")
+          .getByRole("button", { name: "EXPlore", exact: true })
+          .click()
+        const select = page.getByRole("button", {
+          name: "Select Standard service",
+          exact: true,
+        })
+        await expect(select).toHaveAttribute("aria-pressed", "false")
+        await select.click()
+        await page
+          .getByRole("button", { name: "Continue to project requirements" })
+          .click()
+        for (const name of [
+          "Project goals",
+          "Project requirements",
+          "Expected timeline",
+        ]) {
+          const input = page.getByRole("textbox", { name, exact: true })
+          await expect(input).toHaveValue("")
+          await input.fill(`${name} for request ${attempt}`)
+        }
+        await page
+          .getByRole("button", { name: "Continue to preferred specialist" })
+          .click()
+        await expect(
+          page.getByText(/No specialists are currently listed/),
+        ).toBeVisible()
+        await page
+          .getByRole("button", {
+            name: "Submit service request for review",
+            exact: true,
+          })
+          .click()
+        await expect(
+          page.getByRole("heading", {
+            name: "Service request submitted for review",
+            exact: true,
+          }),
+        ).toBeFocused()
+        expect(submissions).toHaveLength(attempt)
+        expect(submissions[attempt - 1]).toMatchObject({
+          serviceId: "service-1",
+          packageId: null,
+          preferredSpecialistId: null,
+          goals: `Project goals for request ${attempt}`,
+          additionalDetails: "",
+        })
+        expect(submissions[attempt - 1]).not.toHaveProperty("clientId")
+        await page
+          .getByRole("button", { name: "Start another request", exact: true })
+          .click()
+      }
+      expect(submissions[0].submissionKey).toEqual(expect.any(String))
+      expect(submissions[1].submissionKey).not.toBe(
+        submissions[0].submissionKey,
+      )
+    })
+
+    test(`admin client form preserves input until explicitly cancelled at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 })
+      await restoreSession(page, "ADMIN")
+      await page.goto("/clients")
+      const opener = page.getByRole("button", {
+        name: "Create Client",
+        exact: true,
+      })
+      await opener.click()
+      const dialog = page.getByRole("dialog")
+      await dialog.getByLabel("Full Name").fill("Draft Client")
+      await dialog.getByLabel("Email Address").fill("draft@example.com")
+      await page.mouse.click(2, 2)
+      await page.keyboard.press("Escape")
+      await expect(dialog.getByLabel("Full Name")).toHaveValue("Draft Client")
+      await expect(dialog.getByLabel("Email Address")).toHaveValue(
+        "draft@example.com",
+      )
+      await dialog.getByRole("button", { name: "Cancel", exact: true }).click()
+      await expect(dialog).toHaveCount(0)
+      await expect(opener).toBeFocused()
+      await opener.click()
+      await expect(dialog.getByLabel("Full Name")).toHaveValue("")
+    })
+  }
+
   test("stored Filipino language hydrates and survives auth navigation", async ({
     page,
   }) => {
@@ -3066,26 +3278,31 @@ test.describe("mocked regression", () => {
       page.getByRole("radiogroup", { name: "Department color" }),
     ).toBeVisible()
     await page.getByRole("radio", { name: "Green", exact: true }).click()
+    const createdDepartment = page.waitForRequest(
+      (request) =>
+        request.method() === "POST" &&
+        new URL(request.url()).pathname === "/api/departments",
+    )
     await page
       .getByRole("dialog")
       .getByRole("button", { name: "Create Department" })
       .click()
 
     await expect(page.getByText("Customer Support")).toBeVisible()
-    expect(
-      await page.evaluate(
-        () =>
-          JSON.parse(localStorage.getItem("department-colors") ?? "{}")[
-            "customer support"
-          ],
-      ),
-    ).toBe("green")
+    expect((await createdDepartment).postDataJSON()).toMatchObject({
+      name: "Customer Support",
+      color: "green",
+    })
+    await page.reload()
 
     // 2. Edit the Department
     await page.getByRole("button", { name: "Edit Customer Support" }).click()
     await expect(
       page.getByRole("heading", { name: "Edit Department" }),
     ).toBeVisible()
+    await expect(
+      page.getByRole("radio", { name: "Green", exact: true }),
+    ).toBeChecked()
     await page.getByLabel("Department Name").fill("Client Success")
     await page
       .getByRole("dialog")
