@@ -8,6 +8,7 @@ import { usersRouter } from "./features/users/users.controller.js"
 import { servicesRouter } from "./features/services/services.controller.js"
 import { clientsRouter } from "./features/clients/clients.controller.js"
 import { serviceRequestsRouter } from "./features/service-requests/service-requests.controller.js"
+import { workloadRouter } from "./features/workload/routes.js"
 
 export function createApp() {
   const app = express()
@@ -27,6 +28,7 @@ export function createApp() {
   app.use("/api/departments", departmentsRouter)
   app.use("/api/employees", employeesRouter)
   app.use("/api/clients", clientsRouter)
+  app.use("/api/workload", workloadRouter)
   app.use("/api", healthRouter)
   app.use(handleError)
   return app

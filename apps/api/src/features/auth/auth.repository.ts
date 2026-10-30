@@ -26,6 +26,7 @@ export const authRepository = {
     return prisma.user.findUnique({
       where: { email },
       include: {
+        headOf: { select: { id: true } },
         department: {
           select: { id: true, name: true, code: true, color: true },
         },
@@ -67,6 +68,7 @@ export const authRepository = {
       include: {
         user: {
           include: {
+            headOf: { select: { id: true } },
             department: {
               select: { id: true, name: true, code: true, color: true },
             },

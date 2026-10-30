@@ -20,6 +20,8 @@ export const Permission = {
   SERVICES_READ: "services:read",
   SERVICES_MANAGE: "services:manage",
   CLIENTS_READ: "clients:read",
+  WORKLOAD_READ: "workload:read",
+  WORKLOAD_MANAGE: "workload:manage",
 } as const
 
 export type Permission = (typeof Permission)[keyof typeof Permission]
@@ -73,10 +75,22 @@ const rolePermissions: Record<Role, readonly Permission[]> = {
   ],
 }
 
-export function permissionsFor(role: Role): Permission[] {
-  return [...rolePermissions[role]]
+export function permissionsFor(
+  role: Role,
+  isDepartmentHead = false,
+): Permission[] {
+  return [
+    ...rolePermissions[role],
+    ...((role === Role.STAFF || role === Role.ADMIN) && isDepartmentHead
+      ? [Permission.WORKLOAD_READ, Permission.WORKLOAD_MANAGE]
+      : []),
+  ]
 }
 
-export function hasPermission(role: Role, permission: Permission): boolean {
-  return rolePermissions[role].includes(permission)
+export function hasPermission(
+  role: Role,
+  permission: Permission,
+  isDepartmentHead = false,
+): boolean {
+  return permissionsFor(role, isDepartmentHead).includes(permission)
 }

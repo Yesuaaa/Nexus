@@ -3,6 +3,7 @@ import { permissionsFor } from "../auth/auth.permissions.js"
 
 export function publicUser(
   user: User & {
+    headOf?: { id: string } | null
     department?: {
       id: string
       name: string
@@ -37,7 +38,7 @@ export function publicUser(
           name: user.team.name,
         }
       : null,
-    permissions: permissionsFor(user.role),
+    permissions: permissionsFor(user.role, Boolean(user.headOf)),
     createdAt: user.createdAt,
   }
 }

@@ -20,9 +20,18 @@ export const Permissions = {
   SERVICES_READ: "services:read",
   SERVICES_MANAGE: "services:manage",
   CLIENTS_READ: "clients:read",
+  WORKLOAD_READ: "workload:read",
+  WORKLOAD_MANAGE: "workload:manage",
 } as const
 
 export type Permission = (typeof Permissions)[keyof typeof Permissions]
+
+export function canAccessWorkload(account: Account): boolean {
+  return (
+    (account.role === "ADMIN" || account.role === "STAFF") &&
+    hasPermission(account, Permissions.WORKLOAD_READ)
+  )
+}
 
 type Role = Account["role"]
 

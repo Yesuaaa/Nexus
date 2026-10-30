@@ -109,6 +109,10 @@ model Department {
   employees               Employee[]
   teams                   Team[]
   services                Service[]  @relation("ServiceDepartments")
+  projects                Project[]  @relation("ProjectDepartments")
+  ownedWork               WorkAssignment[]
+  staffingSent            StaffingRequest[] @relation("StaffingOwner")
+  staffingReceived        StaffingRequest[] @relation("StaffingRecipient")
   createdAt               DateTime   @default(now())
   updatedAt               DateTime   @updatedAt
 
@@ -215,6 +219,8 @@ model ServiceRequest {
   submissionKey           String?              @db.VarChar(36)
   createdAt               DateTime             @default(now())
   updatedAt               DateTime             @updatedAt
+  workAssignments         WorkAssignment[]
+  staffingRequests        StaffingRequest[]
 
   @@unique([clientId, submissionKey])
   @@index([clientId, createdAt, id])
@@ -233,6 +239,10 @@ model Project {
   startDate   DateTime?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
+  departments Department[] @relation("ProjectDepartments")
+  tasks       ProjectTask[]
+  workAssignments WorkAssignment[]
+  staffingRequests StaffingRequest[]
 
   @@index([clientId, createdAt, id])
 }
@@ -274,12 +284,141 @@ model Employee {
   createdAt                DateTime         @default(now())
   updatedAt                DateTime         @updatedAt
   preferredServiceRequests ServiceRequest[]
+  skills                   String[] @default([])
+  workingSchedule          WorkingSchedule[]
+  commitments              WorkCommitment[]
+  workAssignments          WorkAssignment[]
 
   @@index([departmentId])
   @@index([teamId])
   @@index([status])
   @@index([employmentType])
   @@index([fullName])
+}
+
+// Recurring local working hours, always interpreted in Asia/Manila.
+// No default capacity is inferred from employment type.
+model WorkingSchedule {
+  id          String @id @default(cuid())
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  weekday     Int
+  startMinute Int
+  endMinute   Int
+
+  @@unique([employeeId, weekday, startMinute])
+}
+
+enum CommitmentKind {
+  APPOINTMENT
+  LEAVE
+  UNAVAILABLE
+}
+
+model WorkCommitment {
+  id         String @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  kind       CommitmentKind
+  title      String @db.VarChar(160)
+  startsAt   DateTime
+  endsAt     DateTime
+  source     String @default("MANUAL") @db.VarChar(32)
+  recordedBy String
+  createdAt  DateTime @default(now())
+
+  @@index([employeeId, startsAt, endsAt])
+}
+
+model ProjectTask {
+  id          String @id @default(cuid())
+  projectId   String
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  title       String @db.VarChar(160)
+  completed   Boolean @default(false)
+  workAssignments WorkAssignment[]
+  staffingRequests StaffingRequest[]
+}
+
+enum WorkPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum WorkAssignmentStatus {
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+// Each assignment is an explicitly scheduled block. Multiple blocks may reference
+// the same request/project/task. Client specialist preferences never create blocks.
+model WorkAssignment {
+  id                String @id @default(cuid())
+  employeeId        String
+  employee          Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  ownerDepartmentId String
+  ownerDepartment   Department @relation(fields: [ownerDepartmentId], references: [id], onDelete: Restrict)
+  serviceRequestId  String?
+  serviceRequest    ServiceRequest? @relation(fields: [serviceRequestId], references: [id], onDelete: Restrict)
+  projectId         String?
+  project           Project? @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  taskId            String?
+  task              ProjectTask? @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  staffingRequestId String? @unique
+  staffingRequest   StaffingRequest? @relation(fields: [staffingRequestId], references: [id], onDelete: Restrict)
+  title             String @db.VarChar(160)
+  requiredSkills    String[] @default([])
+  startsAt          DateTime
+  endsAt            DateTime
+  estimatedHours    Float
+  deadline          DateTime?
+  priority          WorkPriority @default(NORMAL)
+  status            WorkAssignmentStatus @default(CONFIRMED)
+  assignedBy        String
+  createdAt         DateTime @default(now())
+
+  @@index([employeeId, startsAt, endsAt])
+  @@index([ownerDepartmentId])
+}
+
+enum StaffingRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model StaffingRequest {
+  id                    String @id @default(cuid())
+  ownerDepartmentId     String
+  ownerDepartment       Department @relation("StaffingOwner", fields: [ownerDepartmentId], references: [id], onDelete: Restrict)
+  recipientDepartmentId String
+  recipientDepartment   Department @relation("StaffingRecipient", fields: [recipientDepartmentId], references: [id], onDelete: Restrict)
+  serviceRequestId      String?
+  serviceRequest        ServiceRequest? @relation(fields: [serviceRequestId], references: [id], onDelete: Restrict)
+  projectId             String?
+  project               Project? @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  taskId                String?
+  task                  ProjectTask? @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  title                 String @db.VarChar(160)
+  requiredSkills        String[] @default([])
+  startsAt              DateTime
+  endsAt                DateTime
+  estimatedHours        Float
+  deadline              DateTime?
+  priority              WorkPriority @default(NORMAL)
+  status                StaffingRequestStatus @default(PENDING)
+  requestedBy           String
+  decidedBy             String?
+  decidedAt             DateTime?
+  createdAt             DateTime @default(now())
+  assignment            WorkAssignment?
+
+  @@index([ownerDepartmentId, status])
+  @@index([recipientDepartmentId, status])
 }
 
 model Session {

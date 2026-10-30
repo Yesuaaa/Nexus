@@ -12,6 +12,7 @@ import {
   canAccessServiceCatalog,
   canAccessServiceManagement,
   canAccessClientManagement,
+  canAccessWorkload,
 } from "@/features/auth/model/permissions"
 import { AccountContext } from "@/features/auth/providers/account-context"
 import { useAuthTransition } from "@/features/auth/providers/auth-provider"
@@ -36,7 +37,9 @@ export function PortalLayout({ children }: { children: ReactNode }) {
       (pathname === "/services" &&
         !canAccessServiceCatalog(account) &&
         !canAccessServiceManagement(account)) ||
-      (pathname.startsWith("/clients") && !canAccessClientManagement(account)))
+      (pathname.startsWith("/clients") &&
+        !canAccessClientManagement(account)) ||
+      (pathname.startsWith("/workload") && !canAccessWorkload(account)))
 
   useEffect(() => {
     if (denied) router.replace("/dashboard")

@@ -8,7 +8,10 @@ import { errors } from "jose"
 
 export { issueSession }
 
-export type AuthContext = { user: User; sessionId: string }
+export type AuthContext = {
+  user: User & { headOf?: { id: string } | null }
+  sessionId: string
+}
 
 declare global {
   // Express augments Request through its global namespace.
@@ -68,7 +71,13 @@ export function requirePermission(permission: Permission): RequestHandler {
   return (request, response, next) => {
     if (!request.auth) {
       response.status(401).json({ error: "Authentication required" })
-    } else if (!hasPermission(request.auth.user.role, permission)) {
+    } else if (
+      !hasPermission(
+        request.auth.user.role,
+        permission,
+        Boolean(request.auth.user.headOf),
+      )
+    ) {
       response.status(403).json({ error: "Insufficient permissions" })
     } else {
       next()
