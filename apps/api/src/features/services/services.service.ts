@@ -90,7 +90,71 @@ function uniqueConflict() {
   )
 }
 
+function publicPortfolioUrl(value: string | null): string | null {
+  if (!value) return null
+  try {
+    const url = new URL(value)
+    return url.protocol === "https:" && !url.username && !url.password
+      ? url.href
+      : null
+  } catch {
+    return null
+  }
+}
+
+function publicSocialLinks(
+  links: { platform: string; url: string }[],
+): { platform: string; url: string }[] {
+  const seen = new Set<string>()
+  const publicLinks: { platform: string; url: string }[] = []
+
+  for (const link of links) {
+    const platform = link.platform.trim().replace(/\s+/g, " ").slice(0, 40)
+    const url = publicPortfolioUrl(link.url)
+    if (!platform || !url || seen.has(url)) continue
+    seen.add(url)
+    publicLinks.push({ platform, url })
+    if (publicLinks.length === 8) break
+  }
+
+  return publicLinks
+}
+
 export const servicesService = {
+  async getSpecialistProfile(serviceId: string, specialistId: string) {
+    const profile = await servicesRepository.findSpecialistProfile(
+      serviceId,
+      specialistId,
+    )
+    if (!profile)
+      throw new ServicesError(
+        404,
+        "Specialist profile not found for this service",
+      )
+    const {
+      profileBio,
+      profileImageUrl,
+      profileSpecialties,
+      portfolioProjects,
+      socialLinks,
+      ...identity
+    } = profile
+    return {
+      ...identity,
+      bio: profileBio,
+      imageUrl: publicPortfolioUrl(profileImageUrl),
+      specialties: profileSpecialties
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .slice(0, 12),
+      socialLinks: publicSocialLinks(socialLinks),
+      projects: portfolioProjects.map((project) => ({
+        ...project,
+        thumbnailUrl: publicPortfolioUrl(project.thumbnailUrl),
+        projectUrl: publicPortfolioUrl(project.projectUrl),
+      })),
+    }
+  },
   async getSpecialists(serviceId: string) {
     const service = await servicesRepository.findHeaderById(serviceId)
     if (!service?.isActive) throw new ServicesError(404, "Service not found")

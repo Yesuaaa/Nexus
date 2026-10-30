@@ -36,7 +36,7 @@ const fields: {
     label: "Project goals",
     hint: "What would you like to achieve? Tell us what success looks like for your business.",
     placeholder:
-      "e.g. Increase brand awareness and generate more qualified leads.",
+      "e.g. Reduce onboarding delays and make the process easier to follow.",
     required: true,
     rows: 4,
   },
@@ -45,7 +45,7 @@ const fields: {
     label: "Project requirements",
     hint: "Describe the deliverables, features, scope, or support you need.",
     placeholder:
-      "e.g. A monthly content calendar, 12 social posts, and performance reporting.",
+      "e.g. A clear project plan, updated reference materials, and a handoff guide.",
     required: true,
     rows: 5,
   },
@@ -54,7 +54,7 @@ const fields: {
     label: "Expected timeline",
     hint: "Include a target start date, deadline, or duration. If you are flexible, let us know.",
     placeholder:
-      "e.g. Launch within 6 weeks, or flexible based on your recommendation.",
+      "e.g. Begin in six weeks and complete within two months, or flexible.",
     required: true,
   },
   {
@@ -187,7 +187,7 @@ export function ServiceRequirementsStep({
                   </label>
                   <p
                     id={`${id}-hint`}
-                    className="mt-1 mb-2 text-xs leading-5 text-[#687e9e]"
+                    className="mt-1 mb-2 text-sm leading-6 text-[#687e9e]"
                   >
                     {field.hint}
                   </p>
@@ -211,7 +211,7 @@ export function ServiceRequirementsStep({
                       </p>
                     )}
                     <span
-                      className="ml-auto shrink-0 text-[10px] leading-5 text-[#738096]"
+                      className="ml-auto shrink-0 text-xs leading-5 text-[#687e9e]"
                       aria-hidden="true"
                     >
                       {value[field.name].length.toLocaleString("en")} /{" "}
@@ -226,8 +226,8 @@ export function ServiceRequirementsStep({
           </div>
 
           <footer className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-[#e8edf5] pt-5">
-            <p className="m-0 max-w-[360px] text-xs leading-5 text-[#687e9e]">
-              Your details stay in this draft while you move between steps.
+            <p className="m-0 max-w-[360px] text-sm leading-6 text-[#687e9e]">
+              Your saved draft can be recovered in this browser tab.
             </p>
             <div className="flex flex-wrap gap-3 max-[560px]:w-full">
               <button
@@ -248,8 +248,7 @@ export function ServiceRequirementsStep({
                   focusRing,
                 )}
               >
-                Continue to preferred specialist{" "}
-                <ArrowRight size={17} aria-hidden="true" />
+                Continue <ArrowRight size={17} aria-hidden="true" />
               </button>
             </div>
           </footer>
@@ -263,7 +262,7 @@ export function ServiceRequirementsStep({
                 className="mt-0.5 shrink-0"
                 aria-hidden="true"
               />
-              Project requirements saved in this draft.
+              Saved in this browser tab.
             </p>
           )}
         </form>
@@ -275,7 +274,7 @@ export function ServiceRequirementsStep({
             </h3>
             <dl className="m-0 grid gap-5 p-5">
               <div>
-                <dt className="text-[10px] font-bold tracking-[0.12em] text-[#687e9e] uppercase">
+                <dt className="text-xs font-bold tracking-[0.08em] text-[#687e9e] uppercase">
                   Service
                 </dt>
                 <dd className="mt-1 ml-0 text-sm font-semibold text-[#243c69]">
@@ -283,7 +282,7 @@ export function ServiceRequirementsStep({
                 </dd>
               </div>
               <div>
-                <dt className="text-[10px] font-bold tracking-[0.12em] text-[#687e9e] uppercase">
+                <dt className="text-xs font-bold tracking-[0.08em] text-[#687e9e] uppercase">
                   Package
                 </dt>
                 <dd className="mt-1 ml-0 text-sm font-semibold text-[#243c69]">
@@ -291,7 +290,7 @@ export function ServiceRequirementsStep({
                 </dd>
               </div>
               <div className="border-t border-[#e8edf5] pt-4">
-                <dt className="text-[10px] font-bold tracking-[0.12em] text-[#687e9e] uppercase">
+                <dt className="text-xs font-bold tracking-[0.08em] text-[#687e9e] uppercase">
                   Pricing
                 </dt>
                 <dd className="mt-1 ml-0 text-lg font-bold text-[#173d8d]">
@@ -312,11 +311,11 @@ export function ServiceRequirementsStep({
               <h3 className="m-0 flex items-center gap-2 text-sm font-bold text-[#243c69]">
                 <ClipboardList size={18} aria-hidden="true" /> What we’ll need
               </h3>
-              <p className="mt-2 mb-3 text-xs leading-5 text-[#587095]">
+              <p className="mt-2 mb-3 text-sm leading-6 text-[#587095]">
                 Keep these service requirements in mind when describing your
                 project.
               </p>
-              <ul className="m-0 list-disc space-y-2 pl-4 text-xs leading-5 text-[#405b80]">
+              <ul className="m-0 list-disc space-y-2 pl-4 text-sm leading-6 text-[#405b80]">
                 {service.clientRequirements.map((requirement, index) => (
                   <li key={`${requirement}-${index}`}>{requirement}</li>
                 ))}

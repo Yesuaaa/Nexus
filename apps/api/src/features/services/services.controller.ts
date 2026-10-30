@@ -44,6 +44,23 @@ servicesRouter.get(
   },
 )
 
+servicesRouter.get(
+  "/:id/specialists/:specialistId",
+  async (request, response, next) => {
+    try {
+      const specialist = await servicesService.getSpecialistProfile(
+        String(request.params.id),
+        String(request.params.specialistId),
+      )
+      response.json({ specialist })
+    } catch (error) {
+      if (error instanceof ServicesError)
+        return response.status(error.status).json({ error: error.message })
+      next(error)
+    }
+  },
+)
+
 servicesRouter.get("/:id/specialists", async (request, response, next) => {
   try {
     const specialists = await servicesService.getSpecialists(

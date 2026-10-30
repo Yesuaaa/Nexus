@@ -49,6 +49,23 @@ test(
         await readFile(new URL(`${name}/migration.sql`, migrations), "utf8"),
       )
     }
+    const serviceRequestStatuses = await database.query<{ enumlabel: string }>(`
+      SELECT e.enumlabel
+      FROM pg_type t
+      JOIN pg_enum e ON e.enumtypid = t.oid
+      WHERE t.typname = 'ServiceRequestStatus'
+    `)
+    assert.deepEqual(
+      serviceRequestStatuses.rows.map((row) => row.enumlabel).sort(),
+      [
+        "AWAITING_CLIENT_INFO",
+        "CANCELLED",
+        "CLOSED",
+        "READY_FOR_QUOTATION",
+        "SUBMITTED",
+        "UNDER_REVIEW",
+      ],
+    )
     const socket = new PGLiteSocketServer({
       db: database,
       port: 0,
@@ -168,6 +185,19 @@ test(
     })
     assert.equal(response.status, 200)
     assert.deepEqual(await response.json(), { specialists: expected })
+    const profileResponse = await fetch(
+      `${base}/services/${service.id}/specialists/${expected[0]!.id}`,
+      { headers },
+    )
+    assert.equal(profileResponse.status, 200)
+    const initialProfile = (await profileResponse.json()) as {
+      specialist: Record<string, unknown>
+    }
+    assert.equal(initialProfile.specialist.fullName, "Alex Santos")
+    assert.deepEqual(initialProfile.specialist.projects, [])
+    assert.deepEqual(initialProfile.specialist.specialties, [])
+    assert.equal("email" in initialProfile.specialist, false)
+    assert.equal("passwordHash" in initialProfile.specialist, false)
     const empty = await fetch(
       `${base}/services/${unassignedService.id}/specialists`,
       { headers },
@@ -185,6 +215,166 @@ test(
       401,
     )
     assert.equal((await fetch(`${base}/employees`, { headers })).status, 403)
+
+    await t.test(
+      "specialist profiles show only their published portfolio and safe public fields",
+      async () => {
+        const employeeId = expected[0]!.id
+        await prisma.employee.update({
+          where: { id: employeeId },
+          data: {
+            profileBio: "I help teams plan clear social content.",
+            profileSpecialties: ["Content planning", "Brand communication"],
+            profileImageUrl: "javascript:alert(1)",
+          },
+        })
+        const published = await prisma.specialistPortfolioProject.create({
+          data: {
+            employeeId,
+            title: "Published content series",
+            summary: "A published portfolio example.",
+            contribution: "Content direction and layout.",
+            isPublished: true,
+            thumbnailUrl:
+              "https://example.supabase.co/storage/v1/object/public/portfolio/preview.png",
+            projectUrl: "https://example.com/work/content-series",
+            displayOrder: 0,
+          },
+        })
+        await prisma.specialistPortfolioProject.create({
+          data: {
+            employeeId,
+            title: "Private portfolio draft",
+            summary: "Not ready to share",
+            isPublished: false,
+          },
+        })
+        await prisma.specialistPortfolioProject.create({
+          data: {
+            employeeId: expected[1]!.id,
+            title: "Another specialist portfolio",
+            summary: "Not owned by this specialist",
+            isPublished: true,
+          },
+        })
+        await prisma.project.create({
+          data: {
+            clientId: client.id,
+            name: "Confidential client project",
+            status: "COMPLETED",
+          },
+        })
+        const response = await fetch(
+          `${base}/services/${service.id}/specialists/${employeeId}`,
+          { headers },
+        )
+        assert.equal(response.status, 200)
+        const payload = (await response.json()) as {
+          specialist: {
+            bio: string
+            imageUrl: string | null
+            specialties: string[]
+            projects: Record<string, unknown>[]
+          }
+        }
+        assert.equal(
+          payload.specialist.bio,
+          "I help teams plan clear social content.",
+        )
+        assert.equal(payload.specialist.imageUrl, null)
+        assert.deepEqual(payload.specialist.specialties, [
+          "Content planning",
+          "Brand communication",
+        ])
+        assert.deepEqual(payload.specialist.projects, [
+          {
+            id: published.id,
+            title: published.title,
+            summary: published.summary,
+            contribution: published.contribution,
+            thumbnailUrl: published.thumbnailUrl,
+            projectUrl: published.projectUrl,
+          },
+        ])
+        const text = JSON.stringify(payload)
+        for (const forbidden of [
+          "email",
+          "passwordHash",
+          "contactNumber",
+          "employeeId",
+          "isPublished",
+          "Private portfolio draft",
+          "Confidential client project",
+          "Another specialist portfolio",
+        ])
+          assert.equal(text.includes(forbidden), false, forbidden)
+        await prisma.specialistPortfolioProject.update({
+          where: { id: published.id },
+          data: {
+            thumbnailUrl: "data:text/html,bad",
+            projectUrl: "https://user:secret@example.com/private",
+          },
+        })
+        const sanitized = await fetch(
+          `${base}/services/${service.id}/specialists/${employeeId}`,
+          { headers },
+        )
+        const sanitizedBody = (await sanitized.json()) as {
+          specialist: {
+            projects: {
+              thumbnailUrl: string | null
+              projectUrl: string | null
+            }[]
+          }
+        }
+        assert.equal(sanitizedBody.specialist.projects[0]!.thumbnailUrl, null)
+        assert.equal(sanitizedBody.specialist.projects[0]!.projectUrl, null)
+        for (const serviceId of [
+          unassignedService.id,
+          inactiveService.id,
+          "missing",
+        ])
+          assert.equal(
+            (
+              await fetch(
+                `${base}/services/${serviceId}/specialists/${employeeId}`,
+                { headers },
+              )
+            ).status,
+            404,
+          )
+        const excluded = await prisma.employee.findMany({
+          where: { id: { notIn: expected.map((item) => item.id) } },
+          select: { id: true },
+        })
+        for (const candidate of excluded)
+          assert.equal(
+            (
+              await fetch(
+                `${base}/services/${service.id}/specialists/${candidate.id}`,
+                { headers },
+              )
+            ).status,
+            404,
+          )
+        assert.equal(
+          (
+            await fetch(
+              `${base}/services/${service.id}/specialists/${employeeId}`,
+            )
+          ).status,
+          401,
+        )
+        assert.equal(
+          (
+            await fetch(`${base}/services/${service.id}/specialists/missing`, {
+              headers,
+            })
+          ).status,
+          404,
+        )
+      },
+    )
 
     await t.test(
       "service requests validate the draft and store a pending review with a specialist preference",
