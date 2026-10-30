@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { createHash } from "node:crypto"
+import { randomBytes } from "node:crypto"
 import { readdir, readFile } from "node:fs/promises"
 import type { Server } from "node:http"
 import type { AddressInfo } from "node:net"
@@ -11,11 +11,14 @@ import { getPrisma } from "../../lib/db.js"
 import { Role } from "../../generated/prisma/client.js"
 import { hashPassword, verifyPassword } from "../auth/auth.password.js"
 import { usersRepository } from "./users.repository.js"
+import { issueSession } from "../auth/auth.service.js"
 
 test(
   "only Superadmins can change other account passwords and revoke their sessions",
   { timeout: 120_000 },
   async (t) => {
+    const originalJwtSecret = process.env.JWT_SECRET
+    process.env.JWT_SECRET = randomBytes(32).toString("base64url")
     const originalUrl = process.env.DATABASE_URL
     const originalDirectUrl = process.env.DIRECT_URL
     const originalPoolMax = process.env.DATABASE_POOL_MAX
@@ -33,6 +36,8 @@ test(
       await cleanup.prisma?.$disconnect()
       await cleanup.socket?.stop()
       await database.close()
+      if (originalJwtSecret === undefined) delete process.env.JWT_SECRET
+      else process.env.JWT_SECRET = originalJwtSecret
       if (originalUrl === undefined) delete process.env.DATABASE_URL
       else process.env.DATABASE_URL = originalUrl
       if (originalDirectUrl === undefined) delete process.env.DIRECT_URL
@@ -64,6 +69,7 @@ test(
     const initialPassword = "OriginalPassword123!"
     const initialHash = await hashPassword(initialPassword)
     const tokens = new Map<string, string>()
+    const refreshTokens = new Map<string, string>()
     for (const [id, role] of [
       ["superadmin", Role.SUPERADMIN],
       ["admin", Role.ADMIN],
@@ -74,7 +80,7 @@ test(
       ["peer", Role.SUPERADMIN],
       ["trashed", Role.USER],
     ] as const) {
-      await prisma.user.create({
+      const user = await prisma.user.create({
         data: {
           id,
           email: `${id}@example.com`,
@@ -85,23 +91,13 @@ test(
           accountDeletedAt: id === "trashed" ? new Date() : null,
         },
       })
-      const token = createHash("sha256").update(id).digest("base64url")
-      tokens.set(id, token)
-      await prisma.session.create({
-        data: {
-          userId: id,
-          tokenHash: createHash("sha256").update(token).digest("hex"),
-          expiresAt: new Date(Date.now() + 600_000),
-        },
-      })
+      const session = await issueSession(user)
+      tokens.set(id, session.token)
+      refreshTokens.set(id, session.refreshToken)
     }
-    await prisma.session.create({
-      data: {
-        userId: "target",
-        tokenHash: "second-target-session",
-        expiresAt: new Date(Date.now() + 600_000),
-      },
-    })
+    const secondTargetSession = await issueSession(
+      await prisma.user.findUniqueOrThrow({ where: { id: "target" } }),
+    )
     const server = createApp().listen(0, "127.0.0.1")
     cleanup.server = server
     await new Promise<void>((resolve) => server.once("listening", resolve))
@@ -204,10 +200,29 @@ test(
         .passwordHash,
       initialHash,
     )
-    const me = await fetch(`${base}/auth/me`, {
-      headers: { Authorization: `Bearer ${tokens.get("target")}` },
-    })
-    assert.equal(me.status, 401)
+    for (const [token, refreshToken] of [
+      [tokens.get("target"), refreshTokens.get("target")],
+      [secondTargetSession.token, secondTargetSession.refreshToken],
+    ]) {
+      const me = await fetch(`${base}/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      assert.equal(me.status, 401)
+      const refresh = await fetch(`${base}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      })
+      assert.equal(refresh.status, 401)
+    }
+    assert.equal(
+      (
+        await fetch(`${base}/auth/me`, {
+          headers: { Authorization: `Bearer ${tokens.get("superadmin")}` },
+        })
+      ).status,
+      200,
+    )
     const login = (password: string) =>
       fetch(`${base}/auth/login`, {
         method: "POST",

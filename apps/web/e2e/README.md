@@ -2,6 +2,17 @@
 
 `pnpm --filter @nexus/web test:e2e` runs the deterministic mocked regressions.
 
+To run the main regression file alone, use
+`pnpm --filter @nexus/web test:e2e regression.spec.ts --workers=2` after building.
+Its authentication checks cover both stored tokens, refresh across all roles,
+concurrent refresh coordination, a single mutation retry, revoked sessions,
+and recoverable refresh failures. Mock tokens exercise browser behavior;
+they do not verify JWT signatures or server authorization.
+
+Run `pnpm --filter @nexus/api test` for real JWT verification, rotation/reuse
+detection, password-reset session revocation, and account restoration against
+offline PGlite databases. No live database is used by that suite.
+
 `pnpm --filter @nexus/web test:e2e:live` signs in to the real backend using
 the Superadmin, Admin, Staff, User, and deactivated test accounts configured in
 `regression.spec.ts`. It checks login, page access, direct API read permissions,
