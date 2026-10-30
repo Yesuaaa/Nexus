@@ -1,4 +1,4 @@
-import { useRef } from "react"
+import { useRef, useState } from "react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,6 +9,7 @@ import {
   dropdownItemClass,
   dropdownMenuClass,
 } from "@/components/ui/dropdown-styles"
+import { useExclusiveMenu } from "@/components/ui/dropdown"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import type { Account } from "@/features/auth/model/types"
@@ -27,14 +28,27 @@ export function AccountRowActions({
   onDelete: () => void
   trashView?: boolean
 }) {
+  const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const pendingAction = useRef<"status" | "delete" | null>(null)
+  const closedByOther = useRef(false)
   const action = account.isActive ? "Deactivate" : "Reactivate"
+
+  // Close this menu whenever any other menu (dropdown or row actions) opens.
+  useExclusiveMenu(open, () => {
+    closedByOther.current = true
+    setOpen(false)
+  })
 
   return (
     <DropdownMenu
-      onOpenChange={(open) => {
-        if (open) pendingAction.current = null
+      open={open}
+      onOpenChange={(next) => {
+        if (next) {
+          pendingAction.current = null
+          closedByOther.current = false
+        }
+        setOpen(next)
       }}
     >
       <DropdownMenuTrigger asChild>
@@ -69,6 +83,12 @@ export function AccountRowActions({
           "w-48 max-w-[min(280px,calc(100vw-40px))] text-xs text-foreground outline-none",
         )}
         onCloseAutoFocus={(event) => {
+          // Another menu took over: don't pull focus back to this trigger.
+          if (closedByOther.current) {
+            closedByOther.current = false
+            event.preventDefault()
+            return
+          }
           const selectedAction = pendingAction.current
           if (!selectedAction) return
           event.preventDefault()
