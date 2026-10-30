@@ -1040,7 +1040,43 @@ test(
         assert.equal(reactivated.isActive, true)
         assert.equal(reactivated.passwordHash, account.passwordHash)
         await json(`${path}/account/status`, "PATCH", { isActive: "true" }, 400)
+        await json(`${path}/account`, "DELETE", undefined, 409)
+        await json(`${path}/account/status`, "PATCH", { isActive: false }, 204)
+        await json(`${path}/account/permanent`, "DELETE", undefined, 409)
         await json(`${path}/account`, "DELETE", undefined, 204)
+        const archived = await prisma.user.findUniqueOrThrow({
+          where: { id: account.id },
+        })
+        assert.ok(archived.accountDeletedAt)
+        assert.equal(archived.passwordHash, account.passwordHash)
+        assert.equal(
+          (
+            await prisma.employee.findUniqueOrThrow({
+              where: { id: employee.id },
+            })
+          ).userId,
+          account.id,
+        )
+        assert.equal(
+          (await json("/employees?search=login.person@example.com")).total,
+          0,
+        )
+        assert.equal(
+          (
+            await json(
+              "/employees?archived=true&search=login.person@example.com",
+            )
+          ).total,
+          1,
+        )
+        await json(`${path}/account/status`, "PATCH", { isActive: true }, 409)
+        await json(
+          `${path}/account`,
+          "POST",
+          { password: "ValidPassword1!" },
+          409,
+        )
+        await json(`${path}/account/permanent`, "DELETE", undefined, 204)
         assert.equal(
           await prisma.user.findUnique({ where: { id: account.id } }),
           null,
@@ -1211,6 +1247,12 @@ test(
           "DELETE",
           undefined,
           403,
+        )
+        await json(
+          `/employees/account:${staffAccount.id}/account/status`,
+          "PATCH",
+          { isActive: false },
+          204,
         )
         await json(
           `/employees/account:${staffAccount.id}/account`,

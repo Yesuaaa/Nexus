@@ -1,6 +1,14 @@
 "use client"
 
-import { useState, useSyncExternalStore } from "react"
+import { useEffect, useState, useSyncExternalStore } from "react"
+import { useRouter } from "next/navigation"
+import { Button } from "@/components/ui/button"
+import {
+  ApiError,
+  clearToken,
+  getCurrentAccount,
+  getToken,
+} from "../api/auth-api"
 import { useAuthTransition } from "../providers/auth-provider"
 import { AuthLayout } from "../components/auth-layout"
 import { AuthContent } from "../components/auth-form"
@@ -23,6 +31,68 @@ function getServerLanguage(): AuthLanguage {
 }
 
 export function AuthPage({ mode }: { mode: AuthMode }) {
+  const router = useRouter()
+  const [guest, setGuest] = useState(false)
+  const [error, setError] = useState(false)
+  const [revision, setRevision] = useState(0)
+
+  useEffect(() => {
+    let active = true
+    Promise.resolve()
+      .then(async () => {
+        if (!active) return false
+        if (!getToken()) {
+          setGuest(true)
+          return false
+        }
+        return await getCurrentAccount()
+      })
+      .then((session) => {
+        if (active && session) router.replace("/dashboard")
+      })
+      .catch((reason: unknown) => {
+        if (!active) return
+        if (reason instanceof ApiError && reason.status === 401) {
+          clearToken()
+          setGuest(true)
+        } else {
+          setError(true)
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [router, revision])
+
+  if (guest) return <AuthFormPage mode={mode} />
+  return (
+    <main className="grid min-h-dvh place-content-center gap-4 bg-[var(--portal-canvas)] px-6 text-center text-sm text-[#5a6f95]">
+      <h1 className="m-0 text-xl font-semibold text-[#203f8c]">
+        {mode === "login" ? "Welcome Back" : "Create Account"}
+      </h1>
+      {error ? (
+        <>
+          <p role="alert" className="m-0">
+            We couldn't check your session. Please try again.
+          </p>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setError(false)
+              setRevision((value) => value + 1)
+            }}
+          >
+            Try again
+          </Button>
+        </>
+      ) : (
+        <p role="status">Checking your session…</p>
+      )}
+    </main>
+  )
+}
+
+function AuthFormPage({ mode }: { mode: AuthMode }) {
   const { beginLoginTransition: onLoggedIn } = useAuthTransition()
   const storedLanguage = useSyncExternalStore(
     subscribeLanguage,

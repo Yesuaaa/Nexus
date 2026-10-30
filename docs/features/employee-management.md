@@ -57,7 +57,7 @@ Edit employee updates only HR/profile details and never creates or changes crede
 
 Inactive logins offer Reactivate login and Delete login account. Reactivation uses PATCH /api/employees/:id/account/status with isActive=true and retains the existing password. Deactivation revokes sessions without changing employment status.
 
-Deleting a login permanently deletes its User row and sessions. The employee HR record, department, team, and position remain; the userId becomes null and account-based leadership links are cleared by the existing foreign keys. A new login may then be created with a new identity. No live accounts are removed by this implementation; deletion happens only through a confirmed action. Existing retired rows are not bulk-purged.
+Deleting a login first requires deactivation and moves it to Archive using accountDeletedAt. Permanent deletion is a separate confirmed action available from Archive. Archiving preserves its User row, HR link, and assignments; permanent deletion removes its User row and sessions. The employee HR record, department, team, and position remain; the userId becomes null and account-based leadership links are cleared by the existing foreign keys. A new login may then be created with a new identity. No live accounts are removed by this implementation; deletion happens only through a confirmed action. Existing retired rows are not bulk-purged.
 
 ## Database rollout
 
@@ -69,10 +69,12 @@ Generating the Prisma client alone does not apply migrations. See the [Prisma gu
 
 The earlier Employee Management implementation passed the API suite (29 tests), web unit suite (11 tests), production web build, TypeScript checks, and browser checks for employee form validation and creation, the directory toolbar, and mobile layout. After removing Employee Management account controls, API and web TypeScript checks, targeted ESLint, and `git diff --check` passed. Test suites were not rerun for this update.
 
-The row menu keeps Change status for employment status and separate Deactivate account / Reactivate account actions for sign-in access. Delete account is available for both active and inactive logins, with a confirmation before permanent deletion. It is disabled only when the employee has no account.
+The row menu keeps Change status for employment status and separate Deactivate account / Reactivate account actions for sign-in access. Delete account is disabled until the account is deactivated. It moves the account to Archive. Archive lists soft-deleted Admin/Staff accounts with their archived dates; Admins may permanently delete Staff accounts from there. Admin accounts remain managed by Superadmin Account Management. Self-deletion is blocked.
 
 ## Account-based directory
 
 GET /api/employees starts from User records with role ADMIN or STAFF and accountDeletedAt=null, then joins Employee by userId. Account name/email/contact and activation come from User; EXP ID and employment fields come from Employee. Inactive accounts remain visible. Deleted accounts, client accounts, Superadmins, and employee-only records are excluded. Missing HR fields are null (the employee ID is an empty string) and display as Not set. Employment filters exclude rows without matching HR details. Search uses account identity and linked employee ID, with stable account-based pagination. No accounts are linked by email.
 
 Rows without HR details carry accountId, hasEmployeeRecord=false, and a directory ID prefixed with account:. Viewing and login actions work for these rows. Change status is disabled until the HR profile is completed. POST /api/employees/accounts/:accountId/profile creates the HR profile transactionally for an eligible account without creating or resetting credentials. Duplicate/concurrent profiles are rejected. No data migration or automatic backfill is performed.
+
+Archive uses GET /api/employees?archived=true. DELETE /api/employees/:id/account requires an inactive account and archives it with session revocation. DELETE /api/employees/:id/account/permanent requires an archived inactive Staff account and preserves the HR record while clearing account-based relationships. Foreign-key-protected history blocks permanent deletion. Archived credentials cannot authenticate or be recreated through the login-creation endpoint. No existing database rows are changed automatically.

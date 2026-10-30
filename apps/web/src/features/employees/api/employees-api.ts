@@ -7,6 +7,8 @@ export type EmploymentStatus = "ACTIVE" | "INACTIVE" | "ON_LEAVE"
 export type Employee = {
   id: string
   employeeId: string
+  accountRole?: "ADMIN" | "STAFF"
+  accountDeletedAt?: string | null
   accountId?: string
   hasEmployeeRecord?: boolean
   fullName: string
@@ -72,8 +74,10 @@ export async function listEmployees(filters: {
   employmentType?: EmploymentType | ""
   status?: EmploymentStatus | ""
   page: number
+  archived?: boolean
 }): Promise<EmployeeList> {
   const params = new URLSearchParams({ page: String(filters.page) })
+  if (filters.archived) params.set("archived", "true")
   if (filters.search) params.set("search", filters.search)
   if (filters.departmentId) params.set("departmentId", filters.departmentId)
   if (filters.employmentType)
@@ -156,4 +160,11 @@ export async function createEmployeeProfile(
     { method: "POST", body: JSON.stringify(input) },
   )
   return result.employee
+}
+
+export function permanentlyDeleteEmployeeLogin(id: string): Promise<void> {
+  return apiRequest(
+    `/api/employees/${encodeURIComponent(id)}/account/permanent`,
+    { method: "DELETE" },
+  )
 }

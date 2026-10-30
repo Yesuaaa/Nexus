@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { useState, type ReactNode } from "react"
 import { focusRing } from "@/components/layout/styles"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { Button } from "@/components/ui/button"
@@ -63,6 +63,7 @@ function employeeRowClass(
 
 export function EmployeeTable({
   employees,
+  archiveView = false,
   viewKey,
   quickKey,
   animateRows,
@@ -75,8 +76,10 @@ export function EmployeeTable({
   onChangeStatus,
   onManageLogin,
   onManageDepartment,
+  onRowsSettled,
 }: {
   employees: Employee[]
+  archiveView?: boolean
   viewKey: string
   quickKey: string
   animateRows: boolean
@@ -89,10 +92,12 @@ export function EmployeeTable({
   onChangeStatus: (employee: Employee) => void
   onManageLogin: (
     employee: Employee,
-    action: "create" | "deactivate" | "reactivate" | "delete",
+    action: "create" | "deactivate" | "reactivate" | "delete" | "permanent",
   ) => void
   onManageDepartment?: (departmentId: string) => void
+  onRowsSettled?: () => void
 }) {
+  const [openMenuKey, setOpenMenuKey] = useState<string | null>(null)
   const initialLoading = loading && employees.length === 0
 
   return (
@@ -115,7 +120,9 @@ export function EmployeeTable({
           <span role="columnheader">Department</span>
           <span role="columnheader">Position / team</span>
           <span role="columnheader">Type</span>
-          <span role="columnheader">Start date</span>
+          <span role="columnheader">
+            {archiveView ? "Date archived" : "Start date"}
+          </span>
           <span role="columnheader">Status</span>
           <span role="columnheader">Actions</span>
         </div>
@@ -149,6 +156,7 @@ export function EmployeeTable({
         </div>
       ) : (
         <AnimatedSlotGridBody
+          onRowsSettled={onRowsSettled}
           items={employees}
           viewKey={viewKey}
           quickKey={quickKey}
@@ -262,14 +270,22 @@ export function EmployeeTable({
                 role="cell"
                 className="text-[11px] text-[#738096] @max-[1000px]:col-start-2 @max-[1000px]:row-start-5 @max-[1000px]:justify-self-end"
               >
-                <span className="hidden @max-[1000px]:inline">Start date </span>
-                {formatDate(employee.startDate)}
+                <span className="hidden @max-[1000px]:inline">
+                  {archiveView ? "Archived " : "Start date "}
+                </span>
+                {formatDate(
+                  archiveView
+                    ? (employee.accountDeletedAt ?? null)
+                    : employee.startDate,
+                )}
               </div>
               <div
                 role="cell"
                 className="@max-[1000px]:col-start-2 @max-[1000px]:row-start-1 @max-[1000px]:justify-self-end"
               >
-                {employee.status ? (
+                {archiveView ? (
+                  <Pill className="bg-[#eef0f3] text-[#596579]">Archived</Pill>
+                ) : employee.status ? (
                   <StatusPill status={employee.status} />
                 ) : (
                   <span className="text-[#738096]">Not set</span>
@@ -280,6 +296,16 @@ export function EmployeeTable({
                 className="flex justify-start @max-[1000px]:col-start-2 @max-[1000px]:row-start-4 @max-[1000px]:justify-self-end"
               >
                 <EmployeeRowActions
+                  open={
+                    openMenuKey === `${viewKey}:${archiveView}:${employee.id}`
+                  }
+                  onOpenChange={(open) => {
+                    const key = `${viewKey}:${archiveView}:${employee.id}`
+                    setOpenMenuKey((current) =>
+                      open ? key : current === key ? null : current,
+                    )
+                  }}
+                  archiveView={archiveView}
                   employee={employee}
                   disabled={false}
                   onView={() => onView(employee)}

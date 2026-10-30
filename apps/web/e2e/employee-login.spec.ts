@@ -29,6 +29,7 @@ for (const width of [1440, 390]) {
       updatedAt: "2026-01-15T00:00:00Z",
     }
     let accountDeleted = false
+    let accountArchived = false
     await page.addInitScript(() =>
       sessionStorage.setItem("nexus.auth.token", "test-session"),
     )
@@ -72,15 +73,15 @@ for (const width of [1440, 390]) {
         return route.fulfill({
           json: { department: { ...department, teams: [], members: [] } },
         })
-      if (path === "/api/employees" && request.method() === "GET")
+      if (path === "/api/employees" && request.method() === "GET") {
+        const archive =
+          new URL(request.url()).searchParams.get("archived") === "true"
+        const rows =
+          !accountDeleted && archive === accountArchived ? [employee] : []
         return route.fulfill({
-          json: {
-            employees: accountDeleted ? [] : [employee],
-            total: accountDeleted ? 0 : 1,
-            page: 1,
-            pageSize: 10,
-          },
+          json: { employees: rows, total: rows.length, page: 1, pageSize: 10 },
         })
+      }
       if (
         path === "/api/employees/accounts/account-1/profile" &&
         request.method() === "POST"
@@ -131,6 +132,18 @@ for (const width of [1440, 390]) {
       }
       if (
         path === "/api/employees/employee-1/account" &&
+        request.method() === "DELETE"
+      ) {
+        accountArchived = true
+        employee = {
+          ...employee,
+          accountDeletedAt: "2026-10-30T00:00:00Z",
+          hasAccount: false,
+        }
+        return route.fulfill({ status: 204 })
+      }
+      if (
+        path === "/api/employees/employee-1/account/permanent" &&
         request.method() === "DELETE"
       ) {
         accountDeleted = true
@@ -189,7 +202,7 @@ for (const width of [1440, 390]) {
       .click()
     await expect(
       page.getByRole("menuitem", { name: "Delete account", exact: true }),
-    ).toBeEnabled()
+    ).toBeDisabled()
     await page.keyboard.press("Escape")
     await menu("Deactivate account")
     await dialog
@@ -217,14 +230,29 @@ for (const width of [1440, 390]) {
       .click()
     await expect(dialog).toHaveCount(0)
     await menu("Delete account")
-    await expect(dialog).toContainText("permanently deletes")
+    await expect(dialog).toContainText(
+      "moves the deactivated account to Archive",
+    )
     await dialog
-      .getByRole("button", { name: "Delete account", exact: true })
+      .getByRole("button", { name: "Move to Archive", exact: true })
       .click()
     await expect(dialog).toHaveCount(0)
     await expect(
       page.getByRole("button", { name: "Edit Alex Employee", exact: true }),
     ).toHaveCount(0)
+    await page.getByRole("button", { name: "Archive", exact: true }).click()
+    await menu("Delete permanently")
+    await expect(dialog).toContainText("permanently deletes")
+    await dialog
+      .getByRole("button", { name: "Delete permanently", exact: true })
+      .click()
+    await expect(dialog).toHaveCount(0)
+    await expect(
+      page.getByText("No archived accounts.", { exact: true }),
+    ).toBeVisible()
+    await page
+      .getByRole("button", { name: "Back to employees", exact: true })
+      .click()
     await page
       .getByRole("button", { name: "Create Employee", exact: true })
       .click()

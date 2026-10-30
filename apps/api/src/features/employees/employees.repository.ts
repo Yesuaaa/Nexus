@@ -29,6 +29,8 @@ const directoryAccountSelect = {
   email: true,
   contactNumber: true,
   isActive: true,
+  role: true,
+  accountDeletedAt: true,
   createdAt: true,
   updatedAt: true,
   employee: {
@@ -59,7 +61,9 @@ function directoryEmployee(
     teamId: hr?.teamId ?? null,
     department: hr?.department ?? null,
     team: hr?.team ?? null,
-    hasAccount: true,
+    accountRole: account.role,
+    accountDeletedAt: account.accountDeletedAt,
+    hasAccount: !account.accountDeletedAt,
     accountIsActive: account.isActive,
     createdAt: hr?.createdAt ?? account.createdAt,
     updatedAt: hr?.updatedAt ?? account.updatedAt,
@@ -86,6 +90,7 @@ export const employeesRepository = {
     employmentType: string
     status: string
     page: number
+    archived?: boolean
   }) {
     const hr: Prisma.EmployeeWhereInput = {
       ...(filters.departmentId ? { departmentId: filters.departmentId } : {}),
@@ -96,7 +101,7 @@ export const employeesRepository = {
     }
     const where: Prisma.UserWhereInput = {
       role: { in: [Role.ADMIN, Role.STAFF] },
-      accountDeletedAt: null,
+      accountDeletedAt: filters.archived ? { not: null } : null,
       ...(Object.keys(hr).length ? { employee: { is: hr } } : {}),
       ...(filters.search
         ? {

@@ -68,8 +68,11 @@ employeesRouter.get(
     const employmentType = parseQueryString(request.query.employmentType)
     const status = parseQueryString(request.query.status)
     const page = parsePage(request.query.page)
+    const archived = parseQueryString(request.query.archived)
 
     if (
+      archived === null ||
+      !["", "true", "false"].includes(archived) ||
       search === null ||
       departmentId === null ||
       employmentType === null ||
@@ -94,6 +97,7 @@ employeesRouter.get(
         employmentType,
         status,
         page,
+        archived: archived === "true",
       }),
     )
   },
@@ -268,19 +272,11 @@ employeesRouter.post(
             include: employeeInclude,
           })
           if (!existing) throw new EmployeeError(404, "Employee not found")
-          if (existing.user && !existing.user.accountDeletedAt)
+          if (existing.user)
             throw new EmployeeError(
               409,
-              "Employee already has a portal account",
+              "Employee already has an account. Manage archived accounts from Archive.",
             )
-          if (existing.user) {
-            if (existing.user.role !== Role.STAFF)
-              throw new EmployeeError(
-                403,
-                "Admin accounts must be managed from Account Management",
-              )
-            await tx.user.delete({ where: { id: existing.user.id } })
-          }
           const account = await createStaffAccount(tx, existing, passwordHash)
           return updateEmployee(tx, existing.id, { userId: account.id })
         },
@@ -343,39 +339,69 @@ employeesRouter.patch(
   },
 )
 
-employeesRouter.delete(
-  "/:id/account",
-  requirePermission(Permission.EMPLOYEES_MANAGE),
-  async (request, response, next) => {
-    const actor = request.auth!.user
-    try {
-      await getPrisma()!.$transaction(
-        async (tx) => {
-          const employee = await directoryLogin(tx, String(request.params.id))
-          if (!employee) throw new EmployeeError(404, "Employee not found")
-          if (!employee.user || employee.user.accountDeletedAt) {
-            throw new EmployeeError(409, "Employee has no login account")
-          }
-          if (employee.user.id === actor.id) {
-            throw new EmployeeError(
-              403,
-              "You cannot delete your own login account",
-            )
-          }
-          if (employee.user.role !== Role.STAFF) {
-            throw new EmployeeError(
-              403,
-              "Admin accounts must be managed from Account Management",
-            )
-          }
-          await tx.user.delete({ where: { id: employee.user.id } })
-        },
-        { isolationLevel: "Serializable" },
-      )
-      return response.status(204).send()
-    } catch (error) {
-      if (sendError(response, error)) return
-      next(error)
-    }
-  },
-)
+for (const permanent of [false, true]) {
+  employeesRouter.delete(
+    permanent ? "/:id/account/permanent" : "/:id/account",
+    requirePermission(Permission.EMPLOYEES_MANAGE),
+    async (request, response, next) => {
+      const actor = request.auth!.user
+      try {
+        await getPrisma()!.$transaction(
+          async (tx) => {
+            const employee = await directoryLogin(tx, String(request.params.id))
+            if (!employee) throw new EmployeeError(404, "Employee not found")
+            if (
+              !employee.user ||
+              (!permanent && employee.user.accountDeletedAt)
+            ) {
+              throw new EmployeeError(409, "Employee has no login account")
+            }
+            if (employee.user.id === actor.id) {
+              throw new EmployeeError(
+                403,
+                "You cannot delete your own login account",
+              )
+            }
+            if (employee.user.role !== Role.STAFF) {
+              throw new EmployeeError(
+                403,
+                "Admin accounts must be managed from Account Management",
+              )
+            }
+            if (employee.user.isActive)
+              throw new EmployeeError(
+                409,
+                "Deactivate the account before moving it to Archive",
+              )
+            if (permanent) {
+              if (!employee.user.accountDeletedAt)
+                throw new EmployeeError(
+                  409,
+                  "Move the account to Archive before deleting it permanently",
+                )
+              await tx.user.delete({ where: { id: employee.user.id } })
+            } else {
+              await tx.user.update({
+                where: { id: employee.user.id },
+                data: { accountDeletedAt: new Date() },
+              })
+              await tx.session.deleteMany({
+                where: { userId: employee.user.id },
+              })
+            }
+          },
+          { isolationLevel: "Serializable" },
+        )
+        return response.status(204).send()
+      } catch (error) {
+        if (permanent && isForeignKeyViolation(error))
+          return response.status(409).json({
+            error:
+              "This account has related records and cannot be permanently deleted. Keep it in Archive to preserve its history.",
+          })
+        if (sendError(response, error)) return
+        next(error)
+      }
+    },
+  )
+}

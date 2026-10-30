@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Trash2 } from "lucide-react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { PlusIcon } from "@/components/layout/icons"
 import { contentClass, focusRing } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
@@ -32,8 +33,10 @@ import { EmployeeTable } from "../components/employee-table"
 import {
   setEmployeeLoginStatus,
   deleteEmployeeLogin,
+  permanentlyDeleteEmployeeLogin,
   listEmployees,
   type Employee,
+  type EmployeeList,
   type EmploymentStatus,
   type EmploymentType,
 } from "../api/employees-api"
@@ -58,11 +61,17 @@ export function EmployeeManagementPage() {
     actor,
     Permissions.DEPARTMENTS_MANAGE,
   )
+  const [archiveView, setArchiveView] = useState(false)
   const [employees, setEmployees] = useState<Employee[]>([])
-  const [total, setTotal] = useState(0)
-  const [pageSize, setPageSize] = useState(10)
+  const [footerResult, setFooterResult] = useState<EmployeeList | null>(null)
+  const pendingResult = useRef<EmployeeList | null>(null)
+  const settleRows = useCallback(() => {
+    if (pendingResult.current) setFooterResult(pendingResult.current)
+  }, [])
+  const total = footerResult?.total ?? 0
+  const pageSize = footerResult?.pageSize ?? 10
+  const resolvedPage = footerResult?.page ?? 1
   const [page, setPage] = useState(1)
-  const [resolvedPage, setResolvedPage] = useState(1)
   const [animateRows, setAnimateRows] = useState(true)
   const [search, setSearch] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
@@ -72,6 +81,7 @@ export function EmployeeManagementPage() {
   const [error, setError] = useState("")
   const [resolvedListKey, setResolvedListKey] = useState("")
   const [resolvedViewKey, setResolvedViewKey] = useState("")
+  const [resolvedSearch, setResolvedSearch] = useState("")
   const [departments, setDepartments] = useState<Department[]>([])
   const [departmentsError, setDepartmentsError] = useState("")
   const [departmentsLoading, setDepartmentsLoading] = useState(true)
@@ -89,7 +99,7 @@ export function EmployeeManagementPage() {
     null,
   )
   const [loginAction, setLoginAction] = useState<
-    "deactivate" | "reactivate" | "delete"
+    "deactivate" | "reactivate" | "delete" | "permanent"
   >("deactivate")
   const [loginTarget, setLoginTarget] = useState<Employee | null>(null)
   const [loginActionPending, setLoginActionPending] = useState(false)
@@ -101,6 +111,7 @@ export function EmployeeManagementPage() {
     status,
     page,
     revision,
+    archiveView,
   })
   const viewKey = JSON.stringify({
     search: debouncedSearch,
@@ -108,6 +119,7 @@ export function EmployeeManagementPage() {
     employmentType,
     status,
     page,
+    archiveView,
   })
   const isLoading =
     resolvedListKey !== listRequestKey || search.trim() !== debouncedSearch
@@ -128,16 +140,24 @@ export function EmployeeManagementPage() {
       employmentType,
       status,
       page,
+      archived: archiveView,
     })
       .then((result) => {
         if (active) {
+          const lastPage = Math.max(
+            1,
+            Math.ceil(result.total / result.pageSize),
+          )
+          if (page > lastPage) {
+            setPage(lastPage)
+            return
+          }
+          pendingResult.current = result
           setEmployees(result.employees)
-          setTotal(result.total)
-          setPageSize(result.pageSize)
-          setResolvedPage(result.page)
           setError("")
           setResolvedListKey(listRequestKey)
           setResolvedViewKey(viewKey)
+          setResolvedSearch(debouncedSearch)
         }
       })
       .catch((reason: unknown) => {
@@ -161,6 +181,7 @@ export function EmployeeManagementPage() {
     page,
     revision,
     listRequestKey,
+    archiveView,
     viewKey,
   ])
 
@@ -237,8 +258,8 @@ export function EmployeeManagementPage() {
         className="mt-[18px] min-w-0 max-[767px]:mt-[14px]"
         aria-label="Employee directory"
       >
-        <div className="flex items-start justify-between gap-3 pb-4 max-[560px]:flex-col max-[560px]:pb-3">
-          <div className="flex min-w-0 gap-[10px] max-[1050px]:w-full max-[560px]:flex-col">
+        <div className="flex flex-wrap items-start justify-between gap-3 pb-4 max-[560px]:flex-col max-[560px]:pb-3">
+          <div className="flex min-w-0 flex-wrap gap-[10px] max-[560px]:w-full max-[560px]:flex-col">
             <SearchField
               label="Search employees"
               placeholder="Search name, ID, email…"
@@ -332,6 +353,27 @@ export function EmployeeManagementPage() {
               </SelectContent>
             </Select>
           </div>
+          <button
+            type="button"
+            className={cn(
+              "inline-flex min-h-[34px] flex-none cursor-pointer items-center justify-center gap-[7px] rounded-lg border border-red-500 bg-background px-[12px] text-xs leading-[1.2] font-semibold whitespace-nowrap text-red-600 transition-[background-color,border-color,color] duration-150 hover:enabled:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none",
+              focusRing,
+            )}
+            disabled={loginActionPending}
+            aria-pressed={archiveView}
+            onClick={() => {
+              setArchiveView((current) => !current)
+              setPage(1)
+              setSearch("")
+              setDebouncedSearch("")
+              setDepartmentId("")
+              setEmploymentType("")
+              setStatus("")
+            }}
+          >
+            <Trash2 size={14} aria-hidden="true" />
+            {archiveView ? "Back to employees" : "Archive"}
+          </button>
           {departmentsError && (
             <div
               className="flex flex-none items-center gap-2 text-[11px] text-[#bc3649] max-[560px]:w-full"
@@ -353,9 +395,11 @@ export function EmployeeManagementPage() {
           )}
         </div>
         <EmployeeTable
+          archiveView={archiveView}
           employees={employees}
           viewKey={resolvedViewKey}
-          quickKey={debouncedSearch}
+          quickKey={resolvedSearch}
+          onRowsSettled={settleRows}
           animateRows={animateRows}
           loading={isLoading}
           error={error}
@@ -364,6 +408,8 @@ export function EmployeeManagementPage() {
               <SearchEmptyState query={debouncedSearch} />
             ) : hasFilters ? (
               "No employees match these filters. Try clearing a filter or search term."
+            ) : archiveView ? (
+              "No archived accounts."
             ) : (
               "No employee records yet. Add an employee to get started."
             )
@@ -395,7 +441,7 @@ export function EmployeeManagementPage() {
             <NumberedPagination
               page={resolvedPage}
               totalPages={totalPages}
-              disabled={isLoading}
+              disabled={isLoading || footerResult?.employees !== employees}
               label="Employee pages"
               onPageChange={(nextPage) => {
                 setAnimateRows(true)
@@ -404,11 +450,14 @@ export function EmployeeManagementPage() {
             />
           </footer>
         )}
-        {!isLoading && !error && total > 0 && (
-          <p className="sr-only" aria-live="polite">
-            {employees.length} employees shown on page {page}.
-          </p>
-        )}
+        {!isLoading &&
+          !error &&
+          total > 0 &&
+          footerResult?.employees === employees && (
+            <p className="sr-only" aria-live="polite">
+              {employees.length} employees shown on page {page}.
+            </p>
+          )}
       </section>
 
       {formState && (
@@ -483,33 +532,41 @@ export function EmployeeManagementPage() {
       {loginTarget && (
         <ConfirmationDialog
           title={
-            loginAction === "delete"
+            loginAction === "permanent"
               ? "Permanently delete account?"
-              : loginAction === "reactivate"
-                ? "Reactivate account?"
-                : "Deactivate account?"
+              : loginAction === "delete"
+                ? "Move account to Archive?"
+                : loginAction === "reactivate"
+                  ? "Reactivate account?"
+                  : "Deactivate account?"
           }
           subject={loginTarget.fullName}
           description={
-            loginAction === "delete"
+            loginAction === "permanent"
               ? "This permanently deletes the login account and its sessions. The employee's HR record, department, and team placement remain. Account-based leadership assignments are cleared. This cannot be undone."
-              : loginAction === "reactivate"
-                ? "Allow this employee to sign in again using their existing password. Their employment status stays the same."
-                : "This immediately signs the employee out and prevents login. You can reactivate the login later."
+              : loginAction === "delete"
+                ? "This moves the deactivated account to Archive and ends its sessions. Its employee record and assignments are preserved. Permanent deletion is available only from Archive."
+                : loginAction === "reactivate"
+                  ? "Allow this employee to sign in again using their existing password. Their employment status stays the same."
+                  : "This immediately signs the employee out and prevents login. You can reactivate the login later."
           }
           confirmLabel={
-            loginAction === "delete"
-              ? "Delete account"
-              : loginAction === "reactivate"
-                ? "Reactivate account"
-                : "Deactivate account"
+            loginAction === "permanent"
+              ? "Delete permanently"
+              : loginAction === "delete"
+                ? "Move to Archive"
+                : loginAction === "reactivate"
+                  ? "Reactivate account"
+                  : "Deactivate account"
           }
           pendingLabel={
-            loginAction === "delete"
+            loginAction === "permanent"
               ? "Deleting…"
-              : loginAction === "reactivate"
-                ? "Reactivating…"
-                : "Deactivating…"
+              : loginAction === "delete"
+                ? "Archiving…"
+                : loginAction === "reactivate"
+                  ? "Reactivating…"
+                  : "Deactivating…"
           }
           destructive={loginAction !== "reactivate"}
           pending={loginActionPending}
@@ -524,12 +581,14 @@ export function EmployeeManagementPage() {
             setLoginActionPending(true)
             setLoginActionError("")
             const action =
-              loginAction === "delete"
-                ? deleteEmployeeLogin(loginTarget.id)
-                : setEmployeeLoginStatus(
-                    loginTarget.id,
-                    loginAction === "reactivate",
-                  )
+              loginAction === "permanent"
+                ? permanentlyDeleteEmployeeLogin(loginTarget.id)
+                : loginAction === "delete"
+                  ? deleteEmployeeLogin(loginTarget.id)
+                  : setEmployeeLoginStatus(
+                      loginTarget.id,
+                      loginAction === "reactivate",
+                    )
             void action
               .then(() => {
                 setLoginTarget(null)
@@ -538,7 +597,9 @@ export function EmployeeManagementPage() {
                     ? "Account deactivated"
                     : loginAction === "reactivate"
                       ? "Account reactivated"
-                      : "Account permanently deleted",
+                      : loginAction === "delete"
+                        ? "Account moved to Archive"
+                        : "Account permanently deleted",
                   description: `${loginTarget.fullName}'s employee record was kept.`,
                 })
                 setRevision((value) => value + 1)
