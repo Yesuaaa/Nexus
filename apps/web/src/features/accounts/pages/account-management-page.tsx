@@ -1,20 +1,20 @@
 "use client"
 
-import {
-  forwardRef,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { LoaderCircle } from "lucide-react"
-import { motion, useReducedMotion } from "framer-motion"
+import { useReducedMotion } from "framer-motion"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { sileo } from "sileo"
 import { cn } from "@/lib/utils"
 import { contentClass } from "@/components/layout/styles"
+import {
+  AnimatedSlotRow,
+  settledAnimatedRows,
+  swapAnimatedRows,
+  type AnimatedRowItem,
+  type AnimatedRowSlot,
+} from "@/components/ui/animated-data-row"
 import { DepartmentPill } from "@/components/ui/department-pill.tsx"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
 import { Pill } from "@/components/ui/pill"
@@ -61,173 +61,8 @@ const roleOptions = allRoles.map((role) => ({
   label: roleNames[role],
 }))
 
-type AccountRowItem = {
-  user: Account
-  index: number
-  phase: "steady" | "enter" | "exit"
-  runId?: number
-  quick?: boolean
-  delayMs?: number
-}
-
-type AccountRowSlot = {
-  index: number
-  exiting: AccountRowItem | null
-  entering: AccountRowItem | null
-}
-
-function settledAccountRows(users: Account[]): AccountRowSlot[] {
-  return users.map((user, index) => ({
-    index,
-    exiting: null,
-    entering: { user, index, phase: "steady" },
-  }))
-}
-
-function swapAccountRows(
-  currentSlots: AccountRowSlot[],
-  users: Account[],
-  reduceMotion: boolean,
-  runId: number,
-  quick: boolean,
-) {
-  const currentRows = currentSlots.flatMap((slot) =>
-    slot.entering ? [slot.entering] : [],
-  )
-  const slotCount = Math.max(currentRows.length, users.length)
-  let animationDuration = 0
-
-  const slots: AccountRowSlot[] = Array.from(
-    {
-      length: slotCount,
-    },
-    (_, index): AccountRowSlot => {
-      const current = currentRows[index] ?? null
-      const next = users[index] ?? null
-      const unchanged = current?.user.id === next?.id
-      const stagger = reduceMotion
-        ? 0
-        : Math.min(index, quick ? 5 : 9) * (quick ? 20 : 40)
-      const enterDelay =
-        stagger + (current && next && !reduceMotion ? (quick ? 50 : 100) : 0)
-      const exitDuration = reduceMotion ? 120 : quick ? 140 : 220
-      const enterDuration = reduceMotion ? 120 : quick ? 170 : 260
-
-      if (current && !unchanged) {
-        animationDuration = Math.max(animationDuration, stagger + exitDuration)
-      }
-      if (next && !unchanged) {
-        animationDuration = Math.max(
-          animationDuration,
-          enterDelay + enterDuration,
-        )
-      }
-
-      return {
-        index,
-        exiting:
-          current && !unchanged
-            ? {
-                ...current,
-                index,
-                phase: "exit" as const,
-                runId,
-                quick,
-                delayMs: stagger,
-              }
-            : null,
-        entering: next
-          ? {
-              user: next,
-              index,
-              phase: unchanged ? ("steady" as const) : ("enter" as const),
-              quick,
-              delayMs: enterDelay,
-            }
-          : null,
-      }
-    },
-  )
-
-  return { slots, animationDuration }
-}
-
-const AnimatedAccountRow = forwardRef<
-  HTMLDivElement,
-  {
-    children: ReactNode
-    className: string
-    delayMs: number
-    phase: AccountRowItem["phase"]
-    reduceMotion: boolean
-    quick: boolean
-    onExitComplete?: () => void
-  }
->(function AnimatedAccountRow(
-  { children, className, delayMs, phase, reduceMotion, quick, onExitComplete },
-  ref,
-) {
-  const delay = reduceMotion ? 0 : delayMs / 1000
-  const initial =
-    phase === "enter"
-      ? { opacity: 0, x: reduceMotion ? 0 : quick ? -36 : -48 }
-      : false
-  const animate =
-    phase === "exit"
-      ? {
-          opacity: 0,
-          x: reduceMotion ? 0 : quick ? 36 : 48,
-          transition: {
-            delay,
-            duration: reduceMotion ? 0.12 : quick ? 0.14 : 0.22,
-            ease: "easeIn" as const,
-          },
-        }
-      : phase === "enter"
-        ? {
-            opacity: 1,
-            x: 0,
-            transition: {
-              delay,
-              duration: reduceMotion ? 0.12 : quick ? 0.17 : 0.26,
-              ease: "easeOut" as const,
-            },
-          }
-        : { opacity: 1, x: 0, transition: { duration: 0 } }
-
-  return (
-    <motion.div
-      ref={ref}
-      className={className}
-      data-account-row
-      initial={initial}
-      animate={animate}
-      onAnimationComplete={phase === "exit" ? onExitComplete : undefined}
-      aria-hidden={phase !== "steady"}
-      inert={phase !== "steady"}
-      style={
-        phase === "exit"
-          ? {
-              position: "absolute",
-              top: 0,
-              left: 0,
-              zIndex: 1,
-              width: "100%",
-              height: "100%",
-              pointerEvents: "none",
-            }
-          : {
-              position: "relative",
-              zIndex: 0,
-              width: "100%",
-              pointerEvents: phase === "steady" ? "auto" : "none",
-            }
-      }
-    >
-      {children}
-    </motion.div>
-  )
-})
+type AccountRowItem = AnimatedRowItem<Account>
+type AccountRowSlot = AnimatedRowSlot<Account>
 
 function AccountRowContents({
   user,
@@ -437,8 +272,9 @@ export function AccountManagementPage() {
   )
 
   useLayoutEffect(() => {
-    const firstRow =
-      rowsBodyRef.current?.querySelector<HTMLElement>("[data-account-row]")
+    const firstRow = rowsBodyRef.current?.querySelector<HTMLElement>(
+      "[data-animated-slot-row]",
+    )
     if (!firstRow) return
 
     const updateHeight = () => {
@@ -454,7 +290,7 @@ export function AccountManagementPage() {
 
   function settleRowSlots(data: AccountList) {
     animationGenerationRef.current += 1
-    const nextSlots = settledAccountRows(data.users)
+    const nextSlots = settledAnimatedRows(data.users)
     rowSlotsRef.current = nextSlots
     setRowSlots(nextSlots)
     setFooterResult(data)
@@ -485,13 +321,14 @@ export function AccountManagementPage() {
           if (shouldAnimate) {
             const runId = animationGenerationRef.current + 1
             const quick = searchChanged
-            const { slots: nextSlots, animationDuration } = swapAccountRows(
-              rowSlotsRef.current,
-              data.users,
+            const { slots: nextSlots, animationDuration } = swapAnimatedRows({
+              currentSlots: rowSlotsRef.current,
+              items: data.users,
+              getKey: (account) => account.id,
               reduceMotion,
               runId,
               quick,
-            )
+            })
             const hasRowSwap = nextSlots.some(
               (slot) =>
                 slot.exiting !== null || slot.entering?.phase === "enter",
@@ -513,7 +350,7 @@ export function AccountManagementPage() {
               setAnimateBodyHeight(true)
               animationTimerRef.current = window.setTimeout(() => {
                 const finalResult = pendingFooterResultRef.current ?? data
-                const finalSlots = settledAccountRows(finalResult.users)
+                const finalSlots = settledAnimatedRows(finalResult.users)
                 rowSlotsRef.current = finalSlots
                 setRowSlots(finalSlots)
                 setFooterResult(finalResult)
@@ -742,9 +579,9 @@ export function AccountManagementPage() {
     delayMs: number,
     roundBottom: boolean,
   ) {
-    const user = row.user
+    const user = row.item
     return (
-      <AnimatedAccountRow
+      <AnimatedSlotRow
         key={user.id}
         className={cn(
           accountRowClassName,
@@ -761,7 +598,7 @@ export function AccountManagementPage() {
                 const nextSlots = rowSlotsRef.current.map((slot) =>
                   slot.exiting &&
                   slot.exiting.runId === row.runId &&
-                  slot.exiting.user.id === user.id
+                  slot.exiting.item.id === user.id
                     ? { ...slot, exiting: null }
                     : slot,
                 )
@@ -795,7 +632,7 @@ export function AccountManagementPage() {
             setDeleteTarget(account)
           }}
         />
-      </AnimatedAccountRow>
+      </AnimatedSlotRow>
     )
   }
 

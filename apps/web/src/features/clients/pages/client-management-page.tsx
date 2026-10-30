@@ -236,47 +236,28 @@ export function ClientManagementPage() {
             </Button>
           )}
         </div>
-        <div aria-busy={loading}>
-          {error || resolvedKey === "" ? (
-            <div className="grid min-h-[180px] place-content-center gap-3 rounded-lg border border-[#e8ebef] p-6 text-center text-xs text-[#52627a]">
-              {error ? (
-                <div role="alert" className="grid justify-items-center gap-3">
-                  <p>{error}</p>
-                  <Button
-                    variant="outline"
-                    onClick={() => setRevision((value) => value + 1)}
-                    className="text-xs text-[#244993]"
-                  >
-                    Try again
-                  </Button>
-                </div>
-              ) : (
-                <p role="status">Loading clients...</p>
-              )}
-            </div>
-          ) : (
-            <ClientTable
-              clients={result.clients}
-              viewKey={resolvedViewKey}
-              animateRows={animateRows}
-              emptyMessage={
-                debouncedSearch ? (
-                  <SearchEmptyState query={debouncedSearch} />
-                ) : filtered ? (
-                  "No clients match the selected filters."
-                ) : (
-                  "No clients registered yet."
-                )
-              }
-              sortBy={sortBy}
-              sortOrder={sortOrder}
-              onSort={sort}
-              onView={(client) =>
-                setSelectedClient({ client, tab: "overview" })
-              }
-            />
-          )}
-        </div>
+        <ClientTable
+          clients={result.clients}
+          viewKey={resolvedViewKey}
+          quickKey={debouncedSearch}
+          animateRows={animateRows}
+          loading={loading}
+          error={error}
+          emptyMessage={
+            debouncedSearch ? (
+              <SearchEmptyState query={debouncedSearch} />
+            ) : filtered ? (
+              "No clients match the selected filters."
+            ) : (
+              "No clients registered yet."
+            )
+          }
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          onRetry={() => setRevision((value) => value + 1)}
+          onSort={sort}
+          onView={(client) => setSelectedClient({ client, tab: "overview" })}
+        />
         {!error && result.total > 0 && (
           <footer className="flex flex-wrap items-center justify-between gap-3 pt-4 text-[11px] text-[#52627a]">
             <span role="status" aria-live="polite" aria-atomic="true">

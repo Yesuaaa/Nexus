@@ -353,6 +353,7 @@ export function EmployeeManagementPage() {
         <EmployeeTable
           employees={employees}
           viewKey={resolvedViewKey}
+          quickKey={debouncedSearch}
           animateRows={animateRows}
           loading={isLoading}
           error={error}

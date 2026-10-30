@@ -204,6 +204,7 @@ export function DepartmentTable({
                 <AnimatedGridRow
                   key={`empty-${viewKey}`}
                   animateRows={animateRows}
+                  rowIndex={0}
                   className="grid min-h-[150px] place-content-center p-6 text-center text-xs text-[#7183a2]"
                 >
                   <div role="cell" aria-colspan={6}>
@@ -215,10 +216,11 @@ export function DepartmentTable({
                   </div>
                 </AnimatedGridRow>
               ) : (
-                visible.map((department) => (
+                visible.map((department, index) => (
                   <AnimatedGridRow
                     key={`${viewKey}:${department.id}`}
                     animateRows={animateRows}
+                    rowIndex={index}
                     className={cn(
                       departmentGrid,
                       "min-h-[58px] border-b border-[#eceef1] px-4 py-[7px] text-xs text-foreground last:rounded-b-[7px] last:border-b-0 hover:bg-[#e8eef2] @max-[820px]:gap-x-4 @max-[820px]:gap-y-[10px] @max-[820px]:py-[14px]",

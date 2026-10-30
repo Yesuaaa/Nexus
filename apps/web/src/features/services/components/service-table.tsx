@@ -413,6 +413,7 @@ export function ServiceTable({
                 <AnimatedGridRow
                   key={`empty-${viewKey}`}
                   animateRows={animateRows}
+                  rowIndex={0}
                   className="grid min-h-[170px] place-content-center gap-3 p-6 text-center text-xs text-[#7183a2]"
                 >
                   <div role="cell" aria-colspan={6}>
@@ -426,10 +427,11 @@ export function ServiceTable({
                   </div>
                 </AnimatedGridRow>
               ) : (
-                visible.map((service) => (
+                visible.map((service, index) => (
                   <AnimatedGridRow
                     key={`${viewKey}:${service.id}`}
                     animateRows={animateRows}
+                    rowIndex={index}
                     className={cn(
                       serviceGrid,
                       "min-h-[58px] border-b border-[#eceef1] px-4 py-[8px] text-xs last:rounded-b-[7px] last:border-b-0 hover:bg-[#f3f6f8] @max-[920px]:gap-x-4 @max-[920px]:gap-y-2 @max-[920px]:py-3.5",
