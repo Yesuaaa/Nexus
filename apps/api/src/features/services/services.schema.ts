@@ -3,6 +3,19 @@ import { BillingInterval, PricingModel } from "../../generated/prisma/client.js"
 const imageDataUrlPattern =
   /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/
 const maxImageBytes = 2 * 1024 * 1024
+const serviceIconKeys = [
+  "social",
+  "advertising",
+  "business",
+  "video",
+  "code",
+  "search",
+  "email",
+  "design",
+  "sparkles",
+] as const
+
+type ServiceIconKey = (typeof serviceIconKeys)[number]
 
 export type PricingConfigurationInput = {
   name: string
@@ -28,9 +41,15 @@ export type ServicePackageInput = {
   isRecommended: boolean
 }
 
+export type ServiceBenefitInput = {
+  title: string
+  description: string
+}
+
 export type ServiceInput = {
   name: string
   description: string
+  iconKey: ServiceIconKey
   departmentIds: string[]
   isActive: boolean
   imageDataUrl: string | null
@@ -39,6 +58,7 @@ export type ServiceInput = {
   clientRequirements: string[]
   requiresConsultation: boolean
   consultationNotes: string | null
+  keyBenefits: ServiceBenefitInput[]
   pricingTemplateId: string | null
   pricingTemplate: PricingConfigurationInput | null
   packages: ServicePackageInput[]
@@ -60,6 +80,34 @@ type PricingValidationResult =
 
 function nonEmptyString(value: unknown) {
   return typeof value === "string" ? value.trim() : ""
+}
+
+function inferredIconKey(name: string): ServiceIconKey {
+  const normalizedName = name.toLocaleLowerCase()
+  const rules: { terms: string[]; iconKey: ServiceIconKey }[] = [
+    { terms: ["social", "community"], iconKey: "social" },
+    {
+      terms: ["advert", "ads", "paid", "marketing"],
+      iconKey: "advertising",
+    },
+    { terms: ["customer", "support", "business"], iconKey: "business" },
+    { terms: ["video", "film", "media"], iconKey: "video" },
+    {
+      terms: ["website", "web", "development", "software"],
+      iconKey: "code",
+    },
+    { terms: ["search", "seo"], iconKey: "search" },
+    { terms: ["email", "newsletter"], iconKey: "email" },
+    {
+      terms: ["graphic", "design", "brand", "creative"],
+      iconKey: "design",
+    },
+  ]
+  return (
+    rules.find(({ terms }) =>
+      terms.some((term) => normalizedName.includes(term)),
+    )?.iconKey ?? "sparkles"
+  )
 }
 
 function parseOptionalAmount(value: unknown) {
@@ -262,6 +310,42 @@ function validatePackages(value: unknown) {
   return { packages }
 }
 
+function validateKeyBenefits(value: unknown) {
+  if (value === undefined) return { keyBenefits: [] as ServiceBenefitInput[] }
+  if (!Array.isArray(value)) return { error: "Key benefits must be a list" }
+  if (value.length > 10) {
+    return { error: "A service can have up to 10 key benefits" }
+  }
+
+  const keyBenefits: ServiceBenefitInput[] = []
+  const titles = new Set<string>()
+  for (let index = 0; index < value.length; index += 1) {
+    const raw = value[index]
+    const subject = `Key benefit ${index + 1}`
+    if (!raw || typeof raw !== "object") {
+      return { error: `${subject} is invalid` }
+    }
+    const item = raw as Record<string, unknown>
+    const title = nonEmptyString(item.title)
+    const description = nonEmptyString(item.description)
+    if (title.length < 2 || title.length > 120) {
+      return { error: `${subject} title must be between 2 and 120 characters` }
+    }
+    if (description.length < 2 || description.length > 500) {
+      return {
+        error: `${subject} description must be between 2 and 500 characters`,
+      }
+    }
+    const normalizedTitle = title.toLocaleLowerCase()
+    if (titles.has(normalizedTitle)) {
+      return { error: "Key benefit titles must be unique within a service" }
+    }
+    titles.add(normalizedTitle)
+    keyBenefits.push({ title, description })
+  }
+  return { keyBenefits }
+}
+
 export function validateServiceInput(body: unknown): ValidationResult {
   if (!body || typeof body !== "object") {
     return { error: "Service information is required" }
@@ -270,6 +354,7 @@ export function validateServiceInput(body: unknown): ValidationResult {
   const input = body as Record<string, unknown>
   const name = nonEmptyString(input.name)
   const description = nonEmptyString(input.description)
+  const iconKey = input.iconKey ?? inferredIconKey(name)
   const hasInvalidDepartmentIds =
     !Array.isArray(input.departmentIds) ||
     input.departmentIds.some(
@@ -291,6 +376,9 @@ export function validateServiceInput(body: unknown): ValidationResult {
   }
   if (description.length < 2 || description.length > 500) {
     return { error: "Description must be between 2 and 500 characters" }
+  }
+  if (!serviceIconKeys.includes(iconKey as ServiceIconKey)) {
+    return { error: "Service icon category is invalid" }
   }
   if (hasInvalidDepartmentIds || departmentIds.length === 0) {
     return { error: "At least one responsible department is required" }
@@ -372,10 +460,16 @@ export function validateServiceInput(body: unknown): ValidationResult {
     return { error: packageResult.error ?? "Service packages are invalid" }
   }
 
+  const keyBenefitResult = validateKeyBenefits(input.keyBenefits)
+  if ("error" in keyBenefitResult) {
+    return { error: keyBenefitResult.error ?? "Key benefits are invalid" }
+  }
+
   return {
     value: {
       name,
       description,
+      iconKey: iconKey as ServiceIconKey,
       departmentIds,
       isActive: input.isActive,
       imageDataUrl: image.imageDataUrl,
@@ -386,6 +480,7 @@ export function validateServiceInput(body: unknown): ValidationResult {
       ),
       requiresConsultation,
       consultationNotes: requiresConsultation ? consultationNotes : null,
+      keyBenefits: keyBenefitResult.keyBenefits,
       pricingTemplateId,
       pricingTemplate,
       packages: packageResult.packages,

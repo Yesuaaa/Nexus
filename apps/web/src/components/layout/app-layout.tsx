@@ -22,7 +22,6 @@ export function AppLayout({
       typeof window !== "undefined" && window.matchMedia(tabletQuery).matches,
   )
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const management = account.role !== "USER"
 
   useEffect(() => {
     const query = window.matchMedia(tabletQuery)
@@ -43,7 +42,7 @@ export function AppLayout({
   return (
     <div
       className="relative h-dvh overflow-hidden bg-[var(--portal-canvas)] text-sm text-foreground"
-      data-variant={management ? "management" : "client"}
+      data-variant="management"
       data-role={account.role}
       data-collapsed={collapsed}
       data-drawer-open={drawerOpen}
@@ -67,13 +66,7 @@ export function AppLayout({
       <div
         className={cn(
           "h-dvh min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain py-[15px] pr-[15px] pl-4 transition-[margin-left] duration-[240ms] max-[767px]:m-0 max-[767px]:p-3 motion-reduce:transition-none",
-          management
-            ? collapsed
-              ? "ml-[95px]"
-              : "ml-[311px]"
-            : collapsed
-              ? "ml-[80px]"
-              : "ml-[296px]",
+          collapsed ? "ml-[95px]" : "ml-[311px]",
         )}
       >
         <Topbar
