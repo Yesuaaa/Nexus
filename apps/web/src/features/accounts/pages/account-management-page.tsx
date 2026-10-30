@@ -1,13 +1,22 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { LoaderCircle } from "lucide-react"
+import { useReducedMotion } from "framer-motion"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { sileo } from "sileo"
 import { cn } from "@/lib/utils"
 import { contentClass } from "@/components/layout/styles"
+import {
+  AnimatedSlotRow,
+  settledAnimatedRows,
+  swapAnimatedRows,
+  type AnimatedRowItem,
+  type AnimatedRowSlot,
+} from "@/components/ui/animated-data-row"
 import { DepartmentPill } from "@/components/ui/department-pill.tsx"
+import { NumberedPagination } from "@/components/ui/numbered-pagination"
 import { Pill } from "@/components/ui/pill"
 import { TableSortButton } from "@/components/ui/table-sort-button"
 import { ApiError, clearToken } from "@/features/auth/api/auth-api"
@@ -52,6 +61,124 @@ const roleOptions = allRoles.map((role) => ({
   label: roleNames[role],
 }))
 
+type AccountRowItem = AnimatedRowItem<Account>
+type AccountRowSlot = AnimatedRowSlot<Account>
+
+function AccountRowContents({
+  user,
+  actor,
+  selectedRole,
+  disabled,
+  onRoleChange,
+  onChangeStatus,
+  onDelete,
+}: {
+  user: Account
+  actor: Account
+  selectedRole: AccountRole
+  disabled: boolean
+  onRoleChange: (user: Account, role: AccountRole) => void
+  onChangeStatus: (user: Account) => void
+  onDelete: (user: Account) => void
+}) {
+  const assignableRoles = allRoles.filter((role) =>
+    canAssignRole(actor, user.role, role),
+  )
+  const editable = user.id !== actor.id && assignableRoles.length > 0
+
+  return (
+    <>
+      <div className="min-w-0 @max-[900px]:col-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+        <div className="grid min-w-0 gap-0.5">
+          <strong className="min-w-0 truncate font-medium text-foreground">
+            {user.fullName || user.email.split("@")[0]}
+          </strong>
+          <span className="overflow-hidden text-[11px] text-ellipsis whitespace-nowrap text-[#738096]">
+            {user.email}
+          </span>
+        </div>
+      </div>
+      <div className="@max-[900px]:col-start-2 @max-[900px]:row-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+        <span className="mr-1.5 hidden text-[#738096] @max-[530px]:inline">
+          Role
+        </span>
+        <span className="text-xs text-foreground">{roleNames[user.role]}</span>
+      </div>
+      <div className="flex min-w-0 items-center gap-2 @max-[900px]:col-start-2 @max-[900px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+        <span className="hidden text-[#738096] @max-[900px]:inline">
+          Status
+        </span>
+        <Pill
+          className={
+            user.isActive
+              ? "bg-[#dcf5e5] text-[#19703a]"
+              : "bg-[#fde4ea] text-[#b4234d]"
+          }
+        >
+          {user.isActive ? "Active" : "Inactive"}
+        </Pill>
+      </div>
+      <div className="min-w-0 @max-[900px]:col-start-1 @max-[900px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+        {user.department ? (
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <DepartmentPill
+              className="self-start"
+              department={user.department}
+            />
+            {user.team && (
+              <span className="truncate text-[11px] text-[#738096]">
+                {user.team.name}
+              </span>
+            )}
+          </div>
+        ) : (
+          <span className="text-xs text-[#94a3b8]">—</span>
+        )}
+      </div>
+      <div className="text-[11px] text-[#738096] @max-[900px]:col-start-1 @max-[900px]:row-start-3 @max-[530px]:row-auto">
+        <span className="mr-1.5 hidden @max-[900px]:inline">Created</span>
+        {formatDate(user.createdAt)}
+      </div>
+      <div className="flex min-w-0 items-center @max-[900px]:col-start-2 @max-[900px]:row-start-3 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+        {editable ? (
+          <AccountDropdown
+            className="w-full max-w-[112px]"
+            triggerClassName="h-8 border-[#e1e4ea] text-xs"
+            menuClassName="right-0 left-auto"
+            label={`Role for ${user.email}`}
+            value={selectedRole}
+            disabled={disabled}
+            options={assignableRoles.map((role) => ({
+              value: role,
+              label: roleNames[role],
+            }))}
+            onChange={(role) => onRoleChange(user, role)}
+          />
+        ) : (
+          <span className="text-[11px] text-[#738096]">
+            {user.id === actor.id ? "Your account" : "View only"}
+          </span>
+        )}
+      </div>
+      <div className="flex min-w-0 items-center gap-2 @max-[900px]:col-start-2 @max-[900px]:row-start-4 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+        <span className="hidden text-[#738096] @max-[530px]:inline">
+          Actions
+        </span>
+        {canChangeAccountStatus(actor, user) ? (
+          <AccountRowActions
+            account={user}
+            disabled={disabled}
+            onChangeStatus={() => onChangeStatus(user)}
+            onDelete={() => onDelete(user)}
+          />
+        ) : (
+          <span className="text-[11px] text-[#94a3b8]">—</span>
+        )}
+      </div>
+    </>
+  )
+}
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en", {
     month: "short",
@@ -63,7 +190,9 @@ function formatDate(value: string) {
 export function AccountManagementPage() {
   const actor = usePortalAccount()
   const router = useRouter()
+  const reduceMotion = useReducedMotion() ?? false
   const [search, setSearch] = useState("")
+  const searchRef = useRef(search)
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [roleFilter, setRoleFilter] = useState("")
   const [sortKey, setSortKey] = useState<AccountSortKey>("createdAt")
@@ -71,9 +200,25 @@ export function AccountManagementPage() {
     useState<AccountSortDirection>("desc")
   const [page, setPage] = useState(1)
   const [revision, setRevision] = useState(0)
+  const [rowSlots, setRowSlots] = useState<AccountRowSlot[]>([])
+  const rowSlotsRef = useRef<AccountRowSlot[]>([])
+  const [footerResult, setFooterResult] = useState<AccountList | null>(null)
+  const pendingFooterResultRef = useRef<AccountList | null>(null)
+  const [rowHeight, setRowHeight] = useState(58)
+  const [isAnimatingRows, setIsAnimatingRows] = useState(false)
+  const [animateBodyHeight, setAnimateBodyHeight] = useState(false)
+  const rowsBodyRef = useRef<HTMLDivElement>(null)
+  const animationTimerRef = useRef<number | null>(null)
+  const bodyHeightTimerRef = useRef<number | null>(null)
+  const animationGenerationRef = useRef(0)
+  const lastResolvedViewKey = useRef<string | null>(null)
+  const lastResolvedSearch = useRef<string | null>(null)
   const [result, setResult] = useState<AccountList | null>(null)
   const [resolvedKey, setResolvedKey] = useState("")
-  const [error, setError] = useState("")
+  const [errorState, setErrorState] = useState<{
+    requestKey: string
+    message: string
+  } | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [draftRoles, setDraftRoles] = useState<
     Record<string, { role: AccountRole; email: string }>
@@ -94,20 +239,152 @@ export function AccountManagementPage() {
     page,
     revision,
   ])
+  const viewKey = JSON.stringify([
+    debouncedSearch,
+    roleFilter,
+    sortKey,
+    sortDirection,
+    page,
+  ])
+  const error =
+    search === debouncedSearch && errorState?.requestKey === requestKey
+      ? errorState.message
+      : ""
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => setDebouncedSearch(search), 250)
+    const timeout = window.setTimeout(() => {
+      setDebouncedSearch(search)
+      setPage(1)
+    }, 150)
     return () => window.clearTimeout(timeout)
   }, [search])
+
+  useEffect(
+    () => () => {
+      if (animationTimerRef.current !== null) {
+        window.clearTimeout(animationTimerRef.current)
+      }
+      if (bodyHeightTimerRef.current !== null) {
+        window.clearTimeout(bodyHeightTimerRef.current)
+      }
+    },
+    [],
+  )
+
+  useLayoutEffect(() => {
+    const firstRow = rowsBodyRef.current?.querySelector<HTMLElement>(
+      "[data-animated-slot-row]",
+    )
+    if (!firstRow) return
+
+    const updateHeight = () => {
+      const nextHeight = Math.round(firstRow.getBoundingClientRect().height)
+      if (nextHeight > 0) setRowHeight(nextHeight)
+    }
+    updateHeight()
+
+    const observer = new ResizeObserver(updateHeight)
+    observer.observe(firstRow)
+    return () => observer.disconnect()
+  }, [rowSlots])
+
+  function settleRowSlots(data: AccountList) {
+    animationGenerationRef.current += 1
+    const nextSlots = settledAnimatedRows(data.users)
+    rowSlotsRef.current = nextSlots
+    setRowSlots(nextSlots)
+    setFooterResult(data)
+    pendingFooterResultRef.current = null
+    setIsAnimatingRows(false)
+  }
 
   useEffect(() => {
     let active = true
     listAccounts(debouncedSearch, roleFilter, page, sortKey, sortDirection)
       .then((data) => {
         if (active) {
+          const previousViewKey = lastResolvedViewKey.current
+          const searchChanged =
+            lastResolvedSearch.current !== null &&
+            lastResolvedSearch.current !== debouncedSearch
+          const shouldAnimate =
+            previousViewKey !== null &&
+            previousViewKey !== viewKey &&
+            searchRef.current === debouncedSearch
+
           setResult(data)
-          setError("")
+          setErrorState(null)
           setResolvedKey(requestKey)
+          lastResolvedViewKey.current = viewKey
+          lastResolvedSearch.current = debouncedSearch
+
+          if (shouldAnimate) {
+            const runId = animationGenerationRef.current + 1
+            const quick = searchChanged
+            const { slots: nextSlots, animationDuration } = swapAnimatedRows({
+              currentSlots: rowSlotsRef.current,
+              items: data.users,
+              getKey: (account) => account.id,
+              reduceMotion,
+              runId,
+              quick,
+            })
+            const hasRowSwap = nextSlots.some(
+              (slot) =>
+                slot.exiting !== null || slot.entering?.phase === "enter",
+            )
+
+            if (hasRowSwap && animationDuration > 0) {
+              animationGenerationRef.current = runId
+              if (animationTimerRef.current !== null) {
+                window.clearTimeout(animationTimerRef.current)
+              }
+              if (bodyHeightTimerRef.current !== null) {
+                window.clearTimeout(bodyHeightTimerRef.current)
+                bodyHeightTimerRef.current = null
+              }
+              rowSlotsRef.current = nextSlots
+              pendingFooterResultRef.current = data
+              setRowSlots(nextSlots)
+              setIsAnimatingRows(true)
+              setAnimateBodyHeight(true)
+              animationTimerRef.current = window.setTimeout(() => {
+                const finalResult = pendingFooterResultRef.current ?? data
+                const finalSlots = settledAnimatedRows(finalResult.users)
+                rowSlotsRef.current = finalSlots
+                setRowSlots(finalSlots)
+                setFooterResult(finalResult)
+                pendingFooterResultRef.current = null
+                setIsAnimatingRows(false)
+                animationTimerRef.current = null
+                bodyHeightTimerRef.current = window.setTimeout(() => {
+                  setAnimateBodyHeight(false)
+                  bodyHeightTimerRef.current = null
+                }, 250)
+              }, animationDuration)
+            } else if (pendingFooterResultRef.current !== null) {
+              if (animationTimerRef.current !== null) {
+                window.clearTimeout(animationTimerRef.current)
+                animationTimerRef.current = null
+              }
+              if (bodyHeightTimerRef.current !== null) {
+                window.clearTimeout(bodyHeightTimerRef.current)
+                bodyHeightTimerRef.current = null
+              }
+              settleRowSlots(data)
+              setAnimateBodyHeight(true)
+              bodyHeightTimerRef.current = window.setTimeout(() => {
+                setAnimateBodyHeight(false)
+                bodyHeightTimerRef.current = null
+              }, 250)
+            } else {
+              settleRowSlots(data)
+            }
+          } else if (pendingFooterResultRef.current !== null) {
+            pendingFooterResultRef.current = data
+          } else {
+            settleRowSlots(data)
+          }
         }
       })
       .catch((caught: unknown) => {
@@ -118,11 +395,13 @@ export function AccountManagementPage() {
         } else if (caught instanceof ApiError && caught.status === 403) {
           window.location.replace("/dashboard")
         } else {
-          setError(
-            caught instanceof ApiError
-              ? caught.message
-              : "Couldn't load accounts. Please try again.",
-          )
+          setErrorState({
+            requestKey,
+            message:
+              caught instanceof ApiError
+                ? caught.message
+                : "Couldn't load accounts. Please try again.",
+          })
           setResolvedKey(requestKey)
         }
       })
@@ -136,13 +415,15 @@ export function AccountManagementPage() {
     revision,
     router,
     requestKey,
+    viewKey,
+    reduceMotion,
     sortDirection,
     sortKey,
   ])
 
   function updateSearch(value: string) {
+    searchRef.current = value
     setSearch(value)
-    setPage(1)
   }
 
   function updateRoleFilter(value: string) {
@@ -282,11 +563,78 @@ export function AccountManagementPage() {
     }
   }
 
-  const totalPages = result
-    ? Math.max(1, Math.ceil(result.total / result.pageSize))
+  const totalPages = footerResult
+    ? Math.max(1, Math.ceil(footerResult.total / footerResult.pageSize))
     : 1
+  const bodyHeight = rowSlots.length > 0 ? rowSlots.length * rowHeight : 150
   const creatableRoles = allRoles.filter((role) => canCreateRole(actor, role))
   const busy = resolvedKey !== requestKey || search !== debouncedSearch
+  const accountRowClassName = cn(
+    accountGrid,
+    "h-[58px] border-b border-[#eceef1] bg-background px-4 py-[7px] text-xs text-foreground hover:bg-[#e8eef2] @max-[900px]:h-[188px] @max-[900px]:gap-x-4 @max-[900px]:gap-y-[10px] @max-[900px]:py-[14px] @max-[530px]:h-[258px] @max-[530px]:gap-[9px]",
+  )
+
+  function renderAccountRow(
+    row: AccountRowItem,
+    delayMs: number,
+    roundBottom: boolean,
+  ) {
+    const user = row.item
+    return (
+      <AnimatedSlotRow
+        key={user.id}
+        className={cn(
+          accountRowClassName,
+          roundBottom && "rounded-b-[7px] border-b-0",
+        )}
+        delayMs={delayMs}
+        phase={row.phase}
+        reduceMotion={reduceMotion}
+        quick={row.quick ?? false}
+        onExitComplete={
+          row.phase === "exit"
+            ? () => {
+                if (row.runId !== animationGenerationRef.current) return
+                const nextSlots = rowSlotsRef.current.map((slot) =>
+                  slot.exiting &&
+                  slot.exiting.runId === row.runId &&
+                  slot.exiting.item.id === user.id
+                    ? { ...slot, exiting: null }
+                    : slot,
+                )
+                rowSlotsRef.current = nextSlots
+                setRowSlots(nextSlots)
+              }
+            : undefined
+        }
+      >
+        <AccountRowContents
+          user={user}
+          actor={actor}
+          selectedRole={draftRoles[user.id]?.role ?? user.role}
+          disabled={savingAccess || statusSaving || deleting}
+          onRoleChange={(account, role) => {
+            setAccessError("")
+            setDraftRoles((current) => {
+              const next = { ...current }
+              if (role === account.role) delete next[account.id]
+              else next[account.id] = { role, email: account.email }
+              return next
+            })
+          }}
+          onChangeStatus={(account) => {
+            setStatusError("")
+            setStatusTarget(account)
+          }}
+          onDelete={(account) => {
+            if (account.isActive) return
+            setDeleteError("")
+            setDeleteTarget(account)
+          }}
+        />
+      </AnimatedSlotRow>
+    )
+  }
 
   return (
     <main
@@ -403,7 +751,7 @@ export function AccountManagementPage() {
           </p>
         )}
 
-        <div className="@container min-w-0 rounded-lg border border-[#e8ebef] bg-background">
+        <div className="@container min-w-0 overflow-x-clip rounded-lg border border-[#e8ebef] bg-background">
           <div
             className={cn(
               accountGrid,
@@ -448,8 +796,17 @@ export function AccountManagementPage() {
             <span>Access</span>
             <span>Actions</span>
           </div>
-          <div aria-live="polite">
-            {busy && (
+          <div
+            ref={rowsBodyRef}
+            className="relative min-w-0"
+            aria-live="polite"
+            aria-busy={busy || isAnimatingRows}
+            style={{
+              height: bodyHeight,
+              transition: animateBodyHeight ? "height 220ms ease-out" : "none",
+            }}
+          >
+            {busy && !result && (
               <div
                 className="grid min-h-[150px] place-content-center gap-2 p-6 text-center text-[#7183a2]"
                 role="status"
@@ -475,176 +832,71 @@ export function AccountManagementPage() {
                 </button>
               </div>
             )}
-            {!busy && !error && result?.users.length === 0 && (
+            {!error && result?.users.length === 0 && !isAnimatingRows && (
               <div className="grid min-h-[150px] place-content-center gap-2 p-6 text-center text-[#7183a2]">
                 No accounts match your search.
               </div>
             )}
-            {!busy &&
+            {result &&
               !error &&
-              result?.users.map((user) => {
-                const assignableRoles = allRoles.filter((role) =>
-                  canAssignRole(actor, user.role, role),
-                )
-                const editable =
-                  user.id !== actor.id && assignableRoles.length > 0
-                const selectedRole = draftRoles[user.id]?.role ?? user.role
+              rowSlots.map((slot) => {
+                const quick =
+                  slot.entering?.quick ?? slot.exiting?.quick ?? false
+                const stagger = reduceMotion
+                  ? 0
+                  : Math.min(slot.index, quick ? 5 : 9) * (quick ? 20 : 40)
                 return (
                   <div
-                    className={cn(
-                      accountGrid,
-                      "min-h-[58px] border-b border-[#eceef1] px-4 py-[7px] text-xs text-foreground last:rounded-b-[7px] last:border-b-0 hover:bg-[#e8eef2] @max-[900px]:gap-x-4 @max-[900px]:gap-y-[10px] @max-[900px]:py-[14px] @max-[530px]:gap-[9px]",
-                    )}
-                    key={user.id}
+                    key={slot.index}
+                    className="relative"
+                    style={{ height: rowHeight }}
                   >
-                    <div className="min-w-0 @max-[900px]:col-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto">
-                      <div className="grid min-w-0 gap-0.5">
-                        <strong className="min-w-0 truncate font-medium text-foreground">
-                          {user.fullName || user.email.split("@")[0]}
-                        </strong>
-                        <span className="overflow-hidden text-[11px] text-ellipsis whitespace-nowrap text-[#738096]">
-                          {user.email}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="@max-[900px]:col-start-2 @max-[900px]:row-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto">
-                      <span className="mr-1.5 hidden text-[#738096] @max-[530px]:inline">
-                        Role
-                      </span>
-                      <span className="text-xs text-foreground">
-                        {roleNames[user.role]}
-                      </span>
-                    </div>
-                    <div className="flex min-w-0 items-center gap-2 @max-[900px]:col-start-2 @max-[900px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto">
-                      <span className="hidden text-[#738096] @max-[900px]:inline">
-                        Status
-                      </span>
-                      <Pill
-                        className={
-                          user.isActive
-                            ? "bg-[#dcf5e5] text-[#19703a]"
-                            : "bg-[#fde4ea] text-[#b4234d]"
-                        }
-                      >
-                        {user.isActive ? "Active" : "Inactive"}
-                      </Pill>
-                    </div>
-                    <div className="min-w-0 @max-[900px]:col-start-1 @max-[900px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto">
-                      {user.department ? (
-                        <div className="flex min-w-0 flex-col gap-0.5">
-                          <DepartmentPill
-                            className="self-start"
-                            department={user.department}
-                          />
-                          {user.team && (
-                            <span className="truncate text-[11px] text-[#738096]">
-                              {user.team.name}
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-[#94a3b8]">—</span>
+                    {slot.exiting &&
+                      renderAccountRow(
+                        slot.exiting,
+                        slot.exiting.delayMs ?? stagger,
+                        slot.index === rowSlots.length - 1,
                       )}
-                    </div>
-                    <div className="text-[11px] text-[#738096] @max-[900px]:col-start-1 @max-[900px]:row-start-3 @max-[530px]:row-auto">
-                      <span className="mr-1.5 hidden @max-[900px]:inline">
-                        Created
-                      </span>
-                      {formatDate(user.createdAt)}
-                    </div>
-                    <div className="flex min-w-0 items-center @max-[900px]:col-start-2 @max-[900px]:row-start-3 @max-[530px]:col-start-1 @max-[530px]:row-auto">
-                      {editable ? (
-                        <AccountDropdown
-                          className="w-full max-w-[112px]"
-                          triggerClassName="h-8 border-[#e1e4ea] text-xs"
-                          menuClassName="right-0 left-auto"
-                          label={`Role for ${user.email}`}
-                          value={selectedRole}
-                          disabled={savingAccess || statusSaving || deleting}
-                          options={assignableRoles.map((role) => ({
-                            value: role,
-                            label: roleNames[role],
-                          }))}
-                          onChange={(role) => {
-                            setAccessError("")
-                            setDraftRoles((current) => {
-                              const next = { ...current }
-                              if (role === user.role) delete next[user.id]
-                              else next[user.id] = { role, email: user.email }
-                              return next
-                            })
-                          }}
-                        />
-                      ) : (
-                        <span className="text-[11px] text-[#738096]">
-                          {user.id === actor.id ? "Your account" : "View only"}
-                        </span>
+                    {slot.entering &&
+                      renderAccountRow(
+                        slot.entering,
+                        slot.entering.delayMs ??
+                          stagger +
+                            (slot.exiting && !reduceMotion
+                              ? quick
+                                ? 50
+                                : 100
+                              : 0),
+                        slot.index === rowSlots.length - 1,
                       )}
-                    </div>
-                    <div className="flex min-w-0 items-center gap-2 @max-[900px]:col-start-2 @max-[900px]:row-start-4 @max-[530px]:col-start-1 @max-[530px]:row-auto">
-                      <span className="hidden text-[#738096] @max-[530px]:inline">
-                        Actions
-                      </span>
-                      {canChangeAccountStatus(actor, user) ? (
-                        <AccountRowActions
-                          account={user}
-                          disabled={savingAccess || statusSaving || deleting}
-                          onChangeStatus={() => {
-                            setStatusError("")
-                            setStatusTarget(user)
-                          }}
-                          onDelete={() => {
-                            if (user.isActive) return
-                            setDeleteError("")
-                            setDeleteTarget(user)
-                          }}
-                        />
-                      ) : (
-                        <span className="text-[11px] text-[#94a3b8]">—</span>
-                      )}
-                    </div>
                   </div>
                 )
               })}
           </div>
         </div>
-        {!busy && !error && result && result.total > 0 && (
+        {!error && footerResult && footerResult.total > 0 && (
           <div className="flex items-center justify-between gap-3 pt-4 text-[11px] text-[#65718a] max-[560px]:flex-wrap max-[560px]:pt-[14px]">
             <span>
-              Showing {(page - 1) * result.pageSize + 1}–
-              {Math.min(page * result.pageSize, result.total)} of {result.total}
+              Showing {(footerResult.page - 1) * footerResult.pageSize + 1}–
+              {Math.min(
+                footerResult.page * footerResult.pageSize,
+                footerResult.total,
+              )}{" "}
+              of {footerResult.total}
             </span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className={cn(
-                  accountButton,
-                  accountButtonPrimary,
-                  "min-h-[30px] rounded-lg px-3 text-[11px] font-medium",
-                )}
-                disabled={page <= 1 || savingAccess || statusSaving || deleting}
-                onClick={() => setPage((current) => current - 1)}
-              >
-                ← Back
-              </button>
-              <span className="px-[3px] whitespace-nowrap text-foreground">
-                Page {page} of {totalPages}
-              </span>
-              <button
-                type="button"
-                className={cn(
-                  accountButton,
-                  accountButtonPrimary,
-                  "min-h-[30px] rounded-lg px-3 text-[11px] font-medium",
-                )}
-                disabled={
-                  page >= totalPages || savingAccess || statusSaving || deleting
-                }
-                onClick={() => setPage((current) => current + 1)}
-              >
-                Next →
-              </button>
-            </div>
+            <NumberedPagination
+              page={footerResult.page}
+              totalPages={totalPages}
+              disabled={
+                busy ||
+                isAnimatingRows ||
+                savingAccess ||
+                statusSaving ||
+                deleting
+              }
+              label="Account pages"
+              onPageChange={setPage}
+            />
           </div>
         )}
       </section>

@@ -2,6 +2,7 @@ import { useRef } from "react"
 import { CalendarDays, Building2, Clock3, Package } from "lucide-react"
 import { CloseIcon } from "@/components/layout/icons"
 import { focusRing } from "@/components/layout/styles"
+import { useAnimatedPanelClose } from "@/components/ui/use-animated-panel-close"
 import {
   Dialog,
   DialogContent,
@@ -28,6 +29,8 @@ export function ServiceDetailsDialog({
   service: Service
   onClose: () => void
 }) {
+  const { open, handleOpenChange, closeAfterTransition } =
+    useAnimatedPanelClose(onClose)
   const openerRef = useRef(
     typeof document === "undefined" ? null : document.activeElement,
   )
@@ -71,11 +74,11 @@ export function ServiceDetailsDialog({
   ]
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         showCloseButton={false}
-        overlayClassName="z-[110] bg-[rgb(13_28_57_/_48%)]"
-        className="z-[110] max-h-[calc(100dvh-28px)] w-[min(520px,calc(100vw-28px))] gap-0 overflow-y-auto rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_22px_75px_rgb(18_36_73_/_22%)]"
+        overlayClassName="nexus-panel-overlay z-[110] bg-[rgb(13_28_57_/_48%)]"
+        className="nexus-detail-dialog z-[110] max-h-[calc(100dvh-28px)] w-[min(520px,calc(100vw-28px))] gap-0 overflow-y-auto rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_22px_75px_rgb(18_36_73_/_22%)]"
         onCloseAutoFocus={(event) => {
           event.preventDefault()
           const opener = openerRef.current
@@ -98,7 +101,7 @@ export function ServiceDetailsDialog({
               "grid size-7 flex-none cursor-pointer place-items-center rounded-[7px] border-0 bg-background text-[#65718a] hover:bg-[#f1f5fc]",
               focusRing,
             )}
-            onClick={onClose}
+            onClick={() => closeAfterTransition()}
             aria-label="Close details"
           >
             <CloseIcon />
@@ -140,7 +143,7 @@ export function ServiceDetailsDialog({
               "min-h-[38px] cursor-pointer rounded-[9px] border border-[#d7e0ee] bg-background px-[15px] text-xs font-semibold text-[#24437e] hover:bg-[#f1f5fc]",
               focusRing,
             )}
-            onClick={onClose}
+            onClick={() => closeAfterTransition()}
           >
             Close
           </button>

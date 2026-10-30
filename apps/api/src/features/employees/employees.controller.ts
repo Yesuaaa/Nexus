@@ -102,7 +102,7 @@ employeesRouter.get(
         : {}),
     }
 
-    const pageSize = 20
+    const pageSize = 10
     const [employees, total] = await employeesRepository.findManyWithCount(
       where,
       [{ fullName: "asc" }, { employeeId: "asc" }, { id: "asc" }],

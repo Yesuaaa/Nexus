@@ -66,8 +66,7 @@ export function canAccessServiceManagement(account: Account): boolean {
 
 export function canAccessClientManagement(account: Account): boolean {
   return (
-    isPrivileged(account.role) &&
-    hasPermission(account, Permissions.CLIENTS_READ)
+    account.role === "ADMIN" && hasPermission(account, Permissions.CLIENTS_READ)
   )
 }
 

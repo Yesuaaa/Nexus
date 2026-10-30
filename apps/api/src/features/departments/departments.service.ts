@@ -95,7 +95,7 @@ export const departmentsService = {
           ],
         }
       : {}
-    const pageSize = 20
+    const pageSize = 10
     const [employees, total] =
       await departmentsRepository.searchEmployeeOptions(where, page, pageSize)
     return { employees, total, page, pageSize }

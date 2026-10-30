@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
+import { AnimatePresence } from "framer-motion"
 import { CloseIcon } from "@/components/layout/icons"
+import {
+  AnimatedGridRow,
+  AnimatedTableRow,
+} from "@/components/ui/animated-data-row"
 import { Button } from "@/components/ui/button"
 import { Pill } from "@/components/ui/pill"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useAnimatedPanelClose } from "@/components/ui/use-animated-panel-close"
 import {
   Sheet,
   SheetClose,
@@ -90,39 +96,46 @@ function RelatedTable({
               </th>
             </tr>
           </thead>
-          <tbody>
-            {data.rows.map((row) => (
-              <tr key={row.id} className="border-t border-[#eceef1] align-top">
-                <td className="max-w-[200px] break-all px-3 py-3 font-medium">
-                  {requests
-                    ? (row as ClientServiceRequest).title
-                    : (row as ClientProject).name}
-                </td>
-                {requests && (
-                  <td className="max-w-[150px] break-all px-3 py-3 text-[#52627a]">
-                    {(row as ClientServiceRequest).service.name}
+          <tbody className="relative">
+            <AnimatePresence custom={true} mode="popLayout">
+              {data.rows.map((row, index) => (
+                <AnimatedTableRow
+                  key={`${kind}:${data.page}:${row.id}`}
+                  animateRows={true}
+                  rowIndex={index}
+                  className="border-t border-[#eceef1] align-top"
+                >
+                  <td className="max-w-[200px] break-all px-3 py-3 font-medium">
+                    {requests
+                      ? (row as ClientServiceRequest).title
+                      : (row as ClientProject).name}
                   </td>
-                )}
-                <td className="px-3 py-3">
-                  <Pill>{statusLabel(row.status)}</Pill>
-                </td>
-                <td className="whitespace-nowrap px-3 py-3 text-[#52627a]">
-                  <time
-                    dateTime={
-                      requests
-                        ? row.createdAt
-                        : ((row as ClientProject).startDate ?? undefined)
-                    }
-                  >
-                    {dateLabel(
-                      requests
-                        ? row.createdAt
-                        : (row as ClientProject).startDate,
-                    )}
-                  </time>
-                </td>
-              </tr>
-            ))}
+                  {requests && (
+                    <td className="max-w-[150px] break-all px-3 py-3 text-[#52627a]">
+                      {(row as ClientServiceRequest).service.name}
+                    </td>
+                  )}
+                  <td className="px-3 py-3">
+                    <Pill>{statusLabel(row.status)}</Pill>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3 text-[#52627a]">
+                    <time
+                      dateTime={
+                        requests
+                          ? row.createdAt
+                          : ((row as ClientProject).startDate ?? undefined)
+                      }
+                    >
+                      {dateLabel(
+                        requests
+                          ? row.createdAt
+                          : (row as ClientProject).startDate,
+                      )}
+                    </time>
+                  </td>
+                </AnimatedTableRow>
+              ))}
+            </AnimatePresence>
           </tbody>
         </table>
       </div>
@@ -131,57 +144,61 @@ function RelatedTable({
         role="list"
         aria-label={requests ? "Service requests" : "Projects"}
       >
-        {data.rows.map((row) => {
-          const title = requests
-            ? (row as ClientServiceRequest).title
-            : (row as ClientProject).name
-          const detail = requests
-            ? (row as ClientServiceRequest).service.name
-            : dateLabel((row as ClientProject).startDate)
-          const detailLabel = requests ? "Service" : "Start date"
-          const date = requests
-            ? row.createdAt
-            : (row as ClientProject).createdAt
-          return (
-            <article
-              key={row.id}
-              role="listitem"
-              className="grid gap-2 rounded-lg border border-[#e8ebef] p-3 text-xs"
-            >
-              <h3 className="m-0 break-all font-semibold">{title}</h3>
-              <dl className="m-0 grid gap-2">
-                {requests && (
+        <AnimatePresence custom={true} mode="popLayout">
+          {data.rows.map((row, index) => {
+            const title = requests
+              ? (row as ClientServiceRequest).title
+              : (row as ClientProject).name
+            const detail = requests
+              ? (row as ClientServiceRequest).service.name
+              : dateLabel((row as ClientProject).startDate)
+            const detailLabel = requests ? "Service" : "Start date"
+            const date = requests
+              ? row.createdAt
+              : (row as ClientProject).createdAt
+            return (
+              <AnimatedGridRow
+                key={`${kind}:${data.page}:${row.id}`}
+                animateRows={true}
+                rowIndex={index}
+                role="listitem"
+                className="grid gap-2 rounded-lg border border-[#e8ebef] p-3 text-xs"
+              >
+                <h3 className="m-0 break-all font-semibold">{title}</h3>
+                <dl className="m-0 grid gap-2">
+                  {requests && (
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-[#52627a]">{detailLabel}</dt>
+                      <dd className="m-0 min-w-0 break-all text-right">
+                        {detail}
+                      </dd>
+                    </div>
+                  )}
                   <div className="flex justify-between gap-3">
-                    <dt className="text-[#52627a]">{detailLabel}</dt>
-                    <dd className="m-0 min-w-0 break-all text-right">
-                      {detail}
+                    <dt className="text-[#52627a]">Status</dt>
+                    <dd className="m-0">
+                      <Pill>{statusLabel(row.status)}</Pill>
                     </dd>
                   </div>
-                )}
-                <div className="flex items-center justify-between gap-3">
-                  <dt className="text-[#52627a]">Status</dt>
-                  <dd className="m-0">
-                    <Pill>{statusLabel(row.status)}</Pill>
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="text-[#52627a]">
-                    {requests ? "Created" : "Created"}
-                  </dt>
-                  <dd className="m-0 text-right text-[#52627a]">
-                    <time dateTime={date}>{dateLabel(date)}</time>
-                  </dd>
-                </div>
-                {!requests && (
                   <div className="flex justify-between gap-3">
-                    <dt className="text-[#52627a]">Start date</dt>
-                    <dd className="m-0 text-right text-[#52627a]">{detail}</dd>
+                    <dt className="text-[#52627a]">Created</dt>
+                    <dd className="m-0 text-right text-[#52627a]">
+                      <time dateTime={date}>{dateLabel(date)}</time>
+                    </dd>
                   </div>
-                )}
-              </dl>
-            </article>
-          )
-        })}
+                  {!requests && (
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-[#52627a]">Start date</dt>
+                      <dd className="m-0 text-right text-[#52627a]">
+                        {detail}
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+              </AnimatedGridRow>
+            )
+          })}
+        </AnimatePresence>
       </div>
     </>
   )
@@ -196,6 +213,7 @@ export function ClientDetailsDrawer({
   initialTab?: ClientDetailsTab
   onClose: () => void
 }) {
+  const { open, handleOpenChange } = useAnimatedPanelClose(onClose)
   const openerRef = useRef(
     typeof document === "undefined" ? null : document.activeElement,
   )
@@ -301,16 +319,11 @@ export function ClientDetailsDrawer({
   }
 
   return (
-    <Sheet
-      open
-      onOpenChange={(open) => {
-        if (!open) onClose()
-      }}
-    >
+    <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent
         showCloseButton={false}
-        overlayClassName="bg-[rgb(13_28_57_/_40%)]"
-        className="inset-y-auto top-[15px] right-[15px] flex h-[calc(100dvh-30px)] max-h-none w-[min(600px,calc(100vw-30px))] max-w-none flex-col gap-0 overflow-hidden rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_16px_60px_rgb(18_36_73_/_18%)] sm:max-w-none max-[560px]:top-0 max-[560px]:right-0 max-[560px]:h-dvh max-[560px]:w-full max-[560px]:rounded-none max-[560px]:border-0"
+        overlayClassName="nexus-panel-overlay bg-[rgb(13_28_57_/_40%)]"
+        className="nexus-side-panel inset-y-auto top-[15px] right-[15px] flex h-[calc(100dvh-30px)] max-h-none w-[min(600px,calc(100vw-30px))] max-w-none flex-col gap-0 overflow-hidden rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_16px_60px_rgb(18_36_73_/_18%)] sm:max-w-none max-[560px]:top-0 max-[560px]:right-0 max-[560px]:h-dvh max-[560px]:w-full max-[560px]:rounded-none max-[560px]:border-0"
         onCloseAutoFocus={(event) => {
           event.preventDefault()
           const opener = openerRef.current

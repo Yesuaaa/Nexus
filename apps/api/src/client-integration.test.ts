@@ -172,11 +172,10 @@ test(
         headers: { authorization: `Bearer ${tokens.get(actor)}` },
       })
     await t.test(
-      "Admin and Superadmin can read; Staff, User and anonymous cannot",
+      "only Admin can read; Superadmin, Staff, User and anonymous cannot",
       async () => {
         await list()
-        await list("", "SUPERADMIN")
-        for (const actor of ["STAFF", "USER"])
+        for (const actor of ["SUPERADMIN", "STAFF", "USER"])
           assert.equal((await request("", actor)).status, 403)
         assert.equal((await fetch(base)).status, 401)
       },

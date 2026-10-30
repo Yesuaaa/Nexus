@@ -6,6 +6,8 @@ import { contentClass, focusRing } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { Input } from "@/components/ui/input"
+import { NumberedPagination } from "@/components/ui/numbered-pagination"
+import { SearchEmptyState } from "@/components/ui/search-empty-state"
 import {
   Select,
   SelectContent,
@@ -35,7 +37,6 @@ import {
   type EmploymentType,
 } from "../api/employees-api"
 
-const pageButton = `h-auto min-h-[30px] cursor-pointer rounded-lg border border-transparent bg-[#203f8c] px-3 text-[11px] font-medium leading-[1.2] whitespace-nowrap text-white transition-colors hover:enabled:bg-[#172f70] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none ${focusRing}`
 const employmentTypes: { value: EmploymentType | ""; label: string }[] = [
   { value: "", label: "All types" },
   { value: "FULL_TIME", label: "Full time" },
@@ -58,8 +59,10 @@ export function EmployeeManagementPage() {
   )
   const [employees, setEmployees] = useState<Employee[]>([])
   const [total, setTotal] = useState(0)
-  const [pageSize, setPageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(10)
   const [page, setPage] = useState(1)
+  const [resolvedPage, setResolvedPage] = useState(1)
+  const [animateRows, setAnimateRows] = useState(true)
   const [search, setSearch] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [departmentId, setDepartmentId] = useState("")
@@ -67,6 +70,7 @@ export function EmployeeManagementPage() {
   const [status, setStatus] = useState<EmploymentStatus | "">("")
   const [error, setError] = useState("")
   const [resolvedListKey, setResolvedListKey] = useState("")
+  const [resolvedViewKey, setResolvedViewKey] = useState("")
   const [departments, setDepartments] = useState<Department[]>([])
   const [departmentsError, setDepartmentsError] = useState("")
   const [departmentsLoading, setDepartmentsLoading] = useState(true)
@@ -91,6 +95,13 @@ export function EmployeeManagementPage() {
     page,
     revision,
   })
+  const viewKey = JSON.stringify({
+    search: debouncedSearch,
+    departmentId,
+    employmentType,
+    status,
+    page,
+  })
   const isLoading =
     resolvedListKey !== listRequestKey || search.trim() !== debouncedSearch
 
@@ -98,7 +109,7 @@ export function EmployeeManagementPage() {
     const timer = setTimeout(() => {
       setDebouncedSearch(search.trim())
       setPage(1)
-    }, 250)
+    }, 150)
     return () => clearTimeout(timer)
   }, [search])
 
@@ -116,8 +127,10 @@ export function EmployeeManagementPage() {
           setEmployees(result.employees)
           setTotal(result.total)
           setPageSize(result.pageSize)
+          setResolvedPage(result.page)
           setError("")
           setResolvedListKey(listRequestKey)
+          setResolvedViewKey(viewKey)
         }
       })
       .catch((reason: unknown) => {
@@ -141,6 +154,7 @@ export function EmployeeManagementPage() {
     page,
     revision,
     listRequestKey,
+    viewKey,
   ])
 
   const [departmentRevision, setDepartmentRevision] = useState(0)
@@ -171,6 +185,7 @@ export function EmployeeManagementPage() {
 
   function updateFilters(update: () => void) {
     update()
+    setAnimateRows(true)
     setPage(1)
   }
 
@@ -178,8 +193,8 @@ export function EmployeeManagementPage() {
   const hasFilters = Boolean(
     debouncedSearch || departmentId || employmentType || status,
   )
-  const shownFrom = total === 0 ? 0 : (page - 1) * pageSize + 1
-  const shownTo = Math.min(page * pageSize, total)
+  const shownFrom = total === 0 ? 0 : (resolvedPage - 1) * pageSize + 1
+  const shownTo = Math.min(resolvedPage * pageSize, total)
 
   return (
     <main
@@ -227,6 +242,7 @@ export function EmployeeManagementPage() {
                 value={search}
                 maxLength={100}
                 onChange={(event) => {
+                  setAnimateRows(true)
                   setSearch(event.target.value)
                 }}
               />
@@ -336,12 +352,19 @@ export function EmployeeManagementPage() {
         </div>
         <EmployeeTable
           employees={employees}
+          viewKey={resolvedViewKey}
+          quickKey={debouncedSearch}
+          animateRows={animateRows}
           loading={isLoading}
           error={error}
           emptyMessage={
-            hasFilters
-              ? "No employees match these filters. Try clearing a filter or search term."
-              : "No employee records yet. Add an employee to get started."
+            debouncedSearch ? (
+              <SearchEmptyState query={debouncedSearch} />
+            ) : hasFilters ? (
+              "No employees match these filters. Try clearing a filter or search term."
+            ) : (
+              "No employee records yet. Add an employee to get started."
+            )
           }
           onRetry={() => {
             setRevision((value) => value + 1)
@@ -357,44 +380,21 @@ export function EmployeeManagementPage() {
             canManageDepartment ? setMembersDepartmentId : undefined
           }
         />
-        {!isLoading && !error && total > 0 && (
+        {!error && total > 0 && (
           <footer className="flex items-center justify-between gap-3 pt-4 text-[11px] text-[#65718a] max-[560px]:flex-wrap max-[560px]:pt-[14px]">
             <span role="status" aria-live="polite" aria-atomic="true">
               Showing {shownFrom}–{shownTo} of {total}
             </span>
-            <nav
-              className="flex items-center gap-2"
-              aria-label="Employee pages"
-            >
-              <Button
-                type="button"
-                variant="outline"
-                className={pageButton}
-                disabled={page <= 1 || isLoading}
-                onClick={() => {
-                  setPage((value) => value - 1)
-                }}
-              >
-                Back
-              </Button>
-              <span
-                className="px-[3px] whitespace-nowrap text-foreground"
-                aria-current="page"
-                aria-label={`Page ${page} of ${totalPages}`}
-              >
-                Page {page} of {totalPages}
-              </span>
-              <Button
-                type="button"
-                className={pageButton}
-                disabled={page >= totalPages || isLoading}
-                onClick={() => {
-                  setPage((value) => value + 1)
-                }}
-              >
-                Next
-              </Button>
-            </nav>
+            <NumberedPagination
+              page={resolvedPage}
+              totalPages={totalPages}
+              disabled={isLoading}
+              label="Employee pages"
+              onPageChange={(nextPage) => {
+                setAnimateRows(true)
+                setPage(nextPage)
+              }}
+            />
           </footer>
         )}
         {!isLoading && !error && total > 0 && (

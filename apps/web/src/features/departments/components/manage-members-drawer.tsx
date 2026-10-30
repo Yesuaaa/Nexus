@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input"
 import { Pill } from "@/components/ui/pill"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
+import { useAnimatedPanelClose } from "@/components/ui/use-animated-panel-close"
 import { cn } from "@/lib/utils"
 import { EditMemberDialog } from "./edit-member-dialog"
 import {
@@ -94,6 +95,7 @@ export function ManageMembersDrawer({
   onClose: () => void
   onChanged: () => void
 }) {
+  const { open, handleOpenChange } = useAnimatedPanelClose(onClose)
   const openerRef = useRef(
     typeof document === "undefined" ? null : document.activeElement,
   )
@@ -169,7 +171,7 @@ export function ManageMembersDrawer({
   const candidateTotal = candidateResultIsCurrent ? candidateResult.total : 0
   const candidatePageSize = candidateResultIsCurrent
     ? candidateResult.pageSize
-    : 20
+    : 10
   const candidateLoading = Boolean(
     canManage && debouncedAssignSearch && !candidateResultIsCurrent,
   )
@@ -267,7 +269,7 @@ export function ManageMembersDrawer({
             key: candidateRequestKey,
             candidates: [],
             total: 0,
-            pageSize: 20,
+            pageSize: 10,
             error:
               error instanceof Error
                 ? error.message
@@ -489,15 +491,15 @@ export function ManageMembersDrawer({
 
   return (
     <Sheet
-      open
+      open={open}
       onOpenChange={(open) => {
-        if (!open && !submitting) onClose()
+        if (!open && !submitting) handleOpenChange(false)
       }}
     >
       <SheetContent
         showCloseButton={false}
-        overlayClassName="bg-[rgb(13_28_57_/_40%)]"
-        className="inset-y-auto top-[15px] right-[15px] flex h-[calc(100dvh-30px)] max-h-none w-[min(600px,calc(100vw-30px))] max-w-none flex-col gap-0 overflow-hidden rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_16px_60px_rgb(18_36_73_/_18%)] sm:max-w-none max-[560px]:top-0 max-[560px]:right-0 max-[560px]:h-dvh max-[560px]:w-full max-[560px]:rounded-none max-[560px]:border-0"
+        overlayClassName="nexus-panel-overlay bg-[rgb(13_28_57_/_40%)]"
+        className="nexus-side-panel inset-y-auto top-[15px] right-[15px] flex h-[calc(100dvh-30px)] max-h-none w-[min(600px,calc(100vw-30px))] max-w-none flex-col gap-0 overflow-hidden rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_16px_60px_rgb(18_36_73_/_18%)] sm:max-w-none max-[560px]:top-0 max-[560px]:right-0 max-[560px]:h-dvh max-[560px]:w-full max-[560px]:rounded-none max-[560px]:border-0"
         onEscapeKeyDown={(event) => {
           if (submitting) event.preventDefault()
         }}
