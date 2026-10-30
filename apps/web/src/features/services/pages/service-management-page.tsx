@@ -14,7 +14,9 @@ import { cn } from "@/lib/utils"
 import {
   changeServiceStatus,
   deleteService,
+  listPricingTemplates,
   listServices,
+  type PricingTemplate,
   type Service,
 } from "../api/services-api"
 import { ServiceDetailsDialog } from "../components/service-details-dialog"
@@ -29,6 +31,9 @@ export function ServiceManagementPage() {
   const canManage = hasPermission(actor, Permissions.SERVICES_MANAGE)
   const [services, setServices] = useState<Service[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
+  const [pricingTemplates, setPricingTemplates] = useState<PricingTemplate[]>(
+    [],
+  )
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [revision, setRevision] = useState(0)
@@ -43,11 +48,12 @@ export function ServiceManagementPage() {
 
   useEffect(() => {
     let active = true
-    Promise.all([listServices(), listDepartments()])
-      .then(([serviceData, departmentData]) => {
+    Promise.all([listServices(), listDepartments(), listPricingTemplates()])
+      .then(([serviceData, departmentData, pricingTemplateData]) => {
         if (!active) return
         setServices(serviceData)
         setDepartments(departmentData)
+        setPricingTemplates(pricingTemplateData)
         setError("")
       })
       .catch((caught: unknown) => {
@@ -73,6 +79,15 @@ export function ServiceManagementPage() {
         ? current.map((service) => (service.id === saved.id ? saved : service))
         : [saved, ...current]
     })
+    if (saved.pricingTemplate) {
+      setPricingTemplates((current) =>
+        current.some((template) => template.id === saved.pricingTemplate?.id)
+          ? current
+          : [...current, saved.pricingTemplate!].sort((left, right) =>
+              left.name.localeCompare(right.name),
+            ),
+      )
+    }
     const edited = formTarget !== "create"
     setFormTarget(null)
     sileo.success({
@@ -203,6 +218,7 @@ export function ServiceManagementPage() {
         <ServiceFormDialog
           service={formTarget === "create" ? null : formTarget}
           departments={departments}
+          pricingTemplates={pricingTemplates}
           onClose={() => setFormTarget(null)}
           onSaved={saveInList}
         />

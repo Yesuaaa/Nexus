@@ -15,7 +15,7 @@ export function buildContentSecurityPolicy(
     `script-src ${scriptSources}`,
     `style-src 'self' 'nonce-${nonce}'`,
     "style-src-attr 'unsafe-inline'",
-    "img-src 'self' data: blob:",
+    "img-src 'self' data: blob: https://*.supabase.co https://*.supabase.com",
     "font-src 'self' data:",
     `connect-src 'self'${apiOrigin ? ` ${apiOrigin}` : ""}`,
     "object-src 'none'",

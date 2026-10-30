@@ -7,6 +7,7 @@ import { test } from "node:test"
 import { PGlite } from "@electric-sql/pglite"
 import { PGLiteSocketServer } from "@electric-sql/pglite-socket"
 import { createApp } from "./app.js"
+import { setServiceImageStorageForTests } from "./features/services/service-image-storage.js"
 import { getPrisma } from "./lib/db.js"
 
 type Payload = {
@@ -28,6 +29,22 @@ test(
     const originalUrl = process.env.DATABASE_URL
     const originalDirectUrl = process.env.DIRECT_URL
     const originalPoolMax = process.env.DATABASE_POOL_MAX
+    const storedServiceImages = new Set<string>()
+    let uploadedImageSequence = 0
+    setServiceImageStorageForTests({
+      async upload() {
+        uploadedImageSequence += 1
+        const path = `services/test-${uploadedImageSequence}.png`
+        storedServiceImages.add(path)
+        return path
+      },
+      async remove(path) {
+        storedServiceImages.delete(path)
+      },
+      publicUrl(path) {
+        return `https://storage.test/${path}`
+      },
+    })
     const database = new PGlite()
     const cleanup: {
       socket?: PGLiteSocketServer
@@ -35,6 +52,7 @@ test(
       prisma?: ReturnType<typeof getPrisma>
     } = {}
     t.after(async () => {
+      setServiceImageStorageForTests(undefined)
       if (cleanup.server)
         await new Promise<void>((resolve) =>
           cleanup.server!.close(() => resolve()),
@@ -150,6 +168,7 @@ test(
       async () => {
         const protectedRoutes = [
           ["GET", "/services"],
+          ["GET", "/services/pricing-templates"],
           ["GET", "/services/missing"],
           ["POST", "/services"],
           ["PUT", "/services/missing"],
@@ -191,6 +210,32 @@ test(
           description: "Offline integration fixture",
           departmentIds: ["product", "operations"],
           isActive: true,
+          imageDataUrl: `data:image/png;base64,${Buffer.from("service-image").toString("base64")}`,
+          imageAltText: "Security service illustration",
+          removeImage: false,
+          pricingTemplate: {
+            name: "Security regression pricing",
+            pricingModel: "STARTING",
+            currency: "PHP",
+            amount: 5000,
+            billingInterval: null,
+            isPublic: true,
+          },
+          packages: [
+            {
+              name: "Starter",
+              description: "Starter security package",
+              includedFeatures: ["Initial assessment"],
+              pricingModel: "FIXED",
+              currency: "PHP",
+              amount: 7500,
+              billingInterval: null,
+              isPricingPublic: true,
+              isActive: true,
+              displayOrder: 1,
+              isRecommended: true,
+            },
+          ],
         }
         assert.equal(
           (
@@ -204,7 +249,13 @@ test(
         const response = await request("/services", "POST", input)
         assert.equal(response.status, 201)
         const { service } = (await response.json()) as {
-          service: { id: string; departments: { id: string }[] }
+          service: {
+            id: string
+            imageUrl: string | null
+            pricingTemplate: { id: string; pricingModel: string } | null
+            packages: { id: string; name: string }[]
+            departments: { id: string }[]
+          }
         }
         subtest.after(async () => {
           await prisma.service.deleteMany({ where: { id: service.id } })
@@ -213,7 +264,45 @@ test(
           service.departments.map((department) => department.id).sort(),
           ["operations", "product"],
         )
+        assert.equal(
+          service.imageUrl,
+          "https://storage.test/services/test-1.png",
+        )
+        assert.equal(storedServiceImages.has("services/test-1.png"), true)
+        const storedService = await prisma.service.findUniqueOrThrow({
+          where: { id: service.id },
+          select: { imagePath: true },
+        })
+        assert.equal(storedService.imagePath, "services/test-1.png")
+        assert.equal(service.pricingTemplate?.pricingModel, "STARTING")
+        assert.deepEqual(
+          service.packages.map((item) => item.name),
+          ["Starter"],
+        )
+        assert.ok(service.pricingTemplate)
+        const createdPackage = service.packages[0]
+        assert.ok(createdPackage)
         assert.equal((await request("/services", "POST", input)).status, 409)
+        const replacement = await request(`/services/${service.id}`, "PUT", {
+          ...input,
+          imageDataUrl: `data:image/webp;base64,${Buffer.from("replacement-image").toString("base64")}`,
+          pricingTemplate: null,
+          pricingTemplateId: service.pricingTemplate.id,
+          packages: input.packages.map((servicePackage) => ({
+            ...servicePackage,
+            id: createdPackage.id,
+          })),
+        })
+        assert.equal(replacement.status, 200)
+        const replacementService = (await replacement.json()) as {
+          service: { imageUrl: string | null }
+        }
+        assert.equal(
+          replacementService.service.imageUrl,
+          "https://storage.test/services/test-3.png",
+        )
+        assert.equal(storedServiceImages.has("services/test-1.png"), false)
+        assert.equal(storedServiceImages.has("services/test-3.png"), true)
         assert.equal(
           (await request(`/services/${service.id}`, "DELETE")).status,
           409,
@@ -245,6 +334,7 @@ test(
           (await request(`/services/${service.id}`, "DELETE")).status,
           200,
         )
+        assert.equal(storedServiceImages.has("services/test-3.png"), false)
         assert.equal(
           (await request(`/services/${service.id}`, "GET")).status,
           404,

@@ -1,5 +1,14 @@
+import Image from "next/image"
 import { useRef } from "react"
-import { CalendarDays, Building2, Clock3, Package } from "lucide-react"
+import {
+  CalendarDays,
+  Building2,
+  ClipboardList,
+  Clock3,
+  MessagesSquare,
+  Package,
+  PhilippinePeso,
+} from "lucide-react"
 import { CloseIcon } from "@/components/layout/icons"
 import { focusRing } from "@/components/layout/styles"
 import { useAnimatedPanelClose } from "@/components/ui/use-animated-panel-close"
@@ -20,6 +29,23 @@ function formatDate(value: string, includeTime = false) {
     year: "numeric",
     ...(includeTime ? { hour: "numeric", minute: "2-digit" } : {}),
   }).format(new Date(value))
+}
+
+const pricingLabels = {
+  FIXED: "Fixed price",
+  STARTING: "Starting at",
+  CUSTOM_QUOTE: "Custom quotation",
+  RECURRING: "Recurring",
+  HOURLY: "Hourly rate",
+} as const
+
+function formatPrice(amount: string | null, currency: string) {
+  if (amount === null) return "Price on request"
+  return new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 2,
+  }).format(Number(amount))
 }
 
 export function ServiceDetailsDialog({
@@ -45,6 +71,31 @@ export function ServiceDetailsDialog({
         </span>
       ),
       icon: Building2,
+    },
+    {
+      label: "Pricing",
+      value: service.pricingTemplate
+        ? `${pricingLabels[service.pricingTemplate.pricingModel]} · ${formatPrice(
+            service.pricingTemplate.amount,
+            service.pricingTemplate.currency,
+          )}${service.pricingTemplate.billingInterval ? ` / ${service.pricingTemplate.billingInterval.toLocaleLowerCase()}` : ""}${service.pricingTemplate.isPublic ? "" : " (hidden publicly)"}`
+        : "Not configured",
+      icon: PhilippinePeso,
+    },
+    {
+      label: "Requirements",
+      value:
+        service.clientRequirements.length > 0
+          ? service.clientRequirements.join("; ")
+          : "None specified",
+      icon: ClipboardList,
+    },
+    {
+      label: "Consultation",
+      value: service.requiresConsultation
+        ? service.consultationNotes || "Required before proceeding"
+        : "Not required",
+      icon: MessagesSquare,
     },
     {
       label: "Status",
@@ -108,6 +159,22 @@ export function ServiceDetailsDialog({
           </button>
         </div>
         <div className="p-5">
+          <div className="relative mb-4 aspect-[16/7] overflow-hidden rounded-xl bg-[#eef2f8]">
+            {service.imageUrl ? (
+              <Image
+                src={service.imageUrl}
+                alt={service.imageAltText ?? service.name}
+                fill
+                unoptimized
+                className="object-cover"
+              />
+            ) : (
+              <div className="grid size-full place-items-center text-[#7890b2]">
+                <Package size={32} aria-hidden="true" />
+                <span className="sr-only">No service image</span>
+              </div>
+            )}
+          </div>
           <div className="flex items-start gap-3.5">
             <div className="grid size-12 flex-none place-items-center rounded-xl bg-[#e5edff] text-[#2058d4]">
               <Package size={22} aria-hidden="true" />
@@ -135,6 +202,60 @@ export function ServiceDetailsDialog({
               </div>
             ))}
           </dl>
+          {service.packages.length > 0 && (
+            <section className="mt-5 border-t border-[#eceef1] pt-5">
+              <h3 className="m-0 text-sm font-[650]">Packages</h3>
+              <div className="mt-3 grid gap-2.5">
+                {service.packages.map((servicePackage) => (
+                  <article
+                    key={servicePackage.id}
+                    className="rounded-lg border border-[#dfe6ef] p-3"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <strong className="text-xs">{servicePackage.name}</strong>
+                      <span className="flex gap-1.5">
+                        {servicePackage.isRecommended && (
+                          <Pill className="bg-[#e5edff] text-[#2058d4]">
+                            Recommended
+                          </Pill>
+                        )}
+                        <Pill
+                          className={
+                            servicePackage.isActive
+                              ? "bg-[#dcf5e5] text-[#19703a]"
+                              : "bg-[#fde4ea] text-[#b4234d]"
+                          }
+                        >
+                          {servicePackage.isActive ? "Active" : "Inactive"}
+                        </Pill>
+                      </span>
+                    </div>
+                    <p className="mt-1.5 mb-0 text-xs leading-relaxed text-[#526686]">
+                      {servicePackage.description}
+                    </p>
+                    <ul className="mt-2 mb-0 grid gap-1 pl-4 text-[11px] text-[#526686]">
+                      {servicePackage.includedFeatures.map((feature) => (
+                        <li key={feature}>{feature}</li>
+                      ))}
+                    </ul>
+                    <p className="mt-2 mb-0 text-xs font-semibold text-[#203f8c]">
+                      {pricingLabels[servicePackage.pricingModel]} ·{" "}
+                      {formatPrice(
+                        servicePackage.amount,
+                        servicePackage.currency,
+                      )}
+                      {servicePackage.billingInterval
+                        ? ` / ${servicePackage.billingInterval.toLocaleLowerCase()}`
+                        : ""}
+                      {!servicePackage.isPricingPublic
+                        ? " (hidden publicly)"
+                        : ""}
+                    </p>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
         </div>
         <footer className="flex justify-end border-t border-[#eceef1] px-5 py-4">
           <button

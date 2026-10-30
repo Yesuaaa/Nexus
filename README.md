@@ -30,6 +30,8 @@ On macOS or Linux, use `cp` instead of `copy`. Open http://localhost:5173. Next.
 
 In Supabase, open **Connect** and copy the **Transaction pooler** URL into `DATABASE_URL` and the **Direct connection** URL into `DIRECT_URL` in `apps/api/.env`. Add `pgbouncer=true` to the transaction pooler URL if it is absent. For migrations from an IPv4-only network, use the **Session pooler** URL for `DIRECT_URL`. Keep these URLs out of web environment variables.
 
+Service catalog images use Supabase Storage. Set `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `SUPABASE_SERVICE_IMAGES_BUCKET` in the API environment. On the first image upload, the API creates or reconciles the bucket as public with a 2 MB limit and JPG, PNG, and WebP MIME restrictions. The secret key is used only by the authenticated Express API and must never be exposed through a `NEXT_PUBLIC_` variable. The database stores only each image's object path; public URLs are derived when service responses are returned.
+
 For verified TLS, download the database CA certificate from Supabase **Database Settings → SSL Configuration**. Set `sslmode=verify-full` and `sslrootcert=<URL-encoded absolute path to the certificate>` on both URLs. For example, a certificate saved as `C:\certs\supabase-ca.crt` uses `sslrootcert=C%3A%2Fcerts%2Fsupabase-ca.crt`. The `pg` driver currently treats `sslmode=require` as `verify-full` and emits a warning; changing only the mode does not fix an untrusted certificate. If your organization installs its CA in the Windows certificate store, Node 24 can also use it when launched with `NODE_USE_SYSTEM_CA=1`.
 
 After reviewing the target Supabase project and schema, apply the committed migrations:

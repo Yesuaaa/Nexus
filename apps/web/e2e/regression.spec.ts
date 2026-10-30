@@ -315,7 +315,15 @@ test.describe("mocked regression", () => {
         id: "service-1",
         name: "Test Service",
         description: "A service used by the regression suite.",
+        imageUrl: null,
+        imageAltText: null,
+        clientRequirements: [],
+        requiresConsultation: false,
+        consultationNotes: null,
         isActive: true,
+        pricingTemplateId: null,
+        pricingTemplate: null,
+        packages: [],
         departments: [{ id: "dept-1", name: "Engineering", code: "ENG" }],
         createdAt: "2026-01-01T00:00:00.000Z",
         updatedAt: "2026-01-01T00:00:00.000Z",
@@ -635,13 +643,25 @@ test.describe("mocked regression", () => {
         await route.fulfill({ json: { services } })
         return
       }
+      if (pathname === "/api/services/pricing-templates" && method === "GET") {
+        await route.fulfill({ json: { pricingTemplates: [] } })
+        return
+      }
       if (pathname === "/api/services" && method === "POST") {
         const body = request.postDataJSON() as ServiceInput
         const service: Service = {
           id: `service-${services.length + 1}`,
           name: body.name,
           description: body.description,
+          imageUrl: body.imageDataUrl,
+          imageAltText: body.imageAltText,
+          clientRequirements: body.clientRequirements,
+          requiresConsultation: body.requiresConsultation,
+          consultationNotes: body.consultationNotes,
           isActive: body.isActive,
+          pricingTemplateId: body.pricingTemplateId,
+          pricingTemplate: null,
+          packages: [],
           departments: departments.filter((department) =>
             body.departmentIds.includes(department.id),
           ),
@@ -985,6 +1005,15 @@ test.describe("mocked regression", () => {
       description: "Business consulting",
       departmentIds: ["dept-1"],
       isActive: true,
+      imageDataUrl: null,
+      imageAltText: null,
+      removeImage: false,
+      clientRequirements: [],
+      requiresConsultation: false,
+      consultationNotes: null,
+      pricingTemplateId: null,
+      pricingTemplate: null,
+      packages: [],
     })
     await expect(
       page.getByRole("rowheader", { name: "Consulting", exact: true }),
@@ -1052,7 +1081,15 @@ test.describe("mocked regression", () => {
           id: "unsafe",
           name: "Untrusted service",
           description: payload,
+          imageUrl: null,
+          imageAltText: null,
+          clientRequirements: [],
+          requiresConsultation: false,
+          consultationNotes: null,
           isActive: true,
+          pricingTemplateId: null,
+          pricingTemplate: null,
+          packages: [],
           departments: [],
           createdAt: "2026-01-01T00:00:00.000Z",
           updatedAt: "2026-01-01T00:00:00.000Z",
