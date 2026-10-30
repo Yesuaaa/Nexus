@@ -1,6 +1,10 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { Plus } from "lucide-react"
+import { sileo } from "sileo"
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
+import { ClientFormDialog } from "../components/client-form-dialog"
 import { contentClass } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
@@ -16,6 +20,7 @@ import {
 import { cn } from "@/lib/utils"
 import {
   listClients,
+  deleteClient,
   type ClientList,
   type ClientSort,
   type ClientStatus,
@@ -39,6 +44,33 @@ const sortOptions: { value: string; label: string }[] = [
 ]
 
 export function ClientManagementPage() {
+  const [formTarget, setFormTarget] = useState<Client | "create" | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Client | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState("")
+
+  async function confirmDelete() {
+    if (!deleteTarget || deleting) return
+    setDeleting(true)
+    setDeleteError("")
+    try {
+      await deleteClient(deleteTarget.id)
+      setDeleteTarget(null)
+      setRevision((value) => value + 1)
+      sileo.success({
+        title: "Client deleted",
+        description: "The client account was removed.",
+      })
+    } catch (reason) {
+      setDeleteError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not delete the client.",
+      )
+    } finally {
+      setDeleting(false)
+    }
+  }
   const [selectedClient, setSelectedClient] = useState<{
     client: Client
     tab: ClientDetailsTab
@@ -144,17 +176,26 @@ export function ClientManagementPage() {
       className={cn(contentClass, "p-[clamp(16px,2.1vw,32px)]")}
       aria-label="Client management"
     >
-      <header className="-mx-[clamp(16px,2.1vw,32px)] border-b border-[#eceef1] px-[clamp(16px,2.1vw,32px)] pt-0.5 pb-5">
-        <h1
-          id="client-directory-heading"
-          tabIndex={-1}
-          className="m-0 text-[clamp(21px,2vw,25px)] leading-[1.25] font-[650] tracking-[-0.03em]"
+      <header className="-mx-[clamp(16px,2.1vw,32px)] flex items-center justify-between gap-6 border-b border-[#eceef1] px-[clamp(16px,2.1vw,32px)] pt-0.5 pb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-4">
+        <div>
+          <h1
+            id="client-directory-heading"
+            tabIndex={-1}
+            className="m-0 text-[clamp(21px,2vw,25px)] leading-[1.25] font-[650] tracking-[-0.03em]"
+          >
+            Client Management
+          </h1>
+          <p className="mt-[5px] mb-0 text-xs leading-[1.45] text-[#52627a]">
+            Create and manage client accounts and contact information.
+          </p>
+        </div>
+        <Button
+          onClick={() => setFormTarget("create")}
+          className="h-[34px] bg-[#203f8c] text-xs text-white hover:bg-[#172f70] max-[560px]:h-11"
         >
-          Client Management
-        </h1>
-        <p className="mt-[5px] mb-0 text-xs leading-[1.45] text-[#52627a]">
-          View registered clients and account information.
-        </p>
+          <Plus size={16} aria-hidden="true" />
+          Create Client
+        </Button>
       </header>
       <section
         aria-label="Client directory"
@@ -192,7 +233,7 @@ export function ClientManagementPage() {
               <SelectItem value="INACTIVE">Inactive</SelectItem>
             </SelectContent>
           </Select>
-          <div className="hidden @max-[800px]:block">
+          <div className="hidden @max-[1000px]:block">
             <Select
               value={`${sortBy}:${sortOrder}`}
               onValueChange={(value) => {
@@ -249,6 +290,11 @@ export function ClientManagementPage() {
           onRetry={() => setRevision((value) => value + 1)}
           onSort={sort}
           onView={(client) => setSelectedClient({ client, tab: "overview" })}
+          onEdit={setFormTarget}
+          onDelete={(client) => {
+            setDeleteError("")
+            setDeleteTarget(client)
+          }}
         />
         {!error && result.total > 0 && (
           <footer className="flex flex-wrap items-center justify-between gap-3 pt-4 text-[11px] text-[#52627a]">
@@ -268,6 +314,36 @@ export function ClientManagementPage() {
           </footer>
         )}
       </section>
+      {formTarget && (
+        <ClientFormDialog
+          client={formTarget === "create" ? null : formTarget}
+          onClose={() => setFormTarget(null)}
+          onSaved={() => {
+            sileo.success({
+              title:
+                formTarget === "create" ? "Client created" : "Client updated",
+              description: "Client information was saved successfully.",
+            })
+            setFormTarget(null)
+            setRevision((value) => value + 1)
+          }}
+        />
+      )}
+      {deleteTarget && (
+        <ConfirmationDialog
+          title="Delete client?"
+          subject={deleteTarget.fullName || deleteTarget.email}
+          description="This removes the client account and ends its active sessions. Clients with linked service requests or projects cannot be deleted. The email address remains reserved."
+          confirmLabel="Delete Client"
+          pendingLabel="Deleting…"
+          pending={deleting}
+          error={deleteError}
+          onClose={() => {
+            if (!deleting) setDeleteTarget(null)
+          }}
+          onConfirm={confirmDelete}
+        />
+      )}
       {selectedClient && (
         <ClientDetailsDrawer
           key={selectedClient.client.id}

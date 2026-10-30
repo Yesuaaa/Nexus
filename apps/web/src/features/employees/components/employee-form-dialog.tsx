@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react"
+import { Eye, EyeOff } from "lucide-react"
 import { CloseIcon } from "@/components/layout/icons"
 import { focusRing } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
@@ -25,6 +26,7 @@ import {
 } from "@/features/departments/api/departments-api"
 import {
   createEmployee,
+  createEmployeeProfile,
   updateEmployee,
   type Employee,
   type EmploymentType,
@@ -90,7 +92,9 @@ const fieldIds: Record<EmployeeField, string> = {
 
 function toDraft(employee?: Employee | null): EmployeeDraft {
   return {
-    employeeId: employee?.employeeId ?? "",
+    employeeId: employee?.employeeId
+      ? `EXP-${employee.employeeId.replace(/^[^-]+-/, "")}`
+      : "EXP-",
     fullName: employee?.fullName ?? "",
     email: employee?.email ?? "",
     contactNumber: employee?.contactNumber ?? "",
@@ -98,7 +102,7 @@ function toDraft(employee?: Employee | null): EmployeeDraft {
     employmentType: employee?.employmentType ?? "",
     startDate: employee?.startDate?.slice(0, 10) ?? "",
     departmentId: employee?.departmentId ?? "",
-    teamId: employee?.teamId ?? "",
+    teamId: employee ? (employee.teamId ?? "none") : "",
     password: "",
     passwordConfirmation: "",
   }
@@ -114,7 +118,9 @@ export function EmployeeFormDialog({
   onSaved: (employee: Employee) => void
 }) {
   const isEditing = Boolean(employee)
-  const needsAccount = !employee?.hasAccount
+  const needsAccount = !isEditing
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmation, setShowConfirmation] = useState(false)
   const [draft, setDraft] = useState(() => toDraft(employee))
   const [departments, setDepartments] = useState<Department[]>([])
   const [teams, setTeams] = useState<DepartmentTeam[]>([])
@@ -264,9 +270,12 @@ export function EmployeeFormDialog({
         teamId: draft.teamId === "none" ? null : draft.teamId,
         ...(needsAccount ? { password: draft.password } : {}),
       }
-      const saved = employee
-        ? await updateEmployee(employee.id, input)
-        : await createEmployee(input)
+      const saved =
+        employee?.hasEmployeeRecord === false && employee.accountId
+          ? await createEmployeeProfile(employee.accountId, input)
+          : employee
+            ? await updateEmployee(employee.id, input)
+            : await createEmployee(input)
       onSaved(saved)
     } catch (reason: unknown) {
       setError(
@@ -307,7 +316,11 @@ export function EmployeeFormDialog({
           <header className="flex items-start justify-between gap-4 border-b border-[#eceef1] p-5 sm:px-6 sm:pt-6 sm:pb-5">
             <div className="min-w-0">
               <DialogTitle className="m-0 text-[20px] font-[650] tracking-[-0.03em]">
-                {isEditing ? "Edit employee" : "Add employee"}
+                {employee?.hasEmployeeRecord === false
+                  ? "Complete employee details"
+                  : isEditing
+                    ? "Edit employee"
+                    : "Add employee"}
               </DialogTitle>
               <DialogDescription className="mt-1 mb-0 text-xs text-[#738096]">
                 Keep employment details and team placement up to date.
@@ -377,22 +390,35 @@ export function EmployeeFormDialog({
             )}
             <label className={fieldClass}>
               <RequiredFieldLabel>Employee ID</RequiredFieldLabel>
-              <Input
-                id="employee-id"
-                className={validatedInputClass("employeeId")}
-                value={draft.employeeId}
-                maxLength={40}
-                autoComplete="off"
-                placeholder="e.g. EMP-1042"
-                disabled={pending}
-                onChange={(event) => change("employeeId", event.target.value)}
-                onBlur={() => blur("employeeId")}
-                aria-invalid={Boolean(fieldError("employeeId"))}
-                aria-describedby={
-                  fieldError("employeeId") ? "employee-id-error" : undefined
-                }
-                required
-              />
+              <div className="flex min-w-0">
+                <span className="flex h-10 items-center rounded-l-lg border border-r-0 border-[#d6dfec] bg-[#eef1f8] px-3 text-sm text-[#52627a]">
+                  EXP-
+                </span>{" "}
+                <Input
+                  id="employee-id"
+                  className={cn(
+                    validatedInputClass("employeeId"),
+                    "rounded-l-none",
+                  )}
+                  value={draft.employeeId.replace(/^EXP-/, "")}
+                  maxLength={36}
+                  autoComplete="off"
+                  placeholder="1042"
+                  disabled={pending}
+                  onChange={(event) =>
+                    change(
+                      "employeeId",
+                      `EXP-${event.target.value.replace(/[^A-Za-z0-9_-]/g, "")}`,
+                    )
+                  }
+                  onBlur={() => blur("employeeId")}
+                  aria-invalid={Boolean(fieldError("employeeId"))}
+                  aria-describedby={
+                    fieldError("employeeId") ? "employee-id-error" : undefined
+                  }
+                  required
+                />
+              </div>
               <FieldError
                 id="employee-id-error"
                 message={fieldError("employeeId")}
@@ -501,7 +527,7 @@ export function EmployeeFormDialog({
             <div className={fieldClass}>
               <RequiredFieldLabel>Employment type</RequiredFieldLabel>
               <Select
-                value={draft.employmentType || undefined}
+                value={draft.employmentType}
                 onValueChange={(value) =>
                   change("employmentType", value as EmploymentType)
                 }
@@ -561,7 +587,7 @@ export function EmployeeFormDialog({
             <div className={fieldClass}>
               <RequiredFieldLabel>Department</RequiredFieldLabel>
               <Select
-                value={draft.departmentId || undefined}
+                value={draft.departmentId}
                 onValueChange={(value) => {
                   const nextDepartmentId = value
                   setTeams([])
@@ -610,7 +636,7 @@ export function EmployeeFormDialog({
             <div className={fieldClass}>
               <RequiredFieldLabel>Team</RequiredFieldLabel>
               <Select
-                value={draft.teamId || undefined}
+                value={draft.teamId}
                 onValueChange={(value) => change("teamId", value)}
                 disabled={
                   pending ||
@@ -658,24 +684,47 @@ export function EmployeeFormDialog({
               <>
                 <label className={fieldClass}>
                   <RequiredFieldLabel>Password</RequiredFieldLabel>
-                  <Input
-                    type="password"
-                    id="employee-password"
-                    className={validatedInputClass("password")}
-                    value={draft.password}
-                    autoComplete="new-password"
-                    placeholder="At least 12 characters"
-                    disabled={pending}
-                    onChange={(event) => change("password", event.target.value)}
-                    onBlur={() => blur("password")}
-                    aria-invalid={Boolean(fieldError("password"))}
-                    aria-describedby={
-                      fieldError("password")
-                        ? "employee-password-error"
-                        : undefined
-                    }
-                    required
-                  />
+                  <div className="relative">
+                    <Input
+                      type={showPassword ? "text" : "password"}
+                      id="employee-password"
+                      className={cn(validatedInputClass("password"), "pr-10")}
+                      value={draft.password}
+                      autoComplete="new-password"
+                      placeholder="At least 12 characters"
+                      disabled={pending}
+                      onChange={(event) =>
+                        change("password", event.target.value)
+                      }
+                      onBlur={() => blur("password")}
+                      aria-invalid={Boolean(fieldError("password"))}
+                      aria-describedby={
+                        fieldError("password")
+                          ? "employee-password-error"
+                          : undefined
+                      }
+                      required
+                    />
+                    <button
+                      type="button"
+                      aria-label={
+                        showPassword ? "Hide password" : "Show password"
+                      }
+                      aria-pressed={showPassword}
+                      className={cn(
+                        "absolute inset-y-0 right-0 grid w-10 place-items-center rounded-r-lg text-[#65718a]",
+                        focusRing,
+                      )}
+                      disabled={pending}
+                      onClick={() => setShowPassword((value) => !value)}
+                    >
+                      {showPassword ? (
+                        <EyeOff size={16} aria-hidden="true" />
+                      ) : (
+                        <Eye size={16} aria-hidden="true" />
+                      )}
+                    </button>
+                  </div>
                   <FieldError
                     id="employee-password-error"
                     message={fieldError("password")}
@@ -683,26 +732,52 @@ export function EmployeeFormDialog({
                 </label>
                 <label className={fieldClass}>
                   <RequiredFieldLabel>Confirm password</RequiredFieldLabel>
-                  <Input
-                    type="password"
-                    id="employee-password-confirmation"
-                    className={validatedInputClass("passwordConfirmation")}
-                    value={draft.passwordConfirmation}
-                    autoComplete="new-password"
-                    placeholder="Enter the password again"
-                    disabled={pending}
-                    onChange={(event) =>
-                      change("passwordConfirmation", event.target.value)
-                    }
-                    onBlur={() => blur("passwordConfirmation")}
-                    aria-invalid={Boolean(fieldError("passwordConfirmation"))}
-                    aria-describedby={
-                      fieldError("passwordConfirmation")
-                        ? "employee-password-confirmation-error"
-                        : undefined
-                    }
-                    required
-                  />
+                  <div className="relative">
+                    <Input
+                      type={showConfirmation ? "text" : "password"}
+                      id="employee-password-confirmation"
+                      className={cn(
+                        validatedInputClass("passwordConfirmation"),
+                        "pr-10",
+                      )}
+                      value={draft.passwordConfirmation}
+                      autoComplete="new-password"
+                      placeholder="Enter the password again"
+                      disabled={pending}
+                      onChange={(event) =>
+                        change("passwordConfirmation", event.target.value)
+                      }
+                      onBlur={() => blur("passwordConfirmation")}
+                      aria-invalid={Boolean(fieldError("passwordConfirmation"))}
+                      aria-describedby={
+                        fieldError("passwordConfirmation")
+                          ? "employee-password-confirmation-error"
+                          : undefined
+                      }
+                      required
+                    />
+                    <button
+                      type="button"
+                      aria-label={
+                        showConfirmation
+                          ? "Hide confirm password"
+                          : "Show confirm password"
+                      }
+                      aria-pressed={showConfirmation}
+                      className={cn(
+                        "absolute inset-y-0 right-0 grid w-10 place-items-center rounded-r-lg text-[#65718a]",
+                        focusRing,
+                      )}
+                      disabled={pending}
+                      onClick={() => setShowConfirmation((value) => !value)}
+                    >
+                      {showConfirmation ? (
+                        <EyeOff size={16} aria-hidden="true" />
+                      ) : (
+                        <Eye size={16} aria-hidden="true" />
+                      )}
+                    </button>
+                  </div>
                   <FieldError
                     id="employee-password-confirmation-error"
                     message={fieldError("passwordConfirmation")}

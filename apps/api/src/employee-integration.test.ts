@@ -159,7 +159,9 @@ test(
       actor = "admin",
     ) {
       const response = await request(path, method, body, actor)
-      const result = (await response.json()) as Payload
+      const result = (
+        response.status === 204 ? {} : await response.json()
+      ) as Payload
       assert.equal(response.status, status, JSON.stringify(result))
       return result
     }
@@ -540,7 +542,7 @@ test(
           "/employees",
           "POST",
           {
-            employeeId: "EMP-9001",
+            employeeId: "EXP-9001",
             fullName: "Jordan Reyes",
             email: "jordan.hr@example.com",
             contactNumber: "09123456789",
@@ -616,7 +618,7 @@ test(
           "/employees",
           "POST",
           {
-            employeeId: "EMP-9001",
+            employeeId: "EXP-9001",
             fullName: "Duplicate Person",
             email: "duplicate@example.com",
             contactNumber: "09123456789",
@@ -708,7 +710,7 @@ test(
           "/employees",
           "POST",
           {
-            employeeId: "EMP-9003",
+            employeeId: "EXP-9003",
             fullName: "Casey Morgan",
             email: "casey@example.com",
             contactNumber: "09123456789",
@@ -944,14 +946,346 @@ test(
       },
     )
     await t.test(
+      "employee profiles and login accounts have separate lifecycles",
+      async () => {
+        const employee = await prisma.employee.create({
+          data: {
+            employeeId: "EXP-LOGIN",
+            fullName: "Login Person",
+            email: "login.person@example.com",
+            contactNumber: "09123456789",
+            position: "Designer",
+            departmentId: "product",
+          },
+        })
+        const path = `/employees/${employee.id}`
+        await json(path, "PUT", { fullName: "Updated Person" }, 200)
+        await json(path, "PUT", { password: "ValidPassword1!" }, 400)
+        assert.equal(
+          (
+            await prisma.employee.findUniqueOrThrow({
+              where: { id: employee.id },
+            })
+          ).userId,
+          null,
+        )
+        for (const actor of ["staff", "user", "superadmin"]) {
+          assert.equal(
+            (
+              await request(
+                `${path}/account`,
+                "POST",
+                { password: "ValidPassword1!" },
+                actor,
+              )
+            ).status,
+            403,
+          )
+          assert.equal(
+            (
+              await request(
+                `${path}/account/status`,
+                "PATCH",
+                { isActive: true },
+                actor,
+              )
+            ).status,
+            403,
+          )
+          assert.equal(
+            (await request(`${path}/account`, "DELETE", undefined, actor))
+              .status,
+            403,
+          )
+        }
+        await json(`${path}/account`, "POST", { password: "short" }, 400)
+        await json(
+          `${path}/account`,
+          "POST",
+          { password: "ValidPassword1!" },
+          201,
+        )
+        const account = await prisma.user.findUniqueOrThrow({
+          where: { email: employee.email! },
+        })
+        assert.equal(account.role, "STAFF")
+        await json(
+          `${path}/account`,
+          "POST",
+          { password: "OtherPassword1!" },
+          409,
+        )
+        await json(path, "PUT", { position: "Senior Designer" }, 200)
+        assert.equal(
+          (await prisma.user.findUniqueOrThrow({ where: { id: account.id } }))
+            .passwordHash,
+          account.passwordHash,
+        )
+        await prisma.session.create({
+          data: {
+            userId: account.id,
+            tokenHash: "employee-login-test",
+            expiresAt: new Date(Date.now() + 60000),
+          },
+        })
+        await json(`${path}/account/status`, "PATCH", { isActive: false }, 204)
+        assert.equal(
+          await prisma.session.count({ where: { userId: account.id } }),
+          0,
+        )
+        await json(`${path}/account/status`, "PATCH", { isActive: true }, 204)
+        const reactivated = await prisma.user.findUniqueOrThrow({
+          where: { id: account.id },
+        })
+        assert.equal(reactivated.isActive, true)
+        assert.equal(reactivated.passwordHash, account.passwordHash)
+        await json(`${path}/account/status`, "PATCH", { isActive: "true" }, 400)
+        await json(`${path}/account`, "DELETE", undefined, 409)
+        await json(`${path}/account/status`, "PATCH", { isActive: false }, 204)
+        await json(`${path}/account/permanent`, "DELETE", undefined, 409)
+        await json(`${path}/account`, "DELETE", undefined, 204)
+        const archived = await prisma.user.findUniqueOrThrow({
+          where: { id: account.id },
+        })
+        assert.ok(archived.accountDeletedAt)
+        assert.equal(archived.passwordHash, account.passwordHash)
+        assert.equal(
+          (
+            await prisma.employee.findUniqueOrThrow({
+              where: { id: employee.id },
+            })
+          ).userId,
+          account.id,
+        )
+        assert.equal(
+          (await json("/employees?search=login.person@example.com")).total,
+          0,
+        )
+        assert.equal(
+          (
+            await json(
+              "/employees?archived=true&search=login.person@example.com",
+            )
+          ).total,
+          1,
+        )
+        await json(`${path}/account/status`, "PATCH", { isActive: true }, 409)
+        await json(
+          `${path}/account`,
+          "POST",
+          { password: "ValidPassword1!" },
+          409,
+        )
+        await json(`${path}/account/permanent`, "DELETE", undefined, 204)
+        assert.equal(
+          await prisma.user.findUnique({ where: { id: account.id } }),
+          null,
+        )
+        const retained = await prisma.employee.findUniqueOrThrow({
+          where: { id: employee.id },
+        })
+        assert.equal(retained.userId, null)
+        assert.equal(retained.departmentId, employee.departmentId)
+        await json(path, "PUT", { fullName: "Profile Without Login" }, 200)
+        await json(
+          `${path}/account`,
+          "POST",
+          { password: "ValidPassword1!" },
+          201,
+        )
+        const recreated = await prisma.user.findUniqueOrThrow({
+          where: { email: employee.email! },
+        })
+        assert.notEqual(recreated.id, account.id)
+      },
+    )
+    await t.test(
+      "directory follows visible Admin and Staff accounts and joins HR details",
+      async () => {
+        const staffAccount = await prisma.user.create({
+          data: {
+            email: "directory.staff@example.com",
+            fullName: "Directory Staff",
+            contactNumber: "09123456789",
+            role: "STAFF",
+            passwordHash: "private-hash",
+          },
+        })
+        const adminAccount = await prisma.user.create({
+          data: {
+            email: "directory.admin@example.com",
+            fullName: "Directory Admin",
+            role: "ADMIN",
+            passwordHash: "private-hash",
+            isActive: false,
+          },
+        })
+        const retired = await prisma.user.create({
+          data: {
+            email: "directory.deleted@example.com",
+            fullName: "Directory Deleted",
+            role: "STAFF",
+            passwordHash: "private-hash",
+            accountDeletedAt: new Date(),
+          },
+        })
+        await prisma.employee.createMany({
+          data: [
+            {
+              employeeId: "EXP-DIR-ORPHAN",
+              fullName: "Directory Orphan",
+              email: staffAccount.email,
+            },
+            {
+              employeeId: "EXP-DIR-DELETED",
+              fullName: "Directory Retired HR",
+              userId: retired.id,
+            },
+          ],
+        })
+        for (const role of ["USER", "SUPERADMIN"] as const)
+          await prisma.user.create({
+            data: {
+              email: `directory.${role.toLowerCase()}@example.com`,
+              fullName: `Directory ${role}`,
+              role,
+              passwordHash: "private-hash",
+            },
+          })
+        const list = await json("/employees?search=directory")
+        assert.equal(list.total, 2)
+        const rows = list.employees as unknown as {
+          id: string
+          accountId: string
+          hasEmployeeRecord: boolean
+          employeeId: string
+          employmentType: string | null
+          status: string | null
+          fullName: string
+          accountIsActive: boolean
+        }[]
+        const missing = rows.find((row) => row.accountId === staffAccount.id)!
+        assert.equal(missing.hasEmployeeRecord, false)
+        assert.equal(missing.employeeId, "")
+        assert.equal(missing.employmentType, null)
+        assert.equal(missing.status, null)
+        assert.equal(
+          rows.find((row) => row.accountId === adminAccount.id)
+            ?.accountIsActive,
+          false,
+        )
+        assert.equal(JSON.stringify(list).includes("private-hash"), false)
+        await json(
+          `/employees/${encodeURIComponent(missing.id)}`,
+          "GET",
+          undefined,
+          200,
+        )
+        await json(
+          `/employees/${encodeURIComponent(missing.id)}/account/status`,
+          "PATCH",
+          { isActive: false },
+          204,
+        )
+        await json(
+          `/employees/${encodeURIComponent(missing.id)}/account/status`,
+          "PATCH",
+          { isActive: true },
+          204,
+        )
+        const profile = {
+          employeeId: "EXP-DIRECTORY",
+          fullName: "Directory Updated",
+          email: staffAccount.email,
+          contactNumber: "09123456789",
+          position: "Designer",
+          employmentType: "FULL_TIME",
+          departmentId: "product",
+          teamId: null,
+          startDate: "2026-01-15",
+        }
+        for (const actor of ["staff", "user", "superadmin"])
+          assert.equal(
+            (
+              await request(
+                `/employees/accounts/${staffAccount.id}/profile`,
+                "POST",
+                profile,
+                actor,
+              )
+            ).status,
+            403,
+          )
+        const saved = await json(
+          `/employees/accounts/${staffAccount.id}/profile`,
+          "POST",
+          profile,
+          201,
+        )
+        assert.notEqual(saved.employee.id, missing.id)
+        await json(
+          `/employees/accounts/${staffAccount.id}/profile`,
+          "POST",
+          profile,
+          409,
+        )
+        const refreshed = await json(
+          "/employees?search=EXP-DIRECTORY&departmentId=product&employmentType=FULL_TIME&status=ACTIVE",
+        )
+        assert.equal(refreshed.total, 1)
+        assert.equal(refreshed.employees[0]!.id, saved.employee.id)
+        assert.equal(
+          (
+            await prisma.user.findUniqueOrThrow({
+              where: { id: staffAccount.id },
+            })
+          ).fullName,
+          profile.fullName,
+        )
+        await json(
+          `/employees/account:${adminAccount.id}/account`,
+          "DELETE",
+          undefined,
+          403,
+        )
+        await json(
+          `/employees/account:${staffAccount.id}/account/status`,
+          "PATCH",
+          { isActive: false },
+          204,
+        )
+        await json(
+          `/employees/account:${staffAccount.id}/account`,
+          "DELETE",
+          undefined,
+          204,
+        )
+        assert.equal((await json("/employees?search=EXP-DIRECTORY")).total, 0)
+        assert.equal(
+          await prisma.employee.count({ where: { id: saved.employee.id } }),
+          1,
+        )
+      },
+    )
+    await t.test(
       "directory search paginates without losing later results",
       async () => {
-        await prisma.employee.createMany({
-          data: Array.from({ length: 13 }, (_, index) => ({
-            employeeId: `PAGE-${index}`,
-            fullName: `Pagination Person ${String(index).padStart(2, "0")}`,
-          })),
-        })
+        for (let index = 0; index < 13; index++) {
+          await prisma.user.create({
+            data: {
+              email: `pagination${index}@example.com`,
+              fullName: `Pagination Person ${String(index).padStart(2, "0")}`,
+              role: "STAFF",
+              passwordHash: "test-only-hash",
+              employee: {
+                create: {
+                  employeeId: `EXP-PAGE-${index}`,
+                  fullName: `HR Name ${index}`,
+                },
+              },
+            },
+          })
+        }
         const first = await json("/employees?search=Pagination&page=1")
         const second = await json("/employees?search=Pagination&page=2")
         assert.equal(first.total, 13)

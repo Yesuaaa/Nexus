@@ -7,12 +7,16 @@ export type EmploymentStatus = "ACTIVE" | "INACTIVE" | "ON_LEAVE"
 export type Employee = {
   id: string
   employeeId: string
+  accountRole?: "ADMIN" | "STAFF"
+  accountDeletedAt?: string | null
+  accountId?: string
+  hasEmployeeRecord?: boolean
   fullName: string
   email: string | null
   contactNumber: string | null
   position: string | null
-  employmentType: EmploymentType
-  status: EmploymentStatus
+  employmentType: EmploymentType | null
+  status: EmploymentStatus | null
   startDate: string | null
   departmentId: string | null
   teamId: string | null
@@ -70,8 +74,10 @@ export async function listEmployees(filters: {
   employmentType?: EmploymentType | ""
   status?: EmploymentStatus | ""
   page: number
+  archived?: boolean
 }): Promise<EmployeeList> {
   const params = new URLSearchParams({ page: String(filters.page) })
+  if (filters.archived) params.set("archived", "true")
   if (filters.search) params.set("search", filters.search)
   if (filters.departmentId) params.set("departmentId", filters.departmentId)
   if (filters.employmentType)
@@ -115,14 +121,50 @@ export async function updateEmployee(
 }
 
 export async function deactivateEmployeeLogin(id: string): Promise<void> {
+  return setEmployeeLoginStatus(id, false)
+}
+
+export async function setEmployeeLoginStatus(
+  id: string,
+  isActive: boolean,
+): Promise<void> {
   await apiRequest(`/api/employees/${encodeURIComponent(id)}/account/status`, {
     method: "PATCH",
-    body: JSON.stringify({ isActive: false }),
+    body: JSON.stringify({ isActive }),
   })
+}
+
+export async function createEmployeeLogin(
+  id: string,
+  password: string,
+): Promise<Employee> {
+  const result = await apiRequest<{ employee: Employee }>(
+    `/api/employees/${encodeURIComponent(id)}/account`,
+    { method: "POST", body: JSON.stringify({ password }) },
+  )
+  return result.employee
 }
 
 export async function deleteEmployeeLogin(id: string): Promise<void> {
   await apiRequest(`/api/employees/${encodeURIComponent(id)}/account`, {
     method: "DELETE",
   })
+}
+
+export async function createEmployeeProfile(
+  accountId: string,
+  input: EmployeeInput,
+): Promise<Employee> {
+  const result = await apiRequest<{ employee: Employee }>(
+    `/api/employees/accounts/${encodeURIComponent(accountId)}/profile`,
+    { method: "POST", body: JSON.stringify(input) },
+  )
+  return result.employee
+}
+
+export function permanentlyDeleteEmployeeLogin(id: string): Promise<void> {
+  return apiRequest(
+    `/api/employees/${encodeURIComponent(id)}/account/permanent`,
+    { method: "DELETE" },
+  )
 }

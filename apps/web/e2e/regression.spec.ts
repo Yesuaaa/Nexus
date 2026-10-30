@@ -1338,6 +1338,147 @@ test.describe("mocked regression", () => {
     await expect(page.locator('img[src="x"]')).toHaveCount(0)
   })
 
+  test("employee search keeps the summary in sync with row motion", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "no-preference" })
+    const employees: Employee[] = ["Alex Employee", "Second Employee"].map(
+      (fullName, index) => ({
+        id: `employee-${index + 1}`,
+        employeeId: `EXP-00${index + 1}`,
+        fullName,
+        email: `employee${index}@example.com`,
+        contactNumber: "09123456789",
+        position: "Designer",
+        employmentType: "FULL_TIME",
+        status: "ACTIVE",
+        startDate: "2026-01-15",
+        departmentId: null,
+        teamId: null,
+        department: null,
+        team: null,
+        hasAccount: true,
+        accountIsActive: true,
+        createdAt: "2026-01-15T00:00:00Z",
+        updatedAt: "2026-01-15T00:00:00Z",
+      }),
+    )
+    await restoreSession(page, "ADMIN", { initialEmployees: employees })
+    await page.goto("/employees")
+    await expect(
+      page.getByText("Showing 1–2 of 2", { exact: true }),
+    ).toBeVisible()
+    await page.evaluate(() => {
+      const samples: { moving: boolean; summary: string }[] = []
+      Reflect.set(window, "employeeMotionSamples", samples)
+      const main = document.querySelector(
+        'main[aria-label="Employee management"]',
+      )!
+      const observer = new MutationObserver(() => {
+        samples.push({
+          moving: Boolean(
+            main.querySelector("[data-animated-slot-row][inert]"),
+          ),
+          summary: main.querySelector("footer")?.textContent ?? "",
+        })
+      })
+      observer.observe(main, {
+        subtree: true,
+        attributes: true,
+        childList: true,
+        characterData: true,
+      })
+      Reflect.set(window, "employeeMotionObserver", observer)
+    })
+    await page
+      .getByRole("searchbox", { name: "Search employees" })
+      .fill("Second")
+    await expect(
+      page.getByText("Showing 1–1 of 1", { exact: true }),
+    ).toBeVisible()
+    const samples = await page.evaluate(() => {
+      const observer = Reflect.get(
+        window,
+        "employeeMotionObserver",
+      ) as MutationObserver
+      observer.disconnect()
+      return Reflect.get(window, "employeeMotionSamples") as {
+        moving: boolean
+        summary: string
+      }[]
+    })
+    expect(
+      samples.some(
+        (sample) =>
+          sample.moving && sample.summary.includes("Showing 1–2 of 2"),
+      ),
+    ).toBe(true)
+    expect(
+      samples.some(
+        (sample) =>
+          sample.moving && sample.summary.includes("Showing 1–1 of 1"),
+      ),
+    ).toBe(false)
+    await expect(
+      page.getByRole("row", { name: /Second Employee/ }),
+    ).toBeVisible()
+  })
+
+  for (const width of [1440, 390]) {
+    test(`employee row menus close the previous menu at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 })
+      const employees: Employee[] = ["Alex Employee", "Second Employee"].map(
+        (fullName, index) => ({
+          id: `employee-${index + 1}`,
+          employeeId: `EXP-00${index + 1}`,
+          fullName,
+          email: `employee${index}@example.com`,
+          contactNumber: "09123456789",
+          position: "Designer",
+          employmentType: "FULL_TIME",
+          status: "ACTIVE",
+          startDate: "2026-01-15",
+          departmentId: null,
+          teamId: null,
+          department: null,
+          team: null,
+          hasAccount: true,
+          accountIsActive: true,
+          createdAt: "2026-01-15T00:00:00Z",
+          updatedAt: "2026-01-15T00:00:00Z",
+        }),
+      )
+      await restoreSession(page, "ADMIN", { initialEmployees: employees })
+      await page.goto("/employees")
+      const first = page.getByRole("button", {
+        name: "More actions for Alex Employee",
+        exact: true,
+      })
+      const second = page.getByRole("button", {
+        name: "More actions for Second Employee",
+        exact: true,
+      })
+      await second.click()
+      await expect(page.getByRole("menu")).toHaveCount(1)
+      await expect(second).toHaveAttribute("aria-expanded", "true")
+      await first.click()
+      await expect(page.getByRole("menu")).toHaveCount(1)
+      await expect(
+        page.getByRole("menu", {
+          name: "Actions for Alex Employee",
+          exact: true,
+        }),
+      ).toBeVisible()
+      await expect(first).toHaveAttribute("aria-expanded", "true")
+      await expect(second).toHaveAttribute("aria-expanded", "false")
+      await page.keyboard.press("Escape")
+      await expect(page.getByRole("menu")).toHaveCount(0)
+      await expect(first).toBeFocused()
+    })
+  }
+
   test("employee search, details, and login retirement controls preserve HR records", async ({
     page,
   }) => {
@@ -1353,11 +1494,11 @@ test.describe("mocked regression", () => {
       .getByRole("button", { name: "More actions for Alex Employee" })
       .click()
     await expect(
-      page.getByRole("menuitem", { name: "Deactivate login" }),
+      page.getByRole("menuitem", { name: "Deactivate account" }),
     ).toBeVisible()
     await expect(
-      page.getByRole("menuitem", { name: "Delete login account" }),
-    ).toHaveCount(0)
+      page.getByRole("menuitem", { name: "Delete account", exact: true }),
+    ).toBeDisabled()
     await page.keyboard.press("Escape")
     await page.getByPlaceholder("Search name, ID, email…").fill("EMP-001")
     await expect(page.getByText("Alex Employee", { exact: true })).toBeVisible()
@@ -1808,6 +1949,81 @@ test.describe("mocked regression", () => {
     await page.locator('a[href="/register"]').click()
     await expect(page).toHaveURL(/\/register$/)
     await expect(page.locator('main[lang="fil"]')).toBeVisible()
+  })
+
+  for (const role of ["ADMIN", "SUPERADMIN", "STAFF", "USER"] as const) {
+    test(`${role} keeps their session when opening login or registration directly`, async ({
+      page,
+    }) => {
+      await restoreSession(page, role)
+      const authWrites: string[] = []
+      page.on("request", (request) => {
+        if (
+          ["/api/auth/logout", "/api/auth/login"].includes(
+            new URL(request.url()).pathname,
+          )
+        )
+          authWrites.push(request.url())
+      })
+      await page.goto("/dashboard")
+      for (const path of ["/login", "/register"]) {
+        await page.goto(path)
+        await expect(page).toHaveURL(/\/dashboard$/)
+        expect(
+          await page.evaluate(() => sessionStorage.getItem("nexus.auth.token")),
+        ).toBe("test-session")
+        await expect(
+          page.getByRole("button", { name: "Sign In", exact: true }),
+        ).toHaveCount(0)
+      }
+      expect(authWrites).toEqual([])
+    })
+  }
+
+  test("opening login with an expired token allows sign-in", async ({
+    page,
+  }) => {
+    await page.addInitScript(() =>
+      sessionStorage.setItem("nexus.auth.token", "expired"),
+    )
+    await page.route("**/api/auth/me", (route) =>
+      route.fulfill({ status: 401, json: { error: "Unauthorized" } }),
+    )
+    await page.goto("/login")
+    await expect(
+      page.getByRole("button", { name: "Sign In", exact: true }),
+    ).toBeVisible()
+    expect(
+      await page.evaluate(() => sessionStorage.getItem("nexus.auth.token")),
+    ).toBeNull()
+  })
+
+  test("login session checks preserve the token during a server error and can retry", async ({
+    page,
+  }) => {
+    await restoreSession(page, "ADMIN")
+    let unavailable = true
+    await page.route("**/api/auth/me", (route) =>
+      unavailable
+        ? route.fulfill({ status: 503, json: { error: "Unavailable" } })
+        : route.fallback(),
+    )
+    await page.goto("/login")
+    await expect(page.getByRole("main").getByRole("alert")).toContainText(
+      "couldn't check your session",
+    )
+    expect(
+      await page.evaluate(() => sessionStorage.getItem("nexus.auth.token")),
+    ).toBe("test-session")
+    await expect(
+      page.getByRole("button", { name: "Sign In", exact: true }),
+    ).toHaveCount(0)
+    unavailable = false
+    await page.getByRole("button", { name: "Try again", exact: true }).click()
+    await expect(page).toHaveURL(/\/dashboard$/)
+    expect(
+      await page.evaluate(() => sessionStorage.getItem("nexus.auth.token")),
+    ).toBe("test-session")
   })
 
   test("expired sessions clear the token and return to login", async ({

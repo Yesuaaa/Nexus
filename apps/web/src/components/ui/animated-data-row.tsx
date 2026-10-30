@@ -239,6 +239,7 @@ type AnimatedSlotGridBodyProps<T> = {
   defaultRowHeight?: number
   className?: string
   ariaBusy?: boolean
+  onRowsSettled?: () => void
 }
 
 export function AnimatedSlotGridBody<T>({
@@ -254,6 +255,7 @@ export function AnimatedSlotGridBody<T>({
   defaultRowHeight = 58,
   className,
   ariaBusy = false,
+  onRowsSettled,
 }: AnimatedSlotGridBodyProps<T>) {
   const reduceMotion = useReducedMotion() ?? false
   const [rowSlots, setRowSlots] = useState<AnimatedRowSlot<T>[]>(() =>
@@ -269,6 +271,10 @@ export function AnimatedSlotGridBody<T>({
   const animationGenerationRef = useRef(0)
   const lastViewKeyRef = useRef<string | null>(null)
   const lastQuickKeyRef = useRef<string | null>(null)
+  const onRowsSettledRef = useRef(onRowsSettled)
+  useEffect(() => {
+    onRowsSettledRef.current = onRowsSettled
+  }, [onRowsSettled])
 
   const removeExitedRow = useCallback(
     (row: AnimatedRowItem<T>) => {
@@ -321,6 +327,7 @@ export function AnimatedSlotGridBody<T>({
       rowSlotsRef.current = nextSlots
       setRowSlots(nextSlots)
       setIsAnimating(false)
+      onRowsSettledRef.current?.()
     }
     const previousViewKey = lastViewKeyRef.current
     const previousQuickKey = lastQuickKeyRef.current
@@ -384,6 +391,7 @@ export function AnimatedSlotGridBody<T>({
       setRowSlots(finalSlots)
       setIsAnimating(false)
       animationTimerRef.current = null
+      onRowsSettledRef.current?.()
       bodyHeightTimerRef.current = window.setTimeout(() => {
         setAnimateBodyHeight(false)
         bodyHeightTimerRef.current = null

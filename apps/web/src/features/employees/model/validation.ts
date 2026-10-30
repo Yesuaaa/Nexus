@@ -37,7 +37,7 @@ const NAME_RE = /^\p{L}[\p{L} .'’-]*$/u
 const EMAIL_RE =
   /^[A-Za-z0-9]+([._+-][A-Za-z0-9]+)*@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.(com|ph)$/i
 const PHONE_RE = /^0[89]\d{9}$/
-const EMPLOYEE_ID_RE = /^[A-Za-z0-9_-]+$/
+const EMPLOYEE_ID_RE = /^EXP-[A-Za-z0-9_-]+$/
 
 function isValidDate(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
@@ -63,7 +63,8 @@ export function validateEmployeeDraft(
   else if (employeeId.length < 2 || employeeId.length > 40)
     errors.employeeId = "Employee ID must be between 2 and 40 characters."
   else if (!EMPLOYEE_ID_RE.test(employeeId))
-    errors.employeeId = "Use letters, numbers, hyphens, or underscores only."
+    errors.employeeId =
+      "Use EXP- followed by letters, numbers, hyphens, or underscores."
 
   if (!fullName) errors.fullName = "Full name is required."
   else if (fullName.length < 2 || fullName.length > 100)

@@ -6,7 +6,7 @@ import {
 } from "../src/features/employees/model/validation.ts"
 
 const validDraft = {
-  employeeId: "EMP-1042",
+  employeeId: "EXP-1042",
   fullName: "María O’Neil-Santos Jr.",
   email: "maria@example.com.ph",
   contactNumber: "09123456789",

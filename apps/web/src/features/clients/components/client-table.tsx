@@ -1,4 +1,15 @@
-import type { ReactNode } from "react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  dropdownItemClass,
+  dropdownMenuClass,
+} from "@/components/ui/dropdown-styles"
+import { Eye, MoreHorizontal, Pencil } from "lucide-react"
+import { useRef, type ReactNode } from "react"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { Button } from "@/components/ui/button"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
@@ -9,7 +20,7 @@ import { cn } from "@/lib/utils"
 import type { Client, ClientSort } from "../api/clients-api"
 
 const clientGrid =
-  "grid grid-cols-[minmax(180px,1.3fr)_minmax(190px,1.35fr)_minmax(130px,.9fr)_minmax(105px,.7fr)_minmax(110px,.8fr)_72px] items-center gap-3.5 @max-[800px]:grid-cols-[minmax(0,1fr)_auto]"
+  "grid grid-cols-[minmax(180px,1.3fr)_minmax(190px,1.35fr)_minmax(130px,.9fr)_minmax(105px,.7fr)_minmax(110px,.8fr)_120px] items-center gap-3.5 @max-[1000px]:grid-cols-[minmax(0,1fr)_auto]"
 
 export const clientColumns: { key: ClientSort; label: string }[] = [
   { key: "fullName", label: "Client name" },
@@ -30,39 +41,88 @@ function registeredDate(value: string) {
 function ClientRowActions({
   client,
   onView,
+  onEdit,
+  onDelete,
 }: {
+  onEdit: (client: Client) => void
+  onDelete: (client: Client) => void
   client: Client
   onView: (client: Client) => void
 }) {
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const pendingDelete = useRef(false)
   const label = client.fullName?.trim() || client.email
   const actionLabel = `View details for ${label}`
   return (
-    <button
-      type="button"
-      id={`client-view-${client.id}`}
-      className={cn(
-        rowActionButton,
-        "text-[#203f8c] hover:enabled:text-[#172f70] max-[560px]:size-11",
-      )}
-      aria-label={actionLabel}
-      onClick={() => onView(client)}
-    >
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
+    <div className="flex items-center gap-1">
+      <button
+        type="button"
+        id={`client-view-${client.id}`}
+        className={cn(
+          rowActionButton,
+          "text-[#203f8c] hover:enabled:text-[#172f70] max-[560px]:size-11",
+        )}
+        aria-label={actionLabel}
+        onClick={() => onView(client)}
       >
-        <path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6Z" />
-        <circle cx="12" cy="12" r="2.5" />
-      </svg>
-      <HoverTooltip align="end">View details</HoverTooltip>
-    </button>
+        <Eye size={16} aria-hidden="true" />
+        <HoverTooltip>View details</HoverTooltip>
+      </button>
+      <button
+        type="button"
+        className={cn(
+          rowActionButton,
+          "border-[#203f8c] bg-[#203f8c] text-white hover:enabled:border-[#172f70] hover:enabled:bg-[#172f70] hover:enabled:text-white max-[560px]:size-11",
+        )}
+        aria-label={`Edit ${label}`}
+        onClick={() => onEdit(client)}
+      >
+        <Pencil size={16} aria-hidden="true" />
+        <HoverTooltip>Edit client</HoverTooltip>
+      </button>
+      <DropdownMenu
+        onOpenChange={(open) => {
+          if (open) pendingDelete.current = false
+        }}
+      >
+        <DropdownMenuTrigger asChild>
+          <button
+            ref={triggerRef}
+            type="button"
+            className={cn(rowActionButton, "max-[560px]:size-11")}
+            aria-label={`More actions for ${label}`}
+          >
+            <MoreHorizontal size={16} aria-hidden="true" />
+            <HoverTooltip>More actions</HoverTooltip>
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          sideOffset={6}
+          collisionPadding={24}
+          className={cn(dropdownMenuClass, "w-48 text-xs")}
+          onCloseAutoFocus={(event) => {
+            if (!pendingDelete.current) return
+            event.preventDefault()
+            pendingDelete.current = false
+            triggerRef.current?.focus()
+            onDelete(client)
+          }}
+        >
+          <DropdownMenuItem
+            className={cn(
+              dropdownItemClass,
+              "text-[#c33945] focus:bg-[#fff0f1] focus:text-[#c33945]",
+            )}
+            onSelect={() => {
+              pendingDelete.current = true
+            }}
+          >
+            Delete client
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   )
 }
 
@@ -73,7 +133,7 @@ function clientKey(client: Client) {
 function clientRowClass(_client: Client, _index: number, isLast: boolean) {
   return cn(
     clientGrid,
-    "h-[58px] border-b border-[#eceef1] bg-background px-4 py-[7px] text-xs text-foreground hover:bg-[#e8eef2] @max-[800px]:h-[154px] @max-[800px]:gap-x-4 @max-[800px]:gap-y-1.5 @max-[800px]:py-3",
+    "h-[58px] border-b border-[#eceef1] bg-background px-4 py-[7px] text-xs text-foreground hover:bg-[#e8eef2] @max-[1000px]:h-[154px] @max-[1000px]:gap-x-4 @max-[1000px]:gap-y-1.5 @max-[1000px]:py-3",
     isLast && "rounded-b-[7px] border-b-0",
   )
 }
@@ -91,7 +151,11 @@ export function ClientTable({
   sortOrder,
   onSort,
   onView,
+  onEdit,
+  onDelete,
 }: {
+  onEdit: (client: Client) => void
+  onDelete: (client: Client) => void
   clients: Client[]
   viewKey: string
   quickKey: string
@@ -135,7 +199,7 @@ export function ClientTable({
       aria-label="Clients"
       aria-busy={loading}
     >
-      <div role="rowgroup" className="@max-[800px]:sr-only">
+      <div role="rowgroup" className="@max-[1000px]:sr-only">
         <div
           role="row"
           className={cn(
@@ -148,7 +212,7 @@ export function ClientTable({
           <span role="columnheader">Contact number</span>
           {heading("isActive")}
           {heading("createdAt")}
-          <span role="columnheader">View</span>
+          <span role="columnheader">Actions</span>
         </div>
       </div>
 
@@ -193,7 +257,7 @@ export function ClientTable({
             <>
               <div
                 role="cell"
-                className="min-w-0 @max-[800px]:col-start-1 @max-[800px]:row-start-1"
+                className="min-w-0 @max-[1000px]:col-start-1 @max-[1000px]:row-start-1"
               >
                 <div className="flex min-w-0 items-center gap-2.5">
                   <span
@@ -209,22 +273,22 @@ export function ClientTable({
               </div>
               <div
                 role="cell"
-                className="min-w-0 truncate text-[#52627a] @max-[800px]:col-span-2 @max-[800px]:row-start-2 @max-[800px]:break-all @max-[800px]:whitespace-normal"
+                className="min-w-0 truncate text-[#52627a] @max-[1000px]:col-span-2 @max-[1000px]:row-start-2 @max-[1000px]:break-all @max-[1000px]:whitespace-normal"
               >
                 {client.email}
               </div>
               <div
                 role="cell"
-                className="min-w-0 truncate text-[#52627a] @max-[800px]:col-span-2 @max-[800px]:row-start-3 @max-[800px]:whitespace-normal"
+                className="min-w-0 truncate text-[#52627a] @max-[1000px]:col-span-2 @max-[1000px]:row-start-3 @max-[1000px]:whitespace-normal"
               >
-                <span className="hidden @max-[800px]:inline">Contact: </span>
+                <span className="hidden @max-[1000px]:inline">Contact: </span>
                 <span className="break-all">
                   {client.contactNumber?.trim() || "Not provided"}
                 </span>
               </div>
               <div
                 role="cell"
-                className="@max-[800px]:col-start-2 @max-[800px]:row-start-4 @max-[800px]:justify-self-end"
+                className="@max-[1000px]:col-start-2 @max-[1000px]:row-start-4 @max-[1000px]:justify-self-end"
               >
                 <Pill
                   className={
@@ -238,18 +302,25 @@ export function ClientTable({
               </div>
               <div
                 role="cell"
-                className="min-w-0 truncate text-[#52627a] @max-[800px]:col-start-1 @max-[800px]:row-start-4 @max-[800px]:whitespace-normal"
+                className="min-w-0 truncate text-[#52627a] @max-[1000px]:col-start-1 @max-[1000px]:row-start-4 @max-[1000px]:whitespace-normal"
               >
-                <span className="hidden @max-[800px]:inline">Registered: </span>
+                <span className="hidden @max-[1000px]:inline">
+                  Registered:{" "}
+                </span>
                 <time dateTime={client.createdAt}>
                   {registeredDate(client.createdAt)}
                 </time>
               </div>
               <div
                 role="cell"
-                className="@max-[800px]:col-start-2 @max-[800px]:row-start-1 @max-[800px]:justify-self-end"
+                className="@max-[1000px]:col-start-2 @max-[1000px]:row-start-1 @max-[1000px]:justify-self-end"
               >
-                <ClientRowActions client={client} onView={onView} />
+                <ClientRowActions
+                  client={client}
+                  onView={onView}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                />
               </div>
             </>
           )}
