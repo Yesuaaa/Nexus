@@ -274,12 +274,47 @@ model Employee {
   createdAt                DateTime         @default(now())
   updatedAt                DateTime         @updatedAt
   preferredServiceRequests ServiceRequest[]
+  profileBio               String?          @db.VarChar(2000)
+  profileImageUrl          String?          @db.VarChar(2048)
+  profileSpecialties       String[]         @default([])
+  portfolioProjects        SpecialistPortfolioProject[]
+  socialLinks               SpecialistSocialLink[]
 
   @@index([departmentId])
   @@index([teamId])
   @@index([status])
   @@index([employmentType])
   @@index([fullName])
+}
+
+model SpecialistPortfolioProject {
+  id           String   @id @default(cuid())
+  employeeId   String
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  title        String   @db.VarChar(160)
+  summary      String   @db.VarChar(3000)
+  contribution String?  @db.VarChar(2000)
+  thumbnailUrl String?  @db.VarChar(2048)
+  projectUrl   String?  @db.VarChar(2048)
+  isPublished  Boolean  @default(false)
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([employeeId, isPublished, displayOrder], map: "specialist_portfolio_published_order_idx")
+}
+
+model SpecialistSocialLink {
+  id           String   @id @default(cuid())
+  employeeId   String
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  platform     String   @db.VarChar(40)
+  url          String   @db.VarChar(2048)
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([employeeId, displayOrder], map: "specialist_social_link_order_idx")
 }
 
 model Session {

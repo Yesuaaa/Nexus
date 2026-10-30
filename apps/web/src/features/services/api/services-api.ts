@@ -46,6 +46,38 @@ export type ServiceSpecialist = {
   department: { id: string; name: string } | null
 }
 
+export type SpecialistPortfolioProject = {
+  id: string
+  title: string
+  summary: string
+  contribution: string | null
+  thumbnailUrl: string | null
+  projectUrl: string | null
+}
+
+export type SpecialistSocialLink = {
+  platform: string
+  url: string
+}
+
+export type ServiceSpecialistProfile = ServiceSpecialist & {
+  bio: string | null
+  imageUrl: string | null
+  specialties: string[]
+  socialLinks: SpecialistSocialLink[]
+  projects: SpecialistPortfolioProject[]
+}
+
+export async function getServiceSpecialistProfile(
+  serviceId: string,
+  specialistId: string,
+): Promise<ServiceSpecialistProfile> {
+  const result = await apiRequest<{ specialist: ServiceSpecialistProfile }>(
+    `/api/services/${encodeURIComponent(serviceId)}/specialists/${encodeURIComponent(specialistId)}`,
+  )
+  return result.specialist
+}
+
 export async function listServiceSpecialists(
   serviceId: string,
 ): Promise<ServiceSpecialist[]> {

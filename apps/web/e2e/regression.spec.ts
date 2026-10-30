@@ -2680,9 +2680,7 @@ test.describe("mocked regression", () => {
         "aria-valuenow",
         "2",
       )
-      await expect(
-        page.getByText("Most popular", { exact: true }),
-      ).toBeVisible()
+      await expect(page.getByText("Recommended", { exact: true })).toBeVisible()
       await expect(
         page.getByText("Retired package", { exact: true }),
       ).toHaveCount(0)
@@ -2808,8 +2806,13 @@ test.describe("mocked regression", () => {
         .getByRole("button", { name: "Save requirements", exact: true })
         .click()
       await expect(page.getByRole("status")).toContainText(
-        "Project requirements saved in this draft.",
+        "Saved in this browser tab.",
       )
+      await page.reload()
+      await expect(
+        page.getByRole("textbox", { name: "Project goals", exact: true }),
+      ).toHaveValue("Increase awareness and generate qualified leads.")
+      await page.getByRole("button", { name: "Dismiss draft message" }).click()
       await page.getByRole("button", { name: "Back to packages" }).click()
       await expect(
         page.getByRole("button", { name: "Select Custom plan", exact: true }),
@@ -2893,6 +2896,161 @@ test.describe("mocked regression", () => {
       )
       specialistResponse = "populated"
       await page.getByRole("button", { name: "Retry specialists" }).click()
+      let profileFails = true
+      await page.route("https://portfolio.supabase.co/**", (route) =>
+        route.fulfill({
+          contentType: "image/svg+xml",
+          body: '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400"><rect width="640" height="400" fill="#e8eef8"/><rect x="64" y="56" width="512" height="288" rx="12" fill="#294c96"/></svg>',
+        }),
+      )
+      await page.route(
+        "**/api/services/social-service/specialists/*",
+        async (route) => {
+          const id = new URL(route.request().url()).pathname.split("/").at(-1)
+          if (id === "specialist-1" && profileFails)
+            return route.fulfill({
+              status: 503,
+              json: { error: "Profile temporarily unavailable" },
+            })
+          return route.fulfill({
+            json: {
+              specialist: {
+                id,
+                fullName: id === "specialist-1" ? "Alex Santos" : "Jamie Reyes",
+                position:
+                  id === "specialist-1"
+                    ? "Social Media Specialist"
+                    : "Content Strategist",
+                department: { id: "marketing", name: "Marketing" },
+                bio:
+                  id === "specialist-1"
+                    ? "I plan clear content for small businesses."
+                    : null,
+                imageUrl: null,
+                specialties:
+                  id === "specialist-1"
+                    ? ["Content planning", "Brand communication"]
+                    : [],
+                projects:
+                  id === "specialist-1"
+                    ? [0, 1, 2].map((index) => ({
+                        id: `portfolio-${index}`,
+                        title: `Published work ${index + 1}`,
+                        summary:
+                          "A published portfolio project with a complete creative brief.",
+                        contribution: "Content direction and campaign layouts.",
+                        thumbnailUrl:
+                          index === 0
+                            ? "https://portfolio.supabase.co/storage/v1/object/public/work/preview.svg"
+                            : null,
+                        projectUrl:
+                          index === 0
+                            ? "https://example.com/portfolio/work"
+                            : null,
+                      }))
+                    : [],
+              },
+            },
+          })
+        },
+      )
+      await page
+        .getByRole("button", {
+          name: "View profile for Jamie Reyes",
+          exact: true,
+        })
+        .click()
+      const profileDialog = page.getByRole("dialog", {
+        name: "Specialist profile",
+        exact: true,
+      })
+      await expect(
+        profileDialog.getByText("No featured projects have been added yet."),
+      ).toBeVisible()
+      await profileDialog
+        .getByRole("button", { name: "Close profile", exact: true })
+        .click()
+      await expect(
+        page.getByRole("radio", {
+          name: /Let the department assign a specialist/,
+        }),
+      ).toBeChecked()
+      const profileTrigger = page.getByRole("button", {
+        name: "View profile for Alex Santos",
+        exact: true,
+      })
+      await profileTrigger.click()
+      await expect(
+        profileDialog.getByRole("button", {
+          name: "Choose Alex as preferred specialist",
+        }),
+      ).toBeDisabled()
+      profileFails = false
+      await profileDialog.getByRole("button", { name: "Retry profile" }).click()
+      await expect(
+        profileDialog.getByRole("heading", {
+          name: "Featured projects",
+          exact: true,
+        }),
+      ).toBeVisible()
+      await expect(profileDialog.getByRole("article")).toHaveCount(3)
+      await expect
+        .poll(() =>
+          profileDialog
+            .locator("img")
+            .first()
+            .evaluate((element) => (element as HTMLImageElement).naturalWidth),
+        )
+        .toBeGreaterThan(0)
+      expect(
+        await profileDialog.evaluate(
+          (element) => element.scrollWidth <= element.clientWidth,
+        ),
+      ).toBe(true)
+      await profileDialog.screenshot({
+        path: testInfo.outputPath("specialist-profile.png"),
+      })
+      const projectTrigger = profileDialog.getByRole("button", {
+        name: "View project: Published work 1",
+        exact: true,
+      })
+      await projectTrigger.click()
+      await expect(
+        profileDialog.getByRole("heading", {
+          name: "Published work 1",
+          exact: true,
+        }),
+      ).toBeFocused()
+      await expect(
+        profileDialog.getByText("Content direction and campaign layouts.", {
+          exact: true,
+        }),
+      ).toBeVisible()
+      await expect(
+        profileDialog.getByRole("link", {
+          name: "View project: Published work 1",
+          exact: true,
+        }),
+      ).toHaveAttribute("rel", "noopener noreferrer")
+      await profileDialog
+        .getByRole("button", { name: "Back to profile", exact: true })
+        .click()
+      await expect(projectTrigger).toBeFocused()
+      await page.keyboard.press("Escape")
+      await expect(profileTrigger).toBeFocused()
+      await expect(
+        page.getByRole("radio", {
+          name: /Let the department assign a specialist/,
+        }),
+      ).toBeChecked()
+      await profileTrigger.click()
+      await profileDialog
+        .getByRole("button", {
+          name: "Choose Alex as preferred specialist",
+          exact: true,
+        })
+        .click()
+      await expect(profileDialog).toHaveCount(0)
       await page
         .getByRole("radio", { name: "Prefer Alex Santos", exact: true })
         .check()
@@ -2902,10 +3060,9 @@ test.describe("mocked regression", () => {
         }),
       ).toContainText("Alex Santos")
       await expect(
-        page.getByText(
-          "Subject to availability and Department Manager approval",
-          { exact: true },
-        ),
+        page.getByText("Assignment is confirmed during review", {
+          exact: true,
+        }),
       ).toBeVisible()
       await page.screenshot({ path: testInfo.outputPath("specialist.png") })
       await page
@@ -3046,6 +3203,32 @@ test.describe("mocked regression", () => {
         }),
       ).toBeVisible()
       await expect(page.getByText("request-123", { exact: true })).toBeVisible()
+      await page.evaluate(() =>
+        Object.defineProperty(navigator, "clipboard", {
+          configurable: true,
+          value: {
+            writeText: async (text: string) => {
+              document.body.dataset.copiedReference = text
+            },
+          },
+        }),
+      )
+      await page
+        .getByRole("button", { name: "Copy reference", exact: true })
+        .click()
+      await expect(
+        page.getByText("Reference copied.", { exact: true }),
+      ).toBeVisible()
+      expect(
+        await page.evaluate(() => document.body.dataset.copiedReference),
+      ).toBe("request-123")
+      expect(
+        await page.evaluate(() =>
+          Object.keys(sessionStorage).some((key) =>
+            key.startsWith("nexus.services.draft."),
+          ),
+        ),
+      ).toBe(false)
       await expect(
         page.getByText("Pending review", { exact: true }),
       ).toBeVisible()
