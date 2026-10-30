@@ -1,12 +1,11 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { SearchIcon } from "@/components/layout/icons"
 import { contentClass } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
 import { SearchEmptyState } from "@/components/ui/search-empty-state"
+import { SearchField } from "@/components/ui/search-field"
 import {
   Select,
   SelectContent,
@@ -162,24 +161,17 @@ export function ClientManagementPage() {
         className="@container mt-[18px] min-w-0"
       >
         <div className="flex flex-wrap items-center gap-2.5 pb-4 max-[560px]:flex-col max-[560px]:items-stretch">
-          <label
-            className={`flex h-[34px] w-[260px] min-w-0 items-center gap-2 rounded-lg border border-[#e1e4ea] px-[11px] text-[#52627a] focus-within:outline-2 focus-within:outline-[#294a9b] max-[560px]:h-11 max-[560px]:w-full`}
-          >
-            <SearchIcon width="17" height="17" className="flex-none" />
-            <span className="sr-only">Search clients</span>
-            <Input
-              type="search"
-              value={search}
-              maxLength={100}
-              onChange={(event) => {
-                setAnimateRows(true)
-                setSearch(event.target.value)
-                setPage(1)
-              }}
-              placeholder="Search name or email..."
-              className="h-auto min-w-0 border-0 bg-transparent p-0 text-xs shadow-none placeholder:text-[#52627a] focus-visible:ring-0 md:text-xs"
-            />
-          </label>
+          <SearchField
+            label="Search clients"
+            value={search}
+            maxLength={100}
+            onChange={(event) => {
+              setAnimateRows(true)
+              setSearch(event.target.value)
+              setPage(1)
+            }}
+            placeholder="Search name or email…"
+          />
           <Select
             value={status || "all"}
             onValueChange={(value) => {

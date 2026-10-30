@@ -1,13 +1,13 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { PlusIcon, SearchIcon } from "@/components/layout/icons"
+import { PlusIcon } from "@/components/layout/icons"
 import { contentClass, focusRing } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
-import { Input } from "@/components/ui/input"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
 import { SearchEmptyState } from "@/components/ui/search-empty-state"
+import { SearchField } from "@/components/ui/search-field"
 import {
   Select,
   SelectContent,
@@ -214,16 +214,16 @@ export function EmployeeManagementPage() {
             Maintain employee records, team placement, and employment details.
           </p>
         </div>
-        <Button
+        <button
           type="button"
           className={cn(
-            "inline-flex min-h-[34px] flex-none cursor-pointer items-center justify-center gap-[7px] rounded-lg border border-transparent bg-[#203f8c] px-[13px] text-xs font-semibold whitespace-nowrap text-white transition-colors hover:bg-[#172f70]",
+            "inline-flex min-h-[34px] flex-none cursor-pointer items-center justify-center gap-[7px] rounded-lg border border-transparent bg-[#203f8c] px-[13px] text-xs leading-[1.2] font-semibold whitespace-nowrap text-white transition-[background-color,border-color,color] duration-150 hover:bg-[#172f70] motion-reduce:transition-none",
             focusRing,
           )}
           onClick={() => setFormState({ employee: null })}
         >
-          <PlusIcon width="14" height="14" /> Add employee
-        </Button>
+          <PlusIcon width="14" height="14" /> Create Employee
+        </button>
       </header>
 
       <section
@@ -232,21 +232,16 @@ export function EmployeeManagementPage() {
       >
         <div className="flex items-start justify-between gap-3 pb-4 max-[560px]:flex-col max-[560px]:pb-3">
           <div className="flex min-w-0 gap-[10px] max-[1050px]:w-full max-[560px]:flex-col">
-            <label className="flex h-[34px] w-[260px] min-w-0 items-center gap-2 rounded-lg border border-[#e1e4ea] px-[11px] text-[#7b8ca7] focus-within:bg-[#f8fafd] max-[1050px]:w-[min(350px,100%)] max-[1050px]:flex-1 max-[560px]:w-full max-[560px]:flex-none">
-              <SearchIcon width="17" height="17" className="flex-none" />
-              <span className="sr-only">Search employees</span>
-              <Input
-                type="search"
-                className="h-auto w-full min-w-0 border-0 bg-transparent p-0 text-xs text-foreground shadow-none outline-none placeholder:text-[#8a9ab1] focus-visible:ring-0 md:text-xs"
-                placeholder="Search name, ID, email…"
-                value={search}
-                maxLength={100}
-                onChange={(event) => {
-                  setAnimateRows(true)
-                  setSearch(event.target.value)
-                }}
-              />
-            </label>
+            <SearchField
+              label="Search employees"
+              placeholder="Search name, ID, email…"
+              value={search}
+              maxLength={100}
+              onChange={(event) => {
+                setAnimateRows(true)
+                setSearch(event.target.value)
+              }}
+            />
             <Select
               value={departmentId || "all"}
               onValueChange={(value) =>

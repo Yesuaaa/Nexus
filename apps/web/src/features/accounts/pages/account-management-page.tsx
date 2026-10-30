@@ -18,6 +18,7 @@ import {
 import { DepartmentPill } from "@/components/ui/department-pill.tsx"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
 import { Pill } from "@/components/ui/pill"
+import { SearchField } from "@/components/ui/search-field"
 import { TableSortButton } from "@/components/ui/table-sort-button"
 import { ApiError, clearToken } from "@/features/auth/api/auth-api"
 import type { Account } from "@/features/auth/model/types"
@@ -682,29 +683,14 @@ export function AccountManagementPage() {
       >
         <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 pb-4 max-[560px]:pb-3">
           <div className="flex min-w-0 gap-[10px] max-[560px]:flex-col">
-            <label className="flex h-[34px] w-[260px] min-w-0 items-center gap-2 rounded-lg border border-[#e1e4ea] px-[11px] text-[#7b8ca7] focus-within:bg-[#f8fafd] max-[1050px]:w-[min(350px,100%)] max-[1050px]:flex-1 max-[560px]:w-full max-[560px]:flex-none">
-              <span className="sr-only">Search accounts</span>
-              <svg
-                viewBox="0 0 24 24"
-                width="17"
-                height="17"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                aria-hidden="true"
-              >
-                <circle cx="11" cy="11" r="7" />
-                <path d="m16 16 5 5" />
-              </svg>
-              <input
-                className="w-full min-w-0 border-0 bg-transparent text-foreground outline-none placeholder:text-[#8a9ab1]"
-                value={search}
-                onChange={(event) => updateSearch(event.target.value)}
-                placeholder="Search name or email"
-                maxLength={100}
-                disabled={savingAccess || statusSaving || deleting}
-              />
-            </label>
+            <SearchField
+              label="Search accounts"
+              value={search}
+              onChange={(event) => updateSearch(event.target.value)}
+              placeholder="Search name or email"
+              maxLength={100}
+              disabled={savingAccess || statusSaving || deleting}
+            />
             <AccountDropdown
               className="max-[560px]:w-full"
               triggerClassName="h-[34px] min-w-[132px] border-[#e1e4ea] max-[560px]:min-w-0"

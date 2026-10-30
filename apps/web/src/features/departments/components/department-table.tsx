@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react"
 import { AnimatePresence } from "framer-motion"
-import { SearchIcon } from "@/components/layout/icons"
 import { focusRing } from "@/components/layout/styles"
 import { AnimatedGridRow } from "@/components/ui/animated-data-row"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
 import { SearchEmptyState } from "@/components/ui/search-empty-state"
+import { SearchField } from "@/components/ui/search-field"
 import {
   TableSortButton,
   type SortDirection,
@@ -101,20 +101,16 @@ export function DepartmentTable({
     <>
       <div className="flex items-center pb-4 max-[560px]:pb-3">
         <div className="flex min-w-0 gap-[10px] max-[1050px]:w-full max-[560px]:flex-col">
-          <label className="flex h-[34px] w-[260px] min-w-0 items-center gap-2 rounded-lg border border-[#e1e4ea] px-[11px] text-[#7b8ca7] focus-within:bg-[#f8fafd] max-[1050px]:w-[min(350px,100%)] max-[1050px]:flex-1 max-[560px]:w-full max-[560px]:flex-none">
-            <SearchIcon width="17" height="17" className="flex-none" />
-            <span className="sr-only">Search departments</span>
-            <input
-              type="search"
-              className="w-full min-w-0 border-0 bg-transparent text-foreground outline-none placeholder:text-[#8a9ab1]"
-              placeholder="Search departments..."
-              value={search}
-              onChange={(event) => {
-                setAnimateRows(true)
-                setSearch(event.target.value)
-              }}
-            />
-          </label>
+          <SearchField
+            label="Search departments"
+            placeholder="Search departments…"
+            value={search}
+            maxLength={100}
+            onChange={(event) => {
+              setAnimateRows(true)
+              setSearch(event.target.value)
+            }}
+          />
         </div>
       </div>
 
