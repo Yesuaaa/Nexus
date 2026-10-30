@@ -7,7 +7,7 @@
     "dev": "prisma generate && tsx watch src/index.ts",
     "build": "prisma generate && node node_modules/typescript/lib/tsc.js",
     "typecheck": "prisma generate && node node_modules/typescript/lib/tsc.js --noEmit",
-    "test": "prisma generate && node node_modules/typescript/lib/tsc.js && node --test dist/app.test.js dist/features/auth/auth.test.js dist/features/auth/employee-permissions.test.js dist/features/users/role-policy.test.js dist/features/users/account-status.test.js dist/features/employees/validation.test.js dist/employee-integration.test.js dist/features/services/validation.test.js dist/service-specialists.test.js dist/client-integration.test.js",
+    "test": "prisma generate && node node_modules/typescript/lib/tsc.js && node --test dist/app.test.js dist/features/auth/auth.test.js dist/features/auth/employee-permissions.test.js dist/features/users/role-policy.test.js dist/features/users/account-status.test.js dist/features/users/account-password.test.js dist/features/users/account-restore.test.js dist/features/employees/validation.test.js dist/employee-integration.test.js dist/features/services/validation.test.js dist/client-integration.test.js",
     "start": "node dist/index.js",
     "db:generate": "prisma generate",
     "db:seed": "prisma generate && prisma db seed",

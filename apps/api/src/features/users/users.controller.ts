@@ -12,6 +12,26 @@ export const usersRouter = Router()
 usersRouter.use(requireAuth)
 usersRouter.use(requireRole(Role.SUPERADMIN))
 
+usersRouter.post(
+  "/:id/password",
+  requirePermission(Permission.ACCOUNTS_RESET_PASSWORD),
+  async (request, response, next) => {
+    try {
+      await usersService.changePassword(
+        request.auth!.user,
+        String(request.params.id),
+        request.body?.newPassword,
+      )
+      return response.status(204).send()
+    } catch (error) {
+      if (error instanceof UsersError) {
+        return response.status(error.status).json({ error: error.message })
+      }
+      next(error)
+    }
+  },
+)
+
 usersRouter.patch(
   "/:id/status",
   requirePermission(Permission.ACCOUNTS_STATUS_BASIC),
@@ -21,6 +41,25 @@ usersRouter.patch(
         request.auth!.user,
         String(request.params.id),
         request.body?.isActive,
+      )
+      return response.json(result)
+    } catch (error) {
+      if (error instanceof UsersError) {
+        return response.status(error.status).json({ error: error.message })
+      }
+      next(error)
+    }
+  },
+)
+
+usersRouter.post(
+  "/:id/restore",
+  requirePermission(Permission.ACCOUNTS_STATUS_BASIC),
+  async (request, response, next) => {
+    try {
+      const result = await usersService.restoreUser(
+        request.auth!.user,
+        String(request.params.id),
       )
       return response.json(result)
     } catch (error) {
