@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { createHash, randomUUID } from "node:crypto"
+import { randomBytes, randomUUID } from "node:crypto"
 import { readdir, readFile } from "node:fs/promises"
 import type { Server } from "node:http"
 import type { AddressInfo } from "node:net"
@@ -8,6 +8,7 @@ import { PGlite } from "@electric-sql/pglite"
 import { PGLiteSocketServer } from "@electric-sql/pglite-socket"
 import { createApp } from "./app.js"
 import { getPrisma } from "./lib/db.js"
+import { issueSession } from "./features/auth/auth.service.js"
 
 test(
   "client specialist choices are scoped to active service departments and expose only directory details",
@@ -17,7 +18,9 @@ test(
       DATABASE_URL: process.env.DATABASE_URL,
       DIRECT_URL: process.env.DIRECT_URL,
       DATABASE_POOL_MAX: process.env.DATABASE_POOL_MAX,
+      JWT_SECRET: process.env.JWT_SECRET,
     }
+    process.env.JWT_SECRET = randomBytes(32).toString("base64url")
     const database = new PGlite()
     const cleanup: {
       socket?: PGLiteSocketServer
@@ -65,16 +68,7 @@ test(
         role: "USER",
       },
     })
-    const token = createHash("sha256")
-      .update("specialist-client")
-      .digest("base64url")
-    await prisma.session.create({
-      data: {
-        userId: client.id,
-        tokenHash: createHash("sha256").update(token).digest("hex"),
-        expiresAt: new Date(Date.now() + 120_000),
-      },
-    })
+    const { token } = await issueSession(client)
     const marketing = await prisma.department.create({
       data: { name: "Marketing" },
     })
@@ -382,16 +376,7 @@ test(
         const staff = await prisma.user.findUniqueOrThrow({
           where: { email: "staff-0@example.com" },
         })
-        const staffToken = createHash("sha256")
-          .update("staff-request-attempt")
-          .digest("base64url")
-        await prisma.session.create({
-          data: {
-            userId: staff.id,
-            tokenHash: createHash("sha256").update(staffToken).digest("hex"),
-            expiresAt: new Date(Date.now() + 60_000),
-          },
-        })
+        const { token: staffToken } = await issueSession(staff)
         assert.equal(
           (await post(input, { authorization: `Bearer ${staffToken}` })).status,
           403,

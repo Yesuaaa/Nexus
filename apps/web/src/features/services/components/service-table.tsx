@@ -7,7 +7,7 @@ import { AnimatedGridRow } from "@/components/ui/animated-data-row"
 import { DepartmentPill } from "@/components/ui/department-pill.tsx"
 import { SearchEmptyState } from "@/components/ui/search-empty-state"
 import { SearchField } from "@/components/ui/search-field"
-import { Dropdown } from "@/components/ui/dropdown"
+import { Dropdown, useExclusiveMenu } from "@/components/ui/dropdown"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -86,8 +86,16 @@ function ServiceActions({
   onStatus: (service: Service) => void
   onDelete: (service: Service) => void
 }) {
+  const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const pendingAction = useRef<"status" | "delete" | null>(null)
+  const closedByOther = useRef(false)
+
+  // Close this menu whenever any other menu opens.
+  useExclusiveMenu(open, () => {
+    closedByOther.current = true
+    setOpen(false)
+  })
 
   return (
     <div className="flex items-center gap-2">
@@ -116,8 +124,13 @@ function ServiceActions({
       )}
       {canManage && (
         <DropdownMenu
-          onOpenChange={(open) => {
-            if (open) pendingAction.current = null
+          open={open}
+          onOpenChange={(next) => {
+            if (next) {
+              pendingAction.current = null
+              closedByOther.current = false
+            }
+            setOpen(next)
           }}
         >
           <DropdownMenuTrigger asChild>
@@ -137,6 +150,12 @@ function ServiceActions({
             collisionPadding={24}
             className={cn(dropdownMenuClass, "w-48 text-xs")}
             onCloseAutoFocus={(event) => {
+              // Another menu took over: don't pull focus back to this trigger.
+              if (closedByOther.current) {
+                closedByOther.current = false
+                event.preventDefault()
+                return
+              }
               const action = pendingAction.current
               if (!action) return
               event.preventDefault()

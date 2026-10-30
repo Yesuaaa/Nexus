@@ -68,10 +68,24 @@ export function changeAccountStatus(id: string, isActive: boolean) {
   )
 }
 
+export function changeAccountPassword(id: string, newPassword: string) {
+  return apiRequest<void>(`/api/users/${encodeURIComponent(id)}/password`, {
+    method: "POST",
+    body: JSON.stringify({ newPassword }),
+  })
+}
+
 export async function moveAccountToTrash(id: string): Promise<void> {
   await apiRequest(`/api/users/${encodeURIComponent(id)}`, {
     method: "DELETE",
   })
+}
+
+export function restoreAccount(id: string) {
+  return apiRequest<{ user: Account }>(
+    `/api/users/${encodeURIComponent(id)}/restore`,
+    { method: "POST" },
+  )
 }
 
 export async function permanentlyDeleteAccount(id: string): Promise<void> {

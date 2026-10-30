@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -12,6 +13,31 @@ import { CheckIcon } from "@/components/ui/check-icon"
 import { dropdownItemClass, dropdownMenuClass } from "./dropdown-styles"
 import { cn } from "@/lib/utils"
 import { focusRing } from "@/components/layout/styles"
+
+const OPEN_EVENT = "exclusive-menu-open"
+
+/** Closes this menu whenever any other menu using the hook opens. */
+export function useExclusiveMenu(open: boolean, close: () => void) {
+  const id = useId()
+  const closeRef = useRef(close)
+
+  useEffect(() => {
+    closeRef.current = close
+  })
+
+  useEffect(() => {
+    if (!open) return
+
+    window.dispatchEvent(new CustomEvent(OPEN_EVENT, { detail: id }))
+
+    function onOtherOpened(event: Event) {
+      if ((event as CustomEvent<string>).detail !== id) closeRef.current()
+    }
+
+    window.addEventListener(OPEN_EVENT, onOtherOpened)
+    return () => window.removeEventListener(OPEN_EVENT, onOtherOpened)
+  }, [open, id])
+}
 
 export type DropdownOption<T extends string> = {
   value: T
@@ -40,6 +66,7 @@ export function Dropdown<T extends string>({
   menuClassName?: string
 }) {
   const [open, setOpen] = useState(false)
+  useExclusiveMenu(open, () => setOpen(false))
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)

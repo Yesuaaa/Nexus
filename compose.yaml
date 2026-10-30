@@ -5,6 +5,7 @@ services:
       target: api-dev
     environment:
       PORT: "3001"
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET to a random base64url key of at least 32 bytes}
       DATABASE_URL: ${DATABASE_URL:-}
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:5173}
       SUPABASE_URL: ${SUPABASE_URL:-}

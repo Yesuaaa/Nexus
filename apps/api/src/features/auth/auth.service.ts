@@ -6,6 +6,7 @@ import { clearFailures, loginAllowed, recordFailure } from "./auth.limiter.js"
 import { hashPassword, validPassword, verifyPassword } from "./auth.password.js"
 import { authRepository } from "./auth.repository.js"
 import { normalizedEmail, validRegistrationProfile } from "./auth.schema.js"
+import { signAccessToken, jwtKey } from "./auth.jwt.js"
 
 export const SESSION_DAYS = 7
 
@@ -24,20 +25,41 @@ export function tokenHash(token: string): string {
 }
 
 export async function issueSession(user: User) {
-  const token = randomBytes(32).toString("base64url")
-  await authRepository.createSession({
-    tokenHash: tokenHash(token),
+  jwtKey()
+  const refreshToken = randomBytes(32).toString("base64url")
+  const session = await authRepository.createSession({
+    tokenHash: tokenHash(refreshToken),
     userId: user.id,
     expiresAt: new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000),
   })
   return {
-    token,
+    ...(await signAccessToken(user.id, session.id, session.expiresAt)),
+    refreshToken,
     user: publicUser(user),
-    expiresIn: SESSION_DAYS * 24 * 60 * 60,
   }
 }
 
 export const authService = {
+  async refresh(refreshToken: unknown) {
+    if (!authRepository.isDatabaseAvailable())
+      throw new AuthError(503, "Database unavailable")
+    if (
+      typeof refreshToken !== "string" ||
+      !/^[A-Za-z0-9_-]{43}$/.test(refreshToken)
+    )
+      throw new AuthError(401, "Invalid or expired session")
+    jwtKey()
+    const nextToken = randomBytes(32).toString("base64url")
+    const session = await authRepository.rotateRefreshToken(
+      tokenHash(refreshToken),
+      tokenHash(nextToken),
+    )
+    if (!session) throw new AuthError(401, "Invalid or expired session")
+    return {
+      ...(await signAccessToken(session.userId, session.id, session.expiresAt)),
+      refreshToken: nextToken,
+    }
+  },
   async register(input: {
     email?: unknown
     password?: unknown

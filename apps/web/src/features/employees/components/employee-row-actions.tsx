@@ -9,6 +9,7 @@ import {
   dropdownItemClass,
   dropdownMenuClass,
 } from "@/components/ui/dropdown-styles"
+import { useExclusiveMenu } from "@/components/ui/dropdown"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import type { Employee } from "../api/employees-api"
@@ -48,6 +49,9 @@ export function EmployeeRowActions({
     | "permanent"
     | null
   >(null)
+
+  // Close this menu whenever any other menu opens.
+  useExclusiveMenu(open, () => onOpenChange(false))
 
   return (
     <div className="flex items-center gap-2">
@@ -154,7 +158,6 @@ export function EmployeeRowActions({
             const action = nextAction.current
             if (!action && restoreFocus.current) triggerRef.current?.focus()
             if (action) {
-              event.preventDefault()
               nextAction.current = null
               triggerRef.current?.focus()
               if (action === "status") onChangeStatus()

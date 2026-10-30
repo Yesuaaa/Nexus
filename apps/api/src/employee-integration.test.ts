@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { createHash } from "node:crypto"
+import { randomBytes } from "node:crypto"
 import { readdir, readFile } from "node:fs/promises"
 import type { Server } from "node:http"
 import type { AddressInfo } from "node:net"
@@ -9,6 +9,7 @@ import { PGLiteSocketServer } from "@electric-sql/pglite-socket"
 import { createApp } from "./app.js"
 import { setServiceImageStorageForTests } from "./features/services/service-image-storage.js"
 import { getPrisma } from "./lib/db.js"
+import { issueSession } from "./features/auth/auth.service.js"
 
 type Payload = {
   employee: { id: string; hasAccount?: boolean }
@@ -30,6 +31,8 @@ test(
     const originalUrl = process.env.DATABASE_URL
     const originalDirectUrl = process.env.DIRECT_URL
     const originalPoolMax = process.env.DATABASE_POOL_MAX
+    const originalJwtSecret = process.env.JWT_SECRET
+    process.env.JWT_SECRET = randomBytes(32).toString("base64url")
     const storedServiceImages = new Set<string>()
     let uploadedImageSequence = 0
     setServiceImageStorageForTests({
@@ -67,6 +70,8 @@ test(
       else process.env.DIRECT_URL = originalDirectUrl
       if (originalPoolMax === undefined) delete process.env.DATABASE_POOL_MAX
       else process.env.DATABASE_POOL_MAX = originalPoolMax
+      if (originalJwtSecret === undefined) delete process.env.JWT_SECRET
+      else process.env.JWT_SECRET = originalJwtSecret
     })
     await database.waitReady
     const migrations = new URL("../prisma/migrations/", import.meta.url)
@@ -124,15 +129,8 @@ test(
     cleanup.prisma = prisma
     const tokens = new Map<string, string>()
     for (const id of ["admin", "superadmin", "staff", "user"]) {
-      const token = createHash("sha256").update(id).digest("base64url")
-      tokens.set(id, token)
-      await prisma.session.create({
-        data: {
-          userId: id,
-          tokenHash: createHash("sha256").update(token).digest("hex"),
-          expiresAt: new Date(Date.now() + 60_000),
-        },
-      })
+      const user = await prisma.user.findUniqueOrThrow({ where: { id } })
+      tokens.set(id, (await issueSession(user)).token)
     }
     const server = createApp().listen(0, "127.0.0.1")
     cleanup.server = server
