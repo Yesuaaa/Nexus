@@ -34,9 +34,11 @@ enum EmployeeStatus {
 }
 
 enum ServiceRequestStatus {
-  PENDING
-  IN_PROGRESS
-  COMPLETED
+  SUBMITTED
+  UNDER_REVIEW
+  AWAITING_CLIENT_INFO
+  READY_FOR_QUOTATION
+  CLOSED
   CANCELLED
 }
 
@@ -207,7 +209,7 @@ model ServiceRequest {
   projectRequirements     String               @default("")
   expectedTimeline        String               @default("") @db.VarChar(300)
   additionalDetails       String?
-  status                  ServiceRequestStatus @default(PENDING)
+  status                  ServiceRequestStatus @default(SUBMITTED)
   pricingModel            PricingModel?
   agreedPrice             Decimal?             @db.Decimal(12, 2)
   quotedPrice             Decimal?             @db.Decimal(12, 2)

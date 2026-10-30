@@ -247,12 +247,12 @@ test(
         const receipt = (await submitted.json()) as {
           serviceRequest: { id: string; status: string }
         }
-        assert.equal(receipt.serviceRequest.status, "PENDING")
+        assert.equal(receipt.serviceRequest.status, "SUBMITTED")
         const record = await prisma.serviceRequest.findUniqueOrThrow({
           where: { id: receipt.serviceRequest.id },
         })
         assert.equal(record.clientId, client.id)
-        assert.equal(record.status, "PENDING")
+        assert.equal(record.status, "SUBMITTED")
         assert.equal(record.projectGoals, "Grow our audience")
         assert.equal(record.projectRequirements, "Create a content calendar")
         assert.equal(record.expectedTimeline, "Within six weeks")

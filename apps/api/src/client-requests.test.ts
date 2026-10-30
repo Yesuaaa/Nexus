@@ -6,9 +6,50 @@ import { test } from "node:test"
 import { PGlite } from "@electric-sql/pglite"
 import { PGLiteSocketServer } from "@electric-sql/pglite-socket"
 import { createApp } from "./app.js"
-import { Role, type User } from "./generated/prisma/client.js"
+import {
+  Role,
+  ServiceRequestStatus,
+  type User,
+} from "./generated/prisma/client.js"
 import { getPrisma } from "./lib/db.js"
 import { issueSession } from "./features/auth/auth.service.js"
+
+test("request lifecycle migration preserves legacy records and supports already upgraded databases", async () => {
+  const db = new PGlite()
+  try {
+    await db.exec(`
+      CREATE TYPE "ServiceRequestStatus" AS ENUM ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED');
+      CREATE TABLE requests (id integer, status "ServiceRequestStatus" DEFAULT 'PENDING');
+      INSERT INTO requests VALUES (1, 'PENDING'), (2, 'IN_PROGRESS'), (3, 'COMPLETED'), (4, 'CANCELLED');
+    `)
+    const sql = await readFile(
+      new URL(
+        "../prisma/migrations/20261030220000_align_service_request_statuses/migration.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    )
+    await db.exec(sql)
+    await db.exec(sql)
+    await db.exec("INSERT INTO requests (id) VALUES (5)")
+    const result = await db.query<{ status: string }>(
+      "SELECT status::text FROM requests ORDER BY id",
+    )
+    assert.deepEqual(
+      result.rows.map((row) => row.status),
+      ["SUBMITTED", "UNDER_REVIEW", "CLOSED", "CANCELLED", "SUBMITTED"],
+    )
+    const statuses = await db.query<{ enumlabel: string }>(
+      "SELECT e.enumlabel FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid WHERE t.typname = 'ServiceRequestStatus'",
+    )
+    assert.deepEqual(
+      statuses.rows.map((row) => row.enumlabel).sort(),
+      Object.values(ServiceRequestStatus).sort(),
+    )
+  } finally {
+    await db.close()
+  }
+})
 
 test(
   "Client portal service request submission and dynamic requirements validation",
@@ -350,7 +391,7 @@ test(
         ).serviceRequest
         requestId = receipt.id
         assert.match(receipt.referenceNumber, /^SR-[A-F0-9-]{36}$/)
-        assert.equal(receipt.status, "PENDING")
+        assert.equal(receipt.status, "SUBMITTED")
         const record = await prisma.serviceRequest.findUniqueOrThrow({
           where: { id: receipt.id },
         })
@@ -473,7 +514,7 @@ test(
           "page=abc",
           "status=BAD",
           "sortOrder=bad",
-          "status=PENDING&status=COMPLETED",
+          "status=SUBMITTED&status=CLOSED",
           "search=" + "x".repeat(101),
         ])
           assert.equal(
@@ -486,7 +527,7 @@ test(
               clientId: users.get("USER")!.id,
               serviceId: activeService.id,
               title: `Historical request ${index}`,
-              status: "COMPLETED",
+              status: "CLOSED",
               createdAt: new Date(2026, 0, index + 1),
             },
           })
@@ -510,7 +551,7 @@ test(
         )
         const filtered = (await (
           await request(
-            "/service-requests?status=COMPLETED&search=Historical%20request%201&sortOrder=asc",
+            "/service-requests?status=CLOSED&search=Historical%20request%201&sortOrder=asc",
           )
         ).json()) as {
           requests: { title: string }[]
@@ -527,6 +568,48 @@ test(
           await request("/service-requests?search=another-client-secret")
         ).json()) as { total: number }
         assert.equal(noMatch.total, 0)
+      },
+    )
+    await t.test(
+      "history reads and filters every manager lifecycle status with accurate totals",
+      async () => {
+        for (const status of Object.values(ServiceRequestStatus)) {
+          await prisma.serviceRequest.create({
+            data: {
+              clientId: clientB.id,
+              serviceId: activeService.id,
+              title: `Lifecycle ${status}`,
+              status,
+            },
+          })
+        }
+        for (const status of Object.values(ServiceRequestStatus)) {
+          const response = await request(
+            `/service-requests?status=${status}`,
+            "CLIENT_B",
+          )
+          assert.equal(response.status, 200)
+          const history = (await response.json()) as {
+            requests: { status: string }[]
+            total: number
+            summary: {
+              total: number
+              pending: number
+              inProgress: number
+              completed: number
+              cancelled: number
+            }
+          }
+          assert.equal(history.total, status === "SUBMITTED" ? 2 : 1)
+          assert.ok(history.requests.every((row) => row.status === status))
+          assert.deepEqual(history.summary, {
+            total: 7,
+            pending: 2,
+            inProgress: 3,
+            completed: 1,
+            cancelled: 1,
+          })
+        }
       },
     )
   },

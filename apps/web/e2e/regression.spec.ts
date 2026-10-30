@@ -3006,7 +3006,7 @@ test.describe("mocked regression", () => {
             json: {
               serviceRequest: {
                 id: "request-123",
-                status: "PENDING",
+                status: "SUBMITTED",
                 createdAt: timestamp,
               },
             },
@@ -3211,7 +3211,7 @@ test.describe("mocked regression", () => {
           json: {
             serviceRequest: {
               id: "retried-request",
-              status: "PENDING",
+              status: "SUBMITTED",
               createdAt: "2026-10-30T00:00:00.000Z",
             },
           },
@@ -3300,7 +3300,7 @@ test.describe("mocked regression", () => {
           json: {
             serviceRequest: {
               id: `request-${submissions.length}`,
-              status: "PENDING",
+              status: "SUBMITTED",
               createdAt: "2026-10-30T00:00:00.000Z",
             },
           },
