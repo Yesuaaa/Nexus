@@ -5,7 +5,7 @@ import { validateEmployeeInput } from "./employees.schema.js"
 test("employee input requires every form field and normalizes submitted values", () => {
   const result = validateEmployeeInput(
     {
-      employeeId: " EMP-000042 ",
+      employeeId: " EXP-000042 ",
       fullName: "  Ada Lovelace  ",
       email: " ADA@EXAMPLE.COM ",
       contactNumber: " 09123456789 ",
@@ -21,7 +21,7 @@ test("employee input requires every form field and normalizes submitted values",
 
   assert.deepEqual(result, {
     value: {
-      employeeId: "EMP-000042",
+      employeeId: "EXP-000042",
       fullName: "Ada Lovelace",
       email: "ada@example.com",
       contactNumber: "09123456789",
@@ -56,7 +56,7 @@ test("employee input rejects an invalid employment type and malformed email", ()
 test("employee identity fields match registration and account creation rules", () => {
   const accepted = validateEmployeeInput(
     {
-      employeeId: "EMP-1",
+      employeeId: "EXP-1",
       fullName: "María O’Neil-Santos Jr.",
       email: "maria@example.com.ph",
       contactNumber: "08123456789",
@@ -88,7 +88,7 @@ test("employee identity fields match registration and account creation rules", (
 test("employee IDs accept the 40-character boundary and only supported characters", () => {
   const accepted = validateEmployeeInput(
     {
-      employeeId: `A${"b".repeat(39)}`,
+      employeeId: `EXP-${"b".repeat(36)}`,
       fullName: "Valid Person",
       email: "valid@example.com",
       contactNumber: "09123456789",

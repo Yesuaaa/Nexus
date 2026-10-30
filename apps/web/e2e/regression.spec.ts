@@ -1121,11 +1121,11 @@ test.describe("mocked regression", () => {
       .getByRole("button", { name: "More actions for Alex Employee" })
       .click()
     await expect(
-      page.getByRole("menuitem", { name: "Deactivate login" }),
+      page.getByRole("menuitem", { name: "Deactivate account" }),
     ).toBeVisible()
     await expect(
-      page.getByRole("menuitem", { name: "Delete login account" }),
-    ).toHaveCount(0)
+      page.getByRole("menuitem", { name: "Delete account", exact: true }),
+    ).toBeEnabled()
     await page.keyboard.press("Escape")
     await page.getByPlaceholder("Search name, ID, email…").fill("EMP-001")
     await expect(page.getByText("Alex Employee", { exact: true })).toBeVisible()

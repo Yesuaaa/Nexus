@@ -87,7 +87,10 @@ export function EmployeeTable({
   onView: (employee: Employee) => void
   onEdit: (employee: Employee) => void
   onChangeStatus: (employee: Employee) => void
-  onManageLogin: (employee: Employee) => void
+  onManageLogin: (
+    employee: Employee,
+    action: "create" | "deactivate" | "reactivate" | "delete",
+  ) => void
   onManageDepartment?: (departmentId: string) => void
 }) {
   const initialLoading = loading && employees.length === 0
@@ -160,12 +163,12 @@ export function EmployeeTable({
               <div
                 role="cell"
                 className="min-w-0 truncate font-medium text-[#34445e] @max-[1000px]:col-start-1 @max-[1000px]:row-start-1"
-                title={employee.employeeId}
+                title={employee.employeeId || "Not set"}
               >
                 <span className="hidden text-[#738096] @max-[1000px]:inline">
                   ID{" "}
                 </span>
-                {employee.employeeId}
+                {employee.employeeId || "Not set"}
               </div>
               <div
                 role="cell"
@@ -251,7 +254,9 @@ export function EmployeeTable({
                 <span className="hidden text-[#738096] @max-[1000px]:inline">
                   Type{" "}
                 </span>
-                {typeNames[employee.employmentType]}
+                {employee.employmentType
+                  ? typeNames[employee.employmentType]
+                  : "Not set"}
               </div>
               <div
                 role="cell"
@@ -264,7 +269,11 @@ export function EmployeeTable({
                 role="cell"
                 className="@max-[1000px]:col-start-2 @max-[1000px]:row-start-1 @max-[1000px]:justify-self-end"
               >
-                <StatusPill status={employee.status} />
+                {employee.status ? (
+                  <StatusPill status={employee.status} />
+                ) : (
+                  <span className="text-[#738096]">Not set</span>
+                )}
               </div>
               <div
                 role="cell"
@@ -276,7 +285,7 @@ export function EmployeeTable({
                   onView={() => onView(employee)}
                   onEdit={() => onEdit(employee)}
                   onChangeStatus={() => onChangeStatus(employee)}
-                  onManageLogin={() => onManageLogin(employee)}
+                  onManageLogin={(action) => onManageLogin(employee, action)}
                 />
               </div>
             </>

@@ -10,7 +10,7 @@ Employee Management adds `/employees` to the existing Admin portal. Only the `AD
 
 The directory uses the existing EXP admin canvas, Inter typography, navy actions, compact tables, and shadcn/Radix components. These choices keep the page consistent with Account Management and Department Management. Motion is limited to the existing dialog, menu, and drawer transitions.
 
-Admins can search, filter, and page through employee records; add or edit employment details; view an employee drawer; and update employment status. Adding an employee creates an active Staff portal account in the same transaction. Older employee-only records can be provisioned from Edit employee by supplying a password. Employee Management does not expose arbitrary account linking or unlinking.
+Admins can search, filter, and page through employee records; add or edit employment details; view an employee drawer; and update employment status. Adding an employee creates an active Staff portal account in the same transaction. The directory is based on undeleted Admin and Staff accounts. Accounts without a linked HR record appear with Not set employment fields; editing them opens Complete employee details and creates only the HR profile. Orphan employee records stay stored but do not appear. Editing employment details never accepts a password. Employee Management does not expose arbitrary account linking or unlinking.
 
 The Department Management Employees and Teams drawer assigns people to departments and teams without changing portal-account associations or access. Portal-user provisioning and employee synchronization remain managed by their existing flows.
 
@@ -18,18 +18,18 @@ The Department Management Employees and Teams drawer assigns people to departmen
 
 Employees have their own employee ID, personal information, department, position, employment type, status, required start date, and optional team. Employment status is independent of account activation and does not grant permissions. New employee accounts use the Staff role and mirror the employee's name, email, contact number, position, department, and team.
 
-Department and team assignments are validated together. Existing portal-user synchronization retains login identity, password, role, and activation state while mirroring department, team, and position fields for existing account views. Department heads and team leads must be reassigned before an update that would leave them without the required assignment.
+Department and team assignments are validated together. Profile edits mirror name, email, contact number, department, team, and position into the linked account while retaining its ID, password, role, and activation state. Department heads and team leads must be reassigned before an update that would leave them without the required assignment.
 
 ## Validation
 
 The form shows an error after a field loses focus or when submission focuses the first invalid field. A reserved message line keeps the layout steady. The API enforces the same rules:
 
-- Employee ID is required, 2 to 40 characters, and limited to letters, numbers, hyphens, and underscores.
+- Employee ID is required, starts with EXP-, and is limited to 40 characters using letters, numbers, hyphens, and underscores. The form fixes the prefix and allows editing the suffix. Automatically provisioned employees also receive EXP- IDs. Existing records are not bulk-renumbered.
 - Full name is required, 2 to 100 characters, and accepts Unicode letters, spaces, hyphens, apostrophes, and periods.
 - Email is required, must be valid, and must end in `.com` or `.ph`; contact number is required, must have 11 digits, and start with `08` or `09`.
 - Position and start date are required. Position is limited to 100 characters and the start date must be a real calendar date.
 - Employment type and department are required. Team requires an explicit team selection or the `No team` option.
-- A new employee, or an older employee without an account, requires a password and confirmation. Passwords require at least 12 characters with uppercase, lowercase, number, and special character.
+- Adding an employee or creating a login through the separate modal requires a password and confirmation. Both password fields have Show/Hide buttons. Passwords require at least 12 characters with uppercase, lowercase, number, and special character.
 
 Employee and account creation is atomic. A duplicate employee ID or portal-account email rolls back both records. Matching email alone is never used to attach an existing account.
 
@@ -51,13 +51,13 @@ Employee form validation follows registration's interaction pattern: submitting 
 
 Migration `20261026110000_temporary_department_head_coverage` adds the handoff tracking fields. It was applied to the configured Supabase database on 2026-10-26, and Prisma confirmed the schema was up to date afterward.
 
-## Update — 2026-10-26: Login account retirement
+## Update — 2026-10-30: Login lifecycle
 
-Employee login removal uses two explicit steps. An active login must first be deactivated, which immediately revokes its sessions and prevents further sign-in. The row action then changes to **Delete login account**. Deleting the login retires its credentials and removes it from Account Management without deleting the employee record or changing department, team, position, employment, department-head, or team-lead assignments.
+Edit employee updates only HR/profile details and never creates or changes credentials. The separate Create login account modal calls POST /api/employees/:id/account and only provisions an employee without an existing login. Existing passwords cannot be reset from Employee Management.
 
-The retained identity row preserves assignment relationships but cannot authenticate and is not returned by account-directory queries. Editing an employee with a retired login presents the password fields again; saving a new valid password restores the same login identity and assignments rather than creating duplicates.
+Inactive logins offer Reactivate login and Delete login account. Reactivation uses PATCH /api/employees/:id/account/status with isActive=true and retains the existing password. Deactivation revokes sessions without changing employment status.
 
-Migration `20261026120000_soft_delete_login_accounts` adds the login-retirement timestamp. It was applied to the configured Supabase database on 2026-10-26, and Prisma confirmed the schema was up to date afterward.
+Deleting a login permanently deletes its User row and sessions. The employee HR record, department, team, and position remain; the userId becomes null and account-based leadership links are cleared by the existing foreign keys. A new login may then be created with a new identity. No live accounts are removed by this implementation; deletion happens only through a confirmed action. Existing retired rows are not bulk-purged.
 
 ## Database rollout
 
@@ -68,3 +68,11 @@ Generating the Prisma client alone does not apply migrations. See the [Prisma gu
 ## Verification
 
 The earlier Employee Management implementation passed the API suite (29 tests), web unit suite (11 tests), production web build, TypeScript checks, and browser checks for employee form validation and creation, the directory toolbar, and mobile layout. After removing Employee Management account controls, API and web TypeScript checks, targeted ESLint, and `git diff --check` passed. Test suites were not rerun for this update.
+
+The row menu keeps Change status for employment status and separate Deactivate account / Reactivate account actions for sign-in access. Delete account is available for both active and inactive logins, with a confirmation before permanent deletion. It is disabled only when the employee has no account.
+
+## Account-based directory
+
+GET /api/employees starts from User records with role ADMIN or STAFF and accountDeletedAt=null, then joins Employee by userId. Account name/email/contact and activation come from User; EXP ID and employment fields come from Employee. Inactive accounts remain visible. Deleted accounts, client accounts, Superadmins, and employee-only records are excluded. Missing HR fields are null (the employee ID is an empty string) and display as Not set. Employment filters exclude rows without matching HR details. Search uses account identity and linked employee ID, with stable account-based pagination. No accounts are linked by email.
+
+Rows without HR details carry accountId, hasEmployeeRecord=false, and a directory ID prefixed with account:. Viewing and login actions work for these rows. Change status is disabled until the HR profile is completed. POST /api/employees/accounts/:accountId/profile creates the HR profile transactionally for an eligible account without creating or resetting credentials. Duplicate/concurrent profiles are rejected. No data migration or automatic backfill is performed.

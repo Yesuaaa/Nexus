@@ -25,11 +25,12 @@ import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { hasPermission, Permissions } from "@/features/auth/model/permissions"
 import { ManageMembersDrawer } from "@/features/departments/components/manage-members-drawer"
 import { EmployeeDetailsDrawer } from "../components/employee-details-drawer"
+import { EmployeeLoginDialog } from "../components/employee-login-dialog"
 import { EmployeeFormDialog } from "../components/employee-form-dialog"
 import { EmployeeStatusDialog } from "../components/employee-status-dialog"
 import { EmployeeTable } from "../components/employee-table"
 import {
-  deactivateEmployeeLogin,
+  setEmployeeLoginStatus,
   deleteEmployeeLogin,
   listEmployees,
   type Employee,
@@ -84,6 +85,12 @@ export function EmployeeManagementPage() {
   )
   const [returnEmployeeId, setReturnEmployeeId] = useState<string | null>(null)
   const [statusTarget, setStatusTarget] = useState<Employee | null>(null)
+  const [createLoginTarget, setCreateLoginTarget] = useState<Employee | null>(
+    null,
+  )
+  const [loginAction, setLoginAction] = useState<
+    "deactivate" | "reactivate" | "delete"
+  >("deactivate")
   const [loginTarget, setLoginTarget] = useState<Employee | null>(null)
   const [loginActionPending, setLoginActionPending] = useState(false)
   const [loginActionError, setLoginActionError] = useState("")
@@ -367,7 +374,12 @@ export function EmployeeManagementPage() {
           onView={(employee) => setDrawerEmployeeId(employee.id)}
           onEdit={(employee) => setFormState({ employee })}
           onChangeStatus={setStatusTarget}
-          onManageLogin={(employee) => {
+          onManageLogin={(employee, action) => {
+            if (action === "create") {
+              setCreateLoginTarget(employee)
+              return
+            }
+            setLoginAction(action)
             setLoginActionError("")
             setLoginTarget(employee)
           }}
@@ -457,27 +469,49 @@ export function EmployeeManagementPage() {
           }}
         />
       )}
+      {createLoginTarget && (
+        <EmployeeLoginDialog
+          employee={createLoginTarget}
+          onClose={() => setCreateLoginTarget(null)}
+          onSaved={() => {
+            setCreateLoginTarget(null)
+            setRevision((value) => value + 1)
+            sileo.success({ title: "Login account created" })
+          }}
+        />
+      )}
       {loginTarget && (
         <ConfirmationDialog
           title={
-            loginTarget.accountIsActive
-              ? "Deactivate login account?"
-              : "Delete login account?"
+            loginAction === "delete"
+              ? "Permanently delete account?"
+              : loginAction === "reactivate"
+                ? "Reactivate account?"
+                : "Deactivate account?"
           }
           subject={loginTarget.fullName}
           description={
-            loginTarget.accountIsActive
-              ? "This immediately signs the employee out and prevents login. Their employee record and all assignments remain. Deactivation is required before login deletion."
-              : "This removes the employee's portal login from Account Management. Their employee record and all department, team, position, and leadership assignments remain."
+            loginAction === "delete"
+              ? "This permanently deletes the login account and its sessions. The employee's HR record, department, and team placement remain. Account-based leadership assignments are cleared. This cannot be undone."
+              : loginAction === "reactivate"
+                ? "Allow this employee to sign in again using their existing password. Their employment status stays the same."
+                : "This immediately signs the employee out and prevents login. You can reactivate the login later."
           }
           confirmLabel={
-            loginTarget.accountIsActive
-              ? "Deactivate login"
-              : "Delete login account"
+            loginAction === "delete"
+              ? "Delete account"
+              : loginAction === "reactivate"
+                ? "Reactivate account"
+                : "Deactivate account"
           }
           pendingLabel={
-            loginTarget.accountIsActive ? "Deactivating…" : "Deleting…"
+            loginAction === "delete"
+              ? "Deleting…"
+              : loginAction === "reactivate"
+                ? "Reactivating…"
+                : "Deactivating…"
           }
+          destructive={loginAction !== "reactivate"}
           pending={loginActionPending}
           error={loginActionError}
           onClose={() => {
@@ -486,20 +520,26 @@ export function EmployeeManagementPage() {
           }}
           onConfirm={() => {
             if (loginActionPending) return
-            const isDeactivation = loginTarget.accountIsActive === true
+            const isDeactivation = loginAction === "deactivate"
             setLoginActionPending(true)
             setLoginActionError("")
-            const action = isDeactivation
-              ? deactivateEmployeeLogin(loginTarget.id)
-              : deleteEmployeeLogin(loginTarget.id)
+            const action =
+              loginAction === "delete"
+                ? deleteEmployeeLogin(loginTarget.id)
+                : setEmployeeLoginStatus(
+                    loginTarget.id,
+                    loginAction === "reactivate",
+                  )
             void action
               .then(() => {
                 setLoginTarget(null)
                 sileo.success({
                   title: isDeactivation
-                    ? "Login account deactivated"
-                    : "Login account deleted",
-                  description: `${loginTarget.fullName}'s employee record and assignments were kept.`,
+                    ? "Account deactivated"
+                    : loginAction === "reactivate"
+                      ? "Account reactivated"
+                      : "Account permanently deleted",
+                  description: `${loginTarget.fullName}'s employee record was kept.`,
                 })
                 setRevision((value) => value + 1)
               })

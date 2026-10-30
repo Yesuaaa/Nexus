@@ -27,10 +27,14 @@ export function EmployeeRowActions({
   onView: () => void
   onEdit: () => void
   onChangeStatus: () => void
-  onManageLogin: () => void
+  onManageLogin: (
+    action: "create" | "deactivate" | "reactivate" | "delete",
+  ) => void
 }) {
   const triggerRef = useRef<HTMLButtonElement>(null)
-  const nextAction = useRef<"status" | "login" | null>(null)
+  const nextAction = useRef<
+    "status" | "create" | "deactivate" | "reactivate" | "delete" | null
+  >(null)
 
   return (
     <div className="flex items-center gap-2">
@@ -126,33 +130,66 @@ export function EmployeeRowActions({
               nextAction.current = null
               triggerRef.current?.focus()
               if (action === "status") onChangeStatus()
-              if (action === "login") onManageLogin()
+              else onManageLogin(action)
             }
           }}
         >
           <DropdownMenuItem
-            className={cn(dropdownItemClass, "text-xs focus:bg-[#eef1f8]")}
+            disabled={employee.hasEmployeeRecord === false}
+            title={
+              employee.hasEmployeeRecord === false
+                ? "Complete employee details first"
+                : undefined
+            }
+            className={cn(dropdownItemClass, "text-sm focus:bg-[#eef1f8]")}
             onSelect={() => {
               nextAction.current = "status"
             }}
           >
             Change status
           </DropdownMenuItem>
-          {employee.hasAccount && (
+          {!employee.hasAccount ? (
             <DropdownMenuItem
-              className={cn(
-                dropdownItemClass,
-                "text-xs text-[#bc3649] focus:bg-[#fff1f3] focus:text-[#a42f40]",
-              )}
+              className={dropdownItemClass}
               onSelect={() => {
-                nextAction.current = "login"
+                nextAction.current = "create"
               }}
             >
-              {employee.accountIsActive
-                ? "Deactivate login"
-                : "Delete login account"}
+              Create login account
             </DropdownMenuItem>
+          ) : (
+            <>
+              <DropdownMenuItem
+                className={cn(
+                  dropdownItemClass,
+                  employee.accountIsActive
+                    ? "text-[#c33945] focus:bg-[#fff0f1] focus:text-[#c33945]"
+                    : "text-[#247044] focus:bg-[#edf8f1] focus:text-[#247044]",
+                )}
+                onSelect={() => {
+                  nextAction.current = employee.accountIsActive
+                    ? "deactivate"
+                    : "reactivate"
+                }}
+              >
+                {employee.accountIsActive
+                  ? "Deactivate account"
+                  : "Reactivate account"}
+              </DropdownMenuItem>
+            </>
           )}
+          <DropdownMenuItem
+            disabled={!employee.hasAccount}
+            className={cn(
+              dropdownItemClass,
+              "text-[#c33945] focus:bg-[#fff0f1] focus:text-[#c33945] data-[disabled]:text-[#9aa8bb] data-[disabled]:opacity-60",
+            )}
+            onSelect={() => {
+              nextAction.current = "delete"
+            }}
+          >
+            Delete account
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
