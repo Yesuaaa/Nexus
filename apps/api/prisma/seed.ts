@@ -206,6 +206,34 @@ const DEFAULT_SERVICES = [
   },
 ] as const
 
+function defaultServiceIconKey(name: string) {
+  const normalizedName = name.toLocaleLowerCase()
+  const rules = [
+    { terms: ["social", "community"], iconKey: "social" },
+    {
+      terms: ["advert", "ads", "paid", "marketing"],
+      iconKey: "advertising",
+    },
+    { terms: ["customer", "support", "business"], iconKey: "business" },
+    { terms: ["video", "film", "media"], iconKey: "video" },
+    {
+      terms: ["website", "web", "development", "software"],
+      iconKey: "code",
+    },
+    { terms: ["search", "seo"], iconKey: "search" },
+    { terms: ["email", "newsletter"], iconKey: "email" },
+    {
+      terms: ["graphic", "design", "brand", "creative"],
+      iconKey: "design",
+    },
+  ]
+  return (
+    rules.find(({ terms }) =>
+      terms.some((term) => normalizedName.includes(term)),
+    )?.iconKey ?? "sparkles"
+  )
+}
+
 async function seedDepartments(
   prisma: NonNullable<ReturnType<typeof getPrisma>>,
 ) {
@@ -252,6 +280,7 @@ async function seedServices(prisma: NonNullable<ReturnType<typeof getPrisma>>) {
       create: {
         name: service.name,
         description: service.description,
+        iconKey: defaultServiceIconKey(service.name),
         departments: { connect: [{ id: departmentId }] },
         isActive: true,
       },

@@ -72,6 +72,12 @@ function uniqueConflict() {
 }
 
 export const servicesService = {
+  async getSpecialists(serviceId: string) {
+    const service = await servicesRepository.findHeaderById(serviceId)
+    if (!service?.isActive) throw new ServicesError(404, "Service not found")
+    return servicesRepository.findSpecialists(serviceId)
+  },
+
   async getAvailable() {
     const services = await servicesRepository.findAvailable()
     return services.map((service) =>
@@ -145,9 +151,10 @@ export const servicesService = {
         uploadedPath = await uploadImage(parsed.value.imageDataUrl)
       }
       return presentService(
-        await servicesRepository.create(
-          persistenceInput(parsed.value, uploadedPath),
-        ),
+        await servicesRepository.create({
+          ...persistenceInput(parsed.value, uploadedPath),
+          isActive: true,
+        }),
       )
     } catch (error) {
       await removeImageBestEffort(uploadedPath)
@@ -172,11 +179,16 @@ export const servicesService = {
     const compatibleBody = bodyRecord
       ? {
           imageDataUrl: null,
+          iconKey: current.iconKey,
           imageAltText: current.imageAltText,
           removeImage: false,
           clientRequirements: current.clientRequirements,
           requiresConsultation: current.requiresConsultation,
           consultationNotes: current.consultationNotes,
+          keyBenefits: current.keyBenefits.map((benefit) => ({
+            title: benefit.title,
+            description: benefit.description,
+          })),
           pricingTemplateId: keepsExistingPricing
             ? current.pricingTemplateId
             : null,
