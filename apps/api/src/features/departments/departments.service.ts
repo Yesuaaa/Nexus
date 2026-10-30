@@ -34,6 +34,7 @@ export const departmentsService = {
       departments: departments.map((d) => ({
         id: d.id,
         name: d.name,
+        color: d.color,
         code: d.code,
         description: d.description,
         headId: d.headId,
@@ -137,7 +138,7 @@ export const departmentsService = {
       throw new DepartmentError(400, parsed.error)
     }
 
-    const { name, code, description, headId } = parsed.value
+    const { name, color, code, description, headId } = parsed.value
 
     if (headId) {
       const headUser = await departmentsRepository.findUserById(headId)
@@ -159,6 +160,7 @@ export const departmentsService = {
     try {
       const department = await departmentsRepository.createDepartment({
         name,
+        color,
         code,
         description,
         headId,
@@ -188,7 +190,7 @@ export const departmentsService = {
       throw new DepartmentError(404, "Department not found")
     }
 
-    const { name, code, description, headId } = parsed.value
+    const { name, color, code, description, headId } = parsed.value
 
     if (headId) {
       const headUser = await departmentsRepository.findUserById(headId)
@@ -210,6 +212,7 @@ export const departmentsService = {
     try {
       const updated = await departmentsRepository.updateDepartment(id, {
         name,
+        color,
         code,
         description,
         headId,
@@ -434,7 +437,9 @@ export const departmentsService = {
             ...(teamId !== undefined ? { teamId } : {}),
           },
           include: {
-            department: { select: { id: true, name: true, code: true } },
+            department: {
+              select: { id: true, name: true, code: true, color: true },
+            },
             team: { select: { id: true, name: true } },
           },
         })

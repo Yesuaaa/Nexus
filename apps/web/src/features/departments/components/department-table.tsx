@@ -238,7 +238,10 @@ export function DepartmentTable({
                           {department.name}
                         </button>
                         {department.description && (
-                          <HoverTooltip className="left-0 max-w-64 translate-x-0 whitespace-normal text-left leading-4 group-hover:translate-x-0 group-focus-visible:translate-x-0 group-focus-within:translate-x-0">
+                          <HoverTooltip
+                            align="start"
+                            className="max-w-64 whitespace-normal text-left leading-4"
+                          >
                             {department.description}
                           </HoverTooltip>
                         )}

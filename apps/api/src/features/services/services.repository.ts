@@ -5,7 +5,12 @@ import type {
   ServicePersistenceInput,
 } from "./services.schema.js"
 
-export const departmentSelect = { id: true, name: true, code: true } as const
+export const departmentSelect = {
+  id: true,
+  name: true,
+  code: true,
+  color: true,
+} as const
 export const serviceInclude = {
   departments: {
     orderBy: { name: "asc" as const },

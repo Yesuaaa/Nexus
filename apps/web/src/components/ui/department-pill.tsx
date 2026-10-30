@@ -1,9 +1,7 @@
-"use client"
-
-import { useSyncExternalStore } from "react"
 import { Check } from "lucide-react"
 import { focusRing } from "@/components/layout/styles"
 import { Pill } from "@/components/ui/pill"
+import type { DepartmentColor } from "@/features/departments/model/department-color"
 import { cn } from "@/lib/utils"
 
 export const departmentColors = [
@@ -75,14 +73,9 @@ export const departmentColors = [
   },
 ] as const
 
-export type DepartmentColor = (typeof departmentColors)[number]["value"]
-
 const presetColors: Record<string, DepartmentColor> = {
   administration: "blue",
 }
-
-const storageKey = "department-colors"
-const listeners = new Set<() => void>()
 
 function nameKey(name: string) {
   return name.trim().toLowerCase()
@@ -100,46 +93,6 @@ export function autoDepartmentColor(name: string): DepartmentColor {
   return pool[hash % pool.length].value
 }
 
-function readStoredColors() {
-  try {
-    return window.localStorage.getItem(storageKey) ?? ""
-  } catch {
-    return ""
-  }
-}
-
-function parseColors(raw: string): Record<string, string> {
-  if (!raw) return {}
-  try {
-    const value: unknown = JSON.parse(raw)
-    return value && typeof value === "object"
-      ? (value as Record<string, string>)
-      : {}
-  } catch {
-    return {}
-  }
-}
-
-function subscribeColors(callback: () => void) {
-  listeners.add(callback)
-  window.addEventListener("storage", callback)
-  return () => {
-    listeners.delete(callback)
-    window.removeEventListener("storage", callback)
-  }
-}
-
-export function saveDepartmentColor(name: string, color: string) {
-  try {
-    const colors = parseColors(readStoredColors())
-    colors[nameKey(name)] = color
-    window.localStorage.setItem(storageKey, JSON.stringify(colors))
-  } catch {
-    // Storage can be unavailable; the pill falls back to its automatic color.
-  }
-  listeners.forEach((listener) => listener())
-}
-
 export function resolveDepartmentColor(
   color: string | null | undefined,
   name: string,
@@ -155,9 +108,7 @@ export function resolveDepartmentColor(
 type DepartmentLike = { id: string; name: string; color?: string | null }
 
 export function getDepartmentColorValue(department: DepartmentLike) {
-  const stored = parseColors(readStoredColors())[nameKey(department.name)]
-  return resolveDepartmentColor(stored ?? department.color, department.name)
-    .value
+  return resolveDepartmentColor(department.color, department.name).value
 }
 
 export function DepartmentPill({
@@ -167,12 +118,7 @@ export function DepartmentPill({
   department: DepartmentLike
   className?: string
 }) {
-  const raw = useSyncExternalStore(subscribeColors, readStoredColors, () => "")
-  const stored = parseColors(raw)[nameKey(department.name)]
-  const color = resolveDepartmentColor(
-    stored ?? department.color,
-    department.name,
-  )
+  const color = resolveDepartmentColor(department.color, department.name)
   return (
     <Pill className={cn(color.pill, className)} title={department.name}>
       {department.name}

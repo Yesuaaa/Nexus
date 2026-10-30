@@ -11,6 +11,7 @@ import {
 } from "lucide-react"
 import { CloseIcon } from "@/components/layout/icons"
 import { focusRing } from "@/components/layout/styles"
+import { DepartmentPill } from "@/components/ui/department-pill"
 import { useAnimatedPanelClose } from "@/components/ui/use-animated-panel-close"
 import {
   Dialog,
@@ -66,7 +67,7 @@ export function ServiceDetailsDialog({
       value: (
         <span className="flex flex-wrap gap-1.5">
           {service.departments.map((department) => (
-            <Pill key={department.id}>{department.name}</Pill>
+            <DepartmentPill key={department.id} department={department} />
           ))}
         </span>
       ),

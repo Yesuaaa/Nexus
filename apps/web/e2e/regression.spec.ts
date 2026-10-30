@@ -324,7 +324,9 @@ test.describe("mocked regression", () => {
         pricingTemplateId: null,
         pricingTemplate: null,
         packages: [],
-        departments: [{ id: "dept-1", name: "Engineering", code: "ENG" }],
+        departments: [
+          { id: "dept-1", name: "Engineering", code: "ENG", color: "teal" },
+        ],
         createdAt: "2026-01-01T00:00:00.000Z",
         updatedAt: "2026-01-01T00:00:00.000Z",
       },
@@ -342,7 +344,12 @@ test.describe("mocked regression", () => {
         Permissions.PROFILE_CHANGE_PASSWORD,
       ],
       departmentId: "dept-1",
-      department: { id: "dept-1", name: "Engineering", code: "ENG" },
+      department: {
+        id: "dept-1",
+        name: "Engineering",
+        code: "ENG",
+        color: "teal",
+      },
       teamId: null,
       team: null,
       createdAt: "2026-01-02T00:00:00.000Z",
@@ -357,6 +364,7 @@ test.describe("mocked regression", () => {
       {
         id: "dept-1",
         name: "Engineering",
+        color: "teal",
         code: "ENG",
         description: "Engineering department",
         headId: null,
@@ -381,7 +389,12 @@ test.describe("mocked regression", () => {
         startDate: "2026-01-15",
         departmentId: "dept-1",
         teamId: null,
-        department: { id: "dept-1", name: "Engineering", code: "ENG" },
+        department: {
+          id: "dept-1",
+          name: "Engineering",
+          code: "ENG",
+          color: "teal",
+        },
         team: null,
         hasAccount: true,
         accountIsActive: true,
@@ -705,6 +718,7 @@ test.describe("mocked regression", () => {
       if (pathname === "/api/departments" && method === "POST") {
         const body = request.postDataJSON() as {
           name: string
+          color: Department["color"]
           code?: string
           description?: string
           headId?: string | null
@@ -712,6 +726,7 @@ test.describe("mocked regression", () => {
         const created: Department = {
           id: `dept-${Date.now()}`,
           name: body.name,
+          color: body.color,
           code: body.code ?? null,
           description: body.description ?? null,
           headId: body.headId ?? null,

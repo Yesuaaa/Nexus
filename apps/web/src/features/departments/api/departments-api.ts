@@ -1,4 +1,5 @@
 import { apiRequest } from "@/features/auth/api/auth-api"
+import type { DepartmentColor } from "../model/department-color"
 
 export const COMPANY_DEPARTMENT_PRESETS = [
   {
@@ -49,6 +50,7 @@ export type DepartmentHead = {
 export type Department = {
   id: string
   name: string
+  color: DepartmentColor
   code: string | null
   description: string | null
   headId: string | null
@@ -147,6 +149,7 @@ export async function listEligibleHeads(): Promise<EligibleHead[]> {
 
 export async function createDepartment(input: {
   name: string
+  color: DepartmentColor
   code?: string
   description?: string
   headId?: string | null
@@ -165,6 +168,7 @@ export async function updateDepartment(
   id: string,
   input: {
     name?: string
+    color?: DepartmentColor
     code?: string | null
     description?: string | null
     headId?: string | null

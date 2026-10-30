@@ -61,9 +61,7 @@ function ClientRowActions({
         <path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6Z" />
         <circle cx="12" cy="12" r="2.5" />
       </svg>
-      <HoverTooltip className="right-0 left-auto translate-x-0 group-hover:translate-x-0 group-focus-visible:translate-x-0 group-focus-within:translate-x-0">
-        View details
-      </HoverTooltip>
+      <HoverTooltip align="end">View details</HoverTooltip>
     </button>
   )
 }

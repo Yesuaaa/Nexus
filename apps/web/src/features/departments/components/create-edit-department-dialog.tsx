@@ -6,7 +6,6 @@ import {
   DepartmentColorPicker,
   getDepartmentColorValue,
   resolveDepartmentColor,
-  saveDepartmentColor,
 } from "@/components/ui/department-pill"
 import {
   Dialog,
@@ -31,6 +30,7 @@ import {
   type Department,
   type EligibleHead,
 } from "../api/departments-api"
+import type { DepartmentColor } from "../model/department-color"
 
 const fieldClass = "grid min-w-0 gap-1.5"
 const labelClass = "text-xs font-semibold"
@@ -61,7 +61,7 @@ export function CreateEditDepartmentDialog({
   const [code, setCode] = useState(department?.code ?? "")
   const [description, setDescription] = useState(department?.description ?? "")
   const [headId, setHeadId] = useState(department?.headId ?? "")
-  const [color, setColor] = useState<string>(
+  const [color, setColor] = useState<DepartmentColor>(
     department ? getDepartmentColorValue(department) : autoDepartmentColor(""),
   )
   // Once the user picks a color manually, stop following the name.
@@ -116,6 +116,7 @@ export function CreateEditDepartmentDialog({
       if (isEditing && department) {
         await updateDepartment(department.id, {
           name: name.trim(),
+          color,
           code: code.trim() || null,
           description: description.trim() || null,
           headId: headId || null,
@@ -123,13 +124,12 @@ export function CreateEditDepartmentDialog({
       } else {
         await createDepartment({
           name: name.trim(),
+          color,
           code: code.trim() || undefined,
           description: description.trim() || undefined,
           headId: headId || null,
         })
       }
-      // Front-end only: color is stored locally, keyed by department name.
-      saveDepartmentColor(name.trim(), color)
       onSaved()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to save department")

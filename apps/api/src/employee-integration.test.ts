@@ -17,6 +17,7 @@ type Payload = {
   total: number
   pageSize?: number
   department: {
+    color: string
     members: { id: string }[]
     teams: { id: string; memberCount: number }[]
   }
@@ -203,6 +204,49 @@ test(
       },
     )
     await t.test(
+      "department colors persist and are shared across related responses",
+      async () => {
+        const migrated = (await json("/departments/product")).department
+        assert.equal(typeof migrated.color, "string")
+        assert.equal(
+          (
+            await request("/departments/product", "PUT", {
+              color: "not-a-color",
+            })
+          ).status,
+          400,
+        )
+
+        const updated = await json("/departments/product", "PUT", {
+          color: "teal",
+        })
+        assert.equal(updated.department.color, "teal")
+        assert.equal(
+          (await json("/departments/product")).department.color,
+          "teal",
+        )
+
+        const accountResponse = await request(
+          "/users?search=staff%40example.com",
+          "GET",
+          undefined,
+          "superadmin",
+        )
+        assert.equal(accountResponse.status, 200)
+        const accounts = (await accountResponse.json()) as {
+          users: { department: { color: string } | null }[]
+        }
+        assert.equal(accounts.users[0]?.department?.color, "teal")
+
+        const meResponse = await request("/auth/me", "GET", undefined, "staff")
+        assert.equal(meResponse.status, 200)
+        const me = (await meResponse.json()) as {
+          user: { department: { color: string } | null }
+        }
+        assert.equal(me.user.department?.color, "teal")
+      },
+    )
+    await t.test(
       "service lifecycle validates department links and prevents deleting active services",
       async (subtest) => {
         const input = {
@@ -254,7 +298,7 @@ test(
             imageUrl: string | null
             pricingTemplate: { id: string; pricingModel: string } | null
             packages: { id: string; name: string }[]
-            departments: { id: string }[]
+            departments: { id: string; color: string }[]
           }
         }
         subtest.after(async () => {
@@ -263,6 +307,11 @@ test(
         assert.deepEqual(
           service.departments.map((department) => department.id).sort(),
           ["operations", "product"],
+        )
+        assert.equal(
+          service.departments.find((department) => department.id === "product")
+            ?.color,
+          "teal",
         )
         assert.equal(
           service.imageUrl,

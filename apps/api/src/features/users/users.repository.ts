@@ -37,7 +37,9 @@ export const usersRepository = {
       return transaction.user.findUniqueOrThrow({
         where: { id },
         include: {
-          department: { select: { id: true, name: true, code: true } },
+          department: {
+            select: { id: true, name: true, code: true, color: true },
+          },
           team: { select: { id: true, name: true } },
         },
       })
@@ -73,7 +75,7 @@ export const usersRepository = {
         where,
         include: {
           department: {
-            select: { id: true, name: true, code: true },
+            select: { id: true, name: true, code: true, color: true },
           },
           team: {
             select: { id: true, name: true },
@@ -109,7 +111,7 @@ export const usersRepository = {
         },
         include: {
           department: {
-            select: { id: true, name: true, code: true },
+            select: { id: true, name: true, code: true, color: true },
           },
           team: {
             select: { id: true, name: true },
@@ -154,7 +156,9 @@ export const usersRepository = {
       return tx.user.findUniqueOrThrow({
         where: { id: targetId },
         include: {
-          department: { select: { id: true, name: true, code: true } },
+          department: {
+            select: { id: true, name: true, code: true, color: true },
+          },
           team: { select: { id: true, name: true } },
         },
       })

@@ -20,10 +20,18 @@ export const authRepository = {
     return Boolean(getPrisma())
   },
 
-  async findUserByEmail(email: string): Promise<User | null> {
+  async findUserByEmail(email: string) {
     const prisma = getPrisma()
     if (!prisma) return null
-    return prisma.user.findUnique({ where: { email } })
+    return prisma.user.findUnique({
+      where: { email },
+      include: {
+        department: {
+          select: { id: true, name: true, code: true, color: true },
+        },
+        team: { select: { id: true, name: true } },
+      },
+    })
   },
 
   async createUser(data: CreateUserData): Promise<User> {
@@ -55,7 +63,16 @@ export const authRepository = {
     if (!prisma) return null
     return prisma.session.findUnique({
       where: { tokenHash },
-      include: { user: true },
+      include: {
+        user: {
+          include: {
+            department: {
+              select: { id: true, name: true, code: true, color: true },
+            },
+            team: { select: { id: true, name: true } },
+          },
+        },
+      },
     })
   },
 
