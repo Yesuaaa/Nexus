@@ -10,7 +10,7 @@ export type AccountList = {
 
 export type AccountRole = Account["role"]
 export type AccountSortKey =
-  "member" | "role" | "status" | "department" | "createdAt"
+  "member" | "role" | "status" | "department" | "createdAt" | "deletedAt"
 export type AccountSortDirection = "asc" | "desc"
 
 export type NewAccount = {
@@ -30,12 +30,14 @@ export function listAccounts(
   page: number,
   sort: AccountSortKey = "createdAt",
   direction: AccountSortDirection = "desc",
+  deleted = false,
 ) {
   const params = new URLSearchParams({ page: String(page) })
   if (search) params.set("search", search)
   if (role) params.set("role", role)
   if (sort !== "createdAt") params.set("sort", sort)
   if (direction !== "desc") params.set("direction", direction)
+  if (deleted) params.set("deleted", "true")
   return apiRequest<AccountList>(`/api/users?${params}`)
 }
 
@@ -66,8 +68,14 @@ export function changeAccountStatus(id: string, isActive: boolean) {
   )
 }
 
-export async function deleteAccount(id: string): Promise<void> {
+export async function moveAccountToTrash(id: string): Promise<void> {
   await apiRequest(`/api/users/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  })
+}
+
+export async function permanentlyDeleteAccount(id: string): Promise<void> {
+  await apiRequest(`/api/users/${encodeURIComponent(id)}/permanent`, {
     method: "DELETE",
   })
 }

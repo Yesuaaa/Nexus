@@ -417,20 +417,31 @@ test(
       },
     )
     await t.test(
-      "general account deletion with related client records returns a conflict",
+      "soft deletion preserves client records and permanent deletion returns a conflict",
       async () => {
         await prisma.user.update({
           where: { id: "client-00" },
           data: { isActive: false },
         })
-        const response = await fetch(
-          `${base.replace("/clients", "/users")}/client-00`,
-          {
-            method: "DELETE",
-            headers: { authorization: `Bearer ${tokens.get("SUPERADMIN")}` },
-          },
+        const userUrl = `${base.replace("/clients", "/users")}/client-00`
+        const softDeleteResponse = await fetch(userUrl, {
+          method: "DELETE",
+          headers: { authorization: `Bearer ${tokens.get("SUPERADMIN")}` },
+        })
+        assert.equal(softDeleteResponse.status, 200)
+        assert.ok(
+          (
+            await prisma.user.findUniqueOrThrow({
+              where: { id: "client-00" },
+            })
+          ).accountDeletedAt,
         )
-        assert.equal(response.status, 409)
+
+        const permanentDeleteResponse = await fetch(`${userUrl}/permanent`, {
+          method: "DELETE",
+          headers: { authorization: `Bearer ${tokens.get("SUPERADMIN")}` },
+        })
+        assert.equal(permanentDeleteResponse.status, 409)
         assert.equal(
           await prisma.serviceRequest.count({
             where: { clientId: "client-00" },

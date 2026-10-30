@@ -37,7 +37,26 @@ usersRouter.delete(
   requirePermission(Permission.ACCOUNTS_STATUS_BASIC),
   async (request, response, next) => {
     try {
-      const result = await usersService.deleteUser(
+      const result = await usersService.softDeleteUser(
+        request.auth!.user,
+        String(request.params.id),
+      )
+      return response.json(result)
+    } catch (error) {
+      if (error instanceof UsersError) {
+        return response.status(error.status).json({ error: error.message })
+      }
+      next(error)
+    }
+  },
+)
+
+usersRouter.delete(
+  "/:id/permanent",
+  requirePermission(Permission.ACCOUNTS_STATUS_BASIC),
+  async (request, response, next) => {
+    try {
+      const result = await usersService.permanentlyDeleteUser(
         request.auth!.user,
         String(request.params.id),
       )

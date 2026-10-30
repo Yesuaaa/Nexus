@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { LoaderCircle } from "lucide-react"
+import { LoaderCircle, Trash2 } from "lucide-react"
 import { useReducedMotion } from "framer-motion"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { sileo } from "sileo"
@@ -30,8 +30,9 @@ import {
 import {
   changeAccountRole,
   changeAccountStatus,
-  deleteAccount,
   listAccounts,
+  moveAccountToTrash,
+  permanentlyDeleteAccount,
   type AccountList,
   type AccountRole,
   type AccountSortDirection,
@@ -73,6 +74,7 @@ function AccountRowContents({
   onRoleChange,
   onChangeStatus,
   onDelete,
+  trashView,
 }: {
   user: Account
   actor: Account
@@ -81,11 +83,13 @@ function AccountRowContents({
   onRoleChange: (user: Account, role: AccountRole) => void
   onChangeStatus: (user: Account) => void
   onDelete: (user: Account) => void
+  trashView: boolean
 }) {
   const assignableRoles = allRoles.filter((role) =>
     canAssignRole(actor, user.role, role),
   )
-  const editable = user.id !== actor.id && assignableRoles.length > 0
+  const editable =
+    !trashView && user.id !== actor.id && assignableRoles.length > 0
 
   return (
     <>
@@ -111,12 +115,14 @@ function AccountRowContents({
         </span>
         <Pill
           className={
-            user.isActive
-              ? "bg-[#dcf5e5] text-[#19703a]"
-              : "bg-[#fde4ea] text-[#b4234d]"
+            trashView
+              ? "bg-[#eef0f3] text-[#596579]"
+              : user.isActive
+                ? "bg-[#dcf5e5] text-[#19703a]"
+                : "bg-[#fde4ea] text-[#b4234d]"
           }
         >
-          {user.isActive ? "Active" : "Inactive"}
+          {trashView ? "Deleted" : user.isActive ? "Active" : "Inactive"}
         </Pill>
       </div>
       <div className="min-w-0 @max-[900px]:col-start-1 @max-[900px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto">
@@ -137,11 +143,19 @@ function AccountRowContents({
         )}
       </div>
       <div className="text-[11px] text-[#738096] @max-[900px]:col-start-1 @max-[900px]:row-start-3 @max-[530px]:row-auto">
-        <span className="mr-1.5 hidden @max-[900px]:inline">Created</span>
-        {formatDate(user.createdAt)}
+        <span className="mr-1.5 hidden @max-[900px]:inline">
+          {trashView ? "Deleted" : "Created"}
+        </span>
+        {formatDate(
+          trashView && user.accountDeletedAt
+            ? user.accountDeletedAt
+            : user.createdAt,
+        )}
       </div>
       <div className="flex min-w-0 items-center @max-[900px]:col-start-2 @max-[900px]:row-start-3 @max-[530px]:col-start-1 @max-[530px]:row-auto">
-        {editable ? (
+        {trashView ? (
+          <span className="text-[11px] text-[#738096]">Removed</span>
+        ) : editable ? (
           <AccountDropdown
             className="w-full max-w-[112px]"
             triggerClassName="h-8 border-[#e1e4ea] text-xs"
@@ -171,6 +185,7 @@ function AccountRowContents({
             disabled={disabled}
             onChangeStatus={() => onChangeStatus(user)}
             onDelete={() => onDelete(user)}
+            trashView={trashView}
           />
         ) : (
           <span className="text-[11px] text-[#94a3b8]">—</span>
@@ -201,6 +216,7 @@ export function AccountManagementPage() {
     useState<AccountSortDirection>("desc")
   const [page, setPage] = useState(1)
   const [revision, setRevision] = useState(0)
+  const [trashView, setTrashView] = useState(false)
   const [rowSlots, setRowSlots] = useState<AccountRowSlot[]>([])
   const rowSlotsRef = useRef<AccountRowSlot[]>([])
   const [footerResult, setFooterResult] = useState<AccountList | null>(null)
@@ -238,6 +254,7 @@ export function AccountManagementPage() {
     sortKey,
     sortDirection,
     page,
+    trashView,
     revision,
   ])
   const viewKey = JSON.stringify([
@@ -246,6 +263,7 @@ export function AccountManagementPage() {
     sortKey,
     sortDirection,
     page,
+    trashView,
   ])
   const error =
     search === debouncedSearch && errorState?.requestKey === requestKey
@@ -301,7 +319,14 @@ export function AccountManagementPage() {
 
   useEffect(() => {
     let active = true
-    listAccounts(debouncedSearch, roleFilter, page, sortKey, sortDirection)
+    listAccounts(
+      debouncedSearch,
+      roleFilter,
+      page,
+      sortKey,
+      sortDirection,
+      trashView,
+    )
       .then((data) => {
         if (active) {
           const previousViewKey = lastResolvedViewKey.current
@@ -420,6 +445,7 @@ export function AccountManagementPage() {
     reduceMotion,
     sortDirection,
     sortKey,
+    trashView,
   ])
 
   function updateSearch(value: string) {
@@ -531,7 +557,11 @@ export function AccountManagementPage() {
     setDeleting(true)
     setDeleteError("")
     try {
-      await deleteAccount(deleteTarget.id)
+      if (trashView) {
+        await permanentlyDeleteAccount(deleteTarget.id)
+      } else {
+        await moveAccountToTrash(deleteTarget.id)
+      }
       const deletedEmail = deleteTarget.email
       setDraftRoles((current) => {
         const next = { ...current }
@@ -540,8 +570,12 @@ export function AccountManagementPage() {
       })
       setDeleteTarget(null)
       sileo.success({
-        title: "Account deleted",
-        description: `${deletedEmail} was permanently deleted.`,
+        title: trashView
+          ? "Account permanently deleted"
+          : "Account moved to Trash",
+        description: trashView
+          ? `${deletedEmail} was permanently deleted.`
+          : `${deletedEmail} is now in Trash.`,
       })
       if ((result?.users.length ?? 0) === 1 && page > 1) {
         setPage((current) => current - 1)
@@ -628,10 +662,11 @@ export function AccountManagementPage() {
             setStatusTarget(account)
           }}
           onDelete={(account) => {
-            if (account.isActive) return
+            if (!trashView && account.isActive) return
             setDeleteError("")
             setDeleteTarget(account)
           }}
+          trashView={trashView}
         />
       </AnimatedSlotRow>
     )
@@ -681,7 +716,7 @@ export function AccountManagementPage() {
         className="mt-[18px] min-w-0 max-[560px]:mt-[14px]"
         aria-label="Accounts"
       >
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 pb-4 max-[560px]:pb-3">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 pb-4 max-[560px]:grid-cols-1 max-[560px]:pb-3">
           <div className="flex min-w-0 gap-[10px] max-[560px]:flex-col">
             <SearchField
               label="Search accounts"
@@ -701,32 +736,55 @@ export function AccountManagementPage() {
               disabled={savingAccess || statusSaving || deleting}
             />
           </div>
-          <button
-            type="button"
-            className={cn(
-              accountButton,
-              accountButtonPrimary,
-              "min-h-[34px] rounded-lg px-[13px] text-xs",
-            )}
-            disabled={
-              Object.keys(draftRoles).length === 0 ||
-              savingAccess ||
-              statusSaving ||
-              deleting ||
-              busy
-            }
-            aria-busy={savingAccess}
-            onClick={() => void saveAccessChanges()}
-          >
-            {savingAccess && (
-              <LoaderCircle
-                size={14}
-                className="animate-spin motion-reduce:animate-none"
-                aria-hidden="true"
-              />
-            )}
-            Save changes
-          </button>
+          <div className="flex items-center justify-end gap-2 max-[560px]:justify-start">
+            <button
+              type="button"
+              className={cn(
+                accountButton,
+                "min-h-[34px] rounded-lg border-red-500 bg-background px-[12px] text-xs text-red-600 hover:enabled:bg-red-50",
+              )}
+              disabled={savingAccess || statusSaving || deleting || busy}
+              aria-pressed={trashView}
+              onClick={() => {
+                setTrashView(!trashView)
+                setSortKey(trashView ? "createdAt" : "deletedAt")
+                setSortDirection("desc")
+                setPage(1)
+                setDraftRoles({})
+                setAccessError("")
+              }}
+            >
+              <Trash2 size={14} aria-hidden="true" />
+              {trashView ? "Back to accounts" : "Trash"}
+            </button>
+            <button
+              type="button"
+              className={cn(
+                accountButton,
+                accountButtonPrimary,
+                "min-h-[34px] rounded-lg px-[13px] text-xs",
+              )}
+              disabled={
+                trashView ||
+                Object.keys(draftRoles).length === 0 ||
+                savingAccess ||
+                statusSaving ||
+                deleting ||
+                busy
+              }
+              aria-busy={savingAccess}
+              onClick={() => void saveAccessChanges()}
+            >
+              {savingAccess && (
+                <LoaderCircle
+                  size={14}
+                  className="animate-spin motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
+              )}
+              Save changes
+            </button>
+          </div>
         </div>
         {accessError && (
           <p
@@ -760,7 +818,7 @@ export function AccountManagementPage() {
             </span>
             <span>
               <TableSortButton
-                label="Status"
+                label={trashView ? "Deletion status" : "Status"}
                 direction={sortKey === "status" ? sortDirection : null}
                 onClick={() => sortBy("status")}
               />
@@ -774,9 +832,13 @@ export function AccountManagementPage() {
             </span>
             <span>
               <TableSortButton
-                label="Created"
-                direction={sortKey === "createdAt" ? sortDirection : null}
-                onClick={() => sortBy("createdAt")}
+                label={trashView ? "Deleted" : "Created"}
+                direction={
+                  sortKey === (trashView ? "deletedAt" : "createdAt")
+                    ? sortDirection
+                    : null
+                }
+                onClick={() => sortBy(trashView ? "deletedAt" : "createdAt")}
               />
             </span>
             <span>Access</span>
@@ -820,7 +882,9 @@ export function AccountManagementPage() {
             )}
             {!error && result?.users.length === 0 && !isAnimatingRows && (
               <div className="grid min-h-[150px] place-content-center gap-2 p-6 text-center text-[#7183a2]">
-                No accounts match your search.
+                {trashView
+                  ? "No soft-deleted accounts match your search."
+                  : "No accounts match your search."}
               </div>
             )}
             {result &&
@@ -880,7 +944,7 @@ export function AccountManagementPage() {
                 statusSaving ||
                 deleting
               }
-              label="Account pages"
+              label={trashView ? "Trash pages" : "Account pages"}
               onPageChange={setPage}
             />
           </div>
@@ -901,6 +965,7 @@ export function AccountManagementPage() {
           account={deleteTarget}
           deleting={deleting}
           error={deleteError}
+          permanent={trashView}
           onClose={() => {
             if (!deleting) setDeleteTarget(null)
           }}
