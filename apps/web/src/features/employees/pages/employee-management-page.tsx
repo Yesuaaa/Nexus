@@ -42,16 +42,16 @@ import {
 } from "../api/employees-api"
 
 const employmentTypes: { value: EmploymentType | ""; label: string }[] = [
-  { value: "", label: "All types" },
-  { value: "FULL_TIME", label: "Full time" },
-  { value: "PART_TIME", label: "Part time" },
+  { value: "", label: "All Types" },
+  { value: "FULL_TIME", label: "Full Time" },
+  { value: "PART_TIME", label: "Part Time" },
   { value: "CONTRACT", label: "Contract" },
   { value: "INTERN", label: "Intern" },
 ]
 const statuses: { value: EmploymentStatus | ""; label: string }[] = [
-  { value: "", label: "All statuses" },
+  { value: "", label: "All Statuses" },
   { value: "ACTIVE", label: "Active" },
-  { value: "ON_LEAVE", label: "On leave" },
+  { value: "ON_LEAVE", label: "On Leave" },
   { value: "INACTIVE", label: "Inactive" },
 ]
 
@@ -292,7 +292,7 @@ export function EmployeeManagementPage() {
                 />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All departments</SelectItem>
+                <SelectItem value="all">All Departments</SelectItem>
                 {departments.map((department) => (
                   <SelectItem key={department.id} value={department.id}>
                     {department.name}
@@ -372,7 +372,7 @@ export function EmployeeManagementPage() {
             }}
           >
             <Trash2 size={14} aria-hidden="true" />
-            {archiveView ? "Back to employees" : "Archive"}
+            {archiveView ? "Back to Employees" : "Archive"}
           </button>
           {departmentsError && (
             <div

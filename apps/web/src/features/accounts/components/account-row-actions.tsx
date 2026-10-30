@@ -20,19 +20,27 @@ export function AccountRowActions({
   disabled,
   onChangeStatus,
   onDelete,
+  onChangePassword,
+  canChangeStatus = true,
   trashView = false,
 }: {
   account: Account
   disabled: boolean
   onChangeStatus: () => void
   onDelete: () => void
+  onChangePassword?: () => void
+  canChangeStatus?: boolean
   trashView?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
-  const pendingAction = useRef<"status" | "delete" | null>(null)
+  const pendingAction = useRef<"status" | "delete" | "password" | null>(null)
   const closedByOther = useRef(false)
-  const action = account.isActive ? "Deactivate" : "Reactivate"
+  const action = trashView
+    ? "Restore"
+    : account.isActive
+      ? "Deactivate"
+      : "Reactivate"
 
   // Close this menu whenever any other menu (dropdown or row actions) opens.
   useExclusiveMenu(open, () => {
@@ -95,10 +103,21 @@ export function AccountRowActions({
           pendingAction.current = null
           triggerRef.current?.focus()
           if (selectedAction === "status") onChangeStatus()
+          else if (selectedAction === "password") onChangePassword?.()
           else onDelete()
         }}
       >
-        {!trashView && (
+        {!trashView && onChangePassword && (
+          <DropdownMenuItem
+            className={cn(dropdownItemClass, "text-xs focus:bg-[#eef1f8]")}
+            onSelect={() => {
+              pendingAction.current = "password"
+            }}
+          >
+            Change password
+          </DropdownMenuItem>
+        )}
+        {canChangeStatus && (
           <DropdownMenuItem
             className={cn(
               dropdownItemClass,
@@ -113,7 +132,7 @@ export function AccountRowActions({
             {action} account
           </DropdownMenuItem>
         )}
-        {(trashView || !account.isActive) && (
+        {canChangeStatus && (trashView || !account.isActive) && (
           <DropdownMenuItem
             className={cn(
               dropdownItemClass,
@@ -123,7 +142,7 @@ export function AccountRowActions({
               pendingAction.current = "delete"
             }}
           >
-            {trashView ? "Delete permanently" : "Move to trash"}
+            {trashView ? "Delete Permanently" : "Move to trash"}
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>

@@ -25,7 +25,7 @@ import {
 const statusLabels: Record<EmploymentStatus, string> = {
   ACTIVE: "Active",
   INACTIVE: "Inactive",
-  ON_LEAVE: "On leave",
+  ON_LEAVE: "On Leave",
 }
 
 export function EmployeeStatusDialog({

@@ -33,6 +33,42 @@ export class UsersError extends Error {
 }
 
 export const usersService = {
+  async changePassword(actor: User, targetId: string, newPassword: unknown) {
+    if (actor.role !== Role.SUPERADMIN) {
+      throw new UsersError(403, "Only Superadmins can change account passwords")
+    }
+    if (actor.id === targetId) {
+      throw new UsersError(
+        403,
+        "You cannot change your own password through account management",
+      )
+    }
+    if (
+      !validPassword(newPassword) ||
+      !/[A-Z]/.test(newPassword) ||
+      !/[a-z]/.test(newPassword) ||
+      !/[0-9]/.test(newPassword) ||
+      !/[^A-Za-z0-9]/.test(newPassword)
+    ) {
+      throw new UsersError(
+        400,
+        "Use at least 12 characters, including uppercase, lowercase, a number and a special character, up to 1,024 bytes",
+      )
+    }
+    const target = await usersRepository.findById(targetId)
+    if (!target || target.accountDeletedAt) {
+      throw new UsersError(404, "User not found")
+    }
+    const updated = await usersRepository.changePasswordAndRevokeSessions(
+      target.id,
+      target.passwordHash,
+      await hashPassword(newPassword),
+    )
+    if (!updated) {
+      throw new UsersError(409, "Account changed; refresh and retry")
+    }
+  },
+
   async changeStatus(actor: User, targetId: string, isActive: unknown) {
     if (typeof isActive !== "boolean") {
       throw new UsersError(400, "Provide an active status")
@@ -85,6 +121,34 @@ export const usersService = {
       throw new UsersError(409, "Account changed; refresh and retry")
     }
     return { message: "Account moved to trash" }
+  },
+
+  async restoreUser(actor: User, targetId: string) {
+    if (actor.id === targetId) {
+      throw new UsersError(403, "You cannot restore your own account")
+    }
+    const target = await usersRepository.findById(targetId)
+    if (!target) {
+      throw new UsersError(404, "User not found")
+    }
+    if (!canChangeAccountStatus(actor.role, target.role)) {
+      throw new UsersError(403, "You cannot restore this account")
+    }
+    if (!target.accountDeletedAt || target.isActive) {
+      throw new UsersError(
+        409,
+        "Only inactive accounts in Trash can be restored",
+      )
+    }
+    const user = await usersRepository.restoreUser(
+      target.id,
+      target.role,
+      target.accountDeletedAt,
+    )
+    if (!user) {
+      throw new UsersError(409, "Account changed; refresh and retry")
+    }
+    return { user: publicUser(user) }
   },
 
   async permanentlyDeleteUser(actor: User, targetId: string) {

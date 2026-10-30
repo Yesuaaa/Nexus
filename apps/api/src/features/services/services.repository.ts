@@ -17,6 +17,9 @@ export const serviceInclude = {
     select: departmentSelect,
   },
   pricingTemplate: true,
+  keyBenefits: {
+    orderBy: { displayOrder: "asc" as const },
+  },
   packages: {
     orderBy: [{ displayOrder: "asc" as const }, { name: "asc" as const }],
   },
@@ -46,7 +49,35 @@ function packageData(item: ServicePackageInput) {
   }
 }
 
+function keyBenefitData(
+  item: ServicePersistenceInput["keyBenefits"][number],
+  displayOrder: number,
+) {
+  return {
+    title: item.title,
+    description: item.description,
+    displayOrder,
+  }
+}
+
 export const servicesRepository = {
+  async findSpecialists(serviceId: string) {
+    return getPrisma()!.employee.findMany({
+      where: {
+        status: "ACTIVE",
+        department: { services: { some: { id: serviceId, isActive: true } } },
+        user: { role: "STAFF", isActive: true, accountDeletedAt: null },
+      },
+      orderBy: [{ fullName: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        fullName: true,
+        position: true,
+        department: { select: { id: true, name: true } },
+      },
+    })
+  },
+
   async findAvailable() {
     return getPrisma()!.service.findMany({
       where: { isActive: true },
@@ -111,6 +142,7 @@ export const servicesRepository = {
         packages,
         pricingTemplate,
         pricingTemplateId,
+        keyBenefits,
         ...serviceInput
       } = data
       const createdTemplate = pricingTemplate
@@ -122,6 +154,9 @@ export const servicesRepository = {
           pricingTemplateId: createdTemplate?.id ?? pricingTemplateId,
           departments: {
             connect: departmentIds.map((id) => ({ id })),
+          },
+          keyBenefits: {
+            create: keyBenefits.map(keyBenefitData),
           },
           packages: {
             create: packages.map(packageData),
@@ -140,6 +175,7 @@ export const servicesRepository = {
         packages,
         pricingTemplate,
         pricingTemplateId,
+        keyBenefits,
         ...serviceInput
       } = data
       const createdTemplate = pricingTemplate
@@ -172,6 +208,10 @@ export const servicesRepository = {
           pricingTemplateId: createdTemplate?.id ?? pricingTemplateId,
           departments: {
             set: departmentIds.map((departmentId) => ({ id: departmentId })),
+          },
+          keyBenefits: {
+            deleteMany: {},
+            create: keyBenefits.map(keyBenefitData),
           },
         },
         include: serviceInclude,
