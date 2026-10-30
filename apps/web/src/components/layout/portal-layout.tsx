@@ -9,6 +9,7 @@ import {
   canAccessAccountManagement,
   canAccessDepartmentManagement,
   canAccessEmployeeManagement,
+  canAccessServiceCatalog,
   canAccessServiceManagement,
   canAccessClientManagement,
 } from "@/features/auth/model/permissions"
@@ -32,7 +33,9 @@ export function PortalLayout({ children }: { children: ReactNode }) {
         !canAccessDepartmentManagement(account)) ||
       (pathname.startsWith("/employees") &&
         !canAccessEmployeeManagement(account)) ||
-      (pathname === "/services" && !canAccessServiceManagement(account)) ||
+      (pathname === "/services" &&
+        !canAccessServiceCatalog(account) &&
+        !canAccessServiceManagement(account)) ||
       (pathname.startsWith("/clients") && !canAccessClientManagement(account)))
 
   useEffect(() => {

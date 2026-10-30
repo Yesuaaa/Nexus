@@ -39,9 +39,11 @@ import {
   type PricingModel,
   type PricingTemplate,
   type Service,
+  type ServiceIconKey,
   type ServiceInput,
   type ServicePackage,
 } from "../api/services-api"
+import { ServiceIcon, serviceIconOptions } from "./service-icon"
 
 const fieldClass = "grid min-w-0 gap-1.5"
 const labelClass = "text-xs font-semibold"
@@ -51,10 +53,25 @@ const imageTypes = ["image/jpeg", "image/png", "image/webp"]
 const maxImageBytes = 2 * 1024 * 1024
 const formSteps = [
   { label: "Details", description: "Basic information and service image" },
+  { label: "Benefits", description: "Client-facing value and outcomes" },
   { label: "Requirements", description: "Client needs and consultation" },
   { label: "Pricing", description: "Pricing model and visibility" },
   { label: "Packages", description: "Optional service packages" },
 ] as const
+
+type BenefitDraft = {
+  id: string
+  title: string
+  description: string
+}
+
+function newBenefit(): BenefitDraft {
+  return {
+    id: `new-${crypto.randomUUID()}`,
+    title: "",
+    description: "",
+  }
+}
 
 const pricingModels: { value: PricingModel; label: string }[] = [
   { value: "FIXED", label: "Fixed price" },
@@ -222,10 +239,12 @@ export function ServiceFormDialog({
   const imageInputRef = useRef<HTMLInputElement>(null)
   const [name, setName] = useState(service?.name ?? "")
   const [description, setDescription] = useState(service?.description ?? "")
+  const [iconKey, setIconKey] = useState<ServiceIconKey>(
+    service?.iconKey ?? "sparkles",
+  )
   const [departmentIds, setDepartmentIds] = useState(
     service?.departments.map((department) => department.id) ?? [],
   )
-  const [isActive, setIsActive] = useState(service?.isActive ?? true)
   const [imagePreviewUrl, setImagePreviewUrl] = useState(
     service?.imageUrl ?? null,
   )
@@ -240,6 +259,13 @@ export function ServiceFormDialog({
   )
   const [consultationNotes, setConsultationNotes] = useState(
     service?.consultationNotes ?? "",
+  )
+  const [keyBenefits, setKeyBenefits] = useState<BenefitDraft[]>(
+    service?.keyBenefits.map(({ id, title, description }) => ({
+      id,
+      title,
+      description,
+    })) ?? [],
   )
   const [pricingChoice, setPricingChoice] = useState(
     service?.pricingTemplateId ?? "none",
@@ -262,6 +288,12 @@ export function ServiceFormDialog({
 
   function updatePackage(id: string, update: Partial<PackageDraft>) {
     setPackages((current) =>
+      current.map((item) => (item.id === id ? { ...item, ...update } : item)),
+    )
+  }
+
+  function updateBenefit(id: string, update: Partial<BenefitDraft>) {
+    setKeyBenefits((current) =>
       current.map((item) => (item.id === id ? { ...item, ...update } : item)),
     )
   }
@@ -307,7 +339,15 @@ export function ServiceFormDialog({
       if (imagePreviewUrl && imageAltText.trim().length < 2)
         return "Add alternative text for the service image"
     }
-    if (step === 2 && pricingChoice === "new") {
+    if (step === 1) {
+      for (const [index, benefit] of keyBenefits.entries()) {
+        if (benefit.title.trim().length < 2)
+          return `Enter a title for key benefit ${index + 1}`
+        if (benefit.description.trim().length < 2)
+          return `Enter a description for key benefit ${index + 1}`
+      }
+    }
+    if (step === 3 && pricingChoice === "new") {
       if (templateName.trim().length < 2)
         return "Enter a name for the pricing template"
       if (needsAmount(pricingModel) && Number(amount) <= 0)
@@ -315,7 +355,7 @@ export function ServiceFormDialog({
       if (pricingModel === "RECURRING" && !billingInterval)
         return "Select a billing interval"
     }
-    if (step === 3) {
+    if (step === 4) {
       for (const [index, servicePackage] of packages.entries()) {
         if (servicePackage.name.trim().length < 2)
           return `Enter a name for package ${index + 1}`
@@ -363,21 +403,25 @@ export function ServiceFormDialog({
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
     if (submitting) return
-    if (currentStep < formSteps.length - 1) {
+    if (!isEditing && currentStep < formSteps.length - 1) {
       goToNextStep()
       return
     }
-    const validationError = validateStep(currentStep)
-    if (validationError) {
-      setError(validationError)
-      return
+    for (let step = 0; step < formSteps.length; step++) {
+      const validationError = validateStep(step)
+      if (validationError) {
+        setCurrentStep(step)
+        setError(validationError)
+        return
+      }
     }
 
     const input: ServiceInput = {
       name: name.trim(),
       description: description.trim(),
+      iconKey,
       departmentIds,
-      isActive,
+      isActive: service?.isActive ?? true,
       imageDataUrl,
       imageAltText: imagePreviewUrl ? imageAltText.trim() : null,
       removeImage,
@@ -389,6 +433,10 @@ export function ServiceFormDialog({
       consultationNotes: requiresConsultation
         ? consultationNotes.trim() || null
         : null,
+      keyBenefits: keyBenefits.map(({ title, description }) => ({
+        title: title.trim(),
+        description: description.trim(),
+      })),
       pricingTemplateId:
         pricingChoice === "none" || pricingChoice === "new"
           ? null
@@ -480,9 +528,9 @@ export function ServiceFormDialog({
           className="border-b border-[#eceef1] px-5 pt-5 pb-4"
           aria-label="Service form progress"
         >
-          <ol className="m-0 grid list-none grid-cols-4 gap-2 p-0">
+          <ol className="m-0 grid list-none grid-cols-5 gap-2 p-0">
             {formSteps.map((step, index) => {
-              const isComplete = index < currentStep
+              const isComplete = !isEditing && index < currentStep
               const isCurrent = index === currentStep
               return (
                 <li
@@ -499,33 +547,50 @@ export function ServiceFormDialog({
                       aria-hidden="true"
                     />
                   )}
-                  <span
+                  <button
+                    type="button"
                     className={cn(
-                      "relative z-10 grid size-7 place-items-center rounded-full border text-[11px] font-bold transition-colors motion-reduce:transition-none",
-                      isComplete && "border-[#203f8c] bg-[#203f8c] text-white",
-                      isCurrent &&
-                        "border-[#203f8c] bg-white text-[#203f8c] ring-2 ring-[#dce6fb]",
-                      !isComplete &&
-                        !isCurrent &&
-                        "border-[#d4dce8] bg-white text-[#8290a5]",
+                      "relative z-10 flex w-full min-w-0 flex-col items-center gap-1.5 rounded-lg border-0 bg-transparent p-0 disabled:cursor-default",
+                      isEditing &&
+                        "cursor-pointer hover:enabled:bg-[#f1f5fc] disabled:opacity-60",
+                      focusRing,
                     )}
+                    onClick={() => {
+                      setError("")
+                      setCurrentStep(index)
+                    }}
+                    disabled={!isEditing || submitting}
+                    aria-current={isCurrent ? "step" : undefined}
                   >
-                    {isComplete ? (
-                      <Check size={14} strokeWidth={2.5} aria-hidden="true" />
-                    ) : (
-                      index + 1
-                    )}
-                  </span>
-                  <span
-                    className={cn(
-                      "truncate text-[10px] font-semibold sm:text-[11px]",
-                      isCurrent || isComplete
-                        ? "text-[#203f8c]"
-                        : "text-[#8290a5]",
-                    )}
-                  >
-                    {step.label}
-                  </span>
+                    <span
+                      className={cn(
+                        "relative z-10 grid size-7 place-items-center rounded-full border text-[11px] font-bold transition-colors motion-reduce:transition-none",
+                        isComplete &&
+                          "border-[#203f8c] bg-[#203f8c] text-white",
+                        isCurrent &&
+                          "border-[#203f8c] bg-white text-[#203f8c] ring-2 ring-[#dce6fb]",
+                        !isComplete &&
+                          !isCurrent &&
+                          "border-[#d4dce8] bg-white text-[#8290a5]",
+                      )}
+                    >
+                      {isComplete ? (
+                        <Check size={14} strokeWidth={2.5} aria-hidden="true" />
+                      ) : (
+                        index + 1
+                      )}
+                    </span>
+                    <span
+                      className={cn(
+                        "truncate text-[10px] font-semibold sm:text-[11px]",
+                        isCurrent || isComplete
+                          ? "text-[#203f8c]"
+                          : "text-[#8290a5]",
+                      )}
+                    >
+                      {step.label}
+                    </span>
+                  </button>
                 </li>
               )
             })}
@@ -670,7 +735,35 @@ export function ServiceFormDialog({
                       )}
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3 max-[560px]:grid-cols-1">
+                  <div className="grid grid-cols-2 gap-3 max-[700px]:grid-cols-1">
+                    <div className={fieldClass}>
+                      <label className={labelClass} htmlFor="service-icon">
+                        Icon Category
+                      </label>
+                      <Select
+                        value={iconKey}
+                        onValueChange={(value) =>
+                          setIconKey(value as ServiceIconKey)
+                        }
+                      >
+                        <SelectTrigger
+                          id="service-icon"
+                          className={cn(inputClass, "h-10 shadow-none")}
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="z-[130] bg-white">
+                          {serviceIconOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              <span className="flex items-center gap-2">
+                                <ServiceIcon iconKey={option.value} size={16} />
+                                {option.label}
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                     <div className={fieldClass}>
                       <label
                         className={labelClass}
@@ -733,33 +826,114 @@ export function ServiceFormDialog({
                         </p>
                       )}
                     </div>
-                    <div className={fieldClass}>
-                      <label className={labelClass} htmlFor="service-status">
-                        Status
-                      </label>
-                      <Select
-                        value={isActive ? "active" : "inactive"}
-                        onValueChange={(value) =>
-                          setIsActive(value === "active")
-                        }
-                      >
-                        <SelectTrigger
-                          id="service-status"
-                          className={cn(inputClass, "h-10 shadow-none")}
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="z-[130] bg-white">
-                          <SelectItem value="active">Active</SelectItem>
-                          <SelectItem value="inactive">Inactive</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
                   </div>
                 </section>
               )}
 
               {currentStep === 1 && (
+                <section
+                  className="grid gap-4"
+                  aria-labelledby="service-benefits-heading"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3
+                        id="service-benefits-heading"
+                        className="m-0 text-sm font-[650]"
+                      >
+                        Key Benefits
+                      </h3>
+                      <p className="mt-1 mb-0 text-[11px] text-[#738096]">
+                        Add the outcomes clients can expect. These appear as
+                        expandable items in the service modal.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className={cn(
+                        buttonClass,
+                        "shrink-0 gap-1.5 border-[#d7e0ee] bg-white whitespace-nowrap text-[#24437e] hover:bg-[#f1f5fc]",
+                      )}
+                      onClick={() =>
+                        setKeyBenefits((current) => [...current, newBenefit()])
+                      }
+                      disabled={keyBenefits.length >= 10}
+                    >
+                      <Plus size={14} aria-hidden="true" /> Add Benefit
+                    </button>
+                  </div>
+                  {keyBenefits.length === 0 && (
+                    <p className="m-0 rounded-lg border border-dashed border-[#d6dfec] p-4 text-center text-xs text-[#738096]">
+                      No key benefits configured yet.
+                    </p>
+                  )}
+                  {keyBenefits.map((benefit, index) => (
+                    <article
+                      key={benefit.id}
+                      className="grid gap-3 rounded-lg border border-[#dfe6ef] p-3"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <h4 className="m-0 text-xs font-[650]">
+                          Benefit {index + 1}
+                        </h4>
+                        <button
+                          type="button"
+                          className="inline-flex cursor-pointer items-center gap-1 border-0 bg-transparent text-xs font-semibold text-[#b4234d]"
+                          onClick={() =>
+                            setKeyBenefits((current) =>
+                              current.filter((item) => item.id !== benefit.id),
+                            )
+                          }
+                        >
+                          <Trash2 size={13} aria-hidden="true" /> Remove
+                        </button>
+                      </div>
+                      <div className={fieldClass}>
+                        <label
+                          className={labelClass}
+                          htmlFor={`${benefit.id}-title`}
+                        >
+                          Benefit Title
+                        </label>
+                        <input
+                          id={`${benefit.id}-title`}
+                          className={cn(inputClass, "h-10")}
+                          value={benefit.title}
+                          onChange={(event) =>
+                            updateBenefit(benefit.id, {
+                              title: event.target.value,
+                            })
+                          }
+                          maxLength={120}
+                          required
+                        />
+                      </div>
+                      <div className={fieldClass}>
+                        <label
+                          className={labelClass}
+                          htmlFor={`${benefit.id}-description`}
+                        >
+                          Benefit Description
+                        </label>
+                        <textarea
+                          id={`${benefit.id}-description`}
+                          className={cn(inputClass, "min-h-20 resize-y py-2.5")}
+                          value={benefit.description}
+                          onChange={(event) =>
+                            updateBenefit(benefit.id, {
+                              description: event.target.value,
+                            })
+                          }
+                          maxLength={500}
+                          required
+                        />
+                      </div>
+                    </article>
+                  ))}
+                </section>
+              )}
+
+              {currentStep === 2 && (
                 <section
                   className="grid gap-3"
                   aria-labelledby="service-requirements-heading"
@@ -826,7 +1000,7 @@ export function ServiceFormDialog({
                 </section>
               )}
 
-              {currentStep === 2 && (
+              {currentStep === 3 && (
                 <section
                   className="grid gap-3"
                   aria-labelledby="service-pricing-heading"
@@ -919,7 +1093,7 @@ export function ServiceFormDialog({
                 </section>
               )}
 
-              {currentStep === 3 && (
+              {currentStep === 4 && (
                 <section
                   className="grid gap-3"
                   aria-labelledby="service-packages-heading"
@@ -1172,7 +1346,7 @@ export function ServiceFormDialog({
                 )}
                 disabled={submitting || departments.length === 0}
               >
-                {currentStep < formSteps.length - 1 ? (
+                {!isEditing && currentStep < formSteps.length - 1 ? (
                   <>
                     Continue <ChevronRight size={14} aria-hidden="true" />
                   </>
