@@ -57,11 +57,11 @@ const formSteps = [
 ] as const
 
 const pricingModels: { value: PricingModel; label: string }[] = [
-  { value: "FIXED", label: "Fixed price" },
-  { value: "STARTING", label: "Starting price" },
-  { value: "CUSTOM_QUOTE", label: "Custom quotation" },
+  { value: "FIXED", label: "Fixed Price" },
+  { value: "STARTING", label: "Starting Price" },
+  { value: "CUSTOM_QUOTE", label: "Custom Quotation" },
   { value: "RECURRING", label: "Recurring" },
-  { value: "HOURLY", label: "Hourly rate" },
+  { value: "HOURLY", label: "Hourly Rate" },
 ]
 
 const billingIntervals: { value: BillingInterval; label: string }[] = [
