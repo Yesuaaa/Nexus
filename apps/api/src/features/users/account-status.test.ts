@@ -1,17 +1,23 @@
 import assert from "node:assert/strict"
+import { randomBytes } from "node:crypto"
 import type { AddressInfo } from "node:net"
 import { test } from "node:test"
 import { createApp } from "../../app.js"
 import { Role, type Prisma, type User } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { hashPassword } from "../auth/auth.password.js"
+import { signAccessToken } from "../auth/auth.jwt.js"
 
 test("account status, deletion, and authentication enforce access", async (t) => {
   const previousUrl = process.env.DATABASE_URL
+  const previousJwtSecret = process.env.JWT_SECRET
+  process.env.JWT_SECRET = randomBytes(32).toString("base64url")
   // All database operations below are mocked; never connect to a real database.
   process.env.DATABASE_URL = "postgresql://test:test@127.0.0.1:1/test"
   const prisma = getPrisma()!
-  const token = "a".repeat(43)
+  const token = (
+    await signAccessToken("actor", "session", new Date(Date.now() + 60_000))
+  ).token
   const password = "a long unique password"
   const user: User = {
     id: "target",
@@ -33,7 +39,10 @@ test("account status, deletion, and authentication enforce access", async (t) =>
   let targetExists = true
   let conflict = false
 
-  const sessionCreate = t.mock.fn(async () => ({}))
+  const sessionCreate = t.mock.fn(async () => ({
+    id: "new-session",
+    expiresAt: new Date(Date.now() + 60_000),
+  }))
   const revoke = t.mock.fn(async (args: { where: { userId: string } }) => {
     assert.equal(args.where.userId, "target")
     return { count: 2 }
@@ -67,6 +76,7 @@ test("account status, deletion, and authentication enforce access", async (t) =>
   Reflect.set(prisma, "session", {
     findUnique: async () => ({
       id: "session",
+      userId: actor.id,
       user: actor,
       expiresAt: new Date(Date.now() + 60_000),
     }),
@@ -193,5 +203,7 @@ test("account status, deletion, and authentication enforce access", async (t) =>
     )
     if (previousUrl === undefined) delete process.env.DATABASE_URL
     else process.env.DATABASE_URL = previousUrl
+    if (previousJwtSecret === undefined) delete process.env.JWT_SECRET
+    else process.env.JWT_SECRET = previousJwtSecret
   }
 })

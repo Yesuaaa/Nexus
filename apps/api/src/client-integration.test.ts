@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { createHash } from "node:crypto"
+import { randomBytes } from "node:crypto"
 import { readdir, readFile } from "node:fs/promises"
 import type { AddressInfo } from "node:net"
 import { test } from "node:test"
@@ -7,6 +7,7 @@ import { PGlite } from "@electric-sql/pglite"
 import { PGLiteSocketServer } from "@electric-sql/pglite-socket"
 import { createApp } from "./app.js"
 import { getPrisma } from "./lib/db.js"
+import { issueSession } from "./features/auth/auth.service.js"
 
 test(
   "client directory reads only client accounts without exposing credentials",
@@ -16,7 +17,9 @@ test(
       DATABASE_URL: process.env.DATABASE_URL,
       DIRECT_URL: process.env.DIRECT_URL,
       DATABASE_POOL_MAX: process.env.DATABASE_POOL_MAX,
+      JWT_SECRET: process.env.JWT_SECRET,
     }
+    process.env.JWT_SECRET = randomBytes(32).toString("base64url")
     const db = new PGlite()
     const socket = new PGLiteSocketServer({ db, port: 0, host: "127.0.0.1" })
     const cleanup: {
@@ -61,15 +64,7 @@ test(
           passwordHash: "secret-hash",
         },
       })
-      const token = createHash("sha256").update(role).digest("base64url")
-      tokens.set(role, token)
-      await prisma.session.create({
-        data: {
-          userId: user.id,
-          tokenHash: createHash("sha256").update(token).digest("hex"),
-          expiresAt: new Date(Date.now() + 120_000),
-        },
-      })
+      tokens.set(role, (await issueSession(user)).token)
     }
     for (let i = 0; i < 22; i++) {
       await prisma.user.create({

@@ -54,15 +54,16 @@ export const authRepository = {
         tokenHash: data.tokenHash,
         userId: data.userId,
         expiresAt: data.expiresAt,
+        refreshTokens: { create: { tokenHash: data.tokenHash } },
       },
     })
   },
 
-  async findSessionByTokenHash(tokenHash: string) {
+  async findSessionById(id: string) {
     const prisma = getPrisma()
     if (!prisma) return null
     return prisma.session.findUnique({
-      where: { tokenHash },
+      where: { id },
       include: {
         user: {
           include: {
@@ -76,9 +77,52 @@ export const authRepository = {
     })
   },
 
+  async rotateRefreshToken(currentHash: string, nextHash: string) {
+    const prisma = getPrisma()!
+    return prisma.$transaction(async (tx) => {
+      const record = await tx.refreshToken.findUnique({
+        where: { tokenHash: currentHash },
+        include: { session: { include: { user: true } } },
+      })
+      if (!record) return null
+      const { session } = record
+      if (
+        record.consumedAt ||
+        session.expiresAt <= new Date() ||
+        !session.user.isActive ||
+        session.user.accountDeletedAt !== null
+      ) {
+        await tx.session.deleteMany({ where: { id: session.id } })
+        return null
+      }
+      // Comparing the current hash serializes concurrent rotations of this family.
+      const claimed = await tx.session.updateMany({
+        where: {
+          id: session.id,
+          tokenHash: currentHash,
+          expiresAt: { gt: new Date() },
+          user: { isActive: true, accountDeletedAt: null },
+        },
+        data: { tokenHash: nextHash },
+      })
+      if (claimed.count !== 1) {
+        await tx.session.deleteMany({ where: { id: session.id } })
+        return null
+      }
+      await tx.refreshToken.update({
+        where: { id: record.id },
+        data: { consumedAt: new Date() },
+      })
+      await tx.refreshToken.create({
+        data: { tokenHash: nextHash, sessionId: session.id },
+      })
+      return session
+    })
+  },
+
   async deleteSession(sessionId: string) {
     const prisma = getPrisma()!
-    return prisma.session.delete({ where: { id: sessionId } })
+    return prisma.session.deleteMany({ where: { id: sessionId } })
   },
 
   async updatePasswordAndRevokeSessions(userId: string, passwordHash: string) {

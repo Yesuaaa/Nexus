@@ -2,7 +2,9 @@ import type { RequestHandler } from "express"
 import { Role, type User } from "../../generated/prisma/client.js"
 import { authRepository } from "./auth.repository.js"
 import { hasPermission, type Permission } from "./auth.permissions.js"
-import { issueSession, tokenHash } from "./auth.service.js"
+import { issueSession } from "./auth.service.js"
+import { verifyAccessToken } from "./auth.jwt.js"
+import { errors } from "jose"
 
 export { issueSession }
 
@@ -24,17 +26,20 @@ export const requireAuth: RequestHandler = async (request, response, next) => {
     return
   }
   const authorization = request.header("authorization")
-  const match = /^Bearer ([A-Za-z0-9_-]{43})$/.exec(authorization ?? "")
-  if (!match) {
+  const match =
+    /^Bearer ([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/.exec(
+      authorization ?? "",
+    )
+  if (!match || match[1].length > 4096) {
     response.status(401).json({ error: "Authentication required" })
     return
   }
   try {
-    const session = await authRepository.findSessionByTokenHash(
-      tokenHash(match[1]),
-    )
+    const claims = await verifyAccessToken(match[1])
+    const session = await authRepository.findSessionById(claims.sessionId)
     if (
       !session ||
+      session.userId !== claims.userId ||
       session.expiresAt <= new Date() ||
       !session.user.isActive ||
       session.user.accountDeletedAt !== null
@@ -45,6 +50,16 @@ export const requireAuth: RequestHandler = async (request, response, next) => {
     request.auth = { user: session.user, sessionId: session.id }
     next()
   } catch (error) {
+    if (error instanceof errors.JOSEError) {
+      response.status(401).json({
+        error: "Invalid or expired session",
+        code:
+          error instanceof errors.JWTExpired
+            ? "ACCESS_TOKEN_EXPIRED"
+            : "INVALID_ACCESS_TOKEN",
+      })
+      return
+    }
     next(error)
   }
 }
