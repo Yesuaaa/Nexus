@@ -162,7 +162,7 @@ function AccountRowContents({
           <AccountDropdown
             className="w-full max-w-[112px]"
             triggerClassName="h-8 border-[#e1e4ea] text-xs"
-            menuClassName="right-0 left-auto"
+            align="right"
             label={`Role for ${user.email}`}
             value={selectedRole}
             disabled={disabled}
