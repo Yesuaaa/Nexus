@@ -17,14 +17,14 @@ export function ServiceStatusDialog({
   const activating = !service.isActive
   return (
     <ConfirmationDialog
-      title={activating ? "Activate service?" : "Deactivate service?"}
+      title={activating ? "Activate Service?" : "Deactivate Service?"}
       subject={service.name}
       description={
         activating
           ? "This service will become available for new client requests."
           : "This service will no longer be available for new client requests. Existing records will remain unaffected."
       }
-      confirmLabel={activating ? "Activate service" : "Deactivate service"}
+      confirmLabel={activating ? "Activate Service" : "Deactivate Service"}
       pendingLabel={activating ? "Activating..." : "Deactivating..."}
       pending={saving}
       destructive={!activating}

@@ -101,7 +101,7 @@ export function DepartmentRowActions({
                 deletePending.current = true
               }}
             >
-              Delete department
+              Delete Department
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

@@ -33,15 +33,15 @@ function formatDate(value: string, includeTime = false) {
 }
 
 const pricingLabels = {
-  FIXED: "Fixed price",
-  STARTING: "Starting at",
-  CUSTOM_QUOTE: "Custom quotation",
+  FIXED: "Fixed Price",
+  STARTING: "Starting At",
+  CUSTOM_QUOTE: "Custom Quotation",
   RECURRING: "Recurring",
-  HOURLY: "Hourly rate",
+  HOURLY: "Hourly Rate",
 } as const
 
 function formatPrice(amount: string | null, currency: string) {
-  if (amount === null) return "Price on request"
+  if (amount === null) return "Price on Request"
   return new Intl.NumberFormat("en-PH", {
     style: "currency",
     currency,
