@@ -15,7 +15,6 @@ import {
   type Field,
 } from "../model/schema"
 import type { AuthLanguage, AuthMode } from "../model/types"
-import { SocialPlaceholders } from "./auth-visuals"
 
 export function AuthContent({
   mode,
@@ -250,7 +249,7 @@ export function AuthContent({
             </p>
           )}
           <Button
-            className={`grid h-[46px] w-full place-items-center rounded-md border-0 bg-[#253f8c] text-sm font-bold text-white transition-[background,transform] duration-150 hover:bg-[#1a3276] hover:enabled:-translate-y-px disabled:cursor-wait disabled:opacity-70 motion-reduce:transition-none ${focusOutline}`}
+            className={`grid h-[46px] w-full place-items-center rounded-md border-0 bg-[#253f8c] text-sm font-bold text-white transition-[background,transform] duration-150 hover:bg-[#1a3276] hover:enabled:-translate-y-px disabled:cursor-wait disabled:opacity-70 motion-reduce:transition-none ${focusOutline} ${mode === "register" ? "mt-2" : ""}`}
             type="submit"
             disabled={pending}
           >
@@ -264,20 +263,7 @@ export function AuthContent({
           </Button>
         </form>
 
-        <div
-          className={`flex items-center gap-4 text-xs text-[#7485a7] before:h-px before:flex-1 before:bg-[#dce4ee] before:content-[''] after:h-px after:flex-1 after:bg-[#dce4ee] after:content-[''] ${mode === "register" ? "mt-2 mb-2" : "mt-8 mb-4"}`}
-        >
-          <span>{copy.or}</span>
-        </div>
-        <p
-          className={`text-center text-[13px] leading-[1.4] text-[#7485a7] ${mode === "register" ? "mb-2" : "mb-3"}`}
-        >
-          {copy.continueWith}
-        </p>
-        <SocialPlaceholders copy={copy} />
-        <p
-          className={`text-center text-sm leading-[1.4] text-[#52688d] ${mode === "register" ? "mt-2" : "mt-6"}`}
-        >
+        <p className="mt-6 text-center text-sm leading-[1.4] text-[#52688d]">
           {mode === "login" ? copy.noAccountYet : copy.haveAccountYet}{" "}
           <Link
             href={mode === "login" ? "/register" : "/login"}
