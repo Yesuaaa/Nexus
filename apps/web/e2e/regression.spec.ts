@@ -3164,6 +3164,104 @@ test.describe("mocked regression", () => {
   })
 
   for (const width of [1280, 390]) {
+    test(`client retries a failed submission without changing its request reference at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 })
+      await restoreSession(page, "USER")
+      await page.route("**/api/services/service-1/specialists", (route) =>
+        route.fulfill({ json: { specialists: [] } }),
+      )
+      const submissions: Record<string, unknown>[] = []
+      await page.route("**/api/service-requests", async (route) => {
+        expect(route.request().method()).toBe("POST")
+        expect(route.request().headers().authorization).toBe(
+          "Bearer test-session",
+        )
+        submissions.push(
+          route.request().postDataJSON() as Record<string, unknown>,
+        )
+        if (submissions.length === 1) {
+          await route.fulfill({
+            status: 503,
+            json: { error: "Submission temporarily unavailable" },
+          })
+          return
+        }
+        await route.fulfill({
+          status: 201,
+          json: {
+            serviceRequest: {
+              id: "retried-request",
+              status: "PENDING",
+              createdAt: "2026-10-30T00:00:00.000Z",
+            },
+          },
+        })
+      })
+      await page.goto("/services")
+      await page
+        .getByRole("button", { name: "Explore Test Service", exact: true })
+        .click()
+      await page
+        .getByRole("dialog")
+        .getByRole("button", { name: "EXPlore", exact: true })
+        .click()
+      await page
+        .getByRole("button", { name: "Select Standard service", exact: true })
+        .click()
+      await page
+        .getByRole("button", { name: "Continue to project requirements" })
+        .click()
+      for (const name of [
+        "Project goals",
+        "Project requirements",
+        "Expected timeline",
+      ])
+        await page
+          .getByRole("textbox", { name, exact: true })
+          .fill(`${name} retained on retry`)
+      await page
+        .getByRole("button", { name: "Continue to preferred specialist" })
+        .click()
+      const submit = page.getByRole("button", {
+        name: "Submit service request for review",
+        exact: true,
+      })
+      await submit.click()
+      await expect(
+        page
+          .getByRole("alert")
+          .filter({ hasText: "Submission temporarily unavailable" }),
+      ).toBeVisible()
+      await expect(
+        page.getByRole("heading", {
+          name: "Service request submitted for review",
+          exact: true,
+        }),
+      ).toHaveCount(0)
+      await expect(submit).toBeEnabled()
+      expect(submissions).toHaveLength(1)
+      await submit.click()
+      await expect(
+        page.getByRole("heading", {
+          name: "Service request submitted for review",
+          exact: true,
+        }),
+      ).toBeFocused()
+      expect(submissions).toHaveLength(2)
+      expect(submissions[1]).toEqual(submissions[0])
+      expect(submissions[0].submissionKey).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+      )
+      expect(submissions[0]).not.toHaveProperty("clientId")
+      await expect(
+        page
+          .getByRole("alert")
+          .filter({ hasText: "Submission temporarily unavailable" }),
+      ).toHaveCount(0)
+    })
+
     test(`client submits standard service and starts a clean request at ${width}px`, async ({
       page,
     }) => {
