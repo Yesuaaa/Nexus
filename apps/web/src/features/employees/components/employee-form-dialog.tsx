@@ -299,12 +299,8 @@ export function EmployeeFormDialog({
         showCloseButton={false}
         overlayClassName="bg-[rgb(13_28_57_/_48%)]"
         className="max-h-[calc(100dvh-28px)] w-[min(620px,calc(100vw-28px))] gap-0 overflow-y-auto rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_22px_75px_rgb(18_36_73_/_22%)]"
-        onInteractOutside={(event) => {
-          if (pending) event.preventDefault()
-        }}
-        onEscapeKeyDown={(event) => {
-          if (pending) event.preventDefault()
-        }}
+        onInteractOutside={(event) => event.preventDefault()}
+        onEscapeKeyDown={(event) => event.preventDefault()}
         onCloseAutoFocus={(event) => {
           event.preventDefault()
           const opener = openerRef.current
