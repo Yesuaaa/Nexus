@@ -121,12 +121,25 @@ test.describe("live test accounts", () => {
       const payload = (await response.json()) as {
         user?: Account
         token?: string
+        refreshToken?: string
+        expiresIn?: number
       }
       try {
         expect(response.status(), `${role} login must succeed`).toBe(200)
         expect(payload.user?.email).toBe(testAccounts[role].email)
         expect(payload.user?.role).toBe(role)
         expect(payload.user?.isActive).toBe(true)
+        expect(
+          typeof payload.token === "string" &&
+            payload.token.split(".").length === 3,
+        ).toBe(true)
+        expect(
+          typeof payload.refreshToken === "string" &&
+            /^[A-Za-z0-9_-]{43}$/.test(payload.refreshToken),
+        ).toBe(true)
+        expect(payload.expiresIn).toBeGreaterThan(0)
+        expect(payload.expiresIn).toBeLessThanOrEqual(900)
+        expect(response.headers()["cache-control"]).toBe("no-store")
         await expect(page).toHaveURL(/\/dashboard$/)
         expect(
           await page.evaluate(() =>
@@ -135,6 +148,16 @@ test.describe("live test accounts", () => {
         ).toBe(true)
         expect(
           await page.evaluate(() => localStorage.getItem("nexus.auth.token")),
+        ).toBeNull()
+        expect(
+          await page.evaluate(() =>
+            Boolean(sessionStorage.getItem("nexus.auth.refreshToken")),
+          ),
+        ).toBe(true)
+        expect(
+          await page.evaluate(() =>
+            localStorage.getItem("nexus.auth.refreshToken"),
+          ),
         ).toBeNull()
         for (const feature of features) {
           const clientCatalog = role === "USER" && feature.path === "/services"
@@ -215,12 +238,18 @@ test.describe("live test accounts", () => {
       } finally {
         // Revoke the real session even if an assertion fails halfway through.
         if (payload.token) {
-          const logout = await page.request.post("/api/auth/logout", {
-            headers: { Authorization: `Bearer ${payload.token}` },
-          })
-          await page.evaluate(() =>
-            sessionStorage.removeItem("nexus.auth.token"),
+          const logoutToken = await page.evaluate(() =>
+            sessionStorage.getItem("nexus.auth.token"),
           )
+          const logout = await page.request.post("/api/auth/logout", {
+            headers: {
+              Authorization: `Bearer ${logoutToken ?? payload.token}`,
+            },
+          })
+          await page.evaluate(() => {
+            sessionStorage.removeItem("nexus.auth.token")
+            sessionStorage.removeItem("nexus.auth.refreshToken")
+          })
           expect([204, 401]).toContain(logout.status())
         }
       }
@@ -238,10 +267,14 @@ test.describe("live test accounts", () => {
         headers: { Authorization: `Bearer ${payload.token}` },
       })
       expect([204, 401]).toContain(logout.status())
-      await page.evaluate(() => sessionStorage.removeItem("nexus.auth.token"))
+      await page.evaluate(() => {
+        sessionStorage.removeItem("nexus.auth.token")
+        sessionStorage.removeItem("nexus.auth.refreshToken")
+      })
     }
     expect(response.status()).toBe(401)
     expect(payload).not.toHaveProperty("token")
+    expect(payload).not.toHaveProperty("refreshToken")
     await expect(page).toHaveURL(/\/login$/)
     await expect(
       page.getByText("Sign-in failed", { exact: true }),
@@ -308,6 +341,7 @@ test.describe("mocked regression", () => {
   }
 
   type MockApiOptions = {
+    accessToken?: () => string
     pricingTemplates?: PricingTemplate[]
     account?: Partial<Account>
     initialServices?: Service[]
@@ -469,7 +503,12 @@ test.describe("mocked regression", () => {
           return
         }
         await route.fulfill({
-          json: { token: "test-session", user: currentUser, expiresIn: 60 },
+          json: {
+            token: "test-session",
+            refreshToken: "test-refresh",
+            user: currentUser,
+            expiresIn: 900,
+          },
         })
         return
       }
@@ -486,12 +525,20 @@ test.describe("mocked regression", () => {
           return
         }
         await route.fulfill({
-          json: { token: "test-session", user: currentUser, expiresIn: 60 },
+          status: 201,
+          json: {
+            token: "test-session",
+            refreshToken: "test-refresh",
+            user: currentUser,
+            expiresIn: 900,
+          },
         })
         return
       }
 
-      expect(request.headers().authorization).toBe("Bearer test-session")
+      expect(request.headers().authorization).toBe(
+        `Bearer ${options?.accessToken?.() ?? "test-session"}`,
+      )
 
       if (pathname === "/api/auth/logout") {
         await route.fulfill({ status: 204 })
@@ -905,9 +952,300 @@ test.describe("mocked regression", () => {
   ) {
     await mockApi(page, role, options)
     await page.addInitScript(() => {
+      // Seed once so navigation cannot resurrect a signed-out session or
+      // overwrite tokens that rotated during the test.
+      if (sessionStorage.getItem("regression-session-initialized")) return
+      sessionStorage.setItem("regression-session-initialized", "true")
       sessionStorage.setItem("nexus.auth.token", "test-session")
+      sessionStorage.setItem("nexus.auth.refreshToken", "test-refresh")
     })
   }
+
+  async function storedTokens(page: Page) {
+    return page.evaluate(() => [
+      sessionStorage.getItem("nexus.auth.token"),
+      sessionStorage.getItem("nexus.auth.refreshToken"),
+    ])
+  }
+
+  // Browser mocks exercise the refresh protocol, not JWT signature validation.
+  // The API's auth.jwt and jwt-session tests verify signed tokens with PGlite.
+  const expiredAccess = {
+    error: "Access token expired",
+    code: "ACCESS_TOKEN_EXPIRED",
+  }
+  const renewedTokens = {
+    token: "renewed-session",
+    refreshToken: "renewed-refresh",
+    expiresIn: 900,
+  }
+
+  for (const role of ["SUPERADMIN", "ADMIN", "STAFF", "USER"] as const) {
+    test(`${role} renews an expired access token and signs out both tokens`, async ({
+      page,
+    }) => {
+      let token = "test-session"
+      let refreshes = 0
+      await restoreSession(page, role, { accessToken: () => token })
+      await page.route("**/api/auth/me", async (route) => {
+        if (route.request().headers().authorization === "Bearer test-session") {
+          await route.fulfill({ status: 401, json: expiredAccess })
+        } else {
+          await route.fallback()
+        }
+      })
+      await page.route("**/api/auth/refresh", async (route) => {
+        refreshes++
+        expect(route.request().method()).toBe("POST")
+        expect(route.request().headers().authorization).toBeUndefined()
+        expect(route.request().postDataJSON()).toEqual({
+          refreshToken: "test-refresh",
+        })
+        token = renewedTokens.token
+        await route.fulfill({ json: renewedTokens })
+      })
+      await page.goto("/dashboard")
+      await expect(
+        page.getByRole("button", { name: "Sign Out", exact: true }),
+      ).toBeVisible()
+      expect(refreshes).toBe(1)
+      expect(await storedTokens(page)).toEqual([
+        renewedTokens.token,
+        renewedTokens.refreshToken,
+      ])
+      await page.reload()
+      await expect(
+        page.getByRole("button", { name: "Sign Out", exact: true }),
+      ).toBeVisible()
+      expect(refreshes).toBe(1)
+      expect(
+        await page.evaluate(() => [
+          localStorage.getItem("nexus.auth.token"),
+          localStorage.getItem("nexus.auth.refreshToken"),
+        ]),
+      ).toEqual([null, null])
+      expect(
+        (await page.context().cookies()).some((cookie) =>
+          [renewedTokens.token, renewedTokens.refreshToken].includes(
+            cookie.value,
+          ),
+        ),
+      ).toBe(false)
+      const logout = page.waitForRequest(
+        (request) => new URL(request.url()).pathname === "/api/auth/logout",
+      )
+      await page.getByRole("button", { name: "Sign Out", exact: true }).click()
+      expect((await logout).headers().authorization).toBe(
+        `Bearer ${renewedTokens.token}`,
+      )
+      await expect(page).toHaveURL(/\/login$/)
+      expect(await storedTokens(page)).toEqual([null, null])
+      await page.goto("/dashboard")
+      await expect(page).toHaveURL(/\/login$/)
+    })
+  }
+
+  test("parallel service reads share one refresh and retry with the new bearer token", async ({
+    page,
+  }) => {
+    let token = "test-session"
+    let refreshes = 0
+    const expiredPaths: string[] = []
+    const retriedPaths: string[] = []
+    const paths = [
+      "/api/services",
+      "/api/departments",
+      "/api/services/pricing-templates",
+    ]
+    let releaseRefresh!: () => void
+    const allExpired = new Promise<void>((resolve) => {
+      releaseRefresh = resolve
+    })
+    await restoreSession(page, "ADMIN", { accessToken: () => token })
+    for (const path of paths) {
+      await page.route(`**${path}`, async (route) => {
+        const authorization = route.request().headers().authorization
+        if (authorization === "Bearer test-session") {
+          expiredPaths.push(path)
+          if (expiredPaths.length === paths.length) releaseRefresh()
+          await route.fulfill({ status: 401, json: expiredAccess })
+        } else {
+          expect(authorization).toBe(`Bearer ${renewedTokens.token}`)
+          retriedPaths.push(path)
+          await route.fallback()
+        }
+      })
+    }
+    await page.route("**/api/auth/refresh", async (route) => {
+      refreshes++
+      expect(route.request().postDataJSON()).toEqual({
+        refreshToken: "test-refresh",
+      })
+      await allExpired
+      token = renewedTokens.token
+      await route.fulfill({ json: renewedTokens })
+    })
+    await page.goto("/services")
+    await expect(
+      page.getByRole("rowheader", { name: "Test Service", exact: true }),
+    ).toBeVisible()
+    expect(refreshes).toBe(1)
+    expect(expiredPaths.sort()).toEqual([...paths].sort())
+    expect(retriedPaths.sort()).toEqual([...paths].sort())
+    expect(await storedTokens(page)).toEqual([
+      renewedTokens.token,
+      renewedTokens.refreshToken,
+    ])
+  })
+
+  for (const status of [401, 429, 503]) {
+    test(`refresh HTTP ${status} ${status === 401 ? "clears both tokens" : "preserves the session for retry"}`, async ({
+      page,
+    }) => {
+      let token = "test-session"
+      let refreshes = 0
+      await restoreSession(page, "USER", { accessToken: () => token })
+      await page.route("**/api/auth/me", async (route) => {
+        if (route.request().headers().authorization === "Bearer test-session")
+          await route.fulfill({ status: 401, json: expiredAccess })
+        else await route.fallback()
+      })
+      await page.route("**/api/auth/refresh", async (route) => {
+        refreshes++
+        expect(route.request().postDataJSON()).toEqual({
+          refreshToken: "test-refresh",
+        })
+        if (refreshes === 1)
+          await route.fulfill({
+            status,
+            json: { error: "Unable to refresh session" },
+          })
+        else {
+          token = renewedTokens.token
+          await route.fulfill({ json: renewedTokens })
+        }
+      })
+      await page.goto("/login")
+      if (status === 401) {
+        await expect(
+          page.getByRole("button", { name: "Sign In", exact: true }),
+        ).toBeVisible()
+        expect(await storedTokens(page)).toEqual([null, null])
+        expect(refreshes).toBe(1)
+      } else {
+        await expect(page.getByRole("main").getByRole("alert")).toContainText(
+          "couldn't check your session",
+        )
+        expect(await storedTokens(page)).toEqual([
+          "test-session",
+          "test-refresh",
+        ])
+        await page
+          .getByRole("button", { name: "Try again", exact: true })
+          .click()
+        await expect(page).toHaveURL(/\/dashboard$/)
+        expect(refreshes).toBe(2)
+        expect(await storedTokens(page)).toEqual([
+          renewedTokens.token,
+          renewedTokens.refreshToken,
+        ])
+      }
+    })
+  }
+
+  test("invalid access tokens clear the session without attempting refresh", async ({
+    page,
+  }) => {
+    await restoreSession(page, "USER")
+    const refreshes: string[] = []
+    page.on("request", (request) => {
+      if (new URL(request.url()).pathname === "/api/auth/refresh")
+        refreshes.push(request.url())
+    })
+    await page.route("**/api/auth/me", (route) =>
+      route.fulfill({
+        status: 401,
+        json: { error: "Invalid access token", code: "INVALID_ACCESS_TOKEN" },
+      }),
+    )
+    await page.goto("/dashboard")
+    await expect(page).toHaveURL(/\/login$/)
+    await expect(
+      page.getByRole("button", { name: "Sign In", exact: true }),
+    ).toBeVisible()
+    expect(await storedTokens(page)).toEqual([null, null])
+    expect(refreshes).toEqual([])
+  })
+
+  test("a rejected renewed access token stops after one refresh", async ({
+    page,
+  }) => {
+    await restoreSession(page, "USER")
+    let refreshes = 0
+    let lookups = 0
+    await page.route("**/api/auth/me", async (route) => {
+      lookups++
+      await route.fulfill({ status: 401, json: expiredAccess })
+    })
+    await page.route("**/api/auth/refresh", async (route) => {
+      refreshes++
+      await route.fulfill({ json: renewedTokens })
+    })
+    await page.goto("/dashboard")
+    await expect(page).toHaveURL(/\/login$/)
+    await expect(
+      page.getByRole("button", { name: "Sign In", exact: true }),
+    ).toBeVisible()
+    expect(refreshes).toBe(1)
+    expect(lookups).toBe(2)
+    expect(await storedTokens(page)).toEqual([null, null])
+  })
+
+  test("an expired service update retries the same payload once after refresh", async ({
+    page,
+  }) => {
+    let token = "test-session"
+    let refreshes = 0
+    const updates: ServiceInput[] = []
+    await restoreSession(page, "ADMIN", { accessToken: () => token })
+    await page.route("**/api/services/service-1", async (route) => {
+      expect(route.request().method()).toBe("PUT")
+      updates.push(route.request().postDataJSON() as ServiceInput)
+      if (updates.length === 1)
+        await route.fulfill({ status: 401, json: expiredAccess })
+      else {
+        expect(route.request().headers().authorization).toBe(
+          `Bearer ${renewedTokens.token}`,
+        )
+        await route.fallback()
+      }
+    })
+    await page.route("**/api/auth/refresh", async (route) => {
+      refreshes++
+      token = renewedTokens.token
+      await route.fulfill({ json: renewedTokens })
+    })
+    await page.goto("/services")
+    await page
+      .getByRole("button", { name: "Edit Test Service", exact: true })
+      .click()
+    await page
+      .getByRole("dialog")
+      .getByLabel("Service Name")
+      .fill("Renewed Service")
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Save Changes", exact: true })
+      .click()
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await expect(
+      page.getByRole("rowheader", { name: "Renewed Service", exact: true }),
+    ).toBeVisible()
+    expect(refreshes).toBe(1)
+    expect(updates).toHaveLength(2)
+    expect(updates[1]).toEqual(updates[0])
+    expect(updates[1].name).toBe("Renewed Service")
+  })
 
   // These tests exercise the real browser guards against controlled API responses.
   // Backend authorization, transactions, and session revocation are covered by
@@ -1193,9 +1531,10 @@ test.describe("mocked regression", () => {
       if (new URL(request.url()).pathname.startsWith("/api/"))
         requests.push(request.url())
     })
-    await page.addInitScript(() =>
-      localStorage.setItem("nexus.auth.token", "test-session"),
-    )
+    await page.addInitScript(() => {
+      localStorage.setItem("nexus.auth.token", "test-session")
+      localStorage.setItem("nexus.auth.refreshToken", "test-refresh")
+    })
     await page.goto("/accounts")
     await expect(page).toHaveURL(/\/login$/)
     expect(requests).toEqual([])
@@ -1783,6 +2122,7 @@ test.describe("mocked regression", () => {
       await expect(
         page.getByRole("table", { name: "Services" }).getByRole("alert"),
       ).toContainText("Service list unavailable")
+      expect(await storedTokens(page)).toEqual(["test-session", "test-refresh"])
       await expect(
         page.getByRole("rowheader", { name: "Test Service" }),
       ).toHaveCount(0)
@@ -1887,8 +2227,15 @@ test.describe("mocked regression", () => {
       ),
     ).toBe(false)
     await expect(page.getByText("Welcome back", { exact: true })).toBeVisible()
+    expect(await storedTokens(page)).toEqual(["test-session", "test-refresh"])
+    expect(
+      await page.evaluate(() =>
+        localStorage.getItem("nexus.auth.refreshToken"),
+      ),
+    ).toBeNull()
     await page.getByRole("button", { name: "Sign Out", exact: true }).click()
     await expect(page).toHaveURL(/\/login$/)
+    expect(await storedTokens(page)).toEqual([null, null])
     expect(
       await page.evaluate(() => sessionStorage.getItem("nexus.auth.token")),
     ).toBeNull()
@@ -1998,6 +2345,7 @@ test.describe("mocked regression", () => {
     })
     await expect(page).toHaveURL(/\/dashboard$/)
     await expect(page.locator('[data-role="USER"]')).toBeVisible()
+    expect(await storedTokens(page)).toEqual(["test-session", "test-refresh"])
     await expect(
       page.getByRole("status", { name: "Opening your account" }),
     ).toHaveCount(0)
