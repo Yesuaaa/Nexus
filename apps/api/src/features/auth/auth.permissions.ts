@@ -5,6 +5,7 @@ export const Permission = {
   PROFILE_READ: "profile:read",
   PROFILE_CHANGE_PASSWORD: "profile:change-password",
   ACCOUNTS_READ: "accounts:read",
+  ACCOUNTS_RESET_PASSWORD: "accounts:reset-password",
   ACCOUNTS_CREATE_BASIC: "accounts:create-basic",
   ACCOUNTS_CREATE_PRIVILEGED: "accounts:create-privileged",
   ACCOUNTS_ASSIGN_BASIC: "accounts:assign-basic",
@@ -48,6 +49,7 @@ const adminPermissions = [
 
 const accountManagementPermissions = [
   Permission.ACCOUNTS_READ,
+  Permission.ACCOUNTS_RESET_PASSWORD,
   Permission.ACCOUNTS_CREATE_BASIC,
   Permission.ACCOUNTS_CREATE_PRIVILEGED,
   Permission.ACCOUNTS_ASSIGN_BASIC,
