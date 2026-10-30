@@ -58,7 +58,10 @@ function ClientRowActions({
       </button>
       <button
         type="button"
-        className={cn(rowActionButton, "text-[#203f8c] max-[560px]:size-11")}
+        className={cn(
+          rowActionButton,
+          "border-[#203f8c] bg-[#203f8c] text-white hover:enabled:border-[#172f70] hover:enabled:bg-[#172f70] hover:enabled:text-white max-[560px]:size-11",
+        )}
         aria-label={`Edit ${label}`}
         onClick={() => onEdit(client)}
       >
