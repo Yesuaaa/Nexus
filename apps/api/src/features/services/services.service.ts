@@ -26,6 +26,25 @@ function presentService<T extends { imagePath: string | null }>(service: T) {
   return { ...data, imageUrl: serviceImagePublicUrl(imagePath) }
 }
 
+function presentAvailableService(
+  service: Awaited<ReturnType<typeof servicesRepository.findAvailable>>[number],
+) {
+  return presentService({
+    ...service,
+    pricingTemplateId: service.pricingTemplate?.isPublic
+      ? service.pricingTemplateId
+      : null,
+    pricingTemplate: service.pricingTemplate?.isPublic
+      ? service.pricingTemplate
+      : null,
+    packages: service.packages.map((item) =>
+      item.isPricingPublic
+        ? item
+        : { ...item, amount: null, billingInterval: null },
+    ),
+  })
+}
+
 function persistenceInput(
   input: ServiceInput,
   imagePath: string | null,
@@ -80,26 +99,14 @@ export const servicesService = {
 
   async getAvailable() {
     const services = await servicesRepository.findAvailable()
-    return services.map((service) =>
-      presentService({
-        ...service,
-        pricingTemplateId: service.pricingTemplate?.isPublic
-          ? service.pricingTemplateId
-          : null,
-        pricingTemplate: service.pricingTemplate?.isPublic
-          ? service.pricingTemplate
-          : null,
-        packages: service.packages.map((servicePackage) =>
-          servicePackage.isPricingPublic
-            ? servicePackage
-            : {
-                ...servicePackage,
-                amount: null,
-                billingInterval: null,
-              },
-        ),
-      }),
-    )
+    return services.map(presentAvailableService)
+  },
+
+  async getAvailableById(id: string) {
+    const service = await servicesRepository.findAvailableById(id)
+    if (!service)
+      throw new ServicesError(404, "Service not found or is unavailable")
+    return presentAvailableService(service)
   },
 
   async getAll() {

@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
+import Link from "next/link"
 import { sileo } from "sileo"
 import { ChevronLeft, ChevronRight, Search } from "lucide-react"
 import { contentClass, focusRing } from "@/components/layout/styles"
@@ -13,12 +14,16 @@ import {
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import {
-  listAvailableServices,
   type Service,
   type ServiceSpecialist,
-  submitServiceRequest,
   type ServiceRequestReceipt,
 } from "../api/services-api"
+import {
+  getClientService,
+  listClientServices,
+  submitClientServiceRequest,
+} from "../api/client-services-api"
+import { Button } from "@/components/ui/button"
 import { ServiceCard } from "../components/service-card"
 import { ServiceShowcaseDialog } from "../components/service-showcase-dialog"
 import { ServicePackagesStep } from "../components/service-packages-step"
@@ -47,6 +52,11 @@ export function ClientServicesPage() {
   const [departmentId, setDepartmentId] = useState("all")
   const [page, setPage] = useState(1)
   const [selectedService, setSelectedService] = useState<Service | null>(null)
+  const [detailState, setDetailState] = useState<{
+    id: string
+    error: string
+  } | null>(null)
+  const detailRequest = useRef(0)
   const [packageService, setPackageService] = useState<Service | null>(null)
   const [revision, setRevision] = useState(0)
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1)
@@ -74,7 +84,7 @@ export function ClientServicesPage() {
 
   useEffect(() => {
     let active = true
-    listAvailableServices()
+    listClientServices()
       .then((availableServices) => {
         if (!active) return
         setServices(availableServices)
@@ -159,6 +169,26 @@ export function ClientServicesPage() {
     setCurrentStep(2)
   }
 
+  async function selectService(service: Service) {
+    const request = ++detailRequest.current
+    setDetailState(null)
+    try {
+      const current = await getClientService(service.id)
+      if (request !== detailRequest.current) return
+      setSelectedService(current)
+      setDetailState(null)
+    } catch (reason) {
+      if (request !== detailRequest.current) return
+      setDetailState({
+        id: service.id,
+        error:
+          reason instanceof Error
+            ? reason.message
+            : "Could not load this service.",
+      })
+    }
+  }
+
   async function handleSubmitRequest() {
     if (
       submittingRef.current ||
@@ -176,7 +206,7 @@ export function ClientServicesPage() {
     }
     try {
       submissionKey.current ??= crypto.randomUUID()
-      const receipt = await submitServiceRequest({
+      const receipt = await submitClientServiceRequest({
         ...requirementsDraft,
         serviceId: packageService.id,
         packageId:
@@ -207,33 +237,65 @@ export function ClientServicesPage() {
       className={cn(contentClass, "p-[clamp(20px,2.1vw,32px)]")}
       aria-label="Services catalog"
     >
-      <header>
-        <p className="m-0 text-[11px] font-bold tracking-[0.16em] text-[#2456b6] uppercase">
-          Services
-        </p>
-        <h1 className="mt-1 mb-0 text-[clamp(23px,2.2vw,31px)] leading-tight font-bold tracking-[-0.035em] text-[#101d35]">
-          {submittedRequest
-            ? "Request Submitted"
-            : currentStep === 4
-              ? "Preferred Specialist"
-              : currentStep === 3
-                ? "Project Requirements"
-                : currentStep === 2
-                  ? "Choose Your Package"
-                  : "Build Your Brand with EXP"}
-        </h1>
-        <p className="mt-1.5 mb-0 max-w-[760px] text-sm leading-relaxed text-[#587095]">
-          {submittedRequest
-            ? "Your service request is pending review."
-            : currentStep === 4
-              ? "Let us know who you’d prefer to work with, subject to availability and Department Manager approval."
-              : currentStep === 3
-                ? "Share your goals, requirements, and expected timeline so we can understand your project."
-                : currentStep === 2
-                  ? "Find the right package for your goals, with clear pricing and everything you need to get started."
-                  : "Discover powerful digital services crafted to amplify your presence, connect with your audience, and turn ideas into real business impact."}
-        </p>
+      <header className="flex items-start justify-between gap-4 max-[560px]:flex-col">
+        <div>
+          <p className="m-0 text-[11px] font-bold tracking-[0.16em] text-[#2456b6] uppercase">
+            Services
+          </p>
+          <h1 className="mt-1 mb-0 text-[clamp(23px,2.2vw,31px)] leading-tight font-bold tracking-[-0.035em] text-[#101d35]">
+            {submittedRequest
+              ? "Request Submitted"
+              : currentStep === 4
+                ? "Preferred Specialist"
+                : currentStep === 3
+                  ? "Project Requirements"
+                  : currentStep === 2
+                    ? "Choose Your Package"
+                    : "Build Your Brand with EXP"}
+          </h1>
+          <p className="mt-1.5 mb-0 max-w-[760px] text-sm leading-relaxed text-[#587095]">
+            {submittedRequest
+              ? "Your service request is pending review."
+              : currentStep === 4
+                ? "Let us know who you’d prefer to work with, subject to availability and Department Manager approval."
+                : currentStep === 3
+                  ? "Share your goals, requirements, and expected timeline so we can understand your project."
+                  : currentStep === 2
+                    ? "Find the right package for your goals, with clear pricing and everything you need to get started."
+                    : "Discover powerful digital services crafted to amplify your presence, connect with your audience, and turn ideas into real business impact."}
+          </p>
+        </div>
+        <Button
+          asChild
+          variant="outline"
+          className="h-[34px] text-xs max-[560px]:h-11"
+        >
+          <Link href="/service-requests">My service requests</Link>
+        </Button>
       </header>
+
+      {detailState && (
+        <div
+          className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-[#dce3ee] p-3 text-xs text-[#52627a]"
+          role="alert"
+        >
+          {detailState.error}
+          {detailState.error && (
+            <Button
+              variant="outline"
+              className="h-8 text-xs"
+              onClick={() => {
+                const service = services.find(
+                  (item) => item.id === detailState.id,
+                )
+                if (service) void selectService(service)
+              }}
+            >
+              Try again
+            </Button>
+          )}
+        </div>
+      )}
 
       <div className="mt-[clamp(30px,4vw,52px)] flex items-center gap-4">
         <div
@@ -402,7 +464,7 @@ export function ClientServicesPage() {
                       <ServiceCard
                         key={service.id}
                         service={service}
-                        onSelect={setSelectedService}
+                        onSelect={(item) => void selectService(item)}
                       />
                     ))}
               </div>

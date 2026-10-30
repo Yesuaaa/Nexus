@@ -1,140 +1,81 @@
 import type { Prisma } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
-import type { ClientServiceRequestInput } from "./client-services.schema.js"
+import type { ClientRequestFilters } from "./client-services.schema.js"
+
+export const clientRequestSelect = {
+  id: true,
+  referenceNumber: true,
+  title: true,
+  description: true,
+  status: true,
+  packageName: true,
+  preferredSpecialistName: true,
+  projectGoals: true,
+  projectRequirements: true,
+  expectedTimeline: true,
+  additionalDetails: true,
+  pricingModel: true,
+  quotedPrice: true,
+  currency: true,
+  billingInterval: true,
+  createdAt: true,
+  updatedAt: true,
+  service: { select: { id: true, name: true } },
+  package: { select: { id: true, name: true } },
+  preferredSpecialist: { select: { id: true, fullName: true, position: true } },
+} satisfies Prisma.ServiceRequestSelect
 
 export const clientServicesRepository = {
-  async findActiveServices() {
+  async findClientRequests(clientId: string, filters: ClientRequestFilters) {
+    const { page, search, status, sortOrder } = filters
+    const pageSize = 10
+    const where: Prisma.ServiceRequestWhereInput = {
+      clientId,
+      ...(status ? { status } : {}),
+      ...(search
+        ? {
+            OR: [
+              { title: { contains: search, mode: "insensitive" } },
+              { referenceNumber: { contains: search, mode: "insensitive" } },
+              { service: { name: { contains: search, mode: "insensitive" } } },
+              { packageName: { contains: search, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+    }
     const prisma = getPrisma()!
-    return prisma.service.findMany({
-      where: { isActive: true },
-      include: {
-        departments: {
-          select: { id: true, name: true, code: true, color: true },
-        },
-        pricingTemplate: true,
-        packages: {
-          where: { isActive: true },
-          orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
-        },
-      },
-      orderBy: { name: "asc" },
+    const summaryQuery = prisma.serviceRequest.groupBy({
+      by: ["status"],
+      where: { clientId },
+      orderBy: { status: "asc" },
+      _count: { _all: true },
     })
-  },
-
-  async findActiveServiceById(id: string) {
-    const prisma = getPrisma()!
-    return prisma.service.findFirst({
-      where: { id, isActive: true },
-      include: {
-        departments: {
-          select: { id: true, name: true, code: true, color: true },
-        },
-        pricingTemplate: true,
-        packages: {
-          where: { isActive: true },
-          orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
-        },
-      },
-    })
-  },
-
-  async findServiceSpecialists(serviceId: string) {
-    const prisma = getPrisma()!
-    const service = await prisma.service.findFirst({
-      where: { id: serviceId, isActive: true },
-      include: { departments: { select: { id: true } } },
-    })
-    if (!service) return null
-
-    const departmentIds = service.departments.map((dept) => dept.id)
-    if (departmentIds.length === 0) return []
-
-    return prisma.employee.findMany({
-      where: {
-        departmentId: { in: departmentIds },
-        status: "ACTIVE",
-      },
-      select: {
-        id: true,
-        fullName: true,
-        position: true,
-        department: {
-          select: { id: true, name: true, code: true, color: true },
-        },
-      },
-      orderBy: { fullName: "asc" },
-    })
-  },
-
-  async createServiceRequest(
-    clientId: string,
-    input: ClientServiceRequestInput,
-    referenceNumber: string,
-    packageSnapshot?: {
-      packageName?: string
-      pricingModel?:
-        "FIXED" | "STARTING" | "CUSTOM_QUOTE" | "RECURRING" | "HOURLY"
-      agreedPrice?: number | null
-      currency?: string
-      billingInterval?: "WEEKLY" | "MONTHLY" | "QUARTERLY" | "YEARLY" | null
-    },
-  ) {
-    const prisma = getPrisma()!
-    return prisma.serviceRequest.create({
-      data: {
-        referenceNumber,
-        clientId,
-        serviceId: input.serviceId,
-        packageId: input.packageId ?? null,
-        preferredSpecialistId: input.preferredSpecialistId ?? null,
-        title: input.title,
-        description: input.description ?? null,
-        requirementsPayload: input.requirementsPayload
-          ? (input.requirementsPayload as unknown as Prisma.InputJsonValue)
-          : undefined,
-        packageName: packageSnapshot?.packageName ?? null,
-        pricingModel: packageSnapshot?.pricingModel ?? null,
-        agreedPrice: packageSnapshot?.agreedPrice ?? null,
-        currency: packageSnapshot?.currency ?? "PHP",
-        billingInterval: packageSnapshot?.billingInterval ?? null,
-        status: "PENDING",
-      },
-      include: {
-        service: {
-          select: { id: true, name: true },
-        },
-        package: {
-          select: { id: true, name: true },
-        },
-        preferredSpecialist: {
-          select: { id: true, fullName: true, position: true },
-        },
-      },
-    })
-  },
-
-  async findClientRequests(clientId: string, page = 1, pageSize = 10) {
-    const prisma = getPrisma()!
-    const skip = (page - 1) * pageSize
-    const where = { clientId }
-
-    const [requests, total] = await Promise.all([
+    const [requests, total, groups] = await prisma.$transaction([
       prisma.serviceRequest.findMany({
         where,
-        skip,
+        skip: (page - 1) * pageSize,
         take: pageSize,
-        orderBy: { createdAt: "desc" },
-        include: {
-          service: { select: { id: true, name: true } },
-          package: { select: { id: true, name: true } },
-          preferredSpecialist: {
-            select: { id: true, fullName: true, position: true },
-          },
-        },
+        orderBy: [{ createdAt: sortOrder }, { id: sortOrder }],
+        select: clientRequestSelect,
       }),
       prisma.serviceRequest.count({ where }),
+      summaryQuery,
     ])
-
-    return { requests, total, page, pageSize }
+    const summary = {
+      total: 0,
+      pending: 0,
+      inProgress: 0,
+      completed: 0,
+      cancelled: 0,
+    }
+    for (const group of groups) {
+      const count = group._count._all
+      summary.total += count
+      if (group.status === "PENDING") summary.pending = count
+      if (group.status === "IN_PROGRESS") summary.inProgress = count
+      if (group.status === "COMPLETED") summary.completed = count
+      if (group.status === "CANCELLED") summary.cancelled = count
+    }
+    return { requests, total, page, pageSize, summary }
   },
 }

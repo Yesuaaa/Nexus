@@ -139,7 +139,7 @@ test.describe("live test accounts", () => {
         for (const feature of features) {
           const clientCatalog = role === "USER" && feature.path === "/services"
           const pageEndpoint = clientCatalog
-            ? "/api/services/available"
+            ? "/api/client/services"
             : feature.endpoint
           if (feature.roles.includes(role) || clientCatalog) {
             const loaded = page.waitForResponse(
@@ -754,10 +754,24 @@ test.describe("mocked regression", () => {
         await route.fulfill({ json: { services } })
         return
       }
-      if (pathname === "/api/services/available" && method === "GET") {
+      if (pathname === "/api/client/services" && method === "GET") {
         await route.fulfill({
           json: { services: services.filter((service) => service.isActive) },
         })
+        return
+      }
+      const clientServiceMatch = pathname.match(
+        /^\/api\/client\/services\/([^/]+)$/,
+      )
+      if (clientServiceMatch && method === "GET") {
+        const service = services.find(
+          (item) => item.id === clientServiceMatch[1] && item.isActive,
+        )
+        await route.fulfill(
+          service
+            ? { json: { service } }
+            : { status: 404, json: { error: "Service not found" } },
+        )
         return
       }
       if (pathname === "/api/services/pricing-templates" && method === "GET") {
@@ -2102,7 +2116,11 @@ test.describe("mocked regression", () => {
 
       const serviceRequests: string[] = []
       page.on("request", (request) => {
-        if (new URL(request.url()).pathname.startsWith("/api/services")) {
+        if (
+          /^\/api\/(services|client\/services)/.test(
+            new URL(request.url()).pathname,
+          )
+        ) {
           serviceRequests.push(request.url())
         }
       })
@@ -2138,7 +2156,7 @@ test.describe("mocked regression", () => {
           page.getByRole("button", { name: "Explore Test Service" }),
         ).toBeVisible()
         expect(serviceRequests.map((url) => new URL(url).pathname)).toEqual([
-          "/api/services/available",
+          "/api/client/services",
         ])
       }
     })
@@ -2498,7 +2516,7 @@ test.describe("mocked regression", () => {
       await expect(page.getByRole("status")).toHaveCount(0)
       let specialistResponse: "error" | "populated" | "empty" = "error"
       await page.route(
-        "**/api/services/social-service/specialists",
+        "**/api/client/services/social-service/specialists",
         async (route) => {
           if (specialistResponse === "error") {
             await route.fulfill({ status: 503, json: { error: "Unavailable" } })
@@ -2620,7 +2638,7 @@ test.describe("mocked regression", () => {
           .check()
       const submissions: Record<string, unknown>[] = []
       let releaseSubmission: (() => void) | undefined
-      await page.route("**/api/service-requests", async (route) => {
+      await page.route("**/api/client/service-requests", async (route) => {
         submissions.push(
           route.request().postDataJSON() as Record<string, unknown>,
         )
@@ -2762,7 +2780,7 @@ test.describe("mocked regression", () => {
     }))
     await restoreSession(page, "USER", { initialServices: services })
     await page.route(
-      "**/api/services/available",
+      "**/api/client/services",
       (route) =>
         route.fulfill({
           status: 503,
@@ -2821,11 +2839,12 @@ test.describe("mocked regression", () => {
     }) => {
       await page.setViewportSize({ width, height: 900 })
       await restoreSession(page, "USER")
-      await page.route("**/api/services/service-1/specialists", (route) =>
-        route.fulfill({ json: { specialists: [] } }),
+      await page.route(
+        "**/api/client/services/service-1/specialists",
+        (route) => route.fulfill({ json: { specialists: [] } }),
       )
       const submissions: Record<string, unknown>[] = []
-      await page.route("**/api/service-requests", async (route) => {
+      await page.route("**/api/client/service-requests", async (route) => {
         expect(route.request().method()).toBe("POST")
         submissions.push(
           route.request().postDataJSON() as Record<string, unknown>,

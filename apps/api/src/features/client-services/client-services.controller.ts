@@ -1,12 +1,13 @@
 import { Router } from "express"
 import { Role } from "../../generated/prisma/client.js"
 import { requireAuth, requireRole } from "../auth/auth.middleware.js"
-import { parsePage } from "../../shared/query-helpers.js"
+import { clientServicesService } from "./client-services.service.js"
+import { parseClientRequestFilters } from "./client-services.schema.js"
+import { ServicesError } from "../services/services.service.js"
 import {
-  ClientServicesError,
-  clientServicesService,
-} from "./client-services.service.js"
-import { parseClientServiceRequestInput } from "./client-services.schema.js"
+  ServiceRequestsError,
+  submitServiceRequest,
+} from "../service-requests/service-requests.service.js"
 
 export const clientServicesRouter = Router()
 
@@ -30,7 +31,7 @@ clientServicesRouter.get("/services/:id", async (request, response, next) => {
     )
     return response.json({ service })
   } catch (error) {
-    if (error instanceof ClientServicesError) {
+    if (error instanceof ServicesError) {
       return response.status(error.status).json({ error: error.message })
     }
     next(error)
@@ -46,7 +47,7 @@ clientServicesRouter.get(
       )
       return response.json(specialists)
     } catch (error) {
-      if (error instanceof ClientServicesError) {
+      if (error instanceof ServicesError) {
         return response.status(error.status).json({ error: error.message })
       }
       next(error)
@@ -58,16 +59,11 @@ clientServicesRouter.post(
   "/service-requests",
   async (request, response, next) => {
     try {
-      const { data, error } = parseClientServiceRequestInput(request.body)
-      if (error || !data) {
-        return response.status(400).json({ error: error || "Invalid input" })
-      }
-
       const clientId = request.auth!.user.id
-      const result = await clientServicesService.submitRequest(clientId, data)
-      return response.status(201).json(result)
+      const serviceRequest = await submitServiceRequest(clientId, request.body)
+      return response.status(201).json({ serviceRequest })
     } catch (error) {
-      if (error instanceof ClientServicesError) {
+      if (error instanceof ServiceRequestsError) {
         return response.status(error.status).json({ error: error.message })
       }
       next(error)
@@ -79,11 +75,13 @@ clientServicesRouter.get(
   "/service-requests",
   async (request, response, next) => {
     try {
-      const page = parsePage(request.query.page) ?? 1
+      const filters = parseClientRequestFilters(request.query)
+      if (!filters)
+        return response.status(400).json({ error: "Invalid request filters" })
       const clientId = request.auth!.user.id
       const result = await clientServicesService.getClientRequests(
         clientId,
-        page,
+        filters,
       )
       return response.json(result)
     } catch (error) {

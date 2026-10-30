@@ -86,6 +86,13 @@ export const servicesRepository = {
     })
   },
 
+  async findAvailableById(id: string) {
+    return getPrisma()!.service.findFirst({
+      where: { id, isActive: true },
+      include: availableServiceInclude,
+    })
+  },
+
   async findAll() {
     return getPrisma()!.service.findMany({
       orderBy: [{ createdAt: "desc" }, { name: "asc" }],

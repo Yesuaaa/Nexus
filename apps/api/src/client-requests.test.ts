@@ -105,6 +105,7 @@ test(
       data: {
         employeeId: "EMP-001",
         fullName: "Alice Specialist",
+        userId: users.get("STAFF")!.id,
         position: "Lead UI Designer",
         departmentId: departmentA.id,
         status: "ACTIVE",
@@ -197,192 +198,335 @@ test(
         ...(body ? { body: JSON.stringify(body) } : {}),
       })
 
+    const input = {
+      serviceId: activeService.id,
+      packageId: activePackage.id,
+      preferredSpecialistId: specialistA.id,
+      submissionKey: "a5fe6c7e-310f-4f70-a003-5b44ff2722fb",
+      goals: "Improve accessibility and conversion.",
+      requirements: "Build an accessible client portal.",
+      expectedTimeline: "Within three months",
+      additionalDetails: "Use the existing brand guidelines.",
+    }
     await t.test(
-      "Access control: client routes require authenticated USER role",
+      "client routes reject anonymous and non-client accounts",
       async () => {
-        // Anonymous
-        assert.equal((await fetch(`${base}/services`)).status, 401)
-        // Admin / Staff are blocked from client endpoints (clients only)
-        assert.equal((await request("/services", "ADMIN")).status, 403)
-        assert.equal((await request("/services", "STAFF")).status, 403)
-        // Client succeeds
-        assert.equal((await request("/services", "USER")).status, 200)
-      },
-    )
-
-    await t.test(
-      "Catalog query: returns only active services and active packages",
-      async () => {
-        const response = await request("/services", "USER")
-        assert.equal(response.status, 200)
-        const data = (await response.json()) as {
-          services: { id: string; name: string; packages: { id: string }[] }[]
-        }
-
-        const foundActive = data.services.find((s) => s.id === activeService.id)
-        const foundInactive = data.services.find(
-          (s) => s.id === inactiveService.id,
-        )
-        assert.ok(foundActive)
-        assert.equal(foundInactive, undefined)
-
-        // Packages should only contain active ones
-        assert.ok(foundActive.packages.some((p) => p.id === activePackage.id))
-        assert.equal(
-          foundActive.packages.some((p) => p.id === inactivePackage.id),
-          false,
-        )
-      },
-    )
-
-    await t.test(
-      "Specialist eligibility: lists only active employees from responsible departments",
-      async () => {
-        const response = await request(
+        for (const path of [
+          "/services",
+          `/services/${activeService.id}`,
           `/services/${activeService.id}/specialists`,
-          "USER",
-        )
-        assert.equal(response.status, 200)
-        const data = (await response.json()) as {
-          specialists: { id: string; fullName: string }[]
+          "/service-requests",
+        ]) {
+          assert.equal((await fetch(`${base}${path}`)).status, 401)
+          for (const actor of ["ADMIN", "STAFF"])
+            assert.equal((await request(path, actor)).status, 403)
         }
-
-        // Alice is in Department A and ACTIVE -> eligible
-        assert.ok(data.specialists.some((s) => s.id === specialistA.id))
-        // Bob is in Department B (not assigned to this service) -> not eligible
         assert.equal(
-          data.specialists.some((s) => s.id === specialistOtherDept.id),
-          false,
-        )
-        // Charlie is INACTIVE -> excluded
-        assert.equal(
-          data.specialists.some((s) => s.id === specialistInactive.id),
-          false,
+          (await request("/service-requests", "ADMIN", "POST", input)).status,
+          403,
         )
       },
     )
-
     await t.test(
-      "Validation: rejects invalid payloads, packages, or specialist assignments",
+      "catalog and detail include benefits, image URLs and active packages",
       async () => {
-        // Missing title
-        assert.equal(
-          (
-            await request("/service-requests", "USER", "POST", {
-              serviceId: activeService.id,
-              title: "",
-            })
-          ).status,
-          400,
+        const list = await request("/services")
+        assert.equal(list.status, 200)
+        const data = (await list.json()) as {
+          services: {
+            id: string
+            packages: { id: string }[]
+            keyBenefits: unknown[]
+            imageUrl: string | null
+          }[]
+        }
+        assert.equal(data.services.length, 1)
+        assert.equal(data.services[0].id, activeService.id)
+        assert.deepEqual(
+          data.services[0].packages.map((item) => item.id),
+          [activePackage.id],
         )
-
-        // Inactive service
-        assert.equal(
-          (
-            await request("/service-requests", "USER", "POST", {
-              serviceId: inactiveService.id,
-              title: "Valid Title",
-            })
-          ).status,
-          400,
+        assert.ok(Array.isArray(data.services[0].keyBenefits))
+        assert.equal(data.services[0].imageUrl, null)
+        const detail = await request(`/services/${activeService.id}`)
+        assert.equal(detail.status, 200)
+        assert.deepEqual(
+          ((await detail.json()) as { service: unknown }).service,
+          data.services[0],
         )
-
-        // Inactive package
         assert.equal(
-          (
-            await request("/service-requests", "USER", "POST", {
-              serviceId: activeService.id,
-              packageId: inactivePackage.id,
-              title: "Valid Title",
-            })
-          ).status,
-          400,
-        )
-
-        // Specialist from wrong department
-        assert.equal(
-          (
-            await request("/service-requests", "USER", "POST", {
-              serviceId: activeService.id,
-              preferredSpecialistId: specialistOtherDept.id,
-              title: "Valid Title",
-            })
-          ).status,
-          400,
+          (await request(`/services/${inactiveService.id}`)).status,
+          404,
         )
       },
     )
-
     await t.test(
-      "Creation: creates service request with reference number and snapshots package pricing",
+      "specialists require an active staff login in a responsible department",
       async () => {
-        const response = await request("/service-requests", "USER", "POST", {
-          serviceId: activeService.id,
-          packageId: activePackage.id,
-          preferredSpecialistId: specialistA.id,
-          title: "Complete Portal Revamp",
-          description: "Need full accessibility overhaul.",
-          requirementsPayload: {
-            brandGuidelinesUrl: "https://example.com/brand.pdf",
-            timelineMonths: 3,
+        const noAccount = await prisma.employee.create({
+          data: {
+            employeeId: "EMP-NO-LOGIN",
+            fullName: "No Login",
+            departmentId: departmentA.id,
+            status: "ACTIVE",
           },
         })
-        assert.equal(response.status, 201)
-        const data = (await response.json()) as {
-          serviceRequest: {
-            id: string
-            referenceNumber: string
-            status: string
-            title: string
-            packageName: string
-            service: { id: string }
-            package: { id: string }
-            preferredSpecialist: { id: string }
-          }
+        const response = await request(
+          `/services/${activeService.id}/specialists`,
+        )
+        assert.equal(response.status, 200)
+        const { specialists } = (await response.json()) as {
+          specialists: { id: string }[]
         }
-        assert.ok(data.serviceRequest.id)
-        assert.match(data.serviceRequest.referenceNumber, /^SR-\d{8}-\d{4}$/)
-        assert.equal(data.serviceRequest.status, "PENDING")
-        assert.equal(data.serviceRequest.title, "Complete Portal Revamp")
-        assert.equal(data.serviceRequest.packageName, "Enterprise Overhaul")
-        assert.equal(data.serviceRequest.preferredSpecialist.id, specialistA.id)
-
-        // Verify in DB
-        const record = await prisma.serviceRequest.findUniqueOrThrow({
-          where: { id: data.serviceRequest.id },
-        })
-        assert.equal(record.clientId, users.get("USER")!.id)
-        assert.equal(record.pricingModel, "FIXED")
-        assert.equal(Number(record.agreedPrice), 150000.0)
-        assert.equal(record.currency, "PHP")
-        assert.deepEqual(record.requirementsPayload, {
-          brandGuidelinesUrl: "https://example.com/brand.pdf",
-          timelineMonths: 3,
-        })
+        assert.deepEqual(
+          specialists.map((item) => item.id),
+          [specialistA.id],
+        )
+        assert.ok(
+          !specialists.some((item) =>
+            [
+              noAccount.id,
+              specialistInactive.id,
+              specialistOtherDept.id,
+            ].includes(item.id),
+          ),
+        )
       },
     )
-
     await t.test(
-      "Multi-tenant isolation: clients can only list their own requests",
+      "submission validates requirements, package and specialist eligibility",
       async () => {
-        // USER has 1 request created above
-        const userRes = await request("/service-requests", "USER")
-        assert.equal(userRes.status, 200)
-        const userData = (await userRes.json()) as {
+        for (const change of [
+          { goals: "" },
+          { requirements: "" },
+          { expectedTimeline: "" },
+          { submissionKey: "invalid" },
+        ]) {
+          assert.equal(
+            (
+              await request("/service-requests", "USER", "POST", {
+                ...input,
+                ...change,
+              })
+            ).status,
+            400,
+          )
+        }
+        for (const change of [
+          { serviceId: inactiveService.id },
+          { packageId: inactivePackage.id },
+          { packageId: null },
+          { preferredSpecialistId: specialistOtherDept.id },
+        ]) {
+          assert.equal(
+            (
+              await request("/service-requests", "USER", "POST", {
+                ...input,
+                ...change,
+              })
+            ).status,
+            409,
+          )
+        }
+      },
+    )
+    let requestId = ""
+    await t.test(
+      "submission snapshots public pricing, preserves requirements and safely replays retries",
+      async () => {
+        const response = await request("/service-requests", "USER", "POST", {
+          ...input,
+          clientId: clientB.id,
+        })
+        assert.equal(response.status, 201)
+        const receipt = (
+          (await response.json()) as {
+            serviceRequest: {
+              id: string
+              referenceNumber: string
+              status: string
+            }
+          }
+        ).serviceRequest
+        requestId = receipt.id
+        assert.match(receipt.referenceNumber, /^SR-[A-F0-9-]{36}$/)
+        assert.equal(receipt.status, "PENDING")
+        const record = await prisma.serviceRequest.findUniqueOrThrow({
+          where: { id: receipt.id },
+        })
+        assert.equal(record.clientId, users.get("USER")!.id)
+        assert.equal(record.projectGoals, input.goals)
+        assert.equal(record.projectRequirements, input.requirements)
+        assert.equal(record.preferredSpecialistName, specialistA.fullName)
+        assert.equal(record.packageName, activePackage.name)
+        assert.equal(Number(record.quotedPrice), 150000)
+        const replay = await request("/service-requests", "USER", "POST", input)
+        assert.equal(replay.status, 201)
+        assert.deepEqual(
+          ((await replay.json()) as { serviceRequest: unknown }).serviceRequest,
+          receipt,
+        )
+        assert.equal(
+          (
+            await request("/service-requests", "USER", "POST", {
+              ...input,
+              goals: "Different goals",
+            })
+          ).status,
+          409,
+        )
+        assert.equal(
+          await prisma.serviceRequest.count({
+            where: { clientId: users.get("USER")!.id },
+          }),
+          1,
+        )
+      },
+    )
+    await t.test(
+      "history scopes records, totals and summary to the signed-in client",
+      async () => {
+        const response = await request(
+          "/service-requests?clientId=" + clientB.id,
+        )
+        assert.equal(response.status, 200)
+        const history = (await response.json()) as {
+          requests: {
+            id: string
+            projectGoals: string
+            quotedPrice: string
+            clientId?: string
+          }[]
+          total: number
+          summary: { total: number; pending: number }
+        }
+        assert.equal(history.total, 1)
+        assert.equal(history.requests[0].id, requestId)
+        assert.equal(history.requests[0].projectGoals, input.goals)
+        assert.equal(history.requests[0].clientId, undefined)
+        assert.equal(history.summary.total, 1)
+        assert.equal(history.summary.pending, 1)
+        const other = await request("/service-requests", "CLIENT_B")
+        assert.equal(((await other.json()) as { total: number }).total, 0)
+      },
+    )
+    await t.test(
+      "hidden prices stay hidden in list, detail, submission and history",
+      async () => {
+        const template = await prisma.pricingTemplate.create({
+          data: {
+            name: "Internal rate",
+            pricingModel: "FIXED",
+            amount: 99999,
+            isPublic: false,
+          },
+        })
+        await prisma.service.update({
+          where: { id: activeService.id },
+          data: { pricingTemplateId: template.id },
+        })
+        await prisma.servicePackage.update({
+          where: { id: activePackage.id },
+          data: {
+            isPricingPublic: false,
+            amount: 88888,
+            billingInterval: "MONTHLY",
+          },
+        })
+        for (const path of ["/services", `/services/${activeService.id}`]) {
+          const data = (await (await request(path)).json()) as {
+            services?: {
+              pricingTemplate: unknown
+              packages: { amount: unknown; billingInterval: unknown }[]
+            }[]
+            service?: {
+              pricingTemplate: unknown
+              packages: { amount: unknown; billingInterval: unknown }[]
+            }
+          }
+          const service = data.service ?? data.services![0]
+          assert.equal(service.pricingTemplate, null)
+          assert.equal(service.packages[0].amount, null)
+          assert.equal(service.packages[0].billingInterval, null)
+        }
+        const response = await request(
+          "/service-requests",
+          "CLIENT_B",
+          "POST",
+          { ...input, preferredSpecialistId: null },
+        )
+        assert.equal(response.status, 201)
+        const history = (await (
+          await request("/service-requests", "CLIENT_B")
+        ).json()) as {
+          requests: { quotedPrice: unknown; pricingModel: string }[]
+        }
+        assert.equal(history.requests[0].quotedPrice, null)
+        assert.equal(history.requests[0].pricingModel, "CUSTOM_QUOTE")
+      },
+    )
+    await t.test(
+      "history validates filters, paginates, sorts and searches across all records",
+      async () => {
+        for (const query of [
+          "page=0",
+          "page=abc",
+          "status=BAD",
+          "sortOrder=bad",
+          "status=PENDING&status=COMPLETED",
+          "search=" + "x".repeat(101),
+        ])
+          assert.equal(
+            (await request(`/service-requests?${query}`)).status,
+            400,
+          )
+        for (let index = 0; index < 11; index++)
+          await prisma.serviceRequest.create({
+            data: {
+              clientId: users.get("USER")!.id,
+              serviceId: activeService.id,
+              title: `Historical request ${index}`,
+              status: "COMPLETED",
+              createdAt: new Date(2026, 0, index + 1),
+            },
+          })
+        const first = (await (await request("/service-requests")).json()) as {
+          total: number
           requests: { id: string }[]
-          total: number
+          summary: { total: number; completed: number }
         }
-        assert.equal(userData.total, 1)
-
-        // CLIENT_B has 0 requests
-        const clientBRes = await request("/service-requests", "CLIENT_B")
-        assert.equal(clientBRes.status, 200)
-        const clientBData = (await clientBRes.json()) as {
-          requests: unknown[]
+        assert.equal(first.total, 12)
+        assert.equal(first.requests.length, 10)
+        assert.equal(first.summary.total, 12)
+        assert.equal(first.summary.completed, 11)
+        const second = (await (
+          await request("/service-requests?page=2")
+        ).json()) as { requests: { id: string }[] }
+        assert.equal(second.requests.length, 2)
+        assert.ok(
+          !second.requests.some((item) =>
+            first.requests.some((other) => other.id === item.id),
+          ),
+        )
+        const filtered = (await (
+          await request(
+            "/service-requests?status=COMPLETED&search=Historical%20request%201&sortOrder=asc",
+          )
+        ).json()) as {
+          requests: { title: string }[]
           total: number
+          summary: { total: number }
         }
-        assert.equal(clientBData.total, 0)
-        assert.deepEqual(clientBData.requests, [])
+        assert.equal(filtered.total, 2)
+        assert.deepEqual(
+          filtered.requests.map((item) => item.title),
+          ["Historical request 1", "Historical request 10"],
+        )
+        assert.equal(filtered.summary.total, 12)
+        const noMatch = (await (
+          await request("/service-requests?search=another-client-secret")
+        ).json()) as { total: number }
+        assert.equal(noMatch.total, 0)
       },
     )
   },

@@ -22,13 +22,13 @@ export function createApp() {
     express.json({ limit: "64kb" }),
     serviceRequestsRouter,
   )
+  app.use("/api/client", express.json({ limit: "64kb" }), clientServicesRouter)
   app.use(express.json({ limit: "16kb" }))
   app.use("/api/auth", authRouter)
   app.use("/api/users", usersRouter)
   app.use("/api/departments", departmentsRouter)
   app.use("/api/employees", employeesRouter)
   app.use("/api/clients", clientsRouter)
-  app.use("/api/client", clientServicesRouter)
   app.use("/api", healthRouter)
   app.use(handleError)
   return app
