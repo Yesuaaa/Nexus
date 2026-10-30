@@ -43,7 +43,13 @@ export type ClientDetails = Pick<
 export type ClientServiceRequest = {
   id: string
   title: string
-  status: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED"
+  status:
+    | "SUBMITTED"
+    | "UNDER_REVIEW"
+    | "CLOSED"
+    | "CANCELLED"
+    | "AWAITING_CLIENT_INFO"
+    | "READY_FOR_QUOTATION"
   createdAt: string
   service: { id: string; name: string }
 }

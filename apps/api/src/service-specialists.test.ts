@@ -49,6 +49,23 @@ test(
         await readFile(new URL(`${name}/migration.sql`, migrations), "utf8"),
       )
     }
+    const serviceRequestStatuses = await database.query<{ enumlabel: string }>(`
+      SELECT e.enumlabel
+      FROM pg_type t
+      JOIN pg_enum e ON e.enumtypid = t.oid
+      WHERE t.typname = 'ServiceRequestStatus'
+    `)
+    assert.deepEqual(
+      serviceRequestStatuses.rows.map((row) => row.enumlabel).sort(),
+      [
+        "AWAITING_CLIENT_INFO",
+        "CANCELLED",
+        "CLOSED",
+        "READY_FOR_QUOTATION",
+        "SUBMITTED",
+        "UNDER_REVIEW",
+      ],
+    )
     const socket = new PGLiteSocketServer({
       db: database,
       port: 0,
@@ -420,12 +437,12 @@ test(
         const receipt = (await submitted.json()) as {
           serviceRequest: { id: string; status: string }
         }
-        assert.equal(receipt.serviceRequest.status, "PENDING")
+        assert.equal(receipt.serviceRequest.status, "SUBMITTED")
         const record = await prisma.serviceRequest.findUniqueOrThrow({
           where: { id: receipt.serviceRequest.id },
         })
         assert.equal(record.clientId, client.id)
-        assert.equal(record.status, "PENDING")
+        assert.equal(record.status, "SUBMITTED")
         assert.equal(record.projectGoals, "Grow our audience")
         assert.equal(record.projectRequirements, "Create a content calendar")
         assert.equal(record.expectedTimeline, "Within six weeks")
