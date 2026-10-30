@@ -7,6 +7,7 @@ import { healthRouter } from "./features/health/health.controller.js"
 import { usersRouter } from "./features/users/users.controller.js"
 import { servicesRouter } from "./features/services/services.controller.js"
 import { clientsRouter } from "./features/clients/clients.controller.js"
+import { clientServicesRouter } from "./features/client-services/client-services.controller.js"
 import { serviceRequestsRouter } from "./features/service-requests/service-requests.controller.js"
 
 export function createApp() {
@@ -21,6 +22,7 @@ export function createApp() {
     express.json({ limit: "64kb" }),
     serviceRequestsRouter,
   )
+  app.use("/api/client", express.json({ limit: "64kb" }), clientServicesRouter)
   app.use(express.json({ limit: "16kb" }))
   app.use("/api/auth", authRouter)
   app.use("/api/users", usersRouter)

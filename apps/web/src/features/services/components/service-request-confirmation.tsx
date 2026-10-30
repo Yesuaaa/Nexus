@@ -1,6 +1,8 @@
 "use client"
 
 import { useEffect, useRef } from "react"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
 import { CheckCircle2 } from "lucide-react"
 import { focusRing } from "@/components/layout/styles"
 import { cn } from "@/lib/utils"
@@ -47,7 +49,7 @@ export function ServiceRequestConfirmation({
       </span>
       <dl className="mt-6 grid grid-cols-2 gap-5 max-[600px]:grid-cols-1">
         {[
-          ["Request reference", receipt.id],
+          ["Request reference", receipt.referenceNumber || receipt.id],
           ["Service", serviceName],
           ["Package", packageName],
           ["Preferred specialist", specialistName || "Department to assign"],
@@ -62,16 +64,24 @@ export function ServiceRequestConfirmation({
           </div>
         ))}
       </dl>
-      <button
-        type="button"
-        onClick={onNewRequest}
-        className={cn(
-          "mt-4 inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl border-0 bg-[#294c96] px-5 text-sm font-bold text-white hover:bg-[#203f80] max-[560px]:w-full",
-          focusRing,
-        )}
-      >
-        Start another request
-      </button>
+      <div className="mt-4 flex flex-wrap gap-3">
+        <Button
+          asChild
+          className="min-h-11 bg-[#294c96] text-white hover:bg-[#203f80]"
+        >
+          <Link href="/service-requests">View my service requests</Link>
+        </Button>
+        <button
+          type="button"
+          onClick={onNewRequest}
+          className={cn(
+            "inline-flex min-h-11 cursor-pointer items-center justify-center rounded-md border border-[#dce3ee] bg-white px-5 text-sm font-semibold text-[#294c96] hover:bg-[#eef3ff] max-[560px]:w-full",
+            focusRing,
+          )}
+        >
+          Start another request
+        </button>
+      </div>
     </section>
   )
 }

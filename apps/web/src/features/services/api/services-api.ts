@@ -4,6 +4,7 @@ import type { ProjectRequirementsDraft } from "../model/project-requirements"
 
 export type ServiceRequestReceipt = {
   id: string
+  referenceNumber?: string | null
   status: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED"
   createdAt: string
 }

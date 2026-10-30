@@ -11,6 +11,7 @@ const routeLabels: Record<string, string> = {
   departments: "Department Management",
   employees: "Employee Management",
   services: "Services",
+  "service-requests": "Service Requests",
   clients: "Client Management",
 }
 
