@@ -40,7 +40,6 @@ export function Dropdown<T extends string>({
   menuClassName?: string
 }) {
   const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -49,10 +48,7 @@ export function Dropdown<T extends string>({
 
   // Position the portaled menu relative to the trigger.
   useLayoutEffect(() => {
-    if (!open) {
-      setPos(null)
-      return
-    }
+    if (!open) return
 
     function update() {
       const trigger = triggerRef.current
@@ -66,6 +62,7 @@ export function Dropdown<T extends string>({
       menu.style.lineHeight = cs.lineHeight
       menu.style.letterSpacing = cs.letterSpacing
       menu.style.color = cs.color
+      menu.style.minWidth = `${trigger.offsetWidth}px`
 
       const t = trigger.getBoundingClientRect()
       const menuWidth = menu.offsetWidth
@@ -84,7 +81,9 @@ export function Dropdown<T extends string>({
       const fitsAbove = t.top - gap - menuHeight >= margin
       if (!fitsBelow && fitsAbove) top = t.top - gap - menuHeight
 
-      setPos({ top, left })
+      menu.style.top = `${top}px`
+      menu.style.left = `${left}px`
+      menu.style.visibility = "visible"
     }
 
     update()
@@ -183,13 +182,7 @@ export function Dropdown<T extends string>({
               dropdownMenuClass,
               menuClassName,
             )}
-            style={{
-              top: pos?.top ?? 0,
-              left: pos?.left ?? 0,
-              minWidth: triggerRef.current?.offsetWidth,
-              opacity: pos ? 1 : 0,
-              pointerEvents: pos ? "auto" : "none",
-            }}
+            style={{ top: 0, left: 0, visibility: "hidden" }}
             role="menu"
             aria-label={label}
             onKeyDown={handleMenuKeyDown}
