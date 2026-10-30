@@ -19,6 +19,7 @@ export default tseslint.config(
       "apps/api/src/generated/**",
       ".pnpm-store/**",
       ".localappdata/**",
+      ".ci-tools/**",
       "apps/mobile/**",
     ],
   },
