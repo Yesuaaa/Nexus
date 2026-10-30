@@ -103,17 +103,32 @@ for (const width of [1440, 390]) {
     await dialog.getByRole("button", { name: "Save Changes" }).click()
     await expect(dialog).toHaveCount(0)
     await page
-      .getByRole("button", { name: "Delete Updated Client", exact: true })
+      .getByRole("button", {
+        name: "More actions for Updated Client",
+        exact: true,
+      })
+      .click()
+    await page
+      .getByRole("menuitem", { name: "Delete client", exact: true })
       .click()
     await page
       .getByRole("dialog")
       .getByRole("button", { name: "Cancel" })
       .click()
     await expect(
-      page.getByRole("button", { name: "Delete Updated Client", exact: true }),
+      page.getByRole("button", {
+        name: "More actions for Updated Client",
+        exact: true,
+      }),
     ).toBeVisible()
     await page
-      .getByRole("button", { name: "Delete Updated Client", exact: true })
+      .getByRole("button", {
+        name: "More actions for Updated Client",
+        exact: true,
+      })
+      .click()
+    await page
+      .getByRole("menuitem", { name: "Delete client", exact: true })
       .click()
     await page
       .getByRole("dialog")

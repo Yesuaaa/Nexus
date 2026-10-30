@@ -1,5 +1,15 @@
-import { Eye, Pencil, Trash2 } from "lucide-react"
-import type { ReactNode } from "react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  dropdownItemClass,
+  dropdownMenuClass,
+} from "@/components/ui/dropdown-styles"
+import { Eye, MoreHorizontal, Pencil } from "lucide-react"
+import { useRef, type ReactNode } from "react"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { Button } from "@/components/ui/button"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
@@ -39,6 +49,8 @@ function ClientRowActions({
   client: Client
   onView: (client: Client) => void
 }) {
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const pendingDelete = useRef(false)
   const label = client.fullName?.trim() || client.email
   const actionLabel = `View details for ${label}`
   return (
@@ -68,15 +80,48 @@ function ClientRowActions({
         <Pencil size={16} aria-hidden="true" />
         <HoverTooltip>Edit client</HoverTooltip>
       </button>
-      <button
-        type="button"
-        className={cn(rowActionButton, "text-[#bc3649] max-[560px]:size-11")}
-        aria-label={`Delete ${label}`}
-        onClick={() => onDelete(client)}
+      <DropdownMenu
+        onOpenChange={(open) => {
+          if (open) pendingDelete.current = false
+        }}
       >
-        <Trash2 size={16} aria-hidden="true" />
-        <HoverTooltip>Delete client</HoverTooltip>
-      </button>
+        <DropdownMenuTrigger asChild>
+          <button
+            ref={triggerRef}
+            type="button"
+            className={cn(rowActionButton, "max-[560px]:size-11")}
+            aria-label={`More actions for ${label}`}
+          >
+            <MoreHorizontal size={16} aria-hidden="true" />
+            <HoverTooltip>More actions</HoverTooltip>
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          sideOffset={6}
+          collisionPadding={24}
+          className={cn(dropdownMenuClass, "w-48 text-xs")}
+          onCloseAutoFocus={(event) => {
+            if (!pendingDelete.current) return
+            event.preventDefault()
+            pendingDelete.current = false
+            triggerRef.current?.focus()
+            onDelete(client)
+          }}
+        >
+          <DropdownMenuItem
+            className={cn(
+              dropdownItemClass,
+              "text-[#c33945] focus:bg-[#fff0f1] focus:text-[#c33945]",
+            )}
+            onSelect={() => {
+              pendingDelete.current = true
+            }}
+          >
+            Delete client
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   )
 }
