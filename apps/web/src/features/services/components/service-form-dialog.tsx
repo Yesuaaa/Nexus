@@ -49,6 +49,9 @@ const fieldClass = "grid min-w-0 gap-1.5"
 const labelClass = "text-xs font-semibold"
 const inputClass = `w-full min-w-0 rounded-lg border border-[#d6dfec] bg-background px-3 text-sm text-foreground placeholder:text-[#9aa8bb] ${focusRing}`
 const buttonClass = `inline-flex min-h-[38px] cursor-pointer items-center justify-center rounded-[9px] border border-transparent px-[15px] text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none ${focusRing}`
+// Shared popup style: no border/ring, soft navy-tinted shadow
+const menuContentClass =
+  "z-[130] border-0 bg-white p-1 ring-0 shadow-[0_8px_24px_rgb(18_36_73_/_14%)]"
 const imageTypes = ["image/jpeg", "image/png", "image/webp"]
 const maxImageBytes = 2 * 1024 * 1024
 const formSteps = [
@@ -161,7 +164,7 @@ function PriceFields({
           >
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="z-[130] border-[#cbd5e1] bg-white">
+          <SelectContent className={menuContentClass}>
             {pricingModels.map((option) => (
               <SelectItem key={option.value} value={option.value}>
                 {option.label}
@@ -206,7 +209,7 @@ function PriceFields({
             >
               <SelectValue placeholder="Select interval" />
             </SelectTrigger>
-            <SelectContent className="z-[130] border-[#cbd5e1] bg-white">
+            <SelectContent className={menuContentClass}>
               {billingIntervals.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}
@@ -754,7 +757,7 @@ export function ServiceFormDialog({
                         >
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent className="z-[130] bg-white">
+                        <SelectContent className={menuContentClass}>
                           {serviceIconOptions.map((option) => (
                             <SelectItem key={option.value} value={option.value}>
                               <span className="flex items-center gap-2">
@@ -800,7 +803,10 @@ export function ServiceFormDialog({
                         </DropdownMenuTrigger>
                         <DropdownMenuContent
                           align="start"
-                          className="z-[130] w-[var(--radix-dropdown-menu-trigger-width)] bg-white"
+                          className={cn(
+                            menuContentClass,
+                            "w-[var(--radix-dropdown-menu-trigger-width)]",
+                          )}
                         >
                           {departments.map((department) => (
                             <DropdownMenuCheckboxItem
@@ -1033,7 +1039,7 @@ export function ServiceFormDialog({
                       >
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent className="z-[130] bg-white">
+                      <SelectContent className={menuContentClass}>
                         <SelectItem value="none">
                           No pricing configured
                         </SelectItem>
