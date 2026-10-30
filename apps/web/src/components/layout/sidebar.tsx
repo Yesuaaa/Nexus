@@ -11,6 +11,7 @@ import {
   canAccessDepartmentManagement,
   canAccessEmployeeManagement,
   canAccessServiceManagement,
+  canAccessClientManagement,
 } from "@/features/auth/model/permissions"
 import { focusRing, iconButtonClass } from "./styles"
 import {
@@ -221,6 +222,25 @@ export function Sidebar({
               <span className={collapsedLabelClass}>Service Management</span>
               {collapsed && (
                 <CollapsedTooltip>Service Management</CollapsedTooltip>
+              )}
+            </Link>
+          )}
+          {canAccessClientManagement(account) && (
+            <Link
+              href="/clients"
+              aria-current={pathname === "/clients" ? "page" : undefined}
+              className={cn(
+                navLinkClass,
+                collapsed &&
+                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
+                pathname === "/clients" && "bg-[#e1e3e5]",
+              )}
+              onClick={onCloseDrawer}
+            >
+              <AccountsIcon className="flex-none" />
+              <span className={collapsedLabelClass}>Client Management</span>
+              {collapsed && (
+                <CollapsedTooltip>Client Management</CollapsedTooltip>
               )}
             </Link>
           )}

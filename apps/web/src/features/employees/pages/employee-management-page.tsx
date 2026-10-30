@@ -1,11 +1,13 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { PlusIcon, SearchIcon } from "@/components/layout/icons"
+import { PlusIcon } from "@/components/layout/icons"
 import { contentClass, focusRing } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
-import { Input } from "@/components/ui/input"
+import { NumberedPagination } from "@/components/ui/numbered-pagination"
+import { SearchEmptyState } from "@/components/ui/search-empty-state"
+import { SearchField } from "@/components/ui/search-field"
 import {
   Select,
   SelectContent,
@@ -35,7 +37,6 @@ import {
   type EmploymentType,
 } from "../api/employees-api"
 
-const pageButton = `h-auto min-h-[30px] cursor-pointer rounded-lg border border-transparent bg-[#203f8c] px-3 text-[11px] font-medium leading-[1.2] whitespace-nowrap text-white transition-colors hover:enabled:bg-[#172f70] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none ${focusRing}`
 const employmentTypes: { value: EmploymentType | ""; label: string }[] = [
   { value: "", label: "All types" },
   { value: "FULL_TIME", label: "Full time" },
@@ -58,8 +59,10 @@ export function EmployeeManagementPage() {
   )
   const [employees, setEmployees] = useState<Employee[]>([])
   const [total, setTotal] = useState(0)
-  const [pageSize, setPageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(10)
   const [page, setPage] = useState(1)
+  const [resolvedPage, setResolvedPage] = useState(1)
+  const [animateRows, setAnimateRows] = useState(true)
   const [search, setSearch] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [departmentId, setDepartmentId] = useState("")
@@ -67,6 +70,7 @@ export function EmployeeManagementPage() {
   const [status, setStatus] = useState<EmploymentStatus | "">("")
   const [error, setError] = useState("")
   const [resolvedListKey, setResolvedListKey] = useState("")
+  const [resolvedViewKey, setResolvedViewKey] = useState("")
   const [departments, setDepartments] = useState<Department[]>([])
   const [departmentsError, setDepartmentsError] = useState("")
   const [departmentsLoading, setDepartmentsLoading] = useState(true)
@@ -91,6 +95,13 @@ export function EmployeeManagementPage() {
     page,
     revision,
   })
+  const viewKey = JSON.stringify({
+    search: debouncedSearch,
+    departmentId,
+    employmentType,
+    status,
+    page,
+  })
   const isLoading =
     resolvedListKey !== listRequestKey || search.trim() !== debouncedSearch
 
@@ -98,7 +109,7 @@ export function EmployeeManagementPage() {
     const timer = setTimeout(() => {
       setDebouncedSearch(search.trim())
       setPage(1)
-    }, 250)
+    }, 150)
     return () => clearTimeout(timer)
   }, [search])
 
@@ -116,8 +127,10 @@ export function EmployeeManagementPage() {
           setEmployees(result.employees)
           setTotal(result.total)
           setPageSize(result.pageSize)
+          setResolvedPage(result.page)
           setError("")
           setResolvedListKey(listRequestKey)
+          setResolvedViewKey(viewKey)
         }
       })
       .catch((reason: unknown) => {
@@ -141,6 +154,7 @@ export function EmployeeManagementPage() {
     page,
     revision,
     listRequestKey,
+    viewKey,
   ])
 
   const [departmentRevision, setDepartmentRevision] = useState(0)
@@ -171,6 +185,7 @@ export function EmployeeManagementPage() {
 
   function updateFilters(update: () => void) {
     update()
+    setAnimateRows(true)
     setPage(1)
   }
 
@@ -178,8 +193,8 @@ export function EmployeeManagementPage() {
   const hasFilters = Boolean(
     debouncedSearch || departmentId || employmentType || status,
   )
-  const shownFrom = total === 0 ? 0 : (page - 1) * pageSize + 1
-  const shownTo = Math.min(page * pageSize, total)
+  const shownFrom = total === 0 ? 0 : (resolvedPage - 1) * pageSize + 1
+  const shownTo = Math.min(resolvedPage * pageSize, total)
 
   return (
     <main
@@ -199,16 +214,16 @@ export function EmployeeManagementPage() {
             Maintain employee records, team placement, and employment details.
           </p>
         </div>
-        <Button
+        <button
           type="button"
           className={cn(
-            "inline-flex min-h-[34px] flex-none cursor-pointer items-center justify-center gap-[7px] rounded-lg border border-transparent bg-[#203f8c] px-[13px] text-xs font-semibold whitespace-nowrap text-white transition-colors hover:bg-[#172f70]",
+            "inline-flex min-h-[34px] flex-none cursor-pointer items-center justify-center gap-[7px] rounded-lg border border-transparent bg-[#203f8c] px-[13px] text-xs leading-[1.2] font-semibold whitespace-nowrap text-white transition-[background-color,border-color,color] duration-150 hover:bg-[#172f70] motion-reduce:transition-none",
             focusRing,
           )}
           onClick={() => setFormState({ employee: null })}
         >
-          <PlusIcon width="14" height="14" /> Add employee
-        </Button>
+          <PlusIcon width="14" height="14" /> Create Employee
+        </button>
       </header>
 
       <section
@@ -217,20 +232,16 @@ export function EmployeeManagementPage() {
       >
         <div className="flex items-start justify-between gap-3 pb-4 max-[560px]:flex-col max-[560px]:pb-3">
           <div className="flex min-w-0 gap-[10px] max-[1050px]:w-full max-[560px]:flex-col">
-            <label className="flex h-[34px] w-[260px] min-w-0 items-center gap-2 rounded-lg border border-[#e1e4ea] px-[11px] text-[#7b8ca7] focus-within:bg-[#f8fafd] max-[1050px]:w-[min(350px,100%)] max-[1050px]:flex-1 max-[560px]:w-full max-[560px]:flex-none">
-              <SearchIcon width="17" height="17" className="flex-none" />
-              <span className="sr-only">Search employees</span>
-              <Input
-                type="search"
-                className="h-auto w-full min-w-0 border-0 bg-transparent p-0 text-xs text-foreground shadow-none outline-none placeholder:text-[#8a9ab1] focus-visible:ring-0 md:text-xs"
-                placeholder="Search name, ID, email…"
-                value={search}
-                maxLength={100}
-                onChange={(event) => {
-                  setSearch(event.target.value)
-                }}
-              />
-            </label>
+            <SearchField
+              label="Search employees"
+              placeholder="Search name, ID, email…"
+              value={search}
+              maxLength={100}
+              onChange={(event) => {
+                setAnimateRows(true)
+                setSearch(event.target.value)
+              }}
+            />
             <Select
               value={departmentId || "all"}
               onValueChange={(value) =>
@@ -336,12 +347,19 @@ export function EmployeeManagementPage() {
         </div>
         <EmployeeTable
           employees={employees}
+          viewKey={resolvedViewKey}
+          quickKey={debouncedSearch}
+          animateRows={animateRows}
           loading={isLoading}
           error={error}
           emptyMessage={
-            hasFilters
-              ? "No employees match these filters. Try clearing a filter or search term."
-              : "No employee records yet. Add an employee to get started."
+            debouncedSearch ? (
+              <SearchEmptyState query={debouncedSearch} />
+            ) : hasFilters ? (
+              "No employees match these filters. Try clearing a filter or search term."
+            ) : (
+              "No employee records yet. Add an employee to get started."
+            )
           }
           onRetry={() => {
             setRevision((value) => value + 1)
@@ -357,44 +375,21 @@ export function EmployeeManagementPage() {
             canManageDepartment ? setMembersDepartmentId : undefined
           }
         />
-        {!isLoading && !error && total > 0 && (
+        {!error && total > 0 && (
           <footer className="flex items-center justify-between gap-3 pt-4 text-[11px] text-[#65718a] max-[560px]:flex-wrap max-[560px]:pt-[14px]">
             <span role="status" aria-live="polite" aria-atomic="true">
               Showing {shownFrom}–{shownTo} of {total}
             </span>
-            <nav
-              className="flex items-center gap-2"
-              aria-label="Employee pages"
-            >
-              <Button
-                type="button"
-                variant="outline"
-                className={pageButton}
-                disabled={page <= 1 || isLoading}
-                onClick={() => {
-                  setPage((value) => value - 1)
-                }}
-              >
-                Back
-              </Button>
-              <span
-                className="px-[3px] whitespace-nowrap text-foreground"
-                aria-current="page"
-                aria-label={`Page ${page} of ${totalPages}`}
-              >
-                Page {page} of {totalPages}
-              </span>
-              <Button
-                type="button"
-                className={pageButton}
-                disabled={page >= totalPages || isLoading}
-                onClick={() => {
-                  setPage((value) => value + 1)
-                }}
-              >
-                Next
-              </Button>
-            </nav>
+            <NumberedPagination
+              page={resolvedPage}
+              totalPages={totalPages}
+              disabled={isLoading}
+              label="Employee pages"
+              onPageChange={(nextPage) => {
+                setAnimateRows(true)
+                setPage(nextPage)
+              }}
+            />
           </footer>
         )}
         {!isLoading && !error && total > 0 && (

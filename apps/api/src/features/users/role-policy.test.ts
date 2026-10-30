@@ -7,14 +7,14 @@ import {
   hasPermission,
   Permission,
   permissionsFor,
-} from "../auth/permissions.js"
-import { requirePermission, requireRole } from "../auth/session.js"
+} from "../auth/auth.permissions.js"
+import { requirePermission, requireRole } from "../auth/auth.middleware.js"
 import {
   canAssignRole,
   canChangeAccountStatus,
   canCreateRole,
-} from "./role-policy.js"
-import { publicUser } from "./public-user.js"
+} from "./users.policy.js"
+import { publicUser } from "./users.dto.js"
 
 test("fixed roles have the expected permissions", () => {
   const common = [
@@ -34,6 +34,7 @@ test("fixed roles have the expected permissions", () => {
   assert.deepEqual(permissionsFor(Role.STAFF), staff)
   assert.deepEqual(permissionsFor(Role.ADMIN), [
     ...admin,
+    Permission.CLIENTS_READ,
     Permission.EMPLOYEES_READ,
     Permission.EMPLOYEES_MANAGE,
   ])
@@ -76,6 +77,11 @@ test("permission middleware denies missing permissions", async () => {
     (_request, response) => {
       response.json({ allowed: true })
     },
+  )
+  app.get(
+    "/clients",
+    requirePermission(Permission.CLIENTS_READ),
+    (_request, response) => response.json({ allowed: true }),
   )
   app.post(
     "/services",

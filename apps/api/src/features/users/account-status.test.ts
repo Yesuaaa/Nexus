@@ -4,7 +4,7 @@ import { test } from "node:test"
 import { createApp } from "../../app.js"
 import { Role, type Prisma, type User } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
-import { hashPassword } from "../auth/password.js"
+import { hashPassword } from "../auth/auth.password.js"
 
 test("account status, deletion, and authentication enforce access", async (t) => {
   const previousUrl = process.env.DATABASE_URL
@@ -43,13 +43,20 @@ test("account status, deletion, and authentication enforce access", async (t) =>
     assert.equal(args.where?.role, target.role)
     assert.equal(args.where?.isActive, target.isActive)
     if (conflict) return { count: 0 }
-    target.isActive = args.data.isActive as boolean
+    if ("isActive" in args.data) {
+      target.isActive = args.data.isActive as boolean
+    }
+    if ("accountDeletedAt" in args.data) {
+      assert.equal(args.where?.accountDeletedAt, null)
+      target.accountDeletedAt = args.data.accountDeletedAt as Date
+    }
     return { count: 1 }
   })
   const remove = t.mock.fn(async (args: Prisma.UserDeleteManyArgs) => {
     assert.equal(args.where?.id, "target")
     assert.equal(args.where?.role, target.role)
     assert.equal(args.where?.isActive, false)
+    assert.deepEqual(args.where?.accountDeletedAt, { not: null })
     targetExists = false
     return { count: 1 }
   })
@@ -100,8 +107,13 @@ test("account status, deletion, and authentication enforce access", async (t) =>
         headers,
         body: JSON.stringify({ isActive }),
       })
-    const deleteAccount = (id = "target") =>
+    const moveToTrash = (id = "target") =>
       fetch(`${base}/api/users/${id}`, { method: "DELETE", headers })
+    const deletePermanently = (id = "target") =>
+      fetch(`${base}/api/users/${id}/permanent`, {
+        method: "DELETE",
+        headers,
+      })
 
     assert.equal(
       (await fetch(`${base}/api/users/target/status`, { method: "PATCH" }))
@@ -117,7 +129,8 @@ test("account status, deletion, and authentication enforce access", async (t) =>
     for (const role of [Role.ADMIN, Role.STAFF, Role.USER]) {
       actor.role = role
       assert.equal((await changeStatus(false)).status, 403)
-      assert.equal((await deleteAccount()).status, 403)
+      assert.equal((await moveToTrash()).status, 403)
+      assert.equal((await deletePermanently()).status, 403)
     }
     actor.role = Role.SUPERADMIN
     target.role = Role.USER
@@ -161,13 +174,19 @@ test("account status, deletion, and authentication enforce access", async (t) =>
 
     actor.role = Role.SUPERADMIN
     target.role = Role.ADMIN
-    assert.equal((await deleteAccount()).status, 409)
+    assert.equal((await moveToTrash()).status, 409)
     assert.equal((await changeStatus(false)).status, 200)
     assert.equal(revoke.mock.callCount(), 2)
-    assert.equal((await deleteAccount(actor.id)).status, 403)
-    assert.equal((await deleteAccount()).status, 200)
+    assert.equal((await deletePermanently()).status, 409)
+    assert.equal((await moveToTrash(actor.id)).status, 403)
+    assert.equal((await moveToTrash()).status, 200)
+    assert.ok(target.accountDeletedAt instanceof Date)
+    assert.equal(targetExists, true)
+    assert.equal((await moveToTrash()).status, 404)
+    assert.equal((await deletePermanently(actor.id)).status, 403)
+    assert.equal((await deletePermanently()).status, 200)
     assert.equal(remove.mock.callCount(), 1)
-    assert.equal((await deleteAccount()).status, 404)
+    assert.equal((await deletePermanently()).status, 404)
   } finally {
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),

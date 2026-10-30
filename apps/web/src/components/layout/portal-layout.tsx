@@ -10,6 +10,7 @@ import {
   canAccessDepartmentManagement,
   canAccessEmployeeManagement,
   canAccessServiceManagement,
+  canAccessClientManagement,
 } from "@/features/auth/model/permissions"
 import { AccountContext } from "@/features/auth/providers/account-context"
 import { useAuthTransition } from "@/features/auth/providers/auth-provider"
@@ -31,7 +32,8 @@ export function PortalLayout({ children }: { children: ReactNode }) {
         !canAccessDepartmentManagement(account)) ||
       (pathname.startsWith("/employees") &&
         !canAccessEmployeeManagement(account)) ||
-      (pathname === "/services" && !canAccessServiceManagement(account)))
+      (pathname === "/services" && !canAccessServiceManagement(account)) ||
+      (pathname.startsWith("/clients") && !canAccessClientManagement(account)))
 
   useEffect(() => {
     if (denied) router.replace("/dashboard")
@@ -44,7 +46,6 @@ export function PortalLayout({ children }: { children: ReactNode }) {
       sileo.success({
         title: "Signed out",
         description: "See you next time.",
-        position: "bottom-right",
       })
     } catch {
       sileo.error({

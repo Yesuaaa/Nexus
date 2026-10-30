@@ -12,5 +12,3 @@ export const idleNavClass =
   "text-[#526893] hover:bg-background/70 hover:text-[#213f8c]"
 export const heroTitleClass =
   "text-[clamp(42px,3.55vw,68px)] leading-[0.98] font-[750] tracking-[-0.045em]"
-export const socialIconClass =
-  "grid size-12 select-none place-items-center rounded-[11px] border-2 border-[#dfe4ef] bg-background text-2xl font-bold leading-none"

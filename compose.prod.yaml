@@ -7,6 +7,9 @@ services:
       PORT: "3001"
       DATABASE_URL: ${DATABASE_URL:-}
       WEB_ORIGIN: ${PROD_WEB_ORIGIN:-http://localhost:8080}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
+      SUPABASE_SERVICE_IMAGES_BUCKET: ${SUPABASE_SERVICE_IMAGES_BUCKET:-service-images}
     healthcheck:
       test:
         [

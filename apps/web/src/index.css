@@ -73,7 +73,104 @@ body {
   filter: drop-shadow(0 8px 20px rgb(23 39 53 / 14%));
 }
 
-/* Keep auth toasts centered over the form column in AuthLayout. */
+.nexus-panel-overlay {
+  animation: nexus-panel-overlay-in 180ms ease-out both;
+}
+
+.nexus-panel-overlay[data-state="closed"] {
+  animation: nexus-panel-overlay-out 150ms ease-in both;
+}
+
+.nexus-side-panel {
+  animation: nexus-side-panel-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.nexus-side-panel[data-state="closed"] {
+  animation: nexus-side-panel-out 180ms ease-in both;
+}
+
+.nexus-detail-dialog {
+  animation: nexus-detail-dialog-in 190ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.nexus-detail-dialog[data-state="closed"] {
+  animation: nexus-detail-dialog-out 150ms ease-in both;
+}
+
+@keyframes nexus-panel-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes nexus-panel-overlay-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes nexus-side-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes nexus-side-panel-out {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+
+@keyframes nexus-detail-dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes nexus-detail-dialog-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nexus-panel-overlay,
+  .nexus-panel-overlay[data-state="closed"],
+  .nexus-side-panel,
+  .nexus-side-panel[data-state="closed"],
+  .nexus-detail-dialog,
+  .nexus-detail-dialog[data-state="closed"] {
+    animation: none !important;
+  }
+}
+
+/* Center auth toasts above the form near the top of the page. */
 .auth-toast-region [data-sileo-viewport][data-position="top-center"] {
   left: 78.5%;
 }

@@ -7,6 +7,7 @@ import { test } from "node:test"
 import { PGlite } from "@electric-sql/pglite"
 import { PGLiteSocketServer } from "@electric-sql/pglite-socket"
 import { createApp } from "./app.js"
+import { setServiceImageStorageForTests } from "./features/services/service-image-storage.js"
 import { getPrisma } from "./lib/db.js"
 
 type Payload = {
@@ -14,7 +15,9 @@ type Payload = {
   employees: { id: string }[]
   users: { email: string }[]
   total: number
+  pageSize?: number
   department: {
+    color: string
     members: { id: string }[]
     teams: { id: string; memberCount: number }[]
   }
@@ -27,6 +30,22 @@ test(
     const originalUrl = process.env.DATABASE_URL
     const originalDirectUrl = process.env.DIRECT_URL
     const originalPoolMax = process.env.DATABASE_POOL_MAX
+    const storedServiceImages = new Set<string>()
+    let uploadedImageSequence = 0
+    setServiceImageStorageForTests({
+      async upload() {
+        uploadedImageSequence += 1
+        const path = `services/test-${uploadedImageSequence}.png`
+        storedServiceImages.add(path)
+        return path
+      },
+      async remove(path) {
+        storedServiceImages.delete(path)
+      },
+      publicUrl(path) {
+        return `https://storage.test/${path}`
+      },
+    })
     const database = new PGlite()
     const cleanup: {
       socket?: PGLiteSocketServer
@@ -34,6 +53,7 @@ test(
       prisma?: ReturnType<typeof getPrisma>
     } = {}
     t.after(async () => {
+      setServiceImageStorageForTests(undefined)
       if (cleanup.server)
         await new Promise<void>((resolve) =>
           cleanup.server!.close(() => resolve()),
@@ -144,6 +164,292 @@ test(
       return result
     }
     let employeeId = ""
+    await t.test(
+      "service reads and writes enforce permissions for every role",
+      async () => {
+        const protectedRoutes = [
+          ["GET", "/services"],
+          ["GET", "/services/pricing-templates"],
+          ["GET", "/services/missing"],
+          ["POST", "/services"],
+          ["PUT", "/services/missing"],
+          ["PATCH", "/services/missing/status"],
+          ["DELETE", "/services/missing"],
+        ] as const
+        for (const [method, path] of protectedRoutes) {
+          for (const actor of ["superadmin", "staff", "user"]) {
+            assert.equal(
+              (await request(path, method, undefined, actor)).status,
+              403,
+              `${actor}: ${method} ${path}`,
+            )
+          }
+          assert.equal(
+            (await request(path, method, undefined, "anonymous")).status,
+            401,
+          )
+        }
+        for (const actor of ["admin", "superadmin", "staff", "user"]) {
+          assert.equal(
+            (await request("/services/available", "GET", undefined, actor))
+              .status,
+            200,
+          )
+        }
+        assert.equal(
+          (await request("/services/available", "GET", undefined, "anonymous"))
+            .status,
+          401,
+        )
+      },
+    )
+    await t.test(
+      "department colors persist and are shared across related responses",
+      async () => {
+        const migrated = (await json("/departments/product")).department
+        assert.equal(typeof migrated.color, "string")
+        assert.equal(
+          (
+            await request("/departments/product", "PUT", {
+              color: "not-a-color",
+            })
+          ).status,
+          400,
+        )
+
+        const updated = await json("/departments/product", "PUT", {
+          color: "teal",
+        })
+        assert.equal(updated.department.color, "teal")
+        assert.equal(
+          (await json("/departments/product")).department.color,
+          "teal",
+        )
+
+        const accountResponse = await request(
+          "/users?search=staff%40example.com",
+          "GET",
+          undefined,
+          "superadmin",
+        )
+        assert.equal(accountResponse.status, 200)
+        const accounts = (await accountResponse.json()) as {
+          users: { department: { color: string } | null }[]
+        }
+        assert.equal(accounts.users[0]?.department?.color, "teal")
+
+        const meResponse = await request("/auth/me", "GET", undefined, "staff")
+        assert.equal(meResponse.status, 200)
+        const me = (await meResponse.json()) as {
+          user: { department: { color: string } | null }
+        }
+        assert.equal(me.user.department?.color, "teal")
+      },
+    )
+    await t.test(
+      "service lifecycle validates department links and prevents deleting active services",
+      async (subtest) => {
+        const input = {
+          name: "Security regression service",
+          description: "Offline integration fixture",
+          departmentIds: ["product", "operations"],
+          isActive: true,
+          imageDataUrl: `data:image/png;base64,${Buffer.from("service-image").toString("base64")}`,
+          imageAltText: "Security service illustration",
+          removeImage: false,
+          pricingTemplate: {
+            name: "Security regression pricing",
+            pricingModel: "STARTING",
+            currency: "PHP",
+            amount: 5000,
+            billingInterval: null,
+            isPublic: true,
+          },
+          packages: [
+            {
+              name: "Starter",
+              description: "Starter security package",
+              includedFeatures: ["Initial assessment"],
+              pricingModel: "FIXED",
+              currency: "PHP",
+              amount: 7500,
+              billingInterval: null,
+              isPricingPublic: true,
+              isActive: true,
+              displayOrder: 1,
+              isRecommended: true,
+            },
+          ],
+        }
+        assert.equal(
+          (
+            await request("/services", "POST", {
+              ...input,
+              departmentIds: ["missing"],
+            })
+          ).status,
+          400,
+        )
+        const response = await request("/services", "POST", input)
+        assert.equal(response.status, 201)
+        const { service } = (await response.json()) as {
+          service: {
+            id: string
+            imageUrl: string | null
+            pricingTemplate: { id: string; pricingModel: string } | null
+            packages: { id: string; name: string }[]
+            departments: { id: string; color: string }[]
+          }
+        }
+        subtest.after(async () => {
+          await prisma.service.deleteMany({ where: { id: service.id } })
+        })
+        assert.deepEqual(
+          service.departments.map((department) => department.id).sort(),
+          ["operations", "product"],
+        )
+        assert.equal(
+          service.departments.find((department) => department.id === "product")
+            ?.color,
+          "teal",
+        )
+        assert.equal(
+          service.imageUrl,
+          "https://storage.test/services/test-1.png",
+        )
+        assert.equal(storedServiceImages.has("services/test-1.png"), true)
+        const storedService = await prisma.service.findUniqueOrThrow({
+          where: { id: service.id },
+          select: { imagePath: true },
+        })
+        assert.equal(storedService.imagePath, "services/test-1.png")
+        assert.equal(service.pricingTemplate?.pricingModel, "STARTING")
+        assert.deepEqual(
+          service.packages.map((item) => item.name),
+          ["Starter"],
+        )
+        assert.ok(service.pricingTemplate)
+        const createdPackage = service.packages[0]
+        assert.ok(createdPackage)
+        assert.equal((await request("/services", "POST", input)).status, 409)
+        const replacement = await request(`/services/${service.id}`, "PUT", {
+          ...input,
+          imageDataUrl: `data:image/webp;base64,${Buffer.from("replacement-image").toString("base64")}`,
+          pricingTemplate: null,
+          pricingTemplateId: service.pricingTemplate.id,
+          packages: input.packages.map((servicePackage) => ({
+            ...servicePackage,
+            id: createdPackage.id,
+          })),
+        })
+        assert.equal(replacement.status, 200)
+        const replacementService = (await replacement.json()) as {
+          service: { imageUrl: string | null }
+        }
+        assert.equal(
+          replacementService.service.imageUrl,
+          "https://storage.test/services/test-3.png",
+        )
+        assert.equal(storedServiceImages.has("services/test-1.png"), false)
+        assert.equal(storedServiceImages.has("services/test-3.png"), true)
+        assert.equal(
+          (await request(`/services/${service.id}`, "DELETE")).status,
+          409,
+        )
+        assert.equal(
+          (
+            await request(`/services/${service.id}/status`, "PATCH", {
+              isActive: "false",
+            })
+          ).status,
+          400,
+        )
+        assert.equal(
+          (
+            await request(`/services/${service.id}/status`, "PATCH", {
+              isActive: false,
+            })
+          ).status,
+          200,
+        )
+        const available = (await (
+          await request("/services/available", "GET", undefined, "user")
+        ).json()) as { services: { id: string }[] }
+        assert.equal(
+          available.services.some((item) => item.id === service.id),
+          false,
+        )
+        assert.equal(
+          (await request(`/services/${service.id}`, "DELETE")).status,
+          200,
+        )
+        assert.equal(storedServiceImages.has("services/test-3.png"), false)
+        assert.equal(
+          (await request(`/services/${service.id}`, "GET")).status,
+          404,
+        )
+      },
+    )
+    await t.test(
+      "department mutations reject Staff and User even when directly requested",
+      async () => {
+        for (const actor of ["staff", "user"]) {
+          for (const [method, path] of [
+            ["POST", "/departments"],
+            ["PUT", "/departments/product"],
+            ["DELETE", "/departments/product"],
+            ["POST", "/departments/product/members"],
+            ["PATCH", "/departments/product/members/missing"],
+            ["DELETE", "/departments/product/members/missing"],
+            ["POST", "/departments/product/teams"],
+            ["PUT", "/departments/product/teams/product-team"],
+            ["DELETE", "/departments/product/teams/product-team"],
+          ]) {
+            assert.equal(
+              (await request(path, method, undefined, actor)).status,
+              403,
+              `${actor}: ${method} ${path}`,
+            )
+          }
+        }
+      },
+    )
+    await t.test(
+      "inactive Staff accounts cannot be assigned through legacy user IDs",
+      async (subtest) => {
+        await prisma.user.create({
+          data: {
+            id: "inactive-staff",
+            email: "inactive-staff@example.com",
+            fullName: "Inactive Staff",
+            passwordHash: "unused-test-hash",
+            role: "STAFF",
+            isActive: false,
+          },
+        })
+        subtest.after(async () => {
+          await prisma.user.delete({ where: { id: "inactive-staff" } })
+        })
+        const before = await prisma.employee.count()
+        assert.equal(
+          (
+            await request("/departments/operations/members", "POST", {
+              userIds: ["inactive-staff"],
+            })
+          ).status,
+          400,
+        )
+        assert.equal(await prisma.employee.count(), before)
+        assert.equal(
+          (
+            await prisma.user.findUniqueOrThrow({
+              where: { id: "inactive-staff" },
+            })
+          ).departmentId,
+          null,
+        )
+      },
+    )
     await t.test(
       "only Admin may use the employee API, including direct writes",
       async () => {
@@ -435,9 +741,25 @@ test(
           "POST",
           { userIds: ["user"] },
         )
-        assert.equal(assignment.status, 200)
+        assert.equal(assignment.status, 400)
+        assert.equal(
+          await prisma.employee.count({ where: { userId: "user" } }),
+          0,
+        )
+        await prisma.user.create({
+          data: {
+            id: "operations-staff",
+            email: "operations-staff@example.com",
+            fullName: "Operations Staff",
+            passwordHash: "unused-test-hash",
+            role: "STAFF",
+          },
+        })
+        await json("/departments/operations/members", "POST", {
+          userIds: ["operations-staff"],
+        })
         const linkedEmployee = await prisma.employee.findUniqueOrThrow({
-          where: { userId: "user" },
+          where: { userId: "operations-staff" },
           select: { id: true },
         })
         const teamResponse = await request(
@@ -471,8 +793,11 @@ test(
           2,
         )
         assert.equal(
-          (await prisma.user.findUniqueOrThrow({ where: { id: "user" } }))
-            .teamId,
+          (
+            await prisma.user.findUniqueOrThrow({
+              where: { id: "operations-staff" },
+            })
+          ).teamId,
           team.team.id,
         )
 
@@ -494,8 +819,11 @@ test(
         assert.equal(employee.departmentId, "operations")
         assert.equal(employee.teamId, null)
         assert.equal(
-          (await prisma.user.findUniqueOrThrow({ where: { id: "user" } }))
-            .teamId,
+          (
+            await prisma.user.findUniqueOrThrow({
+              where: { id: "operations-staff" },
+            })
+          ).teamId,
           null,
         )
         assert.equal(
@@ -547,7 +875,7 @@ test(
               userIds: ["link-target", "missing-user"],
             })
           ).status,
-          404,
+          400,
         )
         assert.equal(
           (
@@ -619,16 +947,17 @@ test(
       "directory search paginates without losing later results",
       async () => {
         await prisma.employee.createMany({
-          data: Array.from({ length: 21 }, (_, index) => ({
+          data: Array.from({ length: 13 }, (_, index) => ({
             employeeId: `PAGE-${index}`,
             fullName: `Pagination Person ${String(index).padStart(2, "0")}`,
           })),
         })
         const first = await json("/employees?search=Pagination&page=1")
         const second = await json("/employees?search=Pagination&page=2")
-        assert.equal(first.total, 21)
-        assert.equal(first.employees.length, 20)
-        assert.equal(second.employees.length, 1)
+        assert.equal(first.total, 13)
+        assert.equal(first.pageSize, 10)
+        assert.equal(first.employees.length, 10)
+        assert.equal(second.employees.length, 3)
         assert.ok(
           !first.employees.some(
             (employee) => employee.id === second.employees[0]?.id,

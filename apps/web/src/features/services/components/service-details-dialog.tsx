@@ -1,7 +1,18 @@
+import Image from "next/image"
 import { useRef } from "react"
-import { CalendarDays, Building2, Clock3, Package } from "lucide-react"
+import {
+  CalendarDays,
+  Building2,
+  ClipboardList,
+  Clock3,
+  MessagesSquare,
+  Package,
+  PhilippinePeso,
+} from "lucide-react"
 import { CloseIcon } from "@/components/layout/icons"
 import { focusRing } from "@/components/layout/styles"
+import { DepartmentPill } from "@/components/ui/department-pill"
+import { useAnimatedPanelClose } from "@/components/ui/use-animated-panel-close"
 import {
   Dialog,
   DialogContent,
@@ -21,6 +32,23 @@ function formatDate(value: string, includeTime = false) {
   }).format(new Date(value))
 }
 
+const pricingLabels = {
+  FIXED: "Fixed price",
+  STARTING: "Starting at",
+  CUSTOM_QUOTE: "Custom quotation",
+  RECURRING: "Recurring",
+  HOURLY: "Hourly rate",
+} as const
+
+function formatPrice(amount: string | null, currency: string) {
+  if (amount === null) return "Price on request"
+  return new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 2,
+  }).format(Number(amount))
+}
+
 export function ServiceDetailsDialog({
   service,
   onClose,
@@ -28,6 +56,8 @@ export function ServiceDetailsDialog({
   service: Service
   onClose: () => void
 }) {
+  const { open, handleOpenChange, closeAfterTransition } =
+    useAnimatedPanelClose(onClose)
   const openerRef = useRef(
     typeof document === "undefined" ? null : document.activeElement,
   )
@@ -37,11 +67,36 @@ export function ServiceDetailsDialog({
       value: (
         <span className="flex flex-wrap gap-1.5">
           {service.departments.map((department) => (
-            <Pill key={department.id}>{department.name}</Pill>
+            <DepartmentPill key={department.id} department={department} />
           ))}
         </span>
       ),
       icon: Building2,
+    },
+    {
+      label: "Pricing",
+      value: service.pricingTemplate
+        ? `${pricingLabels[service.pricingTemplate.pricingModel]} · ${formatPrice(
+            service.pricingTemplate.amount,
+            service.pricingTemplate.currency,
+          )}${service.pricingTemplate.billingInterval ? ` / ${service.pricingTemplate.billingInterval.toLocaleLowerCase()}` : ""}${service.pricingTemplate.isPublic ? "" : " (hidden publicly)"}`
+        : "Not configured",
+      icon: PhilippinePeso,
+    },
+    {
+      label: "Requirements",
+      value:
+        service.clientRequirements.length > 0
+          ? service.clientRequirements.join("; ")
+          : "None specified",
+      icon: ClipboardList,
+    },
+    {
+      label: "Consultation",
+      value: service.requiresConsultation
+        ? service.consultationNotes || "Required before proceeding"
+        : "Not required",
+      icon: MessagesSquare,
     },
     {
       label: "Status",
@@ -71,11 +126,11 @@ export function ServiceDetailsDialog({
   ]
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         showCloseButton={false}
-        overlayClassName="z-[110] bg-[rgb(13_28_57_/_48%)]"
-        className="z-[110] max-h-[calc(100dvh-28px)] w-[min(520px,calc(100vw-28px))] gap-0 overflow-y-auto rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_22px_75px_rgb(18_36_73_/_22%)]"
+        overlayClassName="nexus-panel-overlay z-[110] bg-[rgb(13_28_57_/_48%)]"
+        className="nexus-detail-dialog z-[110] max-h-[calc(100dvh-28px)] w-[min(520px,calc(100vw-28px))] gap-0 overflow-y-auto rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_22px_75px_rgb(18_36_73_/_22%)]"
         onCloseAutoFocus={(event) => {
           event.preventDefault()
           const opener = openerRef.current
@@ -98,13 +153,29 @@ export function ServiceDetailsDialog({
               "grid size-7 flex-none cursor-pointer place-items-center rounded-[7px] border-0 bg-background text-[#65718a] hover:bg-[#f1f5fc]",
               focusRing,
             )}
-            onClick={onClose}
+            onClick={() => closeAfterTransition()}
             aria-label="Close details"
           >
             <CloseIcon />
           </button>
         </div>
         <div className="p-5">
+          <div className="relative mb-4 aspect-[16/7] overflow-hidden rounded-xl bg-[#eef2f8]">
+            {service.imageUrl ? (
+              <Image
+                src={service.imageUrl}
+                alt={service.imageAltText ?? service.name}
+                fill
+                unoptimized
+                className="object-cover"
+              />
+            ) : (
+              <div className="grid size-full place-items-center text-[#7890b2]">
+                <Package size={32} aria-hidden="true" />
+                <span className="sr-only">No service image</span>
+              </div>
+            )}
+          </div>
           <div className="flex items-start gap-3.5">
             <div className="grid size-12 flex-none place-items-center rounded-xl bg-[#e5edff] text-[#2058d4]">
               <Package size={22} aria-hidden="true" />
@@ -132,6 +203,60 @@ export function ServiceDetailsDialog({
               </div>
             ))}
           </dl>
+          {service.packages.length > 0 && (
+            <section className="mt-5 border-t border-[#eceef1] pt-5">
+              <h3 className="m-0 text-sm font-[650]">Packages</h3>
+              <div className="mt-3 grid gap-2.5">
+                {service.packages.map((servicePackage) => (
+                  <article
+                    key={servicePackage.id}
+                    className="rounded-lg border border-[#dfe6ef] p-3"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <strong className="text-xs">{servicePackage.name}</strong>
+                      <span className="flex gap-1.5">
+                        {servicePackage.isRecommended && (
+                          <Pill className="bg-[#e5edff] text-[#2058d4]">
+                            Recommended
+                          </Pill>
+                        )}
+                        <Pill
+                          className={
+                            servicePackage.isActive
+                              ? "bg-[#dcf5e5] text-[#19703a]"
+                              : "bg-[#fde4ea] text-[#b4234d]"
+                          }
+                        >
+                          {servicePackage.isActive ? "Active" : "Inactive"}
+                        </Pill>
+                      </span>
+                    </div>
+                    <p className="mt-1.5 mb-0 text-xs leading-relaxed text-[#526686]">
+                      {servicePackage.description}
+                    </p>
+                    <ul className="mt-2 mb-0 grid gap-1 pl-4 text-[11px] text-[#526686]">
+                      {servicePackage.includedFeatures.map((feature) => (
+                        <li key={feature}>{feature}</li>
+                      ))}
+                    </ul>
+                    <p className="mt-2 mb-0 text-xs font-semibold text-[#203f8c]">
+                      {pricingLabels[servicePackage.pricingModel]} ·{" "}
+                      {formatPrice(
+                        servicePackage.amount,
+                        servicePackage.currency,
+                      )}
+                      {servicePackage.billingInterval
+                        ? ` / ${servicePackage.billingInterval.toLocaleLowerCase()}`
+                        : ""}
+                      {!servicePackage.isPricingPublic
+                        ? " (hidden publicly)"
+                        : ""}
+                    </p>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
         </div>
         <footer className="flex justify-end border-t border-[#eceef1] px-5 py-4">
           <button
@@ -140,7 +265,7 @@ export function ServiceDetailsDialog({
               "min-h-[38px] cursor-pointer rounded-[9px] border border-[#d7e0ee] bg-background px-[15px] text-xs font-semibold text-[#24437e] hover:bg-[#f1f5fc]",
               focusRing,
             )}
-            onClick={onClose}
+            onClick={() => closeAfterTransition()}
           >
             Close
           </button>

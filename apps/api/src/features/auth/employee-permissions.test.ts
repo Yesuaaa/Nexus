@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { Role } from "../../generated/prisma/client.js"
-import { permissionsFor } from "./permissions.js"
+import { permissionsFor } from "./auth.permissions.js"
 
 test("employee management belongs only to the Admin role", () => {
   for (const role of Object.values(Role)) {

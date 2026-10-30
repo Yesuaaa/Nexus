@@ -5,22 +5,30 @@ export function DeleteAccountDialog({
   account,
   deleting,
   error,
+  permanent,
   onClose,
   onConfirm,
 }: {
   account: Account
   deleting: boolean
   error: string
+  permanent: boolean
   onClose: () => void
   onConfirm: () => void
 }) {
   return (
     <ConfirmationDialog
-      title="Delete account?"
+      title={
+        permanent ? "Permanently delete account?" : "Move account to Trash?"
+      }
       subject={account.email}
-      description="This will permanently delete this inactive account. Its department and team assignments will be removed. This action cannot be undone."
-      confirmLabel="Delete account"
-      pendingLabel="Deleting..."
+      description={
+        permanent
+          ? "This permanently deletes the account and cannot be undone. Accounts with related historical records must remain in Trash."
+          : "This soft deletes the inactive account and removes it from Account Management. You can review it in Trash before permanently deleting it."
+      }
+      confirmLabel={permanent ? "Delete permanently" : "Move to Trash"}
+      pendingLabel={permanent ? "Deleting..." : "Moving..."}
       pending={deleting}
       error={error}
       onClose={onClose}

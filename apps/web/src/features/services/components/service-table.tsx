@@ -1,7 +1,12 @@
-import { useMemo, useRef, useState } from "react"
+import Image from "next/image"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Eye, MoreHorizontal, Pencil } from "lucide-react"
-import { SearchIcon } from "@/components/layout/icons"
+import { AnimatePresence } from "framer-motion"
 import { focusRing } from "@/components/layout/styles"
+import { AnimatedGridRow } from "@/components/ui/animated-data-row"
+import { DepartmentPill } from "@/components/ui/department-pill.tsx"
+import { SearchEmptyState } from "@/components/ui/search-empty-state"
+import { SearchField } from "@/components/ui/search-field"
 import { Dropdown } from "@/components/ui/dropdown"
 import {
   DropdownMenu,
@@ -15,6 +20,7 @@ import {
 } from "@/components/ui/dropdown-styles"
 import { Pill } from "@/components/ui/pill"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
+import { NumberedPagination } from "@/components/ui/numbered-pagination"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import {
   TableSortButton,
@@ -26,7 +32,7 @@ import type { Service } from "../api/services-api"
 
 type SortKey = "name" | "status" | "createdAt"
 
-const pageSize = 5
+const pageSize = 10
 const serviceGrid =
   "grid grid-cols-[minmax(180px,1.25fr)_minmax(220px,1.6fr)_minmax(120px,.8fr)_90px_125px_112px] items-center gap-3.5 @max-[920px]:grid-cols-[minmax(0,1fr)_auto]"
 
@@ -46,9 +52,7 @@ function DepartmentPills({ service }: { service: Service }) {
   return (
     <span className="inline-flex max-w-full items-center gap-1">
       {visibleDepartments.map((department) => (
-        <Pill key={department.id} title={department.name}>
-          {department.name}
-        </Pill>
+        <DepartmentPill key={department.id} department={department} />
       ))}
       {remainingCount > 0 && (
         <Pill
@@ -199,14 +203,23 @@ export function ServiceTable({
   onRetry: () => void
 }) {
   const [search, setSearch] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
   const [departmentId, setDepartmentId] = useState("")
   const [status, setStatus] = useState("")
   const [sortKey, setSortKey] = useState<SortKey>("createdAt")
   const [direction, setDirection] = useState<SortDirection>("desc")
   const [page, setPage] = useState(1)
+  const [animateRows, setAnimateRows] = useState(true)
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search)
+      setPage(1)
+    }, 150)
+    return () => window.clearTimeout(timer)
+  }, [search])
 
   const filtered = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase()
+    const query = debouncedSearch.trim().toLocaleLowerCase()
     return services
       .filter(
         (service) =>
@@ -236,7 +249,7 @@ export function ServiceTable({
             : String(a).localeCompare(String(b))
         return direction === "asc" ? compared : -compared
       })
-  }, [departmentId, direction, search, services, sortKey, status])
+  }, [departmentId, debouncedSearch, direction, services, sortKey, status])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const currentPage = Math.min(page, totalPages)
@@ -244,8 +257,16 @@ export function ServiceTable({
     (currentPage - 1) * pageSize,
     currentPage * pageSize,
   )
-
+  const viewKey = JSON.stringify([
+    debouncedSearch,
+    departmentId,
+    status,
+    sortKey,
+    direction,
+    currentPage,
+  ])
   function sortBy(key: SortKey) {
+    setAnimateRows(true)
     if (sortKey === key)
       setDirection((value) => (value === "asc" ? "desc" : "asc"))
     else {
@@ -255,26 +276,22 @@ export function ServiceTable({
     setPage(1)
   }
 
-  const filteredState = Boolean(search || departmentId || status)
+  const filteredState = Boolean(debouncedSearch || departmentId || status)
 
   return (
     <>
       <div className="flex items-center justify-between gap-3 pb-4 max-[920px]:items-stretch max-[920px]:flex-col max-[560px]:pb-3">
-        <label className="flex h-[34px] w-[min(380px,100%)] min-w-0 items-center gap-2 rounded-lg border border-[#e1e4ea] px-[11px] text-[#7b8ca7] focus-within:bg-[#f8fafd] max-[920px]:w-full">
-          <SearchIcon width="17" height="17" className="flex-none" />
-          <span className="sr-only">Search services</span>
-          <input
-            type="search"
-            className="w-full min-w-0 border-0 bg-transparent text-foreground outline-none placeholder:text-[#8a9ab1]"
-            placeholder="Search services..."
-            value={search}
-            maxLength={100}
-            onChange={(event) => {
-              setSearch(event.target.value)
-              setPage(1)
-            }}
-          />
-        </label>
+        <SearchField
+          label="Search services"
+          containerClassName="max-[920px]:w-full max-[920px]:flex-none"
+          placeholder="Search services…"
+          value={search}
+          maxLength={100}
+          onChange={(event) => {
+            setAnimateRows(true)
+            setSearch(event.target.value)
+          }}
+        />
         <div className="flex min-w-0 gap-2 max-[560px]:flex-col">
           <Dropdown
             className="w-[180px] max-[560px]:w-full"
@@ -289,6 +306,7 @@ export function ServiceTable({
               })),
             ]}
             onChange={(value) => {
+              setAnimateRows(true)
               setDepartmentId(value)
               setPage(1)
             }}
@@ -304,6 +322,7 @@ export function ServiceTable({
               { value: "inactive", label: "Inactive" },
             ]}
             onChange={(value) => {
+              setAnimateRows(true)
               setStatus(value)
               setPage(1)
             }}
@@ -312,7 +331,7 @@ export function ServiceTable({
       </div>
 
       <div
-        className="@container min-w-0 rounded-lg border border-[#e8ebef] bg-background"
+        className="@container min-w-0 overflow-x-clip rounded-lg border border-[#e8ebef] bg-background"
         role="table"
         aria-label="Services"
       >
@@ -350,8 +369,12 @@ export function ServiceTable({
             <span role="columnheader">Actions</span>
           </div>
         </div>
-        <div role="rowgroup" aria-live="polite">
-          {loading || error || filtered.length === 0 ? (
+        <div
+          role="rowgroup"
+          aria-live="polite"
+          className="relative overflow-x-clip"
+        >
+          {loading || error ? (
             <div role="row">
               <div
                 role="cell"
@@ -374,87 +397,120 @@ export function ServiceTable({
                       Try again
                     </button>
                   </div>
-                ) : filteredState ? (
-                  "No services match the selected filters."
-                ) : (
-                  "No services have been created yet."
-                )}
+                ) : null}
               </div>
             </div>
           ) : (
-            visible.map((service) => (
-              <div
-                role="row"
-                key={service.id}
-                className={cn(
-                  serviceGrid,
-                  "min-h-[58px] border-b border-[#eceef1] px-4 py-[8px] text-xs last:rounded-b-[7px] last:border-b-0 hover:bg-[#f3f6f8] @max-[920px]:gap-x-4 @max-[920px]:gap-y-2 @max-[920px]:py-3.5",
-                )}
-              >
-                <button
-                  type="button"
-                  role="rowheader"
-                  className={cn(
-                    "min-w-0 cursor-pointer truncate rounded-sm border-0 bg-transparent p-0 text-left font-semibold hover:underline hover:underline-offset-4 @max-[920px]:col-start-1 @max-[920px]:row-start-1",
-                    focusRing,
-                  )}
-                  onClick={() => onView(service)}
+            <AnimatePresence
+              custom={animateRows}
+              initial={false}
+              mode={animateRows ? "popLayout" : "sync"}
+            >
+              {visible.length === 0 ? (
+                <AnimatedGridRow
+                  key={`empty-${viewKey}`}
+                  animateRows={animateRows}
+                  rowIndex={0}
+                  className="grid min-h-[170px] place-content-center gap-3 p-6 text-center text-xs text-[#7183a2]"
                 >
-                  {service.name}
-                </button>
-                <div
-                  role="cell"
-                  className="min-w-0 truncate text-[#526686] @max-[920px]:col-span-2 @max-[920px]:row-start-2 @max-[920px]:whitespace-normal"
-                >
-                  {service.description}
-                </div>
-                <div
-                  role="cell"
-                  className="min-w-0 @max-[920px]:col-start-1 @max-[920px]:row-start-3"
-                >
-                  <span className="mr-1.5 hidden text-[#738096] @max-[920px]:inline">
-                    Departments
-                  </span>
-                  <DepartmentPills service={service} />
-                </div>
-                <div
-                  role="cell"
-                  className="@max-[920px]:col-start-2 @max-[920px]:row-start-3 @max-[920px]:justify-self-end"
-                >
-                  <Pill
-                    className={
-                      service.isActive
-                        ? "bg-[#dcf5e5] text-[#19703a]"
-                        : "bg-[#fde4ea] text-[#b4234d]"
-                    }
+                  <div role="cell" aria-colspan={6}>
+                    {debouncedSearch.trim() ? (
+                      <SearchEmptyState query={debouncedSearch.trim()} />
+                    ) : filteredState ? (
+                      "No services match the selected filters."
+                    ) : (
+                      "No services have been created yet."
+                    )}
+                  </div>
+                </AnimatedGridRow>
+              ) : (
+                visible.map((service, index) => (
+                  <AnimatedGridRow
+                    key={`${viewKey}:${service.id}`}
+                    animateRows={animateRows}
+                    rowIndex={index}
+                    className={cn(
+                      serviceGrid,
+                      "min-h-[58px] border-b border-[#eceef1] px-4 py-[8px] text-xs last:rounded-b-[7px] last:border-b-0 hover:bg-[#f3f6f8] @max-[920px]:gap-x-4 @max-[920px]:gap-y-2 @max-[920px]:py-3.5",
+                    )}
                   >
-                    {service.isActive ? "Active" : "Inactive"}
-                  </Pill>
-                </div>
-                <div
-                  role="cell"
-                  className="text-[#526686] tabular-nums @max-[920px]:col-start-1 @max-[920px]:row-start-4"
-                >
-                  <span className="mr-1.5 hidden text-[#738096] @max-[920px]:inline">
-                    Created
-                  </span>
-                  {formatDate(service.createdAt)}
-                </div>
-                <div
-                  role="cell"
-                  className="@max-[920px]:col-start-2 @max-[920px]:row-start-1 @max-[920px]:justify-self-end"
-                >
-                  <ServiceActions
-                    service={service}
-                    canManage={canManage}
-                    onView={onView}
-                    onEdit={onEdit}
-                    onStatus={onStatus}
-                    onDelete={onDelete}
-                  />
-                </div>
-              </div>
-            ))
+                    <button
+                      type="button"
+                      role="rowheader"
+                      className={cn(
+                        "flex min-w-0 cursor-pointer items-center gap-2 rounded-sm border-0 bg-transparent p-0 text-left font-semibold hover:underline hover:underline-offset-4 @max-[920px]:col-start-1 @max-[920px]:row-start-1",
+                        focusRing,
+                      )}
+                      onClick={() => onView(service)}
+                    >
+                      <span className="relative size-8 flex-none overflow-hidden rounded-md bg-[#e8eef7]">
+                        {service.imageUrl ? (
+                          <Image
+                            src={service.imageUrl}
+                            alt=""
+                            fill
+                            unoptimized
+                            className="object-cover"
+                          />
+                        ) : null}
+                      </span>
+                      <span className="truncate">{service.name}</span>
+                    </button>
+                    <div
+                      role="cell"
+                      className="min-w-0 truncate text-[#526686] @max-[920px]:col-span-2 @max-[920px]:row-start-2 @max-[920px]:whitespace-normal"
+                    >
+                      {service.description}
+                    </div>
+                    <div
+                      role="cell"
+                      className="min-w-0 @max-[920px]:col-start-1 @max-[920px]:row-start-3"
+                    >
+                      <span className="mr-1.5 hidden text-[#738096] @max-[920px]:inline">
+                        Departments
+                      </span>
+                      <DepartmentPills service={service} />
+                    </div>
+                    <div
+                      role="cell"
+                      className="@max-[920px]:col-start-2 @max-[920px]:row-start-3 @max-[920px]:justify-self-end"
+                    >
+                      <Pill
+                        className={
+                          service.isActive
+                            ? "bg-[#dcf5e5] text-[#19703a]"
+                            : "bg-[#fde4ea] text-[#b4234d]"
+                        }
+                      >
+                        {service.isActive ? "Active" : "Inactive"}
+                      </Pill>
+                    </div>
+                    <div
+                      role="cell"
+                      className="text-[#526686] tabular-nums @max-[920px]:col-start-1 @max-[920px]:row-start-4"
+                    >
+                      <span className="mr-1.5 hidden text-[#738096] @max-[920px]:inline">
+                        Created
+                      </span>
+                      {formatDate(service.createdAt)}
+                    </div>
+                    <div
+                      role="cell"
+                      className="@max-[920px]:col-start-2 @max-[920px]:row-start-1 @max-[920px]:justify-self-end"
+                    >
+                      <ServiceActions
+                        service={service}
+                        canManage={canManage}
+                        onView={onView}
+                        onEdit={onEdit}
+                        onStatus={onStatus}
+                        onDelete={onDelete}
+                      />
+                    </div>
+                  </AnimatedGridRow>
+                ))
+              )}
+            </AnimatePresence>
           )}
         </div>
       </div>
@@ -468,33 +524,16 @@ export function ServiceTable({
             {filtered.length} services
           </span>
           {filtered.length > 0 && (
-            <nav className="flex items-center gap-2" aria-label="Service pages">
-              <button
-                type="button"
-                className={cn(
-                  "h-8 cursor-pointer rounded-lg border border-[#d7e0ee] bg-background px-3 disabled:cursor-not-allowed disabled:opacity-45",
-                  focusRing,
-                )}
-                disabled={currentPage === 1}
-                onClick={() => setPage(currentPage - 1)}
-              >
-                Back
-              </button>
-              <span className="text-foreground tabular-nums">
-                Page {currentPage} of {totalPages}
-              </span>
-              <button
-                type="button"
-                className={cn(
-                  "h-8 cursor-pointer rounded-lg border border-[#d7e0ee] bg-background px-3 disabled:cursor-not-allowed disabled:opacity-45",
-                  focusRing,
-                )}
-                disabled={currentPage === totalPages}
-                onClick={() => setPage(currentPage + 1)}
-              >
-                Next
-              </button>
-            </nav>
+            <NumberedPagination
+              page={currentPage}
+              totalPages={totalPages}
+              disabled={loading}
+              label="Service pages"
+              onPageChange={(nextPage) => {
+                setAnimateRows(true)
+                setPage(nextPage)
+              }}
+            />
           )}
         </footer>
       )}

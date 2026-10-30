@@ -20,12 +20,14 @@ export function AccountRowActions({
   onChangeStatus,
   onDelete,
   onResetPassword,
+  trashView = false,
 }: {
   account: Account
   disabled: boolean
   onChangeStatus: () => void
   onDelete: () => void
   onResetPassword: () => void
+  trashView?: boolean
 }) {
   const triggerRef = useRef<HTMLButtonElement>(null)
   const pendingAction = useRef<"status" | "delete" | "password" | null>(null)
@@ -79,28 +81,32 @@ export function AccountRowActions({
           else onResetPassword()
         }}
       >
-        <DropdownMenuItem
-          className={cn(dropdownItemClass, "text-xs focus:bg-[#eef1f8]")}
-          onSelect={() => {
-            pendingAction.current = "password"
-          }}
-        >
-          Reset password
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          className={cn(
-            dropdownItemClass,
-            "text-xs focus:bg-[#eef1f8]",
-            account.isActive &&
-              "text-[#c33945] hover:bg-[#fff0f1] focus:bg-[#fff0f1] focus:text-[#c33945] focus-visible:bg-[#fff0f1]",
-          )}
-          onSelect={() => {
-            pendingAction.current = "status"
-          }}
-        >
-          {action} account
-        </DropdownMenuItem>
-        {!account.isActive && (
+        {!trashView && (
+          <DropdownMenuItem
+            className={cn(dropdownItemClass, "text-xs focus:bg-[#eef1f8]")}
+            onSelect={() => {
+              pendingAction.current = "password"
+            }}
+          >
+            Reset password
+          </DropdownMenuItem>
+        )}
+        {!trashView && (
+          <DropdownMenuItem
+            className={cn(
+              dropdownItemClass,
+              "text-xs focus:bg-[#eef1f8]",
+              account.isActive &&
+                "text-[#c33945] hover:bg-[#fff0f1] focus:bg-[#fff0f1] focus:text-[#c33945] focus-visible:bg-[#fff0f1]",
+            )}
+            onSelect={() => {
+              pendingAction.current = "status"
+            }}
+          >
+            {action} account
+          </DropdownMenuItem>
+        )}
+        {(trashView || !account.isActive) && (
           <DropdownMenuItem
             className={cn(
               dropdownItemClass,
@@ -110,7 +116,7 @@ export function AccountRowActions({
               pendingAction.current = "delete"
             }}
           >
-            Delete account
+            {trashView ? "Delete permanently" : "Move to trash"}
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>
