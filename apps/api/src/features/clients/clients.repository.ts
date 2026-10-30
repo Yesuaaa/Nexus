@@ -1,3 +1,5 @@
+import { hashPassword } from "../auth/auth.password.js"
+import type { parseClientInput } from "./clients.schema.js"
 import { Role, type Prisma } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import type { ClientFilters } from "./clients.schema.js"
@@ -12,6 +14,79 @@ const clientSelect = {
 } satisfies Prisma.UserSelect
 
 export const clientsRepository = {
+  async delete(id: string) {
+    const prisma = getPrisma()!
+    return prisma.$transaction(
+      async (tx) => {
+        const target = await tx.user.findFirst({
+          where: { id, role: Role.USER, accountDeletedAt: null },
+          select: { id: true },
+        })
+        if (!target) return "missing"
+        if (
+          (await tx.serviceRequest.count({ where: { clientId: id } })) ||
+          (await tx.project.count({ where: { clientId: id } }))
+        )
+          return "linked"
+        await tx.user.update({
+          where: { id },
+          data: { isActive: false, accountDeletedAt: new Date() },
+        })
+        await tx.session.deleteMany({ where: { userId: id } })
+        return "deleted"
+      },
+      { isolationLevel: "Serializable" },
+    )
+  },
+  async save(
+    input: NonNullable<ReturnType<typeof parseClientInput>>,
+    id: string | null,
+  ) {
+    const prisma = getPrisma()!
+    const creating = id === null
+    const { password, ...profile } = input
+    const passwordHash = creating ? await hashPassword(password!) : undefined
+    return prisma.$transaction(
+      async (tx) => {
+        if (!creating) {
+          const target = await tx.user.findFirst({
+            where: {
+              id: id!,
+              role: Role.USER,
+              accountDeletedAt: null,
+            },
+          })
+          if (!target) return null
+        }
+        const duplicate = await tx.user.findFirst({
+          where: {
+            email: { equals: profile.email, mode: "insensitive" },
+            ...(creating ? {} : { id: { not: id! } }),
+          },
+          select: { id: true },
+        })
+        if (duplicate) throw new Error("DUPLICATE_EMAIL")
+        if (creating)
+          return tx.user.create({
+            data: {
+              ...profile,
+              role: Role.USER,
+              passwordHash: passwordHash!,
+            },
+            select: clientSelect,
+          })
+        const updated = await tx.user.update({
+          where: { id: id! },
+          data: profile,
+          select: clientSelect,
+        })
+        if (!profile.isActive)
+          await tx.session.deleteMany({ where: { userId: updated.id } })
+        return updated
+      },
+      { isolationLevel: "Serializable" },
+    )
+  },
   async list(filters: ClientFilters) {
     const prisma = getPrisma()!
     const where: Prisma.UserWhereInput = {
