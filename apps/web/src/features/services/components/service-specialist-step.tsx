@@ -4,11 +4,8 @@ import { useEffect, useRef, useState } from "react"
 import { ArrowLeft, ShieldCheck, UsersRound } from "lucide-react"
 import { focusRing } from "@/components/layout/styles"
 import { cn } from "@/lib/utils"
-import {
-  listServiceSpecialists,
-  type Service,
-  type ServiceSpecialist,
-} from "../api/services-api"
+import { type Service, type ServiceSpecialist } from "../api/services-api"
+import { getClientServiceSpecialists } from "../api/client-services-api"
 import type { ServicePricingOption } from "../model/service-pricing"
 import type { ProjectRequirementsDraft } from "../model/project-requirements"
 import { SpecialistProfileDialog } from "./specialist-profile-dialog"
@@ -52,7 +49,7 @@ export function ServiceSpecialistStep({
 
   useEffect(() => {
     let active = true
-    listServiceSpecialists(service.id)
+    getClientServiceSpecialists(service.id)
       .then((items) => {
         if (active) setSpecialists(items)
       })

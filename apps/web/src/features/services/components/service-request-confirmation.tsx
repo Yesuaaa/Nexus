@@ -1,6 +1,8 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
 import { CheckCircle2, Copy } from "lucide-react"
 import { focusRing } from "@/components/layout/styles"
 import { cn } from "@/lib/utils"
@@ -23,6 +25,7 @@ export function ServiceRequestConfirmation({
 }) {
   const headingRef = useRef<HTMLHeadingElement>(null)
   const [copyStatus, setCopyStatus] = useState("")
+  const requestReference = receipt.referenceNumber || receipt.id
   useEffect(() => {
     headingRef.current?.focus()
   }, [])
@@ -50,7 +53,7 @@ export function ServiceRequestConfirmation({
       </span>
       <dl className="mt-6 grid grid-cols-2 gap-5 max-[600px]:grid-cols-1">
         {[
-          ["Request reference", receipt.id],
+          ["Request reference", requestReference],
           ["Service", serviceName],
           ["Package", packageName],
           ["Preferred specialist", specialistName || "Department to assign"],
@@ -70,7 +73,7 @@ export function ServiceRequestConfirmation({
           type="button"
           onClick={async () => {
             try {
-              await navigator.clipboard.writeText(receipt.id)
+              await navigator.clipboard.writeText(requestReference)
               setCopyStatus("Reference copied.")
             } catch {
               setCopyStatus(
@@ -92,11 +95,17 @@ export function ServiceRequestConfirmation({
         )}
       </div>
       <div className="mt-5 flex flex-wrap gap-3">
+        <Button
+          asChild
+          className="min-h-11 bg-[#294c96] text-white hover:bg-[#203f80]"
+        >
+          <Link href="/service-requests">View my service requests</Link>
+        </Button>
         <button
           type="button"
           onClick={onNewRequest}
           className={cn(
-            "inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl border-0 bg-[#294c96] px-5 text-sm font-bold text-white hover:bg-[#203f80] max-[560px]:w-full",
+            "inline-flex min-h-11 cursor-pointer items-center justify-center rounded-md border border-[#dce3ee] bg-white px-5 text-sm font-semibold text-[#294c96] hover:bg-[#eef3ff] max-[560px]:w-full",
             focusRing,
           )}
         >

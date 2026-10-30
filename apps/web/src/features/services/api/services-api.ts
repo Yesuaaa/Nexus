@@ -2,15 +2,18 @@ import { apiRequest } from "@/features/auth/api/auth-api"
 import type { DepartmentColor } from "@/features/departments/model/department-color"
 import type { ProjectRequirementsDraft } from "../model/project-requirements"
 
+export type ServiceRequestStatus =
+  | "SUBMITTED"
+  | "UNDER_REVIEW"
+  | "AWAITING_CLIENT_INFO"
+  | "READY_FOR_QUOTATION"
+  | "CLOSED"
+  | "CANCELLED"
+
 export type ServiceRequestReceipt = {
   id: string
-  status:
-    | "SUBMITTED"
-    | "UNDER_REVIEW"
-    | "CLOSED"
-    | "CANCELLED"
-    | "AWAITING_CLIENT_INFO"
-    | "READY_FOR_QUOTATION"
+  referenceNumber?: string | null
+  status: ServiceRequestStatus
   createdAt: string
 }
 

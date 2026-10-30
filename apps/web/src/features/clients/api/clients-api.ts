@@ -1,3 +1,4 @@
+import type { ServiceRequestStatus } from "@/features/services/api/services-api"
 import { apiRequest } from "@/features/auth/api/auth-api"
 
 export type ClientInput = {
@@ -43,13 +44,7 @@ export type ClientDetails = Pick<
 export type ClientServiceRequest = {
   id: string
   title: string
-  status:
-    | "SUBMITTED"
-    | "UNDER_REVIEW"
-    | "CLOSED"
-    | "CANCELLED"
-    | "AWAITING_CLIENT_INFO"
-    | "READY_FOR_QUOTATION"
+  status: ServiceRequestStatus
   createdAt: string
   service: { id: string; name: string }
 }

@@ -69,6 +69,7 @@ jobs:
           -v "$GITHUB_WORKSPACE:/repo:ro"
           ghcr.io/gitleaks/gitleaks:v8.30.0
           git /repo --redact --no-banner --log-opts="--all"
+          --gitleaks-ignore-path=/repo/.gitleaksignore
 
   dependencies:
     name: Dependency scan

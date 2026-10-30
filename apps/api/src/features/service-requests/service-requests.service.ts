@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto"
 import { getPrisma } from "../../lib/db.js"
 import { isUniqueConflict } from "../../lib/errors.js"
 import {
@@ -15,7 +16,12 @@ export class ServiceRequestsError extends Error {
   }
 }
 
-const receiptSelect = { id: true, status: true, createdAt: true } as const
+const receiptSelect = {
+  id: true,
+  referenceNumber: true,
+  status: true,
+  createdAt: true,
+} as const
 
 async function findExisting(clientId: string, input: ServiceRequestInput) {
   const existing = await getPrisma()!.serviceRequest.findUnique({
@@ -40,6 +46,7 @@ async function findExisting(clientId: string, input: ServiceRequestInput) {
   }
   return {
     id: existing.id,
+    referenceNumber: existing.referenceNumber,
     status: existing.status,
     createdAt: existing.createdAt,
   }
@@ -100,6 +107,7 @@ export async function submitServiceRequest(clientId: string, body: unknown) {
         return tx.serviceRequest.create({
           data: {
             clientId,
+            referenceNumber: `SR-${randomUUID().toUpperCase()}`,
             serviceId: service.id,
             title: `${service.name} request`,
             description: input.requirements,

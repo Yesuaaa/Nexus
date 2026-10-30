@@ -10,7 +10,7 @@
     "dev": "pnpm -r --parallel dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
-    "test:e2e": "pnpm --filter @nexus/web test:e2e",
+    "test:e2e": "node scripts/run-e2e.mjs",
     "start:api": "pnpm --filter @nexus/api start",
     "start:web": "pnpm --filter @nexus/web start",
     "preview:web": "pnpm --filter @nexus/web preview",
