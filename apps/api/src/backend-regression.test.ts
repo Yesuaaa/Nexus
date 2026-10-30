@@ -374,13 +374,14 @@ test(
         assert.deepEqual(Object.keys(receipt.serviceRequest).sort(), [
           "createdAt",
           "id",
+          "referenceNumber",
           "status",
         ])
         const persisted = await prisma.serviceRequest.findUniqueOrThrow({
           where: { id: receipt.serviceRequest.id },
         })
         assert.equal(persisted.clientId, "USER")
-        assert.equal(persisted.status, "PENDING")
+        assert.equal(persisted.status, "SUBMITTED")
         assert.equal(persisted.projectRequirements, input.requirements)
         assert.equal(persisted.quotedPrice, null)
         const replay = await request("/service-requests", "USER", "POST", input)

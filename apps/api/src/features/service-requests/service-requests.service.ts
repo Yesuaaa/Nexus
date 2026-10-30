@@ -111,7 +111,7 @@ export async function submitServiceRequest(clientId: string, body: unknown) {
             serviceId: service.id,
             title: `${service.name} request`,
             description: input.requirements,
-            status: "PENDING",
+            status: "SUBMITTED",
             packageId: selectedPackage?.id ?? null,
             packageName: selectedPackage?.name ?? "Standard service",
             projectGoals: input.goals,

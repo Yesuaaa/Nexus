@@ -7,7 +7,7 @@ function request(index: number): ServiceRequestSummary {
     id: `request-${index}`,
     referenceNumber: `SR-20261030-${index}`,
     title: `Website redesign ${index}`,
-    status: index % 2 ? "PENDING" : "COMPLETED",
+    status: index % 2 ? "SUBMITTED" : "CLOSED",
     description: "A new accessible website",
     service: { id: "web", name: "Web Development" },
     package: null,
@@ -162,10 +162,9 @@ test("request history retries errors and shows the first-request empty state", a
   page,
 }) => {
   await session(page)
-  let attempt = 0
+  let unavailable = true
   await page.route("**/api/client/service-requests?*", (route) => {
-    attempt++
-    return attempt === 1
+    return unavailable
       ? route.fulfill({
           status: 503,
           json: { error: "Requests temporarily unavailable" },
@@ -190,6 +189,7 @@ test("request history retries errors and shows the first-request empty state", a
   await expect(page.getByRole("main").getByRole("alert")).toContainText(
     "Requests temporarily unavailable",
   )
+  unavailable = false
   await page.getByRole("button", { name: "Try again", exact: true }).click()
   await expect(
     page.getByRole("heading", { name: "No service requests yet" }),
@@ -197,6 +197,56 @@ test("request history retries errors and shows the first-request empty state", a
   await expect(
     page.getByRole("link", { name: "Browse services", exact: true }),
   ).toHaveAttribute("href", "/services")
+})
+
+test("history renders the manager lifecycle statuses", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await session(page)
+  const statuses = [
+    "SUBMITTED",
+    "UNDER_REVIEW",
+    "AWAITING_CLIENT_INFO",
+    "READY_FOR_QUOTATION",
+    "CLOSED",
+    "CANCELLED",
+  ] as const
+  await page.route("**/api/client/service-requests?*", (route) =>
+    route.fulfill({
+      json: {
+        requests: statuses.map((status, index) => ({
+          ...request(index + 1),
+          status,
+        })),
+        total: statuses.length,
+        page: 1,
+        pageSize: 10,
+        summary: {
+          total: 6,
+          pending: 1,
+          inProgress: 3,
+          completed: 1,
+          cancelled: 1,
+        },
+      },
+    }),
+  )
+  await page.goto("/dashboard")
+  await page
+    .getByRole("link", { name: "Service Requests", exact: true })
+    .click()
+  await expect(
+    page.getByRole("heading", { name: "Service Requests", exact: true }),
+  ).toBeVisible()
+  const table = page.getByRole("table")
+  for (const label of [
+    "Pending review",
+    "Under review",
+    "Awaiting your information",
+    "Ready for quotation",
+    "Closed",
+    "Cancelled",
+  ])
+    await expect(table.getByText(label, { exact: true })).toBeVisible()
 })
 
 for (const role of ["ADMIN", "STAFF", "SUPERADMIN"]) {

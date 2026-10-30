@@ -5,11 +5,11 @@ import type {
   ServiceRequestReceipt,
   PricingModel,
   BillingInterval,
+  ServiceRequestStatus,
 } from "./services-api"
 import type { ProjectRequirementsDraft } from "../model/project-requirements"
 
-export type ServiceRequestStatus =
-  "PENDING" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED"
+export type { ServiceRequestStatus } from "./services-api"
 export interface ServiceRequestSummary {
   id: string
   referenceNumber: string | null

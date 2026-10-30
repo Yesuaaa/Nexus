@@ -94,7 +94,7 @@ test(
             serviceId: service.id,
             title: `Request ${clientId} ${i}`,
             description: "private description",
-            status: i % 2 === 0 ? "PENDING" : "COMPLETED",
+            status: i % 2 === 0 ? "SUBMITTED" : "CLOSED",
             createdAt: new Date(
               `2026-10-${String(10 + (i % 2)).padStart(2, "0")}T00:00:00Z`,
             ),
