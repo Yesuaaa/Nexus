@@ -194,7 +194,7 @@ export async function getEmployeeStatusOptions(
 }
 
 function generatedEmployeeId() {
-  return `EMP-${randomUUID().replaceAll("-", "").slice(0, 10).toUpperCase()}`
+  return `EXP-${randomUUID().replaceAll("-", "").slice(0, 10).toUpperCase()}`
 }
 
 function isDepartmentHeadTitle(position: string | null | undefined) {
@@ -639,6 +639,13 @@ async function writeEmployee(
         departmentId: nextDepartmentId,
         teamId: nextTeamId,
         position: nextPosition,
+        fullName: input.fullName !== undefined ? employee.fullName : undefined,
+        email:
+          input.email !== undefined ? (employee.email ?? undefined) : undefined,
+        contactNumber:
+          input.contactNumber !== undefined
+            ? employee.contactNumber
+            : undefined,
       },
     })
   }

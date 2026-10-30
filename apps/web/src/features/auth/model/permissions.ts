@@ -65,6 +65,10 @@ export function canAccessServiceManagement(account: Account): boolean {
   )
 }
 
+export function canAccessServiceCatalog(account: Account): boolean {
+  return account.role === "USER"
+}
+
 export function canAccessClientManagement(account: Account): boolean {
   return (
     account.role === "ADMIN" && hasPermission(account, Permissions.CLIENTS_READ)

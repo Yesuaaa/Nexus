@@ -157,6 +157,8 @@ export function CreateEditDepartmentDialog({
           if (opener instanceof HTMLElement && opener.isConnected)
             opener.focus()
         }}
+        onInteractOutside={(event) => event.preventDefault()}
+        onEscapeKeyDown={(event) => event.preventDefault()}
       >
         <div className="flex items-start justify-between gap-4 px-5 pt-5">
           <div>

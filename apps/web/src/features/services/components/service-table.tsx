@@ -157,7 +157,7 @@ function ServiceActions({
                 pendingAction.current = "status"
               }}
             >
-              {service.isActive ? "Deactivate service" : "Activate service"}
+              {service.isActive ? "Deactivate Service" : "Activate Service"}
             </DropdownMenuItem>
             {!service.isActive && (
               <DropdownMenuItem
@@ -299,7 +299,7 @@ export function ServiceTable({
             label="Filter by department"
             value={departmentId}
             options={[
-              { value: "", label: "All departments" },
+              { value: "", label: "All Departments" },
               ...departments.map((department) => ({
                 value: department.id,
                 label: department.name,
@@ -317,7 +317,7 @@ export function ServiceTable({
             label="Filter by status"
             value={status}
             options={[
-              { value: "", label: "All statuses" },
+              { value: "", label: "All Statuses" },
               { value: "active", label: "Active" },
               { value: "inactive", label: "Inactive" },
             ]}

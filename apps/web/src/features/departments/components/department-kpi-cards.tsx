@@ -41,7 +41,7 @@ export function DepartmentKpiCards({
       chartColor: "#4169bd",
     },
     {
-      label: "Assigned employees",
+      label: "Assigned Employees",
       value: employeeCount,
       description: "Across all departments",
       icon: UsersRound,
@@ -65,7 +65,7 @@ export function DepartmentKpiCards({
       chartColor: "#7159bd",
     },
     {
-      label: "Heads unassigned",
+      label: "Heads Unassigned",
       value: unassignedHeadCount,
       description:
         departments.length === 0

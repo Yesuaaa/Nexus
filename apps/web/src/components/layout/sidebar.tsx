@@ -10,6 +10,7 @@ import {
   canAccessAccountManagement,
   canAccessDepartmentManagement,
   canAccessEmployeeManagement,
+  canAccessServiceCatalog,
   canAccessServiceManagement,
   canAccessClientManagement,
 } from "@/features/auth/model/permissions"
@@ -25,7 +26,7 @@ import {
 } from "./icons"
 
 const accessLabels: Record<Account["role"], string> = {
-  USER: "DIGITAL SOLUTIONS INC.",
+  USER: "CLIENT ACCESS",
   STAFF: "STAFF ACCESS",
   ADMIN: "ADMIN ACCESS",
   SUPERADMIN: "SUPERADMIN ACCESS",
@@ -53,7 +54,6 @@ export function Sidebar({
   onSignOut: () => void
 }) {
   const pathname = usePathname()
-  const management = account.role !== "USER"
   const collapsedLabelClass = collapsed
     ? "w-0 overflow-hidden opacity-0 max-[767px]:w-auto max-[767px]:overflow-visible max-[767px]:opacity-100"
     : ""
@@ -62,10 +62,7 @@ export function Sidebar({
     <aside
       id="app-sidebar"
       className={cn(
-        "fixed z-30 min-w-0 border-r border-[#e0e5eb] bg-background shadow-[2px_0_4px_rgb(20_30_50_/_11%)] transition-[width,transform] duration-[240ms] max-[767px]:invisible max-[767px]:top-0 max-[767px]:bottom-0 max-[767px]:left-0 max-[767px]:h-dvh max-[767px]:w-[min(296px,calc(100vw-48px))] max-[767px]:-translate-x-[105%] max-[767px]:rounded-r-[14px] max-[767px]:shadow-[5px_0_24px_rgb(20_30_50_/_13%)] motion-reduce:transition-none",
-        management
-          ? "top-[15px] bottom-[15px] left-[15px] h-[calc(100dvh-30px)] rounded-[14px] border border-[#dedede] max-[767px]:rounded-l-none"
-          : "top-0 bottom-0 left-0",
+        "fixed top-[15px] bottom-[15px] left-[15px] z-30 h-[calc(100dvh-30px)] min-w-0 rounded-[14px] border border-[#dedede] bg-background shadow-[2px_0_4px_rgb(20_30_50_/_11%)] transition-[width,transform] duration-[240ms] max-[767px]:invisible max-[767px]:top-0 max-[767px]:bottom-0 max-[767px]:left-0 max-[767px]:h-dvh max-[767px]:w-[min(296px,calc(100vw-48px))] max-[767px]:-translate-x-[105%] max-[767px]:rounded-l-none max-[767px]:rounded-r-[14px] max-[767px]:shadow-[5px_0_24px_rgb(20_30_50_/_13%)] motion-reduce:transition-none",
         collapsed ? "w-[80px]" : "w-[296px]",
         drawerOpen && "max-[767px]:visible max-[767px]:translate-x-0",
       )}
@@ -76,7 +73,7 @@ export function Sidebar({
         <div
           className={cn(
             "relative flex h-[159px] flex-none items-start justify-center px-[14px] pt-[47px] transition-[height,padding] duration-[240ms] max-[767px]:h-[159px] max-[767px]:px-[14px] max-[767px]:pt-[47px] motion-reduce:transition-none",
-            collapsed ? "h-[72px] p-0" : management && "h-[160px] pt-[51px]",
+            collapsed ? "h-[72px] p-0" : "h-[160px] pt-[51px]",
           )}
         >
           <div
@@ -128,8 +125,7 @@ export function Sidebar({
 
         <nav
           className={cn(
-            "grid min-h-0 content-start gap-[5px] overflow-y-auto px-[22px] max-[767px]:px-[22px]",
-            management && "px-6",
+            "grid min-h-0 content-start gap-[5px] overflow-y-auto px-6 max-[767px]:px-[22px]",
             collapsed && "overflow-visible px-3",
           )}
           aria-label="Main menu"
@@ -206,7 +202,8 @@ export function Sidebar({
               )}
             </Link>
           )}
-          {canAccessServiceManagement(account) && (
+          {(canAccessServiceCatalog(account) ||
+            canAccessServiceManagement(account)) && (
             <Link
               href="/services"
               aria-current={pathname === "/services" ? "page" : undefined}
@@ -219,9 +216,13 @@ export function Sidebar({
               onClick={onCloseDrawer}
             >
               <ServiceIcon className="flex-none" />
-              <span className={collapsedLabelClass}>Service Management</span>
+              <span className={collapsedLabelClass}>
+                {account.role === "USER" ? "Services" : "Service Management"}
+              </span>
               {collapsed && (
-                <CollapsedTooltip>Service Management</CollapsedTooltip>
+                <CollapsedTooltip>
+                  {account.role === "USER" ? "Services" : "Service Management"}
+                </CollapsedTooltip>
               )}
             </Link>
           )}
@@ -248,8 +249,7 @@ export function Sidebar({
 
         <div
           className={cn(
-            "mt-auto px-[22px] pt-4 pb-5 max-[767px]:px-[22px]",
-            management && "border-t border-[#e2e5e9] px-6 pb-[19px]",
+            "mt-auto border-t border-[#e2e5e9] px-6 pt-4 pb-[19px] max-[767px]:px-[22px]",
             collapsed && "px-3",
           )}
         >

@@ -14,6 +14,7 @@ test("service input trims and accepts all required fields", () => {
       value: {
         name: "Website Development",
         description: "Custom websites for clients.",
+        iconKey: "code",
         departmentIds: ["dept-1", "dept-2"],
         isActive: true,
         imageDataUrl: null,
@@ -22,6 +23,7 @@ test("service input trims and accepts all required fields", () => {
         clientRequirements: [],
         requiresConsultation: false,
         consultationNotes: null,
+        keyBenefits: [],
         pricingTemplateId: null,
         pricingTemplate: null,
         packages: [],
@@ -42,6 +44,12 @@ test("service input validates images, reusable pricing, and packages", () => {
     clientRequirements: [" Brand guidelines ", "Project brief"],
     requiresConsultation: true,
     consultationNotes: "Schedule a discovery call.",
+    keyBenefits: [
+      {
+        title: "Launch with confidence",
+        description: "A tested website ready for real customers.",
+      },
+    ],
     pricingTemplate: {
       name: "Website starting price",
       pricingModel: "STARTING",
@@ -68,6 +76,7 @@ test("service input validates images, reusable pricing, and packages", () => {
   })
   assert.equal(result.error, undefined)
   assert.equal(result.value?.imageDataUrl, imageDataUrl)
+  assert.equal(result.value?.iconKey, "code")
   assert.equal(result.value?.pricingTemplate?.currency, "PHP")
   assert.equal(result.value?.packages[0]?.amount, 30000)
   assert.deepEqual(result.value?.clientRequirements, [
@@ -75,6 +84,7 @@ test("service input validates images, reusable pricing, and packages", () => {
     "Project brief",
   ])
   assert.equal(result.value?.requiresConsultation, true)
+  assert.equal(result.value?.keyBenefits[0]?.title, "Launch with confidence")
 })
 
 test("pricing rules reject invalid amounts and recurring intervals", () => {
@@ -170,5 +180,15 @@ test("service input rejects missing and invalid required fields", () => {
       isActive: "yes",
     }).error ?? "",
     /status/,
+  )
+  assert.match(
+    validateServiceInput({
+      name: "Service",
+      description: "Description",
+      iconKey: "unknown",
+      departmentIds: ["dept-1"],
+      isActive: true,
+    }).error ?? "",
+    /icon category/,
   )
 })

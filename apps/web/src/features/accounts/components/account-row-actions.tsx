@@ -122,7 +122,7 @@ export function AccountRowActions({
               pendingAction.current = "delete"
             }}
           >
-            {trashView ? "Delete permanently" : "Move to trash"}
+            {trashView ? "Delete Permanently" : "Move to trash"}
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>

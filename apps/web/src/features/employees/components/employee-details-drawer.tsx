@@ -130,7 +130,7 @@ export function EmployeeDetailsDrawer({
                 {employee?.fullName ||
                   (loading ? "Loading employee…" : "Employee")}
               </span>
-              {employee && <Pill>{employee.employeeId}</Pill>}
+              {employee && <Pill>{employee.employeeId || "Not set"}</Pill>}
             </div>
           </div>
           <SheetClose asChild>
@@ -201,10 +201,14 @@ export function EmployeeDetailsDrawer({
                   <dl className="m-0 divide-y divide-[#eceef1] rounded-lg border border-[#e8ebef] px-3">
                     <DetailRow label="Position">{employee.position}</DetailRow>
                     <DetailRow label="Employment type">
-                      {typeNames[employee.employmentType]}
+                      {employee.employmentType
+                        ? typeNames[employee.employmentType]
+                        : "Not set"}
                     </DetailRow>
                     <DetailRow label="Status">
-                      {statusNames[employee.status]}
+                      {employee.status
+                        ? statusNames[employee.status]
+                        : "Not set"}
                     </DetailRow>
                     <DetailRow label="Start date">
                       {employee.startDate

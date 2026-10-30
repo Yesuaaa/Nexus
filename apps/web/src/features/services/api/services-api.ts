@@ -1,10 +1,59 @@
 import { apiRequest } from "@/features/auth/api/auth-api"
 import type { DepartmentColor } from "@/features/departments/model/department-color"
+import type { ProjectRequirementsDraft } from "../model/project-requirements"
+
+export type ServiceRequestReceipt = {
+  id: string
+  status: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED"
+  createdAt: string
+}
+
+export async function submitServiceRequest(
+  input: ProjectRequirementsDraft & {
+    serviceId: string
+    packageId: string | null
+    preferredSpecialistId: string | null
+    submissionKey: string
+  },
+): Promise<ServiceRequestReceipt> {
+  const result = await apiRequest<{ serviceRequest: ServiceRequestReceipt }>(
+    "/api/service-requests",
+    { method: "POST", body: JSON.stringify(input) },
+  )
+  return result.serviceRequest
+}
 
 export type PricingModel =
   "FIXED" | "STARTING" | "CUSTOM_QUOTE" | "RECURRING" | "HOURLY"
 
 export type BillingInterval = "WEEKLY" | "MONTHLY" | "QUARTERLY" | "YEARLY"
+
+export type ServiceIconKey =
+  | "social"
+  | "advertising"
+  | "business"
+  | "video"
+  | "code"
+  | "search"
+  | "email"
+  | "design"
+  | "sparkles"
+
+export type ServiceSpecialist = {
+  id: string
+  fullName: string
+  position: string | null
+  department: { id: string; name: string } | null
+}
+
+export async function listServiceSpecialists(
+  serviceId: string,
+): Promise<ServiceSpecialist[]> {
+  const result = await apiRequest<{ specialists: ServiceSpecialist[] }>(
+    `/api/services/${encodeURIComponent(serviceId)}/specialists`,
+  )
+  return result.specialists
+}
 
 export type ServiceDepartment = {
   id: string
@@ -42,15 +91,24 @@ export type ServicePackage = {
   updatedAt: string
 }
 
+export type ServiceBenefit = {
+  id: string
+  title: string
+  description: string
+  displayOrder: number
+}
+
 export type Service = {
   id: string
   name: string
   description: string
+  iconKey: ServiceIconKey
   imageUrl: string | null
   imageAltText: string | null
   clientRequirements: string[]
   requiresConsultation: boolean
   consultationNotes: string | null
+  keyBenefits: ServiceBenefit[]
   isActive: boolean
   pricingTemplateId: string | null
   pricingTemplate: PricingTemplate | null
@@ -84,9 +142,15 @@ export type ServicePackageInput = {
   isRecommended: boolean
 }
 
+export type ServiceBenefitInput = {
+  title: string
+  description: string
+}
+
 export type ServiceInput = {
   name: string
   description: string
+  iconKey: ServiceIconKey
   departmentIds: string[]
   isActive: boolean
   imageDataUrl: string | null
@@ -95,6 +159,7 @@ export type ServiceInput = {
   clientRequirements: string[]
   requiresConsultation: boolean
   consultationNotes: string | null
+  keyBenefits: ServiceBenefitInput[]
   pricingTemplateId: string | null
   pricingTemplate: PricingConfigurationInput | null
   packages: ServicePackageInput[]

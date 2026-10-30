@@ -1,5 +1,33 @@
 import { apiRequest } from "@/features/auth/api/auth-api"
 
+export type ClientInput = {
+  fullName: string
+  email: string
+  contactNumber: string
+  isActive: boolean
+  password?: string
+}
+
+export async function saveClient(
+  id: string | null,
+  input: ClientInput,
+): Promise<Client> {
+  const result = await apiRequest<{ client: Client }>(
+    id ? `/api/clients/${encodeURIComponent(id)}` : "/api/clients",
+    {
+      method: id ? "PATCH" : "POST",
+      body: JSON.stringify(input),
+    },
+  )
+  return result.client
+}
+
+export function deleteClient(id: string): Promise<void> {
+  return apiRequest(`/api/clients/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  })
+}
+
 export type Client = {
   id: string
   fullName: string | null

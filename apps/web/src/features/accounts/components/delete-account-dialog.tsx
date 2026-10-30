@@ -27,7 +27,7 @@ export function DeleteAccountDialog({
           ? "This permanently deletes the account and cannot be undone. Accounts with related historical records must remain in Trash."
           : "This soft deletes the inactive account and removes it from Account Management. You can review it in Trash before permanently deleting it."
       }
-      confirmLabel={permanent ? "Delete permanently" : "Move to Trash"}
+      confirmLabel={permanent ? "Delete Permanently" : "Move to Trash"}
       pendingLabel={permanent ? "Deleting..." : "Moving..."}
       pending={deleting}
       error={error}

@@ -164,7 +164,7 @@ function AccountRowContents({
           <AccountDropdown
             className="w-full max-w-[112px]"
             triggerClassName="h-8 border-[#e1e4ea] text-xs"
-            menuClassName="right-0 left-auto"
+            align="right"
             label={`Role for ${user.email}`}
             value={selectedRole}
             disabled={disabled}
@@ -783,7 +783,7 @@ export function AccountManagementPage() {
               }}
             >
               <Trash2 size={14} aria-hidden="true" />
-              {trashView ? "Back to accounts" : "Trash"}
+              {trashView ? "Back to Accounts" : "Trash"}
             </button>
             <button
               type="button"
@@ -810,7 +810,7 @@ export function AccountManagementPage() {
                   aria-hidden="true"
                 />
               )}
-              Save changes
+              Save Changes
             </button>
           </div>
         </div>

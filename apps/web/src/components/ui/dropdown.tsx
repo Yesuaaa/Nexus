@@ -1,6 +1,13 @@
 "use client"
 
-import { useEffect, useRef, useState, type KeyboardEvent } from "react"
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react"
+import { createPortal } from "react-dom"
 import { CheckIcon } from "@/components/ui/check-icon"
 import { dropdownItemClass, dropdownMenuClass } from "./dropdown-styles"
 import { cn } from "@/lib/utils"
@@ -17,6 +24,7 @@ export function Dropdown<T extends string>({
   onChange,
   label,
   disabled = false,
+  align = "left",
   className = "",
   triggerClassName = "",
   menuClassName = "",
@@ -26,6 +34,7 @@ export function Dropdown<T extends string>({
   onChange: (value: T) => void
   label: string
   disabled?: boolean
+  align?: "left" | "right"
   className?: string
   triggerClassName?: string
   menuClassName?: string
@@ -33,15 +42,73 @@ export function Dropdown<T extends string>({
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
   const optionRefs = useRef<(HTMLButtonElement | null)[]>([])
   const selectedIndex = options.findIndex((option) => option.value === value)
 
+  // Position the portaled menu relative to the trigger.
+  useLayoutEffect(() => {
+    if (!open) return
+
+    function update() {
+      const trigger = triggerRef.current
+      const menu = menuRef.current
+      if (!trigger || !menu) return
+      // The menu lives in <body>, so it no longer inherits the row's text
+      // styles. Copy them from the trigger so size/font match.
+      const cs = window.getComputedStyle(trigger)
+      menu.style.fontFamily = cs.fontFamily
+      menu.style.fontSize = cs.fontSize
+      menu.style.lineHeight = cs.lineHeight
+      menu.style.letterSpacing = cs.letterSpacing
+      menu.style.color = cs.color
+      menu.style.minWidth = `${trigger.offsetWidth}px`
+
+      const t = trigger.getBoundingClientRect()
+      const menuWidth = menu.offsetWidth
+      const menuHeight = menu.offsetHeight
+      const gap = 6
+      const margin = 8
+
+      let left = align === "right" ? t.right - menuWidth : t.left
+      left = Math.max(
+        margin,
+        Math.min(left, window.innerWidth - menuWidth - margin),
+      )
+
+      let top = t.bottom + gap
+      const fitsBelow = top + menuHeight <= window.innerHeight - margin
+      const fitsAbove = t.top - gap - menuHeight >= margin
+      if (!fitsBelow && fitsAbove) top = t.top - gap - menuHeight
+
+      menu.style.top = `${top}px`
+      menu.style.left = `${left}px`
+      menu.style.visibility = "visible"
+    }
+
+    update()
+    window.addEventListener("resize", update)
+    window.addEventListener("scroll", update, true)
+    return () => {
+      window.removeEventListener("resize", update)
+      window.removeEventListener("scroll", update, true)
+    }
+  }, [open, align, options.length])
+
   useEffect(() => {
     if (!open) return
-    optionRefs.current[Math.max(0, selectedIndex)]?.focus()
+    optionRefs.current[Math.max(0, selectedIndex)]?.focus({
+      preventScroll: true,
+    })
 
     function closeOnOutsideClick(event: PointerEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
+      const target = event.target as Node
+      if (
+        !rootRef.current?.contains(target) &&
+        !menuRef.current?.contains(target)
+      ) {
+        setOpen(false)
+      }
     }
 
     document.addEventListener("pointerdown", closeOnOutsideClick)
@@ -74,11 +141,7 @@ export function Dropdown<T extends string>({
   }
 
   return (
-    <div
-      className={cn("relative min-w-0 data-[open=true]:z-10", className)}
-      data-open={open}
-      ref={rootRef}
-    >
+    <div className={cn("relative min-w-0", className)} ref={rootRef}>
       <button
         ref={triggerRef}
         type="button"
@@ -110,38 +173,48 @@ export function Dropdown<T extends string>({
           <path d="m2 4 4 4 4-4" />
         </svg>
       </button>
-      {open && (
-        <div
-          className={cn(
-            "absolute top-[calc(100%+6px)] left-0 w-max min-w-full max-w-[min(280px,calc(100vw-40px))]",
-            dropdownMenuClass,
-            menuClassName,
-          )}
-          role="menu"
-          aria-label={label}
-          onKeyDown={handleMenuKeyDown}
-          onBlur={(event) => {
-            if (!rootRef.current?.contains(event.relatedTarget)) setOpen(false)
-          }}
-        >
-          {options.map((option, index) => (
-            <button
-              key={option.value}
-              ref={(element) => {
-                optionRefs.current[index] = element
-              }}
-              type="button"
-              role="menuitemradio"
-              aria-checked={option.value === value}
-              className={dropdownItemClass}
-              onClick={() => choose(option.value)}
-            >
-              <span>{option.label}</span>
-              {option.value === value && <CheckIcon />}
-            </button>
-          ))}
-        </div>
-      )}
+      {open &&
+        createPortal(
+          <div
+            ref={menuRef}
+            className={cn(
+              "fixed z-[1000] w-max max-w-[min(280px,calc(100vw-40px))]",
+              dropdownMenuClass,
+              menuClassName,
+            )}
+            style={{ top: 0, left: 0, visibility: "hidden" }}
+            role="menu"
+            aria-label={label}
+            onKeyDown={handleMenuKeyDown}
+            onBlur={(event) => {
+              const next = event.relatedTarget as Node | null
+              if (
+                !rootRef.current?.contains(next) &&
+                !menuRef.current?.contains(next)
+              ) {
+                setOpen(false)
+              }
+            }}
+          >
+            {options.map((option, index) => (
+              <button
+                key={option.value}
+                ref={(element) => {
+                  optionRefs.current[index] = element
+                }}
+                type="button"
+                role="menuitemradio"
+                aria-checked={option.value === value}
+                className={dropdownItemClass}
+                onClick={() => choose(option.value)}
+              >
+                <span>{option.label}</span>
+                {option.value === value && <CheckIcon />}
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }
