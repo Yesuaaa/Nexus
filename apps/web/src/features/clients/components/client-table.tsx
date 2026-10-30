@@ -8,8 +8,9 @@ import {
   dropdownItemClass,
   dropdownMenuClass,
 } from "@/components/ui/dropdown-styles"
+import { useExclusiveMenu } from "@/components/ui/dropdown"
 import { Eye, MoreHorizontal, Pencil } from "lucide-react"
-import { useRef, type ReactNode } from "react"
+import { useRef, useState, type ReactNode } from "react"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { Button } from "@/components/ui/button"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
@@ -49,10 +50,19 @@ function ClientRowActions({
   client: Client
   onView: (client: Client) => void
 }) {
+  const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const pendingDelete = useRef(false)
+  const closedByOther = useRef(false)
   const label = client.fullName?.trim() || client.email
   const actionLabel = `View details for ${label}`
+
+  // Close this menu whenever any other menu opens.
+  useExclusiveMenu(open, () => {
+    closedByOther.current = true
+    setOpen(false)
+  })
+
   return (
     <div className="flex items-center gap-1">
       <button
@@ -81,8 +91,13 @@ function ClientRowActions({
         <HoverTooltip>Edit client</HoverTooltip>
       </button>
       <DropdownMenu
-        onOpenChange={(open) => {
-          if (open) pendingDelete.current = false
+        open={open}
+        onOpenChange={(next) => {
+          if (next) {
+            pendingDelete.current = false
+            closedByOther.current = false
+          }
+          setOpen(next)
         }}
       >
         <DropdownMenuTrigger asChild>
@@ -102,6 +117,12 @@ function ClientRowActions({
           collisionPadding={24}
           className={cn(dropdownMenuClass, "w-48 text-xs")}
           onCloseAutoFocus={(event) => {
+            // Another menu took over: don't pull focus back to this trigger.
+            if (closedByOther.current) {
+              closedByOther.current = false
+              event.preventDefault()
+              return
+            }
             if (!pendingDelete.current) return
             event.preventDefault()
             pendingDelete.current = false

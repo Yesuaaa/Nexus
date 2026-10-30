@@ -2970,7 +2970,7 @@ test.describe("mocked regression", () => {
       await expect(dialog).toBeHidden()
       await expect(page.getByText("Target User")).toBeHidden()
       await page
-        .getByRole("button", { name: "Back to accounts", exact: true })
+        .getByRole("button", { name: "Back to Accounts", exact: true })
         .click()
       await expect(page.getByText("Target User")).toBeVisible()
       await expect(page.getByText("Inactive", { exact: true })).toBeVisible()
