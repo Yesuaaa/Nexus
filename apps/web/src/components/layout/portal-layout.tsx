@@ -36,6 +36,8 @@ export function PortalLayout({ children }: { children: ReactNode }) {
       (pathname === "/services" &&
         !canAccessServiceCatalog(account) &&
         !canAccessServiceManagement(account)) ||
+      (pathname.startsWith("/service-requests") &&
+        !canAccessServiceCatalog(account)) ||
       (pathname.startsWith("/clients") && !canAccessClientManagement(account)))
 
   useEffect(() => {

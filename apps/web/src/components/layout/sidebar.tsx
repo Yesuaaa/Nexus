@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { UsersRound } from "lucide-react"
+import { ClipboardList, UsersRound } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Account } from "@/features/auth/model/types"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
@@ -223,6 +223,31 @@ export function Sidebar({
                 <CollapsedTooltip>
                   {account.role === "USER" ? "Services" : "Service Management"}
                 </CollapsedTooltip>
+              )}
+            </Link>
+          )}
+          {canAccessServiceCatalog(account) && (
+            <Link
+              href="/service-requests"
+              aria-current={
+                pathname === "/service-requests" ? "page" : undefined
+              }
+              className={cn(
+                navLinkClass,
+                collapsed &&
+                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
+                pathname === "/service-requests" && "bg-[#e1e3e5]",
+              )}
+              onClick={onCloseDrawer}
+            >
+              <ClipboardList
+                size={20}
+                strokeWidth={1.7}
+                className="flex-none"
+              />
+              <span className={collapsedLabelClass}>Service Requests</span>
+              {collapsed && (
+                <CollapsedTooltip>Service Requests</CollapsedTooltip>
               )}
             </Link>
           )}
