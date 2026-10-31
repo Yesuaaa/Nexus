@@ -180,6 +180,9 @@ async function mock(
         message = {
           id: `message-${state.messages.length}`,
           body: input.body,
+          editedAt: null,
+          deletedAt: null,
+          purgeAt: null,
           clientMessageId: input.clientMessageId,
           sender: {
             id: actorId,
@@ -412,6 +415,9 @@ test("reconnection recovers history, loads earlier messages and clears revoked c
     id: `old-${index}`,
     clientMessageId: `old-${index}`,
     body: `Earlier message ${index}`,
+    editedAt: null,
+    deletedAt: null,
+    purgeAt: null,
     createdAt: new Date(Date.UTC(2026, 9, 30, 8, index)).toISOString(),
     sender: { id: "head-1", fullName: "Dani Head" },
   }))
@@ -427,6 +433,9 @@ test("reconnection recovers history, loads earlier messages and clears revoked c
     id: "missed",
     clientMessageId: "missed",
     body: "Reply sent while you were disconnected",
+    editedAt: null,
+    deletedAt: null,
+    purgeAt: null,
     createdAt: new Date().toISOString(),
     sender: { id: "head-1", fullName: "Dani Head" },
   })
