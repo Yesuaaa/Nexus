@@ -10,6 +10,7 @@ export function publicUser(
       color: string
     } | null
     team?: { id: string; name: string } | null
+    headOf?: { id: string; name: string } | null
   },
 ) {
   return {
@@ -38,6 +39,7 @@ export function publicUser(
         }
       : null,
     permissions: permissionsFor(user.role),
+    headOf: user.headOf ?? null,
     createdAt: user.createdAt,
   }
 }

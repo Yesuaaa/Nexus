@@ -571,11 +571,334 @@ test(
           (await post(input, { authorization: `Bearer ${staffToken}` })).status,
           403,
         )
+      },
+    )
+
+    await t.test(
+      "clients read only their own booked services with safe details, filters and stable pages",
+      async () => {
+        const otherClient = await prisma.user.create({
+          data: {
+            email: "other-client@example.com",
+            passwordHash: "unused",
+            role: "USER",
+          },
+        })
+        const existingCount = await prisma.serviceRequest.count({
+          where: { clientId: client.id },
+        })
+        const tiedDate = new Date("2040-01-01T00:00:00Z")
+        const bookingIds = Array.from(
+          { length: 12 },
+          (_, index) => `booking-${String(index).padStart(2, "0")}`,
+        )
+        await prisma.serviceRequest.createMany({
+          data: bookingIds.map((id, index) => ({
+            id,
+            clientId: client.id,
+            serviceId: service.id,
+            title: index === 0 ? "Brand refresh" : "Content strategy",
+            packageName: index === 0 ? "Premium Growth" : "Standard",
+            status: index % 2 === 0 ? "SUBMITTED" : "CLOSED",
+            expectedTimeline: "Eight weeks",
+            preferredSpecialistName: "Alex Santos",
+            projectGoals: "Grow our audience",
+            projectRequirements: "A monthly content plan",
+            additionalDetails: "Follow our brand guide",
+            quotedPrice: 5000,
+            agreedPrice: 6000,
+            submissionKey: randomUUID(),
+            createdAt: tiedDate,
+          })),
+        })
+        const foreign = await prisma.serviceRequest.create({
+          data: {
+            clientId: otherClient.id,
+            serviceId: service.id,
+            title: "Brand refresh",
+            packageName: "Premium Growth",
+            projectRequirements: "Other client's private requirements",
+            createdAt: tiedDate,
+          },
+        })
+        const get = (
+          path = "",
+          authHeaders: Record<string, string> = headers,
+        ) => fetch(`${base}/service-requests${path}`, { headers: authHeaders })
+        const firstResponse = await get()
+        assert.equal(firstResponse.status, 200)
+        type Booking = {
+          id: string
+          title: string
+          status: string
+          packageName: string | null
+          expectedTimeline: string
+          preferredSpecialistName: string | null
+          createdAt: string
+          updatedAt: string
+          service: { id: string; name: string }
+        }
+        type BookingPage = {
+          serviceRequests: Booking[]
+          total: number
+          page: number
+          pageSize: number
+        }
+        const first = (await firstResponse.json()) as BookingPage
+        assert.equal(first.total, existingCount + 12)
+        assert.equal(first.page, 1)
+        assert.equal(first.pageSize, 10)
+        assert.deepEqual(
+          first.serviceRequests.map((row) => row.id),
+          bookingIds.slice(0, 10),
+        )
+        const safeKeys = [
+          "id",
+          "title",
+          "status",
+          "packageName",
+          "expectedTimeline",
+          "preferredSpecialistName",
+          "createdAt",
+          "updatedAt",
+          "service",
+        ].sort()
+        for (const row of first.serviceRequests) {
+          assert.deepEqual(Object.keys(row).sort(), safeKeys)
+          assert.deepEqual(Object.keys(row.service).sort(), ["id", "name"])
+        }
+        const second = (await (await get("?page=2")).json()) as BookingPage
+        assert.equal(second.page, 2)
+        assert.deepEqual(
+          second.serviceRequests.slice(0, 2).map((row) => row.id),
+          bookingIds.slice(10),
+        )
+        assert.equal(
+          new Set(
+            [...first.serviceRequests, ...second.serviceRequests].map(
+              (row) => row.id,
+            ),
+          ).size,
+          first.total,
+        )
+        const last = (await (await get("?page=100000")).json()) as BookingPage
+        assert.equal(last.total, first.total)
+        assert.deepEqual(last.serviceRequests, [])
+        for (const search of ["brand refresh", "premium growth"]) {
+          const result = (await (
+            await get(`?search=${encodeURIComponent(search.toUpperCase())}`)
+          ).json()) as BookingPage
+          assert.equal(result.total, 1)
+          assert.deepEqual(
+            result.serviceRequests.map((row) => row.id),
+            [bookingIds[0]],
+          )
+        }
+        const referenceSearch = (await (
+          await get(`?search=${bookingIds[3].toUpperCase()}`)
+        ).json()) as BookingPage
+        assert.equal(referenceSearch.total, 1)
+        assert.deepEqual(
+          referenceSearch.serviceRequests.map((row) => row.id),
+          [bookingIds[3]],
+        )
+        const foreignReferenceSearch = (await (
+          await get(`?search=${foreign.id.toUpperCase()}`)
+        ).json()) as BookingPage
+        assert.deepEqual(foreignReferenceSearch, {
+          serviceRequests: [],
+          total: 0,
+          page: 1,
+          pageSize: 10,
+        })
+        const serviceSearch = (await (
+          await get("?search=SOCIAL%20MEDIA")
+        ).json()) as BookingPage
+        assert.equal(serviceSearch.total, first.total)
+        const filtered = (await (
+          await get("?search=content%20strategy&status=CLOSED")
+        ).json()) as BookingPage
+        assert.equal(filtered.total, 6)
+        assert.ok(
+          filtered.serviceRequests.every((row) => row.status === "CLOSED"),
+        )
+        const absentStatus = (await (
+          await get("?status=READY_FOR_QUOTATION")
+        ).json()) as BookingPage
+        assert.deepEqual(absentStatus, {
+          serviceRequests: [],
+          total: 0,
+          page: 1,
+          pageSize: 10,
+        })
+        const ignoredOwner = (await (
+          await get(`?clientId=${otherClient.id}`)
+        ).json()) as BookingPage
+        assert.equal(ignoredOwner.total, first.total)
+        assert.ok(
+          ignoredOwner.serviceRequests.every((row) => row.id !== foreign.id),
+        )
+        const detailResponse = await get(`/${bookingIds[0]}`)
+        assert.equal(detailResponse.status, 200)
+        const detail = (await detailResponse.json()) as {
+          serviceRequest: Booking & {
+            projectGoals: string
+            projectRequirements: string
+            additionalDetails: string
+          }
+        }
+        assert.deepEqual(
+          Object.keys(detail.serviceRequest).sort(),
+          [
+            ...safeKeys,
+            "projectGoals",
+            "projectRequirements",
+            "additionalDetails",
+          ].sort(),
+        )
+        assert.equal(
+          detail.serviceRequest.projectRequirements,
+          "A monthly content plan",
+        )
+        assert.equal(detail.serviceRequest.projectGoals, "Grow our audience")
+        assert.equal(
+          detail.serviceRequest.additionalDetails,
+          "Follow our brand guide",
+        )
+        for (const path of [`/${foreign.id}`, "/missing"]) {
+          const response = await get(path)
+          assert.equal(response.status, 404)
+          assert.deepEqual(await response.json(), {
+            error: "Booked service not found",
+          })
+        }
+        for (const query of [
+          "page=0",
+          "page=100001",
+          "page=1.5",
+          "page=1&page=2",
+          "search=a&search=b",
+          `search=${"x".repeat(101)}`,
+          "status=UNKNOWN",
+          "status=PENDING&status=COMPLETED",
+        ])
+          assert.equal((await get(`?${query}`)).status, 400)
+        assert.equal((await get("/invalid%20id")).status, 400)
+        assert.equal((await get(`/${"x".repeat(81)}`)).status, 400)
+        for (const path of ["", `/${bookingIds[0]}`])
+          assert.equal((await get(path, {})).status, 401)
+        for (const role of ["ADMIN", "SUPERADMIN", "STAFF"] as const) {
+          const account = await prisma.user.create({
+            data: {
+              email: `bookings-${role.toLowerCase()}@example.com`,
+              passwordHash: "unused",
+              role,
+            },
+          })
+          const session = await issueSession(account)
+          const authHeaders = { authorization: `Bearer ${session.token}` }
+          for (const path of ["", `/${bookingIds[0]}`])
+            assert.equal((await get(path, authHeaders)).status, 403)
+        }
+        const emptySession = await issueSession(otherClient)
+        await prisma.serviceRequest.delete({ where: { id: foreign.id } })
+        const empty = (await (
+          await get("", { authorization: `Bearer ${emptySession.token}` })
+        ).json()) as BookingPage
+        assert.deepEqual(empty, {
+          serviceRequests: [],
+          total: 0,
+          page: 1,
+          pageSize: 10,
+        })
+      },
+    )
+
+    await t.test(
+      "booking submission and replay use the existing normalized database status without migrations",
+      async () => {
+        await database.exec(`
+          ALTER TABLE "ServiceRequest" ALTER COLUMN "status" DROP DEFAULT;
+          ALTER TYPE "ServiceRequestStatus" RENAME TO "LegacyServiceRequestStatus";
+          CREATE TYPE "ServiceRequestStatus" AS ENUM ('SUBMITTED', 'UNDER_REVIEW', 'CLOSED', 'CANCELLED', 'AWAITING_CLIENT_INFO', 'READY_FOR_QUOTATION');
+          ALTER TABLE "ServiceRequest" ALTER COLUMN "status" TYPE "ServiceRequestStatus" USING
+            (CASE "status"::text WHEN 'PENDING' THEN 'SUBMITTED' WHEN 'IN_PROGRESS' THEN 'UNDER_REVIEW' WHEN 'COMPLETED' THEN 'CLOSED' ELSE "status"::text END)::"ServiceRequestStatus";
+          ALTER TABLE "ServiceRequest" ALTER COLUMN "status" SET DEFAULT 'SUBMITTED';
+          DROP TYPE "LegacyServiceRequestStatus";
+        `)
+        const normalizedService = await prisma.service.create({
+          data: {
+            name: "Normalized booking service",
+            description: "Client booking",
+          },
+        })
+        const input = {
+          serviceId: normalizedService.id,
+          packageId: null,
+          preferredSpecialistId: null,
+          submissionKey: randomUUID(),
+          goals: "Launch a new campaign",
+          requirements: "Campaign assets",
+          expectedTimeline: "Four weeks",
+          additionalDetails: "Use existing branding",
+        }
+        const post = () =>
+          fetch(`${base}/service-requests`, {
+            method: "POST",
+            headers: { ...headers, "content-type": "application/json" },
+            body: JSON.stringify(input),
+          })
+        const submitted = await post()
+        assert.equal(submitted.status, 201)
+        const receipt = (await submitted.json()) as {
+          serviceRequest: { id: string; status: string }
+        }
+        assert.equal(receipt.serviceRequest.status, "SUBMITTED")
+        const replay = await post()
+        assert.equal(replay.status, 201)
+        assert.deepEqual(await replay.json(), receipt)
+        assert.equal(
+          await prisma.serviceRequest.count({
+            where: { clientId: client.id, submissionKey: input.submissionKey },
+          }),
+          1,
+        )
+        const submittedList = await fetch(
+          `${base}/service-requests?status=SUBMITTED`,
+          { headers },
+        )
+        assert.equal(submittedList.status, 200)
+        const list = (await submittedList.json()) as {
+          serviceRequests: { status: string }[]
+          total: number
+        }
+        assert.ok(list.total > 0)
+        assert.ok(
+          list.serviceRequests.every((row) => row.status === "SUBMITTED"),
+        )
+        const absentLegacy = await fetch(
+          `${base}/service-requests?status=PENDING`,
+          { headers },
+        )
+        assert.equal(absentLegacy.status, 400)
         await prisma.user.update({
           where: { id: client.id },
           data: { isActive: false },
         })
-        assert.equal((await post(input)).status, 401)
+        assert.equal((await post()).status, 401)
+        assert.equal(
+          (await fetch(`${base}/service-requests`, { headers })).status,
+          401,
+        )
+        assert.equal(
+          (
+            await fetch(
+              `${base}/service-requests/${receipt.serviceRequest.id}`,
+              { headers },
+            )
+          ).status,
+          401,
+        )
       },
     )
   },

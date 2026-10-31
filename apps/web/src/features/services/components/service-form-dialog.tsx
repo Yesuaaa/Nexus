@@ -260,6 +260,15 @@ export function ServiceFormDialog({
   const [requiresConsultation, setRequiresConsultation] = useState(
     service?.requiresConsultation ?? false,
   )
+  const [requiresAgreement, setRequiresAgreement] = useState(
+    service?.requiresAgreement ?? true,
+  )
+  const [requiresPayment, setRequiresPayment] = useState(
+    service?.requiresPayment ?? true,
+  )
+  const [requiresQuotationApproval, setRequiresQuotationApproval] = useState(
+    service?.requiresQuotationApproval ?? false,
+  )
   const [consultationNotes, setConsultationNotes] = useState(
     service?.consultationNotes ?? "",
   )
@@ -433,6 +442,9 @@ export function ServiceFormDialog({
         .map((requirement) => requirement.trim())
         .filter(Boolean),
       requiresConsultation,
+      requiresAgreement,
+      requiresPayment,
+      requiresQuotationApproval,
       consultationNotes: requiresConsultation
         ? consultationNotes.trim() || null
         : null,
@@ -1005,6 +1017,46 @@ export function ServiceFormDialog({
                       />
                     </div>
                   )}
+                  <div className="grid gap-3 rounded-xl border border-[#e3e8ef] p-4">
+                    <h4 className="m-0 text-xs font-semibold">
+                      Commencement requirements
+                    </h4>
+                    <p className="m-0 text-[11px] leading-5 text-[#738096]">
+                      These rules apply to newly accepted requests. Existing
+                      conversations retain their agreed requirements.
+                    </p>
+                    <label className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={requiresAgreement}
+                        onChange={(event) =>
+                          setRequiresAgreement(event.target.checked)
+                        }
+                      />
+                      Approved signed agreement required
+                    </label>
+                    <label className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={requiresPayment}
+                        onChange={(event) =>
+                          setRequiresPayment(event.target.checked)
+                        }
+                      />
+                      Verified commencement payment required
+                    </label>
+                    <label className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={requiresQuotationApproval}
+                        onChange={(event) =>
+                          setRequiresQuotationApproval(event.target.checked)
+                        }
+                      />
+                      Assigned approver must authorize quotations before the
+                      client receives them
+                    </label>
+                  </div>
                 </section>
               )}
 

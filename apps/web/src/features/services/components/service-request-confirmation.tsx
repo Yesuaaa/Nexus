@@ -101,6 +101,9 @@ export function ServiceRequestConfirmation({
         >
           <Link href="/service-requests">View my service requests</Link>
         </Button>
+        <Button asChild variant="outline" className="min-h-11">
+          <Link href="/service-requests">View service requests</Link>
+        </Button>
         <button
           type="button"
           onClick={onNewRequest}

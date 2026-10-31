@@ -103,9 +103,7 @@ test.describe("Client management", () => {
       await page
         .getByRole("button", { name: "Select Standard service", exact: true })
         .click()
-      await page
-        .getByRole("button", { name: "Continue to project requirements" })
-        .click()
+      await page.getByRole("button", { name: "Continue", exact: true }).click()
       for (const name of [
         "Project goals",
         "Project requirements",
@@ -114,9 +112,7 @@ test.describe("Client management", () => {
         await page
           .getByRole("textbox", { name, exact: true })
           .fill(`${name} retained on retry`)
-      await page
-        .getByRole("button", { name: "Continue to preferred specialist" })
-        .click()
+      await page.getByRole("button", { name: "Continue", exact: true }).click()
       const submit = page.getByRole("button", {
         name: "Submit service request for review",
         exact: true,
@@ -197,7 +193,7 @@ test.describe("Client management", () => {
         await expect(select).toHaveAttribute("aria-pressed", "false")
         await select.click()
         await page
-          .getByRole("button", { name: "Continue to project requirements" })
+          .getByRole("button", { name: "Continue", exact: true })
           .click()
         for (const name of [
           "Project goals",
@@ -209,7 +205,7 @@ test.describe("Client management", () => {
           await input.fill(`${name} for request ${attempt}`)
         }
         await page
-          .getByRole("button", { name: "Continue to preferred specialist" })
+          .getByRole("button", { name: "Continue", exact: true })
           .click()
         await expect(
           page.getByText(/No specialists are currently listed/),
@@ -226,6 +222,12 @@ test.describe("Client management", () => {
             exact: true,
           }),
         ).toBeFocused()
+        await expect(
+          page.getByRole("link", {
+            name: "View service requests",
+            exact: true,
+          }),
+        ).toHaveAttribute("href", "/service-requests")
         expect(submissions).toHaveLength(attempt)
         expect(submissions[attempt - 1]).toMatchObject({
           serviceId: "service-1",

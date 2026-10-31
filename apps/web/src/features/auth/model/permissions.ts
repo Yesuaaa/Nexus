@@ -69,6 +69,26 @@ export function canAccessServiceCatalog(account: Account): boolean {
   return account.role === "USER"
 }
 
+export function canAccessBookedServices(account: Account): boolean {
+  return account.role === "USER"
+}
+
+export function canAccessRequestInbox(account: Account): boolean {
+  return account.role === "STAFF" && !!account.headOf
+}
+
+export function canAccessMessages(account: Account): boolean {
+  return account.role === "USER" || canAccessRequestInbox(account)
+}
+
+export function canAccessWorkflowApprovals(account: Account): boolean {
+  return account.role === "ADMIN" || account.role === "SUPERADMIN"
+}
+
+export function canAccessProjects(account: Account): boolean {
+  return account.role === "USER" || account.role === "STAFF"
+}
+
 export function canAccessClientManagement(account: Account): boolean {
   return (
     account.role === "ADMIN" && hasPermission(account, Permissions.CLIENTS_READ)

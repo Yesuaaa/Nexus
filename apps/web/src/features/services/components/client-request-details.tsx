@@ -12,6 +12,7 @@ import {
   serviceRequestStatuses,
 } from "../model/service-request-status"
 import { RequestStatus } from "./client-requests-table"
+import { RequestMessagesLink } from "@/features/request-conversations/components/request-messages-link"
 
 export function ClientRequestDetails({
   request,
@@ -119,6 +120,7 @@ export function ClientRequestDetails({
                 </section>
               ),
           )}
+          <RequestMessagesLink requestId={request.id} />
         </div>
       </SheetContent>
     </Sheet>

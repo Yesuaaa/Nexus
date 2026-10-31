@@ -31,3 +31,11 @@ Service list/detail routes share the catalog's pricing visibility rules. Private
 - Offline PGlite API tests cover role access, ownership, service and package availability, specialist eligibility, hidden pricing, structured requirements, retry protection, history filters, sorting, pagination and totals.
 - Playwright checks cover desktop/mobile history, details, filters, pagination, empty/error states, forbidden-role redirects, and the existing booking flows through the client routes.
 - Run `pnpm format`, `pnpm lint`, and `pnpm typecheck` before handoff.
+
+## Legacy booked-services links and department acceptance
+
+**Service Requests** is the client-facing request history and tracking page. New booking confirmations lead there, and the client sidebar contains no separate **Booked Services** entry. Existing `/booked-services` links remain available for compatibility. `GET /api/service-requests` and `GET /api/service-requests/:id` require an active `USER` session, derive ownership from that session, and return `404` for another client's booking. These read responses omit pricing snapshots, account fields, and submission keys.
+
+Department heads accept bookings through the [Request Inbox](department-request-inbox.md). Acceptance moves a submitted booking into **Under review**, visible in Service Requests and compatible legacy links. Existing pending, in-progress, and completed records are migrated to the shared submitted, under-review, and closed statuses.
+
+Both details panels include an **Open messages** link to the dedicated [Messages page](request-messaging.md), also available from the message icon in the top bar. After acceptance, the client and the accepting department's current head can exchange messages there with live updates, persisted history and retry protection. Before acceptance, the conversation page waits for the department and updates automatically when the conversation opens.

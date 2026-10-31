@@ -9,8 +9,15 @@ import { servicesRouter } from "./features/services/services.controller.js"
 import { clientsRouter } from "./features/clients/clients.controller.js"
 import { clientServicesRouter } from "./features/client-services/client-services.controller.js"
 import { serviceRequestsRouter } from "./features/service-requests/service-requests.controller.js"
+import { requestInboxRouter } from "./features/request-inbox/request-inbox.controller.js"
+import { createRequestConversationsRouter } from "./features/request-conversations/request-conversations.controller.js"
+import type { ConversationRealtime } from "./features/request-conversations/request-conversations.realtime.js"
+import { requestWorkflowRouter } from "./features/request-workflow/workflow.controller.js"
+import { projectsRouter } from "./features/projects/projects.controller.js"
 
-export function createApp() {
+export function createApp(
+  options: { conversationRealtime?: ConversationRealtime } = {},
+) {
   const app = express()
   app.disable("x-powered-by")
   app.use(securityHeaders)
@@ -23,12 +30,19 @@ export function createApp() {
     serviceRequestsRouter,
   )
   app.use("/api/client", express.json({ limit: "64kb" }), clientServicesRouter)
+  app.use("/api/request-workflows", requestWorkflowRouter)
   app.use(express.json({ limit: "16kb" }))
   app.use("/api/auth", authRouter)
   app.use("/api/users", usersRouter)
   app.use("/api/departments", departmentsRouter)
   app.use("/api/employees", employeesRouter)
   app.use("/api/clients", clientsRouter)
+  app.use("/api/request-inbox", requestInboxRouter)
+  app.use("/api/projects", projectsRouter)
+  app.use(
+    "/api/request-conversations",
+    createRequestConversationsRouter(options.conversationRealtime),
+  )
   app.use("/api", healthRouter)
   app.use(handleError)
   return app

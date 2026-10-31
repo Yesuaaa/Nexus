@@ -148,6 +148,9 @@ export type Service = {
   imageAltText: string | null
   clientRequirements: string[]
   requiresConsultation: boolean
+  requiresAgreement?: boolean
+  requiresPayment?: boolean
+  requiresQuotationApproval?: boolean
   consultationNotes: string | null
   keyBenefits: ServiceBenefit[]
   isActive: boolean
@@ -199,6 +202,9 @@ export type ServiceInput = {
   removeImage: boolean
   clientRequirements: string[]
   requiresConsultation: boolean
+  requiresAgreement?: boolean
+  requiresPayment?: boolean
+  requiresQuotationApproval?: boolean
   consultationNotes: string | null
   keyBenefits: ServiceBenefitInput[]
   pricingTemplateId: string | null

@@ -7,11 +7,16 @@ import { signOut } from "@/features/auth/api/auth-api"
 import { useAccount } from "@/features/auth/hooks/use-account"
 import {
   canAccessAccountManagement,
+  canAccessBookedServices,
+  canAccessRequestInbox,
   canAccessDepartmentManagement,
   canAccessEmployeeManagement,
   canAccessServiceCatalog,
   canAccessServiceManagement,
   canAccessClientManagement,
+  canAccessMessages,
+  canAccessWorkflowApprovals,
+  canAccessProjects,
 } from "@/features/auth/model/permissions"
 import { AccountContext } from "@/features/auth/providers/account-context"
 import { useAuthTransition } from "@/features/auth/providers/auth-provider"
@@ -29,6 +34,10 @@ export function PortalLayout({ children }: { children: ReactNode }) {
     !!account &&
     ((pathname.startsWith("/accounts") &&
       !canAccessAccountManagement(account)) ||
+      (pathname.startsWith("/messages") && !canAccessMessages(account)) ||
+      (pathname.startsWith("/workflow-approvals") &&
+        !canAccessWorkflowApprovals(account)) ||
+      (pathname.startsWith("/projects") && !canAccessProjects(account)) ||
       (pathname === "/departments" &&
         !canAccessDepartmentManagement(account)) ||
       (pathname.startsWith("/employees") &&
@@ -38,7 +47,12 @@ export function PortalLayout({ children }: { children: ReactNode }) {
         !canAccessServiceManagement(account)) ||
       (pathname.startsWith("/service-requests") &&
         !canAccessServiceCatalog(account)) ||
-      (pathname.startsWith("/clients") && !canAccessClientManagement(account)))
+      (pathname.startsWith("/clients") &&
+        !canAccessClientManagement(account)) ||
+      (pathname.startsWith("/booked-services") &&
+        !canAccessBookedServices(account)) ||
+      (pathname.startsWith("/request-inbox") &&
+        !canAccessRequestInbox(account)))
 
   useEffect(() => {
     if (denied) router.replace("/dashboard")

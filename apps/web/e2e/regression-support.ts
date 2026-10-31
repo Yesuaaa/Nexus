@@ -318,6 +318,14 @@ export async function mockApi(
       return
     }
 
+    if (
+      pathname === "/api/request-workflows/notifications" &&
+      method === "GET"
+    ) {
+      await route.fulfill({ json: { notifications: [], unreadCount: 0 } })
+      return
+    }
+
     if (pathname === "/api/clients" && method === "GET") {
       const search = url.searchParams.get("search")?.toLowerCase() ?? ""
       const clients = users.filter(

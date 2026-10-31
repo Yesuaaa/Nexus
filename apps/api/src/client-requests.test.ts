@@ -51,6 +51,83 @@ test("request lifecycle migration preserves legacy records and supports already 
   }
 })
 
+test("combined inbox and client lifecycle migrations preserve status history and defaults", async () => {
+  const db = new PGlite()
+  try {
+    await db.exec(`
+      CREATE TYPE "ServiceRequestStatus" AS ENUM ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED');
+      CREATE TABLE "ServiceRequest" (id integer PRIMARY KEY, status "ServiceRequestStatus" NOT NULL DEFAULT 'PENDING');
+      CREATE TABLE "ServiceRequestHistory" (id integer, "fromStatus" "ServiceRequestStatus", "toStatus" "ServiceRequestStatus" DEFAULT 'IN_PROGRESS');
+      CREATE INDEX history_status ON "ServiceRequestHistory" ("toStatus");
+      INSERT INTO "ServiceRequest" VALUES (1, 'PENDING'), (2, 'IN_PROGRESS'), (3, 'COMPLETED');
+      INSERT INTO "ServiceRequestHistory" VALUES (1, NULL, 'PENDING'), (2, 'PENDING', 'IN_PROGRESS'), (3, 'IN_PROGRESS', 'COMPLETED');
+    `)
+    const migrations = new URL("../prisma/migrations/", import.meta.url)
+    await db.exec(
+      await readFile(
+        new URL(
+          "20261030153000_department_request_inbox/migration.sql",
+          migrations,
+        ),
+        "utf8",
+      ),
+    )
+    await db.exec(
+      `INSERT INTO "ServiceRequest" VALUES (4, 'UNDER_REVIEW'); INSERT INTO "ServiceRequestHistory" VALUES (4, 'IN_PROGRESS', 'UNDER_REVIEW');`,
+    )
+    const reconciliation = await readFile(
+      new URL(
+        "20261030215900_reconcile_inbox_request_statuses/migration.sql",
+        migrations,
+      ),
+      "utf8",
+    )
+    await db.exec(reconciliation)
+    await db.exec(reconciliation)
+    await db.exec(
+      await readFile(
+        new URL(
+          "20261030220000_align_service_request_statuses/migration.sql",
+          migrations,
+        ),
+        "utf8",
+      ),
+    )
+    await db.exec(
+      `INSERT INTO "ServiceRequest" (id) VALUES (5); INSERT INTO "ServiceRequestHistory" (id) VALUES (5);`,
+    )
+    const statuses = await db.query<{ status: string }>(
+      `SELECT status::text FROM "ServiceRequest" ORDER BY id`,
+    )
+    assert.deepEqual(
+      statuses.rows.map((row) => row.status),
+      ["SUBMITTED", "UNDER_REVIEW", "CLOSED", "UNDER_REVIEW", "SUBMITTED"],
+    )
+    const history = await db.query<{
+      fromStatus: string | null
+      toStatus: string
+    }>(
+      `SELECT "fromStatus"::text, "toStatus"::text FROM "ServiceRequestHistory" ORDER BY id`,
+    )
+    assert.deepEqual(history.rows, [
+      { fromStatus: null, toStatus: "SUBMITTED" },
+      { fromStatus: "SUBMITTED", toStatus: "UNDER_REVIEW" },
+      { fromStatus: "UNDER_REVIEW", toStatus: "CLOSED" },
+      { fromStatus: "UNDER_REVIEW", toStatus: "UNDER_REVIEW" },
+      { fromStatus: null, toStatus: "UNDER_REVIEW" },
+    ])
+    const labels = await db.query<{ enumlabel: string }>(
+      `SELECT enumlabel FROM pg_enum WHERE enumtypid = to_regtype('"ServiceRequestStatus"')`,
+    )
+    assert.deepEqual(
+      labels.rows.map((row) => row.enumlabel).sort(),
+      Object.values(ServiceRequestStatus).sort(),
+    )
+  } finally {
+    await db.close()
+  }
+})
+
 test(
   "Client portal service request submission and dynamic requirements validation",
   { timeout: 90_000 },

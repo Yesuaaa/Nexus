@@ -7,10 +7,15 @@ import { focusRing } from "./styles"
 
 const routeLabels: Record<string, string> = {
   dashboard: "Dashboard",
+  messages: "Messages",
+  projects: "Projects",
+  "workflow-approvals": "Workflow Approvals",
   accounts: "Account Management",
   departments: "Department Management",
   employees: "Employee Management",
   services: "Services",
+  "booked-services": "Booked Services",
+  "request-inbox": "Request Inbox",
   "service-requests": "Service Requests",
   clients: "Client Management",
 }
@@ -49,9 +54,11 @@ export function Breadcrumbs() {
               className="flex min-w-0 items-center gap-[7px] text-[#8a9ab3]"
             >
               <ChevronRightIcon width="14" height="14" />
-              {index === segments.length - 1 ? (
+              {index === segments.length - 1 || segment === "projects" ? (
                 <span
-                  aria-current="page"
+                  aria-current={
+                    index === segments.length - 1 ? "page" : undefined
+                  }
                   className="overflow-hidden text-ellipsis font-semibold text-[#253f8c]"
                 >
                   {label}

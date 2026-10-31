@@ -255,6 +255,9 @@ export const servicesService = {
           removeImage: false,
           clientRequirements: current.clientRequirements,
           requiresConsultation: current.requiresConsultation,
+          requiresAgreement: current.requiresAgreement,
+          requiresPayment: current.requiresPayment,
+          requiresQuotationApproval: current.requiresQuotationApproval,
           consultationNotes: current.consultationNotes,
           keyBenefits: current.keyBenefits.map((benefit) => ({
             title: benefit.title,

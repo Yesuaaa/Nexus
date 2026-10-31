@@ -114,6 +114,7 @@ async function request<T>(
   path: string,
   options: RequestInit = {},
   retried = false,
+  rawResponse = false,
 ): Promise<T> {
   const headers = new Headers(options.headers)
   if (options.body && !headers.has("Content-Type")) {
@@ -151,19 +152,25 @@ async function request<T>(
         if (getToken() === token) await refreshSession(version)
         if (sessionVersion !== version)
           throw new ApiError("Session changed. Please try again.", 409)
-        if (getToken()) return request<T>(path, options, true)
+        if (getToken()) return request<T>(path, options, true, rawResponse)
       }
       if (getToken() === token) clearToken()
     }
     throw error
   }
 
+  if (rawResponse) return response as T
   const result = response.status === 204 ? undefined : await response.json()
   assertCurrentSession()
   return result as T
 }
 
 export { request as apiRequest }
+
+// Streaming fetch shares the same session checks and access-token renewal.
+export function apiStreamRequest(path: string, options: RequestInit = {}) {
+  return request<Response>(path, options, false, true)
+}
 
 export async function signIn(
   email: string,

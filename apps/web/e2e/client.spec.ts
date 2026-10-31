@@ -202,15 +202,13 @@ test.describe("Client service requests", () => {
         "aria-valuenow",
         "2",
       )
-      await expect(
-        page.getByText("Most popular", { exact: true }),
-      ).toBeVisible()
+      await expect(page.getByText("Recommended", { exact: true })).toBeVisible()
       await expect(
         page.getByText("Retired package", { exact: true }),
       ).toHaveCount(0)
       await expect(page.getByText(/99,999/)).toHaveCount(0)
       await expect(
-        page.getByRole("button", { name: "Continue to project requirements" }),
+        page.getByRole("button", { name: "Continue", exact: true }),
       ).toBeDisabled()
       const packageCards = page
         .getByRole("group", { name: "Packages & pricing" })
@@ -273,9 +271,7 @@ test.describe("Client service requests", () => {
       await expect(
         page.getByText("Consultation required", { exact: true }),
       ).toBeVisible()
-      await page
-        .getByRole("button", { name: "Continue to project requirements" })
-        .click()
+      await page.getByRole("button", { name: "Continue", exact: true }).click()
       await expect(
         page.getByRole("heading", {
           name: "Project Requirements",
@@ -300,9 +296,7 @@ test.describe("Client service requests", () => {
         .getByRole("button", { name: "Save requirements", exact: true })
         .click()
       await expect(page.getByRole("main").getByRole("alert")).toHaveCount(3)
-      await page
-        .getByRole("button", { name: "Continue to preferred specialist" })
-        .click()
+      await page.getByRole("button", { name: "Continue", exact: true }).click()
       await expect(page.getByRole("progressbar")).toHaveAttribute(
         "aria-valuenow",
         "3",
@@ -330,7 +324,7 @@ test.describe("Client service requests", () => {
         .getByRole("button", { name: "Save requirements", exact: true })
         .click()
       await expect(page.getByRole("status")).toContainText(
-        "Project requirements saved in this draft.",
+        "Saved in this browser tab.",
       )
       await page.getByRole("button", { name: "Back to packages" }).click()
       await expect(
@@ -339,9 +333,7 @@ test.describe("Client service requests", () => {
       await page
         .getByRole("button", { name: "Select Starter", exact: true })
         .click()
-      await page
-        .getByRole("button", { name: "Continue to project requirements" })
-        .click()
+      await page.getByRole("button", { name: "Continue", exact: true }).click()
       await expect(
         page.getByRole("textbox", { name: "Project goals", exact: true }),
       ).toHaveValue("Increase awareness and generate qualified leads.")
@@ -397,9 +389,7 @@ test.describe("Client service requests", () => {
           }
         },
       )
-      await page
-        .getByRole("button", { name: "Continue to preferred specialist" })
-        .click()
+      await page.getByRole("button", { name: "Continue", exact: true }).click()
       await expect(page.getByRole("progressbar")).toHaveAttribute(
         "aria-valuenow",
         "4",
@@ -424,10 +414,9 @@ test.describe("Client service requests", () => {
         }),
       ).toContainText("Alex Santos")
       await expect(
-        page.getByText(
-          "Subject to availability and Department Manager approval",
-          { exact: true },
-        ),
+        page.getByText("Assignment is confirmed during review", {
+          exact: true,
+        }),
       ).toBeVisible()
       await page.screenshot({ path: testInfo.outputPath("specialist.png") })
       await page
@@ -436,9 +425,7 @@ test.describe("Client service requests", () => {
       await expect(
         page.getByRole("textbox", { name: "Project goals", exact: true }),
       ).toHaveValue("Grow our online community.")
-      await page
-        .getByRole("button", { name: "Continue to preferred specialist" })
-        .click()
+      await page.getByRole("button", { name: "Continue", exact: true }).click()
       await expect(
         page.getByRole("radio", { name: "Prefer Alex Santos", exact: true }),
       ).toBeChecked()
@@ -450,9 +437,7 @@ test.describe("Client service requests", () => {
       await page
         .getByRole("button", { name: "Back to project requirements" })
         .click()
-      await page
-        .getByRole("button", { name: "Continue to preferred specialist" })
-        .click()
+      await page.getByRole("button", { name: "Continue", exact: true }).click()
       await expect(
         page.getByText(/No specialists are currently listed/),
       ).toBeVisible()
@@ -474,13 +459,9 @@ test.describe("Client service requests", () => {
           () => document.documentElement.scrollWidth <= window.innerWidth,
         ),
       ).toBe(true)
-      await page
-        .getByRole("button", { name: "Continue to project requirements" })
-        .click()
+      await page.getByRole("button", { name: "Continue", exact: true }).click()
       specialistResponse = "populated"
-      await page
-        .getByRole("button", { name: "Continue to preferred specialist" })
-        .click()
+      await page.getByRole("button", { name: "Continue", exact: true }).click()
       await expect(
         page.getByRole("radio", { name: "Prefer Alex Santos", exact: true }),
       ).toBeVisible()

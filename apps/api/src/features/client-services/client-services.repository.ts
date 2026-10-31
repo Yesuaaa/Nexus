@@ -11,6 +11,7 @@ export const clientRequestSelect = {
   packageName: true,
   preferredSpecialistName: true,
   projectGoals: true,
+  acceptedDepartmentId: true,
   projectRequirements: true,
   expectedTimeline: true,
   additionalDetails: true,

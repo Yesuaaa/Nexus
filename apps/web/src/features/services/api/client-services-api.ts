@@ -16,6 +16,7 @@ export interface ServiceRequestSummary {
   title: string
   description: string | null
   status: ServiceRequestStatus
+  acceptedDepartmentId?: string | null
   packageName: string | null
   preferredSpecialistName: string | null
   projectGoals: string

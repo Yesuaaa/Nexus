@@ -31,6 +31,21 @@ function request(index: number): ServiceRequestSummary {
   }
 }
 async function session(page: Page, role = "USER") {
+  await page.route("**/api/request-conversations/**", (route) => {
+    if (new URL(route.request().url()).pathname.endsWith("/events"))
+      return route.fulfill({
+        contentType: "text/event-stream",
+        body: "event: connected\ndata: {}\n\n",
+      })
+    return route.fulfill({
+      json: {
+        conversation: null,
+        canSend: false,
+        messages: [],
+        nextCursor: null,
+      },
+    })
+  })
   await page.addInitScript(() =>
     sessionStorage.setItem("nexus.auth.token", "test-client"),
   )

@@ -54,6 +54,8 @@ test("expired access refreshes on login navigation and logout clears both tokens
       loggedOut = true
       return route.fulfill({ status: 204, body: "" })
     }
+    if (path === "/api/request-workflows/notifications")
+      return route.fulfill({ json: { notifications: [], unreadCount: 0 } })
     return route.fulfill({ json: {} })
   })
   const response = await page.goto("/login")
@@ -67,7 +69,8 @@ test("expired access refreshes on login navigation and logout clears both tokens
       sessionStorage.getItem("nexus.auth.refreshToken"),
     ),
   ).toBe("rotated-refresh")
-  await page.getByRole("button", { name: /sign out/i }).click()
+  await page.getByRole("button", { name: "Open account menu" }).click()
+  await page.getByRole("menuitem", { name: "Log out" }).click()
   await expect(page).toHaveURL(/\/login$/)
   expect(loggedOut).toBe(true)
   expect(

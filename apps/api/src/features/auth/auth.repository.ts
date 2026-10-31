@@ -30,6 +30,7 @@ export const authRepository = {
           select: { id: true, name: true, code: true, color: true },
         },
         team: { select: { id: true, name: true } },
+        headOf: { select: { id: true, name: true } },
       },
     })
   },
@@ -71,6 +72,7 @@ export const authRepository = {
               select: { id: true, name: true, code: true, color: true },
             },
             team: { select: { id: true, name: true } },
+            headOf: { select: { id: true, name: true } },
           },
         },
       },

@@ -2,17 +2,19 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ClipboardList, UsersRound } from "lucide-react"
+import { ClipboardList, Inbox, ShieldCheck, UsersRound } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Account } from "@/features/auth/model/types"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import {
   canAccessAccountManagement,
+  canAccessRequestInbox,
   canAccessDepartmentManagement,
   canAccessEmployeeManagement,
   canAccessServiceCatalog,
   canAccessServiceManagement,
   canAccessClientManagement,
+  canAccessWorkflowApprovals,
 } from "@/features/auth/model/permissions"
 import { focusRing, iconButtonClass } from "./styles"
 import {
@@ -248,6 +250,46 @@ export function Sidebar({
               <span className={collapsedLabelClass}>Service Requests</span>
               {collapsed && (
                 <CollapsedTooltip>Service Requests</CollapsedTooltip>
+              )}
+            </Link>
+          )}
+          {canAccessRequestInbox(account) && (
+            <Link
+              href="/request-inbox"
+              aria-current={
+                pathname.startsWith("/request-inbox") ? "page" : undefined
+              }
+              className={cn(
+                navLinkClass,
+                collapsed &&
+                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
+                pathname.startsWith("/request-inbox") && "bg-[#e1e3e5]",
+              )}
+              onClick={onCloseDrawer}
+            >
+              <Inbox size={20} strokeWidth={1.7} className="flex-none" />
+              <span className={collapsedLabelClass}>Request Inbox</span>
+              {collapsed && <CollapsedTooltip>Request Inbox</CollapsedTooltip>}
+            </Link>
+          )}
+          {canAccessWorkflowApprovals(account) && (
+            <Link
+              href="/workflow-approvals"
+              aria-current={
+                pathname.startsWith("/workflow-approvals") ? "page" : undefined
+              }
+              className={cn(
+                navLinkClass,
+                collapsed &&
+                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
+                pathname.startsWith("/workflow-approvals") && "bg-[#e1e3e5]",
+              )}
+              onClick={onCloseDrawer}
+            >
+              <ShieldCheck size={20} strokeWidth={1.7} className="flex-none" />
+              <span className={collapsedLabelClass}>Workflow Approvals</span>
+              {collapsed && (
+                <CollapsedTooltip>Workflow Approvals</CollapsedTooltip>
               )}
             </Link>
           )}

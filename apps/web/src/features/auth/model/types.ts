@@ -22,6 +22,7 @@ export type Account = {
     color: DepartmentColor
   } | null
   teamId?: string | null
+  headOf?: { id: string; name: string } | null
   team?: { id: string; name: string } | null
   permissions: Permission[]
   createdAt: string
