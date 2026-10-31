@@ -113,9 +113,9 @@ export function RequestInboxTable({
                 </p>
                 <p
                   className="mt-1 mb-0 truncate text-[11px] text-[#738096]"
-                  title={request.id}
+                  title={request.referenceNumber || request.id}
                 >
-                  {request.id}
+                  {request.referenceNumber || request.id}
                 </p>
               </div>
               <div

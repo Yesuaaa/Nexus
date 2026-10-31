@@ -3,6 +3,7 @@ import type { ServiceRequestStatus } from "@/features/services/api/services-api"
 
 export type BookedService = {
   id: string
+  referenceNumber?: string | null
   title: string
   status: ServiceRequestStatus
   acceptedDepartmentId?: string | null

@@ -6,6 +6,7 @@ import type { InboxFilters } from "./request-inbox.schema.js"
 
 const requestSelect = {
   id: true,
+  referenceNumber: true,
   title: true,
   status: true,
   acceptedDepartmentId: true,
@@ -87,6 +88,12 @@ export async function listInbox(userId: string, filters: InboxFilters) {
           ? {
               OR: [
                 { id: { contains: filters.search, mode: "insensitive" } },
+                {
+                  referenceNumber: {
+                    contains: filters.search,
+                    mode: "insensitive",
+                  },
+                },
                 {
                   service: {
                     name: { contains: filters.search, mode: "insensitive" },

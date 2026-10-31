@@ -7,6 +7,7 @@ type RequestDetails = InboxRequest & BookingDetails
 function fixture(index: number): RequestDetails {
   return {
     id: `booking-${index}`,
+    referenceNumber: index === 11 ? null : `SR-INBOX-${index}`,
     title: "Website request",
     status: "SUBMITTED",
     packageName: "Business Website",
@@ -96,7 +97,7 @@ async function mockInbox(
           (view === "under-review"
             ? item.status === "UNDER_REVIEW"
             : item.status === "SUBMITTED") &&
-          `${item.id} ${item.client.fullName} ${item.service.name}`
+          `${item.id} ${item.referenceNumber ?? ""} ${item.client.fullName} ${item.service.name}`
             .toLowerCase()
             .includes(search),
       )
@@ -171,6 +172,7 @@ for (const width of [1440, 390]) {
     await expect(
       page.getByRole("table", { name: "Department requests" }),
     ).toBeVisible()
+    await expect(page.getByText("SR-INBOX-1", { exact: true })).toBeVisible()
     if (width === 390)
       await page.getByRole("button", { name: "Open navigation menu" }).click()
     await expect(
@@ -187,6 +189,13 @@ for (const width of [1440, 390]) {
     })
     await page.getByRole("button", { name: "Page 2", exact: true }).click()
     await expect(page.getByText("Showing 11–11 of 11")).toBeVisible()
+    await expect(page.getByText("booking-11", { exact: true })).toBeVisible()
+    await page
+      .getByRole("searchbox", { name: "Search requests" })
+      .fill("sr-inbox-2")
+    await expect(page.getByText("Showing 1–1 of 1")).toBeVisible()
+    await expect(page.getByText("SR-INBOX-2", { exact: true })).toHaveCount(1)
+    await expect(page.getByText("SR-INBOX-2", { exact: true })).toBeVisible()
     await page
       .getByRole("searchbox", { name: "Search requests" })
       .fill("Mara Client 1")
@@ -195,6 +204,7 @@ for (const width of [1440, 390]) {
       .getByRole("button", { name: "Review request booking-1", exact: true })
       .click()
     const drawer = page.getByRole("dialog", { name: "Booking details" })
+    await expect(drawer.getByText("SR-INBOX-1", { exact: true })).toBeVisible()
     await expect(
       drawer.getByText("client1@example.com", { exact: true }),
     ).toBeVisible()
@@ -224,6 +234,7 @@ for (const width of [1440, 390]) {
       drawer.getByRole("link", { name: "Open request workspace", exact: true }),
     ).toBeVisible()
     await expect(drawer.getByLabel("Message", { exact: true })).toHaveCount(0)
+    await expect(drawer.getByText("SR-INBOX-1", { exact: true })).toBeVisible()
     await drawer.getByRole("button", { name: "Close booking details" }).click()
     await expect(drawer).not.toBeVisible()
     await expect(
