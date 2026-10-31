@@ -86,6 +86,7 @@ export function SpecialistProfileDialog({
   specialist,
   selected,
   disabled = false,
+  allowSelection = true,
   onChoose,
   onClose,
 }: {
@@ -93,6 +94,7 @@ export function SpecialistProfileDialog({
   specialist: ServiceSpecialist
   selected: boolean
   disabled?: boolean
+  allowSelection?: boolean
   onChoose: (specialist: ServiceSpecialist) => void
   onClose: () => void
 }) {
@@ -206,8 +208,9 @@ export function SpecialistProfileDialog({
 
         <DialogTitle className="sr-only">Specialist profile</DialogTitle>
         <DialogDescription className="sr-only">
-          Review this specialist’s background and featured projects before
-          setting a preference.
+          {allowSelection
+            ? "Review this specialist’s background and featured projects before setting a preference."
+            : "Review this specialist’s background, specialties, social links, and featured projects."}
         </DialogDescription>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-7 pb-6 pt-12 max-[560px]:px-5">
@@ -450,8 +453,9 @@ export function SpecialistProfileDialog({
 
         <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-[#e6eaf0] bg-white px-6 py-4 max-[560px]:px-4">
           <p className="m-0 max-w-[390px] text-xs leading-5 text-[#687e9e]">
-            Availability and project fit are reviewed by the department before a
-            specialist is confirmed.
+            {allowSelection
+              ? "Availability and project fit are reviewed by the department before a specialist is confirmed."
+              : "View the specialist’s background and featured work from your request conversation."}
           </p>
           <div className="ml-auto flex flex-wrap gap-2 max-[560px]:w-full max-[560px]:flex-col-reverse">
             <button
@@ -464,7 +468,7 @@ export function SpecialistProfileDialog({
             >
               Close profile
             </button>
-            {!activeProject && (
+            {allowSelection && !activeProject && (
               <button
                 type="button"
                 disabled={!profile || loading || error || disabled || selected}

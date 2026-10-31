@@ -748,14 +748,34 @@ export function ProjectActivationCard({ workflow }: { workflow: Workflow }) {
   )
 }
 
-export function SystemStatusUpdate({ event }: { event: WorkflowEvent }) {
+export function SystemStatusUpdate({
+  event,
+  centered = false,
+}: {
+  event: WorkflowEvent
+  centered?: boolean
+}) {
   return (
-    <div className="my-4 flex gap-2 text-[10px] leading-5 text-[#8791a2]">
-      <span
-        aria-hidden="true"
-        className="mt-2 size-1.5 shrink-0 rounded-full bg-[#8ba1c7]"
-      />
-      <p className="m-0 flex-1 whitespace-pre-wrap">
+    <div
+      className={
+        centered
+          ? "mx-auto my-4 flex max-w-2xl justify-center text-center text-[10px] leading-5 text-[#8791a2]"
+          : "my-4 flex gap-2 text-[10px] leading-5 text-[#8791a2]"
+      }
+    >
+      {!centered && (
+        <span
+          aria-hidden="true"
+          className="mt-2 size-1.5 shrink-0 rounded-full bg-[#8ba1c7]"
+        />
+      )}
+      <p
+        className={
+          centered
+            ? "m-0 whitespace-pre-wrap"
+            : "m-0 flex-1 whitespace-pre-wrap"
+        }
+      >
         {event.summary}
         <time dateTime={event.createdAt} className="ml-2 text-[9px]">
           {new Date(event.createdAt).toLocaleString("en-PH", {
@@ -774,11 +794,15 @@ export function WorkflowEventCard({
   event,
   workflow,
   controls,
-}: CardProps & { event: WorkflowEvent }) {
+  clientView = false,
+}: CardProps & { event: WorkflowEvent; clientView?: boolean }) {
+  const statusUpdate = () => (
+    <SystemStatusUpdate event={event} centered={clientView} />
+  )
   if (event.type === "APPROVAL_CONFIRMED")
     return (
       <>
-        <SystemStatusUpdate event={event} />
+        {statusUpdate()}
         <ApprovalConfirmationCard workflow={workflow} />
       </>
     )
@@ -786,14 +810,14 @@ export function WorkflowEventCard({
     !event.entityId ||
     workflow.events.filter((item) => item.entityId === event.entityId).at(-1)
       ?.id === event.id
-  if (!latest) return <SystemStatusUpdate event={event} />
+  if (!latest) return statusUpdate()
   const requirement = workflow.requirements.find(
     (item) => item.id === event.entityId,
   )
   if (requirement)
     return (
       <>
-        <SystemStatusUpdate event={event} />
+        {statusUpdate()}
         <RequirementRequestCard
           requirement={requirement}
           workflow={workflow}
@@ -805,7 +829,7 @@ export function WorkflowEventCard({
   if (file)
     return (
       <>
-        <SystemStatusUpdate event={event} />
+        {statusUpdate()}
         <FileSubmissionCard file={file} requestId={workflow.request.id} />
       </>
     )
@@ -815,7 +839,7 @@ export function WorkflowEventCard({
   if (consultation)
     return (
       <>
-        <SystemStatusUpdate event={event} />
+        {statusUpdate()}
         <ConsultationSchedulingCard
           consultation={consultation}
           workflow={workflow}
@@ -829,7 +853,7 @@ export function WorkflowEventCard({
   if (quotation)
     return (
       <>
-        <SystemStatusUpdate event={event} />
+        {statusUpdate()}
         <QuotationProposalCard
           quotation={quotation}
           workflow={workflow}
@@ -840,23 +864,23 @@ export function WorkflowEventCard({
   if (workflow.agreement?.id === event.entityId)
     return (
       <>
-        <SystemStatusUpdate event={event} />
+        {statusUpdate()}
         <AgreementCard workflow={workflow} controls={controls} />
       </>
     )
   if (workflow.payment?.id === event.entityId)
     return (
       <>
-        <SystemStatusUpdate event={event} />
+        {statusUpdate()}
         <PaymentVerificationCard workflow={workflow} controls={controls} />
       </>
     )
   if (workflow.project?.id === event.entityId)
     return (
       <>
-        <SystemStatusUpdate event={event} />
+        {statusUpdate()}
         <ProjectActivationCard workflow={workflow} />
       </>
     )
-  return <SystemStatusUpdate event={event} />
+  return statusUpdate()
 }

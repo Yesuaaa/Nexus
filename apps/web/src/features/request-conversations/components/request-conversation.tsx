@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react"
 import Link from "next/link"
-import { ArrowLeft, Paperclip, Send } from "lucide-react"
+import { ArrowLeft, Info, Paperclip, Send, UserRound } from "lucide-react"
 import { sileo } from "sileo"
 import { Button } from "@/components/ui/button"
 import { ApiError } from "@/features/auth/api/auth-api"
@@ -12,6 +12,12 @@ import { focusRing } from "@/components/layout/styles"
 import { useRequestWorkflow } from "@/features/request-workflow/hooks/use-request-workflow"
 import { WorkflowEventCard } from "@/features/request-workflow/components/workflow-cards"
 import { WorkflowContextPanel } from "@/features/request-workflow/components/workflow-context-panel"
+import { getBooking } from "@/features/bookings/api/bookings-api"
+import {
+  listServiceSpecialists,
+  type ServiceSpecialist,
+} from "@/features/services/api/services-api"
+import { SpecialistProfileDialog } from "@/features/services/components/specialist-profile-dialog"
 import {
   WorkflowBadge,
   WorkflowProgress,
@@ -19,6 +25,7 @@ import {
 import { ConversationAvatar } from "./conversation-avatar"
 import {
   getConversation,
+  markConversationRead,
   openConversationEvents,
   sendMessage,
   type ConversationHistory,
@@ -29,11 +36,30 @@ import {
   readConversationEvents,
 } from "../model/conversation-events"
 
+function normalizeSpecialistName(name: string) {
+  return name.trim().replace(/\s+/g, " ").toLocaleLowerCase()
+}
+
 type RequestConversationProps = {
   requestId: string
   clientName?: string
   requestTitle?: string
   onLatestMessage?: (requestId: string, message: RequestMessage) => void
+  onConversationRead?: (
+    requestId: string,
+    unreadCount: number,
+    conversationUnreadCount: number,
+  ) => void
+}
+
+type SpecialistProfileTarget = {
+  serviceId: string
+  specialist: ServiceSpecialist
+}
+
+type SpecialistProfileResolution = {
+  key: string
+  target: SpecialistProfileTarget | null
 }
 
 export function RequestConversation(props: RequestConversationProps) {
@@ -45,6 +71,7 @@ function ConversationPanel({
   clientName,
   requestTitle,
   onLatestMessage,
+  onConversationRead,
 }: RequestConversationProps) {
   const account = usePortalAccount()
   const inputId = useId()
@@ -55,9 +82,16 @@ function ConversationPanel({
   const [sending, setSending] = useState(false)
   const [olderLoading, setOlderLoading] = useState(false)
   const [sendError, setSendError] = useState("")
+  const [contextPanelOpen, setContextPanelOpen] = useState(true)
+  const [specialistProfileOpenFor, setSpecialistProfileOpenFor] = useState<
+    string | null
+  >(null)
+  const [specialistProfileResolution, setSpecialistProfileResolution] =
+    useState<SpecialistProfileResolution | null>(null)
   const pending = useRef<{ body: string; id: string } | null>(null)
   const sendingRef = useRef(false)
   const logRef = useRef<HTMLDivElement>(null)
+  const lastMarkedReadMessage = useRef<string | null>(null)
   const followLatest = useRef(true)
   const controls = useRequestWorkflow(requestId)
   const {
@@ -66,6 +100,87 @@ function ConversationPanel({
     revoke: revokeWorkflow,
   } = controls
   const fileInput = useRef<HTMLInputElement>(null)
+  const isClient = account.role === "USER"
+  const conversationDepartmentId = history?.conversation?.department.id
+  const conversationHeadId = history?.conversation?.head?.id
+  const conversationHeadName = history?.conversation?.head?.fullName?.trim()
+  const specialistProfileKey =
+    isClient &&
+    conversationDepartmentId &&
+    conversationHeadId &&
+    conversationHeadName
+      ? JSON.stringify([
+          requestId,
+          conversationDepartmentId,
+          conversationHeadId,
+          normalizeSpecialistName(conversationHeadName),
+        ])
+      : null
+  const specialistProfileTarget =
+    specialistProfileResolution?.key === specialistProfileKey
+      ? specialistProfileResolution.target
+      : null
+  const specialistProfileLoading = Boolean(
+    specialistProfileKey &&
+    specialistProfileResolution?.key !== specialistProfileKey,
+  )
+
+  useEffect(() => {
+    if (
+      !isClient ||
+      !conversationDepartmentId ||
+      !conversationHeadId ||
+      !conversationHeadName ||
+      !specialistProfileKey
+    )
+      return
+
+    const departmentId = conversationDepartmentId
+    const headName = conversationHeadName
+    const profileKey = specialistProfileKey
+    let active = true
+    async function resolveSpecialistProfile() {
+      try {
+        const booking = await getBooking(requestId)
+        const specialists = await listServiceSpecialists(booking.service.id)
+        const matches = specialists.filter(
+          (specialist) =>
+            specialist.department?.id === departmentId &&
+            normalizeSpecialistName(specialist.fullName) ===
+              normalizeSpecialistName(headName),
+        )
+        if (active) {
+          setSpecialistProfileOpenFor(null)
+          setSpecialistProfileResolution({
+            key: profileKey,
+            target:
+              matches.length === 1
+                ? { serviceId: booking.service.id, specialist: matches[0] }
+                : null,
+          })
+        }
+      } catch {
+        if (active) {
+          setSpecialistProfileOpenFor(null)
+          setSpecialistProfileResolution({
+            key: profileKey,
+            target: null,
+          })
+        }
+      }
+    }
+    void resolveSpecialistProfile()
+    return () => {
+      active = false
+    }
+  }, [
+    conversationDepartmentId,
+    conversationHeadId,
+    conversationHeadName,
+    isClient,
+    requestId,
+    specialistProfileKey,
+  ])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -188,6 +303,42 @@ function ConversationPanel({
     if (followLatest.current && logRef.current)
       logRef.current.scrollTop = logRef.current.scrollHeight
   }, [history?.messages, workflow?.events])
+
+  const latestMessageId = history?.messages.at(-1)?.id
+  const conversationReady = Boolean(history?.conversation)
+  useEffect(() => {
+    if (
+      !isClient ||
+      !conversationReady ||
+      !latestMessageId ||
+      lastMarkedReadMessage.current === latestMessageId
+    )
+      return
+
+    lastMarkedReadMessage.current = latestMessageId
+    let active = true
+    void markConversationRead(requestId)
+      .then((result) => {
+        if (active)
+          onConversationRead?.(
+            requestId,
+            result.unreadCount,
+            result.conversationUnreadCount,
+          )
+      })
+      .catch(() => {
+        if (active) lastMarkedReadMessage.current = null
+      })
+    return () => {
+      active = false
+    }
+  }, [
+    conversationReady,
+    isClient,
+    latestMessageId,
+    onConversationRead,
+    requestId,
+  ])
 
   async function loadOlder() {
     if (!history?.nextCursor || olderLoading) return
@@ -356,6 +507,60 @@ function ConversationPanel({
                   "Request conversation"}
               </p>
             </div>
+            {isClient && (
+              <div className="flex shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  aria-label={
+                    specialistProfileLoading
+                      ? "Loading specialist profile"
+                      : specialistProfileTarget
+                        ? `View ${specialistProfileTarget.specialist.fullName}'s profile`
+                        : "Specialist profile unavailable"
+                  }
+                  title={
+                    specialistProfileLoading
+                      ? "Loading specialist profile"
+                      : specialistProfileTarget
+                        ? "View specialist profile"
+                        : "Specialist profile unavailable"
+                  }
+                  className={cn(
+                    "grid size-11 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 text-[#294a9b] transition-colors duration-150 hover:bg-[#f1f1ee] disabled:cursor-not-allowed disabled:opacity-40",
+                    focusRing,
+                  )}
+                  disabled={
+                    !specialistProfileTarget || specialistProfileLoading
+                  }
+                  onClick={() =>
+                    specialistProfileKey &&
+                    setSpecialistProfileOpenFor(specialistProfileKey)
+                  }
+                >
+                  <UserRound size={16} aria-hidden="true" />
+                </button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  aria-label={
+                    contextPanelOpen
+                      ? "Hide service details"
+                      : "Show service details"
+                  }
+                  aria-expanded={contextPanelOpen}
+                  aria-controls={`request-context-${requestId}`}
+                  title={
+                    contextPanelOpen
+                      ? "Hide service details"
+                      : "Show service details"
+                  }
+                  className="size-11 shrink-0 p-0 text-[#294a9b]"
+                  onClick={() => setContextPanelOpen((open) => !open)}
+                >
+                  <Info size={17} aria-hidden="true" />
+                </Button>
+              </div>
+            )}
           </header>
           {error && (
             <p role="alert" className="m-3 text-xs text-red-700">
@@ -425,6 +630,7 @@ function ConversationPanel({
                           event={entry.event}
                           workflow={workflow}
                           controls={controls}
+                          clientView={isClient}
                         />
                       </div>
                     ) : null
@@ -574,9 +780,27 @@ function ConversationPanel({
           )}
         </section>
         {workflow && (
-          <WorkflowContextPanel workflow={workflow} controls={controls} />
+          <WorkflowContextPanel
+            id={`request-context-${requestId}`}
+            hidden={isClient && !contextPanelOpen}
+            workflow={workflow}
+            controls={controls}
+          />
         )}
       </div>
+      {isClient &&
+        specialistProfileOpenFor === specialistProfileKey &&
+        specialistProfileTarget && (
+          <SpecialistProfileDialog
+            key={specialistProfileTarget.specialist.id}
+            serviceId={specialistProfileTarget.serviceId}
+            specialist={specialistProfileTarget.specialist}
+            selected={false}
+            allowSelection={false}
+            onChoose={() => undefined}
+            onClose={() => setSpecialistProfileOpenFor(null)}
+          />
+        )}
     </div>
   )
 }

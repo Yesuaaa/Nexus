@@ -48,6 +48,35 @@ const messageSelect = {
   sender: { select: { id: true, fullName: true } },
 } as const satisfies Prisma.ServiceRequestMessageSelect
 
+type UnreadConversationRow = {
+  requestId: string
+  unreadCount: number
+}
+
+async function getUnreadConversationCounts(userId: string) {
+  const rows = await getPrisma()!.$queryRaw<UnreadConversationRow[]>`
+    SELECT service_request."id" AS "requestId",
+      COUNT(message."id")::integer AS "unreadCount"
+    FROM "ServiceRequest" AS service_request
+    INNER JOIN "ServiceRequestMessage" AS message
+      ON message."requestId" = service_request."id"
+      AND message."senderId" <> ${userId}
+      AND (
+        service_request."clientReadAt" IS NULL
+        OR message."createdAt" > service_request."clientReadAt"
+      )
+    WHERE service_request."clientId" = ${userId}
+      AND service_request."acceptedAt" IS NOT NULL
+      AND service_request."acceptedDepartmentId" IS NOT NULL
+    GROUP BY service_request."id"
+  `
+  return new Map(rows.map((row) => [row.requestId, row.unreadCount]))
+}
+
+function totalUnreadMessages(unreadCounts: Map<string, number>) {
+  return [...unreadCounts.values()].reduce((total, count) => total + count, 0)
+}
+
 export async function listConversations(userId: string, before?: string) {
   const db = getPrisma()!
   const scope: Prisma.ServiceRequestWhereInput = {
@@ -96,13 +125,44 @@ export async function listConversations(userId: string, before?: string) {
     orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
     take: 31,
   })
-  const conversations = rows.slice(0, 30).map(({ messages, ...row }) => ({
-    ...row,
-    lastMessage: messages[0] ?? null,
-  }))
+  const isClient = rows.some((row) => row.client.id === userId)
+  const unreadCounts = isClient
+    ? await getUnreadConversationCounts(userId)
+    : new Map<string, number>()
+  const conversations = rows.slice(0, 30).map(({ messages, ...row }) => {
+    const unreadCount = unreadCounts.get(row.id) ?? 0
+    return {
+      ...row,
+      lastMessage: messages[0] ?? null,
+      ...(isClient ? { unreadCount } : {}),
+    }
+  })
+  const unreadCount = totalUnreadMessages(unreadCounts)
   return {
     conversations,
     nextCursor: rows.length > 30 ? conversations.at(-1)!.id : null,
+    ...(isClient ? { unreadCount } : {}),
+  }
+}
+
+export async function markConversationRead(userId: string, requestId: string) {
+  const updated = await getPrisma()!.serviceRequest.updateMany({
+    where: {
+      id: requestId,
+      clientId: userId,
+      client: { ...activeUser, role: "USER" },
+      acceptedAt: { not: null },
+      acceptedDepartmentId: { not: null },
+    },
+    data: { clientReadAt: new Date() },
+  })
+  if (!updated.count)
+    throw new ServiceRequestsError(404, "Conversation not found")
+  const unreadCounts = await getUnreadConversationCounts(userId)
+  return {
+    ok: true,
+    unreadCount: totalUnreadMessages(unreadCounts),
+    conversationUnreadCount: unreadCounts.get(requestId) ?? 0,
   }
 }
 

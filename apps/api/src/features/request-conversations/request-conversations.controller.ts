@@ -11,6 +11,7 @@ import {
   getConversationAccess,
   listConversations,
   listConversationMessages,
+  markConversationRead,
   sendConversationMessage,
 } from "./request-conversations.service.js"
 
@@ -48,6 +49,14 @@ export function createRequestConversationsRouter(
       before,
     )
     response.json({ ...access, ...history })
+  })
+  router.patch("/:id/read", async (request, response) => {
+    response.json(
+      await markConversationRead(
+        request.auth!.user.id,
+        String(request.params.id),
+      ),
+    )
   })
   router.post("/:id/messages", async (request, response) => {
     const input: unknown = request.body

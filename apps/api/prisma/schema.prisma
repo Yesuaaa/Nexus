@@ -274,6 +274,7 @@ model ServiceRequest {
   acceptedById            String?
   acceptedBy              User?                   @relation("RequestAcceptedBy", fields: [acceptedById], references: [id], onDelete: Restrict)
   acceptedAt              DateTime?
+  clientReadAt            DateTime?
   messages                ServiceRequestMessage[]
   workflow                RequestWorkflow?
   project                 Project?
@@ -308,6 +309,7 @@ model ServiceRequestMessage {
 
   @@unique([requestId, senderId, clientMessageId])
   @@index([requestId, createdAt, id])
+  @@index([requestId, senderId, createdAt])
 }
 
 model Project {

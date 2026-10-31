@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import { ChevronDown, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import type { WorkflowControls } from "../hooks/use-request-workflow"
 import type { Workflow, WorkflowAction } from "../model/workflow"
 import { QuotationProposalCard } from "./workflow-cards"
@@ -435,9 +436,13 @@ function InternalWorkspace({
 export function WorkflowContextPanel({
   workflow,
   controls,
+  id,
+  hidden = false,
 }: {
   workflow: Workflow
   controls: WorkflowControls
+  id?: string
+  hidden?: boolean
 }) {
   const detailsRef = useRef<HTMLDetailsElement>(null)
   useEffect(() => {
@@ -466,10 +471,22 @@ export function WorkflowContextPanel({
   )
   return (
     <aside
+      id={id}
+      aria-hidden={hidden}
+      inert={hidden}
       aria-label="Request context"
-      className="w-[300px] shrink-0 overflow-y-auto border-l border-[#e8ebef] px-4 py-1 max-[1199px]:w-[270px] max-[1023px]:w-full max-[1023px]:shrink max-[1023px]:overflow-visible max-[1023px]:border-b max-[1023px]:border-l-0"
+      className={cn(
+        "shrink-0 overflow-x-hidden overflow-y-auto border-l border-[#e8ebef] px-4 py-1 transition-[width,max-height,opacity,transform,padding,border-color] duration-[240ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none max-[1023px]:w-full max-[1023px]:shrink max-[1023px]:overflow-hidden max-[1023px]:border-b max-[1023px]:border-l-0",
+        hidden
+          ? "w-0 min-w-0 translate-x-2 border-l-0 px-0 opacity-0 pointer-events-none max-[1199px]:w-0 max-[1023px]:max-h-0 max-[1023px]:translate-x-0 max-[1023px]:translate-y-2 max-[1023px]:border-b-0 max-[1023px]:px-4 max-[1023px]:py-0 max-[1023px]:opacity-0"
+          : "w-[300px] max-[1199px]:w-[270px] max-[1023px]:max-h-[calc(50dvh+64px)] max-[1023px]:translate-x-0 max-[1023px]:translate-y-0 max-[1023px]:opacity-100",
+      )}
     >
-      <details ref={detailsRef} className="group/context" open>
+      <details
+        ref={detailsRef}
+        className="group/context min-w-[238px] min-[1200px]:min-w-[268px] max-[1023px]:min-w-0"
+        open
+      >
         <summary className="hidden cursor-pointer list-none items-center justify-between py-3 text-xs font-semibold max-[1023px]:flex [&::-webkit-details-marker]:hidden">
           Request details and actions
           <ChevronDown

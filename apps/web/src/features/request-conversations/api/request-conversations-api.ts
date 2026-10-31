@@ -17,11 +17,13 @@ export type ConversationSummary = {
   client: { id: string; fullName: string | null }
   acceptedDepartment: { id: string; name: string } | null
   lastMessage: RequestMessage | null
+  unreadCount?: number
 }
 
 export type ConversationList = {
   conversations: ConversationSummary[]
   nextCursor: string | null
+  unreadCount?: number
 }
 
 export function listConversations(before?: string, signal?: AbortSignal) {
@@ -29,6 +31,16 @@ export function listConversations(before?: string, signal?: AbortSignal) {
     `/api/request-conversations${before ? `?before=${encodeURIComponent(before)}` : ""}`,
     { signal },
   )
+}
+
+export function markConversationRead(id: string) {
+  return apiRequest<{
+    ok: true
+    unreadCount: number
+    conversationUnreadCount: number
+  }>(`/api/request-conversations/${encodeURIComponent(id)}/read`, {
+    method: "PATCH",
+  })
 }
 
 export type ConversationHistory = {
