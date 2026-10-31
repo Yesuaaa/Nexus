@@ -2,8 +2,13 @@
 
 import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
-import { MessageSquare } from "lucide-react"
-import { contentClass, focusRing } from "@/components/layout/styles"
+import { ChevronDown, LoaderCircle, MessageSquare } from "lucide-react"
+import {
+  contentClass,
+  focusRing,
+  iconButtonClass,
+} from "@/components/layout/styles"
+import { PanelIcon } from "@/components/layout/icons"
 import { Button } from "@/components/ui/button"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { cn } from "@/lib/utils"
@@ -15,18 +20,53 @@ import {
 import { RequestConversation } from "../components/request-conversation"
 import { ConversationAvatar } from "../components/conversation-avatar"
 
+const conversationRailStorageKey = "nexus.messages.conversation-rail-collapsed"
+
 export function MessagesPage({ requestId }: { requestId: string | null }) {
   const account = usePortalAccount()
   const [result, setResult] = useState<ConversationList | null>(null)
   const [error, setError] = useState("")
   const [loadingMore, setLoadingMore] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [conversationRailCollapsed, setConversationRailCollapsed] = useState(
+    () => {
+      if (typeof window === "undefined") return false
+      try {
+        return (
+          window.sessionStorage.getItem(conversationRailStorageKey) === "true"
+        )
+      } catch {
+        return false
+      }
+    },
+  )
+  const isClient = account.role === "USER"
+  const canCollapseConversations = isClient || account.role === "STAFF"
+  const railCollapsed = canCollapseConversations && conversationRailCollapsed
+
+  function toggleConversationRail() {
+    setConversationRailCollapsed((collapsed) => {
+      const next = !collapsed
+      try {
+        window.sessionStorage.setItem(conversationRailStorageKey, String(next))
+      } catch {
+        // Keep the control functional when storage is unavailable.
+      }
+      return next
+    })
+  }
 
   const updatePreview = useCallback((id: string, message: RequestMessage) => {
     setResult((previous) => {
       const row = previous?.conversations.find((item) => item.id === id)
-      if (!previous || !row || row.lastMessage?.id === message.id)
-        return previous
+      if (!previous || !row) return previous
+      if (row.lastMessage?.id === message.id)
+        return {
+          ...previous,
+          conversations: previous.conversations.map((item) =>
+            item.id === id ? { ...item, lastMessage: message } : item,
+          ),
+        }
       if (row.lastMessage && message.createdAt < row.lastMessage.createdAt)
         return previous
       return {
@@ -39,27 +79,85 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
     })
   }, [])
 
+  function messagePreview(message: RequestMessage | null) {
+    if (!message) return "Start the conversation"
+    if (message.deletedAt) return "This message was deleted"
+    return message.body || "Start the conversation"
+  }
+
+  const refreshConversations = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const value = await listConversations(undefined, signal)
+      if (signal?.aborted) return
+      setResult((previous) => {
+        if (!previous) return value
+        const refreshedIds = new Set(
+          value.conversations.map((conversation) => conversation.id),
+        )
+        return {
+          ...value,
+          conversations: [
+            ...value.conversations,
+            ...previous.conversations.filter(
+              (conversation) => !refreshedIds.has(conversation.id),
+            ),
+          ],
+          nextCursor: previous.nextCursor ?? value.nextCursor,
+          unreadCount:
+            value.unreadCount ??
+            (value.conversations.length === 0
+              ? 0
+              : (previous.unreadCount ?? 0)),
+        }
+      })
+      setError("")
+    } catch (reason: unknown) {
+      if (signal?.aborted) return
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Couldn't load conversations.",
+      )
+    } finally {
+      if (!signal?.aborted) setLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     const controller = new AbortController()
-    listConversations(undefined, controller.signal)
-      .then((value) => {
-        if (controller.signal.aborted) return
-        setResult(value)
-        setError("")
-        setLoading(false)
-      })
-      .catch((reason: unknown) => {
-        if (controller.signal.aborted) return
-        setError(
-          reason instanceof Error
-            ? reason.message
-            : "Couldn't load conversations.",
-        )
-        setResult(null)
-        setLoading(false)
-      })
-    return () => controller.abort()
-  }, [])
+    const initialRefresh = window.setTimeout(
+      () => void refreshConversations(controller.signal),
+      0,
+    )
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible")
+        void refreshConversations(controller.signal)
+    }, 30_000)
+    return () => {
+      clearTimeout(initialRefresh)
+      controller.abort()
+      clearInterval(timer)
+    }
+  }, [refreshConversations])
+
+  const updateUnreadCounts = useCallback(
+    (id: string, unreadCount: number, conversationUnreadCount: number) => {
+      setResult((previous) =>
+        previous
+          ? {
+              ...previous,
+              unreadCount,
+              conversations: previous.conversations.map((conversation) =>
+                conversation.id === id
+                  ? { ...conversation, unreadCount: conversationUnreadCount }
+                  : conversation,
+              ),
+            }
+          : previous,
+      )
+    },
+    [],
+  )
 
   async function loadMore() {
     if (!result?.nextCursor || loadingMore) return
@@ -77,6 +175,7 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
                 ),
               ],
               nextCursor: next.nextCursor,
+              unreadCount: next.unreadCount ?? previous.unreadCount ?? 0,
             }
           : previous,
       )
@@ -98,7 +197,10 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
       aria-label="Messages"
       className={cn(
         contentClass,
-        "grid h-[calc(100dvh-116px)] min-h-[480px] grid-cols-[260px_minmax(0,1fr)] overflow-hidden rounded-[20px] max-[767px]:h-[calc(100dvh-98px)] max-[767px]:min-h-[420px] max-[767px]:grid-cols-1",
+        "grid h-[calc(100dvh-116px)] min-h-[480px] overflow-hidden rounded-[20px] transition-[grid-template-columns] duration-[240ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none max-[767px]:h-[calc(100dvh-98px)] max-[767px]:min-h-[420px] max-[767px]:grid-cols-1",
+        railCollapsed
+          ? "grid-cols-[76px_minmax(0,1fr)]"
+          : "grid-cols-[260px_minmax(0,1fr)]",
       )}
     >
       <nav
@@ -108,40 +210,140 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
           requestId && "max-[767px]:hidden",
         )}
       >
-        <header className="flex h-[68px] shrink-0 items-center gap-2 px-5">
-          <h1 className="m-0 flex-1 text-sm font-semibold">Messages</h1>
-          {result && (
+        <header
+          className={cn(
+            "flex h-[68px] shrink-0 items-center gap-2 transition-[padding] duration-[240ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
+            railCollapsed ? "justify-end px-4" : "px-5",
+            "max-[767px]:justify-between max-[767px]:px-5",
+          )}
+        >
+          <h1
+            className={cn(
+              "m-0 mr-auto min-w-0 flex-none overflow-hidden text-sm font-semibold whitespace-nowrap transition-[max-width,opacity,transform] duration-[160ms] ease-out motion-reduce:transition-none",
+              railCollapsed
+                ? "max-w-0 translate-x-1 opacity-0 max-[767px]:max-w-24 max-[767px]:translate-x-0 max-[767px]:opacity-100"
+                : "max-w-24 opacity-100",
+            )}
+          >
+            Messages
+          </h1>
+          {Boolean(result?.unreadCount) && (
             <span
-              aria-label={`${result.conversations.length}${result.nextCursor ? "+" : ""} conversations`}
-              className="grid min-w-5 place-items-center rounded-full bg-[#294a9b] px-1.5 py-0.5 text-[10px] font-semibold text-white"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              aria-label={`${result?.unreadCount} unread messages`}
+              className={cn(
+                "grid max-w-10 min-w-5 place-items-center overflow-hidden rounded-full bg-[#294a9b] px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap text-white transition-[max-width,min-width,opacity,transform,padding] duration-[160ms] ease-out motion-reduce:transition-none",
+                railCollapsed &&
+                  "max-w-0 min-w-0 scale-95 px-0 py-0 opacity-0 max-[767px]:max-w-10 max-[767px]:min-w-5 max-[767px]:scale-100 max-[767px]:px-1.5 max-[767px]:py-0.5 max-[767px]:opacity-100",
+              )}
             >
-              {result.conversations.length}
-              {result.nextCursor ? "+" : ""}
+              {result!.unreadCount! > 99 ? "99+" : result!.unreadCount}
             </span>
           )}
+          {canCollapseConversations && (
+            <button
+              type="button"
+              aria-label={
+                railCollapsed
+                  ? "Expand conversations"
+                  : "Collapse conversations"
+              }
+              aria-expanded={!railCollapsed}
+              aria-controls="conversation-list"
+              title={
+                railCollapsed
+                  ? "Expand conversations"
+                  : "Collapse conversations"
+              }
+              className={cn(iconButtonClass, "shrink-0 max-[767px]:hidden")}
+              onClick={toggleConversationRail}
+            >
+              <PanelIcon />
+            </button>
+          )}
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+        <div
+          id="conversation-list"
+          className="min-h-0 flex-1 overflow-y-auto px-2 pb-3"
+        >
           {loading && (
-            <p role="status" className="p-5 text-xs text-[#52627a]">
-              Loading conversations…
+            <p
+              role="status"
+              className={cn(
+                "p-5 text-xs text-[#52627a]",
+                railCollapsed && "px-0 text-center",
+                "max-[767px]:px-5 max-[767px]:text-left",
+              )}
+            >
+              {railCollapsed ? (
+                <>
+                  <LoaderCircle
+                    size={18}
+                    aria-hidden="true"
+                    className="mx-auto animate-spin motion-reduce:animate-none max-[767px]:hidden"
+                  />
+                  <span className="sr-only max-[767px]:not-sr-only">
+                    Loading conversations…
+                  </span>
+                </>
+              ) : (
+                "Loading conversations…"
+              )}
             </p>
           )}
           {error && (
-            <p role="alert" className="px-5 text-xs text-red-700">
-              {error}
+            <p
+              role="alert"
+              title={railCollapsed ? error : undefined}
+              className={cn(
+                "px-5 text-xs text-red-700",
+                railCollapsed && "px-1 text-center",
+                "max-[767px]:px-5 max-[767px]:text-left",
+              )}
+            >
+              {railCollapsed ? (
+                <>
+                  <span aria-hidden="true" className="text-base font-bold">
+                    !
+                  </span>
+                  <span className="sr-only max-[767px]:not-sr-only">
+                    {error}
+                  </span>
+                </>
+              ) : (
+                error
+              )}
             </p>
           )}
           {!loading && !error && !result?.conversations.length && (
-            <div className="px-5 py-10 text-center text-[#52627a]">
+            <div
+              className={cn(
+                "py-10 text-center text-[#52627a]",
+                railCollapsed ? "px-1" : "px-5",
+                "max-[767px]:px-5",
+              )}
+            >
               <MessageSquare
-                size={28}
+                size={railCollapsed ? 22 : 28}
                 aria-hidden="true"
                 className="mx-auto mb-3"
               />
-              <h2 className="text-sm font-semibold text-foreground">
+              <h2
+                className={cn(
+                  "text-sm font-semibold text-foreground",
+                  railCollapsed && "hidden max-[767px]:block",
+                )}
+              >
                 No conversations yet
               </h2>
-              <p className="text-xs leading-6">
+              <p
+                className={cn(
+                  "text-xs leading-6",
+                  railCollapsed && "hidden max-[767px]:block",
+                )}
+              >
                 Conversations appear here when a department head accepts a
                 service request.
               </p>
@@ -149,51 +351,102 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
           )}
           {!loading &&
             result?.conversations.map((row) => {
-              const name =
-                account.role === "USER"
-                  ? row.acceptedDepartment?.name || "Department"
-                  : row.client.fullName || "Client"
+              const name = row.client.fullName || "Client"
+              const isSelected = requestId === row.id
               return (
                 <Link
                   key={row.id}
                   href={`/messages?request=${encodeURIComponent(row.id)}`}
-                  aria-current={requestId === row.id ? "page" : undefined}
+                  aria-current={isSelected ? "page" : undefined}
+                  aria-label={`${name}: ${messagePreview(row.lastMessage)}${row.unreadCount ? `. ${row.unreadCount} unread messages` : ""}`}
+                  title={railCollapsed ? name : undefined}
                   className={cn(
-                    "mb-1 flex items-center gap-3 rounded-2xl px-3 py-3 no-underline transition-colors hover:bg-[#f7f7f5]",
+                    "mb-1 flex h-14 items-center overflow-hidden rounded-2xl px-3 py-2.5 no-underline transition-[gap,background-color,color] duration-[240ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
                     focusRing,
-                    requestId === row.id && "bg-[#f1f1ee]",
+                    railCollapsed
+                      ? "mx-auto size-14 justify-center gap-0 px-2.5 py-2.5 max-[767px]:mx-0 max-[767px]:size-auto max-[767px]:h-auto max-[767px]:justify-start max-[767px]:gap-3 max-[767px]:px-3 max-[767px]:py-3"
+                      : "gap-3",
+                    isSelected
+                      ? "bg-[#203f8c] text-white hover:bg-[#172f70] hover:text-white"
+                      : "hover:bg-[#e9eef5] hover:text-[#203a78]",
                   )}
                 >
-                  <ConversationAvatar
-                    name={name}
-                    className={
-                      requestId === row.id
-                        ? "ring-1 ring-[#294a9b] ring-offset-2 ring-offset-[#f1f1ee]"
-                        : undefined
-                    }
-                  />
-                  <span className="min-w-0 flex-1">
+                  <span className="relative grid size-9 shrink-0 place-items-center">
+                    <ConversationAvatar
+                      name={name}
+                      className={
+                        isSelected
+                          ? "ring-1 ring-white ring-offset-2 ring-offset-[#203f8c]"
+                          : undefined
+                      }
+                    />
+                    {Boolean(row.unreadCount) && railCollapsed && (
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          "absolute -top-1 -right-1 grid min-w-4 place-items-center rounded-full px-1 text-[11px] leading-4",
+                          isSelected
+                            ? "bg-white text-[#203f8c]"
+                            : "bg-[#203f8c] text-white",
+                        )}
+                      >
+                        {row.unreadCount! > 99 ? "99+" : row.unreadCount}
+                      </span>
+                    )}
+                  </span>
+                  <span
+                    className={cn(
+                      "min-w-0 flex-1 overflow-hidden whitespace-nowrap leading-4 transition-[max-width,opacity,transform] duration-[160ms] ease-out motion-reduce:transition-none",
+                      railCollapsed
+                        ? "pointer-events-none max-w-0 translate-x-1 opacity-0 max-[767px]:pointer-events-auto max-[767px]:max-w-none max-[767px]:translate-x-0 max-[767px]:opacity-100"
+                        : "max-w-[184px] opacity-100",
+                    )}
+                  >
                     <span className="flex items-center justify-between gap-2">
-                      <span className="truncate text-xs font-semibold text-[#182235]">
+                      <span
+                        className={cn(
+                          "truncate text-xs leading-4 font-semibold",
+                          isSelected ? "text-white" : "text-[#182235]",
+                        )}
+                      >
                         {name}
                       </span>
-                      <time
-                        dateTime={row.lastMessage?.createdAt || row.updatedAt}
-                        className="shrink-0 text-[10px] text-[#8791a2]"
-                      >
-                        {new Date(
-                          row.lastMessage?.createdAt || row.updatedAt,
-                        ).toLocaleDateString("en-PH", {
-                          month: "short",
-                          day: "numeric",
-                        })}
-                      </time>
+                      <span className="flex shrink-0 items-center gap-1.5">
+                        <time
+                          dateTime={row.lastMessage?.createdAt || row.updatedAt}
+                          className={cn(
+                            "text-[11px] leading-4",
+                            isSelected ? "text-white/70" : "text-[#8791a2]",
+                          )}
+                        >
+                          {new Date(
+                            row.lastMessage?.createdAt || row.updatedAt,
+                          ).toLocaleDateString("en-PH", {
+                            month: "short",
+                            day: "numeric",
+                          })}
+                        </time>
+                        {Boolean(row.unreadCount) && !railCollapsed && (
+                          <span
+                            className={cn(
+                              "grid min-w-4 place-items-center rounded-full px-1 text-[11px] leading-4",
+                              isSelected
+                                ? "bg-white text-[#203f8c]"
+                                : "bg-[#203f8c] text-white",
+                            )}
+                          >
+                            {row.unreadCount! > 99 ? "99+" : row.unreadCount}
+                          </span>
+                        )}
+                      </span>
                     </span>
-                    <span className="mt-1 block truncate text-[11px] text-[#52627a]">
-                      {row.title}
-                    </span>
-                    <span className="mt-1 block truncate text-[11px] text-[#8791a2]">
-                      {row.lastMessage?.body || "Start the conversation"}
+                    <span
+                      className={cn(
+                        "block truncate text-xs leading-4",
+                        isSelected ? "text-white/70" : "text-[#8791a2]",
+                      )}
+                    >
+                      {messagePreview(row.lastMessage)}
                     </span>
                   </span>
                 </Link>
@@ -202,11 +455,38 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
           {!loading && result?.nextCursor && (
             <Button
               variant="outline"
-              className="m-4 text-xs"
+              aria-label={
+                railCollapsed
+                  ? loadingMore
+                    ? "Loading more conversations"
+                    : "Load more conversations"
+                  : undefined
+              }
+              className={cn(
+                "m-4 text-xs",
+                railCollapsed && "mx-auto flex size-11 items-center p-0",
+              )}
               disabled={loadingMore}
               onClick={() => void loadMore()}
             >
-              {loadingMore ? "Loading…" : "Load more conversations"}
+              {railCollapsed ? (
+                loadingMore ? (
+                  <LoaderCircle
+                    size={16}
+                    aria-hidden="true"
+                    className="animate-spin motion-reduce:animate-none"
+                  />
+                ) : (
+                  <>
+                    <ChevronDown size={16} aria-hidden="true" />
+                    <span className="sr-only">Load more conversations</span>
+                  </>
+                )
+              ) : loadingMore ? (
+                "Loading…"
+              ) : (
+                "Load more conversations"
+              )}
             </Button>
           )}
         </div>
@@ -223,6 +503,7 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
             clientName={selected?.client.fullName || undefined}
             requestTitle={selected?.title}
             onLatestMessage={updatePreview}
+            onConversationRead={updateUnreadCounts}
           />
         ) : (
           <div className="grid flex-1 place-content-center px-6 text-center text-[#52627a]">

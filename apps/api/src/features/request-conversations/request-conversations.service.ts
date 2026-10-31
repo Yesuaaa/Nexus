@@ -23,10 +23,19 @@ const conversationSelect = {
   status: true,
   acceptedAt: true,
   acceptedDepartmentId: true,
+  client: {
+    select: {
+      id: true,
+      fullName: true,
+      email: true,
+      contactNumber: true,
+    },
+  },
   acceptedDepartment: {
     select: {
       id: true,
       name: true,
+      headId: true,
       head: {
         select: {
           id: true,
@@ -45,8 +54,92 @@ const messageSelect = {
   body: true,
   clientMessageId: true,
   createdAt: true,
+  editedAt: true,
+  deletedAt: true,
+  purgeAt: true,
   sender: { select: { id: true, fullName: true } },
 } as const satisfies Prisma.ServiceRequestMessageSelect
+
+const MESSAGE_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
+
+async function lockWritableConversation(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  requestId: string,
+) {
+  const writable = await tx.serviceRequest.updateMany({
+    where: {
+      id: requestId,
+      ...participantScope(userId),
+      acceptedAt: { not: null },
+      status: { notIn: ["CLOSED", "CANCELLED"] },
+      acceptedDepartment: { head: { ...activeUser, role: "STAFF" } },
+    },
+    data: { updatedAt: new Date() },
+  })
+  if (writable.count) return
+  const visible = await tx.serviceRequest.count({
+    where: { id: requestId, ...participantScope(userId) },
+  })
+  throw new ServiceRequestsError(
+    visible ? 409 : 404,
+    visible
+      ? "Messaging is unavailable until this request is accepted by an active department head, or after it is closed."
+      : "Conversation not found",
+  )
+}
+
+type UnreadConversationRow = {
+  requestId: string
+  unreadCount: number
+}
+
+async function getUnreadConversationCounts(
+  userId: string,
+  role: "USER" | "STAFF",
+) {
+  const rows =
+    role === "USER"
+      ? await getPrisma()!.$queryRaw<UnreadConversationRow[]>`
+          SELECT service_request."id" AS "requestId",
+            COUNT(message."id")::integer AS "unreadCount"
+          FROM "ServiceRequest" AS service_request
+          INNER JOIN "ServiceRequestMessage" AS message
+            ON message."requestId" = service_request."id"
+            AND message."senderId" <> ${userId}
+            AND (
+              service_request."clientReadAt" IS NULL
+              OR message."createdAt" > service_request."clientReadAt"
+            )
+          WHERE service_request."clientId" = ${userId}
+            AND service_request."acceptedAt" IS NOT NULL
+            AND service_request."acceptedDepartmentId" IS NOT NULL
+          GROUP BY service_request."id"
+        `
+      : await getPrisma()!.$queryRaw<UnreadConversationRow[]>`
+          SELECT service_request."id" AS "requestId",
+            COUNT(message."id")::integer AS "unreadCount"
+          FROM "ServiceRequest" AS service_request
+          INNER JOIN "Department" AS department
+            ON department."id" = service_request."acceptedDepartmentId"
+            AND department."headId" = ${userId}
+          INNER JOIN "ServiceRequestMessage" AS message
+            ON message."requestId" = service_request."id"
+            AND message."senderId" <> ${userId}
+            AND (
+              service_request."staffReadAt" IS NULL
+              OR message."createdAt" > service_request."staffReadAt"
+            )
+          WHERE service_request."acceptedAt" IS NOT NULL
+            AND service_request."acceptedDepartmentId" IS NOT NULL
+          GROUP BY service_request."id"
+        `
+  return new Map(rows.map((row) => [row.requestId, row.unreadCount]))
+}
+
+function totalUnreadMessages(unreadCounts: Map<string, number>) {
+  return [...unreadCounts.values()].reduce((total, count) => total + count, 0)
+}
 
 export async function listConversations(userId: string, before?: string) {
   const db = getPrisma()!
@@ -86,7 +179,9 @@ export async function listConversations(userId: string, before?: string) {
       updatedAt: true,
       service: { select: { name: true } },
       client: { select: { id: true, fullName: true } },
-      acceptedDepartment: { select: { id: true, name: true } },
+      acceptedDepartment: {
+        select: { id: true, name: true, headId: true },
+      },
       messages: {
         select: messageSelect,
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -96,13 +191,63 @@ export async function listConversations(userId: string, before?: string) {
     orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
     take: 31,
   })
-  const conversations = rows.slice(0, 30).map(({ messages, ...row }) => ({
-    ...row,
-    lastMessage: messages[0] ?? null,
-  }))
+  const participantRole = rows.some((row) => row.client.id === userId)
+    ? "USER"
+    : rows.some((row) => row.acceptedDepartment?.headId === userId)
+      ? "STAFF"
+      : null
+  const unreadCounts = participantRole
+    ? await getUnreadConversationCounts(userId, participantRole)
+    : new Map<string, number>()
+  const conversations = rows.slice(0, 30).map(({ messages, ...row }) => {
+    const unreadCount = unreadCounts.get(row.id) ?? 0
+    return {
+      ...row,
+      lastMessage: messages[0] ?? null,
+      ...(participantRole ? { unreadCount } : {}),
+    }
+  })
+  const unreadCount = totalUnreadMessages(unreadCounts)
   return {
     conversations,
     nextCursor: rows.length > 30 ? conversations.at(-1)!.id : null,
+    ...(participantRole ? { unreadCount } : {}),
+  }
+}
+
+export async function markConversationRead(
+  userId: string,
+  requestId: string,
+  role: "USER" | "STAFF",
+) {
+  const now = new Date()
+  const updated = await getPrisma()!.serviceRequest.updateMany({
+    where:
+      role === "USER"
+        ? {
+            id: requestId,
+            clientId: userId,
+            client: { ...activeUser, role: "USER" },
+            acceptedAt: { not: null },
+            acceptedDepartmentId: { not: null },
+          }
+        : {
+            id: requestId,
+            acceptedAt: { not: null },
+            acceptedDepartment: {
+              headId: userId,
+              head: { ...activeUser, role: "STAFF" },
+            },
+          },
+    data: role === "USER" ? { clientReadAt: now } : { staffReadAt: now },
+  })
+  if (!updated.count)
+    throw new ServiceRequestsError(404, "Conversation not found")
+  const unreadCounts = await getUnreadConversationCounts(userId, role)
+  return {
+    ok: true,
+    unreadCount: totalUnreadMessages(unreadCounts),
+    conversationUnreadCount: unreadCounts.get(requestId) ?? 0,
   }
 }
 
@@ -122,6 +267,16 @@ export async function getConversationAccess(userId: string, requestId: string) {
         ? {
             department: { id: department.id, name: department.name },
             head: activeHead ? { id: head.id, fullName: head.fullName } : null,
+            ...(userId === record.client.id
+              ? {}
+              : {
+                  client: {
+                    id: record.client.id,
+                    fullName: record.client.fullName,
+                    email: record.client.email,
+                    contactNumber: record.client.contactNumber,
+                  },
+                }),
           }
         : null,
     canSend: Boolean(
@@ -190,27 +345,7 @@ export async function sendConversationMessage(
   return getPrisma()!.$transaction(async (tx) => {
     // This conditional write rechecks the participants and locks the request.
     // Retries with the same client ID serialize and return the original message.
-    const writable = await tx.serviceRequest.updateMany({
-      where: {
-        id: requestId,
-        ...participantScope(userId),
-        acceptedAt: { not: null },
-        status: { notIn: ["CLOSED", "CANCELLED"] },
-        acceptedDepartment: { head: { ...activeUser, role: "STAFF" } },
-      },
-      data: { updatedAt: new Date() },
-    })
-    if (!writable.count) {
-      const visible = await tx.serviceRequest.count({
-        where: { id: requestId, ...participantScope(userId) },
-      })
-      throw new ServiceRequestsError(
-        visible ? 409 : 404,
-        visible
-          ? "Messaging is unavailable until this request is accepted by an active department head, or after it is closed."
-          : "Conversation not found",
-      )
-    }
+    await lockWritableConversation(tx, userId, requestId)
     const existing = await tx.serviceRequestMessage.findUnique({
       where: {
         requestId_senderId_clientMessageId: {
@@ -234,4 +369,64 @@ export async function sendConversationMessage(
       select: messageSelect,
     })
   })
+}
+
+export async function editConversationMessage(
+  userId: string,
+  requestId: string,
+  messageId: string,
+  body: string,
+) {
+  return getPrisma()!.$transaction(async (tx) => {
+    await lockWritableConversation(tx, userId, requestId)
+    const existing = await tx.serviceRequestMessage.findFirst({
+      where: { id: messageId, requestId, senderId: userId },
+      select: { id: true, deletedAt: true },
+    })
+    if (!existing) throw new ServiceRequestsError(404, "Message not found")
+    if (existing.deletedAt)
+      throw new ServiceRequestsError(
+        409,
+        "This message was deleted and can no longer be edited.",
+      )
+    return tx.serviceRequestMessage.update({
+      where: { id: messageId },
+      data: { body, editedAt: new Date() },
+      select: messageSelect,
+    })
+  })
+}
+
+export async function deleteConversationMessage(
+  userId: string,
+  requestId: string,
+  messageId: string,
+) {
+  return getPrisma()!.$transaction(async (tx) => {
+    await lockWritableConversation(tx, userId, requestId)
+    const existing = await tx.serviceRequestMessage.findFirst({
+      where: { id: messageId, requestId, senderId: userId },
+      select: { id: true, deletedAt: true },
+    })
+    if (!existing) throw new ServiceRequestsError(404, "Message not found")
+    if (existing.deletedAt)
+      throw new ServiceRequestsError(409, "This message was already deleted.")
+    const deletedAt = new Date()
+    return tx.serviceRequestMessage.update({
+      where: { id: messageId },
+      data: {
+        body: null,
+        deletedAt,
+        purgeAt: new Date(deletedAt.getTime() + MESSAGE_RETENTION_MS),
+      },
+      select: messageSelect,
+    })
+  })
+}
+
+export async function purgeExpiredConversationMessages(now = new Date()) {
+  const result = await getPrisma()!.serviceRequestMessage.deleteMany({
+    where: { deletedAt: { not: null }, purgeAt: { lte: now } },
+  })
+  return result.count
 }

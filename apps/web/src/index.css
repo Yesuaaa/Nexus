@@ -43,6 +43,40 @@ body {
   color: var(--foreground);
 }
 
+/* Non-auto standard values override WebKit scrollbar parts, including buttons. */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-color: #3f6fd9 #e8eef8;
+    scrollbar-width: thin;
+  }
+}
+
+*::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+*::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+*::-webkit-scrollbar-track {
+  border-radius: 9999px;
+  background: #e8eef8;
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 2px solid #e8eef8;
+  border-radius: 9999px;
+  background: #3f6fd9;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #203f8c;
+}
+
 [data-sileo-viewport] {
   font-family: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   --sileo-state-success: #86efac;

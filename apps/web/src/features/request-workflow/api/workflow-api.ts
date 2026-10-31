@@ -72,3 +72,13 @@ export async function downloadWorkflowFile(
   anchor.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
+
+export async function createWorkflowFilePreviewUrl(
+  requestId: string,
+  fileId: string,
+) {
+  const response = await apiStreamRequest(
+    `${path(requestId)}/files/${encodeURIComponent(fileId)}`,
+  )
+  return URL.createObjectURL(await response.blob())
+}
