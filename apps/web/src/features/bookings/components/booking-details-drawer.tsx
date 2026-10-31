@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils"
 import { getBooking, type BookingDetails } from "../api/bookings-api"
 import { bookingDate } from "../model/booking-status"
 import { BookingStatusPill } from "./booking-status-pill"
+import { RequestMessagesLink } from "@/features/request-conversations/components/request-messages-link"
 
 export function BookingDetailsDrawer({
   id,
@@ -27,6 +28,7 @@ export function BookingDetailsDrawer({
   refreshKey = 0,
   fallbackFocusId = "booked-services-heading",
   closeDisabled = false,
+  showMessagesLink = true,
 }: {
   id: string
   onClose: () => void
@@ -37,6 +39,7 @@ export function BookingDetailsDrawer({
   refreshKey?: number
   fallbackFocusId?: string
   closeDisabled?: boolean
+  showMessagesLink?: boolean | ((details: BookingDetails) => boolean)
 }) {
   const { open, handleOpenChange } = useAnimatedPanelClose(onClose)
   const openerRef = useRef(
@@ -195,6 +198,11 @@ export function BookingDetailsDrawer({
                   department approval. An expected timeline is your requested
                   schedule.
                 </p>
+                {(typeof showMessagesLink === "function"
+                  ? showMessagesLink(details)
+                  : showMessagesLink) && (
+                  <RequestMessagesLink requestId={details.id} />
+                )}
               </>
             )
           )}

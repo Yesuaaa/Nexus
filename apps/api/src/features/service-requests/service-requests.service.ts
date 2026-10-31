@@ -1,4 +1,5 @@
 import type { Prisma } from "../../generated/prisma/client.js"
+import { randomUUID } from "node:crypto"
 import { getPrisma } from "../../lib/db.js"
 import { isUniqueConflict } from "../../lib/errors.js"
 import {
@@ -17,7 +18,12 @@ export class ServiceRequestsError extends Error {
   }
 }
 
-const receiptSelect = { id: true, status: true, createdAt: true } as const
+const receiptSelect = {
+  id: true,
+  referenceNumber: true,
+  status: true,
+  createdAt: true,
+} as const
 
 const bookingSelect = {
   id: true,
@@ -127,6 +133,7 @@ async function findExisting(clientId: string, input: ServiceRequestInput) {
   }
   return {
     id: existing.id,
+    referenceNumber: existing.referenceNumber,
     status: existing.status,
     createdAt: existing.createdAt,
   }
@@ -187,9 +194,11 @@ export async function submitServiceRequest(clientId: string, body: unknown) {
         return tx.serviceRequest.create({
           data: {
             clientId,
+            referenceNumber: `SR-${randomUUID().toUpperCase()}`,
             serviceId: service.id,
             title: `${service.name} request`,
             description: input.requirements,
+            status: "SUBMITTED",
             packageId: selectedPackage?.id ?? null,
             packageName: selectedPackage?.name ?? "Standard service",
             projectGoals: input.goals,

@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react"
 import { cn } from "@/lib/utils"
 import type { Account } from "@/features/auth/model/types"
+import { canAccessMessages } from "@/features/auth/model/permissions"
 import { Sidebar } from "./sidebar"
 import { Topbar } from "./topbar"
 
@@ -72,6 +73,8 @@ export function AppLayout({
         <Topbar
           drawerOpen={drawerOpen}
           onOpenMenu={() => setDrawerOpen(true)}
+          onSignOut={onSignOut}
+          showMessages={canAccessMessages(account)}
         />
         {children}
       </div>

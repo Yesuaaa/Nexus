@@ -61,6 +61,47 @@ function keyBenefitData(
 }
 
 export const servicesRepository = {
+  async findSpecialistProfile(serviceId: string, specialistId: string) {
+    return getPrisma()!.employee.findFirst({
+      where: {
+        id: specialistId,
+        status: "ACTIVE",
+        department: { services: { some: { id: serviceId, isActive: true } } },
+        user: { role: "STAFF", isActive: true, accountDeletedAt: null },
+      },
+      select: {
+        id: true,
+        fullName: true,
+        position: true,
+        department: { select: { id: true, name: true } },
+        profileBio: true,
+        profileImageUrl: true,
+        profileSpecialties: true,
+        portfolioProjects: {
+          where: { isPublished: true },
+          orderBy: [
+            { displayOrder: "asc" },
+            { createdAt: "desc" },
+            { id: "asc" },
+          ],
+          take: 12,
+          select: {
+            id: true,
+            title: true,
+            summary: true,
+            contribution: true,
+            thumbnailUrl: true,
+            projectUrl: true,
+          },
+        },
+        socialLinks: {
+          orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
+          take: 8,
+          select: { platform: true, url: true },
+        },
+      },
+    })
+  },
   async findSpecialists(serviceId: string) {
     return getPrisma()!.employee.findMany({
       where: {
@@ -82,6 +123,13 @@ export const servicesRepository = {
     return getPrisma()!.service.findMany({
       where: { isActive: true },
       orderBy: { name: "asc" },
+      include: availableServiceInclude,
+    })
+  },
+
+  async findAvailableById(id: string) {
+    return getPrisma()!.service.findFirst({
+      where: { id, isActive: true },
       include: availableServiceInclude,
     })
   },

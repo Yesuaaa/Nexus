@@ -1,61 +1,18 @@
 import { expect, test, type Page } from "@playwright/test"
 import type { Account } from "../src/features/auth/model/types"
-import { Permissions } from "../src/features/auth/model/permissions"
-import type { Department } from "../src/features/departments/api/departments-api"
-import type { Employee } from "../src/features/employees/api/employees-api"
-import type {
-  PricingTemplate,
-  Service,
-  ServiceInput,
-} from "../src/features/services/api/services-api"
+import type { ServiceInput } from "../src/features/services/api/services-api"
+import {
+  configureRegressionTest,
+  expiredAccess,
+  live,
+  mockApi,
+  renewedTokens,
+  restoreSession,
+  storedTokens,
+  testAccounts,
+} from "./regression-support"
 
-const pageErrors = new WeakMap<Page, string[]>()
-const live = process.env.NEXUS_E2E_LIVE === "1"
-
-const testAccounts = {
-  SUPERADMIN: {
-    email: "testsuperadmin@nexus.com",
-    passwordKey: "NEXUS_E2E_SUPERADMIN_PASSWORD",
-  },
-  ADMIN: {
-    email: "testadmin@nexus.com",
-    passwordKey: "NEXUS_E2E_ADMIN_PASSWORD",
-  },
-  STAFF: {
-    email: "teststaff@nexus.com",
-    passwordKey: "NEXUS_E2E_STAFF_PASSWORD",
-  },
-  USER: {
-    email: "testuser@nexus.com",
-    passwordKey: "NEXUS_E2E_USER_PASSWORD",
-  },
-  DEACTIVATED: {
-    email: "deactivated@nexus.com",
-    passwordKey: "NEXUS_E2E_DEACTIVATED_PASSWORD",
-  },
-} as const
-
-test.use({ reducedMotion: "reduce" })
-// Keep real credentials and bearer tokens out of browser artifacts.
-if (live) test.use({ trace: "off", screenshot: "off", video: "off" })
-
-test.beforeEach(({ page }) => {
-  const errors: string[] = []
-  pageErrors.set(page, errors)
-  page.on("pageerror", (error) => errors.push(error.message))
-  page.on("console", (message) => {
-    if (
-      message.type() === "error" &&
-      /hydration|hydrated/i.test(message.text())
-    ) {
-      errors.push(message.text())
-    }
-  })
-})
-
-test.afterEach(({ page }) => {
-  expect(pageErrors.get(page)).toEqual([])
-})
+configureRegressionTest()
 
 test.describe("live test accounts", () => {
   test.skip(!live, "Set NEXUS_E2E_LIVE=1 to validate the real backend")
@@ -121,12 +78,25 @@ test.describe("live test accounts", () => {
       const payload = (await response.json()) as {
         user?: Account
         token?: string
+        refreshToken?: string
+        expiresIn?: number
       }
       try {
         expect(response.status(), `${role} login must succeed`).toBe(200)
         expect(payload.user?.email).toBe(testAccounts[role].email)
         expect(payload.user?.role).toBe(role)
         expect(payload.user?.isActive).toBe(true)
+        expect(
+          typeof payload.token === "string" &&
+            payload.token.split(".").length === 3,
+        ).toBe(true)
+        expect(
+          typeof payload.refreshToken === "string" &&
+            /^[A-Za-z0-9_-]{43}$/.test(payload.refreshToken),
+        ).toBe(true)
+        expect(payload.expiresIn).toBeGreaterThan(0)
+        expect(payload.expiresIn).toBeLessThanOrEqual(900)
+        expect(response.headers()["cache-control"]).toBe("no-store")
         await expect(page).toHaveURL(/\/dashboard$/)
         expect(
           await page.evaluate(() =>
@@ -136,10 +106,20 @@ test.describe("live test accounts", () => {
         expect(
           await page.evaluate(() => localStorage.getItem("nexus.auth.token")),
         ).toBeNull()
+        expect(
+          await page.evaluate(() =>
+            Boolean(sessionStorage.getItem("nexus.auth.refreshToken")),
+          ),
+        ).toBe(true)
+        expect(
+          await page.evaluate(() =>
+            localStorage.getItem("nexus.auth.refreshToken"),
+          ),
+        ).toBeNull()
         for (const feature of features) {
           const clientCatalog = role === "USER" && feature.path === "/services"
           const pageEndpoint = clientCatalog
-            ? "/api/services/available"
+            ? "/api/client/services"
             : feature.endpoint
           if (feature.roles.includes(role) || clientCatalog) {
             const loaded = page.waitForResponse(
@@ -215,12 +195,18 @@ test.describe("live test accounts", () => {
       } finally {
         // Revoke the real session even if an assertion fails halfway through.
         if (payload.token) {
-          const logout = await page.request.post("/api/auth/logout", {
-            headers: { Authorization: `Bearer ${payload.token}` },
-          })
-          await page.evaluate(() =>
-            sessionStorage.removeItem("nexus.auth.token"),
+          const logoutToken = await page.evaluate(() =>
+            sessionStorage.getItem("nexus.auth.token"),
           )
+          const logout = await page.request.post("/api/auth/logout", {
+            headers: {
+              Authorization: `Bearer ${logoutToken ?? payload.token}`,
+            },
+          })
+          await page.evaluate(() => {
+            sessionStorage.removeItem("nexus.auth.token")
+            sessionStorage.removeItem("nexus.auth.refreshToken")
+          })
           expect([204, 401]).toContain(logout.status())
         }
       }
@@ -238,10 +224,14 @@ test.describe("live test accounts", () => {
         headers: { Authorization: `Bearer ${payload.token}` },
       })
       expect([204, 401]).toContain(logout.status())
-      await page.evaluate(() => sessionStorage.removeItem("nexus.auth.token"))
+      await page.evaluate(() => {
+        sessionStorage.removeItem("nexus.auth.token")
+        sessionStorage.removeItem("nexus.auth.refreshToken")
+      })
     }
     expect(response.status()).toBe(401)
     expect(payload).not.toHaveProperty("token")
+    expect(payload).not.toHaveProperty("refreshToken")
     await expect(page).toHaveURL(/\/login$/)
     await expect(
       page.getByText("Sign-in failed", { exact: true }),
@@ -254,935 +244,274 @@ test.describe("live test accounts", () => {
   })
 })
 
-test.describe("mocked regression", () => {
+test.describe("Authentication and session regression", () => {
   test.skip(live, "Live mode uses the supplied accounts against the real API")
 
-  function accountFor(
-    role: Account["role"],
-    overrides?: Partial<Account>,
-  ): Account {
-    const permissions: Account["permissions"] = [
-      Permissions.DASHBOARD_READ,
-      Permissions.PROFILE_READ,
-      Permissions.PROFILE_CHANGE_PASSWORD,
-    ]
-    if (role !== "USER") permissions.push(Permissions.DEPARTMENTS_READ)
-    if (role === "ADMIN" || role === "SUPERADMIN") {
-      permissions.push(
-        Permissions.DEPARTMENTS_MANAGE,
-        Permissions.DEPARTMENTS_DELETE,
-      )
-    }
-    if (role === "ADMIN") {
-      permissions.push(
-        Permissions.CLIENTS_READ,
-        Permissions.EMPLOYEES_READ,
-        Permissions.EMPLOYEES_MANAGE,
-        Permissions.SERVICES_READ,
-        Permissions.SERVICES_MANAGE,
-      )
-    }
-    if (role === "SUPERADMIN") {
-      permissions.push(
-        Permissions.ACCOUNTS_READ,
-        Permissions.ACCOUNTS_RESET_PASSWORD,
-        Permissions.ACCOUNTS_CREATE_BASIC,
-        Permissions.ACCOUNTS_CREATE_PRIVILEGED,
-        Permissions.ACCOUNTS_ASSIGN_BASIC,
-        Permissions.ACCOUNTS_ASSIGN_PRIVILEGED,
-        Permissions.ACCOUNTS_STATUS_BASIC,
-        Permissions.ACCOUNTS_STATUS_PRIVILEGED,
-      )
-    }
-    return {
-      id: "actor",
-      email: testAccounts[role].email,
-      fullName: "Test Person",
-      contactNumber: null,
-      role,
-      isActive: true,
-      permissions,
-      createdAt: "2026-01-01T00:00:00.000Z",
-      ...overrides,
-    }
-  }
-
-  type MockApiOptions = {
-    pricingTemplates?: PricingTemplate[]
-    account?: Partial<Account>
-    initialServices?: Service[]
-    initialUsers?: Account[]
-    initialDepartments?: Department[]
-    initialEmployees?: Employee[]
-  }
-
-  async function mockApi(
-    page: Page,
-    role: Account["role"],
-    options?: MockApiOptions,
-  ) {
-    const currentUser = accountFor(role, options?.account)
-    const pricingTemplates = [...(options?.pricingTemplates ?? [])]
-    function pricingFields(body: ServiceInput) {
-      const timestamp = "2026-01-02T00:00:00.000Z"
-      const template = body.pricingTemplate
-        ? {
-            ...body.pricingTemplate,
-            id: `pricing-${pricingTemplates.length + 1}`,
-            amount: body.pricingTemplate.amount?.toFixed(2) ?? null,
-            createdAt: timestamp,
-            updatedAt: timestamp,
-          }
-        : (pricingTemplates.find(
-            (item) => item.id === body.pricingTemplateId,
-          ) ?? null)
-      if (body.pricingTemplate && template) pricingTemplates.push(template)
-      return {
-        pricingTemplateId: template?.id ?? null,
-        pricingTemplate: template,
-        packages: body.packages.map((item, index) => ({
-          ...item,
-          id: item.id ?? `package-${index + 1}`,
-          amount: item.amount?.toFixed(2) ?? null,
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        })),
-      }
-    }
-    const services: Service[] = options?.initialServices ?? [
-      {
-        id: "service-1",
-        name: "Test Service",
-        description: "A service used by the regression suite.",
-        iconKey: "sparkles",
-        imageUrl: null,
-        imageAltText: null,
-        clientRequirements: [],
-        requiresConsultation: false,
-        consultationNotes: null,
-        keyBenefits: [],
-        isActive: true,
-        pricingTemplateId: null,
-        pricingTemplate: null,
-        packages: [],
-        departments: [
-          { id: "dept-1", name: "Engineering", code: "ENG", color: "teal" },
-        ],
-        createdAt: "2026-01-01T00:00:00.000Z",
-        updatedAt: "2026-01-01T00:00:00.000Z",
-      },
-    ]
-    const defaultManagedUser: Account = {
-      id: "user-target",
-      email: "target@example.com",
-      fullName: "Target User",
-      contactNumber: "09123456789",
-      role: "USER",
-      isActive: true,
-      permissions: [
-        Permissions.DASHBOARD_READ,
-        Permissions.PROFILE_READ,
-        Permissions.PROFILE_CHANGE_PASSWORD,
-      ],
-      departmentId: "dept-1",
-      department: {
-        id: "dept-1",
-        name: "Engineering",
-        code: "ENG",
-        color: "teal",
-      },
-      teamId: null,
-      team: null,
-      createdAt: "2026-01-02T00:00:00.000Z",
-    }
-
-    const users: Account[] = options?.initialUsers ?? [
-      currentUser,
-      defaultManagedUser,
-    ]
-
-    const departments: Department[] = options?.initialDepartments ?? [
-      {
-        id: "dept-1",
-        name: "Engineering",
-        color: "teal",
-        code: "ENG",
-        description: "Engineering department",
-        headId: null,
-        head: null,
-        memberCount: 3,
-        teamCount: 1,
-        createdAt: "2026-01-01T00:00:00.000Z",
-        updatedAt: "2026-01-01T00:00:00.000Z",
-      },
-    ]
-
-    const employees: Employee[] = options?.initialEmployees ?? [
-      {
-        id: "employee-1",
-        employeeId: "EMP-001",
-        fullName: "Alex Employee",
-        email: "alex.employee@example.com",
-        contactNumber: "09123456789",
-        position: "Support Specialist",
-        employmentType: "FULL_TIME",
-        status: "ACTIVE",
-        startDate: "2026-01-15",
-        departmentId: "dept-1",
-        teamId: null,
-        department: {
-          id: "dept-1",
-          name: "Engineering",
-          code: "ENG",
-          color: "teal",
-        },
-        team: null,
-        hasAccount: true,
-        accountIsActive: true,
-        createdAt: "2026-01-15T00:00:00.000Z",
-        updatedAt: "2026-01-15T00:00:00.000Z",
-      },
-    ]
-
-    await page.route("**/api/**", async (route) => {
-      const request = route.request()
-      const method = request.method()
-      const url = new URL(request.url())
-      const pathname = url.pathname
-      expect(url.origin).toBe(new URL(page.url()).origin)
-
-      if (pathname === "/api/auth/login" && method === "POST") {
-        const data = request.postDataJSON() as {
-          email?: string
-          password?: string
-        }
-        if (
-          data.email === "invalid@example.com" ||
-          data.password === "WrongPassword123!"
-        ) {
-          await route.fulfill({
-            status: 401,
-            json: {
-              error: "Email or password is incorrect. Please try again.",
-            },
-          })
-          return
-        }
-        await route.fulfill({
-          json: { token: "test-session", user: currentUser, expiresIn: 60 },
-        })
-        return
-      }
-
-      if (pathname === "/api/auth/register" && method === "POST") {
-        const data = request.postDataJSON() as { email?: string }
-        if (data.email === "duplicate@example.com") {
-          await route.fulfill({
-            status: 409,
-            json: {
-              error: "This email is already registered. Sign in instead.",
-            },
-          })
-          return
-        }
-        await route.fulfill({
-          json: { token: "test-session", user: currentUser, expiresIn: 60 },
-        })
-        return
-      }
-
-      expect(request.headers().authorization).toBe("Bearer test-session")
-
-      if (pathname === "/api/auth/logout") {
-        await route.fulfill({ status: 204 })
-        return
-      }
-
-      if (pathname === "/api/auth/me") {
-        await route.fulfill({ json: { user: currentUser } })
-        return
-      }
-
-      if (pathname === "/api/clients" && method === "GET") {
-        const search = url.searchParams.get("search")?.toLowerCase() ?? ""
-        const clients = users.filter(
-          (user) =>
-            user.role === "USER" &&
-            `${user.fullName} ${user.email}`.toLowerCase().includes(search),
-        )
-        await route.fulfill({
-          json: { clients, total: clients.length, page: 1, pageSize: 10 },
-        })
-        return
-      }
-      const clientMatch = pathname.match(
-        /^\/api\/clients\/([^/]+)(?:\/(projects|service-requests))?$/,
-      )
-      if (clientMatch && method === "GET") {
-        const client = users.find(
-          (user) => user.id === clientMatch[1] && user.role === "USER",
-        )
-        if (!client)
-          await route.fulfill({
-            status: 404,
-            json: { error: "Client not found" },
-          })
-        else if (clientMatch[2])
-          await route.fulfill({
-            json: {
-              [clientMatch[2] === "projects" ? "projects" : "serviceRequests"]:
-                [],
-              total: 0,
-              page: 1,
-              pageSize: 10,
-            },
-          })
-        else
-          await route.fulfill({
-            json: { client, serviceRequestCount: 0, projectCount: 0 },
-          })
-        return
-      }
-
-      // --- Users / Accounts endpoints ---
-      if (pathname === "/api/users" && method === "GET") {
-        const search = url.searchParams.get("search")?.toLowerCase() ?? ""
-        const roleFilter = url.searchParams.get("role") ?? ""
-        const deleted = url.searchParams.get("deleted") === "true"
-        const filtered = users.filter((u) => {
-          const matchesSearch =
-            !search ||
-            u.email.toLowerCase().includes(search) ||
-            (u.fullName?.toLowerCase().includes(search) ?? false)
-          const matchesRole = !roleFilter || u.role === roleFilter
-          const matchesDeletionState = Boolean(u.accountDeletedAt) === deleted
-          return matchesSearch && matchesRole && matchesDeletionState
-        })
-        await route.fulfill({
-          json: {
-            users: filtered,
-            total: filtered.length,
-            page: 1,
-            pageSize: 20,
-          },
-        })
-        return
-      }
-
-      if (pathname === "/api/employees" && method === "GET") {
-        const search = url.searchParams.get("search")?.toLowerCase() ?? ""
-        const filtered = employees.filter(
-          (employee) =>
-            !search ||
-            employee.fullName.toLowerCase().includes(search) ||
-            employee.employeeId.toLowerCase().includes(search) ||
-            (employee.email?.toLowerCase().includes(search) ?? false),
-        )
-        await route.fulfill({
-          json: {
-            employees: filtered,
-            total: filtered.length,
-            page: 1,
-            pageSize: 20,
-          },
-        })
-        return
-      }
-
-      const employeeMatch = pathname.match(/^\/api\/employees\/([^/]+)$/)
-      if (employeeMatch && method === "GET") {
-        const employee = employees.find((item) => item.id === employeeMatch[1])
-        await route.fulfill(
-          employee
-            ? { json: { employee } }
-            : { status: 404, json: { error: "Employee not found" } },
-        )
-        return
-      }
-
-      if (pathname === "/api/users" && method === "POST") {
-        const data = request.postDataJSON() as Partial<Account>
-        const created: Account = {
-          id: `user-${Date.now()}`,
-          email: data.email ?? "new@example.com",
-          fullName: data.fullName ?? "New Account",
-          contactNumber: data.contactNumber ?? null,
-          role: data.role ?? "USER",
-          isActive: true,
-          permissions: [
-            Permissions.DASHBOARD_READ,
-            Permissions.PROFILE_READ,
-            Permissions.PROFILE_CHANGE_PASSWORD,
-          ],
-          createdAt: new Date().toISOString(),
-        }
-        users.push(created)
-        await route.fulfill({ json: { user: created } })
-        return
-      }
-
-      const roleMatch = pathname.match(/^\/api\/users\/([^/]+)\/role$/)
-      if (roleMatch && method === "PATCH") {
-        const targetId = decodeURIComponent(roleMatch[1])
-        const { role: newRole } = request.postDataJSON() as {
-          role: Account["role"]
-        }
-        const target = users.find((u) => u.id === targetId)
-        if (target) {
-          target.role = newRole
-          await route.fulfill({ json: { user: target } })
-        } else {
-          await route.fulfill({
-            status: 404,
-            json: { error: "User not found" },
-          })
-        }
-        return
-      }
-
-      const statusMatch = pathname.match(/^\/api\/users\/([^/]+)\/status$/)
-      if (statusMatch && method === "PATCH") {
-        const targetId = decodeURIComponent(statusMatch[1])
-        const { isActive } = request.postDataJSON() as { isActive: boolean }
-        const target = users.find((u) => u.id === targetId)
-        if (target) {
-          target.isActive = isActive
-          await route.fulfill({ json: { user: target } })
-        } else {
-          await route.fulfill({
-            status: 404,
-            json: { error: "User not found" },
-          })
-        }
-        return
-      }
-
-      const restoreAccountMatch = pathname.match(
-        /^\/api\/users\/([^/]+)\/restore$/,
-      )
-      if (restoreAccountMatch && method === "POST") {
-        const target = users.find(
-          (user) => user.id === decodeURIComponent(restoreAccountMatch[1]),
-        )
-        if (target?.accountDeletedAt && !target.isActive) {
-          target.accountDeletedAt = null
-          await route.fulfill({ json: { user: target } })
-        } else {
-          await route.fulfill({
-            status: 409,
-            json: { error: "Only accounts in Trash can be restored" },
-          })
-        }
-        return
-      }
-
-      const permanentAccountMatch = pathname.match(
-        /^\/api\/users\/([^/]+)\/permanent$/,
-      )
-      if (permanentAccountMatch && method === "DELETE") {
-        const targetId = decodeURIComponent(permanentAccountMatch[1])
-        const targetIndex = users.findIndex((u) => u.id === targetId)
-        if (targetIndex >= 0 && users[targetIndex]?.accountDeletedAt) {
-          users.splice(targetIndex, 1)
-          await route.fulfill({
-            json: { message: "Account permanently deleted" },
-          })
-        } else {
-          await route.fulfill({
-            status: 409,
-            json: { error: "Move the account to trash first" },
-          })
-        }
-        return
-      }
-
-      const accountMatch = pathname.match(/^\/api\/users\/([^/]+)$/)
-      if (accountMatch && method === "DELETE") {
-        const targetId = decodeURIComponent(accountMatch[1])
-        const target = users.find((u) => u.id === targetId)
-        if (target && !target.isActive && !target.accountDeletedAt) {
-          target.accountDeletedAt = new Date().toISOString()
-          await route.fulfill({ json: { message: "Account moved to trash" } })
-        } else {
-          await route.fulfill({
-            status: 409,
-            json: { error: "Deactivate the account before moving it to trash" },
-          })
-        }
-        return
-      }
-
-      // --- Departments endpoints ---
-      if (pathname === "/api/departments/eligible-heads" && method === "GET") {
-        await route.fulfill({
-          json: {
-            users: users.map((u) => ({
-              id: u.id,
-              email: u.email,
-              fullName: u.fullName,
-              role: u.role,
-              headOf: null,
-            })),
-          },
-        })
-        return
-      }
-
-      const deptIdMatch = pathname.match(/^\/api\/departments\/([^/]+)$/)
-      if (deptIdMatch && method === "GET") {
-        const id = decodeURIComponent(deptIdMatch[1])
-        const dept = departments.find((d) => d.id === id)
-        if (dept) {
-          await route.fulfill({
-            json: { department: { ...dept, members: [], teams: [] } },
-          })
-        } else {
-          await route.fulfill({
-            status: 404,
-            json: { error: "Department not found" },
-          })
-        }
-        return
-      }
-
-      if (pathname === "/api/departments" && method === "GET") {
-        await route.fulfill({ json: { departments } })
-        return
-      }
-
-      if (pathname === "/api/services" && method === "GET") {
-        await route.fulfill({ json: { services } })
-        return
-      }
-      if (pathname === "/api/services/available" && method === "GET") {
-        await route.fulfill({
-          json: { services: services.filter((service) => service.isActive) },
-        })
-        return
-      }
-      if (pathname === "/api/services/pricing-templates" && method === "GET") {
-        await route.fulfill({ json: { pricingTemplates } })
-        return
-      }
-      if (pathname === "/api/services" && method === "POST") {
-        const body = request.postDataJSON() as ServiceInput
-        const service: Service = {
-          id: `service-${services.length + 1}`,
-          name: body.name,
-          description: body.description,
-          iconKey: body.iconKey,
-          imageUrl: body.imageDataUrl,
-          imageAltText: body.imageAltText,
-          clientRequirements: body.clientRequirements,
-          requiresConsultation: body.requiresConsultation,
-          consultationNotes: body.consultationNotes,
-          keyBenefits: body.keyBenefits.map((benefit, index) => ({
-            ...benefit,
-            id: `benefit-${index + 1}`,
-            displayOrder: index,
-          })),
-          isActive: body.isActive,
-          ...pricingFields(body),
-          departments: departments.filter((department) =>
-            body.departmentIds.includes(department.id),
-          ),
-          createdAt: "2026-01-02T00:00:00.000Z",
-          updatedAt: "2026-01-02T00:00:00.000Z",
-        }
-        services.push(service)
-        await route.fulfill({ status: 201, json: { service } })
-        return
-      }
-      const serviceMatch = pathname.match(
-        /^\/api\/services\/([^/]+)(\/status)?$/,
-      )
-      if (serviceMatch && ["PUT", "PATCH", "DELETE"].includes(method)) {
-        const service = services.find((item) => item.id === serviceMatch[1])
-        expect(
-          service,
-          "Service mutation must target an existing fixture",
-        ).toBeDefined()
-        if (method === "DELETE") {
-          services.splice(services.indexOf(service!), 1)
-          await route.fulfill({ json: { success: true } })
-        } else {
-          const body = request.postDataJSON() as Partial<ServiceInput>
-          Object.assign(
-            service!,
-            body,
-            method === "PUT" ? pricingFields(body as ServiceInput) : {},
-            method === "PUT" && body.keyBenefits
-              ? {
-                  keyBenefits: body.keyBenefits.map((benefit, index) => ({
-                    ...benefit,
-                    id: `benefit-${index + 1}`,
-                    displayOrder: index,
-                  })),
-                }
-              : {},
-            body.departmentIds
-              ? {
-                  departments: departments.filter((department) =>
-                    body.departmentIds!.includes(department.id),
-                  ),
-                }
-              : {},
-          )
-          await route.fulfill({ json: { service } })
-        }
-        return
-      }
-
-      if (pathname === "/api/departments" && method === "POST") {
-        const body = request.postDataJSON() as {
-          name: string
-          color: Department["color"]
-          code?: string
-          description?: string
-          headId?: string | null
-        }
-        const created: Department = {
-          id: `dept-${Date.now()}`,
-          name: body.name,
-          color: body.color,
-          code: body.code ?? null,
-          description: body.description ?? null,
-          headId: body.headId ?? null,
-          head: null,
-          memberCount: 0,
-          teamCount: 0,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        }
-        departments.push(created)
-        await route.fulfill({ json: { department: created } })
-        return
-      }
-
-      if (deptIdMatch && method === "PUT") {
-        const id = decodeURIComponent(deptIdMatch[1])
-        const body = request.postDataJSON() as Partial<Department>
-        const target = departments.find((d) => d.id === id)
-        if (target) {
-          Object.assign(target, body, { updatedAt: new Date().toISOString() })
-          await route.fulfill({ json: { department: target } })
-        } else {
-          await route.fulfill({
-            status: 404,
-            json: { error: "Department not found" },
-          })
-        }
-        return
-      }
-
-      if (deptIdMatch && method === "DELETE") {
-        const id = decodeURIComponent(deptIdMatch[1])
-        const index = departments.findIndex((d) => d.id === id)
-        if (index >= 0) {
-          departments.splice(index, 1)
-          await route.fulfill({ status: 204 })
-        } else {
-          await route.fulfill({
-            status: 404,
-            json: { error: "Department not found" },
-          })
-        }
-        return
-      }
-
-      pageErrors.get(page)?.push(`Unhandled API request: ${method} ${pathname}`)
-      await route.fulfill({
-        status: 404,
-        json: { error: "Unknown test endpoint" },
-      })
-    })
-  }
-
-  async function restoreSession(
-    page: Page,
-    role: Account["role"],
-    options?: MockApiOptions,
-  ) {
-    await mockApi(page, role, options)
-    await page.addInitScript(() => {
-      sessionStorage.setItem("nexus.auth.token", "test-session")
-    })
-  }
-
-  // These tests exercise the real browser guards against controlled API responses.
-  // Backend authorization, transactions, and session revocation are covered by
-  // the API's offline PGlite integration tests, not by these mock handlers.
-  const managementRoutes = [
-    {
-      path: "/accounts",
-      endpoint: "/api/users",
-      role: "SUPERADMIN",
-      permission: Permissions.ACCOUNTS_READ,
-      title: "Account Management",
-    },
-    {
-      path: "/departments",
-      endpoint: "/api/departments",
-      role: "ADMIN",
-      permission: Permissions.DEPARTMENTS_READ,
-      title: "Department Management",
-    },
-    {
-      path: "/employees",
-      endpoint: "/api/employees",
-      role: "ADMIN",
-      permission: Permissions.EMPLOYEES_READ,
-      title: "Employee Management",
-    },
-    {
-      path: "/services",
-      endpoint: "/api/services",
-      role: "ADMIN",
-      permission: Permissions.SERVICES_READ,
-      title: "Service Management",
-    },
-    {
-      path: "/clients",
-      endpoint: "/api/clients",
-      role: "ADMIN",
-      permission: Permissions.CLIENTS_READ,
-      title: "Client Management",
-    },
-  ] as const
-
-  for (const feature of managementRoutes) {
-    test(`${feature.path} denies access when the server withholds its read permission`, async ({
-      page,
-    }) => {
-      const requests: string[] = []
-      await restoreSession(page, feature.role, {
-        account: {
-          permissions: accountFor(feature.role).permissions.filter(
-            (permission) => permission !== feature.permission,
-          ),
-        },
-      })
-      page.on("request", (request) => {
-        if (new URL(request.url()).pathname.startsWith(feature.endpoint))
-          requests.push(request.url())
-      })
-      await page.goto(feature.path)
-      await expect(page).toHaveURL(/\/dashboard$/)
-      await expect(
-        page.getByRole("heading", { name: feature.title }),
-      ).toHaveCount(0)
-      expect(requests).toEqual([])
-    })
-
-    test(`${feature.path} does not expose protected content when session lookup fails`, async ({
-      page,
-    }) => {
-      await restoreSession(page, feature.role)
-      await page.route("**/api/auth/me", (route) =>
-        route.fulfill({ status: 503, json: { error: "Unavailable" } }),
-      )
-      await page.goto(feature.path)
-      await expect(
-        page.getByText(
-          "We couldn't load your account. Please refresh to try again.",
-        ),
-      ).toBeVisible()
-      await expect(
-        page.getByRole("heading", { name: feature.title }),
-      ).toHaveCount(0)
-    })
-  }
-
   for (const role of ["SUPERADMIN", "ADMIN", "STAFF", "USER"] as const) {
-    test(`${role} client directory access and related records respect navigation guards`, async ({
+    test(`${role} renews an expired access token and signs out both tokens`, async ({
       page,
     }) => {
-      await restoreSession(page, role)
-      const requests: string[] = []
-      page.on("request", (request) => {
-        if (new URL(request.url()).pathname.startsWith("/api/clients"))
-          requests.push(request.url())
-      })
-      await page.goto("/clients")
-      if (role !== "ADMIN") {
-        await expect(page).toHaveURL(/\/dashboard$/)
-        expect(requests).toEqual([])
-        return
-      }
-      await expect(
-        page.getByRole("heading", { name: "Client Management" }),
-      ).toBeVisible()
-      await page.getByRole("button", { name: /View.*Target User/i }).click()
-      await expect(page.getByRole("dialog")).toContainText("target@example.com")
-      await page
-        .getByRole("tab", { name: "Service requests", exact: true })
-        .click()
-      await expect(
-        page.getByText("No service requests are linked to this client yet."),
-      ).toBeVisible()
-      await page.getByRole("tab", { name: "Projects", exact: true }).click()
-      await expect(
-        page.getByText("No projects are linked to this client yet."),
-      ).toBeVisible()
-      await page.getByRole("button", { name: "Close client details" }).click()
-      await page
-        .getByRole("searchbox", { name: "Search clients" })
-        .fill("missing-client")
-      await expect(
-        page
-          .getByRole("status")
-          .filter({ hasText: /No results for.*missing-client.*found/ }),
-      ).toBeVisible()
-      await page.getByRole("button", { name: "Clear filters" }).click()
-      await expect(page.getByText("Target User", { exact: true })).toBeVisible()
-    })
-  }
-
-  for (const width of [390, 1280]) {
-    test(`superadmin changes a listed account password at ${width}px`, async ({
-      page,
-    }) => {
-      await page.setViewportSize({ width, height: 900 })
-      await restoreSession(page, "SUPERADMIN")
-      let attempts = 0
-      let releaseSubmission: () => void = () => {}
-      const submission = new Promise<void>((resolve) => {
-        releaseSubmission = resolve
-      })
-      await page.route("**/api/users/user-target/password", async (route) => {
-        const request = route.request()
-        expect(request.method()).toBe("POST")
-        expect(request.headers().authorization).toBe("Bearer test-session")
-        expect(request.postDataJSON()).toEqual({
-          newPassword: " MyNewPassword123! ",
-        })
-        attempts += 1
-        if (attempts === 1) {
-          await route.fulfill({
-            status: 503,
-            json: { error: "Unable to change password. Please retry." },
-          })
+      let token = "test-session"
+      let refreshes = 0
+      await restoreSession(page, role, { accessToken: () => token })
+      await page.route("**/api/auth/me", async (route) => {
+        if (route.request().headers().authorization === "Bearer test-session") {
+          await route.fulfill({ status: 401, json: expiredAccess })
         } else {
-          await submission
-          await route.fulfill({ status: 204 })
+          await route.fallback()
         }
       })
-      await page.goto("/accounts")
-      await expect(
-        page.getByRole("button", { name: "Change my password", exact: true }),
-      ).toHaveCount(0)
-      const openDialog = async () => {
-        await page
-          .getByRole("button", { name: "More actions for target@example.com" })
-          .click()
-        await page
-          .getByRole("menuitem", { name: "Change password", exact: true })
-          .click()
-      }
-      await openDialog()
-      const dialog = page.getByRole("dialog", {
-        name: "Change account password",
+      await page.route("**/api/auth/refresh", async (route) => {
+        refreshes++
+        expect(route.request().method()).toBe("POST")
+        expect(route.request().headers().authorization).toBeUndefined()
+        expect(route.request().postDataJSON()).toEqual({
+          refreshToken: "test-refresh",
+        })
+        token = renewedTokens.token
+        await route.fulfill({ json: renewedTokens })
       })
-      const next = dialog.getByLabel("New password", { exact: true })
-      const confirmation = dialog.getByLabel("Confirm new password", {
-        exact: true,
-      })
-      const save = dialog.getByRole("button", {
-        name: "Change password",
-        exact: true,
-      })
-      await expect(dialog).toContainText("target@example.com")
+      await page.goto("/dashboard")
       await expect(
-        dialog.getByLabel("Current password", { exact: true }),
-      ).toHaveCount(0)
-      await next.fill("discard this value")
-      await dialog.getByRole("button", { name: "Cancel", exact: true }).click()
-      await expect(dialog).toHaveCount(0)
-      await openDialog()
-      await expect(next).toHaveValue("")
-      await save.click()
-      await expect(next).toBeFocused()
-      await expect(
-        dialog.getByText("Use at least 12 characters."),
+        page.getByRole("button", { name: "Sign Out", exact: true }),
       ).toBeVisible()
-      await next.fill("界".repeat(342))
-      await confirmation.fill("界".repeat(342))
-      await save.click()
+      expect(refreshes).toBe(1)
+      expect(await storedTokens(page)).toEqual([
+        renewedTokens.token,
+        renewedTokens.refreshToken,
+      ])
+      await page.reload()
       await expect(
-        dialog.getByText("Use no more than 1,024 bytes."),
+        page.getByRole("button", { name: "Sign Out", exact: true }),
       ).toBeVisible()
-      await next.fill(" MyNewPassword123! ")
-      await confirmation.fill("mismatched")
-      await save.click()
-      await expect(dialog.getByText("Passwords do not match.")).toBeVisible()
-      expect(attempts).toBe(0)
-      await confirmation.fill(" MyNewPassword123! ")
-      await dialog
-        .getByRole("button", { name: "Show new password", exact: true })
-        .click()
-      await expect(next).toHaveAttribute("type", "text")
-      await dialog
-        .getByRole("button", { name: "Hide new password", exact: true })
-        .click()
-      await expect(next).toHaveAttribute("type", "password")
-      await save.click()
-      await expect(dialog.getByRole("alert")).toHaveText(
-        "Unable to change password. Please retry.",
+      expect(refreshes).toBe(1)
+      expect(
+        await page.evaluate(() => [
+          localStorage.getItem("nexus.auth.token"),
+          localStorage.getItem("nexus.auth.refreshToken"),
+        ]),
+      ).toEqual([null, null])
+      expect(
+        (await page.context().cookies()).some((cookie) =>
+          [renewedTokens.token, renewedTokens.refreshToken].includes(
+            cookie.value,
+          ),
+        ),
+      ).toBe(false)
+      const logout = page.waitForRequest(
+        (request) => new URL(request.url()).pathname === "/api/auth/logout",
       )
-      await expect(page).toHaveURL(/\/accounts$/)
-      expect(
-        await page.evaluate(() => sessionStorage.getItem("nexus.auth.token")),
-      ).toBe("test-session")
-      await save.click()
-      const pending = dialog.getByRole("button", {
-        name: "Changing password…",
-        exact: true,
-      })
-      await expect(pending).toBeDisabled()
-      await expect(next).toBeDisabled()
-      await expect(
-        dialog.getByRole("button", { name: "Cancel", exact: true }),
-      ).toBeDisabled()
-      await page.keyboard.press("Escape")
-      await expect(dialog).toBeVisible()
-      expect(attempts).toBe(2)
-      const box = await dialog.boundingBox()
-      expect(box).not.toBeNull()
-      expect(box!.x).toBeGreaterThanOrEqual(0)
-      expect(box!.x + box!.width).toBeLessThanOrEqual(width)
-      releaseSubmission()
-      await expect(dialog).toHaveCount(0)
-      await expect(page).toHaveURL(/\/accounts$/)
-      expect(
-        await page.evaluate(() => sessionStorage.getItem("nexus.auth.token")),
-      ).toBe("test-session")
-      await expect(
-        page.getByText("Password changed", { exact: true }),
-      ).toBeVisible()
-      expect(attempts).toBe(2)
+      await page.getByRole("button", { name: "Sign Out", exact: true }).click()
+      expect((await logout).headers().authorization).toBe(
+        `Bearer ${renewedTokens.token}`,
+      )
+      await expect(page).toHaveURL(/\/login$/)
+      expect(await storedTokens(page)).toEqual([null, null])
+      await page.goto("/dashboard")
+      await expect(page).toHaveURL(/\/login$/)
     })
   }
 
-  test("superadmin cannot edit their own role or account status", async ({
+  test("parallel service reads share one refresh and retry with the new bearer token", async ({
     page,
   }) => {
-    await restoreSession(page, "SUPERADMIN")
-    await page.goto("/accounts")
-    await expect(page.getByText("Your account", { exact: true })).toBeVisible()
+    let token = "test-session"
+    let refreshes = 0
+    const expiredPaths: string[] = []
+    const retriedPaths: string[] = []
+    const paths = [
+      "/api/services",
+      "/api/departments",
+      "/api/services/pricing-templates",
+    ]
+    let releaseRefresh!: () => void
+    const allExpired = new Promise<void>((resolve) => {
+      releaseRefresh = resolve
+    })
+    await restoreSession(page, "ADMIN", { accessToken: () => token })
+    for (const path of paths) {
+      await page.route(`**${path}`, async (route) => {
+        const authorization = route.request().headers().authorization
+        if (authorization === "Bearer test-session") {
+          expiredPaths.push(path)
+          if (expiredPaths.length === paths.length) releaseRefresh()
+          await route.fulfill({ status: 401, json: expiredAccess })
+        } else {
+          expect(authorization).toBe(`Bearer ${renewedTokens.token}`)
+          retriedPaths.push(path)
+          await route.fallback()
+        }
+      })
+    }
+    await page.route("**/api/auth/refresh", async (route) => {
+      refreshes++
+      expect(route.request().postDataJSON()).toEqual({
+        refreshToken: "test-refresh",
+      })
+      await allExpired
+      token = renewedTokens.token
+      await route.fulfill({ json: renewedTokens })
+    })
+    await page.goto("/services")
     await expect(
-      page.getByRole("button", { name: /Role for testsuperadmin@nexus.com/ }),
-    ).toHaveCount(0)
-    await expect(
-      page.getByRole("button", {
-        name: "More actions for testsuperadmin@nexus.com",
+      page.getByRole("rowheader", { name: "Test Service", exact: true }),
+    ).toBeVisible()
+    expect(refreshes).toBe(1)
+    expect(expiredPaths.sort()).toEqual([...paths].sort())
+    expect(retriedPaths.sort()).toEqual([...paths].sort())
+    expect(await storedTokens(page)).toEqual([
+      renewedTokens.token,
+      renewedTokens.refreshToken,
+    ])
+  })
+
+  for (const status of [401, 429, 503]) {
+    test(`refresh HTTP ${status} ${status === 401 ? "clears both tokens" : "preserves the session for retry"}`, async ({
+      page,
+    }) => {
+      let token = "test-session"
+      let refreshes = 0
+      await restoreSession(page, "USER", { accessToken: () => token })
+      await page.route("**/api/auth/me", async (route) => {
+        if (route.request().headers().authorization === "Bearer test-session")
+          await route.fulfill({ status: 401, json: expiredAccess })
+        else await route.fallback()
+      })
+      await page.route("**/api/auth/refresh", async (route) => {
+        refreshes++
+        expect(route.request().postDataJSON()).toEqual({
+          refreshToken: "test-refresh",
+        })
+        if (refreshes === 1)
+          await route.fulfill({
+            status,
+            json: { error: "Unable to refresh session" },
+          })
+        else {
+          token = renewedTokens.token
+          await route.fulfill({ json: renewedTokens })
+        }
+      })
+      await page.goto("/login")
+      if (status === 401) {
+        await expect(
+          page.getByRole("button", { name: "Sign In", exact: true }),
+        ).toBeVisible()
+        expect(await storedTokens(page)).toEqual([null, null])
+        expect(refreshes).toBe(1)
+      } else {
+        await expect(page.getByRole("main").getByRole("alert")).toContainText(
+          "couldn't check your session",
+        )
+        expect(await storedTokens(page)).toEqual([
+          "test-session",
+          "test-refresh",
+        ])
+        await page
+          .getByRole("button", { name: "Try again", exact: true })
+          .click()
+        await expect(page).toHaveURL(/\/dashboard$/)
+        expect(refreshes).toBe(2)
+        expect(await storedTokens(page)).toEqual([
+          renewedTokens.token,
+          renewedTokens.refreshToken,
+        ])
+      }
+    })
+  }
+
+  test("invalid access tokens clear the session without attempting refresh", async ({
+    page,
+  }) => {
+    await restoreSession(page, "USER")
+    const refreshes: string[] = []
+    page.on("request", (request) => {
+      if (new URL(request.url()).pathname === "/api/auth/refresh")
+        refreshes.push(request.url())
+    })
+    await page.route("**/api/auth/me", (route) =>
+      route.fulfill({
+        status: 401,
+        json: { error: "Invalid access token", code: "INVALID_ACCESS_TOKEN" },
       }),
-    ).toHaveCount(0)
-    await page
-      .getByRole("button", { name: "More actions for target@example.com" })
-      .click()
+    )
+    await page.goto("/dashboard")
+    await expect(page).toHaveURL(/\/login$/)
     await expect(
-      page.getByRole("menuitem", { name: "Delete account", exact: true }),
-    ).toHaveCount(0)
+      page.getByRole("button", { name: "Sign In", exact: true }),
+    ).toBeVisible()
+    expect(await storedTokens(page)).toEqual([null, null])
+    expect(refreshes).toEqual([])
+  })
+
+  test("a rejected renewed access token stops after one refresh", async ({
+    page,
+  }) => {
+    await restoreSession(page, "USER")
+    let refreshes = 0
+    let lookups = 0
+    await page.route("**/api/auth/me", async (route) => {
+      lookups++
+      await route.fulfill({ status: 401, json: expiredAccess })
+    })
+    await page.route("**/api/auth/refresh", async (route) => {
+      refreshes++
+      await route.fulfill({ json: renewedTokens })
+    })
+    await page.goto("/dashboard")
+    await expect(page).toHaveURL(/\/login$/)
+    await expect(
+      page.getByRole("button", { name: "Sign In", exact: true }),
+    ).toBeVisible()
+    expect(refreshes).toBe(1)
+    expect(lookups).toBe(2)
+    expect(await storedTokens(page)).toEqual([null, null])
+  })
+
+  test("an expired service update retries the same payload once after refresh", async ({
+    page,
+  }) => {
+    let token = "test-session"
+    let refreshes = 0
+    const updates: ServiceInput[] = []
+    await restoreSession(page, "ADMIN", { accessToken: () => token })
+    await page.route("**/api/services/service-1", async (route) => {
+      expect(route.request().method()).toBe("PUT")
+      updates.push(route.request().postDataJSON() as ServiceInput)
+      if (updates.length === 1)
+        await route.fulfill({ status: 401, json: expiredAccess })
+      else {
+        expect(route.request().headers().authorization).toBe(
+          `Bearer ${renewedTokens.token}`,
+        )
+        await route.fallback()
+      }
+    })
+    await page.route("**/api/auth/refresh", async (route) => {
+      refreshes++
+      token = renewedTokens.token
+      await route.fulfill({ json: renewedTokens })
+    })
+    await page.goto("/services")
+    await page
+      .getByRole("button", { name: "Edit Test Service", exact: true })
+      .click()
+    await page
+      .getByRole("dialog")
+      .getByLabel("Service Name")
+      .fill("Renewed Service")
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Save Changes", exact: true })
+      .click()
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await expect(
+      page.getByRole("rowheader", { name: "Renewed Service", exact: true }),
+    ).toBeVisible()
+    expect(refreshes).toBe(1)
+    expect(updates).toHaveLength(2)
+    expect(updates[1]).toEqual(updates[0])
+    expect(updates[1].name).toBe("Renewed Service")
   })
 
   test("persistent storage cannot restore an authenticated session", async ({
@@ -1193,256 +522,13 @@ test.describe("mocked regression", () => {
       if (new URL(request.url()).pathname.startsWith("/api/"))
         requests.push(request.url())
     })
-    await page.addInitScript(() =>
-      localStorage.setItem("nexus.auth.token", "test-session"),
-    )
+    await page.addInitScript(() => {
+      localStorage.setItem("nexus.auth.token", "test-session")
+      localStorage.setItem("nexus.auth.refreshToken", "test-refresh")
+    })
     await page.goto("/accounts")
     await expect(page).toHaveURL(/\/login$/)
     expect(requests).toEqual([])
-  })
-
-  test("read-only service permission hides every mutation action", async ({
-    page,
-  }) => {
-    await restoreSession(page, "ADMIN", {
-      account: {
-        permissions: [Permissions.SERVICES_READ, Permissions.DEPARTMENTS_READ],
-      },
-    })
-    await page.goto("/services")
-    await expect(
-      page.getByRole("rowheader", { name: "Test Service" }),
-    ).toBeVisible()
-    for (const name of [
-      "Create Service",
-      "Edit Test Service",
-      "More actions for Test Service",
-    ]) {
-      await expect(page.getByRole("button", { name, exact: true })).toHaveCount(
-        0,
-      )
-    }
-    await page.getByRole("button", { name: "View Test Service" }).click()
-    await expect(page.getByRole("dialog")).toContainText(
-      "A service used by the regression suite.",
-    )
-  })
-
-  test("service creation validates department selection and preserves rejected edits", async ({
-    page,
-  }) => {
-    await restoreSession(page, "ADMIN")
-    await page.goto("/services")
-    await page
-      .getByRole("button", { name: "Create Service", exact: true })
-      .click()
-    const dialog = page.getByRole("dialog")
-    await dialog.getByLabel("Service Name").fill("Consulting")
-    await dialog
-      .getByLabel("Description", { exact: false })
-      .fill("Business consulting")
-    await dialog.getByRole("button", { name: "Continue", exact: true }).click()
-    await expect(dialog.getByRole("alert")).toHaveText(
-      "Please select at least one responsible department",
-    )
-    await page
-      .getByRole("button", { name: "Select responsible departments" })
-      .click()
-    await page.getByRole("menuitemcheckbox", { name: "Engineering" }).click()
-    await page.keyboard.press("Escape")
-    for (let step = 0; step < 4; step++) {
-      await dialog
-        .getByRole("button", { name: "Continue", exact: true })
-        .click()
-    }
-    const created = page.waitForRequest(
-      (request) =>
-        request.method() === "POST" &&
-        new URL(request.url()).pathname === "/api/services",
-    )
-    await dialog
-      .getByRole("button", { name: "Create Service", exact: true })
-      .click()
-    expect((await created).postDataJSON()).toEqual({
-      name: "Consulting",
-      description: "Business consulting",
-      iconKey: "sparkles",
-      departmentIds: ["dept-1"],
-      isActive: true,
-      imageDataUrl: null,
-      imageAltText: null,
-      removeImage: false,
-      clientRequirements: [],
-      requiresConsultation: false,
-      consultationNotes: null,
-      keyBenefits: [],
-      pricingTemplateId: null,
-      pricingTemplate: null,
-      packages: [],
-    })
-    await expect(
-      page.getByRole("rowheader", { name: "Consulting", exact: true }),
-    ).toBeVisible()
-    await page
-      .getByRole("button", { name: "Edit Consulting", exact: true })
-      .click()
-    await dialog.getByLabel("Service Name").fill("Updated Consulting")
-    await page.route("**/api/services/service-2", (route) =>
-      route.fulfill({ status: 403, json: { error: "Permission revoked" } }),
-    )
-    await dialog.getByRole("button", { name: "Save Changes" }).click()
-    await expect(dialog.getByRole("alert")).toHaveText("Permission revoked")
-    await expect(dialog.getByLabel("Service Name")).toHaveValue(
-      "Updated Consulting",
-    )
-    await dialog.getByRole("button", { name: "Cancel", exact: true }).click()
-    await expect(
-      page.getByRole("rowheader", { name: "Consulting", exact: true }),
-    ).toBeVisible()
-  })
-
-  test("service wizard persists consultation, recurring pricing, and packages after reload", async ({
-    page,
-  }) => {
-    await restoreSession(page, "ADMIN")
-    await page.goto("/services")
-    await page
-      .getByRole("button", { name: "Edit Test Service", exact: true })
-      .click()
-    const dialog = page.getByRole("dialog")
-    const selectStep = (name: string) =>
-      dialog
-        .getByRole("navigation", { name: "Service form progress" })
-        .getByRole("button", { name })
-        .click()
-    await selectStep("Benefits")
-    await dialog.getByRole("button", { name: "Add Benefit" }).click()
-    await dialog.getByLabel("Benefit Title").fill("Launch with confidence")
-    await dialog
-      .getByLabel("Benefit Description")
-      .fill("A guided process from discovery through delivery.")
-    await page.mouse.click(2, 2)
-    await page.keyboard.press("Escape")
-    await expect(dialog.getByLabel("Benefit Title")).toHaveValue(
-      "Launch with confidence",
-    )
-    await selectStep("Requirements")
-    await dialog
-      .getByRole("textbox", { name: /Client Requirements/ })
-      .fill("  Brand guide  \n\nProject brief")
-    await dialog
-      .getByLabel("Consultation is required before proceeding")
-      .check()
-    await dialog.getByLabel("Consultation Notes").fill("Discuss project scope")
-    await selectStep("Pricing")
-    await dialog.getByLabel("Pricing Template", { exact: true }).click()
-    await page
-      .getByRole("option", { name: "Create a reusable template" })
-      .click()
-    await dialog
-      .getByLabel("Template Name", { exact: true })
-      .fill("Monthly support")
-    await dialog.getByLabel("Pricing Model", { exact: true }).click()
-    await page.getByRole("option", { name: "Recurring", exact: true }).click()
-    await dialog.getByLabel("Amount (PHP)").fill("1500.50")
-    await dialog.getByRole("button", { name: "Save Changes" }).click()
-    await expect(dialog.getByRole("alert")).toHaveText(
-      "Select a billing interval",
-    )
-    await dialog.getByLabel("Billing Interval").click()
-    await page.getByRole("option", { name: "Monthly", exact: true }).click()
-    await selectStep("Packages")
-    await dialog.getByRole("button", { name: "Add Package" }).click()
-    await dialog.getByLabel("Package Name").fill("Starter")
-    await dialog
-      .getByLabel("Description", { exact: true })
-      .fill("Starter support package")
-    await dialog
-      .getByLabel("Included Features")
-      .fill(" Email support \n\nMonthly review")
-    await dialog.getByLabel("Recommended", { exact: true }).check()
-    const saved = page.waitForRequest(
-      (request) =>
-        request.method() === "PUT" &&
-        new URL(request.url()).pathname === "/api/services/service-1",
-    )
-    await dialog.getByRole("button", { name: "Save Changes" }).click()
-    expect((await saved).postDataJSON()).toMatchObject({
-      clientRequirements: ["Brand guide", "Project brief"],
-      requiresConsultation: true,
-      consultationNotes: "Discuss project scope",
-      keyBenefits: [
-        {
-          title: "Launch with confidence",
-          description: "A guided process from discovery through delivery.",
-        },
-      ],
-      pricingTemplateId: null,
-      pricingTemplate: {
-        name: "Monthly support",
-        pricingModel: "RECURRING",
-        amount: 1500.5,
-        currency: "PHP",
-        billingInterval: "MONTHLY",
-        isPublic: true,
-      },
-      packages: [
-        expect.objectContaining({
-          name: "Starter",
-          includedFeatures: ["Email support", "Monthly review"],
-          isRecommended: true,
-        }),
-      ],
-    })
-    await expect(dialog).toHaveCount(0)
-    await page.reload()
-    await page
-      .getByRole("button", { name: "View Test Service", exact: true })
-      .click()
-    for (const text of [
-      "Brand guide; Project brief",
-      "Discuss project scope",
-      "Starter support package",
-      "Email support",
-      "Recommended",
-    ]) {
-      await expect(dialog).toContainText(text)
-    }
-    await dialog.getByRole("button", { name: "Close details" }).click()
-    await page
-      .getByRole("button", { name: "Edit Test Service", exact: true })
-      .click()
-    await selectStep("Benefits")
-    await expect(dialog.getByLabel("Benefit Title")).toHaveValue(
-      "Launch with confidence",
-    )
-    await selectStep("Requirements")
-    await expect(dialog.getByLabel("Consultation Notes")).toHaveValue(
-      "Discuss project scope",
-    )
-    await dialog
-      .getByLabel("Consultation is required before proceeding")
-      .uncheck()
-    await selectStep("Pricing")
-    await expect(
-      dialog.getByLabel("Pricing Template", { exact: true }),
-    ).toContainText("Monthly support")
-    await selectStep("Packages")
-    await expect(dialog.getByLabel("Package Name")).toHaveValue("Starter")
-    const updated = page.waitForRequest(
-      (request) =>
-        request.method() === "PUT" &&
-        new URL(request.url()).pathname === "/api/services/service-1",
-    )
-    await dialog.getByRole("button", { name: "Save Changes" }).click()
-    expect((await updated).postDataJSON()).toMatchObject({
-      requiresConsultation: false,
-      consultationNotes: null,
-      pricingTemplateId: "pricing-1",
-      pricingTemplate: null,
-      packages: [expect.objectContaining({ id: "package-1", name: "Starter" })],
-    })
-    await expect(dialog).toHaveCount(0)
   })
 
   for (const path of ["/login", "/register"]) {
@@ -1462,361 +548,6 @@ test.describe("mocked regression", () => {
       ).toHaveCount(0)
     })
   }
-
-  test("service deletion requires deactivation and explicit confirmation", async ({
-    page,
-  }) => {
-    await restoreSession(page, "ADMIN")
-    await page.goto("/services")
-    const actions = page.getByRole("button", {
-      name: "More actions for Test Service",
-    })
-    await actions.click()
-    await expect(
-      page.getByRole("menuitem", { name: "Delete service" }),
-    ).toHaveCount(0)
-    await page.getByRole("menuitem", { name: "Deactivate service" }).click()
-    await page
-      .getByRole("button", { name: "Deactivate Service", exact: true })
-      .click()
-    await expect(
-      page.getByRole("row").filter({ hasText: "Test Service" }),
-    ).toContainText("Inactive")
-    await actions.click()
-    await page.getByRole("menuitem", { name: "Delete service" }).click()
-    await page.getByRole("button", { name: "Cancel", exact: true }).click()
-    await expect(
-      page.getByRole("rowheader", { name: "Test Service" }),
-    ).toBeVisible()
-    await actions.click()
-    await page.getByRole("menuitem", { name: "Delete service" }).click()
-    await page
-      .getByRole("button", { name: "Delete service", exact: true })
-      .click()
-    await expect(
-      page.getByText("No services have been created yet."),
-    ).toBeVisible()
-  })
-
-  test("service descriptions render untrusted markup as text", async ({
-    page,
-  }) => {
-    const payload = '<img src=x onerror="window.__regressionXss=true">'
-    await restoreSession(page, "ADMIN", {
-      initialServices: [
-        {
-          id: "unsafe",
-          name: "Untrusted service",
-          description: payload,
-          iconKey: "sparkles",
-          imageUrl: null,
-          imageAltText: null,
-          clientRequirements: [],
-          requiresConsultation: false,
-          consultationNotes: null,
-          keyBenefits: [],
-          isActive: true,
-          pricingTemplateId: null,
-          pricingTemplate: null,
-          packages: [],
-          departments: [],
-          createdAt: "2026-01-01T00:00:00.000Z",
-          updatedAt: "2026-01-01T00:00:00.000Z",
-        },
-      ],
-    })
-    await page.goto("/services")
-    await expect(page.getByText(payload, { exact: true })).toBeVisible()
-    await page.getByRole("button", { name: "View Untrusted service" }).click()
-    await expect(page.getByRole("dialog")).toContainText(payload)
-    expect(
-      await page.evaluate(() => Reflect.get(window, "__regressionXss")),
-    ).toBeUndefined()
-    await expect(page.locator('img[src="x"]')).toHaveCount(0)
-  })
-
-  test("employee search keeps the summary in sync with row motion", async ({
-    page,
-  }) => {
-    await page.emulateMedia({ reducedMotion: "no-preference" })
-    const employees: Employee[] = ["Alex Employee", "Second Employee"].map(
-      (fullName, index) => ({
-        id: `employee-${index + 1}`,
-        employeeId: `EXP-00${index + 1}`,
-        fullName,
-        email: `employee${index}@example.com`,
-        contactNumber: "09123456789",
-        position: "Designer",
-        employmentType: "FULL_TIME",
-        status: "ACTIVE",
-        startDate: "2026-01-15",
-        departmentId: null,
-        teamId: null,
-        department: null,
-        team: null,
-        hasAccount: true,
-        accountIsActive: true,
-        createdAt: "2026-01-15T00:00:00Z",
-        updatedAt: "2026-01-15T00:00:00Z",
-      }),
-    )
-    await restoreSession(page, "ADMIN", { initialEmployees: employees })
-    await page.goto("/employees")
-    await expect(
-      page.getByText("Showing 1–2 of 2", { exact: true }),
-    ).toBeVisible()
-    await page.evaluate(() => {
-      const samples: { moving: boolean; summary: string }[] = []
-      Reflect.set(window, "employeeMotionSamples", samples)
-      const main = document.querySelector(
-        'main[aria-label="Employee management"]',
-      )!
-      const observer = new MutationObserver(() => {
-        samples.push({
-          moving: Boolean(
-            main.querySelector("[data-animated-slot-row][inert]"),
-          ),
-          summary: main.querySelector("footer")?.textContent ?? "",
-        })
-      })
-      observer.observe(main, {
-        subtree: true,
-        attributes: true,
-        childList: true,
-        characterData: true,
-      })
-      Reflect.set(window, "employeeMotionObserver", observer)
-    })
-    await page
-      .getByRole("searchbox", { name: "Search employees" })
-      .fill("Second")
-    await expect(
-      page.getByText("Showing 1–1 of 1", { exact: true }),
-    ).toBeVisible()
-    const samples = await page.evaluate(() => {
-      const observer = Reflect.get(
-        window,
-        "employeeMotionObserver",
-      ) as MutationObserver
-      observer.disconnect()
-      return Reflect.get(window, "employeeMotionSamples") as {
-        moving: boolean
-        summary: string
-      }[]
-    })
-    expect(
-      samples.some(
-        (sample) =>
-          sample.moving && sample.summary.includes("Showing 1–2 of 2"),
-      ),
-    ).toBe(true)
-    expect(
-      samples.some(
-        (sample) =>
-          sample.moving && sample.summary.includes("Showing 1–1 of 1"),
-      ),
-    ).toBe(false)
-    await expect(
-      page.getByRole("row", { name: /Second Employee/ }),
-    ).toBeVisible()
-  })
-
-  for (const width of [1440, 390]) {
-    test(`employee row menus close the previous menu at ${width}px`, async ({
-      page,
-    }) => {
-      await page.setViewportSize({ width, height: 900 })
-      const employees: Employee[] = ["Alex Employee", "Second Employee"].map(
-        (fullName, index) => ({
-          id: `employee-${index + 1}`,
-          employeeId: `EXP-00${index + 1}`,
-          fullName,
-          email: `employee${index}@example.com`,
-          contactNumber: "09123456789",
-          position: "Designer",
-          employmentType: "FULL_TIME",
-          status: "ACTIVE",
-          startDate: "2026-01-15",
-          departmentId: null,
-          teamId: null,
-          department: null,
-          team: null,
-          hasAccount: true,
-          accountIsActive: true,
-          createdAt: "2026-01-15T00:00:00Z",
-          updatedAt: "2026-01-15T00:00:00Z",
-        }),
-      )
-      await restoreSession(page, "ADMIN", { initialEmployees: employees })
-      await page.goto("/employees")
-      const first = page.getByRole("button", {
-        name: "More actions for Alex Employee",
-        exact: true,
-      })
-      const second = page.getByRole("button", {
-        name: "More actions for Second Employee",
-        exact: true,
-      })
-      await second.click()
-      await expect(page.getByRole("menu")).toHaveCount(1)
-      await expect(second).toHaveAttribute("aria-expanded", "true")
-      await first.click()
-      await expect(page.getByRole("menu")).toHaveCount(1)
-      await expect(
-        page.getByRole("menu", {
-          name: "Actions for Alex Employee",
-          exact: true,
-        }),
-      ).toBeVisible()
-      await expect(first).toHaveAttribute("aria-expanded", "true")
-      await expect(second).toHaveAttribute("aria-expanded", "false")
-      await page.keyboard.press("Escape")
-      await expect(page.getByRole("menu")).toHaveCount(0)
-      await expect(first).toBeFocused()
-    })
-  }
-
-  test("employee search, details, and login retirement controls preserve HR records", async ({
-    page,
-  }) => {
-    await restoreSession(page, "ADMIN")
-    await page.goto("/employees")
-    await page.getByRole("button", { name: "View Alex Employee" }).click()
-    await expect(page.getByRole("dialog")).toContainText("EMP-001")
-    await expect(page.getByRole("dialog")).toContainText(
-      "alex.employee@example.com",
-    )
-    await page.getByRole("button", { name: "Close employee details" }).click()
-    await page
-      .getByRole("button", { name: "More actions for Alex Employee" })
-      .click()
-    await expect(
-      page.getByRole("menuitem", { name: "Deactivate account" }),
-    ).toBeVisible()
-    await expect(
-      page.getByRole("menuitem", { name: "Delete account", exact: true }),
-    ).toBeDisabled()
-    await page.keyboard.press("Escape")
-    await page.getByPlaceholder("Search name, ID, email…").fill("EMP-001")
-    await expect(page.getByText("Alex Employee", { exact: true })).toBeVisible()
-  })
-
-  test("department head status changes are blocked without an eligible replacement", async ({
-    page,
-  }) => {
-    await restoreSession(page, "ADMIN")
-    await page.route("**/api/employees/employee-1/status-options", (route) =>
-      route.fulfill({
-        json: {
-          isDepartmentHead: true,
-          replacementCandidates: [],
-          recommendedReplacementEmployeeId: null,
-          willRestoreOriginalHead: false,
-        },
-      }),
-    )
-    await page.goto("/employees")
-    await page
-      .getByRole("button", { name: "More actions for Alex Employee" })
-      .click()
-    await page.getByRole("menuitem", { name: "Change status" }).click()
-    await page.getByRole("combobox", { name: "Status", exact: true }).click()
-    await page.getByRole("option", { name: "On leave", exact: false }).click()
-    await expect(
-      page.getByText(
-        "No active Staff member with an EXP account is available.",
-        {
-          exact: false,
-        },
-      ),
-    ).toBeVisible()
-    await expect(
-      page.getByRole("button", { name: "Confirm status" }),
-    ).toBeDisabled()
-  })
-
-  test("department team creation reports authorization errors without adding a team", async ({
-    page,
-  }) => {
-    await restoreSession(page, "ADMIN")
-    await page.route("**/api/departments/dept-1/teams", (route) =>
-      route.fulfill({
-        status: 403,
-        json: { error: "Team permission revoked" },
-      }),
-    )
-    await page.goto("/departments")
-    await page.getByRole("button", { name: "Engineering", exact: true }).click()
-    await page.getByRole("tab", { name: /Teams/ }).click()
-    await page.getByRole("button", { name: "Create Team", exact: true }).click()
-    await page.getByLabel("Team name").fill("Restricted Team")
-    const request = page.waitForRequest(
-      (request) =>
-        request.method() === "POST" &&
-        new URL(request.url()).pathname.endsWith("/dept-1/teams"),
-    )
-    await page.getByRole("button", { name: "Save team" }).click()
-    expect((await request).postDataJSON()).toMatchObject({
-      name: "Restricted Team",
-    })
-    await expect(page.getByText("Team permission revoked")).toBeVisible()
-    await expect(
-      page.getByText("No teams created in this department yet."),
-    ).toBeVisible()
-  })
-
-  for (const status of [403, 500]) {
-    test(`service list handles HTTP ${status} and recovers on retry`, async ({
-      page,
-    }) => {
-      await restoreSession(page, "ADMIN")
-      await page.route(
-        "**/api/services",
-        (route) =>
-          route.fulfill({
-            status,
-            json: { error: "Service list unavailable" },
-          }),
-        { times: 1 },
-      )
-      await page.goto("/services")
-      await expect(
-        page.getByRole("table", { name: "Services" }).getByRole("alert"),
-      ).toContainText("Service list unavailable")
-      await expect(
-        page.getByRole("rowheader", { name: "Test Service" }),
-      ).toHaveCount(0)
-      await page.getByRole("button", { name: "Try again" }).click()
-      await expect(
-        page.getByRole("rowheader", { name: "Test Service" }),
-      ).toBeVisible()
-    })
-  }
-
-  test("services cannot be created without a responsible department", async ({
-    page,
-  }) => {
-    await restoreSession(page, "ADMIN", {
-      initialDepartments: [],
-      initialServices: [],
-    })
-    await page.goto("/services")
-    await page
-      .getByRole("button", { name: "Create Service", exact: true })
-      .click()
-    await expect(
-      page.getByText("Create a department before creating a service."),
-    ).toBeVisible()
-    await expect(
-      page
-        .getByRole("dialog")
-        .getByRole("button", { name: "Continue", exact: true }),
-    ).toBeDisabled()
-  })
-
-  // -----------------------------------------------------------------------------
-  // 1. Core SSR & Route Security
-  // -----------------------------------------------------------------------------
 
   test("auth pages render server HTML and unknown routes return 404", async ({
     request,
@@ -1854,10 +585,6 @@ test.describe("mocked regression", () => {
     }
   })
 
-  // -----------------------------------------------------------------------------
-  // 2. Authentication Flow & Edge Cases
-  // -----------------------------------------------------------------------------
-
   test("login preserves the loader, session, success toast, and sign-out", async ({
     page,
   }) => {
@@ -1887,8 +614,15 @@ test.describe("mocked regression", () => {
       ),
     ).toBe(false)
     await expect(page.getByText("Welcome back", { exact: true })).toBeVisible()
+    expect(await storedTokens(page)).toEqual(["test-session", "test-refresh"])
+    expect(
+      await page.evaluate(() =>
+        localStorage.getItem("nexus.auth.refreshToken"),
+      ),
+    ).toBeNull()
     await page.getByRole("button", { name: "Sign Out", exact: true }).click()
     await expect(page).toHaveURL(/\/login$/)
+    expect(await storedTokens(page)).toEqual([null, null])
     expect(
       await page.evaluate(() => sessionStorage.getItem("nexus.auth.token")),
     ).toBeNull()
@@ -1998,943 +732,11 @@ test.describe("mocked regression", () => {
     })
     await expect(page).toHaveURL(/\/dashboard$/)
     await expect(page.locator('[data-role="USER"]')).toBeVisible()
+    expect(await storedTokens(page)).toEqual(["test-session", "test-refresh"])
     await expect(
       page.getByRole("status", { name: "Opening your account" }),
     ).toHaveCount(0)
   })
-
-  // -----------------------------------------------------------------------------
-  // 3. RBAC Layout, Navigation & Access Restrictions
-  // -----------------------------------------------------------------------------
-
-  for (const role of ["SUPERADMIN", "ADMIN", "STAFF", "USER"] as const) {
-    test(`${role} restores its layout, navigation, and deep-link permissions`, async ({
-      page,
-    }) => {
-      await restoreSession(page, role)
-      await page.goto("/")
-      await expect(page).toHaveURL(/\/dashboard$/)
-      await expect(page.locator(`[data-role="${role}"]`)).toBeVisible()
-      const menu = page.getByRole("navigation", { name: "Main menu" })
-      const managesAccounts = role === "SUPERADMIN"
-      await expect(
-        menu.getByRole("link", { name: "Account Management", exact: true }),
-      ).toHaveCount(managesAccounts ? 1 : 0)
-      await expect(
-        menu.getByRole("link", { name: "Department Management", exact: true }),
-      ).toHaveCount(role === "ADMIN" ? 1 : 0)
-      await expect(
-        menu.getByRole("link", { name: "Employee Management", exact: true }),
-      ).toHaveCount(role === "ADMIN" ? 1 : 0)
-      await expect(
-        menu.getByRole("link", { name: "Service Management", exact: true }),
-      ).toHaveCount(role === "ADMIN" ? 1 : 0)
-      await expect(
-        menu.getByRole("link", { name: "Services", exact: true }),
-      ).toHaveCount(role === "USER" ? 1 : 0)
-
-      await page.goto("/accounts")
-      if (managesAccounts) {
-        await expect(
-          page.getByRole("heading", { name: "Account Management" }),
-        ).toBeVisible()
-        await expect(
-          page.getByText("Test Person", { exact: true }),
-        ).toBeVisible()
-        await expect(
-          menu.getByRole("link", { name: "Account Management", exact: true }),
-        ).toHaveAttribute("aria-current", "page")
-      } else {
-        await expect(page).toHaveURL(/\/dashboard$/)
-      }
-
-      const departmentRequests: string[] = []
-      page.on("request", (request) => {
-        if (new URL(request.url()).pathname.startsWith("/api/departments")) {
-          departmentRequests.push(request.url())
-        }
-      })
-      await page.goto("/departments")
-      if (role !== "ADMIN") {
-        await expect(page).toHaveURL(/\/dashboard$/)
-        await expect(
-          page.getByRole("heading", { name: "Department Management" }),
-        ).toHaveCount(0)
-        expect(departmentRequests).toEqual([])
-      } else {
-        await expect(
-          page.getByRole("heading", { name: "Department Management" }),
-        ).toBeVisible()
-        await expect(
-          page.getByRole("button", { name: "Create Department", exact: true }),
-        ).toHaveCount(1)
-        await page.reload()
-        await expect(
-          page.getByRole("heading", { name: "Department Management" }),
-        ).toBeVisible()
-      }
-
-      const employeeRequests: string[] = []
-      page.on("request", (request) => {
-        if (new URL(request.url()).pathname.startsWith("/api/employees")) {
-          employeeRequests.push(request.url())
-        }
-      })
-      await page.goto("/employees")
-      if (role !== "ADMIN") {
-        await expect(page).toHaveURL(/\/dashboard$/)
-        await expect(
-          page.getByRole("heading", { name: "Employee Management" }),
-        ).toHaveCount(0)
-        expect(employeeRequests).toEqual([])
-      } else {
-        await expect(
-          page.getByRole("heading", { name: "Employee Management" }),
-        ).toBeVisible()
-        await expect(
-          page.getByText("Alex Employee", { exact: true }),
-        ).toBeVisible()
-        await expect(
-          page.getByRole("button", { name: "Create Employee", exact: true }),
-        ).toHaveCount(1)
-        expect(employeeRequests).toHaveLength(1)
-      }
-
-      const serviceRequests: string[] = []
-      page.on("request", (request) => {
-        if (new URL(request.url()).pathname.startsWith("/api/services")) {
-          serviceRequests.push(request.url())
-        }
-      })
-      await page.goto("/services")
-      if (role === "SUPERADMIN" || role === "STAFF") {
-        await expect(page).toHaveURL(/\/dashboard$/)
-        await expect(
-          page.getByRole("heading", { name: "Service Management" }),
-        ).toHaveCount(0)
-        expect(serviceRequests).toEqual([])
-      } else if (role === "ADMIN") {
-        await expect(
-          page.getByRole("heading", { name: "Service Management" }),
-        ).toBeVisible()
-        await expect(
-          page.getByText("Test Service", { exact: true }),
-        ).toBeVisible()
-        await expect(
-          page.getByRole("button", { name: "Create Service", exact: true }),
-        ).toHaveCount(1)
-        expect(
-          serviceRequests.map((url) => new URL(url).pathname).sort(),
-        ).toEqual(["/api/services", "/api/services/pricing-templates"])
-        await page.reload()
-        await expect(
-          page.getByRole("heading", { name: "Service Management" }),
-        ).toBeVisible()
-      } else {
-        await expect(
-          page.getByRole("heading", { name: "Build Your Brand with EXP" }),
-        ).toBeVisible()
-        await expect(
-          page.getByRole("button", { name: "Explore Test Service" }),
-        ).toBeVisible()
-        expect(serviceRequests.map((url) => new URL(url).pathname)).toEqual([
-          "/api/services/available",
-        ])
-      }
-    })
-  }
-
-  for (const width of [390, 1280, 1920]) {
-    for (const packageCount of [0, 1, 2]) {
-      test(`client package card sizing with ${packageCount} packages at ${width}px`, async ({
-        page,
-      }, testInfo) => {
-        await page.setViewportSize({ width, height: 1000 })
-        const timestamp = "2026-01-01T00:00:00.000Z"
-        await restoreSession(page, "USER", {
-          initialServices: [
-            {
-              id: "layout-service",
-              name: "Layout Service",
-              description: "Support for your next project.",
-              iconKey: "sparkles",
-              imageUrl: null,
-              imageAltText: null,
-              clientRequirements: [],
-              requiresConsultation: false,
-              consultationNotes: null,
-              keyBenefits: [],
-              isActive: true,
-              pricingTemplateId: null,
-              pricingTemplate: null,
-              departments: [],
-              createdAt: timestamp,
-              updatedAt: timestamp,
-              packages: Array.from({ length: packageCount }, (_, index) => ({
-                id: `package-${index}`,
-                name: `Package ${index + 1}`,
-                description: "Project support.",
-                includedFeatures: ["Dedicated specialist"],
-                pricingModel: "CUSTOM_QUOTE",
-                currency: "PHP",
-                amount: null,
-                billingInterval: null,
-                isPricingPublic: false,
-                isActive: true,
-                isRecommended: index === 0,
-                displayOrder: index,
-                createdAt: timestamp,
-                updatedAt: timestamp,
-              })),
-            },
-          ],
-        })
-        await page.goto("/services")
-        await page
-          .getByRole("button", { name: "Explore Layout Service" })
-          .click()
-        await page
-          .getByRole("dialog")
-          .getByRole("button", { name: "EXPlore", exact: true })
-          .click()
-        const cards = page
-          .getByRole("group", { name: "Packages & pricing" })
-          .getByRole("article")
-        await expect(cards).toHaveCount(Math.max(1, packageCount))
-        const bounds = await cards.evaluateAll((elements) =>
-          elements.map((element) => {
-            const rect = element.getBoundingClientRect()
-            return {
-              width: rect.width,
-              height: rect.height,
-              overflow: element.scrollWidth > element.clientWidth,
-            }
-          }),
-        )
-        for (const card of bounds) {
-          expect(card.width).toBeGreaterThanOrEqual(280)
-          expect(card.width).toBeLessThanOrEqual(331)
-          expect(card.height).toBeLessThan(500)
-          expect(card.overflow).toBe(false)
-        }
-        await cards.first().scrollIntoViewIfNeeded()
-        await page.screenshot({ path: testInfo.outputPath("card-layout.png") })
-      })
-    }
-  }
-
-  for (const width of [1280, 390]) {
-    test(`client selects service packages and returns to the catalog at ${width}px`, async ({
-      page,
-    }, testInfo) => {
-      await page.setViewportSize({ width, height: 900 })
-      const timestamp = "2026-01-01T00:00:00.000Z"
-      const basePackage = {
-        description: "Social media support for your business.",
-        includedFeatures: ["Content calendar", "Monthly reporting"],
-        pricingModel: "RECURRING" as const,
-        currency: "PHP",
-        amount: "2500.00",
-        billingInterval: "MONTHLY" as const,
-        isPricingPublic: true,
-        isActive: true,
-        isRecommended: false,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      }
-      await restoreSession(page, "USER", {
-        initialServices: [
-          {
-            id: "social-service",
-            name: "Social Media Management",
-            description: "Grow your brand and connect with your audience.",
-            iconKey: "social",
-            imageUrl: null,
-            imageAltText: null,
-            clientRequirements: ["Brand guidelines", "Target audience"],
-            requiresConsultation: true,
-            consultationNotes:
-              "We will discuss your goals and target audience.",
-            keyBenefits: [],
-            isActive: true,
-            pricingTemplateId: null,
-            pricingTemplate: null,
-            departments: [],
-            createdAt: timestamp,
-            updatedAt: timestamp,
-            packages: [
-              {
-                ...basePackage,
-                id: "weekly",
-                name: "Weekly Spark",
-                displayOrder: 0,
-                billingInterval: "WEEKLY",
-                amount: "750.00",
-                includedFeatures: [
-                  "Dedicated specialist",
-                  "2 rounds of revisions",
-                  "48-hour response time",
-                  "Source files included",
-                ],
-              },
-              {
-                ...basePackage,
-                id: "starter",
-                name: "Starter",
-                displayOrder: 1,
-                isRecommended: true,
-              },
-              {
-                ...basePackage,
-                id: "custom",
-                name: "Custom plan",
-                displayOrder: 2,
-                isPricingPublic: false,
-                amount: "99999.00",
-              },
-              {
-                ...basePackage,
-                id: "growth",
-                name: "Growth plan",
-                displayOrder: 3,
-              },
-              {
-                ...basePackage,
-                id: "annual",
-                name: "Annual plan",
-                displayOrder: 4,
-                billingInterval: "YEARLY",
-              },
-              {
-                ...basePackage,
-                id: "retired",
-                name: "Retired package",
-                displayOrder: 0,
-                isActive: false,
-              },
-            ],
-          },
-        ],
-      })
-      await page.goto("/services")
-      await page
-        .getByRole("button", { name: "Explore Social Media Management" })
-        .click()
-      await page
-        .getByRole("dialog")
-        .getByRole("button", { name: "EXPlore", exact: true })
-        .click()
-      await expect(page.getByRole("dialog")).toHaveCount(0)
-      await expect(
-        page.getByRole("heading", { name: "Choose Your Package" }),
-      ).toBeVisible()
-      await expect(page.getByRole("progressbar")).toHaveAttribute(
-        "aria-valuenow",
-        "2",
-      )
-      await expect(
-        page.getByText("Most popular", { exact: true }),
-      ).toBeVisible()
-      await expect(
-        page.getByText("Retired package", { exact: true }),
-      ).toHaveCount(0)
-      await expect(page.getByText(/99,999/)).toHaveCount(0)
-      await expect(
-        page.getByRole("button", { name: "Continue to project requirements" }),
-      ).toBeDisabled()
-      const packageCards = page
-        .getByRole("group", { name: "Packages & pricing" })
-        .getByRole("article")
-      await expect(packageCards).toHaveCount(5)
-      const cardLayout = await packageCards.evaluateAll((cards) =>
-        cards.map((card) => {
-          const bounds = card.getBoundingClientRect()
-          return {
-            left: bounds.left,
-            right: bounds.right,
-            top: bounds.top,
-            width: bounds.width,
-            buttonTop: card.querySelector("button")!.getBoundingClientRect()
-              .top,
-          }
-        }),
-      )
-      const firstRow = cardLayout.filter(
-        (card) => Math.abs(card.top - cardLayout[0].top) < 1,
-      )
-      const lastRow = cardLayout.filter(
-        (card) => Math.abs(card.top - cardLayout.at(-1)!.top) < 1,
-      )
-      expect(
-        Math.abs(
-          firstRow[0].left +
-            firstRow.at(-1)!.right -
-            (lastRow[0].left + lastRow.at(-1)!.right),
-        ),
-      ).toBeLessThan(2)
-      for (const card of cardLayout) {
-        expect(Math.abs(card.width - cardLayout[0].width)).toBeLessThan(1)
-      }
-      for (const card of firstRow) {
-        expect(Math.abs(card.buttonTop - firstRow[0].buttonTop)).toBeLessThan(1)
-      }
-      await page
-        .getByRole("button", { name: "Select Starter", exact: true })
-        .click()
-      await expect(page.getByRole("status")).toContainText("Starter")
-      await expect(page.getByRole("status")).toContainText("₱2,500")
-      await expect(page.getByRole("status")).toContainText("/ month")
-      await page.getByRole("group", { name: "Packages & pricing" }).screenshot({
-        path: testInfo.outputPath("packages.png"),
-      })
-      await page
-        .getByRole("button", { name: "View service details", exact: true })
-        .click()
-      await page.getByRole("button", { name: "Close service details" }).click()
-      await expect(
-        page.getByRole("button", { name: "Select Starter", exact: true }),
-      ).toHaveAttribute("aria-pressed", "true")
-      await page
-        .getByRole("button", { name: "Select Custom plan", exact: true })
-        .click()
-      await expect(page.getByRole("status")).toContainText(
-        "Contact for pricing",
-      )
-      await expect(
-        page.getByText("Consultation required", { exact: true }),
-      ).toBeVisible()
-      await page
-        .getByRole("button", { name: "Continue to project requirements" })
-        .click()
-      await expect(
-        page.getByRole("heading", {
-          name: "Project Requirements",
-          exact: true,
-        }),
-      ).toBeVisible()
-      await expect(page.getByRole("progressbar")).toHaveAttribute(
-        "aria-valuenow",
-        "3",
-      )
-      await expect(
-        page.getByRole("complementary", { name: "Project context" }),
-      ).toContainText("Custom plan")
-      await expect(
-        page.getByText("Brand guidelines", { exact: true }),
-      ).toBeVisible()
-      await page
-        .getByRole("textbox", { name: "Project goals", exact: true })
-        .scrollIntoViewIfNeeded()
-      await page.screenshot({ path: testInfo.outputPath("requirements.png") })
-      await page
-        .getByRole("button", { name: "Save requirements", exact: true })
-        .click()
-      await expect(page.getByRole("main").getByRole("alert")).toHaveCount(3)
-      await page
-        .getByRole("button", { name: "Continue to preferred specialist" })
-        .click()
-      await expect(page.getByRole("progressbar")).toHaveAttribute(
-        "aria-valuenow",
-        "3",
-      )
-      await expect(page.getByRole("main").getByRole("alert")).toHaveCount(3)
-      await expect(
-        page.getByRole("textbox", { name: "Project goals", exact: true }),
-      ).toBeFocused()
-      await page
-        .getByRole("textbox", { name: "Project goals", exact: true })
-        .fill("Increase awareness and generate qualified leads.")
-      await page
-        .getByRole("textbox", { name: "Project requirements", exact: true })
-        .fill("Create a content calendar and 12 posts each month.")
-      await page
-        .getByRole("textbox", { name: "Expected timeline", exact: true })
-        .fill("Launch within six weeks, with a flexible start date.")
-      await page
-        .getByRole("textbox", { name: /^Additional details/ })
-        .fill(
-          "Our audience is small business owners. Follow our existing brand colors.",
-        )
-      await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0)
-      await page
-        .getByRole("button", { name: "Save requirements", exact: true })
-        .click()
-      await expect(page.getByRole("status")).toContainText(
-        "Project requirements saved in this draft.",
-      )
-      await page.getByRole("button", { name: "Back to packages" }).click()
-      await expect(
-        page.getByRole("button", { name: "Select Custom plan", exact: true }),
-      ).toHaveAttribute("aria-pressed", "true")
-      await page
-        .getByRole("button", { name: "Select Starter", exact: true })
-        .click()
-      await page
-        .getByRole("button", { name: "Continue to project requirements" })
-        .click()
-      await expect(
-        page.getByRole("textbox", { name: "Project goals", exact: true }),
-      ).toHaveValue("Increase awareness and generate qualified leads.")
-      await expect(
-        page.getByRole("textbox", {
-          name: "Project requirements",
-          exact: true,
-        }),
-      ).toHaveValue("Create a content calendar and 12 posts each month.")
-      await expect(
-        page.getByRole("textbox", { name: "Expected timeline", exact: true }),
-      ).toHaveValue("Launch within six weeks, with a flexible start date.")
-      await expect(
-        page.getByRole("textbox", { name: /^Additional details/ }),
-      ).toHaveValue(
-        "Our audience is small business owners. Follow our existing brand colors.",
-      )
-      await expect(
-        page.getByRole("complementary", { name: "Project context" }),
-      ).toContainText("Starter")
-      await page
-        .getByRole("textbox", { name: "Project goals", exact: true })
-        .fill("Grow our online community.")
-      await expect(page.getByRole("status")).toHaveCount(0)
-      let specialistResponse: "error" | "populated" | "empty" = "error"
-      await page.route(
-        "**/api/services/social-service/specialists",
-        async (route) => {
-          if (specialistResponse === "error") {
-            await route.fulfill({ status: 503, json: { error: "Unavailable" } })
-          } else {
-            await route.fulfill({
-              json: {
-                specialists:
-                  specialistResponse === "empty"
-                    ? []
-                    : [
-                        {
-                          id: "specialist-1",
-                          fullName: "Alex Santos",
-                          position: "Social Media Specialist",
-                          department: { id: "marketing", name: "Marketing" },
-                        },
-                        {
-                          id: "specialist-2",
-                          fullName: "Jamie Reyes",
-                          position: "Content Strategist",
-                          department: { id: "marketing", name: "Marketing" },
-                        },
-                      ],
-              },
-            })
-          }
-        },
-      )
-      await page
-        .getByRole("button", { name: "Continue to preferred specialist" })
-        .click()
-      await expect(page.getByRole("progressbar")).toHaveAttribute(
-        "aria-valuenow",
-        "4",
-      )
-      await expect(
-        page.getByRole("heading", {
-          name: "Preferred Specialist",
-          exact: true,
-        }),
-      ).toBeVisible()
-      await expect(page.getByRole("main").getByRole("alert")).toContainText(
-        "couldn’t load",
-      )
-      specialistResponse = "populated"
-      await page.getByRole("button", { name: "Retry specialists" }).click()
-      await page
-        .getByRole("radio", { name: "Prefer Alex Santos", exact: true })
-        .check()
-      await expect(
-        page.getByRole("complementary", {
-          name: "Specialist selection summary",
-        }),
-      ).toContainText("Alex Santos")
-      await expect(
-        page.getByText(
-          "Subject to availability and Department Manager approval",
-          { exact: true },
-        ),
-      ).toBeVisible()
-      await page.screenshot({ path: testInfo.outputPath("specialist.png") })
-      await page
-        .getByRole("button", { name: "Back to project requirements" })
-        .click()
-      await expect(
-        page.getByRole("textbox", { name: "Project goals", exact: true }),
-      ).toHaveValue("Grow our online community.")
-      await page
-        .getByRole("button", { name: "Continue to preferred specialist" })
-        .click()
-      await expect(
-        page.getByRole("radio", { name: "Prefer Alex Santos", exact: true }),
-      ).toBeChecked()
-      await page
-        .getByRole("radio", { name: "Prefer Jamie Reyes", exact: true })
-        .check()
-      await expect(page.getByRole("status")).toHaveCount(0)
-      specialistResponse = "empty"
-      await page
-        .getByRole("button", { name: "Back to project requirements" })
-        .click()
-      await page
-        .getByRole("button", { name: "Continue to preferred specialist" })
-        .click()
-      await expect(
-        page.getByText(/No specialists are currently listed/),
-      ).toBeVisible()
-      await expect(
-        page.getByRole("button", {
-          name: "Submit service request for review",
-          exact: true,
-        }),
-      ).toBeDisabled()
-      await page
-        .getByRole("radio", { name: /Let the department assign a specialist/ })
-        .check()
-      await page
-        .getByRole("button", { name: "Back to project requirements" })
-        .click()
-      await page.getByRole("button", { name: "Back to packages" }).click()
-      expect(
-        await page.evaluate(
-          () => document.documentElement.scrollWidth <= window.innerWidth,
-        ),
-      ).toBe(true)
-      await page
-        .getByRole("button", { name: "Continue to project requirements" })
-        .click()
-      specialistResponse = "populated"
-      await page
-        .getByRole("button", { name: "Continue to preferred specialist" })
-        .click()
-      await expect(
-        page.getByRole("radio", { name: "Prefer Alex Santos", exact: true }),
-      ).toBeVisible()
-      if (width === 1280)
-        await page
-          .getByRole("radio", { name: "Prefer Alex Santos", exact: true })
-          .check()
-      const submissions: Record<string, unknown>[] = []
-      let releaseSubmission: (() => void) | undefined
-      await page.route("**/api/service-requests", async (route) => {
-        submissions.push(
-          route.request().postDataJSON() as Record<string, unknown>,
-        )
-        if (submissions.length === 1) {
-          await route.fulfill({
-            status: 503,
-            json: {
-              error: "Submission temporarily unavailable. Please try again.",
-            },
-          })
-        } else {
-          await new Promise<void>((resolve) => {
-            releaseSubmission = resolve
-          })
-          await route.fulfill({
-            status: 201,
-            json: {
-              serviceRequest: {
-                id: "request-123",
-                status: "PENDING",
-                createdAt: timestamp,
-              },
-            },
-          })
-        }
-      })
-      await expect(page.getByRole("progressbar")).toHaveAttribute(
-        "aria-valuemax",
-        "4",
-      )
-      await expect(page.getByText("Step 4 of 4", { exact: true })).toBeVisible()
-      await page
-        .getByRole("button", {
-          name: "Submit service request for review",
-          exact: true,
-        })
-        .click()
-      await expect(page.getByRole("main").getByRole("alert")).toContainText(
-        "Submission temporarily unavailable",
-      )
-      await page
-        .getByRole("button", {
-          name: "Submit service request for review",
-          exact: true,
-        })
-        .click()
-      await expect.poll(() => submissions.length).toBe(2)
-      await expect(
-        page.getByRole("button", { name: "Submitting request…", exact: true }),
-      ).toBeDisabled()
-      await expect(
-        page.getByRole("button", { name: "Back to project requirements" }),
-      ).toBeDisabled()
-      await expect(
-        page.getByRole("radio", { name: "Prefer Alex Santos", exact: true }),
-      ).toBeDisabled()
-      expect(submissions[0].submissionKey).toBe(submissions[1].submissionKey)
-      expect(submissions[1]).toMatchObject({
-        serviceId: "social-service",
-        packageId: "starter",
-        preferredSpecialistId: width === 1280 ? "specialist-1" : null,
-        goals: "Grow our online community.",
-        requirements: "Create a content calendar and 12 posts each month.",
-        expectedTimeline:
-          "Launch within six weeks, with a flexible start date.",
-        additionalDetails:
-          "Our audience is small business owners. Follow our existing brand colors.",
-      })
-      expect(submissions[1]).not.toHaveProperty("clientId")
-      releaseSubmission!()
-      await expect(
-        page.getByRole("heading", {
-          name: "Service request submitted for review",
-          exact: true,
-        }),
-      ).toBeVisible()
-      await expect(page.getByText("request-123", { exact: true })).toBeVisible()
-      await expect(
-        page.getByText("Pending review", { exact: true }),
-      ).toBeVisible()
-      await expect(
-        page.getByText("Request not submitted", { exact: true }),
-      ).toBeHidden()
-      await expect(
-        page.getByRole("button", {
-          name: "Submit service request for review",
-          exact: true,
-        }),
-      ).toHaveCount(0)
-      await page.screenshot({
-        path: testInfo.outputPath("request-submitted.png"),
-      })
-      await page
-        .getByRole("button", { name: "Start another request", exact: true })
-        .click()
-      await expect(page.getByRole("progressbar")).toHaveAttribute(
-        "aria-valuenow",
-        "1",
-      )
-      await expect(
-        page.getByRole("button", { name: "Explore Social Media Management" }),
-      ).toBeVisible()
-    })
-  }
-
-  // -----------------------------------------------------------------------------
-  // 4. Internationalization & Session Expiry
-  // -----------------------------------------------------------------------------
-
-  test("client catalog retries failures and resets pagination when filtering", async ({
-    page,
-  }) => {
-    const timestamp = "2026-10-30T00:00:00.000Z"
-    const services: Service[] = Array.from({ length: 10 }, (_, index) => ({
-      id: `catalog-${index}`,
-      name: `Catalog Service ${index + 1}`,
-      description: "Business support",
-      iconKey: "sparkles",
-      imageUrl: null,
-      imageAltText: null,
-      clientRequirements: [],
-      requiresConsultation: false,
-      consultationNotes: null,
-      keyBenefits: [],
-      isActive: true,
-      pricingTemplateId: null,
-      pricingTemplate: null,
-      packages: [],
-      departments: [
-        {
-          id: index < 8 ? "engineering" : "marketing",
-          name: index < 8 ? "Engineering" : "Marketing",
-          code: null,
-          color: "teal",
-        },
-      ],
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    }))
-    await restoreSession(page, "USER", { initialServices: services })
-    await page.route(
-      "**/api/services/available",
-      (route) =>
-        route.fulfill({
-          status: 503,
-          json: { error: "Catalog temporarily unavailable" },
-        }),
-      { times: 1 },
-    )
-    await page.goto("/services")
-    await expect(page.getByRole("main").getByRole("alert")).toContainText(
-      "Catalog temporarily unavailable",
-    )
-    await page.getByRole("button", { name: "Try again", exact: true }).click()
-    await expect(
-      page.getByRole("button", { name: /^Explore Catalog Service/ }),
-    ).toHaveCount(8)
-    await page.getByRole("button", { name: "Next page", exact: true }).click()
-    await expect(
-      page.getByRole("button", { name: /^Explore Catalog Service/ }),
-    ).toHaveCount(2)
-    await page
-      .getByRole("combobox", { name: "Filter services by department" })
-      .click()
-    await page.getByRole("option", { name: "Engineering", exact: true }).click()
-    await expect(
-      page.getByRole("button", { name: "Page 1", exact: true }),
-    ).toHaveAttribute("aria-current", "page")
-    await expect(
-      page.getByRole("button", { name: /^Explore Catalog Service/ }),
-    ).toHaveCount(8)
-    await page
-      .getByRole("searchbox", { name: "Search services" })
-      .fill("' OR 1=1 --")
-    await expect(
-      page.getByText("No services found", { exact: true }),
-    ).toBeVisible()
-    await expect(
-      page.getByRole("button", { name: /^Explore Catalog Service/ }),
-    ).toHaveCount(0)
-    await page
-      .getByRole("searchbox", { name: "Search services" })
-      .fill("Catalog Service 3")
-    await expect(
-      page.getByRole("button", { name: /^Explore Catalog Service/ }),
-    ).toHaveCount(1)
-    await expect(
-      page.getByRole("button", {
-        name: "Explore Catalog Service 3",
-        exact: true,
-      }),
-    ).toBeVisible()
-  })
-
-  for (const width of [1280, 390]) {
-    test(`client submits standard service and starts a clean request at ${width}px`, async ({
-      page,
-    }) => {
-      await page.setViewportSize({ width, height: 900 })
-      await restoreSession(page, "USER")
-      await page.route("**/api/services/service-1/specialists", (route) =>
-        route.fulfill({ json: { specialists: [] } }),
-      )
-      const submissions: Record<string, unknown>[] = []
-      await page.route("**/api/service-requests", async (route) => {
-        expect(route.request().method()).toBe("POST")
-        submissions.push(
-          route.request().postDataJSON() as Record<string, unknown>,
-        )
-        await route.fulfill({
-          status: 201,
-          json: {
-            serviceRequest: {
-              id: `request-${submissions.length}`,
-              status: "PENDING",
-              createdAt: "2026-10-30T00:00:00.000Z",
-            },
-          },
-        })
-      })
-      await page.goto("/services")
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        await page
-          .getByRole("button", { name: "Explore Test Service", exact: true })
-          .click()
-        await page
-          .getByRole("dialog")
-          .getByRole("button", { name: "EXPlore", exact: true })
-          .click()
-        const select = page.getByRole("button", {
-          name: "Select Standard service",
-          exact: true,
-        })
-        await expect(select).toHaveAttribute("aria-pressed", "false")
-        await select.click()
-        await page
-          .getByRole("button", { name: "Continue to project requirements" })
-          .click()
-        for (const name of [
-          "Project goals",
-          "Project requirements",
-          "Expected timeline",
-        ]) {
-          const input = page.getByRole("textbox", { name, exact: true })
-          await expect(input).toHaveValue("")
-          await input.fill(`${name} for request ${attempt}`)
-        }
-        await page
-          .getByRole("button", { name: "Continue to preferred specialist" })
-          .click()
-        await expect(
-          page.getByText(/No specialists are currently listed/),
-        ).toBeVisible()
-        await page
-          .getByRole("button", {
-            name: "Submit service request for review",
-            exact: true,
-          })
-          .click()
-        await expect(
-          page.getByRole("heading", {
-            name: "Service request submitted for review",
-            exact: true,
-          }),
-        ).toBeFocused()
-        expect(submissions).toHaveLength(attempt)
-        expect(submissions[attempt - 1]).toMatchObject({
-          serviceId: "service-1",
-          packageId: null,
-          preferredSpecialistId: null,
-          goals: `Project goals for request ${attempt}`,
-          additionalDetails: "",
-        })
-        expect(submissions[attempt - 1]).not.toHaveProperty("clientId")
-        await expect(
-          page.getByRole("link", { name: "View booked service", exact: true }),
-        ).toHaveAttribute("href", `/booked-services?booking=request-${attempt}`)
-        await page
-          .getByRole("button", { name: "Start another request", exact: true })
-          .click()
-      }
-      expect(submissions[0].submissionKey).toEqual(expect.any(String))
-      expect(submissions[1].submissionKey).not.toBe(
-        submissions[0].submissionKey,
-      )
-    })
-
-    test(`admin client form preserves input until explicitly cancelled at ${width}px`, async ({
-      page,
-    }) => {
-      await page.setViewportSize({ width, height: 900 })
-      await restoreSession(page, "ADMIN")
-      await page.goto("/clients")
-      const opener = page.getByRole("button", {
-        name: "Create Client",
-        exact: true,
-      })
-      await opener.click()
-      const dialog = page.getByRole("dialog")
-      await dialog.getByLabel("Full Name").fill("Draft Client")
-      await dialog.getByLabel("Email Address").fill("draft@example.com")
-      await page.mouse.click(2, 2)
-      await page.keyboard.press("Escape")
-      await expect(dialog.getByLabel("Full Name")).toHaveValue("Draft Client")
-      await expect(dialog.getByLabel("Email Address")).toHaveValue(
-        "draft@example.com",
-      )
-      await dialog.getByRole("button", { name: "Cancel", exact: true }).click()
-      await expect(dialog).toHaveCount(0)
-      await expect(opener).toBeFocused()
-      await opener.click()
-      await expect(dialog.getByLabel("Full Name")).toHaveValue("")
-    })
-  }
 
   test("stored Filipino language hydrates and survives auth navigation", async ({
     page,
@@ -3041,304 +843,5 @@ test.describe("mocked regression", () => {
     expect(
       await page.evaluate(() => sessionStorage.getItem("nexus.auth.token")),
     ).toBeNull()
-  })
-
-  // -----------------------------------------------------------------------------
-  // 5. Account Management Features (Search, Role Change, Status Toggle)
-  // -----------------------------------------------------------------------------
-
-  test("superadmin can search accounts, modify user roles, and deactivate/reactivate users", async ({
-    page,
-  }) => {
-    await restoreSession(page, "SUPERADMIN")
-    await page.goto("/accounts")
-
-    await expect(
-      page.getByRole("heading", { name: "Account Management" }),
-    ).toBeVisible()
-    await expect(page.getByText("Target User")).toBeVisible()
-
-    // 1. Search accounts
-    const searchInput = page.getByPlaceholder("Search name or email")
-    await searchInput.fill("Target")
-    await expect(page.getByText("Target User")).toBeVisible()
-
-    // 2. Modify Role
-    const roleDropdown = page.getByRole("button", {
-      name: "Role for target@example.com: User",
-    })
-    await roleDropdown.click()
-    await page.getByRole("menuitemradio", { name: "Staff" }).click()
-
-    const saveButton = page.getByRole("button", { name: "Save changes" })
-    await expect(saveButton).toBeEnabled()
-    await saveButton.click()
-    await expect(
-      page.getByRole("button", { name: "Role for target@example.com: Staff" }),
-    ).toBeVisible()
-
-    // 3. Deactivate User via Row Actions
-    const actionsButton = page.getByRole("button", {
-      name: "More actions for target@example.com",
-    })
-    await actionsButton.click()
-    await page.getByRole("menuitem", { name: "Deactivate account" }).click()
-
-    // Confirmation dialog opens
-    await expect(page.getByText("Deactivate account?")).toBeVisible()
-    await page
-      .getByRole("button", { name: "Deactivate account", exact: true })
-      .click()
-
-    // Status pill reflects Inactive
-    await expect(page.getByText("Inactive")).toBeVisible()
-
-    // 4. Reactivate User
-    await actionsButton.click()
-    await page.getByRole("menuitem", { name: "Reactivate account" }).click()
-    await expect(page.getByText("Reactivate account?")).toBeVisible()
-    await page
-      .getByRole("button", { name: "Reactivate account", exact: true })
-      .click()
-
-    // Status pill reflects Active again
-    await expect(page.getByText("Active").first()).toBeVisible()
-  })
-
-  for (const width of [390, 1280]) {
-    test(`superadmin can restore a soft-deleted account at ${width}px`, async ({
-      page,
-    }) => {
-      await page.setViewportSize({ width, height: 900 })
-      await restoreSession(page, "SUPERADMIN", {
-        initialUsers: [
-          {
-            ...accountFor("USER"),
-            id: "trashed-target",
-            email: "target@example.com",
-            fullName: "Target User",
-            isActive: false,
-            accountDeletedAt: "2026-10-01T00:00:00.000Z",
-          },
-        ],
-      })
-      let attempts = 0
-      let releaseRestore: (() => void) | undefined
-      await page.route("**/api/users/trashed-target/restore", async (route) => {
-        attempts += 1
-        expect(route.request().method()).toBe("POST")
-        expect(route.request().headers().authorization).toBe(
-          "Bearer test-session",
-        )
-        if (attempts === 1) {
-          await route.fulfill({
-            status: 503,
-            json: { error: "Restore failed. Please retry." },
-          })
-          return
-        }
-        await new Promise<void>((resolve) => {
-          releaseRestore = resolve
-        })
-        await route.fallback()
-      })
-      await page.goto("/accounts")
-      await expect(page.getByText("Target User")).toBeHidden()
-      await page.getByRole("button", { name: "Trash", exact: true }).click()
-      await expect(page.getByText("Target User")).toBeVisible()
-      const openRestore = async () => {
-        await page
-          .getByRole("button", { name: "More actions for target@example.com" })
-          .click()
-        await page
-          .getByRole("menuitem", { name: "Restore account", exact: true })
-          .click()
-      }
-      await openRestore()
-      const dialog = page.getByRole("dialog")
-      await expect(
-        dialog.getByRole("heading", { name: "Restore account?" }),
-      ).toBeVisible()
-      await expect(dialog).toContainText("as inactive")
-      await dialog.getByRole("button", { name: "Cancel", exact: true }).click()
-      expect(attempts).toBe(0)
-      await openRestore()
-      await dialog
-        .getByRole("button", { name: "Restore account", exact: true })
-        .click()
-      await expect(dialog.getByRole("alert")).toHaveText(
-        "Restore failed. Please retry.",
-      )
-      await dialog
-        .getByRole("button", { name: "Restore account", exact: true })
-        .click()
-      await expect(
-        dialog.getByRole("button", { name: "Restoring...", exact: true }),
-      ).toBeDisabled()
-      await expect(
-        dialog.getByRole("button", { name: "Cancel", exact: true }),
-      ).toBeDisabled()
-      await page.keyboard.press("Escape")
-      await expect(dialog).toBeVisible()
-      await expect.poll(() => Boolean(releaseRestore)).toBe(true)
-      releaseRestore?.()
-      await expect(dialog).toBeHidden()
-      await expect(page.getByText("Target User")).toBeHidden()
-      await page
-        .getByRole("button", { name: "Back to Accounts", exact: true })
-        .click()
-      await expect(page.getByText("Target User")).toBeVisible()
-      await expect(page.getByText("Inactive", { exact: true })).toBeVisible()
-      await page
-        .getByRole("button", { name: "More actions for target@example.com" })
-        .click()
-      await expect(
-        page.getByRole("menuitem", { name: "Restore account", exact: true }),
-      ).toBeHidden()
-      await page
-        .getByRole("menuitem", { name: "Reactivate account", exact: true })
-        .click()
-      await page
-        .getByRole("dialog")
-        .getByRole("button", { name: "Reactivate account", exact: true })
-        .click()
-      await expect(page.getByText("Active", { exact: true })).toBeVisible()
-      expect(attempts).toBe(2)
-    })
-  }
-
-  test("superadmin can move an inactive account to Trash and delete it permanently", async ({
-    page,
-  }) => {
-    await restoreSession(page, "SUPERADMIN")
-    await page.goto("/accounts")
-
-    const searchInput = page.getByPlaceholder("Search name or email")
-    await searchInput.fill("Target")
-
-    await page
-      .getByRole("button", { name: "More actions for target@example.com" })
-      .click()
-    await page.getByRole("menuitem", { name: "Deactivate account" }).click()
-    await page
-      .getByRole("button", { name: "Deactivate account", exact: true })
-      .click()
-
-    await page
-      .getByRole("button", { name: "More actions for target@example.com" })
-      .click()
-    await page.getByRole("menuitem", { name: "Move to trash" }).click()
-    await expect(page.getByText("Move account to Trash?")).toBeVisible()
-    await page.getByRole("button", { name: "Move to Trash" }).click()
-    await expect(page.getByText("Target User")).toBeHidden()
-
-    await page.getByRole("button", { name: "Trash", exact: true }).click()
-    await expect(page.getByText("Target User")).toBeVisible()
-    await expect(
-      page
-        .getByText("Deleted", { exact: true })
-        .filter({ visible: true })
-        .first(),
-    ).toBeVisible()
-
-    await page
-      .getByRole("button", { name: "More actions for target@example.com" })
-      .click()
-    await page.getByRole("menuitem", { name: "Delete permanently" }).click()
-    await expect(page.getByText("Permanently delete account?")).toBeVisible()
-    await page.getByRole("button", { name: "Delete permanently" }).click()
-    await expect(page.getByText("Target User")).toBeHidden()
-  })
-
-  // -----------------------------------------------------------------------------
-  // 6. Department Management Features (Create, Edit, Delete, Members)
-  // -----------------------------------------------------------------------------
-
-  test("admin can create, edit, delete departments and open member management", async ({
-    page,
-  }) => {
-    await restoreSession(page, "ADMIN")
-    await page.goto("/departments")
-
-    await expect(
-      page.getByRole("heading", { name: "Department Management" }),
-    ).toBeVisible()
-    await expect(
-      page.getByRole("button", { name: "Engineering", exact: true }),
-    ).toBeVisible()
-
-    // 1. Create a Department
-    await page
-      .getByRole("button", { name: "Create Department", exact: true })
-      .click()
-    await expect(
-      page.getByRole("heading", { name: "Create Department" }),
-    ).toBeVisible()
-
-    await page.getByLabel("Department Name").fill("Customer Support")
-    await page.getByLabel("Department Code").fill("CS")
-    await expect(
-      page.getByRole("radiogroup", { name: "Department color" }),
-    ).toBeVisible()
-    await page.getByRole("radio", { name: "Green", exact: true }).click()
-    const createdDepartment = page.waitForRequest(
-      (request) =>
-        request.method() === "POST" &&
-        new URL(request.url()).pathname === "/api/departments",
-    )
-    await page
-      .getByRole("dialog")
-      .getByRole("button", { name: "Create Department" })
-      .click()
-
-    await expect(page.getByText("Customer Support")).toBeVisible()
-    expect((await createdDepartment).postDataJSON()).toMatchObject({
-      name: "Customer Support",
-      color: "green",
-    })
-    await page.reload()
-
-    // 2. Edit the Department
-    await page.getByRole("button", { name: "Edit Customer Support" }).click()
-    await expect(
-      page.getByRole("heading", { name: "Edit Department" }),
-    ).toBeVisible()
-    await expect(
-      page.getByRole("radio", { name: "Green", exact: true }),
-    ).toBeChecked()
-    await page.getByLabel("Department Name").fill("Client Success")
-    await page
-      .getByRole("dialog")
-      .getByRole("button", { name: "Update Department" })
-      .click()
-
-    await expect(page.getByText("Client Success")).toBeVisible()
-
-    // 3. Open Member Management Sheet
-    await page
-      .getByRole("button", { name: "Client Success", exact: true })
-      .click()
-
-    // Member Management Drawer / Sheet opens
-    await expect(
-      page.getByRole("heading", { name: "Members & teams" }),
-    ).toBeVisible()
-    await page.getByRole("button", { name: "Close drawer" }).click()
-    await expect(
-      page.getByRole("heading", { name: "Members & teams" }),
-    ).toHaveCount(0)
-
-    // 4. Delete the Department
-    await page
-      .getByRole("button", { name: "More actions for Client Success" })
-      .click()
-    await page.getByRole("menuitem", { name: "Delete department" }).click()
-
-    await expect(page.getByText("Delete department?")).toBeVisible()
-    await page
-      .getByRole("button", { name: "Delete department", exact: true })
-      .click()
-
-    await expect(page.getByText("Client Success")).toHaveCount(0)
   })
 })

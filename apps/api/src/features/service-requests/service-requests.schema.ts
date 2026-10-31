@@ -8,9 +8,6 @@ export type ServiceRequestFilters = {
 }
 
 const statuses: ServiceRequestStatus[] = [
-  "PENDING",
-  "IN_PROGRESS",
-  "COMPLETED",
   "CANCELLED",
   "SUBMITTED",
   "UNDER_REVIEW",

@@ -57,6 +57,9 @@ export type ServiceInput = {
   removeImage: boolean
   clientRequirements: string[]
   requiresConsultation: boolean
+  requiresAgreement: boolean
+  requiresPayment: boolean
+  requiresQuotationApproval: boolean
   consultationNotes: string | null
   keyBenefits: ServiceBenefitInput[]
   pricingTemplateId: string | null
@@ -413,6 +416,16 @@ export function validateServiceInput(body: unknown): ValidationResult {
   if (typeof requiresConsultation !== "boolean") {
     return { error: "Consultation setting must be true or false" }
   }
+  const requiresAgreement = input.requiresAgreement ?? true
+  const requiresPayment = input.requiresPayment ?? true
+  const requiresQuotationApproval = input.requiresQuotationApproval ?? false
+  if (
+    typeof requiresAgreement !== "boolean" ||
+    typeof requiresPayment !== "boolean" ||
+    typeof requiresQuotationApproval !== "boolean"
+  ) {
+    return { error: "Workflow requirement settings must be true or false" }
+  }
   const consultationNotes =
     input.consultationNotes === null || input.consultationNotes === undefined
       ? null
@@ -479,6 +492,9 @@ export function validateServiceInput(body: unknown): ValidationResult {
         requirement.trim(),
       ),
       requiresConsultation,
+      requiresAgreement,
+      requiresPayment,
+      requiresQuotationApproval,
       consultationNotes: requiresConsultation ? consultationNotes : null,
       keyBenefits: keyBenefitResult.keyBenefits,
       pricingTemplateId,

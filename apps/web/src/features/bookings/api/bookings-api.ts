@@ -5,6 +5,7 @@ export type BookedService = {
   id: string
   title: string
   status: ServiceRequestStatus
+  acceptedDepartmentId?: string | null
   packageName: string | null
   expectedTimeline: string
   preferredSpecialistName: string | null

@@ -36,6 +36,11 @@ With Gitleaks installed, scan committed history locally:
 gitleaks git . --redact --log-opts="--all"
 ```
 
+The repository's `.gitleaksignore` contains an exact fingerprint for a historical
+false positive: a UUID used as a request deduplication key in an offline test.
+CI explicitly loads this file from its read-only repository mount. The exception
+does not exclude the test file, other commits, or other findings.
+
 History scanning does not check uncommitted files. CI detects committed secrets
 after they reach GitHub; it does not prevent the original push. If a real secret
 is found, revoke or rotate it before removing it from code. Do not suppress it

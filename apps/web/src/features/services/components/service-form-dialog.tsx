@@ -49,6 +49,9 @@ const fieldClass = "grid min-w-0 gap-1.5"
 const labelClass = "text-xs font-semibold"
 const inputClass = `w-full min-w-0 rounded-lg border border-[#d6dfec] bg-background px-3 text-sm text-foreground placeholder:text-[#9aa8bb] ${focusRing}`
 const buttonClass = `inline-flex min-h-[38px] cursor-pointer items-center justify-center rounded-[9px] border border-transparent px-[15px] text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none ${focusRing}`
+// Shared popup style: no border/ring, soft navy-tinted shadow
+const menuContentClass =
+  "z-[130] border-0 bg-white p-1 ring-0 shadow-[0_8px_24px_rgb(18_36_73_/_14%)]"
 const imageTypes = ["image/jpeg", "image/png", "image/webp"]
 const maxImageBytes = 2 * 1024 * 1024
 const formSteps = [
@@ -161,7 +164,7 @@ function PriceFields({
           >
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="z-[130] border-[#cbd5e1] bg-white">
+          <SelectContent className={menuContentClass}>
             {pricingModels.map((option) => (
               <SelectItem key={option.value} value={option.value}>
                 {option.label}
@@ -206,7 +209,7 @@ function PriceFields({
             >
               <SelectValue placeholder="Select interval" />
             </SelectTrigger>
-            <SelectContent className="z-[130] border-[#cbd5e1] bg-white">
+            <SelectContent className={menuContentClass}>
               {billingIntervals.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}
@@ -256,6 +259,15 @@ export function ServiceFormDialog({
   )
   const [requiresConsultation, setRequiresConsultation] = useState(
     service?.requiresConsultation ?? false,
+  )
+  const [requiresAgreement, setRequiresAgreement] = useState(
+    service?.requiresAgreement ?? true,
+  )
+  const [requiresPayment, setRequiresPayment] = useState(
+    service?.requiresPayment ?? true,
+  )
+  const [requiresQuotationApproval, setRequiresQuotationApproval] = useState(
+    service?.requiresQuotationApproval ?? false,
   )
   const [consultationNotes, setConsultationNotes] = useState(
     service?.consultationNotes ?? "",
@@ -430,6 +442,9 @@ export function ServiceFormDialog({
         .map((requirement) => requirement.trim())
         .filter(Boolean),
       requiresConsultation,
+      requiresAgreement,
+      requiresPayment,
+      requiresQuotationApproval,
       consultationNotes: requiresConsultation
         ? consultationNotes.trim() || null
         : null,
@@ -754,7 +769,7 @@ export function ServiceFormDialog({
                         >
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent className="z-[130] bg-white">
+                        <SelectContent className={menuContentClass}>
                           {serviceIconOptions.map((option) => (
                             <SelectItem key={option.value} value={option.value}>
                               <span className="flex items-center gap-2">
@@ -800,7 +815,10 @@ export function ServiceFormDialog({
                         </DropdownMenuTrigger>
                         <DropdownMenuContent
                           align="start"
-                          className="z-[130] w-[var(--radix-dropdown-menu-trigger-width)] bg-white"
+                          className={cn(
+                            menuContentClass,
+                            "w-[var(--radix-dropdown-menu-trigger-width)]",
+                          )}
                         >
                           {departments.map((department) => (
                             <DropdownMenuCheckboxItem
@@ -999,6 +1017,46 @@ export function ServiceFormDialog({
                       />
                     </div>
                   )}
+                  <div className="grid gap-3 rounded-xl border border-[#e3e8ef] p-4">
+                    <h4 className="m-0 text-xs font-semibold">
+                      Commencement requirements
+                    </h4>
+                    <p className="m-0 text-[11px] leading-5 text-[#738096]">
+                      These rules apply to newly accepted requests. Existing
+                      conversations retain their agreed requirements.
+                    </p>
+                    <label className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={requiresAgreement}
+                        onChange={(event) =>
+                          setRequiresAgreement(event.target.checked)
+                        }
+                      />
+                      Approved signed agreement required
+                    </label>
+                    <label className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={requiresPayment}
+                        onChange={(event) =>
+                          setRequiresPayment(event.target.checked)
+                        }
+                      />
+                      Verified commencement payment required
+                    </label>
+                    <label className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={requiresQuotationApproval}
+                        onChange={(event) =>
+                          setRequiresQuotationApproval(event.target.checked)
+                        }
+                      />
+                      Assigned approver must authorize quotations before the
+                      client receives them
+                    </label>
+                  </div>
                 </section>
               )}
 
@@ -1033,7 +1091,7 @@ export function ServiceFormDialog({
                       >
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent className="z-[130] bg-white">
+                      <SelectContent className={menuContentClass}>
                         <SelectItem value="none">
                           No pricing configured
                         </SelectItem>

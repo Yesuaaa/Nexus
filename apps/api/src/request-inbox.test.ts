@@ -272,9 +272,9 @@ test(
         ).json()) as { total: number }
         assert.equal(reviewed.total, 1)
         for (const status of [
-          "COMPLETED",
+          "CLOSED",
           "CANCELLED",
-          "IN_PROGRESS",
+          "READY_FOR_QUOTATION",
         ] as const) {
           await prisma.serviceRequest.update({
             where: { id: booking.id },

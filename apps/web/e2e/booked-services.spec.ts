@@ -77,6 +77,21 @@ async function mockBookings(
     const request = route.request()
     const url = new URL(request.url())
     expect(request.headers().authorization).toBe("Bearer test-session")
+    if (url.pathname.startsWith("/api/request-conversations/")) {
+      if (url.pathname.endsWith("/events"))
+        return route.fulfill({
+          contentType: "text/event-stream",
+          body: "event: connected\ndata: {}\n\n",
+        })
+      return route.fulfill({
+        json: {
+          conversation: null,
+          canSend: false,
+          messages: [],
+          nextCursor: null,
+        },
+      })
+    }
     if (url.pathname === "/api/auth/me") {
       const user: Account = {
         id: "client-1",
@@ -198,7 +213,7 @@ for (const width of [1440, 390]) {
     })
     await expect(
       navigation.getByRole("link", { name: "Booked Services", exact: true }),
-    ).toHaveAttribute("aria-current", "page")
+    ).toHaveCount(0)
     if (width === 390)
       await page
         .getByRole("button", { name: "Close navigation menu", exact: true })

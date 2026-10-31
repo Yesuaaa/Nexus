@@ -133,7 +133,12 @@ export const clientsRepository = {
         if (!client) return null
         const [serviceRequestCount, projectCount] = await Promise.all([
           tx.serviceRequest.count({ where: { clientId: id } }),
-          tx.project.count({ where: { clientId: id } }),
+          tx.project.count({
+            where: {
+              clientId: id,
+              OR: [{ requestId: null }, { startDate: { not: null } }],
+            },
+          }),
         ])
         return { client, serviceRequestCount, projectCount }
       },
@@ -180,7 +185,10 @@ export const clientsRepository = {
           select: { id: true },
         })
         if (!client) return null
-        const where = { clientId: id }
+        const where: Prisma.ProjectWhereInput = {
+          clientId: id,
+          OR: [{ requestId: null }, { startDate: { not: null } }],
+        }
         const [projects, total] = await Promise.all([
           tx.project.findMany({
             where,

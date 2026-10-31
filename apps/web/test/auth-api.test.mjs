@@ -7,7 +7,62 @@ import {
   signOut,
   clearToken,
   apiRequest,
+  apiStreamRequest,
 } from "../src/features/auth/api/auth-api.ts"
+
+test("stream requests renew expired access tokens and preserve the unread response body", async (t) => {
+  const values = new Map([
+    ["nexus.auth.token", "expired"],
+    ["nexus.auth.refreshToken", "refresh"],
+  ])
+  const descriptor = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "sessionStorage",
+  )
+  Object.defineProperty(globalThis, "sessionStorage", {
+    configurable: true,
+    value: {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => values.set(key, value),
+      removeItem: (key) => values.delete(key),
+    },
+  })
+  t.after(() => {
+    if (descriptor)
+      Object.defineProperty(globalThis, "sessionStorage", descriptor)
+    else delete globalThis.sessionStorage
+  })
+  const controller = new AbortController()
+  let refreshes = 0
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    if (url === "/api/auth/refresh") {
+      refreshes++
+      return Response.json({
+        token: "fresh",
+        refreshToken: "rotated",
+        expiresIn: 900,
+      })
+    }
+    assert.equal(url, "/api/request-conversations/booking/events")
+    assert.equal(options.signal, controller.signal)
+    if (options.headers.get("Authorization") === "Bearer expired")
+      return Response.json(
+        { error: "Expired", code: "ACCESS_TOKEN_EXPIRED" },
+        { status: 401 },
+      )
+    assert.equal(options.headers.get("Authorization"), "Bearer fresh")
+    return new Response("event: connected\ndata: {}\n\n", {
+      headers: { "Content-Type": "text/event-stream" },
+    })
+  })
+  const response = await apiStreamRequest(
+    "/api/request-conversations/booking/events",
+    { signal: controller.signal },
+  )
+  assert.equal(response.bodyUsed, false)
+  assert.equal(await response.text(), "event: connected\ndata: {}\n\n")
+  assert.equal(refreshes, 1)
+})
 
 test("sign-in stores its session and authenticated requests send one bearer token", async (t) => {
   const values = new Map()

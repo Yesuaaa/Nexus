@@ -1,12 +1,15 @@
 import type { Prisma } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
+import { initializeWorkflow } from "../request-workflow/workflow.access.js"
 import type { InboxFilters } from "./request-inbox.schema.js"
 
 const requestSelect = {
   id: true,
   title: true,
   status: true,
+  acceptedDepartmentId: true,
+  acceptedAt: true,
   packageName: true,
   expectedTimeline: true,
   preferredSpecialistName: true,
@@ -34,14 +37,27 @@ export async function requireDepartmentHead(userId: string) {
 
 function departmentScope(userId: string): Prisma.ServiceRequestWhereInput {
   return {
-    service: {
-      departments: {
-        some: {
-          headId: userId,
-          head: { role: "STAFF", isActive: true, accountDeletedAt: null },
-        },
+    AND: [
+      {
+        OR: [
+          {
+            service: {
+              departments: {
+                some: {
+                  headId: userId,
+                  head: {
+                    role: "STAFF",
+                    isActive: true,
+                    accountDeletedAt: null,
+                  },
+                },
+              },
+            },
+          },
+          { acceptedDepartment: { headId: userId } },
+        ],
       },
-    },
+    ],
   }
 }
 
@@ -49,7 +65,7 @@ export async function listInbox(userId: string, filters: InboxFilters) {
   const department = await requireDepartmentHead(userId)
   return getPrisma()!.$transaction(
     async (tx) => {
-      // Both initial labels are supported, even when only one exists in this database.
+      // Avoid querying enum labels that aren't present on older databases.
       const labels = await tx.$queryRaw<{ label: string }[]>`
       SELECT e.enumlabel AS label FROM pg_enum e
       JOIN pg_type t ON t.oid = e.enumtypid
@@ -58,7 +74,7 @@ export async function listInbox(userId: string, filters: InboxFilters) {
     `
       const statuses =
         filters.view === "pending"
-          ? (["PENDING", "SUBMITTED"] as const)
+          ? (["SUBMITTED"] as const)
           : (["UNDER_REVIEW"] as const)
       const where: Prisma.ServiceRequestWhereInput = {
         ...departmentScope(userId),
@@ -132,15 +148,18 @@ export async function getInboxRequest(userId: string, id: string) {
 }
 
 export async function acceptInboxRequest(userId: string, id: string) {
-  await requireDepartmentHead(userId)
+  const department = await requireDepartmentHead(userId)
   return getPrisma()!.$transaction(async (tx) => {
     const where = { id, ...departmentScope(userId) }
     const request = await tx.serviceRequest.findFirst({
       where,
-      select: { status: true },
+      select: { status: true, acceptedDepartmentId: true },
     })
     if (!request) throw new ServiceRequestsError(404, "Request not found")
-    if (request.status !== "PENDING" && request.status !== "SUBMITTED")
+    if (
+      request.acceptedDepartmentId ||
+      (request.status !== "SUBMITTED" && request.status !== "UNDER_REVIEW")
+    )
       throw new ServiceRequestsError(
         409,
         "This request is no longer awaiting acceptance. Refresh the inbox.",
@@ -148,14 +167,33 @@ export async function acceptInboxRequest(userId: string, id: string) {
     // The conditional update allows exactly one head to accept a shared booking.
     // Recheck current head assignment and service routing at the write itself.
     const updated = await tx.serviceRequest.updateMany({
-      where: { ...where, status: request.status },
-      data: { status: "UNDER_REVIEW" },
+      where: {
+        id,
+        status: request.status,
+        acceptedDepartmentId: null,
+        service: {
+          departments: {
+            some: {
+              id: department.id,
+              headId: userId,
+              head: { role: "STAFF", isActive: true, accountDeletedAt: null },
+            },
+          },
+        },
+      },
+      data: {
+        status: "UNDER_REVIEW",
+        acceptedDepartmentId: department.id,
+        acceptedById: userId,
+        acceptedAt: new Date(),
+      },
     })
     if (updated.count !== 1)
       throw new ServiceRequestsError(
         409,
         "This request changed. Refresh the inbox and try again.",
       )
+    await initializeWorkflow(tx, id, userId)
     return tx.serviceRequest.findUniqueOrThrow({
       where: { id },
       select: requestSelect,

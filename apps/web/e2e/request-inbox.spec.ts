@@ -47,6 +47,24 @@ async function mockInbox(
     const request = route.request()
     const url = new URL(request.url())
     expect(request.headers().authorization).toBe("Bearer test-session")
+    if (url.pathname.startsWith("/api/request-conversations/")) {
+      if (url.pathname.endsWith("/events"))
+        return route.fulfill({
+          contentType: "text/event-stream",
+          body: "event: connected\ndata: {}\n\n",
+        })
+      return route.fulfill({
+        json: {
+          conversation: {
+            department: { id: "design", name: "Design" },
+            head: { id: "head-1", fullName: "Dani Head" },
+          },
+          canSend: true,
+          messages: [],
+          nextCursor: null,
+        },
+      })
+    }
     if (url.pathname === "/api/auth/me")
       return route.fulfill({
         json: {
@@ -108,7 +126,10 @@ async function mockInbox(
             state.releaseAccept = resolve
           })
         if (state.acceptError) {
-          if (state.acceptError === 409) item.status = "UNDER_REVIEW"
+          if (state.acceptError === 409) {
+            item.status = "UNDER_REVIEW"
+            item.acceptedDepartmentId = "other-department"
+          }
           return route.fulfill({
             status: state.acceptError,
             json: {
@@ -120,6 +141,7 @@ async function mockInbox(
           })
         }
         item.status = "UNDER_REVIEW"
+        item.acceptedDepartmentId = "design"
         return route.fulfill({ json: { serviceRequest: item } })
       }
       if (state.detailsError)
@@ -198,6 +220,11 @@ for (const width of [1440, 390]) {
     await expect(drawer).toBeVisible()
     await expect.poll(() => state.accepts).toBe(1)
     state.releaseAccept!()
+    await expect(
+      drawer.getByRole("link", { name: "Open request workspace", exact: true }),
+    ).toBeVisible()
+    await expect(drawer.getByLabel("Message", { exact: true })).toHaveCount(0)
+    await drawer.getByRole("button", { name: "Close booking details" }).click()
     await expect(drawer).not.toBeVisible()
     await expect(
       page.getByRole("button", {
@@ -213,19 +240,12 @@ for (const width of [1440, 390]) {
     await page
       .getByRole("button", { name: "Review request booking-1", exact: true })
       .click()
+    await expect(page).toHaveURL(/\/messages\?request=booking-1$/)
     await expect(
-      drawer.getByText("This booking is no longer awaiting acceptance."),
+      page.getByRole("region", { name: "Request conversation" }),
     ).toBeVisible()
-    await expect(
-      drawer.getByRole("button", { name: "Accept request", exact: true }),
-    ).toHaveCount(0)
-    await drawer.getByRole("button", { name: "Close booking details" }).click()
-    await expect(
-      page.getByRole("button", {
-        name: "Review request booking-1",
-        exact: true,
-      }),
-    ).toBeFocused()
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await page.goto("/request-inbox")
     await page
       .getByRole("searchbox", { name: "Search requests" })
       .fill("nothing matches")
@@ -273,9 +293,12 @@ test("head can retry failures and a concurrent acceptance refreshes stale detail
     .getByRole("button", { name: "Accept request", exact: true })
     .click()
   await expect(
-    drawer.getByText("This booking is no longer awaiting acceptance.", {
-      exact: true,
-    }),
+    drawer.getByText(
+      "Another department accepted this request. Its conversation is private to that department and the client.",
+      {
+        exact: true,
+      },
+    ),
   ).toBeVisible()
   await expect(
     drawer.getByRole("button", { name: "Accept request", exact: true }),

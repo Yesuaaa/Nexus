@@ -3,18 +3,16 @@ import type { DepartmentColor } from "@/features/departments/model/department-co
 import type { ProjectRequirementsDraft } from "../model/project-requirements"
 
 export type ServiceRequestStatus =
-  | "PENDING"
-  | "IN_PROGRESS"
-  | "COMPLETED"
-  | "CANCELLED"
   | "SUBMITTED"
   | "UNDER_REVIEW"
-  | "CLOSED"
   | "AWAITING_CLIENT_INFO"
   | "READY_FOR_QUOTATION"
+  | "CLOSED"
+  | "CANCELLED"
 
 export type ServiceRequestReceipt = {
   id: string
+  referenceNumber?: string | null
   status: ServiceRequestStatus
   createdAt: string
 }
@@ -55,6 +53,38 @@ export type ServiceSpecialist = {
   fullName: string
   position: string | null
   department: { id: string; name: string } | null
+}
+
+export type SpecialistPortfolioProject = {
+  id: string
+  title: string
+  summary: string
+  contribution: string | null
+  thumbnailUrl: string | null
+  projectUrl: string | null
+}
+
+export type SpecialistSocialLink = {
+  platform: string
+  url: string
+}
+
+export type ServiceSpecialistProfile = ServiceSpecialist & {
+  bio: string | null
+  imageUrl: string | null
+  specialties: string[]
+  socialLinks: SpecialistSocialLink[]
+  projects: SpecialistPortfolioProject[]
+}
+
+export async function getServiceSpecialistProfile(
+  serviceId: string,
+  specialistId: string,
+): Promise<ServiceSpecialistProfile> {
+  const result = await apiRequest<{ specialist: ServiceSpecialistProfile }>(
+    `/api/services/${encodeURIComponent(serviceId)}/specialists/${encodeURIComponent(specialistId)}`,
+  )
+  return result.specialist
 }
 
 export async function listServiceSpecialists(
@@ -118,6 +148,9 @@ export type Service = {
   imageAltText: string | null
   clientRequirements: string[]
   requiresConsultation: boolean
+  requiresAgreement?: boolean
+  requiresPayment?: boolean
+  requiresQuotationApproval?: boolean
   consultationNotes: string | null
   keyBenefits: ServiceBenefit[]
   isActive: boolean
@@ -169,6 +202,9 @@ export type ServiceInput = {
   removeImage: boolean
   clientRequirements: string[]
   requiresConsultation: boolean
+  requiresAgreement?: boolean
+  requiresPayment?: boolean
+  requiresQuotationApproval?: boolean
   consultationNotes: string | null
   keyBenefits: ServiceBenefitInput[]
   pricingTemplateId: string | null

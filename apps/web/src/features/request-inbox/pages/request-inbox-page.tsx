@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import { RefreshCw } from "lucide-react"
 import { sileo } from "sileo"
 import { contentClass } from "@/components/layout/styles"
@@ -29,6 +30,7 @@ import {
 import { RequestInboxTable } from "../components/request-inbox-table"
 
 export function RequestInboxPage() {
+  const router = useRouter()
   const account = usePortalAccount()
   const [search, setSearch] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
@@ -86,12 +88,14 @@ export function RequestInboxPage() {
     setAccepting(true)
     setAcceptError("")
     try {
-      await acceptInboxRequest(id)
-      setSelected(null)
+      const accepted = await acceptInboxRequest(id)
+      setSelected(accepted)
+      setDetailsRevision((value) => value + 1)
       setRevision((value) => value + 1)
       sileo.success({
-        title: "Request accepted",
-        description: "The booking is now under review.",
+        title: "Consultation accepted",
+        description:
+          "The request workspace is ready for consultation and requirements gathering.",
       })
     } catch (reason) {
       const message =
@@ -204,7 +208,9 @@ export function RequestInboxPage() {
           quickKey={debouncedSearch}
           onRetry={() => setRevision((value) => value + 1)}
           onView={(request) => {
-            setSelected(request)
+            if (request.acceptedDepartmentId === account.headOf?.id)
+              router.push(`/messages?request=${encodeURIComponent(request.id)}`)
+            else setSelected(request)
             setAcceptError("")
           }}
         />
@@ -236,6 +242,9 @@ export function RequestInboxPage() {
           description="Review the client's booking before accepting it for department review."
           fallbackFocusId="request-inbox-heading"
           refreshKey={detailsRevision}
+          showMessagesLink={(details) =>
+            details.acceptedDepartmentId === account.headOf?.id
+          }
           additionalFields={[
             ["Client", selected.client.fullName || "Client"],
             ["Email", selected.client.email],
@@ -248,24 +257,34 @@ export function RequestInboxPage() {
                   {acceptError}
                 </p>
               )}
-              {details.status === "PENDING" ||
-              details.status === "SUBMITTED" ? (
+              {(details.status === "SUBMITTED" ||
+                details.status === "UNDER_REVIEW") &&
+              !details.acceptedDepartmentId ? (
                 <>
                   <p className="mt-0 mb-3 text-xs leading-relaxed text-[#52627a]">
-                    Accepting moves this booking to Under review. The client
-                    will see the updated status.
+                    {details.status === "SUBMITTED"
+                      ? "Accepting starts a consultation and opens a private request workspace with the client. Service delivery requires a separate quotation approval."
+                      : "Start a conversation to claim this previously accepted booking for your department."}
                   </p>
                   <Button
                     className="w-full bg-[#203f8c] text-white hover:bg-[#172f70]"
                     disabled={accepting}
                     onClick={() => void accept(details.id)}
                   >
-                    {accepting ? "Accepting…" : "Accept request"}
+                    {accepting
+                      ? "Accepting…"
+                      : details.status === "SUBMITTED"
+                        ? "Accept request"
+                        : "Start conversation"}
                   </Button>
                 </>
               ) : (
                 <p className="m-0 text-xs text-[#52627a]">
-                  This booking is no longer awaiting acceptance.
+                  {details.acceptedDepartmentId === account.headOf?.id
+                    ? "Your department accepted this consultation. Open the request workspace to gather requirements and prepare a quotation."
+                    : details.acceptedDepartmentId
+                      ? "Another department accepted this request. Its conversation is private to that department and the client."
+                      : "This booking is no longer awaiting acceptance."}
                 </p>
               )}
             </div>
