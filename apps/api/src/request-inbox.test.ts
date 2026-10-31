@@ -128,6 +128,7 @@ test(
     })
     const booking = await prisma.serviceRequest.create({
       data: {
+        referenceNumber: "SR-INBOX-REFERENCE",
         clientId: client.id,
         serviceId: service.id,
         title: "Website request",
@@ -140,6 +141,7 @@ test(
     })
     const foreignBooking = await prisma.serviceRequest.create({
       data: {
+        referenceNumber: "SR-FOREIGN-REFERENCE",
         clientId: client.id,
         serviceId: foreign.id,
         title: "Private campaign",
@@ -200,7 +202,11 @@ test(
         const response = await get("/request-inbox")
         assert.equal(response.status, 200)
         const list = (await response.json()) as {
-          serviceRequests: { id: string; client: object }[]
+          serviceRequests: {
+            id: string
+            referenceNumber: string | null
+            client: object
+          }[]
           total: number
           department: object
         }
@@ -210,6 +216,16 @@ test(
           new Set([booking.id, contested.id]),
         )
         assert.deepEqual(list.department, { id: design.id, name: "Design" })
+        assert.equal(
+          list.serviceRequests.find((item) => item.id === booking.id)
+            ?.referenceNumber,
+          booking.referenceNumber,
+        )
+        assert.equal(
+          list.serviceRequests.find((item) => item.id === contested.id)
+            ?.referenceNumber,
+          null,
+        )
         assert.deepEqual(Object.keys(list.serviceRequests[0]!.client).sort(), [
           "contactNumber",
           "email",
@@ -223,6 +239,7 @@ test(
         assert.equal(details.projectGoals, "Reach new customers")
         assert.equal(details.projectRequirements, "Five pages")
         assert.equal(details.additionalDetails, "Brand guidelines")
+        assert.equal(details.referenceNumber, booking.referenceNumber)
         assert.equal("submissionKey" in details, false)
         assert.equal("quotedPrice" in details, false)
         for (const id of [foreignBooking.id, "missing"]) {
@@ -244,6 +261,15 @@ test(
           await get("/request-inbox?search=business")
         ).json()) as { total: number }
         assert.equal(search.total, 1)
+        const referenceSearch = (await (
+          await get("/request-inbox?search=sr-inbox-ref")
+        ).json()) as { total: number; serviceRequests: { id: string }[] }
+        assert.equal(referenceSearch.total, 1)
+        assert.equal(referenceSearch.serviceRequests[0]?.id, booking.id)
+        const foreignReferenceSearch = (await (
+          await get("/request-inbox?search=SR-FOREIGN-REFERENCE")
+        ).json()) as { total: number }
+        assert.equal(foreignReferenceSearch.total, 0)
         const scoped = (await (
           await get(
             "/request-inbox?search=campaign&departmentId=" + marketing.id,
@@ -255,7 +281,15 @@ test(
     await t.test(
       "acceptance changes only the initial status and is visible to the booking client",
       async () => {
-        assert.equal((await accept(booking.id)).status, 200)
+        const acceptedResponse = await accept(booking.id)
+        assert.equal(acceptedResponse.status, 200)
+        const accepted = (await acceptedResponse.json()) as {
+          serviceRequest: { referenceNumber: string | null }
+        }
+        assert.equal(
+          accepted.serviceRequest.referenceNumber,
+          booking.referenceNumber,
+        )
         const stored = await prisma.serviceRequest.findUniqueOrThrow({
           where: { id: booking.id },
         })

@@ -155,7 +155,10 @@ export function BookingDetailsDrawer({
                 <dl className="mt-5 grid grid-cols-2 gap-x-5 max-[450px]:grid-cols-1">
                   {[
                     ...additionalFields,
-                    ["Request reference", details.id],
+                    [
+                      "Request reference",
+                      details.referenceNumber || details.id,
+                    ],
                     ["Package", details.packageName || "Standard service"],
                     ["Date requested", bookingDate(details.createdAt)],
                     ["Last updated", bookingDate(details.updatedAt)],

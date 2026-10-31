@@ -2,14 +2,8 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LogOut, MessageSquare, UserRound } from "lucide-react"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { dropdownMenuClass } from "@/components/ui/dropdown-styles"
+import { MessageSquare } from "lucide-react"
+import { AccountMenu } from "@/features/auth/components/account-menu"
 import { Breadcrumbs } from "./breadcrumbs"
 import { MenuIcon } from "./icons"
 import { iconButtonClass } from "./styles"
@@ -52,31 +46,7 @@ export function Topbar({
             <MessageSquare size={21} strokeWidth={1.7} aria-hidden="true" />
           </Link>
         )}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className={`${iconButtonClass} data-[state=open]:outline-none data-[state=open]:focus-visible:outline-none`}
-              aria-label="Open account menu"
-            >
-              <UserRound size={22} strokeWidth={1.7} aria-hidden="true" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            sideOffset={8}
-            collisionPadding={12}
-            className={`${dropdownMenuClass} w-40`}
-          >
-            <DropdownMenuItem
-              className="min-h-10 cursor-pointer rounded-md px-3 text-[#f35b61] focus:bg-[#fff0f1] focus:text-[#f35b61]"
-              onSelect={onSignOut}
-            >
-              <LogOut aria-hidden="true" />
-              Log out
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <AccountMenu onSignOut={onSignOut} />
       </div>
     </header>
   )
