@@ -7,6 +7,7 @@ import { Download, FileText, ShieldCheck } from "lucide-react"
 import { sileo } from "sileo"
 import { Button } from "@/components/ui/button"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
+import { cn } from "@/lib/utils"
 import {
   createWorkflowFilePreviewUrl,
   downloadWorkflowFile,
@@ -41,9 +42,11 @@ function useCurrentTime() {
 export function FileSubmissionCard({
   file,
   requestId,
+  className,
 }: {
   file: WorkflowFile
   requestId: string
+  className?: string
 }) {
   const [downloading, setDownloading] = useState(false)
   const [preview, setPreview] = useState<{
@@ -51,9 +54,11 @@ export function FileSubmissionCard({
     url: string
   } | null>(null)
   const isImage = file.mimeType.startsWith("image/")
+  const isVideo = file.mimeType.startsWith("video/")
+  const isMedia = isImage || isVideo
 
   useEffect(() => {
-    if (!isImage) return
+    if (!isMedia) return
     let active = true
     let objectUrl: string | null = null
     void createWorkflowFilePreviewUrl(requestId, file.id)
@@ -70,43 +75,64 @@ export function FileSubmissionCard({
       active = false
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [file.id, isImage, requestId])
+  }, [file.id, isMedia, requestId])
 
   return (
-    <div className="min-w-0 rounded-xl border border-[#e1e6ee] bg-[#f8fafd] p-3">
-      {isImage && preview?.fileId === file.id && (
-        <div className="relative mb-3 flex h-48 items-center justify-center overflow-hidden rounded-lg border border-[#e1e6ee] bg-white p-2">
+    <div
+      className={cn(
+        isMedia
+          ? "w-fit max-w-[min(100%,22rem)] overflow-hidden rounded-xl border border-[#dce4ef] bg-[#f8fafd]"
+          : "w-[min(100%,22rem)] rounded-xl border border-[#dce4ef] bg-[#f1f3f7] p-2",
+        className,
+      )}
+    >
+      {isMedia && preview?.fileId === file.id ? (
+        isImage ? (
           <Image
             src={preview.url}
             alt={file.name}
             width={960}
             height={640}
             unoptimized
-            className="max-h-full max-w-full object-contain"
+            className="block h-auto max-h-[min(50dvh,18rem)] max-w-full w-auto object-contain"
           />
-        </div>
-      )}
-      <div className="flex min-w-0 items-center gap-3">
-        <FileText
-          size={20}
-          className="shrink-0 text-[#203f8c]"
-          aria-hidden="true"
-        />
+        ) : (
+          <video
+            controls
+            preload="metadata"
+            className="block h-auto max-h-[min(50dvh,18rem)] max-w-full w-auto bg-[#101828]"
+          >
+            <source src={preview.url} type={file.mimeType} />
+            Your browser does not support video playback.
+          </video>
+        )
+      ) : null}
+      <div
+        className={
+          isMedia
+            ? "flex min-w-0 items-center gap-3 p-2.5"
+            : "flex min-w-0 items-center gap-3"
+        }
+      >
+        <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-[#dfe7f5] text-[#203f8c]">
+          <FileText size={20} aria-hidden="true" />
+        </span>
         <div className="min-w-0 flex-1">
           <p
-            className="m-0 truncate text-xs font-medium text-[#182235]"
+            className="m-0 truncate text-xs font-semibold text-[#182235]"
             title={file.name}
           >
             {file.name}
           </p>
-          <p className="mt-1 mb-0 text-[10px] text-[#8791a2]">
+          <p className="mt-0.5 mb-0 text-[11px] text-[#6d7b91]">
+            {isVideo ? "Video · " : isImage ? "Image · " : "File · "}
             {Math.max(1, Math.ceil(file.size / 1024))} KB
           </p>
         </div>
         <Button
           aria-label={`Download ${file.name}`}
           variant="outline"
-          className="size-8 shrink-0 p-0"
+          className="size-9 shrink-0 rounded-full border-0 bg-transparent p-0 text-[#52627a] hover:bg-[#dfe7f5] hover:text-[#203f8c]"
           disabled={downloading}
           onClick={async () => {
             setDownloading(true)
@@ -123,7 +149,7 @@ export function FileSubmissionCard({
             }
           }}
         >
-          <Download size={15} aria-hidden="true" />
+          <Download size={16} aria-hidden="true" />
         </Button>
       </div>
     </div>
@@ -815,7 +841,8 @@ export function WorkflowEventCard({
   event,
   workflow,
   controls,
-}: CardProps & { event: WorkflowEvent }) {
+  fileClassName,
+}: CardProps & { event: WorkflowEvent; fileClassName?: string }) {
   const statusUpdate = () => <SystemStatusUpdate event={event} />
   if (event.type === "APPROVAL_CONFIRMED")
     return (
@@ -848,7 +875,11 @@ export function WorkflowEventCard({
     return (
       <>
         {statusUpdate()}
-        <FileSubmissionCard file={file} requestId={workflow.request.id} />
+        <FileSubmissionCard
+          file={file}
+          requestId={workflow.request.id}
+          className={fileClassName}
+        />
       </>
     )
   const consultation = workflow.consultations.find(

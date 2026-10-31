@@ -6,13 +6,11 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { WorkflowControls } from "../hooks/use-request-workflow"
 import type { Workflow, WorkflowAction } from "../model/workflow"
-import { QuotationProposalCard } from "./workflow-cards"
 import {
   WorkflowBadge,
   WorkflowField,
   workflowButton,
   workflowInput,
-  workflowMoney,
 } from "./workflow-primitives"
 
 export function WorkflowDisclosure({
@@ -304,14 +302,13 @@ export function QuotationForm({
 function InternalWorkspace({
   workflow,
   controls,
-  sectionId,
 }: {
   workflow: Workflow
   controls: WorkflowControls
-  sectionId: (name: string) => string
 }) {
   const internal = workflow.internal
-  if (!workflow.permissions.manage || !internal) return null
+  if (!workflow.permissions.manage || !internal || !workflow.approval)
+    return null
   const mutable = !["ACTIVE_PROJECT", "DECLINED", "CANCELLED"].includes(
     workflow.state,
   )
@@ -320,57 +317,6 @@ function InternalWorkspace({
       <p className="mb-1 text-[10px] font-semibold tracking-wide text-[#52627a] uppercase">
         Internal · Department head only
       </p>
-      {mutable && (
-        <WorkflowDisclosure
-          id={sectionId("approver-assignments")}
-          title="Approver assignments"
-        >
-          <ActionForm
-            controls={controls}
-            label="Save assignments"
-            action={(data) => ({
-              type: "ASSIGN_APPROVERS",
-              quotationApproverId:
-                String(data.get("quotationApproverId") || "") || null,
-              paymentVerifierId:
-                String(data.get("paymentVerifierId") || "") || null,
-            })}
-          >
-            <WorkflowField label="Quotation approver">
-              <select
-                name="quotationApproverId"
-                defaultValue={internal.quotationApproverId || ""}
-                className={workflowInput}
-              >
-                <option value="">Select an authorized approver</option>
-                {internal.approvers.map((person) => (
-                  <option key={person.id} value={person.id}>
-                    {person.fullName || person.id}
-                  </option>
-                ))}
-              </select>
-            </WorkflowField>
-            <WorkflowField label="Payment verifier">
-              <select
-                name="paymentVerifierId"
-                defaultValue={internal.paymentVerifierId || ""}
-                className={workflowInput}
-              >
-                <option value="">Select an authorized verifier</option>
-                {internal.approvers.map((person) => (
-                  <option key={person.id} value={person.id}>
-                    {person.fullName || person.id}
-                  </option>
-                ))}
-              </select>
-            </WorkflowField>
-          </ActionForm>
-          <p className="m-0 text-[10px]">
-            Assignments grant access only to the relevant approval records for
-            this request.
-          </p>
-        </WorkflowDisclosure>
-      )}
       {workflow.approval && (
         <WorkflowDisclosure title="Staffing and workload">
           <p className="m-0 text-[11px]">
@@ -437,37 +383,7 @@ function InternalWorkspace({
           </ActionForm>
         </WorkflowDisclosure>
       )}
-      <WorkflowDisclosure
-        id={sectionId("internal-notes")}
-        title="Internal notes"
-      >
-        {mutable && (
-          <ActionForm
-            controls={controls}
-            label="Add internal note"
-            action={(data) => ({
-              type: "INTERNAL_NOTE",
-              note: String(data.get("note")),
-            })}
-          >
-            <WorkflowField label="Private note">
-              <textarea
-                name="note"
-                required
-                rows={3}
-                maxLength={2000}
-                className={workflowInput}
-              />
-            </WorkflowField>
-          </ActionForm>
-        )}
-        <div className="space-y-3">
-          {internal.events.slice(-10).map((event) => (
-            <div
-              key={event.id}
-              className="rounded-lg bg-background p-2 text-[11px]"
-            >
-              <p className="m-0 whitespace-pre-wrap">{event.summary}</p>
+      {/* Internal notes are opened from the + menu.
               <p className="mt-1 mb-0 text-[9px] text-[#8791a2]">
                 {event.actor?.fullName || "System"} ·{" "}
                 {new Date(event.createdAt).toLocaleString("en-PH")}
@@ -475,7 +391,7 @@ function InternalWorkspace({
             </div>
           ))}
         </div>
-      </WorkflowDisclosure>
+      */}
     </div>
   )
 }
@@ -501,18 +417,6 @@ export function WorkflowContextPanel({
     screen.addEventListener("change", update)
     return () => screen.removeEventListener("change", update)
   }, [])
-  const latest = workflow.quotations.at(-1)
-  const beforeApproval = [
-    "CONSULTATION",
-    "QUOTATION_PENDING",
-    "CLIENT_APPROVAL",
-    "REVISION_REQUESTED",
-  ].includes(workflow.state)
-  const canQuote =
-    workflow.permissions.manage &&
-    ["QUOTATION_PENDING", "REVISION_REQUESTED", "CLIENT_APPROVAL"].includes(
-      workflow.state,
-    )
   const terminal = ["ACTIVE_PROJECT", "DECLINED", "CANCELLED"].includes(
     workflow.state,
   )
@@ -524,9 +428,9 @@ export function WorkflowContextPanel({
       inert={hidden}
       aria-label="Request context"
       className={cn(
-        "shrink-0 overflow-x-hidden overflow-y-auto border-l border-[#e8ebef] px-4 py-1 transition-[width,max-height,opacity,transform,padding,border-color] duration-[240ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none max-[1023px]:w-full max-[1023px]:shrink max-[1023px]:overflow-hidden max-[1023px]:border-b max-[1023px]:border-l-0",
+        "m-3 shrink-0 overflow-x-hidden overflow-y-auto rounded-[13px] border border-[#dedede] bg-background px-4 py-1 shadow-[0_2px_8px_rgb(20_30_50_/_11%)] transition-[width,max-height,opacity,transform,padding,margin,border-color] duration-[240ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none max-[1023px]:w-auto max-[1023px]:shrink max-[1023px]:overflow-hidden",
         hidden
-          ? "w-0 min-w-0 translate-x-2 border-l-0 px-0 opacity-0 pointer-events-none max-[1199px]:w-0 max-[1023px]:max-h-0 max-[1023px]:translate-x-0 max-[1023px]:translate-y-2 max-[1023px]:border-b-0 max-[1023px]:px-4 max-[1023px]:py-0 max-[1023px]:opacity-0"
+          ? "m-0 w-0 min-w-0 translate-x-2 border-0 px-0 opacity-0 pointer-events-none max-[1199px]:w-0 max-[1023px]:max-h-0 max-[1023px]:translate-x-0 max-[1023px]:translate-y-2 max-[1023px]:px-4 max-[1023px]:py-0 max-[1023px]:opacity-0"
           : "w-[300px] max-[1199px]:w-[270px] max-[1023px]:max-h-[calc(50dvh+64px)] max-[1023px]:translate-x-0 max-[1023px]:translate-y-0 max-[1023px]:opacity-100",
       )}
     >
@@ -599,7 +503,7 @@ export function WorkflowContextPanel({
               </p>
             )}
           </WorkflowDisclosure>
-          {latest && (
+          {/* Latest quotation is available in the conversation timeline.
             <WorkflowDisclosure title="Latest quotation">
               <p className="m-0 text-sm font-semibold text-[#182235]">
                 {workflowMoney(latest.total, latest.currency)}
@@ -624,6 +528,7 @@ export function WorkflowContextPanel({
               )}
             </WorkflowDisclosure>
           )}
+          */}
           {workflow.approval && (
             <WorkflowDisclosure title="Commencement checklist" open>
               <ul className="m-0 list-none space-y-2 p-0">
@@ -656,6 +561,7 @@ export function WorkflowContextPanel({
               </ul>
             </WorkflowDisclosure>
           )}
+          {/* Workflow action forms are opened from the + menu.
           {workflow.permissions.manage &&
             (beforeApproval ||
               ["AGREEMENT_PAYMENT_PENDING", "READY_FOR_ACTIVATION"].includes(
@@ -778,6 +684,8 @@ export function WorkflowContextPanel({
                 )}
               </>
             )}
+          */}
+          {/* Quotation forms are opened from the + menu.
           {canQuote && (
             <WorkflowDisclosure title="Create quotation">
               <QuotationForm workflow={workflow} controls={controls} />
@@ -801,6 +709,7 @@ export function WorkflowContextPanel({
               )}
             </WorkflowDisclosure>
           )}
+          */}
           {workflow.permissions.manage &&
             workflow.state === "READY_FOR_ACTIVATION" && (
               <div className="py-4">
@@ -819,11 +728,7 @@ export function WorkflowContextPanel({
                 </p>
               </div>
             )}
-          <InternalWorkspace
-            workflow={workflow}
-            controls={controls}
-            sectionId={sectionId}
-          />
+          <InternalWorkspace workflow={workflow} controls={controls} />
           {(workflow.permissions.manage || workflow.permissions.isClient) &&
             !terminal &&
             workflow.state !== "PENDING_REVIEW" && (

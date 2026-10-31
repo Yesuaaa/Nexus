@@ -55,10 +55,7 @@ import {
 } from "@/features/services/api/services-api"
 import { SpecialistProfileDialog } from "@/features/services/components/specialist-profile-dialog"
 import { ClientProfileDialog } from "./client-profile-dialog"
-import {
-  WorkflowBadge,
-  WorkflowProgress,
-} from "@/features/request-workflow/components/workflow-primitives"
+import { WorkflowProgress } from "@/features/request-workflow/components/workflow-primitives"
 import { ConversationAvatar } from "./conversation-avatar"
 import {
   getConversation,
@@ -103,7 +100,7 @@ function MessageDeletionCountdown({ purgeAt }: { purgeAt: string | null }) {
         ? "Permanent deletion is due"
         : `Permanently deleted in ${daysRemaining} ${daysRemaining === 1 ? "day" : "days"}`
 
-  return <span className="text-[10px] text-[#8791a2]">{label}</span>
+  return <span className="text-[11px] text-[#8791a2]">{label}</span>
 }
 
 type RequestConversationProps = {
@@ -693,673 +690,685 @@ function ConversationPanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-      {workflow && (
-        <div className="shrink-0 border-b border-[#e8ebef] px-5 py-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="min-w-0">
-              <h1 className="m-0 truncate text-sm font-semibold text-[#182235]">
-                {workflow.request.serviceName}
-              </h1>
-              <p className="mt-1 mb-0 truncate text-[10px] text-[#8791a2]">
-                {workflow.request.referenceNumber || workflow.request.id}
-              </p>
-            </div>
-            <WorkflowBadge value={workflow.state} />
-          </div>
-        </div>
-      )}
-      {workflow && <WorkflowProgress workflow={workflow} />}
-      {controls.error && (
-        <p
-          role="alert"
-          className="m-0 shrink-0 border-b border-red-100 bg-red-50 px-5 py-2 text-[11px] text-red-700"
-        >
-          Workflow: {controls.error}
-        </p>
-      )}
       <div className="flex min-h-0 flex-1 max-[1023px]:flex-col-reverse">
-        <section
-          aria-label="Request conversation"
-          className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
-        >
-          <header className="flex min-h-[68px] shrink-0 items-center gap-3 border-b border-[#efefee] px-6 py-3 max-[767px]:gap-2 max-[767px]:px-4">
-            <Link
-              href="/messages"
-              aria-label="All conversations"
-              className={cn(
-                "hidden size-8 shrink-0 items-center justify-center rounded-full text-[#52627a] hover:bg-[#f1f1ee] max-[767px]:flex",
-                focusRing,
-              )}
-            >
-              <ArrowLeft size={17} aria-hidden="true" />
-            </Link>
-            <ConversationAvatar name={participantName} className="size-8" />
-            <div className="min-w-0 flex-1">
-              <h2 className="m-0 truncate text-xs font-semibold text-[#182235]">
-                {participantName}
-              </h2>
-              <p
-                className="mt-0.5 mb-0 truncate text-[11px] text-[#8791a2]"
-                title={requestTitle}
+        <div className="m-3 flex min-h-0 flex-1 overflow-hidden rounded-[13px] border border-[#dedede] bg-background shadow-[0_2px_8px_rgb(20_30_50_/_11%)] max-[767px]:m-2">
+          <section
+            aria-label="Request conversation"
+            className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
+          >
+            <header className="flex min-h-[68px] shrink-0 items-center gap-3 border-b border-[#efefee] bg-background px-6 py-3 max-[767px]:gap-2 max-[767px]:px-4">
+              <Link
+                href="/messages"
+                aria-label="All conversations"
+                className={cn(
+                  "hidden size-8 shrink-0 items-center justify-center rounded-full text-[#52627a] hover:bg-[#f1f1ee] max-[767px]:flex",
+                  focusRing,
+                )}
               >
-                {requestTitle ||
-                  history?.conversation?.department.name ||
-                  "Request conversation"}
-              </p>
-            </div>
-            {isParticipant && (
-              <div className="flex shrink-0 items-center gap-1.5">
-                {isClient && (
+                <ArrowLeft size={17} aria-hidden="true" />
+              </Link>
+              <ConversationAvatar name={participantName} className="size-8" />
+              <div className="min-w-0 flex-1">
+                <h2 className="m-0 truncate text-sm font-semibold text-[#182235]">
+                  {participantName}
+                </h2>
+                <p
+                  className="mt-0.5 mb-0 truncate text-xs text-[#8791a2]"
+                  title={requestTitle}
+                >
+                  {requestTitle ||
+                    history?.conversation?.department.name ||
+                    "Request conversation"}
+                </p>
+              </div>
+              {isParticipant && (
+                <div className="flex shrink-0 items-center gap-1.5">
+                  {isClient && (
+                    <button
+                      type="button"
+                      aria-label={
+                        specialistProfileLoading
+                          ? "Loading specialist profile"
+                          : specialistProfileTarget
+                            ? `View ${specialistProfileTarget.specialist.fullName}'s profile`
+                            : "Specialist profile unavailable"
+                      }
+                      title={
+                        specialistProfileLoading
+                          ? "Loading specialist profile"
+                          : specialistProfileTarget
+                            ? "View specialist profile"
+                            : "Specialist profile unavailable"
+                      }
+                      className={cn(
+                        "grid size-11 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 text-[#294a9b] transition-colors duration-150 hover:bg-[#f1f1ee] disabled:cursor-not-allowed disabled:opacity-40",
+                        focusRing,
+                      )}
+                      disabled={
+                        !specialistProfileTarget || specialistProfileLoading
+                      }
+                      onClick={() =>
+                        specialistProfileKey &&
+                        setSpecialistProfileOpenFor(specialistProfileKey)
+                      }
+                    >
+                      <UserRound size={16} aria-hidden="true" />
+                    </button>
+                  )}
+                  {isStaff && clientProfile && clientProfileKey && (
+                    <button
+                      type="button"
+                      aria-label={`View ${clientProfile.fullName || "client"}'s profile`}
+                      title="View client profile"
+                      className={cn(
+                        "grid size-11 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 text-[#294a9b] transition-colors duration-150 hover:bg-[#f1f1ee]",
+                        focusRing,
+                      )}
+                      onClick={() => setClientProfileOpenFor(clientProfileKey)}
+                    >
+                      <UserRound size={16} aria-hidden="true" />
+                    </button>
+                  )}
                   <button
                     type="button"
                     aria-label={
-                      specialistProfileLoading
-                        ? "Loading specialist profile"
-                        : specialistProfileTarget
-                          ? `View ${specialistProfileTarget.specialist.fullName}'s profile`
-                          : "Specialist profile unavailable"
+                      contextPanelOpen
+                        ? "Hide service details"
+                        : "Show service details"
                     }
+                    aria-expanded={contextPanelOpen}
+                    aria-controls={`request-context-${requestId}`}
                     title={
-                      specialistProfileLoading
-                        ? "Loading specialist profile"
-                        : specialistProfileTarget
-                          ? "View specialist profile"
-                          : "Specialist profile unavailable"
+                      contextPanelOpen
+                        ? "Hide service details"
+                        : "Show service details"
                     }
                     className={cn(
-                      "grid size-11 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 text-[#294a9b] transition-colors duration-150 hover:bg-[#f1f1ee] disabled:cursor-not-allowed disabled:opacity-40",
-                      focusRing,
+                      "grid size-11 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 transition-colors duration-150",
+                      contextPanelOpen
+                        ? "text-[#294a9b] hover:text-[#203f8c]"
+                        : "text-[#7c8ba5] hover:text-[#294a9b]",
+                      "focus-visible:outline-none focus-visible:drop-shadow-[0_0_2px_currentColor] focus-visible:[&>svg]:scale-110",
                     )}
-                    disabled={
-                      !specialistProfileTarget || specialistProfileLoading
-                    }
-                    onClick={() =>
-                      specialistProfileKey &&
-                      setSpecialistProfileOpenFor(specialistProfileKey)
-                    }
+                    onClick={() => setContextPanelOpen((open) => !open)}
                   >
-                    <UserRound size={16} aria-hidden="true" />
+                    <Info size={17} aria-hidden="true" />
                   </button>
-                )}
-                {isStaff && clientProfile && clientProfileKey && (
-                  <button
-                    type="button"
-                    aria-label={`View ${clientProfile.fullName || "client"}'s profile`}
-                    title="View client profile"
-                    className={cn(
-                      "grid size-11 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 text-[#294a9b] transition-colors duration-150 hover:bg-[#f1f1ee]",
-                      focusRing,
-                    )}
-                    onClick={() => setClientProfileOpenFor(clientProfileKey)}
-                  >
-                    <UserRound size={16} aria-hidden="true" />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  aria-label={
-                    contextPanelOpen
-                      ? "Hide service details"
-                      : "Show service details"
-                  }
-                  aria-expanded={contextPanelOpen}
-                  aria-controls={`request-context-${requestId}`}
-                  title={
-                    contextPanelOpen
-                      ? "Hide service details"
-                      : "Show service details"
-                  }
-                  className={cn(
-                    "grid size-11 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 transition-colors duration-150",
-                    contextPanelOpen
-                      ? "text-[#294a9b] hover:text-[#203f8c]"
-                      : "text-[#7c8ba5] hover:text-[#294a9b]",
-                    "focus-visible:outline-none focus-visible:drop-shadow-[0_0_2px_currentColor] focus-visible:[&>svg]:scale-110",
-                  )}
-                  onClick={() => setContextPanelOpen((open) => !open)}
-                >
-                  <Info size={17} aria-hidden="true" />
-                </button>
-              </div>
-            )}
-          </header>
-          {error && (
-            <p role="alert" className="m-3 text-xs text-red-700">
-              {error}
-            </p>
-          )}
-          {!history ? (
-            <p className="p-4 text-xs text-[#52627a]">
-              {error
-                ? "Refresh to try loading this conversation again."
-                : "Loading messages…"}
-            </p>
-          ) : !history.conversation ? (
-            <p className="p-4 text-xs leading-5 text-[#52627a]">
-              Messaging opens when a department head accepts your request. You
-              can return to this page to read and send messages.
-            </p>
-          ) : (
-            <>
-              {history.nextCursor && (
-                <Button
-                  variant="outline"
-                  className="mx-4 mt-3 text-xs"
-                  onClick={() => void loadOlder()}
-                  disabled={olderLoading}
-                >
-                  {olderLoading ? "Loading…" : "Load earlier messages"}
-                </Button>
+                </div>
               )}
-              <div
-                ref={logRef}
-                role="log"
-                aria-label="Conversation messages"
-                aria-live="polite"
-                aria-relevant="additions"
-                tabIndex={0}
-                onScroll={(event) => {
-                  const node = event.currentTarget
-                  followLatest.current =
-                    node.scrollHeight - node.scrollTop - node.clientHeight < 70
-                }}
-                className="min-h-0 flex-1 overflow-y-auto px-7 py-5 focus-visible:outline-none max-[767px]:px-4"
+            </header>
+            {workflow && <WorkflowProgress workflow={workflow} />}
+            {controls.error && (
+              <p
+                role="alert"
+                className="m-0 shrink-0 border-b border-red-100 bg-red-50 px-5 py-2 text-[11px] text-red-700"
               >
-                {!timeline.length && (
-                  <p className="my-3 text-center text-xs text-[#52627a]">
-                    No messages yet. Start the conversation below.
-                  </p>
+                Workflow: {controls.error}
+              </p>
+            )}
+            {error && (
+              <p role="alert" className="m-3 text-xs text-red-700">
+                {error}
+              </p>
+            )}
+            {!history ? (
+              <p className="p-4 text-xs text-[#52627a]">
+                {error
+                  ? "Refresh to try loading this conversation again."
+                  : "Loading messages…"}
+              </p>
+            ) : !history.conversation ? (
+              <p className="p-4 text-xs leading-5 text-[#52627a]">
+                Messaging opens when a department head accepts your request. You
+                can return to this page to read and send messages.
+              </p>
+            ) : (
+              <>
+                {history.nextCursor && (
+                  <Button
+                    variant="outline"
+                    className="mx-4 mt-3 text-xs"
+                    onClick={() => void loadOlder()}
+                    disabled={olderLoading}
+                  >
+                    {olderLoading ? "Loading…" : "Load earlier messages"}
+                  </Button>
                 )}
-                {timeline.map((entry, index) => {
-                  if (entry.kind === "event")
-                    return workflow ? (
-                      <div
-                        id={
-                          entry.event.entityId &&
-                          workflow.events
-                            .filter(
-                              (item) => item.entityId === entry.event.entityId,
-                            )
-                            .at(-1)?.id === entry.event.id
-                            ? `workflow-${entry.event.entityId}`
-                            : undefined
-                        }
-                        key={`event-${entry.id}`}
-                        className="scroll-mt-4"
-                      >
-                        <WorkflowEventCard
-                          event={entry.event}
-                          workflow={workflow}
-                          controls={controls}
-                        />
-                      </div>
-                    ) : null
-                  const message = entry.message
-                  const own = message.sender.id === account.id
-                  const previousEntry = timeline[index - 1]
-                  const previous =
-                    previousEntry?.kind === "message"
-                      ? previousEntry.message
-                      : undefined
-                  const date = new Date(message.createdAt)
-                  const deletedAt = message.deletedAt
-                    ? new Date(message.deletedAt)
-                    : null
-                  const newDay =
-                    !previous ||
-                    date.toDateString() !==
-                      new Date(previous.createdAt).toDateString()
-                  const grouped =
-                    !newDay && previous?.sender.id === message.sender.id
-                  const deleted = Boolean(message.deletedAt)
-                  const canManageMessage = Boolean(
-                    isStaff && history?.canSend && own && !deleted,
-                  )
-                  const editing = editingMessageId === message.id
-                  return (
-                    <div key={message.id}>
-                      {newDay && (
-                        <p className="mt-0 mb-5 text-center text-[10px] text-[#8791a2]">
-                          {date.toLocaleDateString("en-PH", {
-                            weekday: "short",
-                            month: "short",
-                            day: "numeric",
-                          })}
-                        </p>
-                      )}
-                      <article
-                        className={cn(
-                          "w-fit max-w-[85%] pb-1 max-[767px]:max-w-[92%]",
-                          grouped ? "mt-1" : "mt-4",
-                          own ? "ml-auto" : "mr-auto",
-                        )}
-                      >
-                        <p className="sr-only">
-                          {own
-                            ? "You"
-                            : message.sender.fullName || "Participant"}
-                        </p>
-                        {editing ? (
-                          <form
-                            className="w-[min(70vw,420px)] max-w-full space-y-2 rounded-xl border border-[#d8e1ef] bg-white p-3 shadow-sm"
-                            onSubmit={(event) => {
-                              event.preventDefault()
-                              void saveEditedMessage(message.id)
-                            }}
-                          >
-                            <label
-                              htmlFor={`edit-message-${message.id}`}
-                              className="sr-only"
-                            >
-                              Edit message
-                            </label>
-                            <textarea
-                              id={`edit-message-${message.id}`}
-                              autoFocus
-                              rows={3}
-                              maxLength={4000}
-                              value={editingMessageBody}
-                              onChange={(event) =>
-                                setEditingMessageBody(event.target.value)
-                              }
-                              onKeyDown={(event) => {
-                                if (
-                                  event.key !== "Enter" ||
-                                  event.shiftKey ||
-                                  event.nativeEvent.isComposing
-                                )
-                                  return
-                                event.preventDefault()
-                                event.currentTarget.form?.requestSubmit()
-                              }}
-                              className="block min-h-20 w-full resize-y rounded-lg border border-[#d8e1ef] bg-white px-3 py-2 text-xs leading-5 text-[#182235] outline-none focus-visible:ring-2 focus-visible:ring-[#294a9b]"
-                            />
-                            {messageActionError && (
-                              <p
-                                role="alert"
-                                className="m-0 text-xs text-red-700"
-                              >
-                                {messageActionError}
-                              </p>
-                            )}
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="h-9 min-w-16 text-xs"
-                                disabled={messageActionBusy}
-                                onClick={() => {
-                                  setEditingMessageId(null)
-                                  setEditingMessageBody("")
-                                  setMessageActionError("")
-                                }}
-                              >
-                                Cancel
-                              </Button>
-                              <Button
-                                type="submit"
-                                className="h-9 min-w-20 bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
-                                disabled={
-                                  messageActionBusy ||
-                                  !editingMessageBody.trim()
-                                }
-                              >
-                                {messageActionBusy ? "Saving…" : "Save"}
-                              </Button>
-                            </div>
-                          </form>
-                        ) : (
-                          <p
-                            className={cn(
-                              "m-0 rounded-2xl px-3.5 py-2.5 text-[13px] leading-5 whitespace-pre-wrap [overflow-wrap:anywhere]",
-                              deleted
-                                ? "border border-dashed border-[#d8e1ef] bg-[#f6f8fc] text-[#52627a]"
-                                : own
-                                  ? "rounded-br-md bg-[#203f8c] text-white"
-                                  : "rounded-bl-md bg-[#f1f1ee] text-[#182235]",
-                              deleted && "w-fit max-w-full py-1.5 italic",
-                              deleted && own && "ml-auto",
-                            )}
-                          >
-                            {deleted
-                              ? "This message was deleted"
-                              : message.body}
+                <div
+                  ref={logRef}
+                  role="log"
+                  aria-label="Conversation messages"
+                  aria-live="polite"
+                  aria-relevant="additions"
+                  tabIndex={0}
+                  onScroll={(event) => {
+                    const node = event.currentTarget
+                    followLatest.current =
+                      node.scrollHeight - node.scrollTop - node.clientHeight <
+                      70
+                  }}
+                  className="min-h-0 flex-1 overflow-y-auto px-7 py-5 focus-visible:outline-none max-[767px]:px-4"
+                >
+                  {!timeline.length && (
+                    <p className="my-3 text-center text-xs text-[#52627a]">
+                      No messages yet. Start the conversation below.
+                    </p>
+                  )}
+                  {timeline.map((entry, index) => {
+                    if (entry.kind === "event")
+                      return workflow ? (
+                        <div
+                          id={
+                            entry.event.entityId &&
+                            workflow.events
+                              .filter(
+                                (item) =>
+                                  item.entityId === entry.event.entityId,
+                              )
+                              .at(-1)?.id === entry.event.id
+                              ? `workflow-${entry.event.entityId}`
+                              : undefined
+                          }
+                          key={`event-${entry.id}`}
+                          className="scroll-mt-4"
+                        >
+                          <WorkflowEventCard
+                            event={entry.event}
+                            workflow={workflow}
+                            controls={controls}
+                            fileClassName={
+                              workflow.files.find(
+                                (file) => file.id === entry.event.entityId,
+                              )?.uploaderId === account.id
+                                ? "ml-auto"
+                                : undefined
+                            }
+                          />
+                        </div>
+                      ) : null
+                    const message = entry.message
+                    const own = message.sender.id === account.id
+                    const previousEntry = timeline[index - 1]
+                    const previous =
+                      previousEntry?.kind === "message"
+                        ? previousEntry.message
+                        : undefined
+                    const date = new Date(message.createdAt)
+                    const deletedAt = message.deletedAt
+                      ? new Date(message.deletedAt)
+                      : null
+                    const newDay =
+                      !previous ||
+                      date.toDateString() !==
+                        new Date(previous.createdAt).toDateString()
+                    const grouped =
+                      !newDay && previous?.sender.id === message.sender.id
+                    const deleted = Boolean(message.deletedAt)
+                    const canManageMessage = Boolean(
+                      isStaff && history?.canSend && own && !deleted,
+                    )
+                    const editing = editingMessageId === message.id
+                    return (
+                      <div key={message.id}>
+                        {newDay && (
+                          <p className="mt-0 mb-5 text-center text-[11px] text-[#8791a2]">
+                            {date.toLocaleDateString("en-PH", {
+                              weekday: "short",
+                              month: "short",
+                              day: "numeric",
+                            })}
                           </p>
                         )}
-                        {deleted ? (
-                          <div
-                            className={cn(
-                              "mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 px-1 text-[9px] text-[#8791a2]",
-                              own && "justify-end",
-                            )}
-                          >
-                            <time dateTime={deletedAt!.toISOString()}>
-                              Deleted{" "}
-                              {deletedAt!.toLocaleDateString("en-PH", {
-                                month: "short",
-                                day: "numeric",
-                              })}
-                              {", "}
-                              {deletedAt!.toLocaleTimeString("en-PH", {
-                                hour: "numeric",
-                                minute: "2-digit",
-                              })}
-                            </time>
-                            <MessageDeletionCountdown
-                              purgeAt={message.purgeAt}
-                            />
-                          </div>
-                        ) : (
-                          <div
-                            className={cn(
-                              "mt-1 flex items-center gap-1 px-1 text-[9px] text-[#8791a2]",
-                              own && "justify-end",
-                            )}
-                          >
-                            {message.editedAt && (
-                              <span className="mr-1">Edited</span>
-                            )}
-                            <time dateTime={message.createdAt}>
-                              {date.toLocaleTimeString("en-PH", {
-                                hour: "numeric",
-                                minute: "2-digit",
-                              })}
-                            </time>
-                            {canManageMessage && (
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    aria-label={`Actions for your message at ${date.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })}`}
-                                    className="size-11 shrink-0 border-0 bg-transparent p-0 text-[#52627a] hover:bg-[#f1f4fa]"
-                                  >
-                                    <MoreHorizontal
-                                      size={16}
-                                      aria-hidden="true"
-                                    />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent
-                                  side="top"
-                                  align="end"
-                                  className="min-w-36 rounded-xl border-[#dce3ee] bg-white p-1.5 text-[#203047] shadow-[0_12px_30px_rgb(18_36_73_/_16%)]"
-                                >
-                                  <DropdownMenuItem
-                                    className="min-h-10 cursor-pointer gap-2 rounded-md px-2.5 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
-                                    onSelect={() => {
-                                      setEditingMessageId(message.id)
-                                      setEditingMessageBody(message.body || "")
-                                      setMessageActionError("")
-                                    }}
-                                  >
-                                    <Pencil aria-hidden="true" />
-                                    Edit message
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    className="min-h-10 cursor-pointer gap-2 rounded-md px-2.5 text-xs font-medium text-red-700 focus:bg-red-50 focus:text-red-700"
-                                    onSelect={() => {
-                                      setDeleteTarget(message)
-                                      setDeleteError("")
-                                    }}
-                                  >
-                                    <Trash2 aria-hidden="true" />
-                                    Delete message
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            )}
-                          </div>
-                        )}
-                      </article>
-                    </div>
-                  )
-                })}
-              </div>
-              {workflow && activeWorkflowDraft && (
-                <WorkflowActionDraft
-                  key={activeWorkflowDraft}
-                  action={activeWorkflowDraft}
-                  workflow={workflow}
-                  controls={controls}
-                  onClose={() => setActiveWorkflowDraft(null)}
-                />
-              )}
-              {!history.canSend && (
-                <p className="mx-4 text-xs leading-5 text-[#52627a]">
-                  Messaging is paused when this request is closed or has no
-                  active department head. Your message history is still
-                  available.
-                </p>
-              )}
-              <form
-                onSubmit={(event) => void submit(event)}
-                className="shrink-0 border-t border-[#efefee] px-5 py-3 max-[767px]:px-3"
-              >
-                <label htmlFor={inputId} className="sr-only">
-                  Message
-                </label>
-                <div className="flex items-end gap-2 rounded-2xl border border-[#e8e9eb] bg-[#fafaf9] p-2">
-                  {workflow && (
-                    <>
-                      <input
-                        ref={fileInput}
-                        type="file"
-                        accept=".pdf,.png,.jpg,.jpeg,.txt"
-                        className="sr-only"
-                        aria-label="Attach a file"
-                        disabled={
-                          controls.busy || !history.canSend || !canAttach
-                        }
-                        onChange={async (event) => {
-                          const file = event.currentTarget.files?.[0]
-                          if (file && (await controls.attach(file))) {
-                            if (fileInput.current) fileInput.current.value = ""
-                          }
-                        }}
-                      />
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            aria-label={
-                              isClient
-                                ? "Open attachment options"
-                                : "Open request actions"
-                            }
-                            className="size-9 shrink-0 p-0 text-[#52627a]"
-                          >
-                            <Plus size={16} aria-hidden="true" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent
-                          side="top"
-                          align="start"
-                          sideOffset={8}
-                          className="w-[320px] rounded-xl border-[#dce3ee] bg-white p-2 text-[#203047] shadow-[0_12px_30px_rgb(18_36_73_/_16%)]"
+                        <article
+                          className={cn(
+                            "w-fit max-w-[85%] pb-1 max-[767px]:max-w-[92%]",
+                            grouped ? "mt-1" : "mt-4",
+                            own ? "ml-auto" : "mr-auto",
+                          )}
                         >
-                          {canAttach && history.canSend && (
-                            <DropdownMenuItem
-                              className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
-                              disabled={controls.busy}
-                              onSelect={() => fileInput.current?.click()}
+                          <p className="sr-only">
+                            {own
+                              ? "You"
+                              : message.sender.fullName || "Participant"}
+                          </p>
+                          {editing ? (
+                            <form
+                              className="w-[min(70vw,420px)] max-w-full space-y-2 rounded-xl border border-[#d8e1ef] bg-white p-3 shadow-sm"
+                              onSubmit={(event) => {
+                                event.preventDefault()
+                                void saveEditedMessage(message.id)
+                              }}
                             >
-                              <Paperclip aria-hidden="true" />
-                              Attach file
-                            </DropdownMenuItem>
-                          )}
-                          {canRequestInformation && (
-                            <DropdownMenuItem
-                              className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
-                              onSelect={() =>
-                                setActiveWorkflowDraft("request-information")
-                              }
-                            >
-                              <CircleHelp aria-hidden="true" />
-                              Request information
-                            </DropdownMenuItem>
-                          )}
-                          {canScheduleConsultation && (
-                            <DropdownMenuItem
-                              className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
-                              onSelect={() =>
-                                setActiveWorkflowDraft("schedule-consultation")
-                              }
-                            >
-                              <CalendarDays aria-hidden="true" />
-                              Schedule consultation
-                            </DropdownMenuItem>
-                          )}
-                          {canContinueToQuotation && (
-                            <DropdownMenuItem
-                              className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
-                              onSelect={() =>
-                                setActiveWorkflowDraft("quotation")
-                              }
-                            >
-                              <FileText aria-hidden="true" />
-                              Continue to quotation
-                            </DropdownMenuItem>
-                          )}
-                          {canCreateQuotation && (
-                            <DropdownMenuItem
-                              className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
-                              onSelect={() =>
-                                setActiveWorkflowDraft("quotation")
-                              }
-                            >
-                              <FileText aria-hidden="true" />
-                              Create quotation
-                            </DropdownMenuItem>
-                          )}
-                          {(canAssignApprovers || canOpenInternalNotes) && (
-                            <>
-                              {((canAttach && history.canSend) ||
-                                canRequestInformation ||
-                                canScheduleConsultation ||
-                                canContinueToQuotation ||
-                                canCreateQuotation) && (
-                                <DropdownMenuSeparator className="my-1.5 bg-[#e8ebef]" />
-                              )}
-                              <DropdownMenuLabel className="flex items-center justify-between gap-2 px-2.5 py-1.5 text-[9px] font-semibold tracking-[0.08em] text-[#6b7a90] uppercase">
-                                <span>Internal · Department head only</span>
-                                <span className="rounded-full bg-[#edf2fb] px-2 py-0.5 text-[9px] font-medium tracking-normal text-[#294a9b] normal-case">
-                                  Staff only
-                                </span>
-                              </DropdownMenuLabel>
-                            </>
-                          )}
-                          {canAssignApprovers && (
-                            <DropdownMenuItem
-                              className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
-                              onSelect={() =>
-                                setActiveWorkflowDraft("approver-assignments")
-                              }
-                            >
-                              <Users aria-hidden="true" />
-                              Approver assignments
-                            </DropdownMenuItem>
-                          )}
-                          {canOpenInternalNotes && (
-                            <DropdownMenuItem
-                              className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
-                              onSelect={() =>
-                                setActiveWorkflowDraft("internal-note")
-                              }
-                            >
-                              <StickyNote aria-hidden="true" />
-                              Internal notes
-                            </DropdownMenuItem>
-                          )}
-                          {canOpenWorkflowControls && (
-                            <>
-                              {((canAttach && history.canSend) ||
-                                canRequestInformation ||
-                                canScheduleConsultation ||
-                                canContinueToQuotation ||
-                                canCreateQuotation ||
-                                canAssignApprovers ||
-                                canOpenInternalNotes) && (
-                                <DropdownMenuSeparator className="my-1.5 bg-[#e8ebef]" />
-                              )}
-                              <DropdownMenuItem
-                                className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
-                                onSelect={() =>
-                                  focusWorkflowSection("workflow-controls")
+                              <label
+                                htmlFor={`edit-message-${message.id}`}
+                                className="sr-only"
+                              >
+                                Edit message
+                              </label>
+                              <textarea
+                                id={`edit-message-${message.id}`}
+                                autoFocus
+                                rows={3}
+                                maxLength={4000}
+                                value={editingMessageBody}
+                                onChange={(event) =>
+                                  setEditingMessageBody(event.target.value)
                                 }
-                              >
-                                <Settings2 aria-hidden="true" />
-                                Workflow controls
-                              </DropdownMenuItem>
-                            </>
+                                onKeyDown={(event) => {
+                                  if (
+                                    event.key !== "Enter" ||
+                                    event.shiftKey ||
+                                    event.nativeEvent.isComposing
+                                  )
+                                    return
+                                  event.preventDefault()
+                                  event.currentTarget.form?.requestSubmit()
+                                }}
+                                className="block min-h-20 w-full resize-y rounded-lg border border-[#d8e1ef] bg-white px-3 py-2 text-xs leading-5 text-[#182235] outline-none focus-visible:ring-2 focus-visible:ring-[#294a9b]"
+                              />
+                              {messageActionError && (
+                                <p
+                                  role="alert"
+                                  className="m-0 text-xs text-red-700"
+                                >
+                                  {messageActionError}
+                                </p>
+                              )}
+                              <div className="flex justify-end gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-9 min-w-16 text-xs"
+                                  disabled={messageActionBusy}
+                                  onClick={() => {
+                                    setEditingMessageId(null)
+                                    setEditingMessageBody("")
+                                    setMessageActionError("")
+                                  }}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  type="submit"
+                                  className="h-9 min-w-20 bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
+                                  disabled={
+                                    messageActionBusy ||
+                                    !editingMessageBody.trim()
+                                  }
+                                >
+                                  {messageActionBusy ? "Saving…" : "Save"}
+                                </Button>
+                              </div>
+                            </form>
+                          ) : (
+                            <p
+                              className={cn(
+                                "m-0 rounded-2xl px-3.5 py-2.5 text-[13px] leading-5 whitespace-pre-wrap [overflow-wrap:anywhere]",
+                                deleted
+                                  ? "border border-dashed border-[#d8e1ef] bg-[#f6f8fc] text-[#52627a]"
+                                  : own
+                                    ? "rounded-br-md bg-[#203f8c] text-white"
+                                    : "rounded-bl-md bg-[#f1f1ee] text-[#182235]",
+                                deleted && "w-fit max-w-full py-1.5 italic",
+                                deleted && own && "ml-auto",
+                              )}
+                            >
+                              {deleted
+                                ? "This message was deleted"
+                                : message.body}
+                            </p>
                           )}
-                          {!(canAttach && history.canSend) &&
-                            !canRequestInformation &&
-                            !canScheduleConsultation &&
-                            !canContinueToQuotation &&
-                            !canCreateQuotation &&
-                            !canAssignApprovers &&
-                            !canOpenInternalNotes &&
-                            !canOpenWorkflowControls && (
-                              <DropdownMenuItem
-                                disabled
-                                className="min-h-9 px-2.5 py-2 text-xs text-[#8791a2]"
-                              >
-                                No actions available
-                              </DropdownMenuItem>
-                            )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </>
+                          {deleted ? (
+                            <div
+                              className={cn(
+                                "mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 px-1 text-[11px] text-[#8791a2]",
+                                own && "justify-end",
+                              )}
+                            >
+                              <time dateTime={deletedAt!.toISOString()}>
+                                Deleted{" "}
+                                {deletedAt!.toLocaleDateString("en-PH", {
+                                  month: "short",
+                                  day: "numeric",
+                                })}
+                                {", "}
+                                {deletedAt!.toLocaleTimeString("en-PH", {
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                })}
+                              </time>
+                              <MessageDeletionCountdown
+                                purgeAt={message.purgeAt}
+                              />
+                            </div>
+                          ) : (
+                            <div
+                              className={cn(
+                                "mt-1 flex items-center gap-1 px-1 text-[11px] text-[#8791a2]",
+                                own && "justify-end",
+                              )}
+                            >
+                              {message.editedAt && (
+                                <span className="mr-1">Edited</span>
+                              )}
+                              <time dateTime={message.createdAt}>
+                                {date.toLocaleTimeString("en-PH", {
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                })}
+                              </time>
+                              {canManageMessage && (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      aria-label={`Actions for your message at ${date.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })}`}
+                                      className="size-11 shrink-0 border-0 bg-transparent p-0 text-[#52627a] hover:bg-[#f1f4fa]"
+                                    >
+                                      <MoreHorizontal
+                                        size={16}
+                                        aria-hidden="true"
+                                      />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent
+                                    side="top"
+                                    align="end"
+                                    className="min-w-36 rounded-xl border-[#dce3ee] bg-white p-1.5 text-[#203047] shadow-[0_12px_30px_rgb(18_36_73_/_16%)]"
+                                  >
+                                    <DropdownMenuItem
+                                      className="min-h-10 cursor-pointer gap-2 rounded-md px-2.5 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                                      onSelect={() => {
+                                        setEditingMessageId(message.id)
+                                        setEditingMessageBody(
+                                          message.body || "",
+                                        )
+                                        setMessageActionError("")
+                                      }}
+                                    >
+                                      <Pencil aria-hidden="true" />
+                                      Edit message
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      className="min-h-10 cursor-pointer gap-2 rounded-md px-2.5 text-xs font-medium text-red-700 focus:bg-red-50 focus:text-red-700"
+                                      onSelect={() => {
+                                        setDeleteTarget(message)
+                                        setDeleteError("")
+                                      }}
+                                    >
+                                      <Trash2 aria-hidden="true" />
+                                      Delete message
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              )}
+                            </div>
+                          )}
+                        </article>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="relative shrink-0">
+                  {workflow && activeWorkflowDraft && (
+                    <div className="absolute right-0 bottom-full left-0 z-10">
+                      <WorkflowActionDraft
+                        key={activeWorkflowDraft}
+                        action={activeWorkflowDraft}
+                        workflow={workflow}
+                        controls={controls}
+                        onClose={() => setActiveWorkflowDraft(null)}
+                      />
+                    </div>
                   )}
-                  <textarea
-                    ref={messageInputRef}
-                    id={inputId}
-                    value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
-                    maxLength={4000}
-                    rows={1}
-                    disabled={sending || !history.canSend}
-                    placeholder="Write a message about this request…"
-                    onKeyDown={(event) => {
-                      if (
-                        event.key !== "Enter" ||
-                        event.shiftKey ||
-                        event.nativeEvent.isComposing
-                      )
-                        return
-                      event.preventDefault()
-                      event.currentTarget.form?.requestSubmit()
-                    }}
-                    className="block min-h-9 max-h-32 min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-2 py-2 text-xs leading-5 focus-visible:outline-none disabled:opacity-50"
-                  />
-                  <Button
-                    type="submit"
-                    aria-label={sending ? "Sending…" : "Send message"}
-                    className="size-9 shrink-0 rounded-full bg-[#203f8c] p-0 text-white hover:bg-[#172f70]"
-                    disabled={!draft.trim() || !history.canSend || sending}
+                  {!history.canSend && (
+                    <p className="mx-4 text-xs leading-5 text-[#52627a]">
+                      Messaging is paused when this request is closed or has no
+                      active department head. Your message history is still
+                      available.
+                    </p>
+                  )}
+                  <form
+                    onSubmit={(event) => void submit(event)}
+                    className="border-t border-[#efefee] px-5 py-3 max-[767px]:px-3"
                   >
-                    <Send
-                      size={15}
-                      aria-hidden="true"
-                      className="translate-x-[-1px] translate-y-[1px]"
-                    />
-                  </Button>
+                    <label htmlFor={inputId} className="sr-only">
+                      Message
+                    </label>
+                    <div className="flex items-center gap-2">
+                      {workflow && (
+                        <>
+                          <input
+                            ref={fileInput}
+                            type="file"
+                            accept=".pdf,.png,.jpg,.jpeg,.txt"
+                            className="sr-only"
+                            aria-label="Attach a file"
+                            disabled={
+                              controls.busy || !history.canSend || !canAttach
+                            }
+                            onChange={async (event) => {
+                              const file = event.currentTarget.files?.[0]
+                              if (file && (await controls.attach(file))) {
+                                if (fileInput.current)
+                                  fileInput.current.value = ""
+                              }
+                            }}
+                          />
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                type="button"
+                                aria-label={
+                                  isClient
+                                    ? "Open attachment options"
+                                    : "Open request actions"
+                                }
+                                className="size-10 shrink-0 rounded-full bg-[#203f8c] p-0 text-white hover:bg-[#172f70]"
+                              >
+                                <Plus size={16} aria-hidden="true" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                              side="top"
+                              align="start"
+                              sideOffset={8}
+                              className="w-[320px] rounded-xl border-[#dce3ee] bg-white p-2 text-[#203047] shadow-[0_12px_30px_rgb(18_36_73_/_16%)]"
+                            >
+                              {canAttach && history.canSend && (
+                                <DropdownMenuItem
+                                  className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                                  disabled={controls.busy}
+                                  onSelect={() => fileInput.current?.click()}
+                                >
+                                  <Paperclip aria-hidden="true" />
+                                  Attach file
+                                </DropdownMenuItem>
+                              )}
+                              {canRequestInformation && (
+                                <DropdownMenuItem
+                                  className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                                  onSelect={() =>
+                                    setActiveWorkflowDraft(
+                                      "request-information",
+                                    )
+                                  }
+                                >
+                                  <CircleHelp aria-hidden="true" />
+                                  Request information
+                                </DropdownMenuItem>
+                              )}
+                              {canScheduleConsultation && (
+                                <DropdownMenuItem
+                                  className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                                  onSelect={() =>
+                                    setActiveWorkflowDraft(
+                                      "schedule-consultation",
+                                    )
+                                  }
+                                >
+                                  <CalendarDays aria-hidden="true" />
+                                  Schedule consultation
+                                </DropdownMenuItem>
+                              )}
+                              {canContinueToQuotation && (
+                                <DropdownMenuItem
+                                  className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                                  onSelect={() =>
+                                    setActiveWorkflowDraft("quotation")
+                                  }
+                                >
+                                  <FileText aria-hidden="true" />
+                                  Continue to quotation
+                                </DropdownMenuItem>
+                              )}
+                              {canCreateQuotation && (
+                                <DropdownMenuItem
+                                  className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                                  onSelect={() =>
+                                    setActiveWorkflowDraft("quotation")
+                                  }
+                                >
+                                  <FileText aria-hidden="true" />
+                                  Create quotation
+                                </DropdownMenuItem>
+                              )}
+                              {(canAssignApprovers || canOpenInternalNotes) && (
+                                <>
+                                  {((canAttach && history.canSend) ||
+                                    canRequestInformation ||
+                                    canScheduleConsultation ||
+                                    canContinueToQuotation ||
+                                    canCreateQuotation) && (
+                                    <DropdownMenuSeparator className="my-1.5 bg-[#e8ebef]" />
+                                  )}
+                                  <DropdownMenuLabel className="flex items-center justify-between gap-2 px-2.5 py-1.5 text-[9px] font-semibold tracking-[0.08em] text-[#6b7a90] uppercase">
+                                    <span>Internal · Department head only</span>
+                                    <span className="rounded-full bg-[#edf2fb] px-2 py-0.5 text-[9px] font-medium tracking-normal text-[#294a9b] normal-case">
+                                      Staff only
+                                    </span>
+                                  </DropdownMenuLabel>
+                                </>
+                              )}
+                              {canAssignApprovers && (
+                                <DropdownMenuItem
+                                  className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                                  onSelect={() =>
+                                    setActiveWorkflowDraft(
+                                      "approver-assignments",
+                                    )
+                                  }
+                                >
+                                  <Users aria-hidden="true" />
+                                  Approver assignments
+                                </DropdownMenuItem>
+                              )}
+                              {canOpenInternalNotes && (
+                                <DropdownMenuItem
+                                  className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                                  onSelect={() =>
+                                    setActiveWorkflowDraft("internal-note")
+                                  }
+                                >
+                                  <StickyNote aria-hidden="true" />
+                                  Internal notes
+                                </DropdownMenuItem>
+                              )}
+                              {canOpenWorkflowControls && (
+                                <>
+                                  {((canAttach && history.canSend) ||
+                                    canRequestInformation ||
+                                    canScheduleConsultation ||
+                                    canContinueToQuotation ||
+                                    canCreateQuotation ||
+                                    canAssignApprovers ||
+                                    canOpenInternalNotes) && (
+                                    <DropdownMenuSeparator className="my-1.5 bg-[#e8ebef]" />
+                                  )}
+                                  <DropdownMenuItem
+                                    className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                                    onSelect={() =>
+                                      focusWorkflowSection("workflow-controls")
+                                    }
+                                  >
+                                    <Settings2 aria-hidden="true" />
+                                    Workflow controls
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                              {!(canAttach && history.canSend) &&
+                                !canRequestInformation &&
+                                !canScheduleConsultation &&
+                                !canContinueToQuotation &&
+                                !canCreateQuotation &&
+                                !canAssignApprovers &&
+                                !canOpenInternalNotes &&
+                                !canOpenWorkflowControls && (
+                                  <DropdownMenuItem
+                                    disabled
+                                    className="min-h-9 px-2.5 py-2 text-xs text-[#8791a2]"
+                                  >
+                                    No actions available
+                                  </DropdownMenuItem>
+                                )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </>
+                      )}
+                      <div className="flex min-w-0 flex-1 items-end gap-2 rounded-2xl border border-[#e8e9eb] bg-[#fafaf9] p-2">
+                        <textarea
+                          ref={messageInputRef}
+                          id={inputId}
+                          value={draft}
+                          onChange={(event) => setDraft(event.target.value)}
+                          maxLength={4000}
+                          rows={1}
+                          disabled={sending || !history.canSend}
+                          placeholder="Write a message about this request…"
+                          onKeyDown={(event) => {
+                            if (
+                              event.key !== "Enter" ||
+                              event.shiftKey ||
+                              event.nativeEvent.isComposing
+                            )
+                              return
+                            event.preventDefault()
+                            event.currentTarget.form?.requestSubmit()
+                          }}
+                          className="block min-h-9 max-h-32 min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-2 py-2 text-xs leading-5 focus-visible:outline-none disabled:opacity-50"
+                        />
+                        <Button
+                          type="submit"
+                          aria-label={sending ? "Sending…" : "Send message"}
+                          className="size-9 shrink-0 rounded-full bg-[#203f8c] p-0 text-white hover:bg-[#172f70]"
+                          disabled={
+                            !draft.trim() || !history.canSend || sending
+                          }
+                        >
+                          <Send
+                            size={15}
+                            aria-hidden="true"
+                            className="translate-x-[-1px] translate-y-[1px]"
+                          />
+                        </Button>
+                      </div>
+                    </div>
+                    {sendError && (
+                      <p role="alert" className="mt-2 text-xs text-red-700">
+                        {sendError} Your text is saved here so you can retry.
+                      </p>
+                    )}
+                    <div className="mt-1.5 px-1 text-[9px] text-[#8791a2]">
+                      {draft.length}/4000
+                      {workflow ? " · Attachments up to 5 MB" : ""}
+                    </div>
+                  </form>
                 </div>
-                {sendError && (
-                  <p role="alert" className="mt-2 text-xs text-red-700">
-                    {sendError} Your text is saved here so you can retry.
-                  </p>
-                )}
-                <div className="mt-1.5 px-1 text-[9px] text-[#8791a2]">
-                  {draft.length}/4000
-                  {workflow ? " · Attachments up to 5 MB" : ""}
-                </div>
-              </form>
-            </>
-          )}
-        </section>
+              </>
+            )}
+          </section>
+        </div>
         {workflow && (
           <WorkflowContextPanel
             id={`request-context-${requestId}`}

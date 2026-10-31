@@ -2,13 +2,13 @@
 
 import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
+import { ChevronDown, LoaderCircle, MessageSquare } from "lucide-react"
 import {
-  ChevronDown,
-  ChevronLeft,
-  LoaderCircle,
-  MessageSquare,
-} from "lucide-react"
-import { contentClass, focusRing } from "@/components/layout/styles"
+  contentClass,
+  focusRing,
+  iconButtonClass,
+} from "@/components/layout/styles"
+import { PanelIcon } from "@/components/layout/icons"
 import { Button } from "@/components/ui/button"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { cn } from "@/lib/utils"
@@ -20,17 +20,41 @@ import {
 import { RequestConversation } from "../components/request-conversation"
 import { ConversationAvatar } from "../components/conversation-avatar"
 
+const conversationRailStorageKey = "nexus.messages.conversation-rail-collapsed"
+
 export function MessagesPage({ requestId }: { requestId: string | null }) {
   const account = usePortalAccount()
   const [result, setResult] = useState<ConversationList | null>(null)
   const [error, setError] = useState("")
   const [loadingMore, setLoadingMore] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [conversationRailCollapsed, setConversationRailCollapsed] =
-    useState(false)
+  const [conversationRailCollapsed, setConversationRailCollapsed] = useState(
+    () => {
+      if (typeof window === "undefined") return false
+      try {
+        return (
+          window.sessionStorage.getItem(conversationRailStorageKey) === "true"
+        )
+      } catch {
+        return false
+      }
+    },
+  )
   const isClient = account.role === "USER"
   const canCollapseConversations = isClient || account.role === "STAFF"
   const railCollapsed = canCollapseConversations && conversationRailCollapsed
+
+  function toggleConversationRail() {
+    setConversationRailCollapsed((collapsed) => {
+      const next = !collapsed
+      try {
+        window.sessionStorage.setItem(conversationRailStorageKey, String(next))
+      } catch {
+        // Keep the control functional when storage is unavailable.
+      }
+      return next
+    })
+  }
 
   const updatePreview = useCallback((id: string, message: RequestMessage) => {
     setResult((previous) => {
@@ -219,9 +243,8 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
             </span>
           )}
           {canCollapseConversations && (
-            <Button
+            <button
               type="button"
-              variant="outline"
               aria-label={
                 railCollapsed
                   ? "Expand conversations"
@@ -234,20 +257,11 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
                   ? "Expand conversations"
                   : "Collapse conversations"
               }
-              className="size-11 shrink-0 p-0 text-[#52627a] max-[767px]:hidden"
-              onClick={() =>
-                setConversationRailCollapsed((collapsed) => !collapsed)
-              }
+              className={cn(iconButtonClass, "shrink-0 max-[767px]:hidden")}
+              onClick={toggleConversationRail}
             >
-              <ChevronLeft
-                size={17}
-                aria-hidden="true"
-                className={cn(
-                  "transition-transform duration-[180ms] ease-out motion-reduce:transition-none",
-                  railCollapsed && "rotate-180",
-                )}
-              />
-            </Button>
+              <PanelIcon />
+            </button>
           )}
         </header>
         <div
@@ -337,37 +351,44 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
           )}
           {!loading &&
             result?.conversations.map((row) => {
-              const name =
-                account.role === "USER"
-                  ? row.acceptedDepartment?.name || "Department"
-                  : row.client.fullName || "Client"
+              const name = row.client.fullName || "Client"
+              const isSelected = requestId === row.id
               return (
                 <Link
                   key={row.id}
                   href={`/messages?request=${encodeURIComponent(row.id)}`}
-                  aria-current={requestId === row.id ? "page" : undefined}
-                  aria-label={`${name}: ${row.title}. ${row.unreadCount ? `${row.unreadCount} unread messages. ` : ""}${messagePreview(row.lastMessage)}`}
+                  aria-current={isSelected ? "page" : undefined}
+                  aria-label={`${name}: ${messagePreview(row.lastMessage)}${row.unreadCount ? `. ${row.unreadCount} unread messages` : ""}`}
                   title={railCollapsed ? name : undefined}
                   className={cn(
-                    "mb-1 flex items-center rounded-2xl px-3 py-3 no-underline transition-[gap,background-color] duration-[240ms] ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-[#f7f7f5] motion-reduce:transition-none",
+                    "mb-1 flex h-14 items-center overflow-hidden rounded-2xl px-3 py-2.5 no-underline transition-[gap,background-color,color] duration-[240ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
                     focusRing,
-                    railCollapsed ? "gap-0 max-[767px]:gap-3" : "gap-3",
-                    requestId === row.id && "bg-[#f1f1ee]",
+                    railCollapsed
+                      ? "mx-auto size-14 justify-center gap-0 px-2.5 py-2.5 max-[767px]:mx-0 max-[767px]:size-auto max-[767px]:h-auto max-[767px]:justify-start max-[767px]:gap-3 max-[767px]:px-3 max-[767px]:py-3"
+                      : "gap-3",
+                    isSelected
+                      ? "bg-[#203f8c] text-white hover:bg-[#172f70] hover:text-white"
+                      : "hover:bg-[#e9eef5] hover:text-[#203a78]",
                   )}
                 >
                   <span className="relative grid size-9 shrink-0 place-items-center">
                     <ConversationAvatar
                       name={name}
                       className={
-                        requestId === row.id
-                          ? "ring-1 ring-[#294a9b] ring-offset-2 ring-offset-[#f1f1ee]"
+                        isSelected
+                          ? "ring-1 ring-white ring-offset-2 ring-offset-[#203f8c]"
                           : undefined
                       }
                     />
                     {Boolean(row.unreadCount) && railCollapsed && (
                       <span
                         aria-hidden="true"
-                        className="absolute -top-1 -right-1 grid min-w-4 place-items-center rounded-full bg-[#203f8c] px-1 text-[9px] leading-4 text-white"
+                        className={cn(
+                          "absolute -top-1 -right-1 grid min-w-4 place-items-center rounded-full px-1 text-[11px] leading-4",
+                          isSelected
+                            ? "bg-white text-[#203f8c]"
+                            : "bg-[#203f8c] text-white",
+                        )}
                       >
                         {row.unreadCount! > 99 ? "99+" : row.unreadCount}
                       </span>
@@ -375,20 +396,28 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
                   </span>
                   <span
                     className={cn(
-                      "min-w-0 flex-1 overflow-hidden whitespace-nowrap transition-[max-width,opacity,transform] duration-[160ms] ease-out motion-reduce:transition-none",
+                      "min-w-0 flex-1 overflow-hidden whitespace-nowrap leading-4 transition-[max-width,opacity,transform] duration-[160ms] ease-out motion-reduce:transition-none",
                       railCollapsed
                         ? "pointer-events-none max-w-0 translate-x-1 opacity-0 max-[767px]:pointer-events-auto max-[767px]:max-w-none max-[767px]:translate-x-0 max-[767px]:opacity-100"
                         : "max-w-[184px] opacity-100",
                     )}
                   >
                     <span className="flex items-center justify-between gap-2">
-                      <span className="truncate text-xs font-semibold text-[#182235]">
+                      <span
+                        className={cn(
+                          "truncate text-xs leading-4 font-semibold",
+                          isSelected ? "text-white" : "text-[#182235]",
+                        )}
+                      >
                         {name}
                       </span>
                       <span className="flex shrink-0 items-center gap-1.5">
                         <time
                           dateTime={row.lastMessage?.createdAt || row.updatedAt}
-                          className="text-[10px] text-[#8791a2]"
+                          className={cn(
+                            "text-[11px] leading-4",
+                            isSelected ? "text-white/70" : "text-[#8791a2]",
+                          )}
                         >
                           {new Date(
                             row.lastMessage?.createdAt || row.updatedAt,
@@ -398,16 +427,25 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
                           })}
                         </time>
                         {Boolean(row.unreadCount) && !railCollapsed && (
-                          <span className="grid min-w-4 place-items-center rounded-full bg-[#203f8c] px-1 text-[9px] leading-4 text-white">
+                          <span
+                            className={cn(
+                              "grid min-w-4 place-items-center rounded-full px-1 text-[11px] leading-4",
+                              isSelected
+                                ? "bg-white text-[#203f8c]"
+                                : "bg-[#203f8c] text-white",
+                            )}
+                          >
                             {row.unreadCount! > 99 ? "99+" : row.unreadCount}
                           </span>
                         )}
                       </span>
                     </span>
-                    <span className="mt-1 block truncate text-[11px] text-[#52627a]">
-                      {row.title}
-                    </span>
-                    <span className="mt-1 block truncate text-[11px] text-[#8791a2]">
+                    <span
+                      className={cn(
+                        "block truncate text-xs leading-4",
+                        isSelected ? "text-white/70" : "text-[#8791a2]",
+                      )}
+                    >
                       {messagePreview(row.lastMessage)}
                     </span>
                   </span>
