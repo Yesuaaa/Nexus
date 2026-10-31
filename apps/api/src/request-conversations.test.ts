@@ -301,7 +301,10 @@ test(
           "body",
           "clientMessageId",
           "createdAt",
+          "deletedAt",
+          "editedAt",
           "id",
+          "purgeAt",
           "sender",
         ])
         const rls = await db.query<{ enabled: boolean }>(

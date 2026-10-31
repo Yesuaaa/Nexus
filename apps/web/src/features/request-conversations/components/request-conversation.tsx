@@ -1,10 +1,42 @@
 "use client"
 
-import { useEffect, useId, useRef, useState, type FormEvent } from "react"
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react"
 import Link from "next/link"
-import { ArrowLeft, Info, Paperclip, Send, UserRound } from "lucide-react"
+import {
+  ArrowLeft,
+  CalendarDays,
+  CircleHelp,
+  FileText,
+  Info,
+  MoreHorizontal,
+  Paperclip,
+  Pencil,
+  Plus,
+  Send,
+  Settings2,
+  StickyNote,
+  Trash2,
+  UserRound,
+  Users,
+} from "lucide-react"
 import { sileo } from "sileo"
 import { Button } from "@/components/ui/button"
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { ApiError } from "@/features/auth/api/auth-api"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { cn } from "@/lib/utils"
@@ -12,12 +44,17 @@ import { focusRing } from "@/components/layout/styles"
 import { useRequestWorkflow } from "@/features/request-workflow/hooks/use-request-workflow"
 import { WorkflowEventCard } from "@/features/request-workflow/components/workflow-cards"
 import { WorkflowContextPanel } from "@/features/request-workflow/components/workflow-context-panel"
+import {
+  WorkflowActionDraft,
+  type WorkflowDraftAction,
+} from "@/features/request-workflow/components/workflow-action-draft"
 import { getBooking } from "@/features/bookings/api/bookings-api"
 import {
   listServiceSpecialists,
   type ServiceSpecialist,
 } from "@/features/services/api/services-api"
 import { SpecialistProfileDialog } from "@/features/services/components/specialist-profile-dialog"
+import { ClientProfileDialog } from "./client-profile-dialog"
 import {
   WorkflowBadge,
   WorkflowProgress,
@@ -27,6 +64,8 @@ import {
   getConversation,
   markConversationRead,
   openConversationEvents,
+  editMessage,
+  deleteMessage,
   sendMessage,
   type ConversationHistory,
   type RequestMessage,
@@ -38,6 +77,33 @@ import {
 
 function normalizeSpecialistName(name: string) {
   return name.trim().replace(/\s+/g, " ").toLocaleLowerCase()
+}
+
+function MessageDeletionCountdown({ purgeAt }: { purgeAt: string | null }) {
+  const [daysRemaining, setDaysRemaining] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!purgeAt) return
+    const update = () =>
+      setDaysRemaining(
+        Math.max(
+          0,
+          Math.ceil((new Date(purgeAt).getTime() - Date.now()) / 86_400_000),
+        ),
+      )
+    update()
+    const timer = window.setInterval(update, 60 * 60 * 1000)
+    return () => window.clearInterval(timer)
+  }, [purgeAt])
+
+  const label =
+    daysRemaining === null
+      ? "Permanent deletion scheduled"
+      : daysRemaining === 0
+        ? "Permanent deletion is due"
+        : `Permanently deleted in ${daysRemaining} ${daysRemaining === 1 ? "day" : "days"}`
+
+  return <span className="text-[10px] text-[#8791a2]">{label}</span>
 }
 
 type RequestConversationProps = {
@@ -80,10 +146,23 @@ function ConversationPanel({
   const [revision, setRevision] = useState(0)
   const [draft, setDraft] = useState("")
   const [sending, setSending] = useState(false)
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
+  const [editingMessageBody, setEditingMessageBody] = useState("")
+  const [messageActionError, setMessageActionError] = useState("")
+  const [messageActionBusy, setMessageActionBusy] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<RequestMessage | null>(null)
+  const [deleteError, setDeleteError] = useState("")
   const [olderLoading, setOlderLoading] = useState(false)
   const [sendError, setSendError] = useState("")
   const [contextPanelOpen, setContextPanelOpen] = useState(true)
+  const [activeWorkflowDraft, setActiveWorkflowDraft] =
+    useState<WorkflowDraftAction | null>(null)
+  const sectionNavigationTimer = useRef<number | null>(null)
+  const messageInputRef = useRef<HTMLTextAreaElement>(null)
   const [specialistProfileOpenFor, setSpecialistProfileOpenFor] = useState<
+    string | null
+  >(null)
+  const [clientProfileOpenFor, setClientProfileOpenFor] = useState<
     string | null
   >(null)
   const [specialistProfileResolution, setSpecialistProfileResolution] =
@@ -101,6 +180,12 @@ function ConversationPanel({
   } = controls
   const fileInput = useRef<HTMLInputElement>(null)
   const isClient = account.role === "USER"
+  const isStaff = account.role === "STAFF"
+  const isParticipant = isClient || isStaff
+  const clientProfile = history?.conversation?.client
+  const clientProfileKey = clientProfile
+    ? `${requestId}:${clientProfile.id}`
+    : null
   const conversationDepartmentId = history?.conversation?.department.id
   const conversationHeadId = history?.conversation?.head?.id
   const conversationHeadName = history?.conversation?.head?.fullName?.trim()
@@ -124,6 +209,13 @@ function ConversationPanel({
     specialistProfileKey &&
     specialistProfileResolution?.key !== specialistProfileKey,
   )
+
+  useLayoutEffect(() => {
+    const input = messageInputRef.current
+    if (!input) return
+    input.style.height = "auto"
+    input.style.height = `${Math.min(input.scrollHeight, 128)}px`
+  }, [draft])
 
   useEffect(() => {
     if (
@@ -308,7 +400,7 @@ function ConversationPanel({
   const conversationReady = Boolean(history?.conversation)
   useEffect(() => {
     if (
-      !isClient ||
+      !isParticipant ||
       !conversationReady ||
       !latestMessageId ||
       lastMarkedReadMessage.current === latestMessageId
@@ -334,7 +426,7 @@ function ConversationPanel({
     }
   }, [
     conversationReady,
-    isClient,
+    isParticipant,
     latestMessageId,
     onConversationRead,
     requestId,
@@ -450,6 +542,154 @@ function ConversationPanel({
       workflow.state,
     ),
   )
+  const canManageWorkflow = Boolean(!isClient && workflow?.permissions.manage)
+  const terminal = Boolean(
+    workflow &&
+    ["ACTIVE_PROJECT", "DECLINED", "CANCELLED"].includes(workflow.state),
+  )
+  const canRequestInformation = Boolean(
+    canManageWorkflow &&
+    workflow &&
+    [
+      "CONSULTATION",
+      "QUOTATION_PENDING",
+      "CLIENT_APPROVAL",
+      "REVISION_REQUESTED",
+      "AGREEMENT_PAYMENT_PENDING",
+      "READY_FOR_ACTIVATION",
+    ].includes(workflow.state),
+  )
+  const canScheduleConsultation = Boolean(
+    canManageWorkflow && workflow?.state === "CONSULTATION",
+  )
+  const canContinueToQuotation = canScheduleConsultation
+  const canCreateQuotation = Boolean(
+    canManageWorkflow &&
+    workflow &&
+    ["QUOTATION_PENDING", "REVISION_REQUESTED", "CLIENT_APPROVAL"].includes(
+      workflow.state,
+    ),
+  )
+  const canAssignApprovers = Boolean(
+    canManageWorkflow && workflow?.internal && !terminal,
+  )
+  const canOpenInternalNotes = Boolean(canManageWorkflow && workflow?.internal)
+  const canOpenWorkflowControls = Boolean(
+    canManageWorkflow &&
+    workflow &&
+    !terminal &&
+    workflow.state !== "PENDING_REVIEW",
+  )
+
+  useEffect(
+    () => () => {
+      if (sectionNavigationTimer.current !== null)
+        window.clearTimeout(sectionNavigationTimer.current)
+    },
+    [],
+  )
+
+  function focusWorkflowSection(section: string) {
+    if (sectionNavigationTimer.current !== null)
+      window.clearTimeout(sectionNavigationTimer.current)
+    setContextPanelOpen(true)
+    const reducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches
+    sectionNavigationTimer.current = window.setTimeout(
+      () => {
+        const panelId = `request-context-${requestId}`
+        const panel = document.getElementById(panelId)
+        const target = document.getElementById(`${panelId}-${section}`)
+        if (!panel || !target) return
+        let parent: HTMLElement | null = target
+        while (parent) {
+          if (parent instanceof HTMLDetailsElement) parent.open = true
+          if (parent === panel) break
+          parent = parent.parentElement
+        }
+        target.scrollIntoView({
+          behavior: reducedMotion ? "auto" : "smooth",
+          block: "nearest",
+        })
+        sectionNavigationTimer.current = null
+      },
+      contextPanelOpen || reducedMotion ? 0 : 260,
+    )
+  }
+
+  function applyMessageUpdate(message: RequestMessage) {
+    setHistory((previous) =>
+      previous
+        ? {
+            ...previous,
+            messages: previous.messages.map((item) =>
+              item.id === message.id ? message : item,
+            ),
+          }
+        : previous,
+    )
+    onLatestMessage?.(requestId, message)
+  }
+
+  async function saveEditedMessage(messageId: string) {
+    const body = editingMessageBody.trim()
+    if (!body) {
+      setMessageActionError("A message cannot be empty.")
+      return
+    }
+    setMessageActionBusy(true)
+    setMessageActionError("")
+    try {
+      const message = await editMessage(requestId, messageId, body)
+      applyMessageUpdate(message)
+      setEditingMessageId(null)
+      setEditingMessageBody("")
+    } catch (reason) {
+      const message =
+        reason instanceof Error ? reason.message : "Couldn't edit this message."
+      setMessageActionError(message)
+      if (
+        reason instanceof ApiError &&
+        [401, 403, 404].includes(reason.status)
+      ) {
+        setHistory(null)
+        revokeWorkflow(reason.message)
+      }
+      if (reason instanceof ApiError && reason.status === 409)
+        setRevision((value) => value + 1)
+    } finally {
+      setMessageActionBusy(false)
+    }
+  }
+
+  async function confirmDeleteMessage() {
+    if (!deleteTarget) return
+    setMessageActionBusy(true)
+    setDeleteError("")
+    try {
+      const message = await deleteMessage(requestId, deleteTarget.id)
+      applyMessageUpdate(message)
+      setDeleteTarget(null)
+    } catch (reason) {
+      const message =
+        reason instanceof Error
+          ? reason.message
+          : "Couldn't delete this message."
+      setDeleteError(message)
+      if (
+        reason instanceof ApiError &&
+        [401, 403, 404].includes(reason.status)
+      ) {
+        setHistory(null)
+        revokeWorkflow(reason.message)
+      }
+      if (reason instanceof ApiError && reason.status === 409)
+        setRevision((value) => value + 1)
+    } finally {
+      setMessageActionBusy(false)
+    }
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
@@ -507,41 +747,56 @@ function ConversationPanel({
                   "Request conversation"}
               </p>
             </div>
-            {isClient && (
+            {isParticipant && (
               <div className="flex shrink-0 items-center gap-1.5">
+                {isClient && (
+                  <button
+                    type="button"
+                    aria-label={
+                      specialistProfileLoading
+                        ? "Loading specialist profile"
+                        : specialistProfileTarget
+                          ? `View ${specialistProfileTarget.specialist.fullName}'s profile`
+                          : "Specialist profile unavailable"
+                    }
+                    title={
+                      specialistProfileLoading
+                        ? "Loading specialist profile"
+                        : specialistProfileTarget
+                          ? "View specialist profile"
+                          : "Specialist profile unavailable"
+                    }
+                    className={cn(
+                      "grid size-11 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 text-[#294a9b] transition-colors duration-150 hover:bg-[#f1f1ee] disabled:cursor-not-allowed disabled:opacity-40",
+                      focusRing,
+                    )}
+                    disabled={
+                      !specialistProfileTarget || specialistProfileLoading
+                    }
+                    onClick={() =>
+                      specialistProfileKey &&
+                      setSpecialistProfileOpenFor(specialistProfileKey)
+                    }
+                  >
+                    <UserRound size={16} aria-hidden="true" />
+                  </button>
+                )}
+                {isStaff && clientProfile && clientProfileKey && (
+                  <button
+                    type="button"
+                    aria-label={`View ${clientProfile.fullName || "client"}'s profile`}
+                    title="View client profile"
+                    className={cn(
+                      "grid size-11 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 text-[#294a9b] transition-colors duration-150 hover:bg-[#f1f1ee]",
+                      focusRing,
+                    )}
+                    onClick={() => setClientProfileOpenFor(clientProfileKey)}
+                  >
+                    <UserRound size={16} aria-hidden="true" />
+                  </button>
+                )}
                 <button
                   type="button"
-                  aria-label={
-                    specialistProfileLoading
-                      ? "Loading specialist profile"
-                      : specialistProfileTarget
-                        ? `View ${specialistProfileTarget.specialist.fullName}'s profile`
-                        : "Specialist profile unavailable"
-                  }
-                  title={
-                    specialistProfileLoading
-                      ? "Loading specialist profile"
-                      : specialistProfileTarget
-                        ? "View specialist profile"
-                        : "Specialist profile unavailable"
-                  }
-                  className={cn(
-                    "grid size-11 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 text-[#294a9b] transition-colors duration-150 hover:bg-[#f1f1ee] disabled:cursor-not-allowed disabled:opacity-40",
-                    focusRing,
-                  )}
-                  disabled={
-                    !specialistProfileTarget || specialistProfileLoading
-                  }
-                  onClick={() =>
-                    specialistProfileKey &&
-                    setSpecialistProfileOpenFor(specialistProfileKey)
-                  }
-                >
-                  <UserRound size={16} aria-hidden="true" />
-                </button>
-                <Button
-                  type="button"
-                  variant="outline"
                   aria-label={
                     contextPanelOpen
                       ? "Hide service details"
@@ -554,11 +809,17 @@ function ConversationPanel({
                       ? "Hide service details"
                       : "Show service details"
                   }
-                  className="size-11 shrink-0 p-0 text-[#294a9b]"
+                  className={cn(
+                    "grid size-11 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 transition-colors duration-150",
+                    contextPanelOpen
+                      ? "text-[#294a9b] hover:text-[#203f8c]"
+                      : "text-[#7c8ba5] hover:text-[#294a9b]",
+                    "focus-visible:outline-none focus-visible:drop-shadow-[0_0_2px_currentColor] focus-visible:[&>svg]:scale-110",
+                  )}
                   onClick={() => setContextPanelOpen((open) => !open)}
                 >
                   <Info size={17} aria-hidden="true" />
-                </Button>
+                </button>
               </div>
             )}
           </header>
@@ -602,7 +863,7 @@ function ConversationPanel({
                   followLatest.current =
                     node.scrollHeight - node.scrollTop - node.clientHeight < 70
                 }}
-                className="min-h-0 flex-1 overflow-y-auto px-7 py-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring max-[767px]:px-4"
+                className="min-h-0 flex-1 overflow-y-auto px-7 py-5 focus-visible:outline-none max-[767px]:px-4"
               >
                 {!timeline.length && (
                   <p className="my-3 text-center text-xs text-[#52627a]">
@@ -630,7 +891,6 @@ function ConversationPanel({
                           event={entry.event}
                           workflow={workflow}
                           controls={controls}
-                          clientView={isClient}
                         />
                       </div>
                     ) : null
@@ -642,12 +902,20 @@ function ConversationPanel({
                       ? previousEntry.message
                       : undefined
                   const date = new Date(message.createdAt)
+                  const deletedAt = message.deletedAt
+                    ? new Date(message.deletedAt)
+                    : null
                   const newDay =
                     !previous ||
                     date.toDateString() !==
                       new Date(previous.createdAt).toDateString()
                   const grouped =
                     !newDay && previous?.sender.id === message.sender.id
+                  const deleted = Boolean(message.deletedAt)
+                  const canManageMessage = Boolean(
+                    isStaff && history?.canSend && own && !deleted,
+                  )
+                  const editing = editingMessageId === message.id
                   return (
                     <div key={message.id}>
                       {newDay && (
@@ -671,33 +939,192 @@ function ConversationPanel({
                             ? "You"
                             : message.sender.fullName || "Participant"}
                         </p>
-                        <p
-                          className={cn(
-                            "m-0 rounded-2xl px-3.5 py-2.5 text-[13px] leading-5 whitespace-pre-wrap [overflow-wrap:anywhere]",
-                            own
-                              ? "rounded-br-md bg-[#203f8c] text-white"
-                              : "rounded-bl-md bg-[#f1f1ee] text-[#182235]",
-                          )}
-                        >
-                          {message.body}
-                        </p>
-                        <time
-                          dateTime={message.createdAt}
-                          className={cn(
-                            "mt-1 block px-1 text-[9px] text-[#8791a2]",
-                            own && "text-right",
-                          )}
-                        >
-                          {date.toLocaleTimeString("en-PH", {
-                            hour: "numeric",
-                            minute: "2-digit",
-                          })}
-                        </time>
+                        {editing ? (
+                          <form
+                            className="w-[min(70vw,420px)] max-w-full space-y-2 rounded-xl border border-[#d8e1ef] bg-white p-3 shadow-sm"
+                            onSubmit={(event) => {
+                              event.preventDefault()
+                              void saveEditedMessage(message.id)
+                            }}
+                          >
+                            <label
+                              htmlFor={`edit-message-${message.id}`}
+                              className="sr-only"
+                            >
+                              Edit message
+                            </label>
+                            <textarea
+                              id={`edit-message-${message.id}`}
+                              autoFocus
+                              rows={3}
+                              maxLength={4000}
+                              value={editingMessageBody}
+                              onChange={(event) =>
+                                setEditingMessageBody(event.target.value)
+                              }
+                              onKeyDown={(event) => {
+                                if (
+                                  event.key !== "Enter" ||
+                                  event.shiftKey ||
+                                  event.nativeEvent.isComposing
+                                )
+                                  return
+                                event.preventDefault()
+                                event.currentTarget.form?.requestSubmit()
+                              }}
+                              className="block min-h-20 w-full resize-y rounded-lg border border-[#d8e1ef] bg-white px-3 py-2 text-xs leading-5 text-[#182235] outline-none focus-visible:ring-2 focus-visible:ring-[#294a9b]"
+                            />
+                            {messageActionError && (
+                              <p
+                                role="alert"
+                                className="m-0 text-xs text-red-700"
+                              >
+                                {messageActionError}
+                              </p>
+                            )}
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-9 min-w-16 text-xs"
+                                disabled={messageActionBusy}
+                                onClick={() => {
+                                  setEditingMessageId(null)
+                                  setEditingMessageBody("")
+                                  setMessageActionError("")
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                type="submit"
+                                className="h-9 min-w-20 bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
+                                disabled={
+                                  messageActionBusy ||
+                                  !editingMessageBody.trim()
+                                }
+                              >
+                                {messageActionBusy ? "Saving…" : "Save"}
+                              </Button>
+                            </div>
+                          </form>
+                        ) : (
+                          <p
+                            className={cn(
+                              "m-0 rounded-2xl px-3.5 py-2.5 text-[13px] leading-5 whitespace-pre-wrap [overflow-wrap:anywhere]",
+                              deleted
+                                ? "border border-dashed border-[#d8e1ef] bg-[#f6f8fc] text-[#52627a]"
+                                : own
+                                  ? "rounded-br-md bg-[#203f8c] text-white"
+                                  : "rounded-bl-md bg-[#f1f1ee] text-[#182235]",
+                              deleted && "w-fit max-w-full py-1.5 italic",
+                              deleted && own && "ml-auto",
+                            )}
+                          >
+                            {deleted
+                              ? "This message was deleted"
+                              : message.body}
+                          </p>
+                        )}
+                        {deleted ? (
+                          <div
+                            className={cn(
+                              "mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 px-1 text-[9px] text-[#8791a2]",
+                              own && "justify-end",
+                            )}
+                          >
+                            <time dateTime={deletedAt!.toISOString()}>
+                              Deleted{" "}
+                              {deletedAt!.toLocaleDateString("en-PH", {
+                                month: "short",
+                                day: "numeric",
+                              })}
+                              {", "}
+                              {deletedAt!.toLocaleTimeString("en-PH", {
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })}
+                            </time>
+                            <MessageDeletionCountdown
+                              purgeAt={message.purgeAt}
+                            />
+                          </div>
+                        ) : (
+                          <div
+                            className={cn(
+                              "mt-1 flex items-center gap-1 px-1 text-[9px] text-[#8791a2]",
+                              own && "justify-end",
+                            )}
+                          >
+                            {message.editedAt && (
+                              <span className="mr-1">Edited</span>
+                            )}
+                            <time dateTime={message.createdAt}>
+                              {date.toLocaleTimeString("en-PH", {
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })}
+                            </time>
+                            {canManageMessage && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    aria-label={`Actions for your message at ${date.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })}`}
+                                    className="size-11 shrink-0 border-0 bg-transparent p-0 text-[#52627a] hover:bg-[#f1f4fa]"
+                                  >
+                                    <MoreHorizontal
+                                      size={16}
+                                      aria-hidden="true"
+                                    />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent
+                                  side="top"
+                                  align="end"
+                                  className="min-w-36 rounded-xl border-[#dce3ee] bg-white p-1.5 text-[#203047] shadow-[0_12px_30px_rgb(18_36_73_/_16%)]"
+                                >
+                                  <DropdownMenuItem
+                                    className="min-h-10 cursor-pointer gap-2 rounded-md px-2.5 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                                    onSelect={() => {
+                                      setEditingMessageId(message.id)
+                                      setEditingMessageBody(message.body || "")
+                                      setMessageActionError("")
+                                    }}
+                                  >
+                                    <Pencil aria-hidden="true" />
+                                    Edit message
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="min-h-10 cursor-pointer gap-2 rounded-md px-2.5 text-xs font-medium text-red-700 focus:bg-red-50 focus:text-red-700"
+                                    onSelect={() => {
+                                      setDeleteTarget(message)
+                                      setDeleteError("")
+                                    }}
+                                  >
+                                    <Trash2 aria-hidden="true" />
+                                    Delete message
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
+                          </div>
+                        )}
                       </article>
                     </div>
                   )
                 })}
               </div>
+              {workflow && activeWorkflowDraft && (
+                <WorkflowActionDraft
+                  key={activeWorkflowDraft}
+                  action={activeWorkflowDraft}
+                  workflow={workflow}
+                  controls={controls}
+                  onClose={() => setActiveWorkflowDraft(null)}
+                />
+              )}
               {!history.canSend && (
                 <p className="mx-4 text-xs leading-5 text-[#52627a]">
                   Messaging is paused when this request is closed or has no
@@ -712,7 +1139,7 @@ function ConversationPanel({
                 <label htmlFor={inputId} className="sr-only">
                   Message
                 </label>
-                <div className="flex items-end gap-2 rounded-2xl border border-[#e8e9eb] bg-[#fafaf9] p-2 focus-within:ring-2 focus-within:ring-ring">
+                <div className="flex items-end gap-2 rounded-2xl border border-[#e8e9eb] bg-[#fafaf9] p-2">
                   {workflow && (
                     <>
                       <input
@@ -731,31 +1158,181 @@ function ConversationPanel({
                           }
                         }}
                       />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        aria-label={
-                          controls.busy ? "Uploading attachment" : "Attach file"
-                        }
-                        className="size-9 shrink-0 p-0 text-[#52627a]"
-                        disabled={
-                          controls.busy || !history.canSend || !canAttach
-                        }
-                        onClick={() => fileInput.current?.click()}
-                      >
-                        <Paperclip size={16} aria-hidden="true" />
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            aria-label={
+                              isClient
+                                ? "Open attachment options"
+                                : "Open request actions"
+                            }
+                            className="size-9 shrink-0 p-0 text-[#52627a]"
+                          >
+                            <Plus size={16} aria-hidden="true" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          side="top"
+                          align="start"
+                          sideOffset={8}
+                          className="w-[320px] rounded-xl border-[#dce3ee] bg-white p-2 text-[#203047] shadow-[0_12px_30px_rgb(18_36_73_/_16%)]"
+                        >
+                          {canAttach && history.canSend && (
+                            <DropdownMenuItem
+                              className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                              disabled={controls.busy}
+                              onSelect={() => fileInput.current?.click()}
+                            >
+                              <Paperclip aria-hidden="true" />
+                              Attach file
+                            </DropdownMenuItem>
+                          )}
+                          {canRequestInformation && (
+                            <DropdownMenuItem
+                              className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                              onSelect={() =>
+                                setActiveWorkflowDraft("request-information")
+                              }
+                            >
+                              <CircleHelp aria-hidden="true" />
+                              Request information
+                            </DropdownMenuItem>
+                          )}
+                          {canScheduleConsultation && (
+                            <DropdownMenuItem
+                              className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                              onSelect={() =>
+                                setActiveWorkflowDraft("schedule-consultation")
+                              }
+                            >
+                              <CalendarDays aria-hidden="true" />
+                              Schedule consultation
+                            </DropdownMenuItem>
+                          )}
+                          {canContinueToQuotation && (
+                            <DropdownMenuItem
+                              className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                              onSelect={() =>
+                                setActiveWorkflowDraft("quotation")
+                              }
+                            >
+                              <FileText aria-hidden="true" />
+                              Continue to quotation
+                            </DropdownMenuItem>
+                          )}
+                          {canCreateQuotation && (
+                            <DropdownMenuItem
+                              className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                              onSelect={() =>
+                                setActiveWorkflowDraft("quotation")
+                              }
+                            >
+                              <FileText aria-hidden="true" />
+                              Create quotation
+                            </DropdownMenuItem>
+                          )}
+                          {(canAssignApprovers || canOpenInternalNotes) && (
+                            <>
+                              {((canAttach && history.canSend) ||
+                                canRequestInformation ||
+                                canScheduleConsultation ||
+                                canContinueToQuotation ||
+                                canCreateQuotation) && (
+                                <DropdownMenuSeparator className="my-1.5 bg-[#e8ebef]" />
+                              )}
+                              <DropdownMenuLabel className="flex items-center justify-between gap-2 px-2.5 py-1.5 text-[9px] font-semibold tracking-[0.08em] text-[#6b7a90] uppercase">
+                                <span>Internal · Department head only</span>
+                                <span className="rounded-full bg-[#edf2fb] px-2 py-0.5 text-[9px] font-medium tracking-normal text-[#294a9b] normal-case">
+                                  Staff only
+                                </span>
+                              </DropdownMenuLabel>
+                            </>
+                          )}
+                          {canAssignApprovers && (
+                            <DropdownMenuItem
+                              className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                              onSelect={() =>
+                                setActiveWorkflowDraft("approver-assignments")
+                              }
+                            >
+                              <Users aria-hidden="true" />
+                              Approver assignments
+                            </DropdownMenuItem>
+                          )}
+                          {canOpenInternalNotes && (
+                            <DropdownMenuItem
+                              className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                              onSelect={() =>
+                                setActiveWorkflowDraft("internal-note")
+                              }
+                            >
+                              <StickyNote aria-hidden="true" />
+                              Internal notes
+                            </DropdownMenuItem>
+                          )}
+                          {canOpenWorkflowControls && (
+                            <>
+                              {((canAttach && history.canSend) ||
+                                canRequestInformation ||
+                                canScheduleConsultation ||
+                                canContinueToQuotation ||
+                                canCreateQuotation ||
+                                canAssignApprovers ||
+                                canOpenInternalNotes) && (
+                                <DropdownMenuSeparator className="my-1.5 bg-[#e8ebef]" />
+                              )}
+                              <DropdownMenuItem
+                                className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                                onSelect={() =>
+                                  focusWorkflowSection("workflow-controls")
+                                }
+                              >
+                                <Settings2 aria-hidden="true" />
+                                Workflow controls
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                          {!(canAttach && history.canSend) &&
+                            !canRequestInformation &&
+                            !canScheduleConsultation &&
+                            !canContinueToQuotation &&
+                            !canCreateQuotation &&
+                            !canAssignApprovers &&
+                            !canOpenInternalNotes &&
+                            !canOpenWorkflowControls && (
+                              <DropdownMenuItem
+                                disabled
+                                className="min-h-9 px-2.5 py-2 text-xs text-[#8791a2]"
+                              >
+                                No actions available
+                              </DropdownMenuItem>
+                            )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </>
                   )}
                   <textarea
+                    ref={messageInputRef}
                     id={inputId}
                     value={draft}
                     onChange={(event) => setDraft(event.target.value)}
                     maxLength={4000}
-                    rows={2}
+                    rows={1}
                     disabled={sending || !history.canSend}
                     placeholder="Write a message about this request…"
-                    className="block min-w-0 flex-1 resize-none border-0 bg-transparent px-2 py-1 text-xs leading-5 focus-visible:outline-none disabled:opacity-50"
+                    onKeyDown={(event) => {
+                      if (
+                        event.key !== "Enter" ||
+                        event.shiftKey ||
+                        event.nativeEvent.isComposing
+                      )
+                        return
+                      event.preventDefault()
+                      event.currentTarget.form?.requestSubmit()
+                    }}
+                    className="block min-h-9 max-h-32 min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-2 py-2 text-xs leading-5 focus-visible:outline-none disabled:opacity-50"
                   />
                   <Button
                     type="submit"
@@ -763,7 +1340,11 @@ function ConversationPanel({
                     className="size-9 shrink-0 rounded-full bg-[#203f8c] p-0 text-white hover:bg-[#172f70]"
                     disabled={!draft.trim() || !history.canSend || sending}
                   >
-                    <Send size={15} aria-hidden="true" />
+                    <Send
+                      size={15}
+                      aria-hidden="true"
+                      className="translate-x-[-1px] translate-y-[1px]"
+                    />
                   </Button>
                 </div>
                 {sendError && (
@@ -772,7 +1353,7 @@ function ConversationPanel({
                   </p>
                 )}
                 <div className="mt-1.5 px-1 text-[9px] text-[#8791a2]">
-                  {draft.length}/4000 · Enter for a new line
+                  {draft.length}/4000
                   {workflow ? " · Attachments up to 5 MB" : ""}
                 </div>
               </form>
@@ -782,12 +1363,25 @@ function ConversationPanel({
         {workflow && (
           <WorkflowContextPanel
             id={`request-context-${requestId}`}
-            hidden={isClient && !contextPanelOpen}
+            hidden={isParticipant && !contextPanelOpen}
             workflow={workflow}
             controls={controls}
           />
         )}
       </div>
+      {deleteTarget && (
+        <ConfirmationDialog
+          title="Delete this message?"
+          subject="Your message"
+          description="Its text will be removed from the conversation immediately. A deletion notice will remain for 30 days before it is permanently removed."
+          confirmLabel="Delete message"
+          pendingLabel="Deleting…"
+          pending={messageActionBusy}
+          error={deleteError}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={() => void confirmDeleteMessage()}
+        />
+      )}
       {isClient &&
         specialistProfileOpenFor === specialistProfileKey &&
         specialistProfileTarget && (
@@ -799,6 +1393,15 @@ function ConversationPanel({
             allowSelection={false}
             onChoose={() => undefined}
             onClose={() => setSpecialistProfileOpenFor(null)}
+          />
+        )}
+      {isStaff &&
+        clientProfileOpenFor === clientProfileKey &&
+        clientProfile && (
+          <ClientProfileDialog
+            key={clientProfile.id}
+            client={clientProfile}
+            onClose={() => setClientProfileOpenFor(null)}
           />
         )}
     </div>

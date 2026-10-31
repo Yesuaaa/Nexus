@@ -29,13 +29,20 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
   const [conversationRailCollapsed, setConversationRailCollapsed] =
     useState(false)
   const isClient = account.role === "USER"
-  const railCollapsed = isClient && conversationRailCollapsed
+  const canCollapseConversations = isClient || account.role === "STAFF"
+  const railCollapsed = canCollapseConversations && conversationRailCollapsed
 
   const updatePreview = useCallback((id: string, message: RequestMessage) => {
     setResult((previous) => {
       const row = previous?.conversations.find((item) => item.id === id)
-      if (!previous || !row || row.lastMessage?.id === message.id)
-        return previous
+      if (!previous || !row) return previous
+      if (row.lastMessage?.id === message.id)
+        return {
+          ...previous,
+          conversations: previous.conversations.map((item) =>
+            item.id === id ? { ...item, lastMessage: message } : item,
+          ),
+        }
       if (row.lastMessage && message.createdAt < row.lastMessage.createdAt)
         return previous
       return {
@@ -47,6 +54,12 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
       }
     })
   }, [])
+
+  function messagePreview(message: RequestMessage | null) {
+    if (!message) return "Start the conversation"
+    if (message.deletedAt) return "This message was deleted"
+    return message.body || "Start the conversation"
+  }
 
   const refreshConversations = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -205,7 +218,7 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
               {result!.unreadCount! > 99 ? "99+" : result!.unreadCount}
             </span>
           )}
-          {isClient && (
+          {canCollapseConversations && (
             <Button
               type="button"
               variant="outline"
@@ -333,7 +346,7 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
                   key={row.id}
                   href={`/messages?request=${encodeURIComponent(row.id)}`}
                   aria-current={requestId === row.id ? "page" : undefined}
-                  aria-label={`${name}: ${row.title}. ${row.unreadCount ? `${row.unreadCount} unread messages. ` : ""}${row.lastMessage?.body || "Start the conversation"}`}
+                  aria-label={`${name}: ${row.title}. ${row.unreadCount ? `${row.unreadCount} unread messages. ` : ""}${messagePreview(row.lastMessage)}`}
                   title={railCollapsed ? name : undefined}
                   className={cn(
                     "mb-1 flex items-center rounded-2xl px-3 py-3 no-underline transition-[gap,background-color] duration-[240ms] ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-[#f7f7f5] motion-reduce:transition-none",
@@ -395,7 +408,7 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
                       {row.title}
                     </span>
                     <span className="mt-1 block truncate text-[11px] text-[#8791a2]">
-                      {row.lastMessage?.body || "Start the conversation"}
+                      {messagePreview(row.lastMessage)}
                     </span>
                   </span>
                 </Link>

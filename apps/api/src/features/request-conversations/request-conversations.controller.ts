@@ -13,6 +13,8 @@ import {
   listConversationMessages,
   markConversationRead,
   sendConversationMessage,
+  editConversationMessage,
+  deleteConversationMessage,
 } from "./request-conversations.service.js"
 
 export function createRequestConversationsRouter(
@@ -32,6 +34,11 @@ export function createRequestConversationsRouter(
   router.param("id", (_request, response, next, id: string) => {
     if (!/^[A-Za-z0-9_-]{1,80}$/.test(id))
       return response.status(400).json({ error: "Invalid request id" })
+    next()
+  })
+  router.param("messageId", (_request, response, next, id: string) => {
+    if (!/^[A-Za-z0-9_-]{1,80}$/.test(id))
+      return response.status(400).json({ error: "Invalid message id" })
     next()
   })
   router.get("/:id", async (request, response) => {
@@ -55,6 +62,7 @@ export function createRequestConversationsRouter(
       await markConversationRead(
         request.auth!.user.id,
         String(request.params.id),
+        request.auth!.user.role === "USER" ? "USER" : "STAFF",
       ),
     )
   })
@@ -84,6 +92,44 @@ export function createRequestConversationsRouter(
       input.clientMessageId,
     )
     response.status(201).json({ message })
+  })
+  router.patch("/:id/messages/:messageId", async (request, response) => {
+    if (request.auth!.user.role !== "STAFF")
+      return response.status(403).json({
+        error: "Only staff can edit conversation messages",
+      })
+    const input: unknown = request.body
+    if (
+      !input ||
+      typeof input !== "object" ||
+      !("body" in input) ||
+      typeof input.body !== "string" ||
+      !input.body.trim() ||
+      input.body.length > 4000 ||
+      input.body.includes("\u0000")
+    )
+      return response.status(400).json({
+        error: "Enter a message of 1–4000 characters",
+      })
+    const message = await editConversationMessage(
+      request.auth!.user.id,
+      String(request.params.id),
+      String(request.params.messageId),
+      input.body.trim(),
+    )
+    response.json({ message })
+  })
+  router.delete("/:id/messages/:messageId", async (request, response) => {
+    if (request.auth!.user.role !== "STAFF")
+      return response.status(403).json({
+        error: "Only staff can delete conversation messages",
+      })
+    const message = await deleteConversationMessage(
+      request.auth!.user.id,
+      String(request.params.id),
+      String(request.params.messageId),
+    )
+    response.json({ message })
   })
   router.get("/:id/events", async (request, response) => {
     const id = String(request.params.id)

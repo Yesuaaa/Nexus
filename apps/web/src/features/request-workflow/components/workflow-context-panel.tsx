@@ -16,16 +16,19 @@ import {
 } from "./workflow-primitives"
 
 export function WorkflowDisclosure({
+  id,
   title,
   children,
   open = false,
 }: {
+  id?: string
   title: string
   children: ReactNode
   open?: boolean
 }) {
   return (
     <details
+      id={id}
       open={open}
       className="group border-b border-[#e8ebef] py-3 last:border-0"
     >
@@ -50,12 +53,18 @@ function ActionForm({
   children,
   label,
   readOnly = false,
+  onComplete,
+  onCancel,
+  inline = false,
 }: {
   controls: WorkflowControls
   action: (data: FormData) => WorkflowAction
   children?: ReactNode
   label: string
   readOnly?: boolean
+  onComplete?: () => void
+  onCancel?: () => void
+  inline?: boolean
 }) {
   if (readOnly) return <div>{children}</div>
   return (
@@ -64,23 +73,50 @@ function ActionForm({
       onSubmit={async (event) => {
         event.preventDefault()
         const form = event.currentTarget
-        if (await controls.act(action(new FormData(form)))) form.reset()
+        if (await controls.act(action(new FormData(form)))) {
+          form.reset()
+          onComplete?.()
+        }
       }}
     >
       {children}
-      <Button className={workflowButton} disabled={controls.busy}>
-        {controls.busy ? "Saving…" : label}
-      </Button>
+      {inline ? (
+        <div className="flex flex-wrap justify-end gap-2 border-t border-[#e8ebef] pt-3">
+          {onCancel && (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 min-w-[92px] text-[11px]"
+              onClick={onCancel}
+            >
+              Cancel
+            </Button>
+          )}
+          <Button className={workflowButton} disabled={controls.busy}>
+            {controls.busy ? "Saving…" : label}
+          </Button>
+        </div>
+      ) : (
+        <Button className={workflowButton} disabled={controls.busy}>
+          {controls.busy ? "Saving…" : label}
+        </Button>
+      )}
     </form>
   )
 }
 
-function QuotationForm({
+export function QuotationForm({
   controls,
   workflow,
+  onComplete,
+  onCancel,
+  inline = false,
 }: {
   controls: WorkflowControls
   workflow: Workflow
+  onComplete?: () => void
+  onCancel?: () => void
+  inline?: boolean
 }) {
   const [rows, setRows] = useState([{ key: 0 }])
   const [nextKey, setNextKey] = useState(1)
@@ -89,6 +125,9 @@ function QuotationForm({
     <ActionForm
       controls={controls}
       label={latest ? "Send revised quotation" : "Send quotation"}
+      onComplete={onComplete}
+      onCancel={onCancel}
+      inline={inline}
       action={(data) => ({
         type: "CREATE_QUOTATION",
         scope: String(data.get("scope")),
@@ -265,9 +304,11 @@ function QuotationForm({
 function InternalWorkspace({
   workflow,
   controls,
+  sectionId,
 }: {
   workflow: Workflow
   controls: WorkflowControls
+  sectionId: (name: string) => string
 }) {
   const internal = workflow.internal
   if (!workflow.permissions.manage || !internal) return null
@@ -275,12 +316,15 @@ function InternalWorkspace({
     workflow.state,
   )
   return (
-    <div className="mt-3 rounded-xl border border-[#d8e1ef] bg-[#f6f8fc] px-3">
-      <p className="mb-0 text-[10px] font-semibold tracking-wide text-[#52627a] uppercase">
+    <div className="mt-3 rounded-xl border border-[#d8e1ef] bg-[#f6f8fc] px-3 pt-3 pb-1">
+      <p className="mb-1 text-[10px] font-semibold tracking-wide text-[#52627a] uppercase">
         Internal · Department head only
       </p>
       {mutable && (
-        <WorkflowDisclosure title="Approver assignments">
+        <WorkflowDisclosure
+          id={sectionId("approver-assignments")}
+          title="Approver assignments"
+        >
           <ActionForm
             controls={controls}
             label="Save assignments"
@@ -393,7 +437,10 @@ function InternalWorkspace({
           </ActionForm>
         </WorkflowDisclosure>
       )}
-      <WorkflowDisclosure title="Internal notes">
+      <WorkflowDisclosure
+        id={sectionId("internal-notes")}
+        title="Internal notes"
+      >
         {mutable && (
           <ActionForm
             controls={controls}
@@ -469,6 +516,7 @@ export function WorkflowContextPanel({
   const terminal = ["ACTIVE_PROJECT", "DECLINED", "CANCELLED"].includes(
     workflow.state,
   )
+  const sectionId = (name: string) => `${id ?? "request-context"}-${name}`
   return (
     <aside
       id={id}
@@ -614,7 +662,10 @@ export function WorkflowContextPanel({
                 workflow.state,
               )) && (
               <>
-                <WorkflowDisclosure title="Request information">
+                <WorkflowDisclosure
+                  id={sectionId("request-information")}
+                  title="Request information"
+                >
                   <ActionForm
                     controls={controls}
                     label="Request requirement"
@@ -653,7 +704,10 @@ export function WorkflowContextPanel({
                   </ActionForm>
                 </WorkflowDisclosure>
                 {workflow.state === "CONSULTATION" && (
-                  <WorkflowDisclosure title="Schedule consultation">
+                  <WorkflowDisclosure
+                    id={sectionId("schedule-consultation")}
+                    title="Schedule consultation"
+                  >
                     <ActionForm
                       controls={controls}
                       label="Schedule consultation"
@@ -765,11 +819,18 @@ export function WorkflowContextPanel({
                 </p>
               </div>
             )}
-          <InternalWorkspace workflow={workflow} controls={controls} />
+          <InternalWorkspace
+            workflow={workflow}
+            controls={controls}
+            sectionId={sectionId}
+          />
           {(workflow.permissions.manage || workflow.permissions.isClient) &&
             !terminal &&
             workflow.state !== "PENDING_REVIEW" && (
-              <WorkflowDisclosure title="Workflow controls">
+              <WorkflowDisclosure
+                id={sectionId("workflow-controls")}
+                title="Workflow controls"
+              >
                 {workflow.permissions.manage &&
                   (workflow.state === "ON_HOLD" ? (
                     <ActionForm

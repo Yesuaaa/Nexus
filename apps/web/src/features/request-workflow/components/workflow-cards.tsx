@@ -1,12 +1,16 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { useEffect, useState } from "react"
 import { Download, FileText, ShieldCheck } from "lucide-react"
 import { sileo } from "sileo"
 import { Button } from "@/components/ui/button"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
-import { downloadWorkflowFile } from "../api/workflow-api"
+import {
+  createWorkflowFilePreviewUrl,
+  downloadWorkflowFile,
+} from "../api/workflow-api"
 import type { WorkflowControls } from "../hooks/use-request-workflow"
 import type {
   Workflow,
@@ -42,46 +46,86 @@ export function FileSubmissionCard({
   requestId: string
 }) {
   const [downloading, setDownloading] = useState(false)
+  const [preview, setPreview] = useState<{
+    fileId: string
+    url: string
+  } | null>(null)
+  const isImage = file.mimeType.startsWith("image/")
+
+  useEffect(() => {
+    if (!isImage) return
+    let active = true
+    let objectUrl: string | null = null
+    void createWorkflowFilePreviewUrl(requestId, file.id)
+      .then((url) => {
+        objectUrl = url
+        if (!active) {
+          URL.revokeObjectURL(url)
+          return
+        }
+        setPreview({ fileId: file.id, url })
+      })
+      .catch(() => undefined)
+    return () => {
+      active = false
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [file.id, isImage, requestId])
+
   return (
-    <div className="flex min-w-0 items-center gap-3 rounded-xl border border-[#e1e6ee] bg-[#f8fafd] p-3">
-      <FileText
-        size={20}
-        className="shrink-0 text-[#203f8c]"
-        aria-hidden="true"
-      />
-      <div className="min-w-0 flex-1">
-        <p
-          className="m-0 truncate text-xs font-medium text-[#182235]"
-          title={file.name}
+    <div className="min-w-0 rounded-xl border border-[#e1e6ee] bg-[#f8fafd] p-3">
+      {isImage && preview?.fileId === file.id && (
+        <div className="relative mb-3 flex h-48 items-center justify-center overflow-hidden rounded-lg border border-[#e1e6ee] bg-white p-2">
+          <Image
+            src={preview.url}
+            alt={file.name}
+            width={960}
+            height={640}
+            unoptimized
+            className="max-h-full max-w-full object-contain"
+          />
+        </div>
+      )}
+      <div className="flex min-w-0 items-center gap-3">
+        <FileText
+          size={20}
+          className="shrink-0 text-[#203f8c]"
+          aria-hidden="true"
+        />
+        <div className="min-w-0 flex-1">
+          <p
+            className="m-0 truncate text-xs font-medium text-[#182235]"
+            title={file.name}
+          >
+            {file.name}
+          </p>
+          <p className="mt-1 mb-0 text-[10px] text-[#8791a2]">
+            {Math.max(1, Math.ceil(file.size / 1024))} KB
+          </p>
+        </div>
+        <Button
+          aria-label={`Download ${file.name}`}
+          variant="outline"
+          className="size-8 shrink-0 p-0"
+          disabled={downloading}
+          onClick={async () => {
+            setDownloading(true)
+            try {
+              await downloadWorkflowFile(requestId, file)
+            } catch (reason) {
+              sileo.error({
+                title: "Couldn't download file",
+                description:
+                  reason instanceof Error ? reason.message : "Try again.",
+              })
+            } finally {
+              setDownloading(false)
+            }
+          }}
         >
-          {file.name}
-        </p>
-        <p className="mt-1 mb-0 text-[10px] text-[#8791a2]">
-          {Math.max(1, Math.ceil(file.size / 1024))} KB
-        </p>
+          <Download size={15} aria-hidden="true" />
+        </Button>
       </div>
-      <Button
-        aria-label={`Download ${file.name}`}
-        variant="outline"
-        className="size-8 shrink-0 p-0"
-        disabled={downloading}
-        onClick={async () => {
-          setDownloading(true)
-          try {
-            await downloadWorkflowFile(requestId, file)
-          } catch (reason) {
-            sileo.error({
-              title: "Couldn't download file",
-              description:
-                reason instanceof Error ? reason.message : "Try again.",
-            })
-          } finally {
-            setDownloading(false)
-          }
-        }}
-      >
-        <Download size={15} aria-hidden="true" />
-      </Button>
     </div>
   )
 }
@@ -748,44 +792,21 @@ export function ProjectActivationCard({ workflow }: { workflow: Workflow }) {
   )
 }
 
-export function SystemStatusUpdate({
-  event,
-  centered = false,
-}: {
-  event: WorkflowEvent
-  centered?: boolean
-}) {
+export function SystemStatusUpdate({ event }: { event: WorkflowEvent }) {
   return (
-    <div
-      className={
-        centered
-          ? "mx-auto my-4 flex max-w-2xl justify-center text-center text-[10px] leading-5 text-[#8791a2]"
-          : "my-4 flex gap-2 text-[10px] leading-5 text-[#8791a2]"
-      }
-    >
-      {!centered && (
-        <span
-          aria-hidden="true"
-          className="mt-2 size-1.5 shrink-0 rounded-full bg-[#8ba1c7]"
-        />
-      )}
-      <p
-        className={
-          centered
-            ? "m-0 whitespace-pre-wrap"
-            : "m-0 flex-1 whitespace-pre-wrap"
-        }
+    <div className="mx-auto my-4 w-full max-w-2xl overflow-x-auto text-[10px] leading-5 text-[#8791a2] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <p className="mx-auto my-0 w-max whitespace-nowrap">{event.summary}</p>
+      <time
+        dateTime={event.createdAt}
+        className="mt-0.5 block text-center text-[9px] leading-4"
       >
-        {event.summary}
-        <time dateTime={event.createdAt} className="ml-2 text-[9px]">
-          {new Date(event.createdAt).toLocaleString("en-PH", {
-            month: "short",
-            day: "numeric",
-            hour: "numeric",
-            minute: "2-digit",
-          })}
-        </time>
-      </p>
+        {new Date(event.createdAt).toLocaleString("en-PH", {
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        })}
+      </time>
     </div>
   )
 }
@@ -794,11 +815,8 @@ export function WorkflowEventCard({
   event,
   workflow,
   controls,
-  clientView = false,
-}: CardProps & { event: WorkflowEvent; clientView?: boolean }) {
-  const statusUpdate = () => (
-    <SystemStatusUpdate event={event} centered={clientView} />
-  )
+}: CardProps & { event: WorkflowEvent }) {
+  const statusUpdate = () => <SystemStatusUpdate event={event} />
   if (event.type === "APPROVAL_CONFIRMED")
     return (
       <>
