@@ -502,6 +502,11 @@ test.describe("Authentication and session regression", () => {
       .fill("Renewed Service")
     await page
       .getByRole("dialog")
+      .getByRole("navigation", { name: "Service form progress" })
+      .getByRole("button", { name: "Pricing" })
+      .click()
+    await page
+      .getByRole("dialog")
       .getByRole("button", { name: "Save Changes", exact: true })
       .click()
     await expect(page.getByRole("dialog")).toHaveCount(0)

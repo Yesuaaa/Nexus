@@ -113,6 +113,7 @@ export type PricingTemplate = {
   isPublic: boolean
   createdAt: string
   updatedAt: string
+  services?: { id: string; name: string }[]
 }
 
 export type ServicePackage = {
@@ -229,6 +230,24 @@ export async function listPricingTemplates(): Promise<PricingTemplate[]> {
     "/api/services/pricing-templates",
   )
   return result.pricingTemplates
+}
+
+export async function updatePricingTemplate(
+  id: string,
+  input: PricingConfigurationInput,
+): Promise<PricingTemplate> {
+  const result = await apiRequest<{ pricingTemplate: PricingTemplate }>(
+    `/api/services/pricing-templates/${encodeURIComponent(id)}`,
+    { method: "PUT", body: JSON.stringify(input) },
+  )
+  return result.pricingTemplate
+}
+
+export async function deletePricingTemplate(id: string): Promise<void> {
+  await apiRequest(
+    `/api/services/pricing-templates/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+  )
 }
 
 export async function createService(input: ServiceInput): Promise<Service> {

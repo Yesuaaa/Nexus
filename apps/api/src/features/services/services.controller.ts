@@ -44,6 +44,40 @@ servicesRouter.get(
   },
 )
 
+servicesRouter.put(
+  "/pricing-templates/:id",
+  requirePermission(Permission.SERVICES_MANAGE),
+  async (request, response, next) => {
+    try {
+      const pricingTemplate = await servicesService.updatePricingTemplate(
+        String(request.params.id),
+        request.body,
+      )
+      return response.json({ pricingTemplate })
+    } catch (error) {
+      if (error instanceof ServicesError)
+        return response.status(error.status).json({ error: error.message })
+      next(error)
+    }
+  },
+)
+
+servicesRouter.delete(
+  "/pricing-templates/:id",
+  requirePermission(Permission.SERVICES_MANAGE),
+  async (request, response, next) => {
+    try {
+      return response.json(
+        await servicesService.deletePricingTemplate(String(request.params.id)),
+      )
+    } catch (error) {
+      if (error instanceof ServicesError)
+        return response.status(error.status).json({ error: error.message })
+      next(error)
+    }
+  },
+)
+
 servicesRouter.get(
   "/:id/specialists/:specialistId",
   async (request, response, next) => {

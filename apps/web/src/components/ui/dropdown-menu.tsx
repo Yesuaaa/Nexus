@@ -48,8 +48,10 @@ const DropdownMenuSubContent = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DropdownMenuPrimitive.SubContent
     ref={ref}
+    collisionPadding={8}
+    hideWhenDetached
     className={cn(
-      "z-50 min-w-[8rem] overflow-hidden rounded-md border bg-background p-1 text-foreground shadow-lg origin-[var(--radix-dropdown-menu-content-transform-origin)]",
+      "z-[130] max-h-[var(--radix-dropdown-menu-content-available-height)] min-w-[8rem] max-w-[calc(100vw-16px)] overflow-y-auto overflow-x-hidden rounded-md border bg-background p-1 text-foreground shadow-lg origin-[var(--radix-dropdown-menu-content-transform-origin)]",
       className,
     )}
     {...props}
@@ -66,8 +68,10 @@ const DropdownMenuContent = React.forwardRef<
     <DropdownMenuPrimitive.Content
       ref={ref}
       sideOffset={sideOffset}
+      collisionPadding={8}
+      hideWhenDetached
       className={cn(
-        "z-50 max-h-[var(--radix-dropdown-menu-content-available-height)] min-w-[8rem] overflow-y-auto overflow-x-hidden rounded-md border bg-background p-1 text-foreground shadow-md",
+        "z-[130] max-h-[var(--radix-dropdown-menu-content-available-height)] min-w-[8rem] max-w-[calc(100vw-16px)] overflow-y-auto overflow-x-hidden rounded-md border bg-background p-1 text-foreground shadow-md",
         "origin-[var(--radix-dropdown-menu-content-transform-origin)]",
         className,
       )}
