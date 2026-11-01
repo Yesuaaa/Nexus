@@ -494,6 +494,230 @@ test(
     )
 
     await t.test(
+      "closed and cancelled conversations archive automatically and deletion is private to each participant",
+      async () => {
+        const ids = ["archived-closed", "archived-cancelled"]
+        const remove = (actor = client, id = ids[0]!) =>
+          fetch(`${base}${path(id)}`, {
+            method: "DELETE",
+            headers: actor.headers,
+          })
+        type Inbox = {
+          conversations: { id: string; status: string; unreadCount: number }[]
+          unreadCount?: number
+        }
+        await prisma!.serviceRequest.createMany({
+          data: ids.map((id, index) => ({
+            id,
+            clientId: client.id,
+            serviceId: service.id,
+            title: id,
+            acceptedAt: new Date(),
+            acceptedDepartmentId: department.id,
+            status: index ? ("CANCELLED" as const) : ("CLOSED" as const),
+          })),
+        })
+        await prisma!.serviceRequestMessage.createMany({
+          data: [client, head].map((actor) => ({
+            requestId: ids[0]!,
+            senderId: actor.id,
+            body: "Retained booking history",
+            clientMessageId: randomUUID(),
+          })),
+        })
+        try {
+          assert.equal(
+            (await fetch(`${base}${path(ids[0])}`, { method: "DELETE" }))
+              .status,
+            401,
+          )
+          assert.equal((await list(client, "?view=unknown")).status, 400)
+          assert.equal(
+            (await list(client, "?view=active&view=archived")).status,
+            400,
+          )
+          assert.equal((await remove(client, booking.id)).status, 409)
+          for (const actor of [
+            foreignClient,
+            otherHead,
+            staff,
+            admin,
+            superadmin,
+          ]) {
+            assert.equal((await remove(actor)).status, 404)
+            assert.equal(
+              ((await (await list(actor, "?view=archived")).json()) as Inbox)
+                .conversations.length,
+              0,
+            )
+          }
+          for (const actor of [client, head]) {
+            const active = (await (await list(actor)).json()) as Inbox
+            assert.ok(
+              active.conversations.every((row) => !ids.includes(row.id)),
+            )
+            const archive = (await (
+              await list(actor, "?view=archived")
+            ).json()) as Inbox
+            assert.deepEqual(
+              new Set(archive.conversations.map((row) => row.status)),
+              new Set(["CLOSED", "CANCELLED"]),
+            )
+            assert.equal(
+              archive.conversations.find((row) => row.id === ids[0])!
+                .unreadCount,
+              1,
+            )
+            assert.equal(archive.unreadCount, active.unreadCount)
+            const history = (await (await get(actor, "", ids[0])).json()) as {
+              archived: boolean
+              canSend: boolean
+              messages: unknown[]
+            }
+            assert.equal(history.archived, true)
+            assert.equal(history.canSend, false)
+            assert.equal(history.messages.length, 2)
+          }
+          const before = await prisma!.serviceRequest.findUniqueOrThrow({
+            where: { id: ids[0] },
+          })
+          const deleted = await Promise.all([remove(), remove()])
+          assert.deepEqual(
+            deleted.map((response) => response.status),
+            [200, 200],
+          )
+          assert.equal((await get(client, "", ids[0])).status, 404)
+          assert.equal((await get(client, "/events", ids[0])).status, 404)
+          assert.equal(
+            (
+              await fetch(`${base}${path(ids[0])}/read`, {
+                method: "PATCH",
+                headers: client.headers,
+              })
+            ).status,
+            404,
+          )
+          assert.equal(
+            ((await (await list(client, "?view=archived")).json()) as Inbox)
+              .conversations.length,
+            1,
+          )
+          assert.equal(
+            ((await (await list(head, "?view=archived")).json()) as Inbox)
+              .conversations.length,
+            2,
+          )
+          assert.equal((await get(head, "", ids[0])).status, 200)
+          assert.equal((await remove(head, ids[1])).status, 200)
+          assert.equal((await get(client, "", ids[1])).status, 200)
+          assert.equal((await get(head, "", ids[1])).status, 404)
+          const after = await prisma!.serviceRequest.findUniqueOrThrow({
+            where: { id: ids[0] },
+          })
+          assert.equal(after.updatedAt.getTime(), before.updatedAt.getTime())
+          assert.equal(
+            await prisma!.serviceRequestMessage.count({
+              where: { requestId: ids[0] },
+            }),
+            2,
+          )
+          // A replacement head inherits the archive, not the previous head's deletion preference.
+          await prisma!.department.update({
+            where: { id: department.id },
+            data: { headId: staff.id },
+          })
+          assert.equal((await get(staff, "", ids[1])).status, 200)
+          assert.equal((await remove(head, ids[1])).status, 404)
+          await prisma!.department.update({
+            where: { id: department.id },
+            data: { headId: head.id },
+          })
+          // Reactivating a service makes its conversation available again.
+          await prisma!.serviceRequest.update({
+            where: { id: ids[0] },
+            data: { status: "UNDER_REVIEW" },
+          })
+          assert.equal((await get(client, "", ids[0])).status, 200)
+          assert.ok(
+            ((await (await list()).json()) as Inbox).conversations.some(
+              (row) => row.id === ids[0],
+            ),
+          )
+        } finally {
+          await prisma!.department.update({
+            where: { id: department.id },
+            data: { headId: head.id },
+          })
+          await prisma!.serviceRequest.deleteMany({
+            where: { id: { in: ids } },
+          })
+        }
+      },
+    )
+
+    await t.test(
+      "archive pagination keeps deleted conversations hidden on later pages",
+      async () => {
+        const ids = Array.from(
+          { length: 33 },
+          (_, index) => `archive-page-${index}`,
+        )
+        await prisma!.serviceRequest.createMany({
+          data: ids.map((id) => ({
+            id,
+            clientId: client.id,
+            serviceId: service.id,
+            title: id,
+            acceptedAt: new Date(),
+            acceptedDepartmentId: department.id,
+            status: "CLOSED" as const,
+            updatedAt: new Date(0),
+          })),
+        })
+        await prisma!.serviceRequestConversationDeletion.create({
+          data: { requestId: ids[0]!, userId: client.id },
+        })
+        try {
+          type Inbox = {
+            conversations: { id: string }[]
+            nextCursor: string | null
+          }
+          const first = (await (
+            await list(client, "?view=archived")
+          ).json()) as Inbox
+          assert.equal(first.conversations.length, 30)
+          const next = (await (
+            await list(client, `?view=archived&before=${first.nextCursor}`)
+          ).json()) as Inbox
+          assert.equal(next.conversations.length, 2)
+          assert.equal(next.nextCursor, null)
+          assert.equal(
+            new Set(
+              [...first.conversations, ...next.conversations].map(
+                (row) => row.id,
+              ),
+            ).size,
+            32,
+          )
+          assert.ok(
+            [...first.conversations, ...next.conversations].every(
+              (row) => row.id !== ids[0],
+            ),
+          )
+          assert.equal(
+            (await list(client, `?view=active&before=${first.nextCursor}`))
+              .status,
+            400,
+          )
+        } finally {
+          await prisma!.serviceRequest.deleteMany({
+            where: { id: { in: ids } },
+          })
+        }
+      },
+    )
+
+    await t.test(
       "head handoff revokes open streams and moves conversation access to the replacement",
       async () => {
         const oldStream = await stream(head)
@@ -555,6 +779,65 @@ test(
           where: { id: staff.id },
           data: { role: "STAFF" },
         })
+      },
+    )
+
+    await t.test(
+      "staff and administrators can create private internal conversations",
+      async () => {
+        const internalList = (actor = admin, suffix = "") =>
+          fetch(`${base}/internal-conversations${suffix}`, {
+            headers: actor.headers,
+          })
+        const createInternal = (actor = admin, recipientId = staff.id) =>
+          fetch(`${base}/internal-conversations`, {
+            method: "POST",
+            headers: { ...actor.headers, "content-type": "application/json" },
+            body: JSON.stringify({ recipientId }),
+          })
+        assert.equal((await internalList(client)).status, 403)
+        const contacts = (await (
+          await internalList(admin, "/contacts")
+        ).json()) as {
+          id: string
+          role: string
+        }[]
+        assert.ok(contacts.some((contact) => contact.id === staff.id))
+        const created = (await (await createInternal()).json()) as {
+          id: string
+          canSend: boolean
+        }
+        assert.ok(created.id)
+        assert.equal(created.canSend, true)
+        const messageResponse = await fetch(
+          `${base}/internal-conversations/${created.id}/messages`,
+          {
+            method: "POST",
+            headers: { ...admin.headers, "content-type": "application/json" },
+            body: JSON.stringify({
+              body: "Internal handoff",
+              clientMessageId: randomUUID(),
+            }),
+          },
+        )
+        assert.equal(messageResponse.status, 201)
+        const history = (await (
+          await internalList(staff, `/${created.id}`)
+        ).json()) as {
+          messages: { body: string | null }[]
+          conversation: { id: string }
+        }
+        assert.equal(history.conversation.id, admin.id)
+        assert.equal(history.messages[0]?.body, "Internal handoff")
+        assert.equal(
+          (
+            await fetch(`${base}/internal-conversations/${created.id}/read`, {
+              method: "PATCH",
+              headers: staff.headers,
+            })
+          ).status,
+          200,
+        )
       },
     )
 

@@ -5,6 +5,7 @@ import { uploadWorkflowFile, downloadWorkflowFile } from "./workflow.files.js"
 import {
   listWorkflowApprovals,
   listWorkflowNotifications,
+  readAllWorkflowNotifications,
   readWorkflowNotification,
 } from "./workflow.notifications.js"
 import { actOnWorkflow } from "./workflow.service.js"
@@ -15,6 +16,12 @@ requestWorkflowRouter.use(requireAuth)
 requestWorkflowRouter.get("/notifications", async (request, response) => {
   response.json(await listWorkflowNotifications(request.auth!.user.id))
 })
+requestWorkflowRouter.patch(
+  "/notifications/read-all",
+  async (request, response) => {
+    response.json(await readAllWorkflowNotifications(request.auth!.user.id))
+  },
+)
 requestWorkflowRouter.patch(
   "/notifications/:id/read",
   async (request, response) => {

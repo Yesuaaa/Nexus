@@ -67,17 +67,13 @@ function MemberIdentity({
         {(member.fullName?.[0] || email?.[0] || "E").toUpperCase()}
       </span>
       <div className="min-w-0">
-        <p
-          className="m-0 truncate text-xs font-medium"
-          title={member.fullName || email || "Employee"}
-        >
+        <p className="m-0 truncate text-xs font-medium">
           {member.fullName || email || "Employee"}
+          <HoverTooltip>{member.fullName || email || "Employee"}</HoverTooltip>
         </p>
-        <p
-          className={`${panelMuted} mt-0.5 mb-0 truncate`}
-          title={email || undefined}
-        >
+        <p className={`${panelMuted} mt-0.5 mb-0 truncate`}>
           {email || "No account linked"}
+          <HoverTooltip>{email || "No account linked"}</HoverTooltip>
         </p>
       </div>
     </div>
@@ -918,8 +914,11 @@ export function ManageMembersDrawer({
                                             </span>
                                           )}
                                           {member.team && (
-                                            <Pill title={member.team.name}>
+                                            <Pill>
                                               {member.team.name}
+                                              <HoverTooltip>
+                                                {member.team.name}
+                                              </HoverTooltip>
                                             </Pill>
                                           )}
                                         </>
@@ -944,7 +943,6 @@ export function ManageMembersDrawer({
                                         type="button"
                                         className={panelDangerButton}
                                         aria-label={`Remove ${member.fullName || member.email || member.user?.email || "employee"} from department`}
-                                        title="Remove from department"
                                         disabled={submitting}
                                         onClick={() =>
                                           void handleRemoveMember(member.id)
@@ -1134,7 +1132,6 @@ export function ManageMembersDrawer({
                                         type="button"
                                         className={panelIconButton}
                                         aria-label={`Remove ${member.fullName || member.email || member.user?.email || "employee"} from ${team.name}`}
-                                        title="Remove from team"
                                         disabled={submitting}
                                         onClick={() =>
                                           void handleRemoveMemberFromTeam(

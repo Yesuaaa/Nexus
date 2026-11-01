@@ -4,7 +4,9 @@ import { useState } from "react"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { cancelClientServiceRequest } from "../api/client-services-api"
 import { Button } from "@/components/ui/button"
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Pill } from "@/components/ui/pill"
+import { rowActionButton } from "@/components/ui/row-action-styles"
 import type { ServiceRequestSummary } from "../api/client-services-api"
 import {
   requestDate,
@@ -46,7 +48,7 @@ function RequestActions({
   const chatHint =
     "Chat becomes available when a department accepts your request."
   const buttonClass = compact
-    ? "size-9 shrink-0 p-0"
+    ? rowActionButton
     : "min-h-11 w-full min-w-0 px-2 text-xs"
   return (
     <div
@@ -60,26 +62,25 @@ function RequestActions({
         variant="outline"
         className={buttonClass}
         aria-label={`View request: ${request.title}`}
-        title="View request"
         onClick={() => onView(request)}
       >
         <Eye size={15} aria-hidden="true" />
         {!compact && "View request"}
+        {compact && <HoverTooltip>View request</HoverTooltip>}
       </Button>
       {chatAvailable ? (
         <Button asChild variant="outline" className={buttonClass}>
           <Link
             href={`/messages?request=${encodeURIComponent(request.id)}`}
             aria-label={`Go to chat: ${request.title}`}
-            title="Go to chat"
           >
             <MessageSquare size={15} aria-hidden="true" />
             {!compact && "Go to chat"}
+            {compact && <HoverTooltip>Go to chat</HoverTooltip>}
           </Link>
         </Button>
       ) : (
         <span
-          title={chatHint}
           tabIndex={0}
           className="min-w-0 rounded-md focus-visible:outline-2 focus-visible:outline-[#294a9b]"
         >
@@ -91,7 +92,9 @@ function RequestActions({
           >
             <MessageSquare size={15} aria-hidden="true" />
             {!compact && "Go to chat"}
+            {compact && <HoverTooltip>Go to chat</HoverTooltip>}
           </Button>
+          <HoverTooltip>{chatHint}</HoverTooltip>
           <span className="sr-only">{chatHint}</span>
         </span>
       )}
@@ -99,7 +102,6 @@ function RequestActions({
         <Button
           variant="outline"
           className={`${buttonClass} ${compact ? "" : "col-span-2"} text-[#bc3649] hover:text-[#a42f40]`}
-          title="Cancel request"
           aria-label={`Cancel request: ${request.title}`}
           onClick={() => {
             setError("")
@@ -108,6 +110,7 @@ function RequestActions({
         >
           <X size={15} aria-hidden="true" />
           {!compact && "Cancel request"}
+          {compact && <HoverTooltip>Cancel request</HoverTooltip>}
         </Button>
       )}
       {confirming && (
@@ -147,10 +150,10 @@ export function ClientRequestsTable({
 }) {
   return (
     <>
-      <div className="overflow-hidden rounded-lg border border-[#e8ebef] @max-[900px]:hidden">
-        <table className="w-full table-fixed border-collapse text-left text-xs">
+      <div className="overflow-hidden rounded-lg border border-[#e8ebef] bg-background @max-[900px]:hidden">
+        <table className="w-full table-fixed border-collapse text-left text-xs text-foreground">
           <caption className="sr-only">Your service requests</caption>
-          <thead className="bg-[#e8eef2] text-[#52627a]">
+          <thead className="bg-[#e8eef2] text-foreground">
             <tr>
               {[
                 "Request",
@@ -164,8 +167,8 @@ export function ClientRequestsTable({
                   scope="col"
                   className={
                     index === 4
-                      ? "w-40 px-3 py-3 font-medium"
-                      : "px-4 py-3 font-medium"
+                      ? "h-[39px] w-40 border-b border-[#dfe6eb] px-3 text-left align-middle text-xs font-semibold"
+                      : "h-[39px] border-b border-[#dfe6eb] px-4 text-left align-middle text-xs font-semibold"
                   }
                 >
                   {label || <span className="sr-only">Actions</span>}
@@ -177,9 +180,9 @@ export function ClientRequestsTable({
             {requests.map((request) => (
               <tr
                 key={request.id}
-                className="border-t border-[#eceef1] align-top hover:bg-[#f8fafd]"
+                className="h-[58px] border-b border-[#eceef1] align-middle transition-colors last:border-b-0 hover:bg-[#e8eef2]"
               >
-                <td className="px-4 py-4">
+                <td className="px-4 py-[7px] align-middle">
                   <button
                     onClick={() => onView(request)}
                     className="cursor-pointer rounded text-left font-semibold text-[#244993] hover:underline focus-visible:outline-2 focus-visible:outline-[#294c96]"
@@ -190,7 +193,7 @@ export function ClientRequestsTable({
                     {request.referenceNumber || request.id}
                   </p>
                 </td>
-                <td className="px-4 py-4">
+                <td className="px-4 py-[7px] align-middle">
                   <span className="block break-words font-medium">
                     {request.service.name}
                   </span>
@@ -200,15 +203,15 @@ export function ClientRequestsTable({
                       "Standard service"}
                   </span>
                 </td>
-                <td className="px-4 py-4">
+                <td className="px-4 py-[7px] align-middle">
                   <RequestStatus status={request.status} />
                 </td>
-                <td className="px-4 py-4 text-[#52627a]">
+                <td className="px-4 py-[7px] align-middle text-[#52627a]">
                   <time dateTime={request.createdAt}>
                     {requestDate(request.createdAt)}
                   </time>
                 </td>
-                <td className="px-3 py-3">
+                <td className="px-3 py-[7px] align-middle">
                   <RequestActions
                     request={request}
                     onView={onView}
@@ -230,7 +233,7 @@ export function ClientRequestsTable({
           <article
             key={request.id}
             role="listitem"
-            className="min-w-0 rounded-lg border border-[#e1e4ea] p-4"
+            className="min-w-0 rounded-lg border border-[#e8ebef] bg-background p-4"
           >
             <div className="flex items-start justify-between gap-3">
               <h2 className="m-0 min-w-0 break-words text-sm font-semibold">

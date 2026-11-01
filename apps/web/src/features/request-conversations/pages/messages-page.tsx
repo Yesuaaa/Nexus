@@ -1,8 +1,16 @@
 "use client"
 
+import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
-import { useCallback, useEffect, useState } from "react"
-import { ChevronDown, LoaderCircle, MessageSquare } from "lucide-react"
+import { useRouter } from "next/navigation"
+import {
+  Archive,
+  ChevronDown,
+  LoaderCircle,
+  MessageSquare,
+  UsersRound,
+} from "lucide-react"
+import { sileo } from "sileo"
 import {
   contentClass,
   focusRing,
@@ -10,32 +18,78 @@ import {
 } from "@/components/layout/styles"
 import { PanelIcon } from "@/components/layout/icons"
 import { Button } from "@/components/ui/button"
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { cn } from "@/lib/utils"
 import {
   listConversations,
+  deleteArchivedConversation,
   type ConversationList,
-  type RequestMessage,
+  type ConversationView,
   type ConversationSummary,
+  type RequestMessage,
 } from "../api/request-conversations-api"
 import { RequestConversation } from "../components/request-conversation"
+import { InternalConversation } from "../components/internal-conversation"
 import { ConversationAvatar } from "../components/conversation-avatar"
+import { ConversationGroupItem } from "../components/conversation-group"
+import {
+  createInternalConversation,
+  listInternalContacts,
+  listInternalConversations,
+  type InternalConversationList,
+} from "../api/internal-conversations-api"
+import {
+  groupConversations,
+  orderConversations,
+} from "../model/conversation-groups"
 
 const conversationRailStorageKey = "nexus.messages.conversation-rail-collapsed"
 
-function orderConversations(rows: ConversationSummary[]) {
-  return [...rows].sort(
-    (a, b) =>
-      b.updatedAt.localeCompare(a.updatedAt) || b.id.localeCompare(a.id),
-  )
+type MessagesPageProps = {
+  requestId: string | null
+  internalId: string | null
+  view: ConversationView
+  mode: "requests" | "internal"
+}
+type DeletionTarget = Pick<
+  ConversationSummary,
+  "id" | "title" | "referenceNumber"
+>
+
+export function MessagesPage(props: MessagesPageProps) {
+  return <ConversationInbox key={`${props.mode}:${props.view}`} {...props} />
 }
 
-export function MessagesPage({ requestId }: { requestId: string | null }) {
+function ConversationInbox({
+  requestId,
+  internalId,
+  view,
+  mode,
+}: MessagesPageProps) {
+  const router = useRouter()
   const account = usePortalAccount()
   const [result, setResult] = useState<ConversationList | null>(null)
+  const [internalResult, setInternalResult] =
+    useState<InternalConversationList | null>(null)
+  const [internalContacts, setInternalContacts] = useState<
+    Awaited<ReturnType<typeof listInternalContacts>>
+  >([])
   const [error, setError] = useState("")
+  const [internalError, setInternalError] = useState("")
   const [loadingMore, setLoadingMore] = useState(false)
+  const [internalLoading, setInternalLoading] = useState(false)
+  const [internalLoadingMore, setInternalLoadingMore] = useState(false)
+  const [creatingInternal, setCreatingInternal] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [deletionTarget, setDeletionTarget] = useState<DeletionTarget | null>(
+    null,
+  )
+  const [deleting, setDeleting] = useState(false)
+  const [deletionError, setDeletionError] = useState("")
+  const loadedPages = useRef(1)
+  const listVersion = useRef(0)
   const [conversationRailCollapsed, setConversationRailCollapsed] = useState(
     () => {
       if (typeof window === "undefined") return false
@@ -49,19 +103,20 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
     },
   )
   const isClient = account.role === "USER"
+  const canUseInternalChat = !isClient
   const canCollapseConversations = isClient || account.role === "STAFF"
   const railCollapsed = canCollapseConversations && conversationRailCollapsed
 
-  function toggleConversationRail() {
-    setConversationRailCollapsed((collapsed) => {
-      const next = !collapsed
-      try {
-        window.sessionStorage.setItem(conversationRailStorageKey, String(next))
-      } catch {
-        // Keep the control functional when storage is unavailable.
-      }
-      return next
-    })
+  function setConversationRail(collapsed: boolean) {
+    setConversationRailCollapsed(collapsed)
+    try {
+      window.sessionStorage.setItem(
+        conversationRailStorageKey,
+        String(collapsed),
+      )
+    } catch {
+      // Keep the control functional when storage is unavailable.
+    }
   }
 
   const updatePreview = useCallback((id: string, message: RequestMessage) => {
@@ -94,63 +149,139 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
     })
   }, [])
 
-  function messagePreview(message: RequestMessage | null) {
-    if (!message) return "Start the conversation"
-    if (message.deletedAt) return "This message was deleted"
-    return message.body || "Start the conversation"
-  }
-
-  const refreshConversations = useCallback(async (signal?: AbortSignal) => {
-    try {
-      const value = await listConversations(undefined, signal)
-      if (signal?.aborted) return
-      setResult((previous) => {
-        if (!previous) return value
-        const refreshedIds = new Set(
-          value.conversations.map((conversation) => conversation.id),
-        )
+  const updateInternalPreview = useCallback(
+    (id: string, message: RequestMessage) => {
+      setInternalResult((previous) => {
+        if (!previous) return previous
+        const row = previous.conversations.find((item) => item.id === id)
+        if (!row) return previous
         return {
-          ...value,
-          conversations: orderConversations([
-            ...value.conversations.map((row) => {
-              const old = previous.conversations.find(
-                (item) => item.id === row.id,
-              )
-              return old && old.updatedAt > row.updatedAt
+          ...previous,
+          conversations: [...previous.conversations]
+            .map((item) =>
+              item.id === id
                 ? {
-                    ...row,
-                    updatedAt: old.updatedAt,
-                    lastMessage: old.lastMessage,
+                    ...item,
+                    updatedAt:
+                      message.createdAt > item.updatedAt
+                        ? message.createdAt
+                        : item.updatedAt,
+                    lastMessage: message,
                   }
-                : row
-            }),
-            ...previous.conversations.filter(
-              (conversation) => !refreshedIds.has(conversation.id),
+                : item,
+            )
+            .sort(
+              (left, right) =>
+                right.updatedAt.localeCompare(left.updatedAt) ||
+                right.id.localeCompare(left.id),
             ),
-          ]),
-          nextCursor: previous.nextCursor ?? value.nextCursor,
-          unreadCount:
-            value.unreadCount ??
-            (value.conversations.length === 0
-              ? 0
-              : (previous.unreadCount ?? 0)),
         }
       })
-      setError("")
-    } catch (reason: unknown) {
-      if (signal?.aborted) return
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Couldn't load conversations.",
-      )
-    } finally {
-      if (!signal?.aborted) setLoading(false)
-    }
-  }, [])
+    },
+    [],
+  )
+
+  const refreshConversations = useCallback(
+    async (signal?: AbortSignal) => {
+      const version = ++listVersion.current
+      try {
+        const value = await listConversations(undefined, signal, view)
+        let nextCursor = value.nextCursor
+        for (let page = 1; page < loadedPages.current && nextCursor; page++) {
+          const next = await listConversations(nextCursor, signal, view)
+          value.conversations.push(...next.conversations)
+          nextCursor = next.nextCursor
+        }
+        value.nextCursor = nextCursor
+        value.conversations = [
+          ...new Map(value.conversations.map((row) => [row.id, row])).values(),
+        ]
+        if (signal?.aborted || version !== listVersion.current) return
+        setResult((previous) => {
+          if (!previous) return value
+          return {
+            ...value,
+            conversations: orderConversations([
+              ...value.conversations.map((row) => {
+                const old = previous.conversations.find(
+                  (item) => item.id === row.id,
+                )
+                return old && old.updatedAt > row.updatedAt
+                  ? {
+                      ...row,
+                      updatedAt: old.updatedAt,
+                      lastMessage: old.lastMessage,
+                    }
+                  : row
+              }),
+            ]),
+            unreadCount:
+              value.unreadCount ??
+              (value.conversations.length === 0
+                ? 0
+                : (previous.unreadCount ?? 0)),
+          }
+        })
+        setError("")
+      } catch (reason: unknown) {
+        if (signal?.aborted || version !== listVersion.current) return
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "Couldn't load conversations.",
+        )
+      } finally {
+        if (!signal?.aborted && version === listVersion.current)
+          setLoading(false)
+      }
+    },
+    [view],
+  )
+
+  const refreshInternalConversations = useCallback(
+    async (signal?: AbortSignal) => {
+      if (!canUseInternalChat) return
+      setInternalLoading(true)
+      try {
+        const [next, contacts] = await Promise.all([
+          listInternalConversations(undefined, signal),
+          listInternalContacts(signal),
+        ])
+        if (signal?.aborted) return
+        setInternalResult(next)
+        setInternalContacts(contacts)
+        setInternalError("")
+      } catch (reason: unknown) {
+        if (signal?.aborted) return
+        setInternalError(
+          reason instanceof Error
+            ? reason.message
+            : "Couldn't load internal conversations.",
+        )
+      } finally {
+        if (!signal?.aborted) setInternalLoading(false)
+      }
+    },
+    [canUseInternalChat],
+  )
 
   useEffect(() => {
     const controller = new AbortController()
+    if (mode === "internal") {
+      const initialRefresh = window.setTimeout(
+        () => void refreshInternalConversations(controller.signal),
+        0,
+      )
+      const timer = setInterval(() => {
+        if (document.visibilityState === "visible")
+          void refreshInternalConversations(controller.signal)
+      }, 30_000)
+      return () => {
+        clearTimeout(initialRefresh)
+        controller.abort()
+        clearInterval(timer)
+      }
+    }
     const initialRefresh = window.setTimeout(
       () => void refreshConversations(controller.signal),
       0,
@@ -164,7 +295,7 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
       controller.abort()
       clearInterval(timer)
     }
-  }, [refreshConversations])
+  }, [mode, refreshConversations, refreshInternalConversations])
 
   const updateUnreadCounts = useCallback(
     (id: string, unreadCount: number, conversationUnreadCount: number) => {
@@ -185,11 +316,33 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
     [],
   )
 
+  const updateInternalUnreadCounts = useCallback(
+    (id: string, unreadCount: number, conversationUnreadCount: number) => {
+      setInternalResult((previous) =>
+        previous
+          ? {
+              ...previous,
+              unreadCount,
+              conversations: previous.conversations.map((conversation) =>
+                conversation.id === id
+                  ? { ...conversation, unreadCount: conversationUnreadCount }
+                  : conversation,
+              ),
+            }
+          : previous,
+      )
+    },
+    [],
+  )
+
   async function loadMore() {
     if (!result?.nextCursor || loadingMore) return
+    const version = ++listVersion.current
     setLoadingMore(true)
     try {
-      const next = await listConversations(result.nextCursor)
+      const next = await listConversations(result.nextCursor, undefined, view)
+      if (version !== listVersion.current) return
+      loadedPages.current++
       setResult((previous) =>
         previous
           ? {
@@ -217,7 +370,138 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
     }
   }
 
+  async function loadMoreInternal() {
+    if (!internalResult?.nextCursor || internalLoadingMore) return
+    setInternalLoadingMore(true)
+    try {
+      const next = await listInternalConversations(internalResult.nextCursor)
+      setInternalResult((previous) =>
+        previous
+          ? {
+              conversations: [
+                ...previous.conversations,
+                ...next.conversations.filter(
+                  (row) =>
+                    !previous.conversations.some((old) => old.id === row.id),
+                ),
+              ],
+              nextCursor: next.nextCursor,
+              unreadCount: next.unreadCount,
+            }
+          : previous,
+      )
+      setInternalError("")
+    } catch (reason) {
+      setInternalError(
+        reason instanceof Error
+          ? reason.message
+          : "Couldn't load more internal conversations.",
+      )
+    } finally {
+      setInternalLoadingMore(false)
+    }
+  }
+
+  async function openInternalChat(recipientId: string) {
+    if (creatingInternal) return
+    setCreatingInternal(recipientId)
+    setInternalError("")
+    try {
+      const conversation = await createInternalConversation(recipientId)
+      setInternalResult((previous) => {
+        if (
+          !previous ||
+          previous.conversations.some((row) => row.id === conversation.id)
+        )
+          return previous
+        return {
+          ...previous,
+          conversations: [
+            {
+              id: conversation.id,
+              updatedAt: new Date().toISOString(),
+              participant: conversation.conversation,
+              lastMessage: null,
+              unreadCount: 0,
+            },
+            ...previous.conversations,
+          ],
+        }
+      })
+      router.push(
+        `/messages?mode=internal&internal=${encodeURIComponent(conversation.id)}`,
+        { scroll: false },
+      )
+    } catch (reason) {
+      setInternalError(
+        reason instanceof Error
+          ? reason.message
+          : "Couldn't open that internal conversation.",
+      )
+    } finally {
+      setCreatingInternal(null)
+    }
+  }
+
+  const updateArchivedView = useCallback(
+    (archived: boolean) => {
+      if (archived !== (view === "archived") && requestId)
+        router.replace(
+          `/messages?request=${encodeURIComponent(requestId)}${archived ? "&view=archived" : ""}`,
+          { scroll: false },
+        )
+    },
+    [requestId, router, view],
+  )
+
+  async function confirmDeletion() {
+    if (!deletionTarget || deleting) return
+    setDeleting(true)
+    setDeletionError("")
+    try {
+      await deleteArchivedConversation(deletionTarget.id)
+      listVersion.current++
+      setResult((previous) =>
+        previous
+          ? {
+              ...previous,
+              conversations: previous.conversations.filter(
+                (row) => row.id !== deletionTarget.id,
+              ),
+            }
+          : previous,
+      )
+      if (requestId === deletionTarget.id)
+        router.replace("/messages?view=archived", { scroll: false })
+      setDeletionTarget(null)
+      sileo.success({ title: "Conversation deleted for you" })
+    } catch (reason) {
+      setDeletionError(
+        reason instanceof Error
+          ? reason.message
+          : "Couldn't delete this conversation.",
+      )
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  function requestDeletion(target: DeletionTarget) {
+    setDeletionError("")
+    setDeletionTarget(target)
+  }
+
   const selected = result?.conversations.find((row) => row.id === requestId)
+  const selectedInternal = internalResult?.conversations.find(
+    (row) => row.id === internalId,
+  )
+  const groups = groupConversations(result?.conversations ?? [], isClient)
+  const hasSelection =
+    mode === "internal" ? Boolean(internalId) : Boolean(requestId)
+  const unreadCount =
+    mode === "internal"
+      ? (internalResult?.unreadCount ?? 0)
+      : result?.unreadCount
   return (
     <main
       aria-label="Messages"
@@ -226,14 +510,14 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
         "grid h-[calc(100dvh-116px)] min-h-[480px] overflow-hidden rounded-[20px] transition-[grid-template-columns] duration-[240ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none max-[767px]:h-[calc(100dvh-98px)] max-[767px]:min-h-[420px] max-[767px]:grid-cols-1",
         railCollapsed
           ? "grid-cols-[76px_minmax(0,1fr)]"
-          : "grid-cols-[260px_minmax(0,1fr)]",
+          : "grid-cols-[360px_minmax(0,1fr)]",
       )}
     >
       <nav
         aria-label="Conversations"
         className={cn(
           "flex min-h-0 flex-col border-r border-[#efefee] max-[767px]:border-r-0",
-          requestId && "max-[767px]:hidden",
+          hasSelection && "max-[767px]:hidden",
         )}
       >
         <header
@@ -253,19 +537,19 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
           >
             Messages
           </h1>
-          {Boolean(result?.unreadCount) && (
+          {mode === "requests" && view === "active" && Boolean(unreadCount) && (
             <span
               role="status"
               aria-live="polite"
               aria-atomic="true"
-              aria-label={`${result?.unreadCount} unread messages`}
+              aria-label={`${unreadCount} unread messages`}
               className={cn(
                 "grid max-w-10 min-w-5 place-items-center overflow-hidden rounded-full bg-[#294a9b] px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap text-white transition-[max-width,min-width,opacity,transform,padding] duration-[160ms] ease-out motion-reduce:transition-none",
                 railCollapsed &&
                   "max-w-0 min-w-0 scale-95 px-0 py-0 opacity-0 max-[767px]:max-w-10 max-[767px]:min-w-5 max-[767px]:scale-100 max-[767px]:px-1.5 max-[767px]:py-0.5 max-[767px]:opacity-100",
               )}
             >
-              {result!.unreadCount! > 99 ? "99+" : result!.unreadCount}
+              {unreadCount! > 99 ? "99+" : unreadCount}
             </span>
           )}
           {canCollapseConversations && (
@@ -278,23 +562,77 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
               }
               aria-expanded={!railCollapsed}
               aria-controls="conversation-list"
-              title={
-                railCollapsed
-                  ? "Expand conversations"
-                  : "Collapse conversations"
-              }
               className={cn(iconButtonClass, "shrink-0 max-[767px]:hidden")}
-              onClick={toggleConversationRail}
+              onClick={() => setConversationRail(!conversationRailCollapsed)}
             >
               <PanelIcon />
+              <HoverTooltip side="top">
+                {railCollapsed
+                  ? "Expand conversations"
+                  : "Collapse conversations"}
+              </HoverTooltip>
             </button>
           )}
         </header>
         <div
+          role="group"
+          aria-label="Conversation views"
+          className={cn(
+            "mb-3 flex gap-1 px-3",
+            railCollapsed && "flex-col max-[767px]:flex-row",
+          )}
+        >
+          {(["active", "archived"] as const).map((value) => {
+            const Icon = value === "active" ? MessageSquare : Archive
+            const label = value === "active" ? "Active" : "Archived"
+            const selected = mode === "requests" && view === value
+            return (
+              <Button
+                key={value}
+                variant="outline"
+                aria-label={`${label} conversations`}
+                aria-pressed={selected}
+                className={cn(
+                  "size-11 shrink-0 cursor-pointer border-transparent p-0",
+                  selected && "bg-[#edf1f8] text-[#203f8c]",
+                )}
+                onClick={() =>
+                  router.push(
+                    value === "archived"
+                      ? "/messages?view=archived"
+                      : "/messages",
+                    { scroll: false },
+                  )
+                }
+              >
+                <Icon size={16} aria-hidden="true" />
+                <HoverTooltip>{label}</HoverTooltip>
+              </Button>
+            )
+          })}
+          {canUseInternalChat && (
+            <Button
+              variant="outline"
+              aria-label="Open internal conversations"
+              aria-pressed={mode === "internal"}
+              className={cn(
+                "size-11 shrink-0 cursor-pointer border-transparent p-0",
+                mode === "internal" && "bg-[#edf1f8] text-[#203f8c]",
+              )}
+              onClick={() =>
+                router.push("/messages?mode=internal", { scroll: false })
+              }
+            >
+              <UsersRound size={16} aria-hidden="true" />
+              <HoverTooltip>Internal staff and admin chats</HoverTooltip>
+            </Button>
+          )}
+        </div>
+        <div
           id="conversation-list"
           className="min-h-0 flex-1 overflow-y-auto px-2 pb-3"
         >
-          {loading && (
+          {mode === "requests" && loading && (
             <p
               role="status"
               className={cn(
@@ -319,10 +657,9 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
               )}
             </p>
           )}
-          {error && (
+          {mode === "requests" && error && (
             <p
               role="alert"
-              title={railCollapsed ? error : undefined}
               className={cn(
                 "px-5 text-xs text-red-700",
                 railCollapsed && "px-1 text-center",
@@ -333,6 +670,9 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
                 <>
                   <span aria-hidden="true" className="text-base font-bold">
                     !
+                    {railCollapsed && (
+                      <HoverTooltip side="right">{error}</HoverTooltip>
+                    )}
                   </span>
                   <span className="sr-only max-[767px]:not-sr-only">
                     {error}
@@ -343,146 +683,76 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
               )}
             </p>
           )}
-          {!loading && !error && !result?.conversations.length && (
-            <div
+          {mode === "internal" && internalLoading && (
+            <p
+              role="status"
               className={cn(
-                "py-10 text-center text-[#52627a]",
-                railCollapsed ? "px-1" : "px-5",
-                "max-[767px]:px-5",
+                "p-5 text-xs text-[#52627a]",
+                railCollapsed && "px-0 text-center",
+                "max-[767px]:px-5 max-[767px]:text-left",
               )}
             >
-              <MessageSquare
-                size={railCollapsed ? 22 : 28}
-                aria-hidden="true"
-                className="mx-auto mb-3"
-              />
-              <h2
-                className={cn(
-                  "text-sm font-semibold text-foreground",
-                  railCollapsed && "hidden max-[767px]:block",
-                )}
-              >
-                No conversations yet
-              </h2>
-              <p
-                className={cn(
-                  "text-xs leading-6",
-                  railCollapsed && "hidden max-[767px]:block",
-                )}
-              >
-                Conversations appear here when a department head accepts a
-                service request.
-              </p>
-            </div>
+              Loading internal chats…
+            </p>
           )}
-          {!loading &&
-            result?.conversations.map((row) => {
-              const name = isClient
-                ? row.acceptedDepartment?.head?.fullName ||
-                  row.acceptedDepartment?.name ||
-                  "Specialist"
-                : row.client.fullName || "Client"
-              const isSelected = requestId === row.id
-              return (
-                <Link
-                  key={row.id}
-                  href={`/messages?request=${encodeURIComponent(row.id)}`}
-                  aria-current={isSelected ? "page" : undefined}
-                  aria-label={`${name}: ${messagePreview(row.lastMessage)}${row.unreadCount ? `. ${row.unreadCount} unread messages` : ""}`}
-                  title={railCollapsed ? name : undefined}
+          {mode === "internal" && internalError && (
+            <p role="alert" className="px-5 text-xs text-red-700">
+              {internalError}
+            </p>
+          )}
+          {mode === "requests" &&
+            !loading &&
+            !error &&
+            !result?.conversations.length && (
+              <div
+                className={cn(
+                  "py-10 text-center text-[#52627a]",
+                  railCollapsed ? "px-1" : "px-5",
+                  "max-[767px]:px-5",
+                )}
+              >
+                <MessageSquare
+                  size={railCollapsed ? 22 : 28}
+                  aria-hidden="true"
+                  className="mx-auto mb-3"
+                />
+                <h2
                   className={cn(
-                    "mb-1 flex h-14 items-center overflow-hidden rounded-2xl px-3 py-2.5 no-underline transition-[gap,background-color,color] duration-[240ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
-                    focusRing,
-                    railCollapsed
-                      ? "mx-auto size-14 justify-center gap-0 px-2.5 py-2.5 max-[767px]:mx-0 max-[767px]:size-auto max-[767px]:h-auto max-[767px]:justify-start max-[767px]:gap-3 max-[767px]:px-3 max-[767px]:py-3"
-                      : "gap-3",
-                    isSelected
-                      ? "bg-[#203f8c] text-white hover:bg-[#172f70] hover:text-white"
-                      : "hover:bg-[#e9eef5] hover:text-[#203a78]",
+                    "text-sm font-semibold text-foreground",
+                    railCollapsed && "hidden max-[767px]:block",
                   )}
                 >
-                  <span className="relative grid size-9 shrink-0 place-items-center">
-                    <ConversationAvatar
-                      name={name}
-                      className={
-                        isSelected
-                          ? "ring-1 ring-white ring-offset-2 ring-offset-[#203f8c]"
-                          : undefined
-                      }
-                    />
-                    {Boolean(row.unreadCount) && railCollapsed && (
-                      <span
-                        aria-hidden="true"
-                        className={cn(
-                          "absolute -top-1 -right-1 grid min-w-4 place-items-center rounded-full px-1 text-[11px] leading-4",
-                          isSelected
-                            ? "bg-white text-[#203f8c]"
-                            : "bg-[#203f8c] text-white",
-                        )}
-                      >
-                        {row.unreadCount! > 99 ? "99+" : row.unreadCount}
-                      </span>
-                    )}
-                  </span>
-                  <span
-                    className={cn(
-                      "min-w-0 flex-1 overflow-hidden whitespace-nowrap leading-4 transition-[max-width,opacity,transform] duration-[160ms] ease-out motion-reduce:transition-none",
-                      railCollapsed
-                        ? "pointer-events-none max-w-0 translate-x-1 opacity-0 max-[767px]:pointer-events-auto max-[767px]:max-w-none max-[767px]:translate-x-0 max-[767px]:opacity-100"
-                        : "max-w-[184px] opacity-100",
-                    )}
-                  >
-                    <span className="flex items-center justify-between gap-2">
-                      <span
-                        className={cn(
-                          "truncate text-xs leading-4 font-semibold",
-                          isSelected ? "text-white" : "text-[#182235]",
-                        )}
-                      >
-                        {name}
-                      </span>
-                      <span className="flex shrink-0 items-center gap-1.5">
-                        <time
-                          dateTime={row.lastMessage?.createdAt || row.updatedAt}
-                          className={cn(
-                            "text-[11px] leading-4",
-                            isSelected ? "text-white/70" : "text-[#8791a2]",
-                          )}
-                        >
-                          {new Date(
-                            row.lastMessage?.createdAt || row.updatedAt,
-                          ).toLocaleDateString("en-PH", {
-                            month: "short",
-                            day: "numeric",
-                          })}
-                        </time>
-                        {Boolean(row.unreadCount) && !railCollapsed && (
-                          <span
-                            className={cn(
-                              "grid min-w-4 place-items-center rounded-full px-1 text-[11px] leading-4",
-                              isSelected
-                                ? "bg-white text-[#203f8c]"
-                                : "bg-[#203f8c] text-white",
-                            )}
-                          >
-                            {row.unreadCount! > 99 ? "99+" : row.unreadCount}
-                          </span>
-                        )}
-                      </span>
-                    </span>
-                    <span
-                      className={cn(
-                        "block truncate text-xs leading-4",
-                        isSelected ? "text-white/70" : "text-[#8791a2]",
-                      )}
-                    >
-                      {messagePreview(row.lastMessage)}
-                    </span>
-                  </span>
-                </Link>
-              )
-            })}
-          {!loading && result?.nextCursor && (
+                  {view === "archived"
+                    ? "No archived conversations"
+                    : "No conversations yet"}
+                </h2>
+                <p
+                  className={cn(
+                    "text-xs leading-6",
+                    railCollapsed && "hidden max-[767px]:block",
+                  )}
+                >
+                  {view === "archived"
+                    ? "Closed and cancelled service conversations appear here."
+                    : "Conversations appear here when a department head accepts a service request."}
+                </p>
+              </div>
+            )}
+          {mode === "requests" &&
+            !loading &&
+            groups.map((group, index) => (
+              <ConversationGroupItem
+                key={group.id}
+                group={group}
+                requestId={requestId}
+                railCollapsed={railCollapsed}
+                defaultExpanded={!requestId && index === 0}
+                onExpandRail={() => setConversationRail(false)}
+                view={view}
+                onDelete={requestDeletion}
+              />
+            ))}
+          {mode === "requests" && !loading && result?.nextCursor && (
             <Button
               variant="outline"
               aria-label={
@@ -519,21 +789,158 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
               )}
             </Button>
           )}
+          {mode === "internal" && !internalLoading && !internalError && (
+            <>
+              <div className="px-2 pb-2">
+                <p className="px-3 pt-2 pb-1 text-[11px] font-semibold tracking-[0.08em] text-[#8791a2] uppercase">
+                  Internal chats
+                </p>
+                {internalResult?.conversations.map((conversation) => {
+                  const selected = internalId === conversation.id
+                  const name =
+                    conversation.participant.fullName?.trim() ||
+                    conversation.participant.email
+                  return (
+                    <Link
+                      key={conversation.id}
+                      href={`/messages?mode=internal&internal=${encodeURIComponent(conversation.id)}`}
+                      scroll={false}
+                      aria-current={selected ? "page" : undefined}
+                      aria-label={`${name}${conversation.unreadCount ? `, ${conversation.unreadCount} unread messages` : ""}`}
+                      className={cn(
+                        "flex items-center gap-3 rounded-xl px-3 py-3 no-underline transition-colors",
+                        focusRing,
+                        selected
+                          ? "bg-[#203f8c] text-white"
+                          : "text-[#182235] hover:bg-[#e9eef5] hover:text-[#203a78]",
+                      )}
+                    >
+                      <ConversationAvatar
+                        name={name}
+                        className="size-9 shrink-0"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-1.5">
+                          <span className="min-w-0 flex-1 truncate text-xs font-semibold">
+                            {name}
+                          </span>
+                          {Boolean(conversation.unreadCount) && (
+                            <span
+                              className={cn(
+                                "grid min-w-4 shrink-0 place-items-center rounded-full px-1 text-[11px] leading-4",
+                                selected
+                                  ? "bg-white text-[#203f8c]"
+                                  : "bg-[#203f8c] text-white",
+                              )}
+                            >
+                              {conversation.unreadCount > 99
+                                ? "99+"
+                                : conversation.unreadCount}
+                            </span>
+                          )}
+                        </span>
+                        <span
+                          className={cn(
+                            "block truncate text-[11px]",
+                            selected ? "text-white/70" : "text-[#8791a2]",
+                          )}
+                        >
+                          {conversation.participant.position ||
+                            conversation.participant.department?.name ||
+                            "Staff and admin chat"}
+                        </span>
+                      </span>
+                    </Link>
+                  )
+                })}
+              </div>
+              <div className="border-t border-[#efefee] px-2 pt-2">
+                <p className="px-3 pt-2 pb-1 text-[11px] font-semibold tracking-[0.08em] text-[#8791a2] uppercase">
+                  Start a chat
+                </p>
+                {internalContacts.map((contact) => {
+                  const existing = internalResult?.conversations.some(
+                    (conversation) =>
+                      conversation.participant.id === contact.id,
+                  )
+                  if (existing) return null
+                  const name = contact.fullName?.trim() || contact.email
+                  return (
+                    <button
+                      key={contact.id}
+                      type="button"
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-[#e9eef5]"
+                      disabled={creatingInternal === contact.id}
+                      onClick={() => void openInternalChat(contact.id)}
+                    >
+                      <ConversationAvatar
+                        name={name}
+                        className="size-9 shrink-0"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-xs font-semibold text-[#182235]">
+                          {name}
+                        </span>
+                        <span className="block truncate text-[11px] text-[#8791a2]">
+                          {creatingInternal === contact.id
+                            ? "Opening chat…"
+                            : contact.position ||
+                              contact.department?.name ||
+                              "Staff and admin"}
+                        </span>
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+              {internalResult?.nextCursor && (
+                <Button
+                  variant="outline"
+                  className="m-4 text-xs"
+                  disabled={internalLoadingMore}
+                  onClick={() => void loadMoreInternal()}
+                >
+                  {internalLoadingMore ? "Loading…" : "Load more chats"}
+                </Button>
+              )}
+            </>
+          )}
         </div>
       </nav>
       <div
         className={cn(
           "flex min-h-0 min-w-0 flex-col",
-          !requestId && "max-[767px]:hidden",
+          !hasSelection && "max-[767px]:hidden",
         )}
       >
-        {requestId ? (
+        {mode === "requests" && requestId ? (
           <RequestConversation
             requestId={requestId}
             clientName={selected?.client.fullName || undefined}
             requestTitle={selected?.title}
             onLatestMessage={updatePreview}
             onConversationRead={updateUnreadCounts}
+            onArchivedChange={updateArchivedView}
+            onDelete={() =>
+              requestDeletion({
+                id: requestId,
+                title: selected?.title || "Service conversation",
+                referenceNumber: selected?.referenceNumber ?? null,
+              })
+            }
+            listHref={
+              view === "archived" ? "/messages?view=archived" : "/messages"
+            }
+          />
+        ) : mode === "internal" && internalId ? (
+          <InternalConversation
+            conversationId={internalId}
+            participantName={
+              selectedInternal?.participant.fullName || undefined
+            }
+            onLatestMessage={updateInternalPreview}
+            onConversationRead={updateInternalUnreadCounts}
+            listHref="/messages?mode=internal"
           />
         ) : (
           <div className="grid flex-1 place-content-center px-6 text-center text-[#52627a]">
@@ -546,11 +953,30 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
               Select a conversation
             </h2>
             <p className="text-xs leading-6">
-              Choose a service request to read and send messages.
+              {mode === "internal"
+                ? "Choose a staff member or administrator to start a private chat."
+                : isClient
+                  ? "Choose a department head, then open a service thread."
+                  : "Choose a client, then open a service thread."}
             </p>
           </div>
         )}
       </div>
+      {deletionTarget && (
+        <ConfirmationDialog
+          title="Delete conversation for you?"
+          subject={[deletionTarget.title, deletionTarget.referenceNumber]
+            .filter(Boolean)
+            .join(" · ")}
+          description="This removes the conversation from your archive. The booking and the other participant's history are kept."
+          confirmLabel="Delete for me"
+          pendingLabel="Deleting…"
+          pending={deleting}
+          error={deletionError}
+          onClose={() => setDeletionTarget(null)}
+          onConfirm={() => void confirmDeletion()}
+        />
+      )}
     </main>
   )
 }

@@ -109,6 +109,9 @@ function reviewFixture(kind: "quotation" | "payment"): Workflow {
 async function mockReview(page: Page, kind: "quotation" | "payment") {
   const workflow = reviewFixture(kind)
   const actions: Record<string, unknown>[] = []
+  let notificationReadAt: string | null = null
+  let otherNotificationReadAt: string | null = null
+  const notificationReads: string[] = []
   await page.addInitScript(() =>
     sessionStorage.setItem("nexus.auth.token", "review-session"),
   )
@@ -144,14 +147,32 @@ async function mockReview(page: Page, kind: "quotation" | "payment") {
               summary: "Payment evidence awaits your review.",
               type: "PAYMENT_SUBMITTED",
               createdAt: "2026-10-30T10:00:00Z",
-              readAt: null,
+              readAt: notificationReadAt,
+            },
+            {
+              id: "notice-2",
+              requestId: "request-1",
+              summary: "You were assigned to verify this payment.",
+              type: "APPROVERS_ASSIGNED",
+              createdAt: "2026-10-30T09:00:00Z",
+              readAt: otherNotificationReadAt,
             },
           ],
-          unreadCount: 1,
+          unreadCount:
+            Number(!notificationReadAt) + Number(!otherNotificationReadAt),
         },
       })
-    if (path === "/api/request-workflows/notifications/notice/read")
-      return route.fulfill({ json: {} })
+    if (path === "/api/request-workflows/notifications/notice/read") {
+      expect(request.method()).toBe("PATCH")
+      notificationReadAt = new Date().toISOString()
+      return route.fulfill({ json: { ok: true } })
+    }
+    if (path === "/api/request-workflows/notifications/read-all") {
+      expect(request.method()).toBe("PATCH")
+      notificationReads.push(path)
+      notificationReadAt = otherNotificationReadAt = new Date().toISOString()
+      return route.fulfill({ json: { ok: true } })
+    }
     if (path === "/api/request-workflows/request-1")
       return route.fulfill({ json: workflow })
     if (path === "/api/request-workflows/request-1/files/proof")
@@ -175,7 +196,7 @@ async function mockReview(page: Page, kind: "quotation" | "payment") {
     }
     return route.fulfill({ status: 404, json: { error: "Not found" } })
   })
-  return { workflow, actions }
+  return { workflow, actions, notificationReads }
 }
 
 test("assigned approver sends a quotation with a formal idempotent action on mobile", async ({
@@ -248,7 +269,7 @@ test("notification sends an assigned approver to the relevant workflow", async (
 }) => {
   await mockReview(page, "payment")
   await page.goto("/workflow-approvals")
-  await page.getByRole("button", { name: "Notifications, 1 unread" }).click()
+  await page.getByRole("button", { name: "Notifications, 2 unread" }).click()
   await page
     .getByRole("menuitem")
     .filter({ hasText: "Payment evidence awaits your review." })
@@ -257,4 +278,76 @@ test("notification sends an assigned approver to the relevant workflow", async (
   await expect(
     page.getByRole("button", { name: "Verify payment", exact: true }),
   ).toBeVisible()
+})
+
+test("all notifications can be marked as read without navigating and stay read after refresh", async ({
+  page,
+}) => {
+  const { notificationReads } = await mockReview(page, "payment")
+  await page.goto("/workflow-approvals")
+  await page.getByRole("button", { name: "Notifications, 2 unread" }).click()
+  await page
+    .getByRole("menuitem", { name: "Mark all as read", exact: true })
+    .click()
+  await expect(page.getByRole("menu")).toBeVisible()
+  await expect(
+    page.getByRole("menuitem", { name: "Mark all as read", exact: true }),
+  ).toBeDisabled()
+  await expect(page.locator('button[aria-label="Notifications"]')).toBeVisible()
+  expect(notificationReads).toEqual([
+    "/api/request-workflows/notifications/read-all",
+  ])
+  await expect(page).toHaveURL(/\/workflow-approvals$/)
+  await expect(
+    page.getByText("Payment evidence awaits your review.", { exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.getByText("You were assigned to verify this payment.", {
+      exact: true,
+    }),
+  ).toBeVisible()
+
+  await page.reload()
+  await page.getByRole("button", { name: "Notifications", exact: true }).click()
+  await expect(
+    page.getByText("Payment evidence awaits your review.", { exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("menuitem", { name: "Mark all as read", exact: true }),
+  ).toBeDisabled()
+})
+
+test("failed mark all as read keeps unread notifications available to retry", async ({
+  page,
+}) => {
+  await mockReview(page, "payment")
+  await page.route("**/api/request-workflows/notifications/read-all", (route) =>
+    route.fulfill({
+      status: 500,
+      json: { error: "Temporarily unavailable" },
+    }),
+  )
+  await page.goto("/workflow-approvals")
+  await page.getByRole("button", { name: "Notifications, 2 unread" }).click()
+  const markAsRead = page.getByRole("menuitem", {
+    name: "Mark all as read",
+    exact: true,
+  })
+  await markAsRead.click()
+  await expect(
+    page.getByText("Couldn't mark all notifications as read. Try again.", {
+      exact: true,
+    }),
+  ).toBeVisible()
+  await expect(markAsRead).toBeEnabled()
+  await expect(
+    page.locator('button[aria-label="Notifications, 2 unread"]'),
+  ).toBeVisible()
+  await expect(page).toHaveURL(/\/workflow-approvals$/)
+
+  await page.unroute("**/api/request-workflows/notifications/read-all")
+  await markAsRead.focus()
+  await page.keyboard.press("Enter")
+  await expect(markAsRead).toBeDisabled()
+  await expect(page.locator('button[aria-label="Notifications"]')).toBeVisible()
 })

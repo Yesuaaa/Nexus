@@ -9,12 +9,12 @@ import { cn } from "@/lib/utils"
 import type { InboxRequest } from "../api/request-inbox-api"
 
 const grid =
-  "grid grid-cols-[minmax(180px,1.6fr)_minmax(150px,1.2fr)_minmax(110px,1fr)_minmax(120px,1fr)_112px] items-center gap-4 @max-[800px]:grid-cols-[minmax(0,1fr)_auto]"
+  "grid grid-cols-[minmax(180px,1.6fr)_minmax(150px,1.2fr)_minmax(110px,1fr)_minmax(120px,1fr)_112px] items-center gap-3.5 @max-[800px]:grid-cols-[minmax(0,1fr)_auto]"
 
 function rowClass(_request: InboxRequest, _index: number, isLast: boolean) {
   return cn(
     grid,
-    "h-[76px] border-b border-[#eceef1] bg-background px-4 py-3 text-xs hover:bg-[#e8eef2] @max-[800px]:h-[184px] @max-[800px]:gap-y-2",
+    "h-[58px] border-b border-[#eceef1] bg-background px-4 py-[7px] text-xs text-foreground transition-colors hover:bg-[#e8eef2] @max-[800px]:h-[184px] @max-[800px]:gap-y-2",
     isLast && "rounded-b-[7px] border-b-0",
   )
 }
@@ -66,7 +66,7 @@ export function RequestInboxTable({
           role="row"
           className={cn(
             grid,
-            "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold",
+            "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground",
           )}
         >
           {[
@@ -112,7 +112,7 @@ export function RequestInboxTable({
           quickKey={quickKey}
           animateRows
           ariaBusy={loading}
-          defaultRowHeight={76}
+          defaultRowHeight={58}
           className="relative min-w-0 overflow-x-clip"
           emptyContent="No requests match this view."
           renderRow={(request) => (
@@ -121,17 +121,18 @@ export function RequestInboxTable({
                 role="cell"
                 className="min-w-0 @max-[800px]:col-start-1 @max-[800px]:row-start-1"
               >
-                <p
-                  className="m-0 truncate font-semibold"
-                  title={request.service.name}
-                >
+                <p className="m-0 truncate font-semibold">
+                  <span className="mr-1.5 hidden text-[#738096] @max-[800px]:inline">
+                    Service
+                  </span>
                   {request.service.name}
+                  <HoverTooltip>{request.service.name}</HoverTooltip>
                 </p>
-                <p
-                  className="mt-1 mb-0 truncate text-[11px] text-[#738096]"
-                  title={request.referenceNumber || request.id}
-                >
+                <p className="mt-1 mb-0 truncate text-[11px] text-[#738096]">
                   {request.referenceNumber || request.id}
+                  <HoverTooltip>
+                    {request.referenceNumber || request.id}
+                  </HoverTooltip>
                 </p>
               </div>
               <div
@@ -139,13 +140,14 @@ export function RequestInboxTable({
                 className="min-w-0 @max-[800px]:col-span-2 @max-[800px]:row-start-2"
               >
                 <p className="m-0 truncate font-medium">
+                  <span className="mr-1.5 hidden text-[#738096] @max-[800px]:inline">
+                    Client
+                  </span>
                   {request.client.fullName || "Client"}
                 </p>
-                <p
-                  className="mt-1 mb-0 truncate text-[11px] text-[#738096]"
-                  title={request.client.email}
-                >
+                <p className="mt-1 mb-0 truncate text-[11px] text-[#738096]">
                   {request.client.email}
+                  <HoverTooltip>{request.client.email}</HoverTooltip>
                 </p>
               </div>
               <div

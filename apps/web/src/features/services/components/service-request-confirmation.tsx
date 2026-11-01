@@ -99,10 +99,10 @@ export function ServiceRequestConfirmation({
           asChild
           className="min-h-11 bg-[#294c96] text-white hover:bg-[#203f80]"
         >
-          <Link href="/service-requests">View my service requests</Link>
+          <Link href="/service-requests">View my booked requests</Link>
         </Button>
         <Button asChild variant="outline" className="min-h-11">
-          <Link href="/service-requests">View service requests</Link>
+          <Link href="/service-requests">View booked requests</Link>
         </Button>
         <button
           type="button"

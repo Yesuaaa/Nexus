@@ -3,6 +3,7 @@ import { focusRing } from "@/components/layout/styles"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { Button } from "@/components/ui/button"
 import { DepartmentPill } from "@/components/ui/department-pill.tsx"
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Pill } from "@/components/ui/pill"
 import { cn } from "@/lib/utils"
 import type {
@@ -171,12 +172,12 @@ export function EmployeeTable({
               <div
                 role="cell"
                 className="min-w-0 truncate font-medium text-[#34445e] @max-[1000px]:col-start-1 @max-[1000px]:row-start-1"
-                title={employee.employeeId || "Not set"}
               >
                 <span className="hidden text-[#738096] @max-[1000px]:inline">
                   ID{" "}
                 </span>
                 {employee.employeeId || "Not set"}
+                <HoverTooltip>{employee.employeeId || "Not set"}</HoverTooltip>
               </div>
               <div
                 role="cell"
@@ -189,17 +190,13 @@ export function EmployeeTable({
                   {employee.fullName[0]?.toUpperCase() || "E"}
                 </span>
                 <div className="min-w-0">
-                  <p
-                    className="m-0 truncate font-semibold"
-                    title={employee.fullName}
-                  >
+                  <p className="m-0 truncate font-semibold">
                     {employee.fullName}
+                    <HoverTooltip>{employee.fullName}</HoverTooltip>
                   </p>
-                  <p
-                    className="mt-0.5 mb-0 truncate text-[11px] text-[#738096]"
-                    title={employee.email ?? undefined}
-                  >
+                  <p className="mt-0.5 mb-0 truncate text-[11px] text-[#738096]">
                     {employee.email || "No email"}
+                    <HoverTooltip>{employee.email || "No email"}</HoverTooltip>
                   </p>
                 </div>
               </div>
@@ -238,16 +235,15 @@ export function EmployeeTable({
                 {employee.position || employee.team ? (
                   <>
                     {employee.position && (
-                      <p className="m-0 truncate" title={employee.position}>
+                      <p className="m-0 truncate">
                         {employee.position}
+                        <HoverTooltip>{employee.position}</HoverTooltip>
                       </p>
                     )}
                     {employee.team && (
-                      <p
-                        className="mt-0.5 mb-0 truncate text-[11px] text-[#738096]"
-                        title={employee.team.name}
-                      >
+                      <p className="mt-0.5 mb-0 truncate text-[11px] text-[#738096]">
                         {employee.team.name}
+                        <HoverTooltip>{employee.team.name}</HoverTooltip>
                       </p>
                     )}
                   </>

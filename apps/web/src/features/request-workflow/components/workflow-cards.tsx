@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react"
 import { Download, FileText, ShieldCheck } from "lucide-react"
 import { sileo } from "sileo"
 import { AttachmentPreview, attachmentAccept } from "./attachment-preview"
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 
 export function getConsultationMeetingUrl(location: string) {
   try {
@@ -164,11 +165,9 @@ export function FileSubmissionCard({
           <FileText size={20} aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1">
-          <p
-            className="m-0 truncate text-xs font-semibold text-[#182235]"
-            title={file.name}
-          >
+          <p className="m-0 truncate text-xs font-semibold text-[#182235]">
             {file.name}
+            <HoverTooltip>{file.name}</HoverTooltip>
           </p>
           <p className="mt-0.5 mb-0 text-[11px] text-[#6d7b91]">
             {isVideo ? "Video · " : isImage ? "Image · " : "File · "}
