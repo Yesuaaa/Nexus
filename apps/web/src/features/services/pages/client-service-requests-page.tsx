@@ -1,7 +1,6 @@
 "use client"
 
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import {
   CheckCircle2,
@@ -42,7 +41,6 @@ const initial: ClientRequestsResponse = {
 }
 
 export function ClientServiceRequestsPage() {
-  const router = useRouter()
   const [search, setSearch] = useState("")
   const [query, setQuery] = useState("")
   const [status, setStatus] = useState<ServiceRequestStatus | "">("")
@@ -249,13 +247,8 @@ export function ClientServiceRequestsPage() {
         ) : result.requests.length ? (
           <ClientRequestsTable
             requests={result.requests}
-            onView={(request) => {
-              if (request.acceptedDepartmentId)
-                router.push(
-                  `/messages?request=${encodeURIComponent(request.id)}`,
-                )
-              else setSelected(request)
-            }}
+            onView={setSelected}
+            onCancelled={() => setRevision((value) => value + 1)}
           />
         ) : (
           <div className="grid min-h-64 place-items-center rounded-lg border border-dashed border-[#d7e0ee] p-6 text-center">

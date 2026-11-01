@@ -1,4 +1,8 @@
-import { Eye } from "lucide-react"
+import Link from "next/link"
+import { Eye, MessageSquare, X } from "lucide-react"
+import { useState } from "react"
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
+import { cancelClientServiceRequest } from "../api/client-services-api"
 import { Button } from "@/components/ui/button"
 import { Pill } from "@/components/ui/pill"
 import type { ServiceRequestSummary } from "../api/client-services-api"
@@ -6,6 +10,122 @@ import {
   requestDate,
   serviceRequestStatuses,
 } from "../model/service-request-status"
+
+function RequestActions({
+  request,
+  onView,
+  compact = false,
+  onCancelled,
+}: {
+  request: ServiceRequestSummary
+  onView: (request: ServiceRequestSummary) => void
+  compact?: boolean
+  onCancelled: () => void
+}) {
+  const [confirming, setConfirming] = useState(false)
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState("")
+  async function cancelRequest() {
+    setPending(true)
+    setError("")
+    try {
+      await cancelClientServiceRequest(request)
+      setConfirming(false)
+      onCancelled()
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not cancel this request.",
+      )
+    } finally {
+      setPending(false)
+    }
+  }
+  const chatAvailable = Boolean(request.acceptedDepartmentId)
+  const chatHint =
+    "Chat becomes available when a department accepts your request."
+  const buttonClass = compact
+    ? "size-9 shrink-0 p-0"
+    : "min-h-11 w-full min-w-0 px-2 text-xs"
+  return (
+    <div
+      className={
+        compact
+          ? "flex items-center gap-2"
+          : "grid w-full min-w-0 grid-cols-2 gap-2"
+      }
+    >
+      <Button
+        variant="outline"
+        className={buttonClass}
+        aria-label={`View request: ${request.title}`}
+        title="View request"
+        onClick={() => onView(request)}
+      >
+        <Eye size={15} aria-hidden="true" />
+        {!compact && "View request"}
+      </Button>
+      {chatAvailable ? (
+        <Button asChild variant="outline" className={buttonClass}>
+          <Link
+            href={`/messages?request=${encodeURIComponent(request.id)}`}
+            aria-label={`Go to chat: ${request.title}`}
+            title="Go to chat"
+          >
+            <MessageSquare size={15} aria-hidden="true" />
+            {!compact && "Go to chat"}
+          </Link>
+        </Button>
+      ) : (
+        <span
+          title={chatHint}
+          tabIndex={0}
+          className="min-w-0 rounded-md focus-visible:outline-2 focus-visible:outline-[#294a9b]"
+        >
+          <Button
+            disabled
+            variant="outline"
+            className={buttonClass}
+            aria-label={`Go to chat unavailable. ${chatHint}`}
+          >
+            <MessageSquare size={15} aria-hidden="true" />
+            {!compact && "Go to chat"}
+          </Button>
+          <span className="sr-only">{chatHint}</span>
+        </span>
+      )}
+      {!["CLOSED", "CANCELLED"].includes(request.status) && (
+        <Button
+          variant="outline"
+          className={`${buttonClass} ${compact ? "" : "col-span-2"} text-[#bc3649] hover:text-[#a42f40]`}
+          title="Cancel request"
+          aria-label={`Cancel request: ${request.title}`}
+          onClick={() => {
+            setError("")
+            setConfirming(true)
+          }}
+        >
+          <X size={15} aria-hidden="true" />
+          {!compact && "Cancel request"}
+        </Button>
+      )}
+      {confirming && (
+        <ConfirmationDialog
+          title="Cancel this request?"
+          subject={request.title}
+          description="Your request will be cancelled. This action cannot be undone."
+          confirmLabel="Cancel request"
+          pendingLabel="Cancelling…"
+          pending={pending}
+          error={error}
+          onClose={() => setConfirming(false)}
+          onConfirm={() => void cancelRequest()}
+        />
+      )}
+    </div>
+  )
+}
 
 export function RequestStatus({
   status,
@@ -19,9 +139,11 @@ export function RequestStatus({
 export function ClientRequestsTable({
   requests,
   onView,
+  onCancelled,
 }: {
   requests: ServiceRequestSummary[]
   onView: (request: ServiceRequestSummary) => void
+  onCancelled: () => void
 }) {
   return (
     <>
@@ -30,21 +152,25 @@ export function ClientRequestsTable({
           <caption className="sr-only">Your service requests</caption>
           <thead className="bg-[#e8eef2] text-[#52627a]">
             <tr>
-              {["Request", "Service & package", "Status", "Submitted", ""].map(
-                (label, index) => (
-                  <th
-                    key={index}
-                    scope="col"
-                    className={
-                      index === 4
-                        ? "w-20 px-3 py-3 font-medium"
-                        : "px-4 py-3 font-medium"
-                    }
-                  >
-                    {label || <span className="sr-only">Actions</span>}
-                  </th>
-                ),
-              )}
+              {[
+                "Request",
+                "Service & package",
+                "Status",
+                "Submitted",
+                "Actions",
+              ].map((label, index) => (
+                <th
+                  key={index}
+                  scope="col"
+                  className={
+                    index === 4
+                      ? "w-40 px-3 py-3 font-medium"
+                      : "px-4 py-3 font-medium"
+                  }
+                >
+                  {label || <span className="sr-only">Actions</span>}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -83,14 +209,12 @@ export function ClientRequestsTable({
                   </time>
                 </td>
                 <td className="px-3 py-3">
-                  <Button
-                    variant="outline"
-                    className="size-8 p-0"
-                    aria-label={`View ${request.title}`}
-                    onClick={() => onView(request)}
-                  >
-                    <Eye size={15} aria-hidden="true" />
-                  </Button>
+                  <RequestActions
+                    request={request}
+                    onView={onView}
+                    onCancelled={onCancelled}
+                    compact
+                  />
                 </td>
               </tr>
             ))}
@@ -133,22 +257,18 @@ export function ClientRequestsTable({
                 </dd>
               </div>
             </dl>
-            <div className="mt-4 flex items-center justify-between gap-2 border-t border-[#eceef1] pt-3">
+            <div className="mt-4 space-y-3 border-t border-[#eceef1] pt-3">
               <time
-                className="text-[11px] text-[#52627a]"
+                className="block text-[11px] whitespace-nowrap text-[#52627a]"
                 dateTime={request.createdAt}
               >
                 {requestDate(request.createdAt)}
               </time>
-              <Button
-                variant="outline"
-                className="h-9 text-xs"
-                aria-label={`View ${request.title}`}
-                onClick={() => onView(request)}
-              >
-                <Eye size={14} aria-hidden="true" />
-                View details
-              </Button>
+              <RequestActions
+                request={request}
+                onView={onView}
+                onCancelled={onCancelled}
+              />
             </div>
           </article>
         ))}

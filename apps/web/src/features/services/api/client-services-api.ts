@@ -1,4 +1,26 @@
 import { apiRequest } from "@/features/auth/api/auth-api"
+import {
+  getWorkflow,
+  performWorkflowAction,
+} from "@/features/request-workflow/api/workflow-api"
+
+export async function cancelClientServiceRequest(
+  request: ServiceRequestSummary,
+) {
+  if (request.acceptedDepartmentId) {
+    const workflow = await getWorkflow(request.id)
+    return performWorkflowAction(request.id, {
+      type: "CANCEL",
+      note: "Cancelled by the client from Service Requests.",
+      actionId: crypto.randomUUID(),
+      expectedVersion: workflow.version,
+    })
+  }
+  return apiRequest(
+    `/api/client/service-requests/${encodeURIComponent(request.id)}/cancel`,
+    { method: "POST" },
+  )
+}
 import type {
   Service,
   ServiceSpecialist,
