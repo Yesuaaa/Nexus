@@ -57,14 +57,16 @@ function DepartmentPills({ service }: { service: Service }) {
       {remainingCount > 0 && (
         <Pill
           className="shrink-0 bg-[#e8eef9] font-semibold text-[#244993]"
-          title={remainingDepartments
-            .map((department) => department.name)
-            .join(", ")}
           aria-label={`${remainingCount} more departments: ${remainingDepartments
             .map((department) => department.name)
             .join(", ")}`}
         >
           +{remainingCount}
+          <HoverTooltip>
+            {remainingDepartments
+              .map((department) => department.name)
+              .join(", ")}
+          </HoverTooltip>
         </Pill>
       )}
     </span>

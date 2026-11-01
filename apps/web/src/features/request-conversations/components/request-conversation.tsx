@@ -29,6 +29,7 @@ import {
 import { sileo } from "sileo"
 import { Button } from "@/components/ui/button"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -76,6 +77,8 @@ import {
   readConversationEvents,
 } from "../model/conversation-events"
 
+const contextPanelStorageKey = "nexus.messages.context-panel-open"
+
 function normalizeSpecialistName(name: string) {
   return name.trim().replace(/\s+/g, " ").toLocaleLowerCase()
 }
@@ -111,6 +114,9 @@ type RequestConversationProps = {
   requestId: string
   clientName?: string
   requestTitle?: string
+  listHref?: string
+  onArchivedChange?: (archived: boolean) => void
+  onDelete?: () => void
   onLatestMessage?: (requestId: string, message: RequestMessage) => void
   onConversationRead?: (
     requestId: string,
@@ -139,10 +145,17 @@ function ConversationPanel({
   requestTitle,
   onLatestMessage,
   onConversationRead,
+  listHref = "/messages",
+  onArchivedChange,
+  onDelete,
 }: RequestConversationProps) {
   const account = usePortalAccount()
   const inputId = useId()
   const [history, setHistory] = useState<ConversationHistory | null>(null)
+  useEffect(() => {
+    if (typeof history?.archived === "boolean")
+      onArchivedChange?.(history.archived)
+  }, [history?.archived, onArchivedChange])
   const [error, setError] = useState("")
   const [revision, setRevision] = useState(0)
   const [draft, setDraft] = useState("")
@@ -155,7 +168,14 @@ function ConversationPanel({
   const [deleteError, setDeleteError] = useState("")
   const [olderLoading, setOlderLoading] = useState(false)
   const [sendError, setSendError] = useState("")
-  const [contextPanelOpen, setContextPanelOpen] = useState(true)
+  const [contextPanelOpen, setContextPanelOpen] = useState(() => {
+    if (typeof window === "undefined") return true
+    try {
+      return window.sessionStorage.getItem(contextPanelStorageKey) !== "false"
+    } catch {
+      return true
+    }
+  })
   const [activeWorkflowDraft, setActiveWorkflowDraft] =
     useState<WorkflowDraftAction | null>(null)
   const sectionNavigationTimer = useRef<number | null>(null)
@@ -596,10 +616,19 @@ function ConversationPanel({
     [],
   )
 
+  function setContextPanel(open: boolean) {
+    setContextPanelOpen(open)
+    try {
+      window.sessionStorage.setItem(contextPanelStorageKey, String(open))
+    } catch {
+      // Keep the control functional when storage is unavailable.
+    }
+  }
+
   function focusWorkflowSection(section: string) {
     if (sectionNavigationTimer.current !== null)
       window.clearTimeout(sectionNavigationTimer.current)
-    setContextPanelOpen(true)
+    setContextPanel(true)
     const reducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches
@@ -708,7 +737,7 @@ function ConversationPanel({
           >
             <header className="flex min-h-[68px] shrink-0 items-center gap-3 border-b border-[#efefee] bg-background px-6 py-3 max-[767px]:gap-2 max-[767px]:px-4">
               <Link
-                href="/messages"
+                href={listHref}
                 aria-label="All conversations"
                 className={cn(
                   "hidden size-8 shrink-0 items-center justify-center rounded-full text-[#52627a] hover:bg-[#f1f1ee] max-[767px]:flex",
@@ -730,13 +759,12 @@ function ConversationPanel({
                 <h2 className="m-0 truncate text-sm font-semibold text-[#182235]">
                   {participantName}
                 </h2>
-                <p
-                  className="mt-0.5 mb-0 truncate text-xs text-[#8791a2]"
-                  title={requestTitle}
-                >
+                <p className="mt-0.5 mb-0 truncate text-xs text-[#8791a2]">
                   {requestTitle ||
                     history?.conversation?.department.name ||
                     "Request conversation"}
+                  {history?.archived && " · Archived"}
+                  {requestTitle && <HoverTooltip>{requestTitle}</HoverTooltip>}
                 </p>
               </div>
               {isParticipant && (
@@ -749,13 +777,6 @@ function ConversationPanel({
                           ? "Loading specialist profile"
                           : specialistProfileTarget
                             ? `View ${specialistProfileTarget.specialist.fullName}'s profile`
-                            : "Specialist profile unavailable"
-                      }
-                      title={
-                        specialistProfileLoading
-                          ? "Loading specialist profile"
-                          : specialistProfileTarget
-                            ? "View specialist profile"
                             : "Specialist profile unavailable"
                       }
                       className={cn(
@@ -771,13 +792,19 @@ function ConversationPanel({
                       }
                     >
                       <UserRound size={16} aria-hidden="true" />
+                      <HoverTooltip>
+                        {specialistProfileLoading
+                          ? "Loading specialist profile"
+                          : specialistProfileTarget
+                            ? "View specialist profile"
+                            : "Specialist profile unavailable"}
+                      </HoverTooltip>
                     </button>
                   )}
                   {isStaff && clientProfile && clientProfileKey && (
                     <button
                       type="button"
                       aria-label={`View ${clientProfile.fullName || "client"}'s profile`}
-                      title="View client profile"
                       className={cn(
                         "grid size-11 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 text-[#294a9b] transition-colors duration-150 hover:bg-[#f1f1ee]",
                         focusRing,
@@ -785,6 +812,7 @@ function ConversationPanel({
                       onClick={() => setClientProfileOpenFor(clientProfileKey)}
                     >
                       <UserRound size={16} aria-hidden="true" />
+                      <HoverTooltip>View client profile</HoverTooltip>
                     </button>
                   )}
                   <button
@@ -796,11 +824,6 @@ function ConversationPanel({
                     }
                     aria-expanded={contextPanelOpen}
                     aria-controls={`request-context-${requestId}`}
-                    title={
-                      contextPanelOpen
-                        ? "Hide service details"
-                        : "Show service details"
-                    }
                     className={cn(
                       "grid size-11 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 transition-colors duration-150",
                       contextPanelOpen
@@ -808,9 +831,14 @@ function ConversationPanel({
                         : "text-[#7c8ba5] hover:text-[#294a9b]",
                       "focus-visible:outline-none focus-visible:drop-shadow-[0_0_2px_currentColor] focus-visible:[&>svg]:scale-110",
                     )}
-                    onClick={() => setContextPanelOpen((open) => !open)}
+                    onClick={() => setContextPanel(!contextPanelOpen)}
                   >
                     <Info size={17} aria-hidden="true" />
+                    <HoverTooltip>
+                      {contextPanelOpen
+                        ? "Hide service details"
+                        : "Show service details"}
+                    </HoverTooltip>
                   </button>
                 </div>
               )}
@@ -1144,270 +1172,292 @@ function ConversationPanel({
                     </div>
                   )}
                   {!history.canSend && (
-                    <p className="mx-4 text-xs leading-5 text-[#52627a]">
-                      Messaging is paused when this request is closed or has no
-                      active department head. Your message history is still
-                      available.
-                    </p>
-                  )}
-                  <form
-                    onSubmit={(event) => void submit(event)}
-                    className="border-t border-[#efefee] px-5 py-3 max-[767px]:px-3"
-                  >
-                    {attachmentDraft && (
-                      <div className="mb-3 space-y-2">
-                        <AttachmentPreview
-                          file={attachmentDraft}
-                          disabled={controls.busy}
-                          onRemove={() => {
-                            setAttachmentDraft(null)
-                            if (fileInput.current) fileInput.current.value = ""
-                          }}
-                        />
+                    <div className="mx-4 my-3 flex flex-wrap items-center justify-between gap-2">
+                      <p className="m-0 min-w-0 flex-1 basis-48 text-xs leading-5 text-[#52627a]">
+                        {history.archived
+                          ? "This service is archived. Your message history is available to read."
+                          : "Messaging is paused while this request has no active department head. Your message history is still available."}
+                      </p>
+                      {history.archived && onDelete && (
                         <Button
                           type="button"
-                          className="ml-auto flex bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
-                          disabled={controls.busy || !history.canSend}
-                          onClick={async () => {
-                            if (await controls.attach(attachmentDraft)) {
+                          variant="outline"
+                          aria-label="Delete conversation for me"
+                          className="min-h-11 shrink-0 cursor-pointer text-xs text-red-700 hover:bg-red-50 hover:text-red-800"
+                          onClick={onDelete}
+                        >
+                          <Trash2 size={15} aria-hidden="true" />
+                          Delete for me
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                  {!history.archived && (
+                    <form
+                      onSubmit={(event) => void submit(event)}
+                      className="border-t border-[#efefee] px-5 py-3 max-[767px]:px-3"
+                    >
+                      {attachmentDraft && (
+                        <div className="mb-3 space-y-2">
+                          <AttachmentPreview
+                            file={attachmentDraft}
+                            disabled={controls.busy}
+                            onRemove={() => {
                               setAttachmentDraft(null)
                               if (fileInput.current)
                                 fileInput.current.value = ""
-                            }
-                          }}
-                        >
-                          {controls.busy ? "Sending file…" : "Send file"}
-                        </Button>
-                      </div>
-                    )}
-                    <label htmlFor={inputId} className="sr-only">
-                      Message
-                    </label>
-                    <div className="flex items-center gap-2">
-                      {workflow && (
-                        <>
-                          <input
-                            ref={fileInput}
-                            type="file"
-                            accept={attachmentAccept}
-                            className="sr-only"
-                            aria-label="Attach a file"
-                            disabled={
-                              controls.busy || !history.canSend || !canAttach
-                            }
-                            onChange={(event) => {
-                              const file = event.currentTarget.files?.[0]
-                              if (file) setAttachmentDraft(file)
                             }}
                           />
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                type="button"
-                                aria-label={
-                                  isClient
-                                    ? "Open attachment options"
-                                    : "Open request actions"
-                                }
-                                className="size-10 shrink-0 rounded-full bg-[#203f8c] p-0 text-white hover:bg-[#172f70]"
+                          <Button
+                            type="button"
+                            className="ml-auto flex bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
+                            disabled={controls.busy || !history.canSend}
+                            onClick={async () => {
+                              if (await controls.attach(attachmentDraft)) {
+                                setAttachmentDraft(null)
+                                if (fileInput.current)
+                                  fileInput.current.value = ""
+                              }
+                            }}
+                          >
+                            {controls.busy ? "Sending file…" : "Send file"}
+                          </Button>
+                        </div>
+                      )}
+                      <label htmlFor={inputId} className="sr-only">
+                        Message
+                      </label>
+                      <div className="flex items-center gap-2">
+                        {workflow && (
+                          <>
+                            <input
+                              ref={fileInput}
+                              type="file"
+                              accept={attachmentAccept}
+                              className="sr-only"
+                              aria-label="Attach a file"
+                              disabled={
+                                controls.busy || !history.canSend || !canAttach
+                              }
+                              onChange={(event) => {
+                                const file = event.currentTarget.files?.[0]
+                                if (file) setAttachmentDraft(file)
+                              }}
+                            />
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  type="button"
+                                  aria-label={
+                                    isClient
+                                      ? "Open attachment options"
+                                      : "Open request actions"
+                                  }
+                                  className="size-10 shrink-0 rounded-full bg-[#203f8c] p-0 text-white hover:bg-[#172f70]"
+                                >
+                                  <Plus size={16} aria-hidden="true" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent
+                                side="top"
+                                align="start"
+                                sideOffset={8}
+                                className="w-[320px] rounded-xl border-[#dce3ee] bg-white p-2 text-[#203047] shadow-[0_12px_30px_rgb(18_36_73_/_16%)]"
                               >
-                                <Plus size={16} aria-hidden="true" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent
-                              side="top"
-                              align="start"
-                              sideOffset={8}
-                              className="w-[320px] rounded-xl border-[#dce3ee] bg-white p-2 text-[#203047] shadow-[0_12px_30px_rgb(18_36_73_/_16%)]"
-                            >
-                              {canAttach && history.canSend && (
-                                <DropdownMenuItem
-                                  className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
-                                  disabled={controls.busy}
-                                  onSelect={() => fileInput.current?.click()}
-                                >
-                                  <Paperclip aria-hidden="true" />
-                                  Attach file
-                                </DropdownMenuItem>
-                              )}
-                              {canRequestInformation && (
-                                <DropdownMenuItem
-                                  className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
-                                  onSelect={() =>
-                                    setActiveWorkflowDraft(
-                                      "request-information",
-                                    )
-                                  }
-                                >
-                                  <CircleHelp aria-hidden="true" />
-                                  Request information
-                                </DropdownMenuItem>
-                              )}
-                              {canScheduleConsultation && (
-                                <DropdownMenuItem
-                                  className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
-                                  onSelect={() =>
-                                    setActiveWorkflowDraft(
-                                      "schedule-consultation",
-                                    )
-                                  }
-                                >
-                                  <CalendarDays aria-hidden="true" />
-                                  Schedule consultation
-                                </DropdownMenuItem>
-                              )}
-                              {canContinueToQuotation && (
-                                <DropdownMenuItem
-                                  className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
-                                  onSelect={() =>
-                                    setActiveWorkflowDraft("quotation")
-                                  }
-                                >
-                                  <FileText aria-hidden="true" />
-                                  Continue to quotation
-                                </DropdownMenuItem>
-                              )}
-                              {canCreateQuotation && (
-                                <DropdownMenuItem
-                                  className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
-                                  onSelect={() =>
-                                    setActiveWorkflowDraft("quotation")
-                                  }
-                                >
-                                  <FileText aria-hidden="true" />
-                                  Create quotation
-                                </DropdownMenuItem>
-                              )}
-                              {(canAssignApprovers || canOpenInternalNotes) && (
-                                <>
-                                  {((canAttach && history.canSend) ||
-                                    canRequestInformation ||
-                                    canScheduleConsultation ||
-                                    canContinueToQuotation ||
-                                    canCreateQuotation) && (
-                                    <DropdownMenuSeparator className="my-1.5 bg-[#e8ebef]" />
-                                  )}
-                                  <DropdownMenuLabel className="flex items-center justify-between gap-2 px-2.5 py-1.5 text-[9px] font-semibold tracking-[0.08em] text-[#6b7a90] uppercase">
-                                    <span>Internal · Department head only</span>
-                                    <span className="rounded-full bg-[#edf2fb] px-2 py-0.5 text-[9px] font-medium tracking-normal text-[#294a9b] normal-case">
-                                      Staff only
-                                    </span>
-                                  </DropdownMenuLabel>
-                                </>
-                              )}
-                              {canAssignApprovers && (
-                                <DropdownMenuItem
-                                  className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
-                                  onSelect={() =>
-                                    setActiveWorkflowDraft(
-                                      "approver-assignments",
-                                    )
-                                  }
-                                >
-                                  <Users aria-hidden="true" />
-                                  Approver assignments
-                                </DropdownMenuItem>
-                              )}
-                              {canOpenInternalNotes && (
-                                <DropdownMenuItem
-                                  className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
-                                  onSelect={() =>
-                                    setActiveWorkflowDraft("internal-note")
-                                  }
-                                >
-                                  <StickyNote aria-hidden="true" />
-                                  Internal notes
-                                </DropdownMenuItem>
-                              )}
-                              {canOpenWorkflowControls && (
-                                <>
-                                  {((canAttach && history.canSend) ||
-                                    canRequestInformation ||
-                                    canScheduleConsultation ||
-                                    canContinueToQuotation ||
-                                    canCreateQuotation ||
-                                    canAssignApprovers ||
-                                    canOpenInternalNotes) && (
-                                    <DropdownMenuSeparator className="my-1.5 bg-[#e8ebef]" />
-                                  )}
+                                {canAttach && history.canSend && (
+                                  <DropdownMenuItem
+                                    className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                                    disabled={controls.busy}
+                                    onSelect={() => fileInput.current?.click()}
+                                  >
+                                    <Paperclip aria-hidden="true" />
+                                    Attach file
+                                  </DropdownMenuItem>
+                                )}
+                                {canRequestInformation && (
                                   <DropdownMenuItem
                                     className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
                                     onSelect={() =>
-                                      focusWorkflowSection("workflow-controls")
+                                      setActiveWorkflowDraft(
+                                        "request-information",
+                                      )
                                     }
                                   >
-                                    <Settings2 aria-hidden="true" />
-                                    Workflow controls
-                                  </DropdownMenuItem>
-                                </>
-                              )}
-                              {!(canAttach && history.canSend) &&
-                                !canRequestInformation &&
-                                !canScheduleConsultation &&
-                                !canContinueToQuotation &&
-                                !canCreateQuotation &&
-                                !canAssignApprovers &&
-                                !canOpenInternalNotes &&
-                                !canOpenWorkflowControls && (
-                                  <DropdownMenuItem
-                                    disabled
-                                    className="min-h-9 px-2.5 py-2 text-xs text-[#8791a2]"
-                                  >
-                                    No actions available
+                                    <CircleHelp aria-hidden="true" />
+                                    Request information
                                   </DropdownMenuItem>
                                 )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </>
-                      )}
-                      <div className="flex min-w-0 flex-1 items-end gap-2 rounded-2xl border border-[#e8e9eb] bg-[#fafaf9] p-2">
-                        <textarea
-                          ref={messageInputRef}
-                          id={inputId}
-                          value={draft}
-                          onChange={(event) => setDraft(event.target.value)}
-                          maxLength={4000}
-                          rows={1}
-                          disabled={sending || !history.canSend}
-                          placeholder="Write a message about this request…"
-                          onKeyDown={(event) => {
-                            if (
-                              event.key !== "Enter" ||
-                              event.shiftKey ||
-                              event.nativeEvent.isComposing
-                            )
-                              return
-                            event.preventDefault()
-                            event.currentTarget.form?.requestSubmit()
-                          }}
-                          className="block min-h-9 max-h-32 min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-2 py-2 text-xs leading-5 focus-visible:outline-none disabled:opacity-50"
-                        />
-                        <Button
-                          type="submit"
-                          aria-label={sending ? "Sending…" : "Send message"}
-                          className="size-9 shrink-0 rounded-full bg-[#203f8c] p-0 text-white hover:bg-[#172f70]"
-                          disabled={
-                            !draft.trim() || !history.canSend || sending
-                          }
-                        >
-                          <Send
-                            size={15}
-                            aria-hidden="true"
-                            className="translate-x-[-1px] translate-y-[1px]"
+                                {canScheduleConsultation && (
+                                  <DropdownMenuItem
+                                    className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                                    onSelect={() =>
+                                      setActiveWorkflowDraft(
+                                        "schedule-consultation",
+                                      )
+                                    }
+                                  >
+                                    <CalendarDays aria-hidden="true" />
+                                    Schedule consultation
+                                  </DropdownMenuItem>
+                                )}
+                                {canContinueToQuotation && (
+                                  <DropdownMenuItem
+                                    className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                                    onSelect={() =>
+                                      setActiveWorkflowDraft("quotation")
+                                    }
+                                  >
+                                    <FileText aria-hidden="true" />
+                                    Continue to quotation
+                                  </DropdownMenuItem>
+                                )}
+                                {canCreateQuotation && (
+                                  <DropdownMenuItem
+                                    className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                                    onSelect={() =>
+                                      setActiveWorkflowDraft("quotation")
+                                    }
+                                  >
+                                    <FileText aria-hidden="true" />
+                                    Create quotation
+                                  </DropdownMenuItem>
+                                )}
+                                {(canAssignApprovers ||
+                                  canOpenInternalNotes) && (
+                                  <>
+                                    {((canAttach && history.canSend) ||
+                                      canRequestInformation ||
+                                      canScheduleConsultation ||
+                                      canContinueToQuotation ||
+                                      canCreateQuotation) && (
+                                      <DropdownMenuSeparator className="my-1.5 bg-[#e8ebef]" />
+                                    )}
+                                    <DropdownMenuLabel className="flex items-center justify-between gap-2 px-2.5 py-1.5 text-[9px] font-semibold tracking-[0.08em] text-[#6b7a90] uppercase">
+                                      <span>
+                                        Internal · Department head only
+                                      </span>
+                                      <span className="rounded-full bg-[#edf2fb] px-2 py-0.5 text-[9px] font-medium tracking-normal text-[#294a9b] normal-case">
+                                        Staff only
+                                      </span>
+                                    </DropdownMenuLabel>
+                                  </>
+                                )}
+                                {canAssignApprovers && (
+                                  <DropdownMenuItem
+                                    className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                                    onSelect={() =>
+                                      setActiveWorkflowDraft(
+                                        "approver-assignments",
+                                      )
+                                    }
+                                  >
+                                    <Users aria-hidden="true" />
+                                    Approver assignments
+                                  </DropdownMenuItem>
+                                )}
+                                {canOpenInternalNotes && (
+                                  <DropdownMenuItem
+                                    className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                                    onSelect={() =>
+                                      setActiveWorkflowDraft("internal-note")
+                                    }
+                                  >
+                                    <StickyNote aria-hidden="true" />
+                                    Internal notes
+                                  </DropdownMenuItem>
+                                )}
+                                {canOpenWorkflowControls && (
+                                  <>
+                                    {((canAttach && history.canSend) ||
+                                      canRequestInformation ||
+                                      canScheduleConsultation ||
+                                      canContinueToQuotation ||
+                                      canCreateQuotation ||
+                                      canAssignApprovers ||
+                                      canOpenInternalNotes) && (
+                                      <DropdownMenuSeparator className="my-1.5 bg-[#e8ebef]" />
+                                    )}
+                                    <DropdownMenuItem
+                                      className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                                      onSelect={() =>
+                                        focusWorkflowSection(
+                                          "workflow-controls",
+                                        )
+                                      }
+                                    >
+                                      <Settings2 aria-hidden="true" />
+                                      Workflow controls
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
+                                {!(canAttach && history.canSend) &&
+                                  !canRequestInformation &&
+                                  !canScheduleConsultation &&
+                                  !canContinueToQuotation &&
+                                  !canCreateQuotation &&
+                                  !canAssignApprovers &&
+                                  !canOpenInternalNotes &&
+                                  !canOpenWorkflowControls && (
+                                    <DropdownMenuItem
+                                      disabled
+                                      className="min-h-9 px-2.5 py-2 text-xs text-[#8791a2]"
+                                    >
+                                      No actions available
+                                    </DropdownMenuItem>
+                                  )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </>
+                        )}
+                        <div className="flex min-w-0 flex-1 items-end gap-2 rounded-2xl border border-[#e8e9eb] bg-[#fafaf9] p-2">
+                          <textarea
+                            ref={messageInputRef}
+                            id={inputId}
+                            value={draft}
+                            onChange={(event) => setDraft(event.target.value)}
+                            maxLength={4000}
+                            rows={1}
+                            disabled={sending || !history.canSend}
+                            placeholder="Write a message about this request…"
+                            onKeyDown={(event) => {
+                              if (
+                                event.key !== "Enter" ||
+                                event.shiftKey ||
+                                event.nativeEvent.isComposing
+                              )
+                                return
+                              event.preventDefault()
+                              event.currentTarget.form?.requestSubmit()
+                            }}
+                            className="block min-h-9 max-h-32 min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-2 py-2 text-xs leading-5 focus-visible:outline-none disabled:opacity-50"
                           />
-                        </Button>
+                          <Button
+                            type="submit"
+                            aria-label={sending ? "Sending…" : "Send message"}
+                            className="size-9 shrink-0 rounded-full bg-[#203f8c] p-0 text-white hover:bg-[#172f70]"
+                            disabled={
+                              !draft.trim() || !history.canSend || sending
+                            }
+                          >
+                            <Send
+                              size={15}
+                              aria-hidden="true"
+                              className="translate-x-[-1px] translate-y-[1px]"
+                            />
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                    {sendError && (
-                      <p role="alert" className="mt-2 text-xs text-red-700">
-                        {sendError} Your text is saved here so you can retry.
-                      </p>
-                    )}
-                    <div className="mt-1.5 px-1 text-[9px] text-[#8791a2]">
-                      {draft.length}/4000
-                      {workflow ? " · Attachments up to 5 MB" : ""}
-                    </div>
-                  </form>
+                      {sendError && (
+                        <p role="alert" className="mt-2 text-xs text-red-700">
+                          {sendError} Your text is saved here so you can retry.
+                        </p>
+                      )}
+                      <div className="mt-1.5 px-1 text-[9px] text-[#8791a2]">
+                        {draft.length}/4000
+                        {workflow ? " · Attachments up to 5 MB" : ""}
+                      </div>
+                    </form>
+                  )}
                 </div>
               </>
             )}

@@ -15,6 +15,7 @@ import {
   sendConversationMessage,
   editConversationMessage,
   deleteConversationMessage,
+  deleteArchivedConversation,
 } from "./request-conversations.service.js"
 
 export function createRequestConversationsRouter(
@@ -24,12 +25,15 @@ export function createRequestConversationsRouter(
   router.use(requireAuth)
   router.get("/", async (request, response) => {
     const before = request.query.before
+    const view = request.query.view ?? "active"
+    if (view !== "active" && view !== "archived")
+      return response.status(400).json({ error: "Invalid conversation view" })
     if (
       before !== undefined &&
       (typeof before !== "string" || !/^[A-Za-z0-9_-]{1,80}$/.test(before))
     )
       return response.status(400).json({ error: "Invalid conversation cursor" })
-    response.json(await listConversations(request.auth!.user.id, before))
+    response.json(await listConversations(request.auth!.user.id, before, view))
   })
   router.param("id", (_request, response, next, id: string) => {
     if (!/^[A-Za-z0-9_-]{1,80}$/.test(id))
@@ -63,6 +67,14 @@ export function createRequestConversationsRouter(
         request.auth!.user.id,
         String(request.params.id),
         request.auth!.user.role === "USER" ? "USER" : "STAFF",
+      ),
+    )
+  })
+  router.delete("/:id", async (request, response) => {
+    response.json(
+      await deleteArchivedConversation(
+        request.auth!.user.id,
+        String(request.params.id),
       ),
     )
   })

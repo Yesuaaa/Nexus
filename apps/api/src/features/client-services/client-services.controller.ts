@@ -1,4 +1,5 @@
 import { Router } from "express"
+import { getPrisma } from "../../lib/db.js"
 import { Role } from "../../generated/prisma/client.js"
 import { requireAuth, requireRole } from "../auth/auth.middleware.js"
 import { clientServicesService } from "./client-services.service.js"
@@ -14,6 +15,38 @@ export const clientServicesRouter = Router()
 // All routes here are restricted to authenticated Client accounts (Role.USER)
 clientServicesRouter.use(requireAuth)
 clientServicesRouter.use(requireRole(Role.USER))
+
+clientServicesRouter.post(
+  "/service-requests/:id/cancel",
+  async (request, response, next) => {
+    try {
+      const result = await getPrisma()!.serviceRequest.updateMany({
+        where: {
+          id: String(request.params.id),
+          clientId: request.auth!.user.id,
+          acceptedDepartmentId: null,
+          status: {
+            in: [
+              "SUBMITTED",
+              "UNDER_REVIEW",
+              "AWAITING_CLIENT_INFO",
+              "READY_FOR_QUOTATION",
+            ],
+          },
+        },
+        data: { status: "CANCELLED" },
+      })
+      if (!result.count)
+        return response.status(409).json({
+          error:
+            "This request is no longer available for cancellation. Refresh and try again.",
+        })
+      return response.json({ success: true })
+    } catch (error) {
+      next(error)
+    }
+  },
+)
 
 clientServicesRouter.get("/services", async (_request, response, next) => {
   try {

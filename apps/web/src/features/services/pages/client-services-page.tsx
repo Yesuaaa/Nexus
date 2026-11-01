@@ -414,7 +414,7 @@ export function ClientServicesPage() {
           variant="outline"
           className="h-[34px] text-xs max-[560px]:h-11"
         >
-          <Link href="/service-requests">My service requests</Link>
+          <Link href="/service-requests">My booked requests</Link>
         </Button>
       </header>
 

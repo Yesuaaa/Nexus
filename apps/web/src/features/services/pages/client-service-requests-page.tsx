@@ -1,7 +1,6 @@
 "use client"
 
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import {
   CheckCircle2,
@@ -42,7 +41,6 @@ const initial: ClientRequestsResponse = {
 }
 
 export function ClientServiceRequestsPage() {
-  const router = useRouter()
   const [search, setSearch] = useState("")
   const [query, setQuery] = useState("")
   const [status, setStatus] = useState<ServiceRequestStatus | "">("")
@@ -132,12 +130,12 @@ export function ClientServiceRequestsPage() {
   return (
     <main
       className={cn(contentClass, "p-[clamp(16px,2.1vw,32px)]")}
-      aria-label="My service requests"
+      aria-label="Booked requests"
     >
       <header className="-mx-[clamp(16px,2.1vw,32px)] flex items-center justify-between gap-6 border-b border-[#eceef1] px-[clamp(16px,2.1vw,32px)] pt-0.5 pb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-4">
         <div>
           <h1 className="m-0 text-[clamp(21px,2vw,25px)] leading-[1.25] font-[650] tracking-[-0.03em]">
-            Service Requests
+            Booked Requests
           </h1>
           <p className="mt-[5px] mb-0 text-xs leading-[1.45] text-[#52627a]">
             Track your requests, review project details, and follow their
@@ -249,13 +247,8 @@ export function ClientServiceRequestsPage() {
         ) : result.requests.length ? (
           <ClientRequestsTable
             requests={result.requests}
-            onView={(request) => {
-              if (request.acceptedDepartmentId)
-                router.push(
-                  `/messages?request=${encodeURIComponent(request.id)}`,
-                )
-              else setSelected(request)
-            }}
+            onView={setSelected}
+            onCancelled={() => setRevision((value) => value + 1)}
           />
         ) : (
           <div className="grid min-h-64 place-items-center rounded-lg border border-dashed border-[#d7e0ee] p-6 text-center">

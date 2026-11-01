@@ -12,6 +12,7 @@ import {
   Video,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import {
   ConsultationLocation,
   getConsultationMeetingUrl,
@@ -684,10 +685,10 @@ export function WorkflowContextPanel({
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 aria-label="Join consultation"
-                                title="Join consultation"
                                 className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white p-0 text-[#203f8c] transition-colors hover:bg-blue-50"
                               >
                                 <Video size={12} aria-hidden="true" />
+                                <HoverTooltip>Join consultation</HoverTooltip>
                               </a>
                             )}
                             <a

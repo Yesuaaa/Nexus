@@ -247,9 +247,9 @@ export function Sidebar({
                 strokeWidth={1.7}
                 className="flex-none"
               />
-              <span className={collapsedLabelClass}>Service Requests</span>
+              <span className={collapsedLabelClass}>Booked Requests</span>
               {collapsed && (
-                <CollapsedTooltip>Service Requests</CollapsedTooltip>
+                <CollapsedTooltip>Booked Requests</CollapsedTooltip>
               )}
             </Link>
           )}

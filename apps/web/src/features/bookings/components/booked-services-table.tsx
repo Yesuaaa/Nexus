@@ -119,28 +119,26 @@ export function BookedServicesTable({
                 role="cell"
                 className="min-w-0 @max-[950px]:col-start-1 @max-[950px]:row-start-1"
               >
-                <p
-                  className="m-0 truncate font-semibold"
-                  title={booking.service.name}
-                >
+                <p className="m-0 truncate font-semibold">
                   {booking.service.name}
+                  <HoverTooltip>{booking.service.name}</HoverTooltip>
                 </p>
-                <p
-                  className="mt-1 mb-0 truncate text-[11px] text-[#738096]"
-                  title={booking.id}
-                >
+                <p className="mt-1 mb-0 truncate text-[11px] text-[#738096]">
                   {booking.id}
+                  <HoverTooltip>{booking.id}</HoverTooltip>
                 </p>
               </div>
               <div
                 role="cell"
                 className="min-w-0 truncate text-[#52627a] @max-[950px]:col-span-2 @max-[950px]:row-start-3"
-                title={booking.packageName || "Standard service"}
               >
                 <span className="mr-1.5 hidden text-[#738096] @max-[950px]:inline">
                   Package
                 </span>
                 {booking.packageName || "Standard service"}
+                <HoverTooltip>
+                  {booking.packageName || "Standard service"}
+                </HoverTooltip>
               </div>
               <div
                 role="cell"
@@ -162,7 +160,6 @@ export function BookedServicesTable({
               <div
                 role="cell"
                 className="min-w-0 text-[#52627a] @max-[950px]:col-span-2 @max-[950px]:row-start-5"
-                title={booking.expectedTimeline}
               >
                 <span className="mr-1.5 hidden text-[#738096] @max-[950px]:inline">
                   Timeline
@@ -170,6 +167,9 @@ export function BookedServicesTable({
                 <span className="line-clamp-2">
                   {booking.expectedTimeline || "Not specified"}
                 </span>
+                <HoverTooltip>
+                  {booking.expectedTimeline || "Not specified"}
+                </HoverTooltip>
               </div>
               <div
                 role="cell"

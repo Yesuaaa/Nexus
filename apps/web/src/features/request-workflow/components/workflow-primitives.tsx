@@ -97,7 +97,7 @@ export function WorkflowProgress({ workflow }: { workflow: Workflow }) {
             key={step}
             aria-current={current === index ? "step" : undefined}
             className={cn(
-              "flex min-w-fit flex-1 items-center gap-1.5 text-[10px]",
+              "flex min-w-fit flex-1 items-center gap-1.5 text-[10px] font-semibold",
               index <= current ? "text-[#203f8c]" : "text-[#8791a2]",
             )}
           >
@@ -112,16 +112,15 @@ export function WorkflowProgress({ workflow }: { workflow: Workflow }) {
             {index !== steps.length - 1 && (
               <span
                 aria-hidden="true"
-                className="ml-1 h-px min-w-2 flex-1 bg-[#e1e6ee]"
+                className={cn(
+                  "ml-1 h-0.5 min-w-2 flex-1 rounded-full",
+                  index < current ? "bg-[#203f8c]" : "bg-[#cbd5e1]",
+                )}
               />
             )}
           </li>
         ))}
       </ol>
-      <p className="mt-2 mb-0 text-[11px] leading-5 text-[#52627a]">
-        <span className="font-medium text-[#182235]">Next: </span>
-        {workflow.nextAction}
-      </p>
     </div>
   )
 }

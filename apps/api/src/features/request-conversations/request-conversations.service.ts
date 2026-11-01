@@ -22,6 +22,24 @@ function avatarUrl(user: {
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 
 const activeUser = { isActive: true, accountDeletedAt: null } as const
+const archivedStatuses = ["CLOSED", "CANCELLED"] as const
+export type ConversationView = "active" | "archived"
+
+function visibleConversationScope(
+  userId: string,
+): Prisma.ServiceRequestWhereInput {
+  return {
+    AND: [
+      participantScope(userId),
+      {
+        OR: [
+          { status: { notIn: [...archivedStatuses] } },
+          { conversationDeletions: { none: { userId } } },
+        ],
+      },
+    ],
+  }
+}
 
 function participantScope(userId: string): Prisma.ServiceRequestWhereInput {
   return {
@@ -119,6 +137,7 @@ type UnreadConversationRow = {
 async function getUnreadConversationCounts(
   userId: string,
   role: "USER" | "STAFF",
+  view: ConversationView = "active",
 ) {
   const rows =
     role === "USER"
@@ -136,6 +155,11 @@ async function getUnreadConversationCounts(
           WHERE service_request."clientId" = ${userId}
             AND service_request."acceptedAt" IS NOT NULL
             AND service_request."acceptedDepartmentId" IS NOT NULL
+            AND (service_request."status"::text IN ('CLOSED', 'CANCELLED')) = ${view === "archived"}
+            AND (${view === "active"} OR NOT EXISTS (
+              SELECT 1 FROM "ServiceRequestConversationDeletion" AS deletion
+              WHERE deletion."requestId" = service_request."id" AND deletion."userId" = ${userId}
+            ))
           GROUP BY service_request."id"
         `
       : await getPrisma()!.$queryRaw<UnreadConversationRow[]>`
@@ -154,6 +178,11 @@ async function getUnreadConversationCounts(
             )
           WHERE service_request."acceptedAt" IS NOT NULL
             AND service_request."acceptedDepartmentId" IS NOT NULL
+            AND (service_request."status"::text IN ('CLOSED', 'CANCELLED')) = ${view === "archived"}
+            AND (${view === "active"} OR NOT EXISTS (
+              SELECT 1 FROM "ServiceRequestConversationDeletion" AS deletion
+              WHERE deletion."requestId" = service_request."id" AND deletion."userId" = ${userId}
+            ))
           GROUP BY service_request."id"
         `
   return new Map(rows.map((row) => [row.requestId, row.unreadCount]))
@@ -163,12 +192,20 @@ function totalUnreadMessages(unreadCounts: Map<string, number>) {
   return [...unreadCounts.values()].reduce((total, count) => total + count, 0)
 }
 
-export async function listConversations(userId: string, before?: string) {
+export async function listConversations(
+  userId: string,
+  before?: string,
+  view: ConversationView = "active",
+) {
   const db = getPrisma()!
   const scope: Prisma.ServiceRequestWhereInput = {
-    ...participantScope(userId),
+    ...visibleConversationScope(userId),
     acceptedAt: { not: null },
     acceptedDepartmentId: { not: null },
+    status:
+      view === "archived"
+        ? { in: [...archivedStatuses] }
+        : { notIn: [...archivedStatuses] },
   }
   const boundary = before
     ? await db.serviceRequest.findFirst({
@@ -184,6 +221,7 @@ export async function listConversations(userId: string, before?: string) {
       ...(boundary
         ? {
             AND: [
+              scope,
               {
                 OR: [
                   { updatedAt: { lt: boundary.updatedAt } },
@@ -196,6 +234,7 @@ export async function listConversations(userId: string, before?: string) {
     },
     select: {
       id: true,
+      status: true,
       title: true,
       referenceNumber: true,
       updatedAt: true,
@@ -231,7 +270,7 @@ export async function listConversations(userId: string, before?: string) {
       ? "STAFF"
       : null
   const unreadCounts = participantRole
-    ? await getUnreadConversationCounts(userId, participantRole)
+    ? await getUnreadConversationCounts(userId, participantRole, view)
     : new Map<string, number>()
   const conversations = rows.slice(0, 30).map(({ messages, ...row }) => {
     const unreadCount = unreadCounts.get(row.id) ?? 0
@@ -260,7 +299,11 @@ export async function listConversations(userId: string, before?: string) {
       ...(participantRole ? { unreadCount } : {}),
     }
   })
-  const unreadCount = totalUnreadMessages(unreadCounts)
+  const unreadCount = totalUnreadMessages(
+    view === "archived" && participantRole
+      ? await getUnreadConversationCounts(userId, participantRole)
+      : unreadCounts,
+  )
   return {
     conversations,
     nextCursor: rows.length > 30 ? conversations.at(-1)!.id : null,
@@ -275,23 +318,12 @@ export async function markConversationRead(
 ) {
   const now = new Date()
   const updated = await getPrisma()!.serviceRequest.updateMany({
-    where:
-      role === "USER"
-        ? {
-            id: requestId,
-            clientId: userId,
-            client: { ...activeUser, role: "USER" },
-            acceptedAt: { not: null },
-            acceptedDepartmentId: { not: null },
-          }
-        : {
-            id: requestId,
-            acceptedAt: { not: null },
-            acceptedDepartment: {
-              headId: userId,
-              head: { ...activeUser, role: "STAFF" },
-            },
-          },
+    where: {
+      id: requestId,
+      ...visibleConversationScope(userId),
+      acceptedAt: { not: null },
+      acceptedDepartmentId: { not: null },
+    },
     data: role === "USER" ? { clientReadAt: now } : { staffReadAt: now },
   })
   if (!updated.count)
@@ -306,7 +338,7 @@ export async function markConversationRead(
 
 export async function getConversationAccess(userId: string, requestId: string) {
   const record = await getPrisma()!.serviceRequest.findFirst({
-    where: { id: requestId, ...participantScope(userId) },
+    where: { id: requestId, ...visibleConversationScope(userId) },
     select: conversationSelect,
   })
   if (!record) throw new ServiceRequestsError(404, "Conversation not found")
@@ -315,6 +347,7 @@ export async function getConversationAccess(userId: string, requestId: string) {
   const activeHead =
     head?.role === "STAFF" && head.isActive && !head.accountDeletedAt
   return {
+    archived: record.status === "CLOSED" || record.status === "CANCELLED",
     conversation:
       department && record.acceptedAt
         ? {
@@ -359,7 +392,7 @@ export async function listConversationMessages(
     async (tx) => {
       // Authorization and history share one snapshot, including department handoffs.
       const request = await tx.serviceRequest.findFirst({
-        where: { id: requestId, ...participantScope(userId) },
+        where: { id: requestId, ...visibleConversationScope(userId) },
         select: { id: true },
       })
       if (!request)
@@ -395,6 +428,43 @@ export async function listConversationMessages(
     },
     { isolationLevel: "RepeatableRead" },
   )
+}
+
+export async function deleteArchivedConversation(
+  userId: string,
+  requestId: string,
+) {
+  return getPrisma()!.$transaction(async (tx) => {
+    // Serialize with status changes without changing the shared activity time.
+    await tx.$queryRaw`SELECT "id" FROM "ServiceRequest" WHERE "id" = ${requestId} FOR UPDATE`
+    const archived = await tx.serviceRequest.findFirst({
+      where: {
+        id: requestId,
+        ...participantScope(userId),
+        acceptedAt: { not: null },
+        acceptedDepartmentId: { not: null },
+        status: { in: [...archivedStatuses] },
+      },
+      select: { id: true },
+    })
+    if (!archived) {
+      const visible = await tx.serviceRequest.count({
+        where: { id: requestId, ...participantScope(userId) },
+      })
+      throw new ServiceRequestsError(
+        visible ? 409 : 404,
+        visible
+          ? "Only closed or cancelled conversations can be deleted."
+          : "Conversation not found",
+      )
+    }
+    await tx.serviceRequestConversationDeletion.upsert({
+      where: { requestId_userId: { requestId, userId } },
+      create: { requestId, userId },
+      update: {},
+    })
+    return { ok: true }
+  })
 }
 
 export async function sendConversationMessage(

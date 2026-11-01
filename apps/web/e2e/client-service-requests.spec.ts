@@ -108,7 +108,7 @@ for (const width of [1440, 390]) {
     })
     await page.goto("/service-requests")
     await expect(
-      page.getByRole("heading", { name: "Service Requests", exact: true }),
+      page.getByRole("heading", { name: "Booked Requests", exact: true }),
     ).toBeVisible()
     await expect(page.getByText("Showing 1–10 of 12")).toBeVisible()
     await page.getByRole("button", { name: "Next page", exact: true }).click()
@@ -246,11 +246,9 @@ test("history renders the manager lifecycle statuses", async ({ page }) => {
     }),
   )
   await page.goto("/dashboard")
-  await page
-    .getByRole("link", { name: "Service Requests", exact: true })
-    .click()
+  await page.getByRole("link", { name: "Booked Requests", exact: true }).click()
   await expect(
-    page.getByRole("heading", { name: "Service Requests", exact: true }),
+    page.getByRole("heading", { name: "Booked Requests", exact: true }),
   ).toBeVisible()
   const table = page.getByRole("table")
   for (const label of [
@@ -276,7 +274,7 @@ for (const role of ["ADMIN", "STAFF", "SUPERADMIN"]) {
     await page.goto("/service-requests")
     await expect(page).toHaveURL(/\/dashboard$/)
     await expect(
-      page.getByRole("link", { name: "Service Requests", exact: true }),
+      page.getByRole("link", { name: "Booked Requests", exact: true }),
     ).toHaveCount(0)
     expect(calls).toEqual([])
   })

@@ -17,7 +17,7 @@ const routeLabels: Record<string, string> = {
   services: "Services",
   "booked-services": "Booked Services",
   "request-inbox": "Request Inbox",
-  "service-requests": "Service Requests",
+  "service-requests": "Booked Requests",
   clients: "Client Management",
 }
 
