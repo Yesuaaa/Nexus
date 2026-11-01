@@ -14,6 +14,24 @@ export function useAccount(onReady?: (succeeded: boolean) => void) {
   const [error, setError] = useState("")
 
   useEffect(() => {
+    let active = true
+    const refresh = () => {
+      void getCurrentAccount()
+        .then(({ user }) => {
+          if (active) setAccount(user)
+        })
+        .catch(() => {
+          /* The next authenticated request handles session expiry. */
+        })
+    }
+    window.addEventListener("nexus:account-updated", refresh)
+    return () => {
+      active = false
+      window.removeEventListener("nexus:account-updated", refresh)
+    }
+  }, [])
+
+  useEffect(() => {
     if (!getToken()) {
       onReady?.(false)
       router.replace("/login")

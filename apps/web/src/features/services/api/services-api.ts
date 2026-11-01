@@ -70,6 +70,7 @@ export type SpecialistSocialLink = {
 }
 
 export type ServiceSpecialistProfile = ServiceSpecialist & {
+  bannerUrl?: string | null
   bio: string | null
   imageUrl: string | null
   specialties: string[]

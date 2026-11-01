@@ -77,6 +77,7 @@ export const servicesRepository = {
         department: { select: { id: true, name: true } },
         profileBio: true,
         profileImageUrl: true,
+        profileBannerUrl: true,
         profileSpecialties: true,
         portfolioProjects: {
           where: { isPublished: true },

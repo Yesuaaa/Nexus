@@ -160,7 +160,7 @@ export const authService = {
       )
     }
     if (!(await verifyPassword(currentPassword, input.currentPasswordHash))) {
-      throw new AuthError(401, "Current password is incorrect")
+      throw new AuthError(400, "Current password is incorrect")
     }
     const newPasswordHash = await hashPassword(newPassword)
     await authRepository.updatePasswordAndRevokeSessions(

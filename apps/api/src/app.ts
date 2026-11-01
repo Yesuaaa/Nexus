@@ -1,4 +1,6 @@
 import cors from "cors"
+import { requireAuth } from "./features/auth/auth.middleware.js"
+import { authRateLimit } from "./features/auth/auth.limiter.js"
 import express, { type ErrorRequestHandler } from "express"
 import { authRouter } from "./features/auth/auth.controller.js"
 import { departmentsRouter } from "./features/departments/departments.controller.js"
@@ -31,6 +33,8 @@ export function createApp(
   )
   app.use("/api/client", express.json({ limit: "64kb" }), clientServicesRouter)
   app.use("/api/request-workflows", requestWorkflowRouter)
+  app.use("/api/auth/profile/images", requireAuth, authRateLimit(20), express.json({ limit: "3mb" }))
+  app.use("/api/auth/profile/specialist", requireAuth, express.json({ limit: "128kb" }))
   app.use(express.json({ limit: "16kb" }))
   app.use("/api/auth", authRouter)
   app.use("/api/users", usersRouter)

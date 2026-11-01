@@ -116,6 +116,7 @@ export function SpecialistProfileDialog({
       : (document.activeElement as HTMLElement),
   )
   const imageUrl = safeHttpsUrl(profile?.imageUrl ?? null)
+  const bannerUrl = safeHttpsUrl(profile?.bannerUrl ?? null)
   const socialLinks =
     profile?.socialLinks?.flatMap((link) => {
       const url = safeHttpsUrl(link.url)
@@ -173,6 +174,7 @@ export function SpecialistProfileDialog({
         }}
       >
         <header className="relative flex min-h-20 shrink-0 items-center gap-4 bg-[#203f80] px-6 py-4 text-white max-[560px]:px-4">
+          {bannerUrl && <div className="absolute inset-0 overflow-hidden rounded-t-2xl" aria-hidden="true"><Image src={bannerUrl} alt="" fill unoptimized className="object-cover" /><div className="absolute inset-0 bg-black/30" /></div>}
           <div className="relative -mb-9 mt-1 grid size-[76px] shrink-0 place-items-center overflow-hidden rounded-full border-4 border-white bg-[#eaf0fa] text-lg font-bold text-[#294c96] shadow-sm">
             {imageUrl && !avatarFailed ? (
               <Image
@@ -188,7 +190,7 @@ export function SpecialistProfileDialog({
               initials(specialist.fullName)
             )}
           </div>
-          <div className="min-w-0 flex-1 self-start pt-1">
+          <div className="relative min-w-0 flex-1 self-start pt-1">
             <p className="m-0 text-[11px] font-bold tracking-[0.14em] text-white/75 uppercase">
               Specialist profile
             </p>
@@ -198,7 +200,7 @@ export function SpecialistProfileDialog({
             onClick={() => closeAfterTransition()}
             aria-label="Close specialist profile"
             className={cn(
-              "grid size-11 shrink-0 cursor-pointer place-items-center rounded-full border border-white/35 bg-white/10 text-white hover:bg-white/20",
+              "relative grid size-11 shrink-0 cursor-pointer place-items-center rounded-full border border-white/35 bg-white/10 text-white hover:bg-white/20",
               focusRing,
             )}
           >

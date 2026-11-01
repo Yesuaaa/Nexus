@@ -139,6 +139,7 @@ export const servicesService = {
     const {
       profileBio,
       profileImageUrl,
+      profileBannerUrl,
       profileSpecialties,
       portfolioProjects,
       socialLinks,
@@ -148,6 +149,7 @@ export const servicesService = {
       ...identity,
       bio: profileBio,
       imageUrl: publicPortfolioUrl(profileImageUrl),
+      bannerUrl: publicPortfolioUrl(profileBannerUrl),
       specialties: profileSpecialties
         .map((item) => item.trim())
         .filter(Boolean)

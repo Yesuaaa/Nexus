@@ -117,6 +117,8 @@ model User {
   email                             String                  @unique
   fullName                          String?
   contactNumber                     String?
+  profileImagePath                  String?
+  profileBannerPath                 String?
   position                          String?
   passwordHash                      String
   role                              Role                    @default(USER)
@@ -376,6 +378,7 @@ model Employee {
   preferredServiceRequests ServiceRequest[]
   profileBio               String?                      @db.VarChar(2000)
   profileImageUrl          String?                      @db.VarChar(2048)
+  profileBannerUrl         String?                      @db.VarChar(2048)
   profileSpecialties       String[]                     @default([])
   portfolioProjects        SpecialistPortfolioProject[]
   socialLinks              SpecialistSocialLink[]

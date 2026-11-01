@@ -4,8 +4,64 @@ import { requireAuth, requirePermission } from "./auth.middleware.js"
 import { Permission } from "./auth.permissions.js"
 import { AuthError, authService } from "./auth.service.js"
 import { authRateLimit } from "./auth.limiter.js"
+import { uploadProfileImage } from "./profile-images.service.js"
+import {
+  getProfile,
+  updateProfile,
+  updateSpecialistProfile,
+} from "./profile.service.js"
 
 export const authRouter = Router()
+
+authRouter.post("/profile/images", requireAuth, async (request, response, next) => {
+  try { response.status(201).json(await uploadProfileImage(request.auth!.user.id, request.body)) } catch (error) { if (error instanceof AuthError) return response.status(error.status).json({ error: error.message }); next(error) }
+})
+
+authRouter.get(
+  "/profile",
+  requireAuth,
+  requirePermission(Permission.PROFILE_READ),
+  async (request, response, next) => {
+    try {
+      response.json(await getProfile(request.auth!.user.id))
+    } catch (error) {
+      if (error instanceof AuthError)
+        return response.status(error.status).json({ error: error.message })
+      next(error)
+    }
+  },
+)
+authRouter.patch(
+  "/profile",
+  requireAuth,
+  requirePermission(Permission.PROFILE_READ),
+  authRateLimit(30),
+  async (request, response, next) => {
+    try {
+      response.json(await updateProfile(request.auth!.user.id, request.body))
+    } catch (error) {
+      if (error instanceof AuthError)
+        return response.status(error.status).json({ error: error.message })
+      next(error)
+    }
+  },
+)
+authRouter.put(
+  "/profile/specialist",
+  requireAuth,
+  authRateLimit(30),
+  async (request, response, next) => {
+    try {
+      response.json(
+        await updateSpecialistProfile(request.auth!.user.id, request.body),
+      )
+    } catch (error) {
+      if (error instanceof AuthError)
+        return response.status(error.status).json({ error: error.message })
+      next(error)
+    }
+  },
+)
 
 authRouter.post(
   "/register",
