@@ -507,23 +507,30 @@ export function QuotationProposalCard({
           <div className="flex flex-wrap gap-2">
             <Button
               value="ACCEPT"
-              className={workflowButton}
+              className={cn(
+                workflowButton,
+                "!border-transparent !bg-[#1f9a54] !text-white hover:!bg-[#178045]",
+              )}
               disabled={controls.busy}
             >
               Accept quotation
             </Button>
             <Button
               value="REVISE"
-              variant="outline"
-              className={workflowButton}
+              className={cn(
+                workflowButton,
+                "!border-transparent !bg-[#f2b632] !text-[#3d2c08] hover:!bg-[#e0a622]",
+              )}
               disabled={controls.busy}
             >
               Request revision
             </Button>
             <Button
               value="DECLINE"
-              variant="outline"
-              className={workflowButton}
+              className={cn(
+                workflowButton,
+                "!border-transparent !bg-[#d12f2f] !text-white hover:!bg-[#b82525]",
+              )}
               disabled={controls.busy}
             >
               Decline quotation
