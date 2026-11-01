@@ -11,6 +11,7 @@ import { clientServicesRouter } from "./features/client-services/client-services
 import { serviceRequestsRouter } from "./features/service-requests/service-requests.controller.js"
 import { requestInboxRouter } from "./features/request-inbox/request-inbox.controller.js"
 import { createRequestConversationsRouter } from "./features/request-conversations/request-conversations.controller.js"
+import { internalConversationsRouter } from "./features/internal-conversations/internal-conversations.controller.js"
 import type { ConversationRealtime } from "./features/request-conversations/request-conversations.realtime.js"
 import { requestWorkflowRouter } from "./features/request-workflow/workflow.controller.js"
 import { projectsRouter } from "./features/projects/projects.controller.js"
@@ -42,6 +43,11 @@ export function createApp(
   app.use(
     "/api/request-conversations",
     createRequestConversationsRouter(options.conversationRealtime),
+  )
+  app.use(
+    "/api/internal-conversations",
+    express.json({ limit: "16kb" }),
+    internalConversationsRouter,
   )
   app.use("/api", healthRouter)
   app.use(handleError)

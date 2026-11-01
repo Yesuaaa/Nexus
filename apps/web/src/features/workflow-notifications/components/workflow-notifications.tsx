@@ -2,7 +2,8 @@
 
 import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
-import { Bell } from "lucide-react"
+import { Bell, CheckCheck } from "lucide-react"
+import { sileo } from "sileo"
 import { apiRequest } from "@/features/auth/api/auth-api"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import {
@@ -28,6 +29,7 @@ export function WorkflowNotifications() {
   const account = usePortalAccount()
   const [result, setResult] = useState<Notifications | null>(null)
   const [error, setError] = useState(false)
+  const [markingRead, setMarkingRead] = useState(false)
   const load = useCallback(async (signal?: AbortSignal) => {
     try {
       const value = await apiRequest<Notifications>(
@@ -67,6 +69,23 @@ export function WorkflowNotifications() {
       /* The unread marker remains so a later visit can retry. */
     }
   }
+  async function readAll() {
+    if (markingRead || !result?.unreadCount) return
+    setMarkingRead(true)
+    try {
+      await apiRequest("/api/request-workflows/notifications/read-all", {
+        method: "PATCH",
+      })
+      await load()
+      sileo.success({ title: "All notifications marked as read" })
+    } catch {
+      sileo.error({
+        title: "Couldn't mark all notifications as read. Try again.",
+      })
+    } finally {
+      setMarkingRead(false)
+    }
+  }
   return (
     <DropdownMenu
       onOpenChange={(open) => {
@@ -93,15 +112,28 @@ export function WorkflowNotifications() {
         collisionPadding={12}
         className={`${dropdownMenuClass} max-h-[min(420px,75dvh)] w-[min(360px,calc(100vw-32px))] overflow-y-auto`}
       >
-        <p className="m-0 border-b border-border px-3 py-3 text-xs font-semibold">
-          Notifications
-        </p>
+        <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+          <p className="m-0 text-xs font-semibold">Notifications</p>
+          <DropdownMenuItem
+            disabled={markingRead || !result?.unreadCount}
+            onSelect={(event) => {
+              event.preventDefault()
+              void readAll()
+            }}
+            className="cursor-pointer gap-1.5 rounded-md px-2 py-2 text-[11px] font-medium text-[#203f8c] focus:bg-[#e9eef5] focus:text-[#203f8c]"
+          >
+            <CheckCheck aria-hidden="true" />
+            {markingRead ? "Marking as read…" : "Mark all as read"}
+          </DropdownMenuItem>
+        </div>
         {result?.notifications.length ? (
           result.notifications.map((item) => (
             <DropdownMenuItem key={item.id} asChild>
               <Link
                 href={`${account.role === "ADMIN" || account.role === "SUPERADMIN" ? "/workflow-approvals" : "/messages"}?request=${encodeURIComponent(item.requestId)}`}
-                onClick={() => void read(item.id)}
+                onClick={() => {
+                  if (!item.readAt) void read(item.id)
+                }}
                 className="grid cursor-pointer gap-1 rounded-lg px-3 py-3 no-underline focus:bg-[#e9eef5]"
               >
                 <span

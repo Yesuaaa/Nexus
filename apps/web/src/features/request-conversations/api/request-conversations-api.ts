@@ -1,4 +1,7 @@
 import { apiRequest, apiStreamRequest } from "@/features/auth/api/auth-api"
+import type { ServiceRequestStatus } from "@/features/services/api/services-api"
+
+export type ConversationView = "active" | "archived"
 
 export type RequestMessage = {
   id: string
@@ -13,6 +16,7 @@ export type RequestMessage = {
 
 export type ConversationSummary = {
   id: string
+  status: ServiceRequestStatus
   title: string
   referenceNumber: string | null
   updatedAt: string
@@ -33,9 +37,16 @@ export type ConversationList = {
   unreadCount?: number
 }
 
-export function listConversations(before?: string, signal?: AbortSignal) {
+export function listConversations(
+  before?: string,
+  signal?: AbortSignal,
+  view: ConversationView = "active",
+) {
+  const query = new URLSearchParams()
+  if (before) query.set("before", before)
+  if (view === "archived") query.set("view", view)
   return apiRequest<ConversationList>(
-    `/api/request-conversations${before ? `?before=${encodeURIComponent(before)}` : ""}`,
+    `/api/request-conversations${query.size ? `?${query}` : ""}`,
     { signal },
   )
 }
@@ -51,6 +62,7 @@ export function markConversationRead(id: string) {
 }
 
 export type ConversationHistory = {
+  archived: boolean
   conversation: {
     department: { id: string; name: string }
     head: { id: string; fullName: string | null } | null
@@ -68,6 +80,10 @@ export type ConversationHistory = {
 
 const path = (id: string) =>
   `/api/request-conversations/${encodeURIComponent(id)}`
+
+export function deleteArchivedConversation(id: string) {
+  return apiRequest<{ ok: true }>(path(id), { method: "DELETE" })
+}
 
 export function getConversation(
   id: string,

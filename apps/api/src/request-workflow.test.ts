@@ -1391,5 +1391,98 @@ test(
         )
       },
     )
+
+    await t.test(
+      "mark all as read covers notifications beyond the list limit and preserves recipient access boundaries",
+      async () => {
+        const eventIds = Array.from({ length: 47 }, () => randomUUID())
+        await prisma!.workflowEvent.createMany({
+          data: eventIds.map((id, index) => ({
+            id,
+            requestId: request.id,
+            actorId: head.id,
+            type: "NOTIFICATION_TEST",
+            summary: `Notification ${index + 1}`,
+            internal: index === 46,
+          })),
+        })
+        const earlierReadAt = new Date("2026-10-01T00:00:00Z")
+        await prisma!.workflowNotification.createMany({
+          data: [
+            ...eventIds.map((eventId, index) => ({
+              eventId,
+              requestId: request.id,
+              userId: client.id,
+              readAt: index === 45 ? earlierReadAt : null,
+            })),
+            {
+              eventId: eventIds[0]!,
+              requestId: request.id,
+              userId: otherClient.id,
+              readAt: null,
+            },
+          ],
+        })
+        const endpoint = `${base}/request-workflows/notifications`
+        const list = async () => {
+          const response = await fetch(endpoint, { headers: client.headers })
+          assert.equal(response.status, 200)
+          return (await response.json()) as {
+            notifications: { id: string; readAt: string | null }[]
+            unreadCount: number
+          }
+        }
+        const before = await list()
+        assert.equal(before.notifications.length, 40)
+        assert.ok(before.unreadCount >= 45)
+        assert.equal(
+          (await fetch(`${endpoint}/read-all`, { method: "PATCH" })).status,
+          401,
+        )
+        const markAll = () =>
+          fetch(`${endpoint}/read-all`, {
+            method: "PATCH",
+            headers: client.headers,
+          })
+        assert.equal((await markAll()).status, 200)
+        const after = await list()
+        assert.equal(after.unreadCount, 0)
+        assert.ok(after.notifications.every((item) => item.readAt))
+        const saved = await prisma!.workflowNotification.findMany({
+          where: { eventId: { in: eventIds } },
+          orderBy: { id: "asc" },
+        })
+        assert.ok(
+          saved
+            .filter(
+              (item) =>
+                item.userId === client.id && item.eventId !== eventIds[46],
+            )
+            .every((item) => item.readAt),
+        )
+        assert.equal(
+          saved.find((item) => item.userId === otherClient.id)!.readAt,
+          null,
+        )
+        assert.equal(
+          saved.find((item) => item.eventId === eventIds[46])!.readAt,
+          null,
+        )
+        assert.equal(
+          saved
+            .find((item) => item.eventId === eventIds[45])!
+            .readAt!.toISOString(),
+          earlierReadAt.toISOString(),
+        )
+        assert.equal((await markAll()).status, 200)
+        assert.deepEqual(
+          await prisma!.workflowNotification.findMany({
+            where: { eventId: { in: eventIds } },
+            orderBy: { id: "asc" },
+          }),
+          saved,
+        )
+      },
+    )
   },
 )

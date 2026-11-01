@@ -93,6 +93,14 @@ export async function readWorkflowNotification(userId: string, id: string) {
   return { ok: true }
 }
 
+export async function readAllWorkflowNotifications(userId: string) {
+  await getPrisma()!.workflowNotification.updateMany({
+    where: { ...notificationScope(userId), readAt: null },
+    data: { readAt: new Date() },
+  })
+  return { ok: true }
+}
+
 export async function listWorkflowApprovals(userId: string) {
   const rows = await getPrisma()!.requestWorkflow.findMany({
     where: {

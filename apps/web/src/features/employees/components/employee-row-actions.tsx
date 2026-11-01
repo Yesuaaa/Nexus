@@ -169,17 +169,15 @@ export function EmployeeRowActions({
             <>
               <DropdownMenuItem
                 disabled={employee.hasEmployeeRecord === false}
-                title={
-                  employee.hasEmployeeRecord === false
-                    ? "Complete employee details first"
-                    : undefined
-                }
                 className={cn(dropdownItemClass, "text-sm focus:bg-[#eef1f8]")}
                 onSelect={() => {
                   nextAction.current = "status"
                 }}
               >
                 Change status
+                {employee.hasEmployeeRecord === false && (
+                  <HoverTooltip>Complete employee details first</HoverTooltip>
+                )}
               </DropdownMenuItem>
               {!employee.hasAccount ? (
                 <DropdownMenuItem
