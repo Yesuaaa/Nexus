@@ -25,6 +25,7 @@ import { ServiceFormDialog } from "../components/service-form-dialog"
 import { ServiceKpiCards } from "../components/service-kpi-cards"
 import { ServiceStatusDialog } from "../components/service-status-dialog"
 import { ServiceTable } from "../components/service-table"
+import { PricingTemplatesDialog } from "../components/pricing-templates-dialog"
 
 export function ServiceManagementPage() {
   const actor = usePortalAccount()
@@ -45,6 +46,24 @@ export function ServiceManagementPage() {
   const [deleteTarget, setDeleteTarget] = useState<Service | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState("")
+  const [templateManagerId, setTemplateManagerId] = useState<string | null>(
+    null,
+  )
+
+  function savePricingTemplate(saved: PricingTemplate) {
+    setPricingTemplates((current) =>
+      current
+        .map((template) => (template.id === saved.id ? saved : template))
+        .sort((left, right) => left.name.localeCompare(right.name)),
+    )
+    setServices((current) =>
+      current.map((service) =>
+        service.pricingTemplateId === saved.id
+          ? { ...service, pricingTemplate: saved }
+          : service,
+      ),
+    )
+  }
 
   useEffect(() => {
     let active = true
@@ -168,16 +187,29 @@ export function ServiceManagementPage() {
           </p>
         </div>
         {canManage && (
-          <button
-            type="button"
-            className={cn(
-              "inline-flex min-h-[34px] flex-none cursor-pointer items-center justify-center gap-[7px] rounded-lg border border-transparent bg-[#203f8c] px-[13px] text-xs leading-[1.2] font-semibold whitespace-nowrap text-white transition-colors hover:bg-[#172f70]",
-              focusRing,
-            )}
-            onClick={() => setFormTarget("create")}
-          >
-            <PlusIcon width="14" height="14" /> Create Service
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={loading || Boolean(error)}
+              className={cn(
+                "inline-flex min-h-[34px] cursor-pointer items-center justify-center rounded-lg border border-[#d7e0ee] px-[13px] text-xs font-semibold whitespace-nowrap text-[#24437e] hover:bg-[#f1f5fc] disabled:cursor-not-allowed disabled:opacity-50",
+                focusRing,
+              )}
+              onClick={() => setTemplateManagerId("")}
+            >
+              Pricing Templates
+            </button>
+            <button
+              type="button"
+              className={cn(
+                "inline-flex min-h-[34px] flex-none cursor-pointer items-center justify-center gap-[7px] rounded-lg border border-transparent bg-[#203f8c] px-[13px] text-xs leading-[1.2] font-semibold whitespace-nowrap text-white transition-colors hover:bg-[#172f70]",
+                focusRing,
+              )}
+              onClick={() => setFormTarget("create")}
+            >
+              <PlusIcon width="14" height="14" /> Create Service
+            </button>
+          </div>
         )}
       </header>
 
@@ -219,8 +251,27 @@ export function ServiceManagementPage() {
           service={formTarget === "create" ? null : formTarget}
           departments={departments}
           pricingTemplates={pricingTemplates}
+          onManagePricingTemplates={(id) => setTemplateManagerId(id ?? "")}
           onClose={() => setFormTarget(null)}
           onSaved={saveInList}
+        />
+      )}
+      {templateManagerId !== null && canManage && (
+        <PricingTemplatesDialog
+          templates={pricingTemplates.map((template) => ({
+            ...template,
+            services: services
+              .filter((service) => service.pricingTemplateId === template.id)
+              .map(({ id, name }) => ({ id, name })),
+          }))}
+          initialTemplateId={templateManagerId || undefined}
+          onClose={() => setTemplateManagerId(null)}
+          onSaved={savePricingTemplate}
+          onDeleted={(id) =>
+            setPricingTemplates((current) =>
+              current.filter((template) => template.id !== id),
+            )
+          }
         />
       )}
       {detailsTarget && (

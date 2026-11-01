@@ -78,22 +78,19 @@ const SelectContent = React.forwardRef<
     <SelectPrimitive.Content
       ref={ref}
       className={cn(
-        "relative z-50 max-h-[var(--radix-select-content-available-height)] min-w-[8rem] max-w-[calc(100vw-16px)] overflow-y-auto overflow-x-hidden rounded-lg border border-[#e1e4ea] bg-background text-foreground shadow-md origin-[var(--radix-select-content-transform-origin)]",
+        "relative z-[130] flex max-h-[min(20rem,var(--radix-select-content-available-height))] min-w-[8rem] max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-lg border border-[#e1e4ea] bg-background text-foreground shadow-md origin-[var(--radix-select-content-transform-origin)]",
         position === "popper" && "w-[var(--radix-select-trigger-width)]",
         className,
       )}
       position={position}
       sideOffset={4}
       collisionPadding={8}
+      hideWhenDetached
       {...props}
     >
       <SelectScrollUpButton />
       <SelectPrimitive.Viewport
-        className={cn(
-          "p-1",
-          position === "popper" &&
-            "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]",
-        )}
+        className={cn("p-1", position === "popper" && "w-full min-w-0")}
       >
         {children}
       </SelectPrimitive.Viewport>

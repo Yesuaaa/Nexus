@@ -1,4 +1,8 @@
-import { isForeignKeyViolation, isUniqueConflict } from "../../lib/errors.js"
+import {
+  isForeignKeyViolation,
+  isRecordNotFound,
+  isUniqueConflict,
+} from "../../lib/errors.js"
 import {
   getServiceImageStorage,
   ServiceImageStorageError,
@@ -7,6 +11,7 @@ import {
 import { servicesRepository } from "./services.repository.js"
 import {
   validateServiceInput,
+  validatePricingTemplateInput,
   type ServiceInput,
   type ServicePersistenceInput,
 } from "./services.schema.js"
@@ -179,6 +184,35 @@ export const servicesService = {
 
   async getPricingTemplates() {
     return servicesRepository.findPricingTemplates()
+  },
+
+  async updatePricingTemplate(id: string, body: unknown) {
+    const parsed = validatePricingTemplateInput(body)
+    if (!parsed.value) throw new ServicesError(400, parsed.error)
+    try {
+      return await servicesRepository.updatePricingTemplate(id, parsed.value)
+    } catch (error) {
+      if (isRecordNotFound(error))
+        throw new ServicesError(404, "Pricing template not found")
+      if (isUniqueConflict(error))
+        throw new ServicesError(
+          409,
+          "A pricing template with this name already exists",
+        )
+      throw error
+    }
+  },
+
+  async deletePricingTemplate(id: string) {
+    const result = await servicesRepository.deletePricingTemplate(id)
+    if (result === "not-found")
+      throw new ServicesError(404, "Pricing template not found")
+    if (result === "in-use")
+      throw new ServicesError(
+        409,
+        "This pricing template is used by a service. Reassign or remove it from all services before deleting it.",
+      )
+    return { success: true }
   },
 
   async getById(id: string) {

@@ -1,6 +1,7 @@
 import type { Prisma } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import type {
+  PricingConfigurationInput,
   ServicePackageInput,
   ServicePersistenceInput,
 } from "./services.schema.js"
@@ -172,6 +173,40 @@ export const servicesRepository = {
   async findPricingTemplates() {
     return getPrisma()!.pricingTemplate.findMany({
       orderBy: [{ name: "asc" }],
+      include: {
+        services: {
+          select: { id: true, name: true },
+          orderBy: { name: "asc" },
+        },
+      },
+    })
+  },
+
+  async updatePricingTemplate(id: string, data: PricingConfigurationInput) {
+    return getPrisma()!.pricingTemplate.update({
+      where: { id },
+      data,
+      include: {
+        services: {
+          select: { id: true, name: true },
+          orderBy: { name: "asc" },
+        },
+      },
+    })
+  },
+
+  async deletePricingTemplate(id: string) {
+    return getPrisma()!.$transaction(async (tx) => {
+      // Lock the template so a concurrent service assignment cannot be detached by deletion.
+      await tx.$queryRaw`SELECT "id" FROM "PricingTemplate" WHERE "id" = ${id} FOR UPDATE`
+      const template = await tx.pricingTemplate.findUnique({
+        where: { id },
+        select: { _count: { select: { services: true } } },
+      })
+      if (!template) return "not-found" as const
+      if (template._count.services > 0) return "in-use" as const
+      await tx.pricingTemplate.delete({ where: { id } })
+      return "deleted" as const
     })
   },
 
@@ -229,6 +264,13 @@ export const servicesRepository = {
       const createdTemplate = pricingTemplate
         ? await tx.pricingTemplate.create({ data: pricingTemplate })
         : null
+
+      await tx.servicePackage.deleteMany({
+        where: {
+          serviceId: id,
+          id: { notIn: packages.flatMap((item) => (item.id ? [item.id] : [])) },
+        },
+      })
 
       if (packages.some((item) => item.isRecommended)) {
         await tx.servicePackage.updateMany({
