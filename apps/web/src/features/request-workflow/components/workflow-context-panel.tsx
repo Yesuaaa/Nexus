@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import { ChevronDown, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ConsultationLocation } from "./workflow-cards"
 import { cn } from "@/lib/utils"
 import type { WorkflowControls } from "../hooks/use-request-workflow"
 import type { Workflow, WorkflowAction } from "../model/workflow"
@@ -401,11 +402,13 @@ export function WorkflowContextPanel({
   controls,
   id,
   hidden = false,
+  onViewEvent,
 }: {
   workflow: Workflow
   controls: WorkflowControls
   id?: string
   hidden?: boolean
+  onViewEvent?: (entityId: string) => void
 }) {
   const detailsRef = useRef<HTMLDetailsElement>(null)
   useEffect(() => {
@@ -423,6 +426,14 @@ export function WorkflowContextPanel({
   const sectionId = (name: string) => `${id ?? "request-context"}-${name}`
   return (
     <aside
+      onClickCapture={(event) => {
+        if (!onViewEvent || !(event.target instanceof Element)) return
+        const link = event.target.closest('a[href^="#workflow-"]')
+        const href = link?.getAttribute("href")
+        if (!href) return
+        event.preventDefault()
+        onViewEvent(href.slice("#workflow-".length))
+      }}
       id={id}
       aria-hidden={hidden}
       inert={hidden}
@@ -736,6 +747,29 @@ export function WorkflowContextPanel({
                 id={sectionId("workflow-controls")}
                 title="Workflow controls"
               >
+                {workflow.consultations
+                  .filter((item) => item.status === "SCHEDULED")
+                  .map((consultation) => (
+                    <div
+                      key={consultation.id}
+                      className="space-y-1 rounded-lg border border-[#d8e1ef] p-3"
+                    >
+                      <p className="m-0 font-medium">Scheduled consultation</p>
+                      <p className="m-0">
+                        {new Date(consultation.startsAt).toLocaleString(
+                          "en-PH",
+                          { dateStyle: "medium", timeStyle: "short" },
+                        )}
+                      </p>
+                      <ConsultationLocation location={consultation.location} />
+                      <a
+                        href={`#workflow-${consultation.id}`}
+                        className="block text-[#294a9b] underline"
+                      >
+                        View consultation and reschedule options
+                      </a>
+                    </div>
+                  ))}
                 {workflow.permissions.manage &&
                   (workflow.state === "ON_HOLD" ? (
                     <ActionForm

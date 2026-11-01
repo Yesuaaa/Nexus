@@ -16,11 +16,19 @@ import {
   listConversations,
   type ConversationList,
   type RequestMessage,
+  type ConversationSummary,
 } from "../api/request-conversations-api"
 import { RequestConversation } from "../components/request-conversation"
 import { ConversationAvatar } from "../components/conversation-avatar"
 
 const conversationRailStorageKey = "nexus.messages.conversation-rail-collapsed"
+
+function orderConversations(rows: ConversationSummary[]) {
+  return [...rows].sort(
+    (a, b) =>
+      b.updatedAt.localeCompare(a.updatedAt) || b.id.localeCompare(a.id),
+  )
+}
 
 export function MessagesPage({ requestId }: { requestId: string | null }) {
   const account = usePortalAccount()
@@ -71,10 +79,17 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
         return previous
       return {
         ...previous,
-        conversations: [
-          { ...row, lastMessage: message, updatedAt: message.createdAt },
+        conversations: orderConversations([
+          {
+            ...row,
+            lastMessage: message,
+            updatedAt:
+              message.createdAt > row.updatedAt
+                ? message.createdAt
+                : row.updatedAt,
+          },
           ...previous.conversations.filter((item) => item.id !== id),
-        ],
+        ]),
       }
     })
   }, [])
@@ -96,12 +111,23 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
         )
         return {
           ...value,
-          conversations: [
-            ...value.conversations,
+          conversations: orderConversations([
+            ...value.conversations.map((row) => {
+              const old = previous.conversations.find(
+                (item) => item.id === row.id,
+              )
+              return old && old.updatedAt > row.updatedAt
+                ? {
+                    ...row,
+                    updatedAt: old.updatedAt,
+                    lastMessage: old.lastMessage,
+                  }
+                : row
+            }),
             ...previous.conversations.filter(
               (conversation) => !refreshedIds.has(conversation.id),
             ),
-          ],
+          ]),
           nextCursor: previous.nextCursor ?? value.nextCursor,
           unreadCount:
             value.unreadCount ??
@@ -351,7 +377,11 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
           )}
           {!loading &&
             result?.conversations.map((row) => {
-              const name = row.client.fullName || "Client"
+              const name = isClient
+                ? row.acceptedDepartment?.head?.fullName ||
+                  row.acceptedDepartment?.name ||
+                  "Specialist"
+                : row.client.fullName || "Client"
               const isSelected = requestId === row.id
               return (
                 <Link
