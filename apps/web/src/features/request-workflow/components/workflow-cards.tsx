@@ -7,25 +7,43 @@ import { Download, FileText, ShieldCheck } from "lucide-react"
 import { sileo } from "sileo"
 import { AttachmentPreview, attachmentAccept } from "./attachment-preview"
 
-export function ConsultationLocation({ location }: { location: string }) {
-  let href: string | null = null
+export function getConsultationMeetingUrl(location: string) {
   try {
     const url = new URL(location)
-    if (["https:", "http:"].includes(url.protocol)) href = url.href
+    return ["https:", "http:"].includes(url.protocol) ? url.href : null
   } catch {
-    /* In-person locations remain plain text. */
+    return null
   }
-  return href ? (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="break-all font-medium text-[#294a9b] underline underline-offset-2"
-    >
-      Join consultation
-    </a>
-  ) : (
-    <span className="break-words">{location}</span>
+}
+
+export function ConsultationLocation({
+  location,
+  className,
+  showJoinButton = true,
+}: {
+  location: string
+  className?: string
+  showJoinButton?: boolean
+}) {
+  const href = getConsultationMeetingUrl(location)
+  if (href && showJoinButton)
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={cn(
+          "inline-flex w-fit items-center justify-center rounded-lg bg-[#203f8c] px-3 py-2 text-[10px] font-semibold text-white no-underline shadow-[0_4px_10px_rgb(32_63_140_/_18%)] transition-colors hover:bg-[#172f70]",
+          className,
+        )}
+      >
+        Join consultation
+      </a>
+    )
+  return (
+    <span className={cn("break-words", className)}>
+      {href ? "Online meeting" : location}
+    </span>
   )
 }
 import { Button } from "@/components/ui/button"
