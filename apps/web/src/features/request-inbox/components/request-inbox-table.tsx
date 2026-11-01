@@ -1,4 +1,4 @@
-import { Eye } from "lucide-react"
+import { Eye, MessageSquare, Trash2 } from "lucide-react"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { Button } from "@/components/ui/button"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
@@ -9,7 +9,8 @@ import { cn } from "@/lib/utils"
 import type { InboxRequest } from "../api/request-inbox-api"
 
 const grid =
-  "grid grid-cols-[minmax(180px,1.6fr)_minmax(150px,1.2fr)_minmax(120px,1fr)_110px_44px] items-center gap-4 @max-[800px]:grid-cols-[minmax(0,1fr)_44px]"
+  "grid grid-cols-[minmax(180px,1.6fr)_minmax(150px,1.2fr)_minmax(110px,1fr)_minmax(120px,1fr)_112px] items-center gap-4 @max-[800px]:grid-cols-[minmax(0,1fr)_auto]"
+
 function rowClass(_request: InboxRequest, _index: number, isLast: boolean) {
   return cn(
     grid,
@@ -17,8 +18,19 @@ function rowClass(_request: InboxRequest, _index: number, isLast: boolean) {
     isLast && "rounded-b-[7px] border-b-0",
   )
 }
+
 function requestKey(request: InboxRequest) {
   return request.id
+}
+
+function StatusCell({ request }: { request: InboxRequest }) {
+  if (request.status === "SUBMITTED")
+    return (
+      <span className="inline-flex items-center rounded-md bg-[#fff1d6] px-2 py-0.5 text-[10px] font-medium text-[#8a5a00]">
+        Pending
+      </span>
+    )
+  return <BookingStatusPill status={request.status} />
 }
 
 export function RequestInboxTable({
@@ -29,6 +41,8 @@ export function RequestInboxTable({
   quickKey,
   onRetry,
   onView,
+  onGoToChat,
+  onDelete,
 }: {
   requests: InboxRequest[]
   loading: boolean
@@ -37,6 +51,8 @@ export function RequestInboxTable({
   quickKey: string
   onRetry: () => void
   onView: (request: InboxRequest) => void
+  onGoToChat: (request: InboxRequest) => void
+  onDelete: (request: InboxRequest) => void
 }) {
   return (
     <div
@@ -136,7 +152,7 @@ export function RequestInboxTable({
                 role="cell"
                 className="@max-[800px]:col-span-2 @max-[800px]:row-start-3"
               >
-                <BookingStatusPill status={request.status} />
+                <StatusCell request={request} />
               </div>
               <div
                 role="cell"
@@ -151,7 +167,7 @@ export function RequestInboxTable({
               </div>
               <div
                 role="cell"
-                className="justify-self-end @max-[800px]:col-start-2 @max-[800px]:row-start-1"
+                className="flex items-center justify-start gap-2 @max-[800px]:col-start-2 @max-[800px]:row-start-1 @max-[800px]:justify-self-end"
               >
                 <button
                   type="button"
@@ -159,12 +175,36 @@ export function RequestInboxTable({
                   aria-label={`Review request ${request.id}`}
                   className={cn(
                     rowActionButton,
-                    "text-[#203f8c] max-[560px]:size-11",
+                    "text-[#52627a] max-[560px]:size-11",
                   )}
                   onClick={() => onView(request)}
                 >
                   <Eye size={16} aria-hidden="true" />
                   <HoverTooltip>Review request</HoverTooltip>
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Go to chat for request ${request.id}`}
+                  className={cn(
+                    rowActionButton,
+                    "text-[#52627a] max-[560px]:size-11",
+                  )}
+                  onClick={() => onGoToChat(request)}
+                >
+                  <MessageSquare size={16} aria-hidden="true" />
+                  <HoverTooltip>Go to chat</HoverTooltip>
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Delete request ${request.id}`}
+                  className={cn(
+                    rowActionButton,
+                    "text-[#b42318] max-[560px]:size-11",
+                  )}
+                  onClick={() => onDelete(request)}
+                >
+                  <Trash2 size={16} aria-hidden="true" />
+                  <HoverTooltip>Delete request</HoverTooltip>
                 </button>
               </div>
             </>

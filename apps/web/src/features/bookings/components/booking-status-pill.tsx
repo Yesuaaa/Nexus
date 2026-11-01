@@ -4,9 +4,11 @@ import { bookingStatuses } from "../model/booking-status"
 
 export function BookingStatusPill({
   status,
+  label,
 }: {
   status: ServiceRequestStatus
+  label?: string
 }) {
   const info = bookingStatuses[status]
-  return <Pill className={info.className}>{info.label}</Pill>
+  return <Pill className={info.className}>{label ?? info.label}</Pill>
 }
