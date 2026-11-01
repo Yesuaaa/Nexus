@@ -52,7 +52,9 @@ export function WorkflowCard({
         <h3 className="m-0 text-xs font-semibold text-[#182235]">{title}</h3>
         {status && <WorkflowBadge value={status} />}
       </header>
-      <div className="space-y-3 leading-5 text-[#52627a]">{children}</div>
+      <div className="flex flex-col gap-4 leading-5 text-[#52627a]">
+        {children}
+      </div>
     </section>
   )
 }

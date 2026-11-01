@@ -45,3 +45,15 @@ export async function acceptInboxRequest(id: string): Promise<InboxRequest> {
   )
   return result.serviceRequest
 }
+export async function declineInboxRequest(id: string): Promise<InboxRequest> {
+  const result = await apiRequest<{ serviceRequest: InboxRequest }>(
+    `/api/request-inbox/${encodeURIComponent(id)}/decline`,
+    { method: "POST" },
+  )
+  return result.serviceRequest
+}
+export async function deleteInboxRequest(id: string): Promise<void> {
+  await apiRequest<unknown>(`/api/request-inbox/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  })
+}

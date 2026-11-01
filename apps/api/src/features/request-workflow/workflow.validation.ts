@@ -2,6 +2,22 @@ import { ServiceRequestsError } from "../service-requests/service-requests.servi
 
 export type WorkflowCommand =
   | {
+      type: "RESPOND_CONSULTATION_RESCHEDULE"
+      consultationId: string
+      requestEventId: string
+      approve: boolean
+      startsAt: string
+      endsAt: string
+      location: string
+      note: string
+    }
+  | {
+      type: "REQUEST_CONSULTATION_RESCHEDULE"
+      consultationId: string
+      startsAt: string
+      note: string
+    }
+  | {
       type: "REQUEST_REQUIREMENT"
       title: string
       details: string
@@ -179,6 +195,23 @@ export function parseAction(input: unknown) {
         note: note(),
       }
       break
+    case "RESPOND_CONSULTATION_RESCHEDULE":
+      command = {
+        type: body.type,
+        consultationId: id("consultationId"),
+        requestEventId: id("requestEventId"),
+        approve: bool(body.approve),
+        startsAt: body.approve === true ? date(body.startsAt) : "",
+        endsAt: body.approve === true ? date(body.endsAt) : "",
+        location: textField(
+          body.location,
+          "location",
+          1000,
+          body.approve !== true,
+        ),
+        note: note(),
+      }
+      break
     case "SCHEDULE_CONSULTATION":
       command = {
         type: body.type,
@@ -186,6 +219,14 @@ export function parseAction(input: unknown) {
         endsAt: date(body.endsAt),
         location: textField(body.location, "location", 1000),
         notes: textField(body.notes, "notes", 2000, true),
+      }
+      break
+    case "REQUEST_CONSULTATION_RESCHEDULE":
+      command = {
+        type: body.type,
+        consultationId: id("consultationId"),
+        startsAt: date(body.startsAt),
+        note: note(),
       }
       break
     case "COMPLETE_CONSULTATION":

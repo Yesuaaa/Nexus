@@ -1,3 +1,5 @@
+"use client"
+
 import Image from "next/image"
 import { useRef, useState } from "react"
 import {
@@ -44,6 +46,7 @@ import {
   type ServicePackage,
 } from "../api/services-api"
 import { ServiceIcon, serviceIconOptions } from "./service-icon"
+import { needsAmount, PriceFields } from "./service-price-fields"
 
 const fieldClass = "grid min-w-0 gap-1.5"
 const labelClass = "text-xs font-semibold"
@@ -54,13 +57,17 @@ const menuContentClass =
   "z-[130] border-0 bg-white p-1 ring-0 shadow-[0_8px_24px_rgb(18_36_73_/_14%)]"
 const imageTypes = ["image/jpeg", "image/png", "image/webp"]
 const maxImageBytes = 2 * 1024 * 1024
-const formSteps = [
+const initialFormSteps = [
   { label: "Details", description: "Basic information and service image" },
   { label: "Benefits", description: "Client-facing value and outcomes" },
   { label: "Requirements", description: "Client needs and consultation" },
-  { label: "Pricing", description: "Pricing model and visibility" },
-  { label: "Packages", description: "Optional service packages" },
+  {
+    label: "Options",
+    description: "Choose single pricing or multiple packages",
+  },
 ] as const
+
+type ServiceOffering = "pricing" | "packages"
 
 type BenefitDraft = {
   id: string
@@ -75,21 +82,6 @@ function newBenefit(): BenefitDraft {
     description: "",
   }
 }
-
-const pricingModels: { value: PricingModel; label: string }[] = [
-  { value: "FIXED", label: "Fixed Price" },
-  { value: "STARTING", label: "Starting Price" },
-  { value: "CUSTOM_QUOTE", label: "Custom Quotation" },
-  { value: "RECURRING", label: "Recurring" },
-  { value: "HOURLY", label: "Hourly Rate" },
-]
-
-const billingIntervals: { value: BillingInterval; label: string }[] = [
-  { value: "WEEKLY", label: "Weekly" },
-  { value: "MONTHLY", label: "Monthly" },
-  { value: "QUARTERLY", label: "Quarterly" },
-  { value: "YEARLY", label: "Yearly" },
-]
 
 type PackageDraft = Omit<
   ServicePackage,
@@ -127,112 +119,18 @@ function newPackage(index: number): PackageDraft {
   }
 }
 
-function needsAmount(model: PricingModel) {
-  return model !== "CUSTOM_QUOTE"
-}
-
-function PriceFields({
-  model,
-  amount,
-  billingInterval,
-  onModelChange,
-  onAmountChange,
-  onBillingIntervalChange,
-  idPrefix,
-}: {
-  model: PricingModel
-  amount: string
-  billingInterval: BillingInterval | null
-  onModelChange: (model: PricingModel) => void
-  onAmountChange: (amount: string) => void
-  onBillingIntervalChange: (interval: BillingInterval | null) => void
-  idPrefix: string
-}) {
-  return (
-    <div className="grid grid-cols-2 gap-3 max-[560px]:grid-cols-1">
-      <div className={fieldClass}>
-        <label className={labelClass} htmlFor={`${idPrefix}-model`}>
-          Pricing Model
-        </label>
-        <Select
-          value={model}
-          onValueChange={(value) => onModelChange(value as PricingModel)}
-        >
-          <SelectTrigger
-            id={`${idPrefix}-model`}
-            className={cn(inputClass, "h-10 shadow-none")}
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className={menuContentClass}>
-            {pricingModels.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      {needsAmount(model) && (
-        <div className={fieldClass}>
-          <label className={labelClass} htmlFor={`${idPrefix}-amount`}>
-            {model === "HOURLY" ? "Hourly Rate" : "Amount"} (PHP)
-          </label>
-          <input
-            id={`${idPrefix}-amount`}
-            type="number"
-            min="0.01"
-            max="99999999999.99"
-            step="0.01"
-            className={cn(inputClass, "h-10")}
-            value={amount}
-            onChange={(event) => onAmountChange(event.target.value)}
-            placeholder="0.00"
-            required
-          />
-        </div>
-      )}
-      {model === "RECURRING" && (
-        <div className={fieldClass}>
-          <label className={labelClass} htmlFor={`${idPrefix}-interval`}>
-            Billing Interval
-          </label>
-          <Select
-            value={billingInterval ?? ""}
-            onValueChange={(value) =>
-              onBillingIntervalChange(value as BillingInterval)
-            }
-          >
-            <SelectTrigger
-              id={`${idPrefix}-interval`}
-              className={cn(inputClass, "h-10 shadow-none")}
-            >
-              <SelectValue placeholder="Select interval" />
-            </SelectTrigger>
-            <SelectContent className={menuContentClass}>
-              {billingIntervals.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-    </div>
-  )
-}
-
 export function ServiceFormDialog({
   service,
   departments,
   pricingTemplates,
+  onManagePricingTemplates,
   onClose,
   onSaved,
 }: {
   service: Service | null
   departments: Department[]
   pricingTemplates: PricingTemplate[]
+  onManagePricingTemplates?: (id?: string) => void
   onClose: () => void
   onSaved: (service: Service) => void
 }) {
@@ -279,9 +177,15 @@ export function ServiceFormDialog({
       description,
     })) ?? [],
   )
-  const [pricingChoice, setPricingChoice] = useState(
+  const [requestedPricingChoice, setPricingChoice] = useState(
     service?.pricingTemplateId ?? "none",
   )
+  const pricingChoice =
+    requestedPricingChoice === "new" ||
+    requestedPricingChoice === "none" ||
+    pricingTemplates.some((template) => template.id === requestedPricingChoice)
+      ? requestedPricingChoice
+      : "none"
   const [templateName, setTemplateName] = useState(
     service ? `${service.name} Pricing` : "",
   )
@@ -293,10 +197,35 @@ export function ServiceFormDialog({
   const [packages, setPackages] = useState<PackageDraft[]>(
     service?.packages.map(packageDraft) ?? [],
   )
+  const [offering, setOffering] = useState<ServiceOffering | null>(
+    service ? (service.packages.length > 0 ? "packages" : "pricing") : null,
+  )
   const [currentStep, setCurrentStep] = useState(0)
   const [error, setError] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const isEditing = Boolean(service)
+  const formSteps = [
+    ...initialFormSteps,
+    offering === "packages"
+      ? { label: "Packages", description: "Configure multiple service options" }
+      : offering === "pricing"
+        ? {
+            label: "Pricing",
+            description: "Configure one service pricing option",
+          }
+        : {
+            label: "Setup",
+            description: "Configure your selected service option",
+          },
+  ]
+
+  function selectOffering(value: ServiceOffering) {
+    setOffering(value)
+    setError("")
+    if (value === "packages" && packages.length === 0) {
+      setPackages([newPackage(0), newPackage(1)])
+    }
+  }
 
   function updatePackage(id: string, update: Partial<PackageDraft>) {
     setPackages((current) =>
@@ -359,15 +288,21 @@ export function ServiceFormDialog({
           return `Enter a description for key benefit ${index + 1}`
       }
     }
-    if (step === 3 && pricingChoice === "new") {
+    if (step === 3 && !offering) return "Choose Pricing or Packages to continue"
+    if (step === 4 && offering === "pricing" && pricingChoice === "new") {
       if (templateName.trim().length < 2)
         return "Enter a name for the pricing template"
-      if (needsAmount(pricingModel) && Number(amount) <= 0)
+      if (
+        needsAmount(pricingModel) &&
+        (!Number.isFinite(Number(amount)) || Number(amount) <= 0)
+      )
         return "Enter a valid service price"
       if (pricingModel === "RECURRING" && !billingInterval)
         return "Select a billing interval"
     }
-    if (step === 4) {
+    if (step === 4 && offering === "packages") {
+      if (packages.length < 2)
+        return "Add at least two packages, or choose Pricing for a single option"
       for (const [index, servicePackage] of packages.entries()) {
         if (servicePackage.name.trim().length < 2)
           return `Enter a name for package ${index + 1}`
@@ -382,7 +317,8 @@ export function ServiceFormDialog({
         }
         if (
           needsAmount(servicePackage.pricingModel) &&
-          Number(servicePackage.amount) <= 0
+          (!Number.isFinite(Number(servicePackage.amount)) ||
+            Number(servicePackage.amount) <= 0)
         ) {
           return `Enter a valid price for package ${index + 1}`
         }
@@ -415,7 +351,7 @@ export function ServiceFormDialog({
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
     if (submitting) return
-    if (!isEditing && currentStep < formSteps.length - 1) {
+    if (currentStep < formSteps.length - 1) {
       goToNextStep()
       return
     }
@@ -453,11 +389,13 @@ export function ServiceFormDialog({
         description: description.trim(),
       })),
       pricingTemplateId:
-        pricingChoice === "none" || pricingChoice === "new"
+        offering !== "pricing" ||
+        pricingChoice === "none" ||
+        pricingChoice === "new"
           ? null
           : pricingChoice,
       pricingTemplate:
-        pricingChoice === "new"
+        offering === "pricing" && pricingChoice === "new"
           ? {
               name: templateName.trim(),
               pricingModel,
@@ -468,21 +406,23 @@ export function ServiceFormDialog({
               isPublic: isPricingPublic,
             }
           : null,
-      packages: packages.map(({ featuresText, isNew, ...servicePackage }) => ({
-        ...servicePackage,
-        ...(isNew ? { id: undefined } : {}),
-        includedFeatures: featuresText
-          .split("\n")
-          .map((feature) => feature.trim())
-          .filter(Boolean),
-        amount: needsAmount(servicePackage.pricingModel)
-          ? Number(servicePackage.amount)
-          : null,
-        billingInterval:
-          servicePackage.pricingModel === "RECURRING"
-            ? servicePackage.billingInterval
+      packages: (offering === "packages" ? packages : []).map(
+        ({ featuresText, isNew, ...servicePackage }) => ({
+          ...servicePackage,
+          ...(isNew ? { id: undefined } : {}),
+          includedFeatures: featuresText
+            .split("\n")
+            .map((feature) => feature.trim())
+            .filter(Boolean),
+          amount: needsAmount(servicePackage.pricingModel)
+            ? Number(servicePackage.amount)
             : null,
-      })),
+          billingInterval:
+            servicePackage.pricingModel === "RECURRING"
+              ? servicePackage.billingInterval
+              : null,
+        }),
+      ),
     }
 
     setSubmitting(true)
@@ -576,7 +516,9 @@ export function ServiceFormDialog({
                       setError("")
                       setCurrentStep(index)
                     }}
-                    disabled={!isEditing || submitting}
+                    disabled={
+                      !isEditing || submitting || (index === 4 && !offering)
+                    }
                     aria-current={isCurrent ? "step" : undefined}
                   >
                     <span
@@ -1063,6 +1005,79 @@ export function ServiceFormDialog({
               {currentStep === 3 && (
                 <section
                   className="grid gap-3"
+                  aria-labelledby="service-options-heading"
+                >
+                  <div>
+                    <h3
+                      id="service-options-heading"
+                      className="m-0 text-sm font-[650]"
+                    >
+                      How will this service be offered?
+                    </h3>
+                    <p className="mt-1 mb-0 text-[11px] text-[#738096]">
+                      Choose one pricing option or let clients choose between
+                      multiple packages.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 max-[560px]:grid-cols-1">
+                    {(
+                      [
+                        {
+                          value: "pricing",
+                          label: "Pricing",
+                          description:
+                            "One service option with a single pricing configuration.",
+                        },
+                        {
+                          value: "packages",
+                          label: "Packages",
+                          description:
+                            "Two or more service options, each with its own features and pricing.",
+                        },
+                      ] as const
+                    ).map((option) => (
+                      <label
+                        key={option.value}
+                        className={cn(
+                          "flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors focus-within:ring-2 focus-within:ring-[#203f8c]",
+                          offering === option.value
+                            ? "border-[#203f8c] bg-[#f1f5fc]"
+                            : "border-[#d6dfec] bg-background hover:bg-[#f8fafc]",
+                        )}
+                      >
+                        <input
+                          type="radio"
+                          name="service-offering"
+                          value={option.value}
+                          checked={offering === option.value}
+                          onChange={() => selectOffering(option.value)}
+                          className="mt-0.5 accent-[#203f8c]"
+                        />
+                        <span className="grid gap-1">
+                          <span className="text-sm font-semibold">
+                            {option.label}
+                          </span>
+                          <span className="text-xs leading-5 text-[#738096]">
+                            {option.description}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  {offering === "pricing" &&
+                    Boolean(service?.packages.length) && (
+                      <p className="m-0 text-xs leading-5 text-[#738096]">
+                        Saving with Pricing will replace this service&apos;s
+                        existing packages with one pricing option. Existing
+                        requests keep their agreed pricing.
+                      </p>
+                    )}
+                </section>
+              )}
+
+              {currentStep === 4 && offering === "pricing" && (
+                <section
+                  className="grid gap-3"
                   aria-labelledby="service-pricing-heading"
                 >
                   <div>
@@ -1106,6 +1121,26 @@ export function ServiceFormDialog({
                       </SelectContent>
                     </Select>
                   </div>
+                  {onManagePricingTemplates && (
+                    <button
+                      type="button"
+                      className={cn(
+                        buttonClass,
+                        "justify-self-start border-[#d7e0ee] text-[#24437e] hover:bg-[#f1f5fc]",
+                      )}
+                      onClick={() =>
+                        onManagePricingTemplates(
+                          pricingChoice === "new" || pricingChoice === "none"
+                            ? undefined
+                            : pricingChoice,
+                        )
+                      }
+                    >
+                      {pricingChoice === "new" || pricingChoice === "none"
+                        ? "Manage pricing templates"
+                        : "Customize template"}
+                    </button>
+                  )}
                   {pricingChoice === "new" && (
                     <div className="grid gap-3 rounded-lg border border-[#dfe6ef] bg-[#f8fafc] p-3">
                       <div className={fieldClass}>
@@ -1153,7 +1188,7 @@ export function ServiceFormDialog({
                 </section>
               )}
 
-              {currentStep === 4 && (
+              {currentStep === 4 && offering === "packages" && (
                 <section
                   className="grid gap-3"
                   aria-labelledby="service-packages-heading"
@@ -1167,15 +1202,15 @@ export function ServiceFormDialog({
                         Service Packages
                       </h3>
                       <p className="mt-1 mb-0 text-[11px] text-[#738096]">
-                        Packages are optional and appear publicly in display
-                        order.
+                        Add at least two options for clients to choose from.
+                        Active packages appear publicly in display order.
                       </p>
                     </div>
                     <button
                       type="button"
                       className={cn(
                         buttonClass,
-                        "gap-1.5 border-[#d7e0ee] bg-white text-[#24437e] hover:bg-[#f1f5fc]",
+                        "shrink-0 gap-1.5 whitespace-nowrap border-[#d7e0ee] bg-white text-[#24437e] hover:bg-[#f1f5fc]",
                       )}
                       onClick={() =>
                         setPackages((current) => [
@@ -1183,6 +1218,7 @@ export function ServiceFormDialog({
                           newPackage(current.length),
                         ])
                       }
+                      disabled={packages.length >= 20}
                     >
                       <Plus size={14} aria-hidden="true" /> Add Package
                     </button>
@@ -1201,21 +1237,19 @@ export function ServiceFormDialog({
                         <h4 className="m-0 text-xs font-[650]">
                           Package {index + 1}
                         </h4>
-                        {servicePackage.isNew && (
-                          <button
-                            type="button"
-                            className="inline-flex cursor-pointer items-center gap-1 border-0 bg-transparent text-xs font-semibold text-[#b4234d]"
-                            onClick={() =>
-                              setPackages((current) =>
-                                current.filter(
-                                  (item) => item.id !== servicePackage.id,
-                                ),
-                              )
-                            }
-                          >
-                            <Trash2 size={13} aria-hidden="true" /> Remove
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          className="inline-flex cursor-pointer items-center gap-1 border-0 bg-transparent text-xs font-semibold text-[#b4234d]"
+                          onClick={() =>
+                            setPackages((current) =>
+                              current.filter(
+                                (item) => item.id !== servicePackage.id,
+                              ),
+                            )
+                          }
+                        >
+                          <Trash2 size={13} aria-hidden="true" /> Remove
+                        </button>
                       </div>
                       <div className="grid grid-cols-2 gap-3 max-[560px]:grid-cols-1">
                         <div className={fieldClass}>
@@ -1388,17 +1422,6 @@ export function ServiceFormDialog({
             </div>
             <div className="flex gap-2">
               <button
-                type="button"
-                className={cn(
-                  buttonClass,
-                  "border-[#d7e0ee] bg-background text-[#24437e] hover:enabled:bg-[#f1f5fc]",
-                )}
-                onClick={onClose}
-                disabled={submitting}
-              >
-                Cancel
-              </button>
-              <button
                 type="submit"
                 className={cn(
                   buttonClass,
@@ -1406,9 +1429,10 @@ export function ServiceFormDialog({
                 )}
                 disabled={submitting || departments.length === 0}
               >
-                {!isEditing && currentStep < formSteps.length - 1 ? (
+                {currentStep < formSteps.length - 1 ? (
                   <>
-                    Continue <ChevronRight size={14} aria-hidden="true" />
+                    {isEditing ? "Next" : "Continue"}{" "}
+                    <ChevronRight size={14} aria-hidden="true" />
                   </>
                 ) : submitting ? (
                   "Saving..."

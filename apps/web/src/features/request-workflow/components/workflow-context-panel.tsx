@@ -1,8 +1,21 @@
 "use client"
 
 import { useEffect, useRef, useState, type ReactNode } from "react"
-import { ChevronDown, Plus, Trash2 } from "lucide-react"
+import {
+  CalendarDays,
+  ChevronDown,
+  Clock3,
+  ExternalLink,
+  MapPin,
+  Plus,
+  Trash2,
+  Video,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+  ConsultationLocation,
+  getConsultationMeetingUrl,
+} from "./workflow-cards"
 import { cn } from "@/lib/utils"
 import type { WorkflowControls } from "../hooks/use-request-workflow"
 import type { Workflow, WorkflowAction } from "../model/workflow"
@@ -54,6 +67,7 @@ function ActionForm({
   onComplete,
   onCancel,
   inline = false,
+  destructive = false,
 }: {
   controls: WorkflowControls
   action: (data: FormData) => WorkflowAction
@@ -63,8 +77,14 @@ function ActionForm({
   onComplete?: () => void
   onCancel?: () => void
   inline?: boolean
+  destructive?: boolean
 }) {
   if (readOnly) return <div>{children}</div>
+  const submitClass = cn(
+    workflowButton,
+    destructive &&
+      "border border-[#b42318] bg-background text-[#b42318] hover:bg-[#fef3f2] hover:text-[#912018] disabled:opacity-50",
+  )
   return (
     <form
       className="space-y-3"
@@ -90,12 +110,12 @@ function ActionForm({
               Cancel
             </Button>
           )}
-          <Button className={workflowButton} disabled={controls.busy}>
+          <Button className={submitClass} disabled={controls.busy}>
             {controls.busy ? "Saving…" : label}
           </Button>
         </div>
       ) : (
-        <Button className={workflowButton} disabled={controls.busy}>
+        <Button className={submitClass} disabled={controls.busy}>
           {controls.busy ? "Saving…" : label}
         </Button>
       )}
@@ -401,11 +421,13 @@ export function WorkflowContextPanel({
   controls,
   id,
   hidden = false,
+  onViewEvent,
 }: {
   workflow: Workflow
   controls: WorkflowControls
   id?: string
   hidden?: boolean
+  onViewEvent?: (entityId: string) => void
 }) {
   const detailsRef = useRef<HTMLDetailsElement>(null)
   useEffect(() => {
@@ -423,6 +445,14 @@ export function WorkflowContextPanel({
   const sectionId = (name: string) => `${id ?? "request-context"}-${name}`
   return (
     <aside
+      onClickCapture={(event) => {
+        if (!onViewEvent || !(event.target instanceof Element)) return
+        const link = event.target.closest('a[href^="#workflow-"]')
+        const href = link?.getAttribute("href")
+        if (!href) return
+        event.preventDefault()
+        onViewEvent(href.slice("#workflow-".length))
+      }}
       id={id}
       aria-hidden={hidden}
       inert={hidden}
@@ -561,6 +591,119 @@ export function WorkflowContextPanel({
               </ul>
             </WorkflowDisclosure>
           )}
+          {(workflow.permissions.manage || workflow.permissions.isClient) &&
+            workflow.consultations.some(
+              (item) => item.status === "SCHEDULED",
+            ) && (
+              <WorkflowDisclosure
+                id={sectionId("scheduled-consultation")}
+                title="Scheduled consultation"
+              >
+                {workflow.consultations
+                  .filter((item) => item.status === "SCHEDULED")
+                  .map((consultation) => {
+                    const startsAt = new Date(consultation.startsAt)
+                    const endsAt = new Date(consultation.endsAt)
+                    const meetingUrl = getConsultationMeetingUrl(
+                      consultation.location,
+                    )
+                    return (
+                      <div
+                        key={consultation.id}
+                        className="overflow-hidden rounded-xl border border-[#1b367a] bg-[linear-gradient(145deg,#2b5bbb,#203f8c)] text-white shadow-[0_8px_20px_rgb(32_63_140_/_20%)]"
+                      >
+                        <div className="flex items-start justify-between gap-3 border-b border-white/15 px-3.5 py-3">
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white/15 text-white shadow-[0_4px_10px_rgb(12_35_93_/_20%)]">
+                              <CalendarDays size={15} aria-hidden="true" />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="m-0 truncate text-[11px] font-semibold text-white">
+                                Consultation appointment
+                              </p>
+                              <p className="m-0 text-[10px] text-blue-100">
+                                Confirmed schedule
+                              </p>
+                            </div>
+                          </div>
+                          <span className="shrink-0 rounded-full border border-white/20 bg-white/15 px-2 py-1 text-[9px] font-semibold tracking-[0.04em] text-white uppercase">
+                            Scheduled
+                          </span>
+                        </div>
+                        <div className="space-y-3 px-3.5 py-3 text-[11px] text-blue-50">
+                          <div className="flex items-start gap-2.5">
+                            <CalendarDays
+                              size={14}
+                              aria-hidden="true"
+                              className="mt-0.5 shrink-0 text-blue-100"
+                            />
+                            <div>
+                              <p className="m-0 font-medium text-white">
+                                {startsAt.toLocaleDateString("en-PH", {
+                                  weekday: "short",
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                })}
+                              </p>
+                              <p className="m-0 flex items-center gap-1 text-[10px] text-blue-100">
+                                <Clock3 size={11} aria-hidden="true" />
+                                {startsAt.toLocaleTimeString("en-PH", {
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                })}{" "}
+                                –{" "}
+                                {endsAt.toLocaleTimeString("en-PH", {
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                })}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-start gap-2.5">
+                            <MapPin
+                              size={14}
+                              aria-hidden="true"
+                              className="mt-0.5 shrink-0 text-blue-100"
+                            />
+                            <div className="min-w-0 break-words">
+                              <p className="m-0 text-[10px] text-blue-100">
+                                Location
+                              </p>
+                              <ConsultationLocation
+                                location={consultation.location}
+                                className="text-white"
+                                showJoinButton={false}
+                              />
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {meetingUrl && (
+                              <a
+                                href={meetingUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label="Join consultation"
+                                title="Join consultation"
+                                className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white p-0 text-[#203f8c] transition-colors hover:bg-blue-50"
+                              >
+                                <Video size={12} aria-hidden="true" />
+                              </a>
+                            )}
+                            <a
+                              href={`#workflow-${consultation.id}`}
+                              className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg border border-white/35 bg-white/10 px-2.5 py-2 text-center text-[9px] leading-4 font-semibold text-white transition-colors hover:bg-white/20"
+                            >
+                              View details and reschedule
+                              <ExternalLink size={12} aria-hidden="true" />
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+              </WorkflowDisclosure>
+            )}
           {/* Workflow action forms are opened from the + menu.
           {workflow.permissions.manage &&
             (beforeApproval ||
@@ -777,6 +920,7 @@ export function WorkflowContextPanel({
                 <ActionForm
                   controls={controls}
                   label="Cancel request"
+                  destructive
                   action={(data) => ({
                     type: "CANCEL",
                     note: String(data.get("note")),

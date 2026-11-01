@@ -5,6 +5,7 @@ import type { Department } from "../src/features/departments/api/departments-api
 import type { Employee } from "../src/features/employees/api/employees-api"
 import type {
   PricingTemplate,
+  PricingConfigurationInput,
   Service,
   ServiceInput,
 } from "../src/features/services/api/services-api"
@@ -598,7 +599,61 @@ export async function mockApi(
       return
     }
     if (pathname === "/api/services/pricing-templates" && method === "GET") {
-      await route.fulfill({ json: { pricingTemplates } })
+      await route.fulfill({
+        json: {
+          pricingTemplates: pricingTemplates.map((template) => ({
+            ...template,
+            services: services
+              .filter((service) => service.pricingTemplateId === template.id)
+              .map(({ id, name }) => ({ id, name })),
+          })),
+        },
+      })
+      return
+    }
+    const pricingTemplateMatch = pathname.match(
+      /^\/api\/services\/pricing-templates\/([^/]+)$/,
+    )
+    if (pricingTemplateMatch && ["PUT", "DELETE"].includes(method)) {
+      const template = pricingTemplates.find(
+        (item) => item.id === pricingTemplateMatch[1],
+      )
+      if (!template) {
+        await route.fulfill({
+          status: 404,
+          json: { error: "Pricing template not found" },
+        })
+        return
+      }
+      const linkedServices = services.filter(
+        (service) => service.pricingTemplateId === template.id,
+      )
+      if (method === "DELETE") {
+        if (linkedServices.length > 0) {
+          await route.fulfill({
+            status: 409,
+            json: { error: "Reassign this template before deleting it." },
+          })
+          return
+        }
+        pricingTemplates.splice(pricingTemplates.indexOf(template), 1)
+        await route.fulfill({ json: { success: true } })
+      } else {
+        const body = request.postDataJSON() as PricingConfigurationInput
+        Object.assign(template, body, {
+          amount: body.amount?.toFixed(2) ?? null,
+        })
+        for (const service of linkedServices)
+          service.pricingTemplate = { ...template }
+        await route.fulfill({
+          json: {
+            pricingTemplate: {
+              ...template,
+              services: linkedServices.map(({ id, name }) => ({ id, name })),
+            },
+          },
+        })
+      }
       return
     }
     if (pathname === "/api/services" && method === "POST") {

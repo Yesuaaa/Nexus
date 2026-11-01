@@ -172,6 +172,8 @@ test(
         const protectedRoutes = [
           ["GET", "/services"],
           ["GET", "/services/pricing-templates"],
+          ["PUT", "/services/pricing-templates/missing"],
+          ["DELETE", "/services/pricing-templates/missing"],
           ["GET", "/services/missing"],
           ["POST", "/services"],
           ["PUT", "/services/missing"],
@@ -304,6 +306,9 @@ test(
           }
         }
         subtest.after(async () => {
+          await prisma.serviceRequest.deleteMany({
+            where: { serviceId: service.id },
+          })
           await prisma.service.deleteMany({ where: { id: service.id } })
         })
         assert.deepEqual(
@@ -354,6 +359,56 @@ test(
         )
         assert.equal(storedServiceImages.has("services/test-1.png"), false)
         assert.equal(storedServiceImages.has("services/test-3.png"), true)
+        const historicalRequest = await prisma.serviceRequest.create({
+          data: {
+            clientId: "user",
+            serviceId: service.id,
+            packageId: createdPackage.id,
+            title: "Previously booked package",
+            packageName: "Starter",
+            pricingModel: "FIXED",
+            agreedPrice: 7500,
+            currency: "PHP",
+          },
+        })
+        const singlePricing = await request(`/services/${service.id}`, "PUT", {
+          ...input,
+          imageDataUrl: null,
+          pricingTemplate: null,
+          pricingTemplateId: service.pricingTemplate.id,
+          packages: [],
+        })
+        assert.equal(singlePricing.status, 200)
+        const singlePricingService = (await singlePricing.json()) as {
+          service: { packages: { id: string }[]; pricingTemplateId: string }
+        }
+        assert.deepEqual(singlePricingService.service.packages, [])
+        assert.equal(
+          singlePricingService.service.pricingTemplateId,
+          service.pricingTemplate.id,
+        )
+        assert.equal(
+          await prisma.servicePackage.count({
+            where: { serviceId: service.id },
+          }),
+          0,
+        )
+        const reloadResponse = await request(`/services/${service.id}`)
+        assert.equal(reloadResponse.status, 200)
+        const reloaded = (await reloadResponse.json()) as {
+          service: { packages: { id: string }[] }
+        }
+        assert.deepEqual(reloaded.service.packages, [])
+        const preservedRequest = await prisma.serviceRequest.findUniqueOrThrow({
+          where: { id: historicalRequest.id },
+        })
+        assert.equal(preservedRequest.packageId, null)
+        assert.equal(preservedRequest.packageName, "Starter")
+        assert.equal(preservedRequest.pricingModel, "FIXED")
+        assert.equal(Number(preservedRequest.agreedPrice), 7500)
+        await prisma.serviceRequest.delete({
+          where: { id: historicalRequest.id },
+        })
         assert.equal(
           (await request(`/services/${service.id}`, "DELETE")).status,
           409,
@@ -390,6 +445,160 @@ test(
           (await request(`/services/${service.id}`, "GET")).status,
           404,
         )
+      },
+    )
+    await t.test(
+      "pricing templates can be customized and only unused templates can be deleted",
+      async (subtest) => {
+        const template = await prisma.pricingTemplate.create({
+          data: {
+            name: "Shared test pricing",
+            pricingModel: "FIXED",
+            currency: "PHP",
+            amount: 1000,
+            isPublic: true,
+          },
+        })
+        const otherTemplate = await prisma.pricingTemplate.create({
+          data: {
+            name: "Another test pricing",
+            pricingModel: "CUSTOM_QUOTE",
+            currency: "PHP",
+            isPublic: true,
+          },
+        })
+        const linkedServices = await Promise.all(
+          ["First", "Second"].map((name) =>
+            prisma.service.create({
+              data: {
+                name: `${name} template test service`,
+                description: "Template regression fixture",
+                pricingTemplateId: template.id,
+              },
+            }),
+          ),
+        )
+        const historicalRequest = await prisma.serviceRequest.create({
+          data: {
+            clientId: "user",
+            serviceId: linkedServices[0]!.id,
+            title: "Previously priced request",
+            pricingModel: "FIXED",
+            agreedPrice: 1000,
+            currency: "PHP",
+          },
+        })
+        subtest.after(async () => {
+          await prisma.serviceRequest.deleteMany({
+            where: { id: historicalRequest.id },
+          })
+          await prisma.service.deleteMany({
+            where: { id: { in: linkedServices.map((service) => service.id) } },
+          })
+          await prisma.pricingTemplate.deleteMany({
+            where: { id: { in: [template.id, otherTemplate.id] } },
+          })
+        })
+        const templatePath = `/services/pricing-templates/${template.id}`
+        const input = {
+          name: "Customized shared pricing",
+          pricingModel: "RECURRING",
+          currency: "PHP",
+          amount: 2500,
+          billingInterval: "MONTHLY",
+          isPublic: false,
+        }
+        for (const invalid of [
+          null,
+          [],
+          { ...input, name: " " },
+          { ...input, amount: -1 },
+          { ...input, billingInterval: null },
+          { ...input, isPublic: "true" },
+        ]) {
+          assert.equal(
+            (await request(templatePath, "PUT", invalid)).status,
+            400,
+          )
+        }
+        assert.equal(
+          (
+            await request(templatePath, "PUT", {
+              ...input,
+              name: otherTemplate.name,
+            })
+          ).status,
+          409,
+        )
+        assert.equal(
+          (await request("/services/pricing-templates/missing", "PUT", input))
+            .status,
+          404,
+        )
+        const update = await request(templatePath, "PUT", input)
+        assert.equal(update.status, 200)
+        const updated = (await update.json()) as {
+          pricingTemplate: {
+            id: string
+            name: string
+            amount: string
+            services: { id: string }[]
+          }
+        }
+        assert.equal(updated.pricingTemplate.id, template.id)
+        assert.equal(updated.pricingTemplate.amount, "2500")
+        assert.equal(updated.pricingTemplate.name, input.name)
+        assert.deepEqual(
+          updated.pricingTemplate.services.map((service) => service.id).sort(),
+          linkedServices.map((service) => service.id).sort(),
+        )
+        for (const service of linkedServices) {
+          const lookup = await request(`/services/${service.id}`)
+          const saved = (await lookup.json()) as {
+            service: {
+              pricingTemplate: {
+                amount: string
+                billingInterval: string
+                isPublic: boolean
+              }
+            }
+          }
+          assert.equal(saved.service.pricingTemplate.amount, "2500")
+          assert.equal(saved.service.pricingTemplate.billingInterval, "MONTHLY")
+          assert.equal(saved.service.pricingTemplate.isPublic, false)
+        }
+        const listResponse = await request("/services/pricing-templates")
+        const list = (await listResponse.json()) as {
+          pricingTemplates: { id: string; services: { id: string }[] }[]
+        }
+        assert.equal(
+          list.pricingTemplates.find((item) => item.id === template.id)
+            ?.services.length,
+          2,
+        )
+        assert.equal((await request(templatePath, "DELETE")).status, 409)
+        await prisma.service.update({
+          where: { id: linkedServices[0]!.id },
+          data: { pricingTemplateId: null },
+        })
+        assert.equal((await request(templatePath, "DELETE")).status, 409)
+        await prisma.service.update({
+          where: { id: linkedServices[1]!.id },
+          data: { pricingTemplateId: null },
+        })
+        assert.equal((await request(templatePath, "DELETE")).status, 200)
+        assert.equal((await request(templatePath, "DELETE")).status, 404)
+        assert.equal(
+          await prisma.pricingTemplate.findUnique({
+            where: { id: template.id },
+          }),
+          null,
+        )
+        const preserved = await prisma.serviceRequest.findUniqueOrThrow({
+          where: { id: historicalRequest.id },
+        })
+        assert.equal(preserved.pricingModel, "FIXED")
+        assert.equal(Number(preserved.agreedPrice), 1000)
       },
     )
     await t.test(

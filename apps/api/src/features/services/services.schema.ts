@@ -176,6 +176,26 @@ function validatePricing(
   }
 }
 
+export function validatePricingTemplateInput(
+  body: unknown,
+):
+  | { value: PricingConfigurationInput; error?: never }
+  | { value?: never; error: string } {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { error: "Pricing configuration is invalid" }
+  }
+  const input = body as Record<string, unknown>
+  const name = nonEmptyString(input.name)
+  if (name.length < 2 || name.length > 100) {
+    return {
+      error: "Pricing template name must be between 2 and 100 characters",
+    }
+  }
+  const pricing = validatePricing(input, "Service")
+  if (!pricing.value) return { error: pricing.error }
+  return { value: { name, ...pricing.value } }
+}
+
 function validateImage(input: Record<string, unknown>) {
   const removeImage = input.removeImage ?? false
   if (typeof removeImage !== "boolean") {
@@ -453,19 +473,9 @@ export function validateServiceInput(body: unknown): ValidationResult {
           "Choose an existing pricing template or create a new one, not both",
       }
     }
-    if (typeof input.pricingTemplate !== "object") {
-      return { error: "Pricing configuration is invalid" }
-    }
-    const rawPricing = input.pricingTemplate as Record<string, unknown>
-    const templateName = nonEmptyString(rawPricing.name)
-    if (templateName.length < 2 || templateName.length > 100) {
-      return {
-        error: "Pricing template name must be between 2 and 100 characters",
-      }
-    }
-    const parsedPricing = validatePricing(rawPricing, "Service")
+    const parsedPricing = validatePricingTemplateInput(input.pricingTemplate)
     if (!parsedPricing.value) return { error: parsedPricing.error }
-    pricingTemplate = { name: templateName, ...parsedPricing.value }
+    pricingTemplate = parsedPricing.value
   }
 
   const packageResult = validatePackages(input.packages)

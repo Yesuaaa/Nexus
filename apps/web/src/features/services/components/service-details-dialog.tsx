@@ -12,13 +12,13 @@ import {
 import { CloseIcon } from "@/components/layout/icons"
 import { focusRing } from "@/components/layout/styles"
 import { DepartmentPill } from "@/components/ui/department-pill"
-import { useAnimatedPanelClose } from "@/components/ui/use-animated-panel-close"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog"
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import { useAnimatedPanelClose } from "@/components/ui/use-animated-panel-close"
 import { Pill } from "@/components/ui/pill"
 import { cn } from "@/lib/utils"
 import type { Service } from "../api/services-api"
@@ -56,8 +56,7 @@ export function ServiceDetailsDialog({
   service: Service
   onClose: () => void
 }) {
-  const { open, handleOpenChange, closeAfterTransition } =
-    useAnimatedPanelClose(onClose)
+  const { open, handleOpenChange } = useAnimatedPanelClose(onClose)
   const openerRef = useRef(
     typeof document === "undefined" ? null : document.activeElement,
   )
@@ -126,11 +125,12 @@ export function ServiceDetailsDialog({
   ]
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent
+    <Sheet open={open} onOpenChange={handleOpenChange}>
+      <SheetContent
+        side="right"
         showCloseButton={false}
-        overlayClassName="nexus-panel-overlay z-[110] bg-[rgb(13_28_57_/_48%)]"
-        className="nexus-detail-dialog z-[110] max-h-[calc(100dvh-28px)] w-[min(520px,calc(100vw-28px))] gap-0 overflow-y-auto rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_22px_75px_rgb(18_36_73_/_22%)]"
+        overlayClassName="nexus-panel-overlay bg-[rgb(13_28_57_/_48%)]"
+        className="nexus-side-panel inset-y-auto top-[15px] right-[15px] flex h-[calc(100dvh-30px)] max-h-none w-[min(560px,calc(100vw-30px))] max-w-none flex-col gap-0 overflow-hidden rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_16px_60px_rgb(18_36_73_/_18%)] sm:max-w-none max-[560px]:top-0 max-[560px]:right-0 max-[560px]:h-dvh max-[560px]:w-full max-[560px]:rounded-none max-[560px]:border-0"
         onCloseAutoFocus={(event) => {
           event.preventDefault()
           const opener = openerRef.current
@@ -138,14 +138,14 @@ export function ServiceDetailsDialog({
             opener.focus()
         }}
       >
-        <div className="flex items-start justify-between gap-4 px-5 pt-5">
+        <header className="flex flex-none items-start justify-between gap-4 border-b border-[#eceef1] px-6 pt-6 pb-5 max-[560px]:px-5">
           <div>
-            <DialogTitle className="m-0 text-lg font-[650] tracking-[-0.03em]">
+            <SheetTitle className="m-0 text-[22px] leading-[1.25] font-[650] tracking-[-0.03em]">
               Service Details
-            </DialogTitle>
-            <DialogDescription className="sr-only">
+            </SheetTitle>
+            <SheetDescription className="mt-1 text-xs text-[#52627a]">
               Details for {service.name}
-            </DialogDescription>
+            </SheetDescription>
           </div>
           <button
             type="button"
@@ -153,13 +153,13 @@ export function ServiceDetailsDialog({
               "grid size-7 flex-none cursor-pointer place-items-center rounded-[7px] border-0 bg-background text-[#65718a] hover:bg-[#f1f5fc]",
               focusRing,
             )}
-            onClick={() => closeAfterTransition()}
+            onClick={onClose}
             aria-label="Close details"
           >
             <CloseIcon />
           </button>
-        </div>
-        <div className="p-5">
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 max-[560px]:px-5">
           <div className="relative mb-4 aspect-[16/7] overflow-hidden rounded-xl bg-[#eef2f8]">
             {service.imageUrl ? (
               <Image
@@ -258,19 +258,19 @@ export function ServiceDetailsDialog({
             </section>
           )}
         </div>
-        <footer className="flex justify-end border-t border-[#eceef1] px-5 py-4">
+        <footer className="flex flex-none justify-end border-t border-[#eceef1] px-6 py-4 max-[560px]:px-5">
           <button
             type="button"
             className={cn(
               "min-h-[38px] cursor-pointer rounded-[9px] border border-[#d7e0ee] bg-background px-[15px] text-xs font-semibold text-[#24437e] hover:bg-[#f1f5fc]",
               focusRing,
             )}
-            onClick={() => closeAfterTransition()}
+            onClick={onClose}
           >
             Close
           </button>
         </footer>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   )
 }
