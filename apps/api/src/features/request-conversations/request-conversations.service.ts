@@ -180,7 +180,12 @@ export async function listConversations(userId: string, before?: string) {
       service: { select: { name: true } },
       client: { select: { id: true, fullName: true } },
       acceptedDepartment: {
-        select: { id: true, name: true, headId: true },
+        select: {
+          id: true,
+          name: true,
+          headId: true,
+          head: { select: { id: true, fullName: true } },
+        },
       },
       messages: {
         select: messageSelect,

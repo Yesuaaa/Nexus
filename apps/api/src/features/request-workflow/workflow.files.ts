@@ -10,6 +10,9 @@ const mimeExtensions: Record<string, string> = {
   "image/png": ".png",
   "image/jpeg": ".jpg",
   "text/plain": ".txt",
+  "application/msword": ".doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    ".docx",
 }
 
 function parseFile(input: unknown) {
@@ -27,7 +30,7 @@ function parseFile(input: unknown) {
     fail("Use a plain file name without directory separators")
   const mimeType = textField(body.mimeType, "file type", 100)
   const extension = mimeExtensions[mimeType]
-  if (!extension) fail("Supported files: PDF, PNG, JPEG, and plain text")
+  if (!extension) fail("Supported files: PDF, Word, PNG, JPEG, and plain text")
   if (
     !(
       mimeType === "image/jpeg"
@@ -45,6 +48,18 @@ function parseFile(input: unknown) {
   )
     fail("Invalid or oversized file content")
   const data = Buffer.from(body.content, "base64")
+  if (
+    mimeType === "application/msword" &&
+    !data
+      .subarray(0, 8)
+      .equals(Buffer.from([208, 207, 17, 224, 161, 177, 26, 225]))
+  )
+    fail("Invalid Word document")
+  if (
+    extension === ".docx" &&
+    !(data[0] === 80 && data[1] === 75 && data[2] === 3 && data[3] === 4)
+  )
+    fail("Invalid Word document")
   if (!data.length || data.length > maxSize)
     fail("Files must be between 1 byte and 5 MB")
   if (

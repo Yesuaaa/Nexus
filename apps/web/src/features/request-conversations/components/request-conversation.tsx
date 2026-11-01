@@ -45,6 +45,10 @@ import { useRequestWorkflow } from "@/features/request-workflow/hooks/use-reques
 import { WorkflowEventCard } from "@/features/request-workflow/components/workflow-cards"
 import { WorkflowContextPanel } from "@/features/request-workflow/components/workflow-context-panel"
 import {
+  AttachmentPreview,
+  attachmentAccept,
+} from "@/features/request-workflow/components/attachment-preview"
+import {
   WorkflowActionDraft,
   type WorkflowDraftAction,
 } from "@/features/request-workflow/components/workflow-action-draft"
@@ -176,6 +180,7 @@ function ConversationPanel({
     revoke: revokeWorkflow,
   } = controls
   const fileInput = useRef<HTMLInputElement>(null)
+  const [attachmentDraft, setAttachmentDraft] = useState<File | null>(null)
   const isClient = account.role === "USER"
   const isStaff = account.role === "STAFF"
   const isParticipant = isClient || isStaff
@@ -873,6 +878,9 @@ function ConversationPanel({
                           className="scroll-mt-4"
                         >
                           <WorkflowEventCard
+                            onPrepareQuotation={() =>
+                              setActiveWorkflowDraft("quotation")
+                            }
                             event={entry.event}
                             workflow={workflow}
                             controls={controls}
@@ -1133,6 +1141,32 @@ function ConversationPanel({
                     onSubmit={(event) => void submit(event)}
                     className="border-t border-[#efefee] px-5 py-3 max-[767px]:px-3"
                   >
+                    {attachmentDraft && (
+                      <div className="mb-3 space-y-2">
+                        <AttachmentPreview
+                          file={attachmentDraft}
+                          disabled={controls.busy}
+                          onRemove={() => {
+                            setAttachmentDraft(null)
+                            if (fileInput.current) fileInput.current.value = ""
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          className="ml-auto flex bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
+                          disabled={controls.busy || !history.canSend}
+                          onClick={async () => {
+                            if (await controls.attach(attachmentDraft)) {
+                              setAttachmentDraft(null)
+                              if (fileInput.current)
+                                fileInput.current.value = ""
+                            }
+                          }}
+                        >
+                          {controls.busy ? "Sending file…" : "Send file"}
+                        </Button>
+                      </div>
+                    )}
                     <label htmlFor={inputId} className="sr-only">
                       Message
                     </label>
@@ -1142,18 +1176,15 @@ function ConversationPanel({
                           <input
                             ref={fileInput}
                             type="file"
-                            accept=".pdf,.png,.jpg,.jpeg,.txt"
+                            accept={attachmentAccept}
                             className="sr-only"
                             aria-label="Attach a file"
                             disabled={
                               controls.busy || !history.canSend || !canAttach
                             }
-                            onChange={async (event) => {
+                            onChange={(event) => {
                               const file = event.currentTarget.files?.[0]
-                              if (file && (await controls.attach(file))) {
-                                if (fileInput.current)
-                                  fileInput.current.value = ""
-                              }
+                              if (file) setAttachmentDraft(file)
                             }}
                           />
                           <DropdownMenu>
@@ -1375,6 +1406,23 @@ function ConversationPanel({
             hidden={isParticipant && !contextPanelOpen}
             workflow={workflow}
             controls={controls}
+            onViewEvent={(entityId) => {
+              const log = logRef.current
+              const target = document.getElementById(`workflow-${entityId}`)
+              if (!log || !target || !log.contains(target)) return
+              followLatest.current = false
+              log.scrollTo({
+                top:
+                  log.scrollTop +
+                  target.getBoundingClientRect().top -
+                  log.getBoundingClientRect().top -
+                  16,
+                behavior: window.matchMedia("(prefers-reduced-motion: reduce)")
+                  .matches
+                  ? "auto"
+                  : "smooth",
+              })
+            }}
           />
         )}
       </div>

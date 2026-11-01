@@ -145,6 +145,22 @@ export type Workflow = {
 
 export type WorkflowAction =
   | {
+      type: "RESPOND_CONSULTATION_RESCHEDULE"
+      consultationId: string
+      requestEventId: string
+      approve: boolean
+      startsAt: string
+      endsAt: string
+      location: string
+      note: string
+    }
+  | {
+      type: "REQUEST_CONSULTATION_RESCHEDULE"
+      consultationId: string
+      startsAt: string
+      note: string
+    }
+  | {
       type: "REQUEST_REQUIREMENT"
       title: string
       details: string

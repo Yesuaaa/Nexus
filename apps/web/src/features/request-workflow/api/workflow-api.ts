@@ -30,11 +30,15 @@ export async function uploadWorkflowFile(
     jpg: "image/jpeg",
     jpeg: "image/jpeg",
     txt: "text/plain",
+    doc: "application/msword",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   }
   const mimeType =
     file.type || types[file.name.split(".").at(-1)?.toLowerCase() || ""]
   if (!mimeType || !Object.values(types).includes(mimeType))
-    throw new Error("Choose a PDF, PNG, JPEG, or plain text file.")
+    throw new Error(
+      "Choose a PDF, Word document, PNG, JPEG, or plain text file.",
+    )
   const content = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
     reader.onerror = () => reject(new Error("Couldn't read this file."))

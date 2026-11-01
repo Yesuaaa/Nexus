@@ -486,6 +486,114 @@ test(
           location: "Video meeting",
           notes: "Review goals",
         })
+        const originalStartsAt = (
+          await prisma!.workflowConsultation.findUniqueOrThrow({
+            where: { id: scheduled.consultations[0]!.id },
+          })
+        ).startsAt.toISOString()
+        const reschedule = {
+          type: "REQUEST_CONSULTATION_RESCHEDULE",
+          consultationId: scheduled.consultations[0]!.id,
+          startsAt: new Date(Date.now() + 86_400_000).toISOString(),
+          note: "Please move our meeting to tomorrow.",
+        }
+        assert.equal(
+          (await send(head, reschedule, scheduled.version)).status,
+          403,
+        )
+        assert.equal(
+          (
+            await send(
+              client,
+              {
+                ...reschedule,
+                startsAt: new Date(Date.now() - 1000).toISOString(),
+              },
+              scheduled.version,
+            )
+          ).status,
+          400,
+        )
+        const rescheduled = await act(client, reschedule)
+        assert.equal(rescheduled.consultations[0]!.status, "SCHEDULED")
+        assert.equal(
+          rescheduled.events.at(-1)!.type,
+          "CONSULTATION_RESCHEDULE_REQUESTED",
+        )
+        assert.match(
+          rescheduled.events.at(-1)!.summary,
+          /existing schedule remains/,
+        )
+        assert.equal(
+          (
+            await prisma!.workflowConsultation.findUniqueOrThrow({
+              where: { id: reschedule.consultationId },
+            })
+          ).startsAt.toISOString(),
+          originalStartsAt,
+        )
+        assert.equal(
+          (await send(client, reschedule, rescheduled.version)).status,
+          409,
+        )
+        const response = {
+          type: "RESPOND_CONSULTATION_RESCHEDULE",
+          consultationId: reschedule.consultationId,
+          requestEventId: (rescheduled.events.at(-1) as { id?: string }).id,
+          approve: true,
+          startsAt: reschedule.startsAt,
+          endsAt: new Date(
+            new Date(reschedule.startsAt).getTime() + 3600000,
+          ).toISOString(),
+          location: "https://meet.example.com/replacement",
+          note: "Confirmed your preferred time.",
+        }
+        assert.equal(
+          (await send(client, response, rescheduled.version)).status,
+          403,
+        )
+        const confirmed = await act(head, response)
+        assert.equal(
+          confirmed.events.at(-1)!.type,
+          "CONSULTATION_RESCHEDULE_CONFIRMED",
+        )
+        assert.equal(
+          (
+            await prisma!.workflowConsultation.findUniqueOrThrow({
+              where: { id: reschedule.consultationId },
+            })
+          ).startsAt.toISOString(),
+          reschedule.startsAt,
+        )
+        assert.equal(
+          (await send(head, response, confirmed.version)).status,
+          409,
+        )
+        const secondRequest = await act(client, reschedule)
+        const decline = {
+          ...response,
+          requestEventId: (secondRequest.events.at(-1) as { id?: string }).id,
+          approve: false,
+          note: "The department is unavailable at that time.",
+        }
+        assert.equal(
+          (await send(head, { ...decline, note: "" }, secondRequest.version))
+            .status,
+          400,
+        )
+        const declined = await act(head, decline)
+        assert.equal(
+          declined.events.at(-1)!.type,
+          "CONSULTATION_RESCHEDULE_DECLINED",
+        )
+        assert.equal(
+          (
+            await prisma!.workflowConsultation.findUniqueOrThrow({
+              where: { id: reschedule.consultationId },
+            })
+          ).startsAt.toISOString(),
+          reschedule.startsAt,
+        )
         await prisma!.workflowConsultation.update({
           where: { id: scheduled.consultations[0]!.id },
           data: {
@@ -840,6 +948,20 @@ test(
           reference: "BANK-WF-001",
         })
         const beforeVerification = await read(head)
+        assert.equal(
+          (
+            await send(
+              client,
+              {
+                type: "SUBMIT_PAYMENT",
+                fileId: proof.id,
+                reference: "REPLACEMENT",
+              },
+              beforeVerification.version,
+            )
+          ).status,
+          409,
+        )
         assert.equal(
           (
             await send(

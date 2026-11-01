@@ -18,7 +18,11 @@ export type ConversationSummary = {
   updatedAt: string
   service: { name: string }
   client: { id: string; fullName: string | null }
-  acceptedDepartment: { id: string; name: string } | null
+  acceptedDepartment: {
+    id: string
+    name: string
+    head?: { id: string; fullName: string | null } | null
+  } | null
   lastMessage: RequestMessage | null
   unreadCount?: number
 }

@@ -155,6 +155,101 @@ async function runAction(
     fail("This service request is closed", 409)
 
   switch (command.type) {
+    case "REQUEST_CONSULTATION_RESCHEDULE": {
+      if (!permissions.isClient)
+        fail("Only the client can request a reschedule", 403)
+      requireStage(
+        "CONSULTATION",
+        "QUOTATION_PENDING",
+        "CLIENT_APPROVAL",
+        "REVISION_REQUESTED",
+      )
+      const consultation = await tx.workflowConsultation.findFirst({
+        where: { id: command.consultationId, requestId, status: "SCHEDULED" },
+      })
+      if (!consultation) fail("This consultation is no longer scheduled", 409)
+      if (new Date(command.startsAt).getTime() <= Date.now())
+        fail("Choose a future consultation time")
+      const latest = await tx.workflowEvent.findFirst({
+        where: {
+          requestId,
+          entityId: consultation.id,
+          type: {
+            in: [
+              "CONSULTATION_RESCHEDULE_REQUESTED",
+              "CONSULTATION_RESCHEDULE_CONFIRMED",
+              "CONSULTATION_RESCHEDULE_DECLINED",
+            ],
+          },
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      })
+      if (latest?.type === "CONSULTATION_RESCHEDULE_REQUESTED")
+        fail("A reschedule request is already awaiting a response", 409)
+      await event(
+        "CONSULTATION_RESCHEDULE_REQUESTED",
+        `Client requested a consultation reschedule to ${command.startsAt}. ${command.note} The existing schedule remains in place until the department confirms a replacement.`,
+        consultation.id,
+      )
+      break
+    }
+    case "RESPOND_CONSULTATION_RESCHEDULE": {
+      requireManager()
+      requireStage(
+        "CONSULTATION",
+        "QUOTATION_PENDING",
+        "CLIENT_APPROVAL",
+        "REVISION_REQUESTED",
+      )
+      const consultation = await tx.workflowConsultation.findFirst({
+        where: { id: command.consultationId, requestId, status: "SCHEDULED" },
+      })
+      if (!consultation) fail("This consultation is no longer scheduled", 409)
+      const latest = await tx.workflowEvent.findFirst({
+        where: {
+          requestId,
+          entityId: consultation.id,
+          type: {
+            in: [
+              "CONSULTATION_RESCHEDULE_REQUESTED",
+              "CONSULTATION_RESCHEDULE_CONFIRMED",
+              "CONSULTATION_RESCHEDULE_DECLINED",
+            ],
+          },
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      })
+      if (
+        latest?.type !== "CONSULTATION_RESCHEDULE_REQUESTED" ||
+        latest.id !== command.requestEventId
+      )
+        fail("This reschedule request has already been handled or changed", 409)
+      if (command.approve) {
+        const startsAt = new Date(command.startsAt),
+          endsAt = new Date(command.endsAt)
+        if (
+          startsAt <= new Date() ||
+          endsAt <= startsAt ||
+          endsAt.getTime() - startsAt.getTime() > 8 * 60 * 60 * 1000
+        )
+          fail("Schedule a future consultation lasting at most eight hours")
+        await tx.workflowConsultation.update({
+          where: { id: consultation.id },
+          data: { startsAt, endsAt, location: command.location },
+        })
+      } else if (!command.note.trim())
+        fail("Provide a reason for declining the reschedule")
+      await event(
+        command.approve
+          ? "CONSULTATION_RESCHEDULE_CONFIRMED"
+          : "CONSULTATION_RESCHEDULE_DECLINED",
+        command.approve
+          ? `The department confirmed a replacement consultation for ${command.startsAt}. ${command.note}`
+          : `The department declined the reschedule request. ${command.note} The current schedule remains unchanged.`,
+        consultation.id,
+      )
+      break
+    }
     case "REQUEST_REQUIREMENT": {
       requireManager()
       requireStage(
@@ -193,6 +288,8 @@ async function runAction(
       if (!requirement) fail("Requirement not found", 404)
       if (requirement.status === "COMPLETED")
         fail("This requirement is already complete", 409)
+      if (requirement.status === "SUBMITTED")
+        fail("This response is awaiting department review", 409)
       await tx.workflowRequirement.update({
         where: { id: requirement.id },
         data: {
@@ -636,6 +733,11 @@ async function runAction(
       })
       if (!payment || payment.status === "VERIFIED")
         fail("Payment is already verified or unavailable", 409)
+      if (payment.status === "SUBMITTED")
+        fail(
+          "Your payment proof is awaiting verification. You can submit another if the verifier returns it.",
+          409,
+        )
       await tx.workflowPayment.update({
         where: { requestId },
         data: {

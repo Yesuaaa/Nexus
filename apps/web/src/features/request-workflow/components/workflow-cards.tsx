@@ -2,9 +2,50 @@
 
 import Link from "next/link"
 import Image from "next/image"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Download, FileText, ShieldCheck } from "lucide-react"
 import { sileo } from "sileo"
+import { AttachmentPreview, attachmentAccept } from "./attachment-preview"
+
+export function getConsultationMeetingUrl(location: string) {
+  try {
+    const url = new URL(location)
+    return ["https:", "http:"].includes(url.protocol) ? url.href : null
+  } catch {
+    return null
+  }
+}
+
+export function ConsultationLocation({
+  location,
+  className,
+  showJoinButton = true,
+}: {
+  location: string
+  className?: string
+  showJoinButton?: boolean
+}) {
+  const href = getConsultationMeetingUrl(location)
+  if (href && showJoinButton)
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={cn(
+          "inline-flex w-fit items-center justify-center rounded-lg bg-[#203f8c] px-3 py-2 text-[10px] font-semibold text-white no-underline shadow-[0_4px_10px_rgb(32_63_140_/_18%)] transition-colors hover:bg-[#172f70]",
+          className,
+        )}
+      >
+        Join consultation
+      </a>
+    )
+  return (
+    <span className={cn("break-words", className)}>
+      {href ? "Online meeting" : location}
+    </span>
+  )
+}
 import { Button } from "@/components/ui/button"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { cn } from "@/lib/utils"
@@ -28,7 +69,12 @@ import {
   workflowMoney,
 } from "./workflow-primitives"
 
-type CardProps = { workflow: Workflow; controls: WorkflowControls }
+type CardProps = {
+  workflow: Workflow
+  controls: WorkflowControls
+  onPrepareQuotation?: () => void
+}
+const workflowPrimaryButton = `${workflowButton} bg-[#203f8c] text-white hover:bg-[#172f70]`
 
 function useCurrentTime() {
   const [now, setNow] = useState(() => Date.now())
@@ -230,10 +276,10 @@ export function RequirementRequestCard({
         <p className="m-0 text-[11px]">Review: {requirement.reviewNote}</p>
       )}
       {workflow.permissions.isClient &&
-        requirement.status !== "COMPLETED" &&
+        requirement.status === "REQUESTED" &&
         writable && (
           <form
-            className="space-y-3"
+            className="grid gap-4"
             onSubmit={async (event) => {
               event.preventDefault()
               const form = event.currentTarget
@@ -263,7 +309,7 @@ export function RequirementRequestCard({
             <WorkflowField label="Supporting document">
               <WorkflowFileSelect workflow={workflow} />
             </WorkflowField>
-            <Button className={workflowButton} disabled={controls.busy}>
+            <Button className={workflowPrimaryButton} disabled={controls.busy}>
               Submit requirement
             </Button>
           </form>
@@ -272,7 +318,7 @@ export function RequirementRequestCard({
         requirement.status === "SUBMITTED" &&
         writable && (
           <form
-            className="space-y-3"
+            className="grid gap-4"
             onSubmit={async (event) => {
               event.preventDefault()
               const data = new FormData(event.currentTarget)
@@ -294,7 +340,7 @@ export function RequirementRequestCard({
               <Button
                 name="decision"
                 value="approve"
-                className={workflowButton}
+                className={workflowPrimaryButton}
                 disabled={controls.busy}
               >
                 Mark complete
@@ -311,6 +357,15 @@ export function RequirementRequestCard({
             </div>
           </form>
         )}
+      {workflow.permissions.isClient && requirement.status === "SUBMITTED" && (
+        <p
+          role="status"
+          className="m-0 rounded-lg bg-[#edf2fb] p-3 text-xs text-[#294a9b]"
+        >
+          Your response is awaiting department review. You can submit changes if
+          it is returned.
+        </p>
+      )}
     </WorkflowCard>
   )
 }
@@ -321,6 +376,32 @@ export function ConsultationSchedulingCard({
   controls,
 }: CardProps & { consultation: Workflow["consultations"][number] }) {
   const now = useCurrentTime()
+  const [rescheduling, setRescheduling] = useState(false)
+  const rescheduleEvent = workflow.events
+    .filter(
+      (event) =>
+        event.entityId === consultation.id &&
+        [
+          "CONSULTATION_RESCHEDULE_REQUESTED",
+          "CONSULTATION_RESCHEDULE_CONFIRMED",
+          "CONSULTATION_RESCHEDULE_DECLINED",
+        ].includes(event.type),
+    )
+    .at(-1)
+  const pendingReschedule =
+    rescheduleEvent?.type === "CONSULTATION_RESCHEDULE_REQUESTED"
+      ? rescheduleEvent
+      : null
+  const preferredTime =
+    pendingReschedule?.summary.match(
+      /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/,
+    )?.[0] || consultation.startsAt
+  function localDateTime(value: number) {
+    const date = new Date(value)
+    return new Date(value - date.getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 16)
+  }
   return (
     <WorkflowCard title="Consultation" status={consultation.status}>
       <p className="m-0 font-medium text-[#182235]">
@@ -335,11 +416,216 @@ export function ConsultationSchedulingCard({
           hour: "numeric",
           minute: "2-digit",
         })}{" "}
-        · {consultation.location}
+        · <ConsultationLocation location={consultation.location} />
       </p>
       {consultation.notes && (
         <p className="m-0 whitespace-pre-wrap">{consultation.notes}</p>
       )}
+      {pendingReschedule && consultation.status === "SCHEDULED" && (
+        <div className="flex flex-col gap-5 rounded-xl border border-[#d8e1ef] bg-[#edf2fb] p-5">
+          <p className="m-0 text-xs font-semibold text-[#294a9b]">
+            Reschedule requested · Awaiting department response
+          </p>
+          <div className="space-y-2 text-xs leading-6">
+            <p className="m-0">
+              <span className="font-medium">Preferred time: </span>
+              {new Date(preferredTime).toLocaleString("en-PH", {
+                dateStyle: "medium",
+                timeStyle: "short",
+              })}
+            </p>
+            <p className="m-0 whitespace-pre-wrap">
+              <span className="font-medium">Reason: </span>
+              {pendingReschedule.summary
+                .replace(
+                  /^Client requested a consultation reschedule to \S+\.\s*/,
+                  "",
+                )
+                .replace(
+                  / The existing schedule remains in place until the department confirms a replacement\.$/,
+                  "",
+                )}
+            </p>
+            <p className="m-0 text-[#738096]">
+              The current schedule stays in place until a replacement is
+              confirmed.
+            </p>
+          </div>
+          {workflow.permissions.manage &&
+            [
+              "CONSULTATION",
+              "QUOTATION_PENDING",
+              "CLIENT_APPROVAL",
+              "REVISION_REQUESTED",
+            ].includes(workflow.state) && (
+              <form
+                key={pendingReschedule.id}
+                className="grid gap-5 border-t border-[#d8e1ef] pt-5"
+                onSubmit={async (event) => {
+                  event.preventDefault()
+                  const data = new FormData(event.currentTarget)
+                  const submitter = (event.nativeEvent as SubmitEvent).submitter
+                  const approve =
+                    !(submitter instanceof HTMLButtonElement) ||
+                    submitter.value !== "decline"
+                  await controls.act({
+                    type: "RESPOND_CONSULTATION_RESCHEDULE",
+                    consultationId: consultation.id,
+                    requestEventId: pendingReschedule.id,
+                    approve,
+                    startsAt: approve
+                      ? new Date(String(data.get("startsAt"))).toISOString()
+                      : "",
+                    endsAt: approve
+                      ? new Date(String(data.get("endsAt"))).toISOString()
+                      : "",
+                    location: String(data.get("location") || ""),
+                    note: String(data.get("note") || ""),
+                  })
+                }}
+              >
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <WorkflowField label="Replacement start">
+                    <input
+                      type="datetime-local"
+                      name="startsAt"
+                      required
+                      defaultValue={localDateTime(
+                        new Date(preferredTime).getTime(),
+                      )}
+                      className={workflowInput}
+                    />
+                  </WorkflowField>
+                  <WorkflowField label="Replacement end">
+                    <input
+                      type="datetime-local"
+                      name="endsAt"
+                      required
+                      defaultValue={localDateTime(
+                        new Date(preferredTime).getTime() +
+                          new Date(consultation.endsAt).getTime() -
+                          new Date(consultation.startsAt).getTime(),
+                      )}
+                      className={workflowInput}
+                    />
+                  </WorkflowField>
+                </div>
+                <WorkflowField label="Meeting link or location">
+                  <input
+                    name="location"
+                    required
+                    maxLength={1000}
+                    defaultValue={consultation.location}
+                    className={workflowInput}
+                  />
+                </WorkflowField>
+                <WorkflowField label="Response to client (required when declining)">
+                  <textarea
+                    name="note"
+                    rows={2}
+                    maxLength={2000}
+                    className={workflowInput}
+                  />
+                </WorkflowField>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    disabled={controls.busy}
+                    className={`${workflowButton} bg-[#203f8c] text-white hover:bg-[#172f70]`}
+                  >
+                    Confirm
+                  </Button>
+                  <Button
+                    type="submit"
+                    value="decline"
+                    formNoValidate
+                    variant="outline"
+                    disabled={controls.busy}
+                    className={`${workflowButton} text-[#bc3649]`}
+                  >
+                    Decline
+                  </Button>
+                </div>
+              </form>
+            )}
+        </div>
+      )}
+      {workflow.permissions.isClient &&
+        !pendingReschedule &&
+        consultation.status === "SCHEDULED" &&
+        [
+          "CONSULTATION",
+          "QUOTATION_PENDING",
+          "CLIENT_APPROVAL",
+          "REVISION_REQUESTED",
+        ].includes(workflow.state) &&
+        (rescheduling ? (
+          <form
+            className="grid gap-4"
+            onSubmit={async (event) => {
+              event.preventDefault()
+              const data = new FormData(event.currentTarget)
+              if (
+                await controls.act({
+                  type: "REQUEST_CONSULTATION_RESCHEDULE",
+                  consultationId: consultation.id,
+                  startsAt: new Date(
+                    String(data.get("startsAt")),
+                  ).toISOString(),
+                  note: String(data.get("note")),
+                })
+              )
+                setRescheduling(false)
+            }}
+          >
+            <WorkflowField label="Preferred date and time">
+              <input
+                type="datetime-local"
+                name="startsAt"
+                required
+                className={workflowInput}
+              />
+            </WorkflowField>
+            <WorkflowField label="Reason for rescheduling">
+              <textarea
+                name="note"
+                required
+                maxLength={2000}
+                rows={2}
+                className={workflowInput}
+              />
+            </WorkflowField>
+            <p className="m-0 text-xs">
+              Your current schedule remains until the department confirms a
+              replacement.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                disabled={controls.busy}
+                className={`${workflowButton} bg-[#203f8c] text-white hover:bg-[#172f70]`}
+              >
+                Request reschedule
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={controls.busy}
+                onClick={() => setRescheduling(false)}
+                className={`${workflowButton} text-[#294a9b]`}
+              >
+                Keep schedule
+              </Button>
+            </div>
+          </form>
+        ) : (
+          <Button
+            variant="outline"
+            className={workflowButton}
+            disabled={controls.busy}
+            onClick={() => setRescheduling(true)}
+          >
+            Request reschedule
+          </Button>
+        ))}
       {workflow.permissions.manage &&
         consultation.status === "SCHEDULED" &&
         [
@@ -348,9 +634,9 @@ export function ConsultationSchedulingCard({
           "CLIENT_APPROVAL",
           "REVISION_REQUESTED",
         ].includes(workflow.state) && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 border-t border-[#e1e6ee] pt-4">
             <Button
-              className={workflowButton}
+              className={`${workflowButton} bg-[#203f8c] text-white hover:bg-[#172f70]`}
               disabled={
                 controls.busy || new Date(consultation.startsAt).getTime() > now
               }
@@ -361,11 +647,11 @@ export function ConsultationSchedulingCard({
                 })
               }
             >
-              Mark consultation complete
+              Mark as complete
             </Button>
             <Button
               variant="outline"
-              className={workflowButton}
+              className={`${workflowButton} text-[#bc3649] hover:text-[#a42f40]`}
               disabled={controls.busy}
               onClick={() =>
                 void controls.act({
@@ -374,7 +660,7 @@ export function ConsultationSchedulingCard({
                 })
               }
             >
-              Cancel schedule
+              Cancel
             </Button>
           </div>
         )}
@@ -386,6 +672,7 @@ export function QuotationProposalCard({
   quotation,
   workflow,
   controls,
+  onPrepareQuotation,
 }: CardProps & { quotation: WorkflowQuotation }) {
   const now = useCurrentTime()
   const latest = quotation.id === workflow.quotations.at(-1)?.id
@@ -462,6 +749,25 @@ export function QuotationProposalCard({
           {quotation.decisionNote}
         </p>
       )}
+      {latest && quotation.status === "REVISION_REQUESTED" && (
+        <div className="flex flex-col gap-3 rounded-lg border border-[#d8e1ef] bg-[#edf2fb] p-4">
+          <p className="m-0 font-medium text-[#294a9b]">
+            {workflow.permissions.manage
+              ? "The client requested changes. Prepare a revised quotation for review."
+              : "Your revision request is awaiting a revised quotation from the department."}
+          </p>
+          {workflow.permissions.manage && onPrepareQuotation && (
+            <Button
+              type="button"
+              className={`${workflowButton} self-start bg-[#203f8c] text-white hover:bg-[#172f70]`}
+              disabled={controls.busy}
+              onClick={onPrepareQuotation}
+            >
+              Prepare revised quotation
+            </Button>
+          )}
+        </div>
+      )}
       {respond && (
         <form
           className="space-y-3 border-t border-[#e1e6ee] pt-3"
@@ -507,10 +813,7 @@ export function QuotationProposalCard({
           <div className="flex flex-wrap gap-2">
             <Button
               value="ACCEPT"
-              className={cn(
-                workflowButton,
-                "!border-transparent !bg-[#1f9a54] !text-white hover:!bg-[#178045]",
-              )}
+              className={workflowPrimaryButton}
               disabled={controls.busy}
             >
               Accept quotation
@@ -544,7 +847,7 @@ export function QuotationProposalCard({
         valid &&
         workflow.state === "QUOTATION_PENDING" && (
           <Button
-            className={workflowButton}
+            className={workflowPrimaryButton}
             disabled={controls.busy}
             onClick={() =>
               void controls.act({
@@ -639,12 +942,20 @@ export function AgreementCard({ workflow, controls }: CardProps) {
           </form>
         )}
       <AttachedFile fileId={agreement.signedFileId} workflow={workflow} />
+      {workflow.permissions.isClient && agreement.status === "SUBMITTED" && (
+        <p
+          role="status"
+          className="m-0 rounded-lg bg-[#edf2fb] p-3 text-xs text-[#294a9b]"
+        >
+          Your signed agreement is awaiting department review.
+        </p>
+      )}
       {workflow.permissions.isClient &&
         writable &&
         agreement.documentFileId &&
         agreement.status === "PENDING" && (
           <form
-            className="space-y-3"
+            className="grid gap-4"
             onSubmit={async (event) => {
               event.preventDefault()
               const data = new FormData(event.currentTarget)
@@ -657,7 +968,7 @@ export function AgreementCard({ workflow, controls }: CardProps) {
             <WorkflowField label="Signed agreement">
               <WorkflowFileSelect workflow={workflow} required />
             </WorkflowField>
-            <Button className={workflowButton} disabled={controls.busy}>
+            <Button className={workflowPrimaryButton} disabled={controls.busy}>
               Submit signed agreement
             </Button>
           </form>
@@ -666,7 +977,7 @@ export function AgreementCard({ workflow, controls }: CardProps) {
         writable &&
         agreement.status === "SUBMITTED" && (
           <form
-            className="space-y-3"
+            className="grid gap-4"
             onSubmit={async (event) => {
               event.preventDefault()
               const data = new FormData(event.currentTarget)
@@ -686,7 +997,7 @@ export function AgreementCard({ workflow, controls }: CardProps) {
             <div className="flex flex-wrap gap-2">
               <Button
                 value="approve"
-                className={workflowButton}
+                className={workflowPrimaryButton}
                 disabled={controls.busy}
               >
                 Approve agreement
@@ -707,6 +1018,15 @@ export function AgreementCard({ workflow, controls }: CardProps) {
 }
 
 export function PaymentVerificationCard({ workflow, controls }: CardProps) {
+  const [proofDraft, setProofDraft] = useState<File | null>(null)
+  const [proofSource, setProofSource] = useState<"upload" | "existing">(
+    "upload",
+  )
+  const proofInput = useRef<HTMLInputElement>(null)
+  const account = usePortalAccount()
+  const hasExistingFiles = workflow.files.some(
+    (file) => file.uploaderId === account.id,
+  )
   const payment = workflow.payment
   if (!payment) return null
   const writable = [
@@ -727,19 +1047,33 @@ export function PaymentVerificationCard({ workflow, controls }: CardProps) {
         <p className="m-0">Reference: {payment.reference}</p>
       )}
       <AttachedFile fileId={payment.proofFileId} workflow={workflow} />
+      {workflow.permissions.isClient && payment.status === "SUBMITTED" && (
+        <p
+          role="status"
+          className="m-0 rounded-lg bg-[#edf2fb] p-3 text-xs text-[#294a9b]"
+        >
+          Your payment proof has been submitted and is awaiting verification.
+          You can submit another if the verifier returns it.
+        </p>
+      )}
       {workflow.permissions.isClient &&
         writable &&
-        payment.status !== "VERIFIED" && (
+        payment.status === "PENDING" && (
           <form
-            className="space-y-3"
+            className="grid gap-4"
             onSubmit={async (event) => {
               event.preventDefault()
               const data = new FormData(event.currentTarget)
-              await controls.act({
+              const uploaded = proofDraft
+                ? await controls.attach(proofDraft)
+                : null
+              if (proofDraft && !uploaded) return
+              const submitted = await controls.act({
                 type: "SUBMIT_PAYMENT",
-                fileId: String(data.get("fileId")),
+                fileId: uploaded?.id || String(data.get("fileId")),
                 reference: String(data.get("reference")),
               })
+              if (submitted) setProofDraft(null)
             }}
           >
             <WorkflowField label="Payment reference">
@@ -751,9 +1085,67 @@ export function PaymentVerificationCard({ workflow, controls }: CardProps) {
               />
             </WorkflowField>
             <WorkflowField label="Proof of payment">
-              <WorkflowFileSelect workflow={workflow} required />
+              <input
+                ref={proofInput}
+                type="file"
+                accept={attachmentAccept}
+                disabled={controls.busy}
+                aria-label="Attach proof of payment"
+                className="hidden"
+                onChange={(event) => {
+                  setProofDraft(event.currentTarget.files?.[0] || null)
+                  event.currentTarget.value = ""
+                }}
+              />
+              {proofSource === "existing" ? (
+                <WorkflowFileSelect workflow={workflow} required />
+              ) : proofDraft ? (
+                <AttachmentPreview
+                  file={proofDraft}
+                  disabled={controls.busy}
+                  onRemove={() => setProofDraft(null)}
+                />
+              ) : (
+                <div className="space-y-2 rounded-lg border border-dashed border-[#d8e1ef] bg-[#f6f8fc] p-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-11 text-xs"
+                    disabled={controls.busy}
+                    onClick={() => proofInput.current?.click()}
+                  >
+                    <FileText size={15} aria-hidden="true" />
+                    Attach payment proof
+                  </Button>
+                  <p className="m-0 text-[11px] text-[#738096]">
+                    Choose a receipt or transfer screenshot. PDF, Word, PNG,
+                    JPEG, or text · Up to 5 MB.
+                  </p>
+                </div>
+              )}
+              {hasExistingFiles && !proofDraft && (
+                <button
+                  type="button"
+                  disabled={controls.busy}
+                  className="min-h-11 cursor-pointer text-left text-xs font-medium text-[#294a9b] underline-offset-2 hover:underline disabled:opacity-50"
+                  onClick={() =>
+                    setProofSource(
+                      proofSource === "upload" ? "existing" : "upload",
+                    )
+                  }
+                >
+                  {proofSource === "upload"
+                    ? "Choose an existing attachment instead"
+                    : "Upload a new file instead"}
+                </button>
+              )}
             </WorkflowField>
-            <Button className={workflowButton} disabled={controls.busy}>
+            <Button
+              className={workflowPrimaryButton}
+              disabled={
+                controls.busy || (proofSource === "upload" && !proofDraft)
+              }
+            >
               Submit payment proof
             </Button>
           </form>
@@ -762,7 +1154,7 @@ export function PaymentVerificationCard({ workflow, controls }: CardProps) {
         writable &&
         payment.status === "SUBMITTED" && (
           <form
-            className="space-y-3"
+            className="grid gap-4"
             onSubmit={async (event) => {
               event.preventDefault()
               const data = new FormData(event.currentTarget)
@@ -787,7 +1179,7 @@ export function PaymentVerificationCard({ workflow, controls }: CardProps) {
             <div className="flex flex-wrap gap-2">
               <Button
                 value="approve"
-                className={workflowButton}
+                className={workflowPrimaryButton}
                 disabled={controls.busy}
               >
                 Verify payment
@@ -816,7 +1208,7 @@ export function ProjectActivationCard({ workflow }: { workflow: Workflow }) {
         Your consultation history and approved documents remain available in
         this conversation.
       </p>
-      <Button asChild className={workflowButton}>
+      <Button asChild className={workflowPrimaryButton}>
         <Link href={`/projects/${encodeURIComponent(workflow.project.id)}`}>
           View Project
         </Link>
@@ -849,6 +1241,7 @@ export function WorkflowEventCard({
   workflow,
   controls,
   fileClassName,
+  onPrepareQuotation,
 }: CardProps & { event: WorkflowEvent; fileClassName?: string }) {
   const statusUpdate = () => <SystemStatusUpdate event={event} />
   if (event.type === "APPROVAL_CONFIRMED")
@@ -911,6 +1304,7 @@ export function WorkflowEventCard({
       <>
         {statusUpdate()}
         <QuotationProposalCard
+          onPrepareQuotation={onPrepareQuotation}
           quotation={quotation}
           workflow={workflow}
           controls={controls}
