@@ -84,49 +84,71 @@ export function Dropdown<T extends string>({
       // The menu lives in <body>, so it no longer inherits the row's text
       // styles. Copy them from the trigger so size/font match.
       const cs = window.getComputedStyle(trigger)
+      const viewport = window.visualViewport
+      const viewportLeft = viewport?.offsetLeft ?? 0
+      const viewportTop = viewport?.offsetTop ?? 0
+      const viewportWidth = viewport?.width ?? window.innerWidth
+      const viewportHeight = viewport?.height ?? window.innerHeight
+      const gap = 6
+      const margin = 8
+      const viewportRight = viewportLeft + viewportWidth - margin
+      const viewportBottom = viewportTop + viewportHeight - margin
       menu.style.fontFamily = cs.fontFamily
       menu.style.fontSize = cs.fontSize
       menu.style.lineHeight = cs.lineHeight
       menu.style.letterSpacing = cs.letterSpacing
       menu.style.color = cs.color
-      menu.style.minWidth = `${trigger.offsetWidth}px`
+      menu.style.minWidth = `${Math.min(trigger.offsetWidth, viewportWidth - margin * 2)}px`
+      menu.style.maxWidth = `${Math.min(Math.max(280, trigger.offsetWidth), viewportWidth - margin * 2)}px`
 
       const t = trigger.getBoundingClientRect()
       const menuWidth = menu.offsetWidth
-      const menuHeight = menu.offsetHeight
-      const gap = 6
-      const margin = 8
+      const menuHeight =
+        menu.scrollHeight + menu.offsetHeight - menu.clientHeight
+      const spaceBelow = Math.max(0, viewportBottom - t.bottom - gap)
+      const spaceAbove = Math.max(0, t.top - gap - viewportTop - margin)
+      const openAbove = menuHeight > spaceBelow && spaceAbove > spaceBelow
+      const availableHeight = openAbove ? spaceAbove : spaceBelow
+      menu.style.maxHeight = `${availableHeight}px`
 
       let left = align === "right" ? t.right - menuWidth : t.left
       left = Math.max(
-        margin,
-        Math.min(left, window.innerWidth - menuWidth - margin),
+        viewportLeft + margin,
+        Math.min(left, viewportRight - menuWidth),
       )
 
-      let top = t.bottom + gap
-      const fitsBelow = top + menuHeight <= window.innerHeight - margin
-      const fitsAbove = t.top - gap - menuHeight >= margin
-      if (!fitsBelow && fitsAbove) top = t.top - gap - menuHeight
+      const top = openAbove
+        ? t.top - gap - Math.min(menuHeight, availableHeight)
+        : t.bottom + gap
 
       menu.style.top = `${top}px`
       menu.style.left = `${left}px`
-      menu.style.visibility = "visible"
+      menu.style.visibility =
+        t.bottom > viewportTop && t.top < viewportTop + viewportHeight
+          ? "visible"
+          : "hidden"
     }
 
     update()
     window.addEventListener("resize", update)
     window.addEventListener("scroll", update, true)
+    window.visualViewport?.addEventListener("resize", update)
+    window.visualViewport?.addEventListener("scroll", update)
+    const observer = new ResizeObserver(update)
+    if (triggerRef.current) observer.observe(triggerRef.current)
+    if (menuRef.current) observer.observe(menuRef.current)
     return () => {
       window.removeEventListener("resize", update)
       window.removeEventListener("scroll", update, true)
+      window.visualViewport?.removeEventListener("resize", update)
+      window.visualViewport?.removeEventListener("scroll", update)
+      observer.disconnect()
     }
   }, [open, align, options.length])
 
   useEffect(() => {
     if (!open) return
-    optionRefs.current[Math.max(0, selectedIndex)]?.focus({
-      preventScroll: true,
-    })
+    optionRefs.current[Math.max(0, selectedIndex)]?.focus()
 
     function closeOnOutsideClick(event: PointerEvent) {
       const target = event.target as Node
@@ -205,7 +227,7 @@ export function Dropdown<T extends string>({
           <div
             ref={menuRef}
             className={cn(
-              "fixed z-[1000] w-max max-w-[min(280px,calc(100vw-40px))]",
+              "fixed z-[130] w-max max-w-[min(280px,calc(100vw-40px))] overflow-y-auto overscroll-contain",
               dropdownMenuClass,
               menuClassName,
             )}

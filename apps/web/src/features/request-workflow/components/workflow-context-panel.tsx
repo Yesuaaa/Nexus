@@ -67,6 +67,7 @@ function ActionForm({
   onComplete,
   onCancel,
   inline = false,
+  destructive = false,
 }: {
   controls: WorkflowControls
   action: (data: FormData) => WorkflowAction
@@ -76,8 +77,14 @@ function ActionForm({
   onComplete?: () => void
   onCancel?: () => void
   inline?: boolean
+  destructive?: boolean
 }) {
   if (readOnly) return <div>{children}</div>
+  const submitClass = cn(
+    workflowButton,
+    destructive &&
+      "border border-[#b42318] bg-background text-[#b42318] hover:bg-[#fef3f2] hover:text-[#912018] disabled:opacity-50",
+  )
   return (
     <form
       className="space-y-3"
@@ -103,12 +110,12 @@ function ActionForm({
               Cancel
             </Button>
           )}
-          <Button className={workflowButton} disabled={controls.busy}>
+          <Button className={submitClass} disabled={controls.busy}>
             {controls.busy ? "Saving…" : label}
           </Button>
         </div>
       ) : (
-        <Button className={workflowButton} disabled={controls.busy}>
+        <Button className={submitClass} disabled={controls.busy}>
           {controls.busy ? "Saving…" : label}
         </Button>
       )}
@@ -913,6 +920,7 @@ export function WorkflowContextPanel({
                 <ActionForm
                   controls={controls}
                   label="Cancel request"
+                  destructive
                   action={(data) => ({
                     type: "CANCEL",
                     note: String(data.get("note")),

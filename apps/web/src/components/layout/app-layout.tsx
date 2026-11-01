@@ -8,6 +8,21 @@ import { Sidebar } from "./sidebar"
 import { Topbar } from "./topbar"
 
 const tabletQuery = "(min-width: 768px) and (max-width: 1100px)"
+const sidebarCollapsedStorageKey = "nexus.layout.sidebar-collapsed"
+
+function readSidebarCollapsedPreference(): boolean | null {
+  if (typeof window === "undefined") return null
+
+  try {
+    const stored = window.sessionStorage.getItem(sidebarCollapsedStorageKey)
+    if (stored === "true") return true
+    if (stored === "false") return false
+  } catch {
+    // Fall back to the responsive default when storage is unavailable.
+  }
+
+  return null
+}
 
 export function AppLayout({
   account,
@@ -20,13 +35,16 @@ export function AppLayout({
 }) {
   const [collapsed, setCollapsed] = useState(
     () =>
-      typeof window !== "undefined" && window.matchMedia(tabletQuery).matches,
+      readSidebarCollapsedPreference() ??
+      (typeof window !== "undefined" && window.matchMedia(tabletQuery).matches),
   )
   const [drawerOpen, setDrawerOpen] = useState(false)
 
   useEffect(() => {
     const query = window.matchMedia(tabletQuery)
-    const syncBreakpoint = () => setCollapsed(query.matches)
+    const syncBreakpoint = () => {
+      if (readSidebarCollapsedPreference() === null) setCollapsed(query.matches)
+    }
     query.addEventListener("change", syncBreakpoint)
     return () => query.removeEventListener("change", syncBreakpoint)
   }, [])
@@ -39,6 +57,18 @@ export function AppLayout({
     window.addEventListener("keydown", closeOnEscape)
     return () => window.removeEventListener("keydown", closeOnEscape)
   }, [drawerOpen])
+
+  function toggleSidebar() {
+    setCollapsed((current) => {
+      const next = !current
+      try {
+        window.sessionStorage.setItem(sidebarCollapsedStorageKey, String(next))
+      } catch {
+        // Keep the control functional when storage is unavailable.
+      }
+      return next
+    })
+  }
 
   return (
     <div
@@ -60,7 +90,7 @@ export function AppLayout({
         account={account}
         collapsed={collapsed}
         drawerOpen={drawerOpen}
-        onToggleCollapse={() => setCollapsed((current) => !current)}
+        onToggleCollapse={toggleSidebar}
         onCloseDrawer={() => setDrawerOpen(false)}
         onSignOut={onSignOut}
       />

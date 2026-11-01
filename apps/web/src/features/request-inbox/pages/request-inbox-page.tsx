@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { RefreshCw } from "lucide-react"
 import { sileo } from "sileo"
@@ -18,9 +18,12 @@ import {
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { ApiError } from "@/features/auth/api/auth-api"
 import { BookingDetailsDrawer } from "@/features/bookings/components/booking-details-drawer"
+import { listConversations } from "@/features/request-conversations/api/request-conversations-api"
 import { cn } from "@/lib/utils"
 import {
   acceptInboxRequest,
+  declineInboxRequest,
+  deleteInboxRequest,
   getInboxRequest,
   listInbox,
   type InboxList,
@@ -28,6 +31,90 @@ import {
   type InboxView,
 } from "../api/request-inbox-api"
 import { RequestInboxTable } from "../components/request-inbox-table"
+
+type ConfirmAction = { kind: "decline" | "delete"; request: InboxRequest }
+type ClientLike = { id?: string; fullName?: string | null }
+
+function ConfirmModal({
+  open,
+  title,
+  description,
+  confirmLabel,
+  busyLabel,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  open: boolean
+  title: string
+  description: string
+  confirmLabel: string
+  busyLabel: string
+  busy: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const ref = useRef<HTMLDialogElement>(null)
+  const titleId = useId()
+  const descriptionId = useId()
+  useEffect(() => {
+    const dialog = ref.current
+    if (!dialog) return
+    if (open && !dialog.open) dialog.showModal()
+    if (!open && dialog.open) dialog.close()
+  }, [open])
+  return (
+    <dialog
+      ref={ref}
+      aria-labelledby={titleId}
+      aria-describedby={descriptionId}
+      onCancel={(event) => {
+        event.preventDefault()
+        if (!busy) onCancel()
+      }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget && !busy) onCancel()
+      }}
+      className="pointer-events-auto m-auto w-[calc(100%-32px)] max-w-[420px] rounded-[13px] border border-[#dedede] bg-background p-0 text-[#182235] shadow-[0_8px_30px_rgb(20_30_50_/_18%)] backdrop:bg-black/40"
+    >
+      <div className="grid gap-4 p-5">
+        <div className="grid gap-1.5">
+          <h2
+            id={titleId}
+            className="m-0 text-base leading-tight font-semibold"
+          >
+            {title}
+          </h2>
+          <p
+            id={descriptionId}
+            className="m-0 text-xs leading-relaxed text-[#52627a]"
+          >
+            {description}
+          </p>
+        </div>
+        <div className="flex justify-end gap-2 max-[560px]:flex-col-reverse">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-9 min-w-[92px] text-xs max-[560px]:h-11"
+            disabled={busy}
+            onClick={onCancel}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            className="h-9 min-w-[92px] bg-[#b42318] text-xs text-white hover:bg-[#912018] max-[560px]:h-11"
+            disabled={busy}
+            onClick={onConfirm}
+          >
+            {busy ? busyLabel : confirmLabel}
+          </Button>
+        </div>
+      </div>
+    </dialog>
+  )
+}
 
 export function RequestInboxPage() {
   const router = useRouter()
@@ -41,6 +128,9 @@ export function RequestInboxPage() {
   const [accepting, setAccepting] = useState(false)
   const acceptingRef = useRef(false)
   const [acceptError, setAcceptError] = useState("")
+  const [confirm, setConfirm] = useState<ConfirmAction | null>(null)
+  const [confirming, setConfirming] = useState(false)
+  const confirmingRef = useRef(false)
   const [detailsRevision, setDetailsRevision] = useState(0)
   const [result, setResult] = useState<InboxList | null>(null)
   const [error, setError] = useState("")
@@ -82,6 +172,48 @@ export function RequestInboxPage() {
     }
   }, [debouncedSearch, view, page, revision, requestKey, viewKey])
 
+  function refresh() {
+    setRevision((value) => value + 1)
+  }
+
+  async function goToChat(request: InboxRequest) {
+    // Conversations are keyed by request id, and one only exists once a
+    // department has accepted the request.
+    if (request.acceptedDepartmentId === account.headOf?.id) {
+      router.push(`/messages?request=${encodeURIComponent(request.id)}`)
+      return
+    }
+    // Not accepted yet: open this department's most recent conversation
+    // with the same client.
+    try {
+      const target = request.client as ClientLike
+      const departmentId = account.headOf?.id
+      let before: string | undefined
+      for (let i = 0; i < 5; i++) {
+        const { conversations, nextCursor } = await listConversations(before)
+        const match = conversations.find((row) => {
+          const sameDepartment =
+            !departmentId ||
+            !row.acceptedDepartment ||
+            row.acceptedDepartment.id === departmentId
+          const sameClient = target.id
+            ? row.client.id === target.id
+            : !!row.client.fullName && row.client.fullName === target.fullName
+          return sameDepartment && sameClient
+        })
+        if (match) {
+          router.push(`/messages?request=${encodeURIComponent(match.id)}`)
+          return
+        }
+        if (!nextCursor) break
+        before = nextCursor
+      }
+    } catch {
+      // Fall through to the plain Messages page.
+    }
+    router.push("/messages")
+  }
+
   async function accept(id: string) {
     if (acceptingRef.current) return
     acceptingRef.current = true
@@ -91,7 +223,7 @@ export function RequestInboxPage() {
       const accepted = await acceptInboxRequest(id)
       setSelected(accepted)
       setDetailsRevision((value) => value + 1)
-      setRevision((value) => value + 1)
+      refresh()
       sileo.success({
         title: "Consultation accepted",
         description:
@@ -110,7 +242,7 @@ export function RequestInboxPage() {
           reason.status === 404 ||
           reason.status === 403)
       ) {
-        setRevision((value) => value + 1)
+        refresh()
         setDetailsRevision((value) => value + 1)
       }
     } finally {
@@ -119,10 +251,64 @@ export function RequestInboxPage() {
     }
   }
 
+  async function runConfirm() {
+    if (!confirm || confirmingRef.current) return
+    confirmingRef.current = true
+    setConfirming(true)
+    const { kind, request } = confirm
+    try {
+      if (kind === "decline") {
+        const declined = await declineInboxRequest(request.id)
+        setSelected((current) =>
+          current?.id === request.id ? declined : current,
+        )
+        setDetailsRevision((value) => value + 1)
+        sileo.success({
+          title: "Request declined",
+          description: "The booking was declined and the inbox was refreshed.",
+        })
+      } else {
+        await deleteInboxRequest(request.id)
+        setSelected((current) => (current?.id === request.id ? null : current))
+        sileo.success({ title: "Request deleted" })
+      }
+      setConfirm(null)
+      refresh()
+    } catch (reason) {
+      const message =
+        reason instanceof Error
+          ? reason.message
+          : kind === "decline"
+            ? "Couldn't decline this request. Try again."
+            : "Couldn't delete this request. Try again."
+      sileo.error({
+        title:
+          kind === "decline"
+            ? "Couldn't decline request"
+            : "Couldn't delete request",
+        description: message,
+      })
+      if (
+        reason instanceof ApiError &&
+        (reason.status === 409 ||
+          reason.status === 404 ||
+          reason.status === 403)
+      ) {
+        setConfirm(null)
+        refresh()
+        setDetailsRevision((value) => value + 1)
+      }
+    } finally {
+      confirmingRef.current = false
+      setConfirming(false)
+    }
+  }
+
   const from = !result?.total ? 0 : (result.page - 1) * result.pageSize + 1
   const to = result
     ? (result.page - 1) * result.pageSize + result.serviceRequests.length
     : 0
+  const confirmService = confirm?.request.service.name ?? "this request"
   return (
     <main
       className={cn(contentClass, "p-[clamp(16px,2.1vw,32px)]")}
@@ -148,7 +334,7 @@ export function RequestInboxPage() {
         <Button
           variant="outline"
           disabled={loading}
-          onClick={() => setRevision((value) => value + 1)}
+          onClick={refresh}
           className="h-[34px] flex-none text-xs max-[560px]:h-11"
         >
           <RefreshCw size={14} aria-hidden="true" />
@@ -206,13 +392,13 @@ export function RequestInboxPage() {
           error={error}
           viewKey={resolvedViewKey}
           quickKey={debouncedSearch}
-          onRetry={() => setRevision((value) => value + 1)}
+          onRetry={refresh}
           onView={(request) => {
-            if (request.acceptedDepartmentId === account.headOf?.id)
-              router.push(`/messages?request=${encodeURIComponent(request.id)}`)
-            else setSelected(request)
+            setSelected(request)
             setAcceptError("")
           }}
+          onGoToChat={(request) => void goToChat(request)}
+          onDelete={(request) => setConfirm({ kind: "delete", request })}
         />
         {!error && !!result?.total && (
           <footer className="flex flex-wrap items-center justify-between gap-3 pt-4 text-[11px] text-[#52627a]">
@@ -237,11 +423,12 @@ export function RequestInboxPage() {
           key={selected.id}
           id={selected.id}
           loadDetails={getInboxRequest}
-          closeDisabled={accepting}
+          closeDisabled={accepting || !!confirm}
           onClose={() => setSelected(null)}
           description="Review the client's booking before accepting it for department review."
           fallbackFocusId="request-inbox-heading"
           refreshKey={detailsRevision}
+          statusLabels={{ SUBMITTED: "Pending" }}
           showMessagesLink={(details) =>
             details.acceptedDepartmentId === account.headOf?.id
           }
@@ -266,31 +453,72 @@ export function RequestInboxPage() {
                       ? "Accepting starts a consultation and opens a private request workspace with the client. Service delivery requires a separate quotation approval."
                       : "Start a conversation to claim this previously accepted booking for your department."}
                   </p>
-                  <Button
-                    className="w-full bg-[#203f8c] text-white hover:bg-[#172f70]"
-                    disabled={accepting}
-                    onClick={() => void accept(details.id)}
-                  >
-                    {accepting
-                      ? "Accepting…"
-                      : details.status === "SUBMITTED"
-                        ? "Accept request"
-                        : "Start conversation"}
-                  </Button>
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      className="w-full bg-[#203f8c] text-white hover:bg-[#172f70]"
+                      disabled={accepting || confirming}
+                      onClick={() => void accept(details.id)}
+                    >
+                      {accepting
+                        ? "Accepting…"
+                        : details.status === "SUBMITTED"
+                          ? "Accept request"
+                          : "Start conversation"}
+                    </Button>
+                    <Button
+                      className="w-full bg-[#b42318] text-white hover:bg-[#912018]"
+                      disabled={accepting || confirming}
+                      onClick={() =>
+                        setConfirm({ kind: "decline", request: selected })
+                      }
+                    >
+                      Decline request
+                    </Button>
+                  </div>
                 </>
               ) : (
-                <p className="m-0 text-xs text-[#52627a]">
-                  {details.acceptedDepartmentId === account.headOf?.id
-                    ? "Your department accepted this consultation. Open the request workspace to gather requirements and prepare a quotation."
-                    : details.acceptedDepartmentId
-                      ? "Another department accepted this request. Its conversation is private to that department and the client."
-                      : "This booking is no longer awaiting acceptance."}
-                </p>
+                <>
+                  <p className="m-0 text-xs text-[#52627a]">
+                    {details.acceptedDepartmentId === account.headOf?.id
+                      ? "Your department accepted this consultation. Open the request workspace to gather requirements and prepare a quotation."
+                      : details.acceptedDepartmentId
+                        ? "Another department accepted this request. Its conversation is private to that department and the client."
+                        : "This booking is no longer awaiting acceptance."}
+                  </p>
+                  {details.acceptedDepartmentId === account.headOf?.id && (
+                    <Button
+                      className="mt-3 w-full bg-[#203f8c] text-white hover:bg-[#172f70]"
+                      onClick={() => void goToChat(selected)}
+                    >
+                      Go to chat
+                    </Button>
+                  )}
+                </>
               )}
             </div>
           )}
         />
       )}
+      <ConfirmModal
+        open={!!confirm}
+        busy={confirming}
+        title={
+          confirm?.kind === "delete"
+            ? "Delete this request?"
+            : "Decline this request?"
+        }
+        description={
+          confirm?.kind === "delete"
+            ? `This permanently removes ${confirmService} from the inbox. This can't be undone.`
+            : `The client's booking for ${confirmService} will be marked as declined. This can't be undone.`
+        }
+        confirmLabel={
+          confirm?.kind === "delete" ? "Delete request" : "Decline request"
+        }
+        busyLabel={confirm?.kind === "delete" ? "Deleting…" : "Declining…"}
+        onCancel={() => setConfirm(null)}
+        onConfirm={() => void runConfirm()}
+      />
     </main>
   )
 }
