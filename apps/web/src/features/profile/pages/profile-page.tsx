@@ -308,12 +308,15 @@ function SecurityDetails() {
 function SpecialistEditor({
   specialist,
   onSaved,
+  onUploadingChange,
 }: {
   specialist: SpecialistProfile
   onSaved: (data: Profile) => void
+  onUploadingChange: (busy: boolean) => void
 }) {
   const [draft, setDraft] = useState(specialist)
   const [original, setOriginal] = useState(specialist)
+  const [uploadingImage, setUploadingImage] = useState(false)
   const [specialties, setSpecialties] = useState(
     specialist.specialties.join(", "),
   )
@@ -330,6 +333,7 @@ function SpecialistEditor({
   }
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (uploadingImage) return
     setBusy(true)
     setError("")
     try {
@@ -365,7 +369,7 @@ function SpecialistEditor({
     >
       <form onSubmit={save} className="grid gap-6">
         <fieldset
-          disabled={busy}
+          disabled={busy || uploadingImage}
           className="m-0 grid min-w-0 gap-6 border-0 p-0"
         >
           <Field label="About">
@@ -548,7 +552,20 @@ function SpecialistEditor({
                   />
                 </Field>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="sm:col-span-2"><ProfileImageUpload kind="project" value={item.thumbnailUrl} label={`Project ${index + 1} image`} onUploaded={(url) => project(index, { thumbnailUrl: url })} /></div>
+                  <div className="sm:col-span-2">
+                    <ProfileImageUpload
+                      kind="project"
+                      value={item.thumbnailUrl}
+                      label={`Project ${index + 1} image`}
+                      onUploaded={(url) =>
+                        project(index, { thumbnailUrl: url })
+                      }
+                      onUploadingChange={(value) => {
+                        setUploadingImage(value)
+                        onUploadingChange(value)
+                      }}
+                    />
+                  </div>
                   <Field label="Project image URL">
                     <input
                       type="url"
@@ -616,8 +633,12 @@ function SpecialistEditor({
         </fieldset>
         <ErrorMessage message={error} />
         <div className="flex justify-end border-t border-[#eceef1] pt-4">
-          <Button className={primaryClass} disabled={busy}>
-            {busy ? "Saving…" : "Save specialist profile"}
+          <Button className={primaryClass} disabled={busy || uploadingImage}>
+            {busy
+              ? "Saving…"
+              : uploadingImage
+                ? "Uploading image…"
+                : "Save specialist profile"}
           </Button>
         </div>
       </form>
@@ -630,6 +651,7 @@ export function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [error, setError] = useState("")
   const [revision, setRevision] = useState(0)
+  const [uploadingImage, setUploadingImage] = useState(false)
   const [editor, setEditor] = useState<
     "personal" | "specialist" | "security" | "images" | null
   >(null)
@@ -667,22 +689,72 @@ export function ProfilePage() {
       <Dialog
         open={editor !== null}
         onOpenChange={(open) => {
-          if (!open) setEditor(null)
+          if (!open && !uploadingImage) setEditor(null)
         }}
       >
-        <DialogContent className="max-h-[calc(100dvh-32px)] w-[min(820px,calc(100vw-32px))] max-w-[820px] overflow-y-auto rounded-2xl p-0">
+        <DialogContent
+          onEscapeKeyDown={(event) => {
+            if (uploadingImage) event.preventDefault()
+          }}
+          onPointerDownOutside={(event) => {
+            if (uploadingImage) event.preventDefault()
+          }}
+          className="max-h-[calc(100dvh-32px)] w-[min(820px,calc(100vw-32px))] max-w-[820px] overflow-y-auto rounded-2xl p-0"
+        >
           <DialogTitle className="sr-only">
-            {editor === "images" ? "Profile photo & banner" : editor === "specialist"
-              ? "Edit specialist profile"
-              : editor === "security"
-                ? "Change password"
-                : "Edit personal details"}
+            {editor === "images"
+              ? "Profile photo & banner"
+              : editor === "specialist"
+                ? "Edit specialist profile"
+                : editor === "security"
+                  ? "Change password"
+                  : "Edit personal details"}
           </DialogTitle>
           <DialogDescription className="sr-only">
             Update your profile information and save your changes.
           </DialogDescription>
           <div className="[&>section]:rounded-none [&>section]:border-0">
-            {editor === "images" && profile && <Section id="profile-images" title="Profile photo & banner" description="Choose an image, review the preview, then upload it to your profile."><div className="grid gap-5"><ProfileImageUpload kind="avatar" value={profile.imageUrl} label="Profile picture" onUploaded={(_url, data) => { if (data) setProfile(data) }} /><ProfileImageUpload kind="banner" value={profile.bannerUrl} label="Cover banner" onUploaded={(_url, data) => { if (data) setProfile(data) }} /><div className="flex justify-end"><Button type="button" className={primaryClass} onClick={() => setEditor(null)}>Done</Button></div></div></Section>}
+            {editor === "images" && profile && (
+              <Section
+                id="profile-images"
+                title="Profile photo & banner"
+                description="Choose an image, review the preview, then upload it to your profile."
+              >
+                <fieldset
+                  disabled={uploadingImage}
+                  className="m-0 grid min-w-0 gap-5 border-0 p-0"
+                >
+                  <ProfileImageUpload
+                    kind="avatar"
+                    value={profile.imageUrl}
+                    label="Profile picture"
+                    onUploadingChange={setUploadingImage}
+                    onUploaded={(_url, data) => {
+                      if (data) setProfile(data)
+                    }}
+                  />
+                  <ProfileImageUpload
+                    kind="banner"
+                    value={profile.bannerUrl}
+                    label="Cover banner"
+                    onUploadingChange={setUploadingImage}
+                    onUploaded={(_url, data) => {
+                      if (data) setProfile(data)
+                    }}
+                  />
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      className={primaryClass}
+                      disabled={uploadingImage}
+                      onClick={() => setEditor(null)}
+                    >
+                      Done
+                    </Button>
+                  </div>
+                </fieldset>
+              </Section>
+            )}
             {editor === "personal" && profile && (
               <PersonalDetails profile={profile} onSaved={saved} />
             )}
@@ -690,6 +762,7 @@ export function ProfilePage() {
               <SpecialistEditor
                 specialist={profile.specialist}
                 onSaved={saved}
+                onUploadingChange={setUploadingImage}
               />
             )}
             {editor === "security" && <SecurityDetails />}

@@ -33,8 +33,17 @@ export function createApp(
   )
   app.use("/api/client", express.json({ limit: "64kb" }), clientServicesRouter)
   app.use("/api/request-workflows", requestWorkflowRouter)
-  app.use("/api/auth/profile/images", requireAuth, authRateLimit(20), express.json({ limit: "3mb" }))
-  app.use("/api/auth/profile/specialist", requireAuth, express.json({ limit: "128kb" }))
+  app.use(
+    "/api/auth/profile/images",
+    requireAuth,
+    authRateLimit(20),
+    express.json({ limit: "3mb" }),
+  )
+  app.use(
+    "/api/auth/profile/specialist",
+    requireAuth,
+    express.json({ limit: "128kb" }),
+  )
   app.use(express.json({ limit: "16kb" }))
   app.use("/api/auth", authRouter)
   app.use("/api/users", usersRouter)

@@ -11,6 +11,7 @@ import type {
   EmploymentType,
 } from "../api/employees-api"
 import { EmployeeRowActions } from "./employee-row-actions"
+import { ConversationAvatar } from "@/features/request-conversations/components/conversation-avatar"
 
 const employeeGrid =
   "grid grid-cols-[minmax(100px,.75fr)_minmax(180px,1.35fr)_minmax(120px,1fr)_minmax(160px,1.2fr)_minmax(82px,.7fr)_minmax(90px,.7fr)_minmax(78px,.65fr)_112px] items-center gap-3.5 @max-[1000px]:grid-cols-[minmax(0,1fr)_minmax(105px,.65fr)]"
@@ -182,12 +183,11 @@ export function EmployeeTable({
                 role="cell"
                 className="flex min-w-0 items-center gap-2.5 @max-[1000px]:col-span-2 @max-[1000px]:row-start-2"
               >
-                <span
-                  className="grid size-8 flex-none place-items-center rounded-full bg-[#eef0f3] text-xs font-medium text-[#65718a]"
-                  aria-hidden="true"
-                >
-                  {employee.fullName[0]?.toUpperCase() || "E"}
-                </span>
+                <ConversationAvatar
+                  name={employee.fullName}
+                  imageUrl={employee.imageUrl}
+                  className="size-8"
+                />
                 <div className="min-w-0">
                   <p
                     className="m-0 truncate font-semibold"

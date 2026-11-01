@@ -9,6 +9,7 @@ export type Account = {
   id: string
   email: string
   fullName: string | null
+  imageUrl?: string | null
   contactNumber: string | null
   role: "SUPERADMIN" | "ADMIN" | "STAFF" | "USER"
   isActive: boolean

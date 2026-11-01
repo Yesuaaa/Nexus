@@ -28,7 +28,12 @@ test(
     }
     const db = new PGlite()
     let imageUploads = 0
-    setServiceImageStorageForTests({ upload: async (_dataUrl, directory = "services") => `${directory}/${++imageUploads}.png`, publicUrl: (path) => `https://images.example.com/${path}`, remove: async () => {} })
+    setServiceImageStorageForTests({
+      upload: async (_dataUrl, directory = "services") =>
+        `${directory}/${++imageUploads}.png`,
+      publicUrl: (path) => `https://images.example.com/${path}`,
+      remove: async () => {},
+    })
     const socket = new PGLiteSocketServer({ db, port: 0, host: "127.0.0.1" })
     const cleanup: {
       server?: ReturnType<ReturnType<typeof createApp>["listen"]>
@@ -130,23 +135,95 @@ test(
         .fullName,
       "Updated STAFF",
     )
-    const pngData = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lY4AAAAASUVORK5CYII="
+    const pngData =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lY4AAAAASUVORK5CYII="
     for (const actor of actors) {
       for (const kind of ["avatar", "banner"] as const) {
-        const result = await request(actor.token, "/profile/images", "POST", { kind, dataUrl: pngData })
+        const result = await request(actor.token, "/profile/images", "POST", {
+          kind,
+          dataUrl: pngData,
+        })
         assert.equal(result.status, 201, await result.clone().text())
-        const body = await result.json() as { url: string; profile: { imageUrl: string; bannerUrl: string } }
-        assert.match(body.url, new RegExp(`/profiles/${actor.user.id}/${kind}/`))
-        assert.equal(kind === "avatar" ? body.profile.imageUrl : body.profile.bannerUrl, body.url)
+        const body = (await result.json()) as {
+          url: string
+          profile: { imageUrl: string; bannerUrl: string }
+        }
+        assert.match(
+          body.url,
+          new RegExp(`/profiles/${actor.user.id}/${kind}/`),
+        )
+        assert.equal(
+          kind === "avatar" ? body.profile.imageUrl : body.profile.bannerUrl,
+          body.url,
+        )
       }
     }
+    const managementBase = base.replace(/\/auth$/, "")
+    const accountListResponse = await fetch(`${managementBase}/users`, {
+      headers: { authorization: `Bearer ${actors[3]!.token}` },
+    })
+    assert.equal(accountListResponse.status, 200)
+    const accountList = (await accountListResponse.json()) as {
+      users: { id: string; imageUrl: string | null }[]
+    }
+    for (const actor of actors)
+      assert.match(
+        accountList.users.find((item) => item.id === actor.user.id)!.imageUrl!,
+        new RegExp(`/profiles/${actor.user.id}/avatar/`),
+      )
+    const employeeListResponse = await fetch(`${managementBase}/employees`, {
+      headers: { authorization: `Bearer ${actors[2]!.token}` },
+    })
+    assert.equal(employeeListResponse.status, 200)
+    const employeeList = (await employeeListResponse.json()) as {
+      employees: { accountId: string; imageUrl: string | null }[]
+    }
+    for (const actor of [actors[1]!, actors[2]!])
+      assert.match(
+        employeeList.employees.find((item) => item.accountId === actor.user.id)!
+          .imageUrl!,
+        new RegExp(`/profiles/${actor.user.id}/avatar/`),
+      )
+    const employeeDetailResponse = await fetch(
+      `${managementBase}/employees/${employee.id}`,
+      { headers: { authorization: `Bearer ${actors[2]!.token}` } },
+    )
+    assert.equal(employeeDetailResponse.status, 200)
+    const employeeDetail = (await employeeDetailResponse.json()) as {
+      employee: { imageUrl: string | null }
+    }
+    assert.match(
+      employeeDetail.employee.imageUrl!,
+      new RegExp(`/profiles/${staff.user.id}/avatar/`),
+    )
     const uploadsBeforeInvalid = imageUploads
-    assert.equal((await request(staff.token, "/profile/images", "POST", { kind: "avatar", dataUrl: "data:image/png;base64,aW52YWxpZA==" })).status, 400)
+    assert.equal(
+      (
+        await request(staff.token, "/profile/images", "POST", {
+          kind: "avatar",
+          dataUrl: "data:image/png;base64,aW52YWxpZA==",
+        })
+      ).status,
+      400,
+    )
     assert.equal(imageUploads, uploadsBeforeInvalid)
-    assert.equal((await request(actors[0]!.token, "/profile/images", "POST", { kind: "project", dataUrl: pngData })).status, 403)
-    const projectImage = await request(staff.token, "/profile/images", "POST", { kind: "project", dataUrl: pngData })
+    assert.equal(
+      (
+        await request(actors[0]!.token, "/profile/images", "POST", {
+          kind: "project",
+          dataUrl: pngData,
+        })
+      ).status,
+      403,
+    )
+    const projectImage = await request(staff.token, "/profile/images", "POST", {
+      kind: "project",
+      dataUrl: pngData,
+    })
     assert.equal(projectImage.status, 201)
-    const uploadedEmployee = await prisma.employee.findUniqueOrThrow({ where: { id: employee.id } })
+    const uploadedEmployee = await prisma.employee.findUniqueOrThrow({
+      where: { id: employee.id },
+    })
     assert.match(uploadedEmployee.profileImageUrl!, /\/avatar\//)
     assert.match(uploadedEmployee.profileBannerUrl!, /\/banner\//)
     const profile = await readProfile(await request(staff.token, "/profile"))

@@ -404,6 +404,11 @@ export function MessagesPage({ requestId }: { requestId: string | null }) {
                   <span className="relative grid size-9 shrink-0 place-items-center">
                     <ConversationAvatar
                       name={name}
+                      imageUrl={
+                        isClient
+                          ? row.acceptedDepartment?.head?.imageUrl
+                          : row.client.imageUrl
+                      }
                       className={
                         isSelected
                           ? "ring-1 ring-white ring-offset-2 ring-offset-[#203f8c]"

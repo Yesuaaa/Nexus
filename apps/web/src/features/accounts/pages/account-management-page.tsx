@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { LoaderCircle, Trash2 } from "lucide-react"
+import { ConversationAvatar } from "@/features/request-conversations/components/conversation-avatar"
 import { useReducedMotion } from "framer-motion"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { sileo } from "sileo"
@@ -98,7 +99,12 @@ function AccountRowContents({
 
   return (
     <>
-      <div className="min-w-0 @max-[900px]:col-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+      <div className="flex min-w-0 items-center gap-2.5 @max-[900px]:col-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+        <ConversationAvatar
+          name={user.fullName || user.email}
+          imageUrl={user.imageUrl}
+          className="size-8"
+        />
         <div className="grid min-w-0 gap-0.5">
           <strong className="min-w-0 truncate font-medium text-foreground">
             {user.fullName || user.email.split("@")[0]}

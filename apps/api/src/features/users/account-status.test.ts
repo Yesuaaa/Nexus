@@ -24,6 +24,8 @@ test("account status, deletion, and authentication enforce access", async (t) =>
     email: "target@example.com",
     fullName: "Test User",
     contactNumber: null,
+    profileImagePath: null,
+    profileBannerPath: null,
     position: null,
     passwordHash: await hashPassword(password),
     role: Role.USER,

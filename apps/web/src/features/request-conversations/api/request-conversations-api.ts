@@ -17,11 +17,15 @@ export type ConversationSummary = {
   referenceNumber: string | null
   updatedAt: string
   service: { name: string }
-  client: { id: string; fullName: string | null }
+  client: { id: string; fullName: string | null; imageUrl?: string | null }
   acceptedDepartment: {
     id: string
     name: string
-    head?: { id: string; fullName: string | null } | null
+    head?: {
+      id: string
+      fullName: string | null
+      imageUrl?: string | null
+    } | null
   } | null
   lastMessage: RequestMessage | null
   unreadCount?: number
@@ -53,12 +57,18 @@ export function markConversationRead(id: string) {
 export type ConversationHistory = {
   conversation: {
     department: { id: string; name: string }
-    head: { id: string; fullName: string | null } | null
+    head: {
+      id: string
+      fullName: string | null
+      specialistId?: string | null
+      imageUrl?: string | null
+    } | null
     client?: {
       id: string
       fullName: string | null
       email: string
       contactNumber: string | null
+      imageUrl?: string | null
     }
   } | null
   canSend: boolean

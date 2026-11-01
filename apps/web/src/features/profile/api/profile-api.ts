@@ -32,7 +32,15 @@ export type Profile = {
   } | null
   specialist: SpecialistProfile | null
 }
-export function uploadProfileImage(kind: "avatar" | "banner" | "project", dataUrl: string) { return apiRequest<{ url: string; profile: Profile | null }>("/api/auth/profile/images", { method: "POST", body: JSON.stringify({ kind, dataUrl }) }) }
+export function uploadProfileImage(
+  kind: "avatar" | "banner" | "project",
+  dataUrl: string,
+) {
+  return apiRequest<{ url: string; profile: Profile | null }>(
+    "/api/auth/profile/images",
+    { method: "POST", body: JSON.stringify({ kind, dataUrl }) },
+  )
+}
 export function getProfile(signal?: AbortSignal) {
   return apiRequest<Profile>("/api/auth/profile", { signal })
 }

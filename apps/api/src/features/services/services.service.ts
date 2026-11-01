@@ -119,7 +119,7 @@ function publicSocialLinks(
     if (!platform || !url || seen.has(url)) continue
     seen.add(url)
     publicLinks.push({ platform, url })
-    if (publicLinks.length === 8) break
+    if (publicLinks.length === 10) break
   }
 
   return publicLinks
@@ -153,7 +153,7 @@ export const servicesService = {
       specialties: profileSpecialties
         .map((item) => item.trim())
         .filter(Boolean)
-        .slice(0, 12),
+        .slice(0, 20),
       socialLinks: publicSocialLinks(socialLinks),
       projects: portfolioProjects.map((project) => ({
         ...project,
@@ -165,7 +165,11 @@ export const servicesService = {
   async getSpecialists(serviceId: string) {
     const service = await servicesRepository.findHeaderById(serviceId)
     if (!service?.isActive) throw new ServicesError(404, "Service not found")
-    return servicesRepository.findSpecialists(serviceId)
+    const specialists = await servicesRepository.findSpecialists(serviceId)
+    return specialists.map(({ profileImageUrl, ...specialist }) => ({
+      ...specialist,
+      imageUrl: publicPortfolioUrl(profileImageUrl),
+    }))
   },
 
   async getAvailable() {

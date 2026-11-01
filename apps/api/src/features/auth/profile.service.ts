@@ -27,8 +27,14 @@ export async function getProfile(userId: string) {
       : null
   return {
     user: publicUser(user),
-    imageUrl: serviceImagePublicUrl(user.profileImagePath) || (user.role === "STAFF" ? employee?.profileImageUrl : null) || null,
-    bannerUrl: serviceImagePublicUrl(user.profileBannerPath) || (user.role === "STAFF" ? employee?.profileBannerUrl : null) || null,
+    imageUrl:
+      serviceImagePublicUrl(user.profileImagePath) ||
+      (user.role === "STAFF" ? employee?.profileImageUrl : null) ||
+      null,
+    bannerUrl:
+      serviceImagePublicUrl(user.profileBannerPath) ||
+      (user.role === "STAFF" ? employee?.profileBannerUrl : null) ||
+      null,
     employee: employee
       ? {
           employeeId: employee.employeeId,

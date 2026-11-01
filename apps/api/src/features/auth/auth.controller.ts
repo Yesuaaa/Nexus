@@ -13,9 +13,21 @@ import {
 
 export const authRouter = Router()
 
-authRouter.post("/profile/images", requireAuth, async (request, response, next) => {
-  try { response.status(201).json(await uploadProfileImage(request.auth!.user.id, request.body)) } catch (error) { if (error instanceof AuthError) return response.status(error.status).json({ error: error.message }); next(error) }
-})
+authRouter.post(
+  "/profile/images",
+  requireAuth,
+  async (request, response, next) => {
+    try {
+      response
+        .status(201)
+        .json(await uploadProfileImage(request.auth!.user.id, request.body))
+    } catch (error) {
+      if (error instanceof AuthError)
+        return response.status(error.status).json({ error: error.message })
+      next(error)
+    }
+  },
+)
 
 authRouter.get(
   "/profile",

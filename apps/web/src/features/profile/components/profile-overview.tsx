@@ -136,14 +136,45 @@ export function ProfileOverview({
         aria-label="Profile overview"
         className="mb-6 overflow-hidden rounded-2xl border border-[#dce3ee] bg-background"
       >
-        <div
-          className="relative h-32 overflow-hidden bg-[#203f80] sm:h-44"
-        >
-          {profile?.bannerUrl ? <Photo key={profile.bannerUrl} url={profile.bannerUrl} alt="Profile banner" className="absolute inset-0 size-full object-cover" fallback={null} /> : <><div aria-hidden="true" className="absolute -top-24 -right-10 size-80 rounded-full border-[40px] border-white/5" /><div aria-hidden="true" className="absolute -bottom-48 right-60 size-80 rounded-full bg-white/5" /></>}
-          <button type="button" onClick={onEditImages} disabled={!profile} className={`absolute top-4 right-4 flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-white/30 bg-[#17243a]/70 px-3 text-xs font-medium text-white hover:bg-[#17243a] disabled:opacity-50 ${focusRing}`}><Camera size={16} aria-hidden="true" />Edit banner</button>
+        <div className="relative h-32 overflow-hidden bg-[#203f80] sm:h-44">
+          {profile?.bannerUrl ? (
+            <Photo
+              key={profile.bannerUrl}
+              url={profile.bannerUrl}
+              alt="Profile banner"
+              className="absolute inset-0 size-full object-cover"
+              fallback={null}
+            />
+          ) : (
+            <>
+              <div
+                aria-hidden="true"
+                className="absolute -top-24 -right-10 size-80 rounded-full border-[40px] border-white/5"
+              />
+              <div
+                aria-hidden="true"
+                className="absolute -bottom-48 right-60 size-80 rounded-full bg-white/5"
+              />
+            </>
+          )}
+          <button
+            type="button"
+            onClick={onEditImages}
+            disabled={!profile}
+            className={`absolute top-4 right-4 flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-white/30 bg-[#17243a]/70 px-3 text-xs font-medium text-white hover:bg-[#17243a] disabled:opacity-50 ${focusRing}`}
+          >
+            <Camera size={16} aria-hidden="true" />
+            Edit banner
+          </button>
         </div>
         <div className="relative px-5 pb-6 sm:px-7">
-          <button type="button" aria-label="Change profile picture" disabled={!profile} onClick={onEditImages} className={`relative -mt-12 mb-4 inline-block cursor-pointer rounded-full border-[5px] border-background bg-background shadow-sm sm:-mt-14 ${focusRing}`}>
+          <button
+            type="button"
+            aria-label="Change profile picture"
+            disabled={!profile}
+            onClick={onEditImages}
+            className={`relative -mt-12 mb-4 inline-block cursor-pointer rounded-full border-[5px] border-background bg-background shadow-sm sm:-mt-14 ${focusRing}`}
+          >
             <Photo
               key={profile?.imageUrl || specialist?.imageUrl || "avatar"}
               url={profile?.imageUrl || specialist?.imageUrl}
@@ -151,7 +182,9 @@ export function ProfileOverview({
               className="size-24 rounded-full object-cover text-2xl font-semibold sm:size-28"
               fallback={initials}
             />
-            <span className="absolute right-0 bottom-0 grid size-8 place-items-center rounded-full border border-[#dce3ee] bg-background text-[#294a9b]"><Camera size={15} aria-hidden="true" /></span>
+            <span className="absolute right-0 bottom-0 grid size-8 place-items-center rounded-full border border-[#dce3ee] bg-background text-[#294a9b]">
+              <Camera size={15} aria-hidden="true" />
+            </span>
           </button>
           <div className="flex flex-col justify-between gap-5 md:flex-row md:items-start">
             <div className="min-w-0">

@@ -48,11 +48,32 @@ for (const role of ["USER", "STAFF", "ADMIN", "SUPERADMIN"] as const) {
     await page.addInitScript(() =>
       sessionStorage.setItem("nexus.auth.token", "profile-test"),
     )
+    const imageBuffer = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lY4AAAAASUVORK5CYII=",
+      "base64",
+    )
+    await page.route("https://profile-test.supabase.co/**", (route) =>
+      route.fulfill({ contentType: "image/png", body: imageBuffer }),
+    )
     await page.route("**/api/**", async (route) => {
       const request = route.request()
       const path = new URL(request.url()).pathname
       if (path === "/api/auth/me")
         return route.fulfill({ json: { user: profile.user } })
+      if (path === "/api/auth/profile/images") {
+        const { kind, dataUrl } = request.postDataJSON()
+        expect(dataUrl).toMatch(/^data:image\/png;base64,/)
+        const url = `https://profile-test.supabase.co/${kind}.png`
+        if (kind === "avatar") {
+          profile.imageUrl = url
+          if (profile.specialist) profile.specialist.imageUrl = url
+        }
+        if (kind === "banner") profile.bannerUrl = url
+        return route.fulfill({
+          status: 201,
+          json: { url, profile: kind === "project" ? null : profile },
+        })
+      }
       if (path === "/api/auth/profile/specialist") {
         profile.specialist = request.postDataJSON()
         return route.fulfill({ json: profile })
@@ -83,6 +104,45 @@ for (const role of ["USER", "STAFF", "ADMIN", "SUPERADMIN"] as const) {
     await expect(
       page.getByRole("heading", { name: "Alex Updated" }),
     ).toBeVisible()
+    await page
+      .getByRole("button", { name: "Change profile picture", exact: true })
+      .click()
+    await page
+      .getByLabel("Choose profile picture", { exact: true })
+      .setInputFiles({
+        name: "avatar.png",
+        mimeType: "image/png",
+        buffer: imageBuffer,
+      })
+    await expect(
+      page.getByRole("img", { name: "Profile picture preview", exact: true }),
+    ).toBeVisible()
+    await page
+      .getByRole("button", { name: "Upload image", exact: true })
+      .click()
+    await expect
+      .poll(() => profile.imageUrl)
+      .toBe("https://profile-test.supabase.co/avatar.png")
+    await page
+      .getByLabel("Choose cover banner", { exact: true })
+      .setInputFiles({
+        name: "banner.png",
+        mimeType: "image/png",
+        buffer: imageBuffer,
+      })
+    await expect(
+      page.getByRole("img", { name: "Cover banner preview", exact: true }),
+    ).toBeVisible()
+    await page
+      .getByRole("button", { name: "Upload image", exact: true })
+      .click()
+    await expect
+      .poll(() => profile.bannerUrl)
+      .toBe("https://profile-test.supabase.co/banner.png")
+    await page.getByRole("button", { name: "Done", exact: true }).click()
+    await expect(
+      page.getByRole("img", { name: "Profile banner", exact: true }),
+    ).toBeVisible()
     if (role === "STAFF") {
       await page
         .getByRole("button", { name: "Edit specialist profile", exact: true })
@@ -93,6 +153,22 @@ for (const role of ["USER", "STAFF", "ADMIN", "SUPERADMIN"] as const) {
         .getByLabel("URL", { exact: true })
         .fill("https://linkedin.com/in/alex")
       await page.getByRole("button", { name: "Add featured project" }).click()
+      await page
+        .getByLabel("Choose project 1 image", { exact: true })
+        .setInputFiles({
+          name: "project.png",
+          mimeType: "image/png",
+          buffer: imageBuffer,
+        })
+      await expect(
+        page.getByRole("img", { name: "Project 1 image preview", exact: true }),
+      ).toBeVisible()
+      await page
+        .getByRole("button", { name: "Upload image", exact: true })
+        .click()
+      await expect(
+        page.getByLabel("Project image URL", { exact: true }),
+      ).toHaveValue("https://profile-test.supabase.co/project.png")
       await page
         .getByLabel("Project title", { exact: true })
         .fill("Brand website")

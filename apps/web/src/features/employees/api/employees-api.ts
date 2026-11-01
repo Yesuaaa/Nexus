@@ -12,6 +12,7 @@ export type Employee = {
   accountId?: string
   hasEmployeeRecord?: boolean
   fullName: string
+  imageUrl?: string | null
   email: string | null
   contactNumber: string | null
   position: string | null

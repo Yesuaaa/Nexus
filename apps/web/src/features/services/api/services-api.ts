@@ -49,6 +49,7 @@ export type ServiceIconKey =
   | "sparkles"
 
 export type ServiceSpecialist = {
+  imageUrl?: string | null
   id: string
   fullName: string
   position: string | null

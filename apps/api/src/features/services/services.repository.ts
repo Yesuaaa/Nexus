@@ -98,7 +98,7 @@ export const servicesRepository = {
         },
         socialLinks: {
           orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
-          take: 8,
+          take: 10,
           select: { platform: true, url: true },
         },
       },
@@ -115,6 +115,7 @@ export const servicesRepository = {
       select: {
         id: true,
         fullName: true,
+        profileImageUrl: true,
         position: true,
         department: { select: { id: true, name: true } },
       },

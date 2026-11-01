@@ -101,7 +101,11 @@ function supabaseStorage({
         throw new ServiceImageStorageError("Service image data is invalid")
       }
       const subtype = match[1] as keyof typeof extensions
-      if (!/^[A-Za-z0-9_/-]{1,180}$/.test(directory) || directory.includes("..")) throw new ServiceImageStorageError("Invalid image directory")
+      if (
+        !/^[A-Za-z0-9_/-]{1,180}$/.test(directory) ||
+        directory.includes("..")
+      )
+        throw new ServiceImageStorageError("Invalid image directory")
       const path = `${directory}/${randomUUID()}.${extensions[subtype]}`
       await ensureBucket()
       const { error } = await client.storage
@@ -153,5 +157,21 @@ export function serviceImagePublicUrl(path: string | null) {
   } catch (error) {
     if (error instanceof ServiceImageStorageError) return null
     throw error
+  }
+}
+
+export function profileImagePublicUrl(
+  path: string | null,
+  fallback?: string | null,
+) {
+  const value = serviceImagePublicUrl(path) || fallback
+  if (!value) return null
+  try {
+    const url = new URL(value)
+    return url.protocol === "https:" && !url.username && !url.password
+      ? url.href
+      : null
+  } catch {
+    return null
   }
 }

@@ -88,6 +88,15 @@ test(
     const department = await prisma.department.create({
       data: { name: "Design", headId: head.id },
     })
+    const headEmployee = await prisma.employee.create({
+      data: {
+        userId: head.id,
+        employeeId: "EXP-CONVERSATION-HEAD",
+        fullName: "Head specialist",
+        profileImageUrl: "https://profile-test.supabase.co/avatar.png",
+        departmentId: department.id,
+      },
+    })
     const otherDepartment = await prisma.department.create({
       data: { name: "Marketing", headId: otherHead.id },
     })
@@ -198,6 +207,19 @@ test(
           assert.equal((await post(actor)).status, 404)
         }
         assert.equal((await get(head)).status, 200)
+        const clientHistory = (await (await get(client)).json()) as {
+          conversation: {
+            head: { specialistId: string; imageUrl: string | null }
+          }
+        }
+        assert.equal(
+          clientHistory.conversation.head.specialistId,
+          headEmployee.id,
+        )
+        assert.equal(
+          clientHistory.conversation.head.imageUrl,
+          "https://profile-test.supabase.co/avatar.png",
+        )
         for (const actor of [client, head]) {
           const inbox = (await (await list(actor)).json()) as {
             conversations: { id: string; title: string; lastMessage: unknown }[]

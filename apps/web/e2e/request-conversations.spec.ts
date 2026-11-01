@@ -120,7 +120,16 @@ async function mock(
                   updatedAt: booking.updatedAt,
                   service: booking.service,
                   client: { id: "client-1", fullName: "Mara Client" },
-                  acceptedDepartment: { id: "design", name: "Design" },
+                  acceptedDepartment: {
+                    id: "design",
+                    name: "Design",
+                    head: {
+                      id: "head-1",
+                      fullName: "Dani Head",
+                      imageUrl:
+                        "https://profile-test.supabase.co/storage/v1/object/public/service-images/profile.png",
+                    },
+                  },
                   lastMessage: state.messages.at(-1) ?? null,
                 },
               ]
@@ -146,6 +155,25 @@ async function mock(
       ].includes(url.pathname)
     )
       return route.fulfill({ json: { serviceRequest: booking } })
+    if (url.pathname === "/api/services/web/specialists")
+      return route.fulfill({
+        json: {
+          specialists: [
+            {
+              id: "specialist-1",
+              fullName: "Dani Head",
+              position: "Designer",
+              department: { id: "design", name: "Design" },
+            },
+            {
+              id: "specialist-2",
+              fullName: "Dani Head",
+              position: "Designer",
+              department: { id: "design", name: "Design" },
+            },
+          ],
+        },
+      })
     if (url.pathname.endsWith("/accept")) {
       state.accepted = true
       emit()
@@ -213,7 +241,13 @@ async function mock(
           conversation: state.accepted
             ? {
                 department: { id: "design", name: "Design" },
-                head: { id: "head-1", fullName: "Dani Head" },
+                head: {
+                  id: "head-1",
+                  fullName: "Dani Head",
+                  specialistId: "specialist-1",
+                  imageUrl:
+                    "https://profile-test.supabase.co/storage/v1/object/public/service-images/profile.png",
+                },
               }
             : null,
           canSend: state.accepted,
@@ -252,6 +286,154 @@ async function openMessages(page: Page, role: "USER" | "STAFF") {
 }
 
 test.use({ reducedMotion: "reduce" })
+
+for (const width of [1440, 390]) {
+  test(`client sees the latest uploaded specialist profile at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await mock(page, stateFixture(), "USER")
+    let profileBio = "My latest published biography."
+    const imageSizingWarnings: string[] = []
+    page.on("console", (message) => {
+      if (
+        message.type() === "warning" &&
+        message.text().includes("has either width or height modified")
+      )
+        imageSizingWarnings.push(message.text())
+    })
+    const portraitImage = await page.screenshot({
+      clip: { x: 0, y: 0, width: 20, height: 60 },
+    })
+    const imageUrl =
+      "https://profile-test.supabase.co/storage/v1/object/public/service-images/profile.png"
+    await page.route("https://profile-test.supabase.co/**", (route) =>
+      route.fulfill({
+        contentType: "image/png",
+        body: portraitImage,
+      }),
+    )
+    await page.route(
+      "**/api/services/web/specialists/specialist-1",
+      (route) => {
+        return route.fulfill({
+          json: {
+            specialist: {
+              id: "specialist-1",
+              fullName: "Dani Updated",
+              position: "Senior designer",
+              department: { id: "design", name: "Design" },
+              imageUrl,
+              bannerUrl: imageUrl,
+              bio: profileBio,
+              specialties: ["Accessible design"],
+              socialLinks: [
+                { platform: "LinkedIn", url: "https://linkedin.com/in/dani" },
+              ],
+              projects: [
+                {
+                  id: "portfolio-1",
+                  title: "Published website",
+                  summary: "A responsive client website.",
+                  contribution: "Design and development",
+                  thumbnailUrl: imageUrl,
+                  projectUrl: "https://example.com/work",
+                },
+              ],
+            },
+          },
+        })
+      },
+    )
+    await page.goto("/messages?request=booking-1", {
+      waitUntil: "domcontentloaded",
+    })
+    const openProfile = page.getByRole("button", {
+      name: /View Dani Head.s profile/,
+    })
+    await expect(openProfile).toBeEnabled({ timeout: 30000 })
+    await expect(
+      page
+        .getByRole("region", { name: "Request conversation" })
+        .locator("header img"),
+    ).toHaveAttribute("src", imageUrl)
+    await expect
+      .poll(() =>
+        page
+          .getByRole("region", { name: "Request conversation" })
+          .locator("header img")
+          .evaluate((image) => {
+            const bounds = image.getBoundingClientRect()
+            return Math.abs(bounds.width - bounds.height)
+          }),
+      )
+      .toBeLessThan(1)
+    if (width > 767)
+      await expect(
+        page
+          .getByRole("navigation", { name: "Conversations", exact: true })
+          .locator("img")
+          .first(),
+      ).toHaveAttribute("src", imageUrl)
+    await openProfile.click()
+    const dialog = page.getByRole("dialog", {
+      name: "Specialist profile",
+      exact: true,
+    })
+    await expect(
+      dialog.getByRole("heading", { name: "Dani Updated", exact: true }),
+    ).toBeVisible()
+    await expect(
+      dialog.getByText("My latest published biography."),
+    ).toBeVisible()
+    await expect(
+      dialog.getByText("Accessible design", { exact: true }),
+    ).toBeVisible()
+    await expect(
+      dialog.getByRole("link", { name: /Open LinkedIn/ }),
+    ).toHaveAttribute("href", "https://linkedin.com/in/dani")
+    await expect(dialog.locator(`img[src="${imageUrl}"]`).first()).toBeVisible()
+    await expect
+      .poll(() =>
+        dialog
+          .locator(`img[src="${imageUrl}"]`)
+          .first()
+          .evaluate((image) => (image as HTMLImageElement).complete),
+      )
+      .toBe(true)
+    expect(imageSizingWarnings).toEqual([])
+    await dialog
+      .getByRole("button", {
+        name: "View project: Published website",
+        exact: true,
+      })
+      .click()
+    await expect(
+      dialog.getByRole("heading", { name: "Published website", exact: true }),
+    ).toBeVisible()
+    await expect(
+      dialog.getByText("Design and development", { exact: true }),
+    ).toBeVisible()
+    await expect(
+      dialog.getByRole("img", { name: "Published website", exact: true }),
+    ).toBeVisible()
+    expect(imageSizingWarnings).toEqual([])
+    await dialog
+      .getByRole("button", { name: "Close specialist profile" })
+      .click()
+    await expect(dialog).not.toBeVisible()
+    profileBio = "An updated biography after reopening."
+    await openProfile.click()
+    await expect(
+      dialog.getByText("An updated biography after reopening."),
+    ).toBeVisible()
+    await expect
+      .poll(() =>
+        dialog.evaluate((element) => element.scrollWidth - element.clientWidth),
+      )
+      .toBeLessThanOrEqual(0)
+  })
+}
 
 for (const width of [1440, 390]) {
   test(`top bar opens the conversation list on a separate page at ${width}px`, async ({
