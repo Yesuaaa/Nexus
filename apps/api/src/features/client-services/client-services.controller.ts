@@ -37,12 +37,10 @@ clientServicesRouter.post(
         data: { status: "CANCELLED" },
       })
       if (!result.count)
-        return response
-          .status(409)
-          .json({
-            error:
-              "This request is no longer available for cancellation. Refresh and try again.",
-          })
+        return response.status(409).json({
+          error:
+            "This request is no longer available for cancellation. Refresh and try again.",
+        })
       return response.json({ success: true })
     } catch (error) {
       next(error)
