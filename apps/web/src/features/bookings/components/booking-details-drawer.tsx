@@ -29,6 +29,7 @@ export function BookingDetailsDrawer({
   fallbackFocusId = "booked-services-heading",
   closeDisabled = false,
   showMessagesLink = true,
+  statusLabels,
 }: {
   id: string
   onClose: () => void
@@ -40,6 +41,7 @@ export function BookingDetailsDrawer({
   fallbackFocusId?: string
   closeDisabled?: boolean
   showMessagesLink?: boolean | ((details: BookingDetails) => boolean)
+  statusLabels?: Partial<Record<string, string>>
 }) {
   const { open, handleOpenChange } = useAnimatedPanelClose(onClose)
   const openerRef = useRef(
@@ -150,7 +152,10 @@ export function BookingDetailsDrawer({
                   {details.service.name}
                 </h2>
                 <div className="mt-3">
-                  <BookingStatusPill status={details.status} />
+                  <BookingStatusPill
+                    status={details.status}
+                    label={statusLabels?.[details.status]}
+                  />
                 </div>
                 <dl className="mt-5 grid grid-cols-2 gap-x-5 max-[450px]:grid-cols-1">
                   {[
