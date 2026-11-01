@@ -50,23 +50,30 @@ function safeHttpsUrl(value: string | null) {
 
 function ProjectThumbnail({
   project,
+  detail = false,
 }: {
   project: SpecialistPortfolioProject
+  detail?: boolean
 }) {
   const [failed, setFailed] = useState(false)
   const imageUrl = safeHttpsUrl(project.thumbnailUrl)
 
   return (
-    <div className="relative aspect-[16/10] max-h-[320px] overflow-hidden rounded-lg bg-[#edf2f8]">
+    <div
+      className={cn(
+        "relative w-full overflow-hidden rounded-lg bg-[#edf2f8]",
+        detail ? "h-[clamp(180px,40vh,420px)]" : "aspect-[16/10]",
+      )}
+    >
       {imageUrl && !failed ? (
-        <Image
+        <img
           src={imageUrl}
-          alt=""
-          fill
-          unoptimized
-          sizes="(max-width: 640px) calc(100vw - 80px), 220px"
-          loading="lazy"
-          className="size-full object-cover"
+          alt={project.title}
+          loading={detail ? "eager" : "lazy"}
+          className={cn(
+            "absolute inset-0 size-full",
+            detail ? "object-contain" : "object-cover",
+          )}
           onError={() => setFailed(true)}
         />
       ) : (
@@ -116,18 +123,25 @@ export function SpecialistProfileDialog({
       : (document.activeElement as HTMLElement),
   )
   const imageUrl = safeHttpsUrl(profile?.imageUrl ?? null)
+  const bannerUrl = safeHttpsUrl(profile?.bannerUrl ?? null)
   const socialLinks =
     profile?.socialLinks?.flatMap((link) => {
       const url = safeHttpsUrl(link.url)
       return url ? [{ ...link, url }] : []
     }) ?? []
-  const departmentName = specialist.department?.name
+  const departmentName =
+    profile?.department?.name || specialist.department?.name
+  const displayName = profile?.fullName || specialist.fullName
 
   useEffect(() => {
     let active = true
     getServiceSpecialistProfile(serviceId, specialist.id)
       .then((result) => {
-        if (active) setProfile(result)
+        if (active) {
+          setProfile(result)
+          setError(false)
+          setAvatarFailed(false)
+        }
       })
       .catch(() => {
         if (active) setError(true)
@@ -172,23 +186,38 @@ export function SpecialistProfileDialog({
           if (openerRef.current?.isConnected) openerRef.current.focus()
         }}
       >
-        <header className="relative flex min-h-20 shrink-0 items-center gap-4 bg-[#203f80] px-6 py-4 text-white max-[560px]:px-4">
-          <div className="relative -mb-9 mt-1 grid size-[76px] shrink-0 place-items-center overflow-hidden rounded-full border-4 border-white bg-[#eaf0fa] text-lg font-bold text-[#294c96] shadow-sm">
+        <header className="relative flex h-36 shrink-0 items-end gap-4 bg-[#203f80] px-6 py-4 text-white sm:h-44 max-[560px]:px-4">
+          {bannerUrl && (
+            <div
+              className="absolute inset-0 overflow-hidden rounded-t-2xl"
+              aria-hidden="true"
+            >
+              <Image
+                src={bannerUrl}
+                alt=""
+                fill
+                unoptimized
+                className="object-cover"
+              />
+              <div className="absolute inset-0 bg-black/30" />
+            </div>
+          )}
+          <div className="relative -mb-14 grid size-[100px] shrink-0 place-items-center overflow-hidden rounded-full border-4 border-white bg-[#eaf0fa] text-2xl font-bold text-[#294c96] shadow-sm">
             {imageUrl && !avatarFailed ? (
               <Image
                 src={imageUrl}
                 alt=""
-                width={68}
-                height={68}
+                fill
+                sizes="92px"
                 unoptimized
                 className="size-full object-cover"
                 onError={() => setAvatarFailed(true)}
               />
             ) : (
-              initials(specialist.fullName)
+              initials(displayName)
             )}
           </div>
-          <div className="min-w-0 flex-1 self-start pt-1">
+          <div className="relative min-w-0 flex-1 self-start pt-1">
             <p className="m-0 text-[11px] font-bold tracking-[0.14em] text-white/75 uppercase">
               Specialist profile
             </p>
@@ -198,7 +227,7 @@ export function SpecialistProfileDialog({
             onClick={() => closeAfterTransition()}
             aria-label="Close specialist profile"
             className={cn(
-              "grid size-11 shrink-0 cursor-pointer place-items-center rounded-full border border-white/35 bg-white/10 text-white hover:bg-white/20",
+              "relative grid size-11 shrink-0 cursor-pointer place-items-center self-start rounded-full border border-white/35 bg-[#17243a]/50 text-white hover:bg-[#17243a]/75",
               focusRing,
             )}
           >
@@ -213,7 +242,7 @@ export function SpecialistProfileDialog({
             : "Review this specialist’s background, specialties, social links, and featured projects."}
         </DialogDescription>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-7 pb-6 pt-12 max-[560px]:px-5">
+        <div className="min-h-0 flex-1 overflow-y-auto px-7 pb-6 pt-16 max-[560px]:px-5">
           {activeProject ? (
             <section aria-labelledby="specialist-project-detail-title">
               <button
@@ -226,7 +255,7 @@ export function SpecialistProfileDialog({
               >
                 <ArrowLeft size={17} aria-hidden="true" /> Back to profile
               </button>
-              <ProjectThumbnail project={activeProject} />
+              <ProjectThumbnail project={activeProject} detail />
               <h2
                 ref={projectHeadingRef}
                 id="specialist-project-detail-title"
@@ -268,10 +297,10 @@ export function SpecialistProfileDialog({
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0">
                   <h2 className="m-0 text-[clamp(24px,4vw,32px)] leading-tight font-bold tracking-[-0.04em] text-[#17243a] [overflow-wrap:anywhere]">
-                    {specialist.fullName}
+                    {displayName}
                   </h2>
                   <p className="mt-1 mb-0 text-sm font-semibold text-[#40516b]">
-                    {specialist.position || "Specialist"}
+                    {profile?.position || specialist.position || "Specialist"}
                   </p>
                   {departmentName && (
                     <p className="mt-2 mb-0 inline-flex rounded-full bg-[#eaf0fa] px-3 py-1 text-xs font-semibold text-[#294c96]">
@@ -289,7 +318,7 @@ export function SpecialistProfileDialog({
                           href={link.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          aria-label={`Open ${link.platform} profile for ${specialist.fullName}`}
+                          aria-label={`Open ${link.platform} profile for ${displayName}`}
                           className={cn(
                             "inline-flex min-h-11 items-center gap-1.5 rounded-md px-1 text-sm font-semibold text-[#294c96] underline-offset-4 hover:underline",
                             focusRing,
@@ -480,7 +509,7 @@ export function SpecialistProfileDialog({
               >
                 {selected
                   ? "Selected as preferred specialist"
-                  : `Choose ${specialist.fullName.trim().split(/\s+/)[0]} as preferred specialist`}
+                  : `Choose ${displayName.trim().split(/\s+/)[0]} as preferred specialist`}
               </button>
             )}
           </div>

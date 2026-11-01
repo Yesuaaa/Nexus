@@ -9,6 +9,7 @@ import { getClientServiceSpecialists } from "../api/client-services-api"
 import type { ServicePricingOption } from "../model/service-pricing"
 import type { ProjectRequirementsDraft } from "../model/project-requirements"
 import { SpecialistProfileDialog } from "./specialist-profile-dialog"
+import { ConversationAvatar } from "@/features/request-conversations/components/conversation-avatar"
 
 export function ServiceSpecialistStep({
   service,
@@ -200,18 +201,11 @@ export function ServiceSpecialistStep({
                             focusRing,
                           )}
                         />
-                        <span
-                          aria-hidden="true"
-                          className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#eaf0fa] text-xs font-bold text-[#294c96]"
-                        >
-                          {specialist.fullName
-                            .trim()
-                            .split(/\s+/)
-                            .slice(0, 2)
-                            .map((part) => part[0])
-                            .join("")
-                            .toUpperCase()}
-                        </span>
+                        <ConversationAvatar
+                          name={specialist.fullName}
+                          imageUrl={specialist.imageUrl}
+                          className="size-10 text-xs font-bold"
+                        />
                         <span className="min-w-0 [overflow-wrap:anywhere]">
                           <span className="block text-sm font-bold text-[#243c69]">
                             {specialist.fullName}

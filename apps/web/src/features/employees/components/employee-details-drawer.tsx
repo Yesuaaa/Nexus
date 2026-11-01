@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { CloseIcon } from "@/components/layout/icons"
+import { ConversationAvatar } from "@/features/request-conversations/components/conversation-avatar"
 import { Button } from "@/components/ui/button"
 import { Pill } from "@/components/ui/pill"
 import { useAnimatedPanelClose } from "@/components/ui/use-animated-panel-close"
@@ -180,6 +181,16 @@ export function EmployeeDetailsDrawer({
                   <h3 className="m-0 text-xs font-semibold">
                     Personal information
                   </h3>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <ConversationAvatar
+                      name={employee.fullName}
+                      imageUrl={employee.imageUrl}
+                      className="size-12"
+                    />
+                    <span className="min-w-0 break-words text-sm font-semibold">
+                      {employee.fullName}
+                    </span>
+                  </div>
                   <dl className="m-0 divide-y divide-[#eceef1] rounded-lg border border-[#e8ebef] px-3">
                     <DetailRow label="Employee ID">
                       {employee.employeeId}

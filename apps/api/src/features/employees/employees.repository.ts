@@ -5,6 +5,7 @@ import {
   type EmployeeStatus,
 } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
+import { profileImagePublicUrl } from "../services/service-image-storage.js"
 
 export const employeeInclude = {
   department: {
@@ -25,6 +26,7 @@ export const employeeInclude = {
 
 const directoryAccountSelect = {
   id: true,
+  profileImagePath: true,
   fullName: true,
   email: true,
   contactNumber: true,
@@ -51,6 +53,10 @@ function directoryEmployee(
     hasEmployeeRecord: Boolean(hr),
     employeeId: hr?.employeeId ?? "",
     fullName: account.fullName?.trim() || account.email,
+    imageUrl: profileImagePublicUrl(
+      account.profileImagePath,
+      hr?.profileImageUrl,
+    ),
     email: account.email,
     contactNumber: account.contactNumber,
     position: hr?.position ?? null,

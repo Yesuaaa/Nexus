@@ -1,5 +1,24 @@
 import type { Prisma } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
+import { serviceImagePublicUrl } from "../services/service-image-storage.js"
+
+function avatarUrl(user: {
+  profileImagePath: string | null
+  employee?: { profileImageUrl: string | null } | null
+}) {
+  const value =
+    serviceImagePublicUrl(user.profileImagePath) ||
+    user.employee?.profileImageUrl
+  if (!value) return null
+  try {
+    const url = new URL(value)
+    return url.protocol === "https:" && !url.username && !url.password
+      ? url.href
+      : null
+  } catch {
+    return null
+  }
+}
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 
 const activeUser = { isActive: true, accountDeletedAt: null } as const
@@ -47,6 +66,7 @@ const conversationSelect = {
       fullName: true,
       email: true,
       contactNumber: true,
+      profileImagePath: true,
     },
   },
   acceptedDepartment: {
@@ -61,6 +81,8 @@ const conversationSelect = {
           role: true,
           isActive: true,
           accountDeletedAt: true,
+          profileImagePath: true,
+          employee: { select: { id: true, profileImageUrl: true } },
         },
       },
     },
@@ -217,13 +239,20 @@ export async function listConversations(
       referenceNumber: true,
       updatedAt: true,
       service: { select: { name: true } },
-      client: { select: { id: true, fullName: true } },
+      client: { select: { id: true, fullName: true, profileImagePath: true } },
       acceptedDepartment: {
         select: {
           id: true,
           name: true,
           headId: true,
-          head: { select: { id: true, fullName: true } },
+          head: {
+            select: {
+              id: true,
+              fullName: true,
+              profileImagePath: true,
+              employee: { select: { profileImageUrl: true } },
+            },
+          },
         },
       },
       messages: {
@@ -247,6 +276,25 @@ export async function listConversations(
     const unreadCount = unreadCounts.get(row.id) ?? 0
     return {
       ...row,
+      client: {
+        id: row.client.id,
+        fullName: row.client.fullName,
+        imageUrl: avatarUrl(row.client),
+      },
+      acceptedDepartment: row.acceptedDepartment
+        ? {
+            id: row.acceptedDepartment.id,
+            name: row.acceptedDepartment.name,
+            headId: row.acceptedDepartment.headId,
+            head: row.acceptedDepartment.head
+              ? {
+                  id: row.acceptedDepartment.head.id,
+                  fullName: row.acceptedDepartment.head.fullName,
+                  imageUrl: avatarUrl(row.acceptedDepartment.head),
+                }
+              : null,
+          }
+        : null,
       lastMessage: messages[0] ?? null,
       ...(participantRole ? { unreadCount } : {}),
     }
@@ -304,7 +352,14 @@ export async function getConversationAccess(userId: string, requestId: string) {
       department && record.acceptedAt
         ? {
             department: { id: department.id, name: department.name },
-            head: activeHead ? { id: head.id, fullName: head.fullName } : null,
+            head: activeHead
+              ? {
+                  id: head.id,
+                  fullName: head.fullName,
+                  specialistId: head.employee?.id || null,
+                  imageUrl: avatarUrl(head),
+                }
+              : null,
             ...(userId === record.client.id
               ? {}
               : {
@@ -313,6 +368,7 @@ export async function getConversationAccess(userId: string, requestId: string) {
                     fullName: record.client.fullName,
                     email: record.client.email,
                     contactNumber: record.client.contactNumber,
+                    imageUrl: avatarUrl(record.client),
                   },
                 }),
           }

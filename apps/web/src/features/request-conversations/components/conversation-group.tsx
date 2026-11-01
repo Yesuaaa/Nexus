@@ -71,6 +71,7 @@ export function ConversationGroupItem({
         <span className="relative grid size-9 shrink-0 place-items-center">
           <ConversationAvatar
             name={group.name}
+            imageUrl={group.imageUrl}
             className={isSelected ? "ring-1 ring-[#294a9b]/30" : undefined}
           />
           {Boolean(group.unreadCount) && railCollapsed && (

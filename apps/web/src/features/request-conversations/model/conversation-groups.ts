@@ -6,6 +6,7 @@ import type {
 export type ConversationGroup = {
   id: string
   name: string
+  imageUrl: string | null
   departmentName: string | null
   conversations: ConversationSummary[]
   unreadCount: number
@@ -37,6 +38,9 @@ export function groupConversations(
         name: isClient
           ? row.acceptedDepartment?.head?.fullName?.trim() || "Department head"
           : row.client.fullName?.trim() || "Client",
+        imageUrl: isClient
+          ? row.acceptedDepartment?.head?.imageUrl || null
+          : row.client.imageUrl || null,
         departmentName: isClient
           ? (row.acceptedDepartment?.name ?? null)
           : null,

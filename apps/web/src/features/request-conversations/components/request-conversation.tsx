@@ -211,16 +211,18 @@ function ConversationPanel({
   const conversationDepartmentId = history?.conversation?.department.id
   const conversationHeadId = history?.conversation?.head?.id
   const conversationHeadName = history?.conversation?.head?.fullName?.trim()
+  const conversationSpecialistId = history?.conversation?.head?.specialistId
   const specialistProfileKey =
     isClient &&
     conversationDepartmentId &&
     conversationHeadId &&
-    conversationHeadName
+    (conversationSpecialistId || conversationHeadName)
       ? JSON.stringify([
           requestId,
           conversationDepartmentId,
           conversationHeadId,
-          normalizeSpecialistName(conversationHeadName),
+          conversationSpecialistId,
+          normalizeSpecialistName(conversationHeadName || ""),
         ])
       : null
   const specialistProfileTarget =
@@ -244,13 +246,13 @@ function ConversationPanel({
       !isClient ||
       !conversationDepartmentId ||
       !conversationHeadId ||
-      !conversationHeadName ||
+      (!conversationSpecialistId && !conversationHeadName) ||
       !specialistProfileKey
     )
       return
 
     const departmentId = conversationDepartmentId
-    const headName = conversationHeadName
+    const headName = conversationHeadName || ""
     const profileKey = specialistProfileKey
     let active = true
     async function resolveSpecialistProfile() {
@@ -260,8 +262,10 @@ function ConversationPanel({
         const matches = specialists.filter(
           (specialist) =>
             specialist.department?.id === departmentId &&
-            normalizeSpecialistName(specialist.fullName) ===
-              normalizeSpecialistName(headName),
+            (conversationSpecialistId !== undefined
+              ? specialist.id === conversationSpecialistId
+              : normalizeSpecialistName(specialist.fullName) ===
+                normalizeSpecialistName(headName)),
         )
         if (active) {
           setSpecialistProfileOpenFor(null)
@@ -291,6 +295,7 @@ function ConversationPanel({
     conversationDepartmentId,
     conversationHeadId,
     conversationHeadName,
+    conversationSpecialistId,
     isClient,
     requestId,
     specialistProfileKey,
@@ -741,7 +746,15 @@ function ConversationPanel({
               >
                 <ArrowLeft size={17} aria-hidden="true" />
               </Link>
-              <ConversationAvatar name={participantName} className="size-8" />
+              <ConversationAvatar
+                name={participantName}
+                imageUrl={
+                  isClient
+                    ? history?.conversation?.head?.imageUrl
+                    : history?.conversation?.client?.imageUrl
+                }
+                className="size-8"
+              />
               <div className="min-w-0 flex-1">
                 <h2 className="m-0 truncate text-sm font-semibold text-[#182235]">
                   {participantName}

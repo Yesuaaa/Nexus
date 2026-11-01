@@ -184,7 +184,12 @@ test(
       headers,
     })
     assert.equal(response.status, 200)
-    assert.deepEqual(await response.json(), { specialists: expected })
+    assert.deepEqual(await response.json(), {
+      specialists: expected.map((specialist) => ({
+        ...specialist,
+        imageUrl: null,
+      })),
+    })
     const profileResponse = await fetch(
       `${base}/services/${service.id}/specialists/${expected[0]!.id}`,
       { headers },
@@ -226,6 +231,8 @@ test(
             profileBio: "I help teams plan clear social content.",
             profileSpecialties: ["Content planning", "Brand communication"],
             profileImageUrl: "javascript:alert(1)",
+            profileBannerUrl:
+              "https://example.supabase.co/storage/v1/object/public/service-images/profiles/banner.png",
           },
         })
         const published = await prisma.specialistPortfolioProject.create({
@@ -273,6 +280,7 @@ test(
           specialist: {
             bio: string
             imageUrl: string | null
+            bannerUrl: string | null
             specialties: string[]
             projects: Record<string, unknown>[]
           }
@@ -282,6 +290,28 @@ test(
           "I help teams plan clear social content.",
         )
         assert.equal(payload.specialist.imageUrl, null)
+        const photoUrl =
+          "https://example.supabase.co/storage/v1/object/public/service-images/profiles/avatar.png"
+        await prisma.employee.update({
+          where: { id: employeeId },
+          data: { profileImageUrl: photoUrl },
+        })
+        const directoryWithPhoto = await fetch(
+          `${base}/services/${service.id}/specialists`,
+          { headers },
+        )
+        const directoryPayload = (await directoryWithPhoto.json()) as {
+          specialists: { id: string; imageUrl: string | null }[]
+        }
+        assert.equal(
+          directoryPayload.specialists.find((item) => item.id === employeeId)!
+            .imageUrl,
+          photoUrl,
+        )
+        assert.equal(
+          payload.specialist.bannerUrl,
+          "https://example.supabase.co/storage/v1/object/public/service-images/profiles/banner.png",
+        )
         assert.deepEqual(payload.specialist.specialties, [
           "Content planning",
           "Brand communication",

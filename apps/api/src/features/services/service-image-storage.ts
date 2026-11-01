@@ -9,7 +9,7 @@ const imagePattern =
 const extensions = { jpeg: "jpg", png: "png", webp: "webp" } as const
 
 export type ServiceImageStorage = {
-  upload(dataUrl: string): Promise<string>
+  upload(dataUrl: string, directory?: string): Promise<string>
   remove(path: string): Promise<void>
   publicUrl(path: string): string
 }
@@ -95,13 +95,18 @@ function supabaseStorage({
   }
 
   return {
-    async upload(dataUrl) {
+    async upload(dataUrl, directory = "services") {
       const match = dataUrl.match(imagePattern)
       if (!match) {
         throw new ServiceImageStorageError("Service image data is invalid")
       }
       const subtype = match[1] as keyof typeof extensions
-      const path = `services/${randomUUID()}.${extensions[subtype]}`
+      if (
+        !/^[A-Za-z0-9_/-]{1,180}$/.test(directory) ||
+        directory.includes("..")
+      )
+        throw new ServiceImageStorageError("Invalid image directory")
+      const path = `${directory}/${randomUUID()}.${extensions[subtype]}`
       await ensureBucket()
       const { error } = await client.storage
         .from(bucket)
@@ -152,5 +157,21 @@ export function serviceImagePublicUrl(path: string | null) {
   } catch (error) {
     if (error instanceof ServiceImageStorageError) return null
     throw error
+  }
+}
+
+export function profileImagePublicUrl(
+  path: string | null,
+  fallback?: string | null,
+) {
+  const value = serviceImagePublicUrl(path) || fallback
+  if (!value) return null
+  try {
+    const url = new URL(value)
+    return url.protocol === "https:" && !url.username && !url.password
+      ? url.href
+      : null
+  } catch {
+    return null
   }
 }

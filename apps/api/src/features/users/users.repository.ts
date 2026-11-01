@@ -140,6 +140,7 @@ export const usersRepository = {
       prisma.user.findMany({
         where,
         include: {
+          employee: { select: { profileImageUrl: true } },
           department: {
             select: { id: true, name: true, code: true, color: true },
           },

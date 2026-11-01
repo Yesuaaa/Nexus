@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { sileo } from "sileo"
-import { Check, ChevronLeft, ChevronRight, Search } from "lucide-react"
+import { ChevronLeft, ChevronRight, Search } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -418,53 +418,6 @@ export function ClientServicesPage() {
         </Button>
       </header>
 
-      {!submittedRequest && currentStep > 1 && (
-        <nav
-          aria-label="Service request steps"
-          className="mt-7 grid grid-cols-4 gap-2"
-        >
-          {(["Service", "Package", "Requirements", "Review"] as const).map(
-            (label, index) => {
-              const step = (index + 1) as 1 | 2 | 3 | 4
-              return (
-                <button
-                  key={label}
-                  type="button"
-                  disabled={step >= currentStep || submitting}
-                  onClick={() => setCurrentStep(step)}
-                  aria-current={step === currentStep ? "step" : undefined}
-                  className={cn(
-                    "flex min-h-11 min-w-0 items-center gap-2 rounded-lg px-2 py-2 text-left text-sm font-semibold disabled:cursor-default max-[560px]:flex-col max-[560px]:px-0 max-[560px]:text-xs",
-                    step === currentStep
-                      ? "text-[#173d8d]"
-                      : step < currentStep
-                        ? "cursor-pointer text-[#294c96] hover:bg-[#eaf0fa]"
-                        : "text-[#64748b]",
-                    focusRing,
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "grid size-7 shrink-0 place-items-center rounded-full border text-xs",
-                      step <= currentStep
-                        ? "border-[#294c96] bg-[#294c96] text-white"
-                        : "border-[#c9d3e3] bg-white text-[#64748b]",
-                    )}
-                  >
-                    {step < currentStep ? (
-                      <Check size={14} aria-hidden="true" />
-                    ) : (
-                      step
-                    )}
-                  </span>
-                  <span>{label}</span>
-                </button>
-              )
-            },
-          )}
-        </nav>
-      )}
-
       {detailState && (
         <div
           className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-[#dce3ee] p-3 text-xs text-[#52627a]"
@@ -486,12 +439,7 @@ export function ClientServicesPage() {
         </div>
       )}
 
-      <div
-        className={cn(
-          "flex items-center gap-4",
-          currentStep === 1 ? "mt-[clamp(30px,4vw,52px)]" : "mt-3",
-        )}
-      >
+      <div className="mt-[clamp(30px,4vw,52px)] flex items-center gap-4">
         <div
           className="h-1 flex-1 overflow-hidden rounded-full bg-[#e4ebfa]"
           role="progressbar"
