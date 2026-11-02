@@ -107,34 +107,45 @@ If may access ka sa Mac and Xcode, ganito naman yung process:
 
 ## 📁 Project Structure (Saan Tayo Magko-Code?)
 
-Here's a quick overview ng mobile app structure natin para mas madali malaman kung saan ilalagay yung code.
+Para maging malinis at aligned sa ating monorepo (`apps/web` at `apps/api`), naka-organize ang code natin sa **feature-driven** architecture:
 
 ```text
-apps/mobile/
-├── androidApp/          # Android entry point and Android-specific manifest/resources
-├── iosApp/              # iOS entry point (Xcode project)
-├── shared/              # ⭐️ DITO TAYO MOSTLY MAGKO-CODE
-│   └── src/
-│       ├── commonMain/  # ⭐️ Main shared codebase
-│       │                # - Compose Multiplatform UI Screens & Components
-│       │                # - Navigation & ViewModels
-│       │                # - API Calls (Ktor Client) & State Management
-│       ├── androidMain/ # Android-specific APIs (e.g. notifications, context)
-│       └── iosMain/     # iOS-specific bridges/configs
-├── build.gradle.kts
-└── settings.gradle.kts
+apps/mobile/shared/src/commonMain/kotlin/com/nexus/app/
+│
+├── core/                                         # Shared utilities, tokens, at UI primitives
+│   ├── components/                               # Shared UI atoms (NexusTopAppBar, NexusBottomBar, NexusButton, NexusTextField, StatusBadge, KpiCard)
+│   ├── network/                                  # ApiEndpoints (10.0.2.2:3001) & HttpClientFactory (Ktor)
+│   ├── storage/                                  # TokenStorage & SettingsTokenStorage (JWT)
+│   ├── theme/                                    # Color (EXP Navy #1E3A78), Theme, Type
+│   └── validation/                               # Regex para sa PH phone (+63/09), email, password
+│
+├── features/                                     # ⭐️ DITO MAGCO-CODE NG FEATURES (Katugma ng web/api)
+│   ├── auth/                                     # Login, Register, AuthViewModel, AuthRepository
+│   │   └── screens/                              # LoginScreen.kt, RegisterScreen.kt
+│   ├── dashboard/                                # Portal welcome, quick overview
+│   │   └── screens/                              # DashboardScreen.kt
+│   ├── services/                                 # Catalog, Packages, Booking Wizard (Steps 1-4)
+│   │   └── screens/                              # ServicesScreen.kt
+│   └── booked_requests/                          # KPI cards, Request list, Details
+│       └── screens/                              # BookedRequestsScreen.kt
+│
+├── navigation/                                   # Navigation shell
+│   ├── Screen.kt                                 # Route definitions & BottomTab enum
+│   └── AppNavHost.kt                             # Scaffold host at tab router
+│
+└── App.kt                                        # Root Compose Multiplatform App
 ```
 
-### Quick Explanation
+### 📦 Installed Dependencies
 
-- **`androidApp/`** – Dito yung Android-specific entry point and configurations.
-- **`iosApp/`** – Dito naman yung iOS entry point na managed through Xcode.
-- **`shared/`** – Ito yung main workspace natin for shared code. Most of our development will happen here.
-- **`commonMain/`** – Dito natin ilalagay yung shared UI, navigation, ViewModels, API integration, and state management.
-- **`androidMain/`** – For Android-specific implementations.
-- **`iosMain/`** – For iOS-specific implementations and configurations.
-
-Ang idea is, instead na gumawa tayo ng separate implementation for Android and iOS, we can share most of our code through `commonMain`.
+* **Networking:** Ktor Client 3.1.1 (Content Negotiation, JSON Serialization, Logging, Bearer Auth)
+* **Serialization:** Kotlinx Serialization JSON 1.8.0
+* **Date & Time:** Kotlinx DateTime 0.6.2
+* **Navigation:** JetBrains Navigation-Compose 2.8.0-alpha10
+* **Dependency Injection:** Koin 4.0.2 (`koin-core`, `koin-compose`, `koin-compose-viewmodel`)
+* **Local Storage:** Multiplatform Settings 1.3.0
+* **Image Loading:** Coil 3.1.0 (`coil-compose`, `coil-network-ktor3`)
+* **Icons:** Compose Material Icons Extended 1.7.3
 
 ---
 
