@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
-  Archive,
   ChevronDown,
   LoaderCircle,
   MessageSquare,
@@ -18,56 +17,38 @@ import {
 } from "@/components/layout/styles"
 import { PanelIcon } from "@/components/layout/icons"
 import { Button } from "@/components/ui/button"
-import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { cn } from "@/lib/utils"
 import {
   listConversations,
-  deleteArchivedConversation,
   type ConversationList,
-  type ConversationView,
-  type ConversationSummary,
   type RequestMessage,
 } from "../api/request-conversations-api"
 import { RequestConversation } from "../components/request-conversation"
 import { InternalConversation } from "../components/internal-conversation"
 import { ConversationAvatar } from "../components/conversation-avatar"
-import { ConversationGroupItem } from "../components/conversation-group"
+import { ConversationListItem } from "../components/conversation-list-item"
 import {
   createInternalConversation,
   listInternalContacts,
   listInternalConversations,
   type InternalConversationList,
 } from "../api/internal-conversations-api"
-import {
-  groupConversations,
-  orderConversations,
-} from "../model/conversation-groups"
+import { orderConversations } from "../model/conversation-groups"
 
 const conversationRailStorageKey = "nexus.messages.conversation-rail-collapsed"
 
 type MessagesPageProps = {
   requestId: string | null
   internalId: string | null
-  view: ConversationView
   mode: "requests" | "internal"
 }
-type DeletionTarget = Pick<
-  ConversationSummary,
-  "id" | "title" | "referenceNumber"
->
-
 export function MessagesPage(props: MessagesPageProps) {
-  return <ConversationInbox key={`${props.mode}:${props.view}`} {...props} />
+  return <ConversationInbox key={props.mode} {...props} />
 }
 
-function ConversationInbox({
-  requestId,
-  internalId,
-  view,
-  mode,
-}: MessagesPageProps) {
+function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
   const router = useRouter()
   const account = usePortalAccount()
   const [result, setResult] = useState<ConversationList | null>(null)
@@ -94,11 +75,6 @@ function ConversationInbox({
   const [internalLoadingMore, setInternalLoadingMore] = useState(false)
   const [creatingInternal, setCreatingInternal] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [deletionTarget, setDeletionTarget] = useState<DeletionTarget | null>(
-    null,
-  )
-  const [deleting, setDeleting] = useState(false)
-  const [deletionError, setDeletionError] = useState("")
   const loadedPages = useRef(1)
   const listVersion = useRef(0)
   const [conversationRailCollapsed, setConversationRailCollapsed] = useState(
@@ -192,62 +168,58 @@ function ConversationInbox({
     [],
   )
 
-  const refreshConversations = useCallback(
-    async (signal?: AbortSignal) => {
-      const version = ++listVersion.current
-      try {
-        const value = await listConversations(undefined, signal, view)
-        let nextCursor = value.nextCursor
-        for (let page = 1; page < loadedPages.current && nextCursor; page++) {
-          const next = await listConversations(nextCursor, signal, view)
-          value.conversations.push(...next.conversations)
-          nextCursor = next.nextCursor
-        }
-        value.nextCursor = nextCursor
-        value.conversations = [
-          ...new Map(value.conversations.map((row) => [row.id, row])).values(),
-        ]
-        if (signal?.aborted || version !== listVersion.current) return
-        setResult((previous) => {
-          if (!previous) return value
-          return {
-            ...value,
-            conversations: orderConversations([
-              ...value.conversations.map((row) => {
-                const old = previous.conversations.find(
-                  (item) => item.id === row.id,
-                )
-                return old && old.updatedAt > row.updatedAt
-                  ? {
-                      ...row,
-                      updatedAt: old.updatedAt,
-                      lastMessage: old.lastMessage,
-                    }
-                  : row
-              }),
-            ]),
-            unreadCount:
-              value.unreadCount ??
-              (value.conversations.length === 0
-                ? 0
-                : (previous.unreadCount ?? 0)),
-          }
-        })
-        setError("")
-      } catch (reason: unknown) {
-        if (signal?.aborted || version !== listVersion.current) return
-        setError(
-          reason instanceof Error
-            ? reason.message
-            : "Couldn't load conversations.",
-        )
-      } finally {
-        if (!signal?.aborted && version === listVersion.current)
-          setLoading(false)
+  const refreshConversations = useCallback(async (signal?: AbortSignal) => {
+    const version = ++listVersion.current
+    try {
+      const value = await listConversations(undefined, signal)
+      let nextCursor = value.nextCursor
+      for (let page = 1; page < loadedPages.current && nextCursor; page++) {
+        const next = await listConversations(nextCursor, signal)
+        value.conversations.push(...next.conversations)
+        nextCursor = next.nextCursor
       }
-    },
-    [view],
-  )
+      value.nextCursor = nextCursor
+      value.conversations = [
+        ...new Map(value.conversations.map((row) => [row.id, row])).values(),
+      ]
+      if (signal?.aborted || version !== listVersion.current) return
+      setResult((previous) => {
+        if (!previous) return value
+        return {
+          ...value,
+          conversations: orderConversations([
+            ...value.conversations.map((row) => {
+              const old = previous.conversations.find(
+                (item) => item.id === row.id,
+              )
+              return old && old.updatedAt > row.updatedAt
+                ? {
+                    ...row,
+                    updatedAt: old.updatedAt,
+                    lastMessage: old.lastMessage,
+                  }
+                : row
+            }),
+          ]),
+          unreadCount:
+            value.unreadCount ??
+            (value.conversations.length === 0
+              ? 0
+              : (previous.unreadCount ?? 0)),
+        }
+      })
+      setError("")
+    } catch (reason: unknown) {
+      if (signal?.aborted || version !== listVersion.current) return
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Couldn't load conversations.",
+      )
+    } finally {
+      if (!signal?.aborted && version === listVersion.current) setLoading(false)
+    }
+  }, [])
 
   const refreshInternalConversations = useCallback(
     async (signal?: AbortSignal) => {
@@ -351,7 +323,7 @@ function ConversationInbox({
     const version = ++listVersion.current
     setLoadingMore(true)
     try {
-      const next = await listConversations(result.nextCursor, undefined, view)
+      const next = await listConversations(result.nextCursor)
       if (version !== listVersion.current) return
       loadedPages.current++
       setResult((previous) =>
@@ -454,59 +426,14 @@ function ConversationInbox({
     }
   }
 
-  const updateArchivedView = useCallback(
-    (archived: boolean) => {
-      if (archived !== (view === "archived") && requestId)
-        router.replace(
-          `/messages?request=${encodeURIComponent(requestId)}${archived ? "&view=archived" : ""}`,
-          { scroll: false },
-        )
-    },
-    [requestId, router, view],
+  const selected = result?.conversations.find(
+    (row) =>
+      row.id === requestId ||
+      row.bookings?.some((booking) => booking.id === requestId),
   )
-
-  async function confirmDeletion() {
-    if (!deletionTarget || deleting) return
-    setDeleting(true)
-    setDeletionError("")
-    try {
-      await deleteArchivedConversation(deletionTarget.id)
-      listVersion.current++
-      setResult((previous) =>
-        previous
-          ? {
-              ...previous,
-              conversations: previous.conversations.filter(
-                (row) => row.id !== deletionTarget.id,
-              ),
-            }
-          : previous,
-      )
-      if (requestId === deletionTarget.id)
-        router.replace("/messages?view=archived", { scroll: false })
-      setDeletionTarget(null)
-      sileo.success({ title: "Conversation deleted for you" })
-    } catch (reason) {
-      setDeletionError(
-        reason instanceof Error
-          ? reason.message
-          : "Couldn't delete this conversation.",
-      )
-    } finally {
-      setDeleting(false)
-    }
-  }
-
-  function requestDeletion(target: DeletionTarget) {
-    setDeletionError("")
-    setDeletionTarget(target)
-  }
-
-  const selected = result?.conversations.find((row) => row.id === requestId)
   const selectedInternal = internalResult?.conversations.find(
     (row) => row.id === internalId,
   )
-  const groups = groupConversations(result?.conversations ?? [], isClient)
   const hasSelection =
     mode === "internal" ? Boolean(internalId) : Boolean(requestId)
   const unreadCount =
@@ -548,7 +475,7 @@ function ConversationInbox({
           >
             Messages
           </h1>
-          {mode === "requests" && view === "active" && Boolean(unreadCount) && (
+          {mode === "requests" && Boolean(unreadCount) && (
             <span
               role="status"
               aria-live="polite"
@@ -586,41 +513,11 @@ function ConversationInbox({
           )}
         </header>
         <div
-          role="group"
-          aria-label="Conversation views"
           className={cn(
             "mb-3 flex gap-1 px-3",
             railCollapsed && "flex-col max-[767px]:flex-row",
           )}
         >
-          {(["active", "archived"] as const).map((value) => {
-            const Icon = value === "active" ? MessageSquare : Archive
-            const label = value === "active" ? "Active" : "Archived"
-            const selected = mode === "requests" && view === value
-            return (
-              <Button
-                key={value}
-                variant="outline"
-                aria-label={`${label} conversations`}
-                aria-pressed={selected}
-                className={cn(
-                  "size-11 shrink-0 cursor-pointer border-transparent p-0",
-                  selected && "bg-[#edf1f8] text-[#203f8c]",
-                )}
-                onClick={() =>
-                  router.push(
-                    value === "archived"
-                      ? "/messages?view=archived"
-                      : "/messages",
-                    { scroll: false },
-                  )
-                }
-              >
-                <Icon size={16} aria-hidden="true" />
-                <HoverTooltip>{label}</HoverTooltip>
-              </Button>
-            )
-          })}
           {canUseInternalChat && (
             <Button
               variant="outline"
@@ -702,9 +599,7 @@ function ConversationInbox({
                     railCollapsed && "hidden max-[767px]:block",
                   )}
                 >
-                  {view === "archived"
-                    ? "No archived conversations"
-                    : "No conversations yet"}
+                  No conversations yet
                 </h2>
                 <p
                   className={cn(
@@ -712,26 +607,24 @@ function ConversationInbox({
                     railCollapsed && "hidden max-[767px]:block",
                   )}
                 >
-                  {view === "archived"
-                    ? "Closed and cancelled service conversations appear here."
-                    : "Conversations appear here when a department head accepts a service request."}
+                  Conversations appear here when a department head accepts a
+                  service request.
                 </p>
               </div>
             )}
           {mode === "requests" &&
             !loading &&
-            groups.map((group, index) => (
-              <ConversationGroupItem
-                key={group.id}
-                group={group}
-                requestId={requestId}
-                railCollapsed={railCollapsed}
-                defaultExpanded={!requestId && index === 0}
-                onExpandRail={() => setConversationRail(false)}
-                view={view}
-                onDelete={requestDeletion}
-              />
-            ))}
+            orderConversations(result?.conversations ?? []).map(
+              (conversation) => (
+                <ConversationListItem
+                  key={conversation.id}
+                  conversation={conversation}
+                  isClient={isClient}
+                  requestId={requestId}
+                  railCollapsed={railCollapsed}
+                />
+              ),
+            )}
           {mode === "requests" && !loading && result?.nextCursor && (
             <Button
               variant="outline"
@@ -902,17 +795,7 @@ function ConversationInbox({
             requestTitle={selected?.title}
             onLatestMessage={updatePreview}
             onConversationRead={updateUnreadCounts}
-            onArchivedChange={updateArchivedView}
-            onDelete={() =>
-              requestDeletion({
-                id: requestId,
-                title: selected?.title || "Service conversation",
-                referenceNumber: selected?.referenceNumber ?? null,
-              })
-            }
-            listHref={
-              view === "archived" ? "/messages?view=archived" : "/messages"
-            }
+            listHref="/messages"
           />
         ) : mode === "internal" && internalId ? (
           <InternalConversation
@@ -938,27 +821,12 @@ function ConversationInbox({
               {mode === "internal"
                 ? "Choose a staff member or administrator to start a private chat."
                 : isClient
-                  ? "Choose a department head, then open a service thread."
-                  : "Choose a client, then open a service thread."}
+                  ? "Choose a department to discuss all your bookings in one conversation."
+                  : "Choose a client to discuss all their department bookings in one conversation."}
             </p>
           </div>
         )}
       </div>
-      {deletionTarget && (
-        <ConfirmationDialog
-          title="Delete conversation for you?"
-          subject={[deletionTarget.title, deletionTarget.referenceNumber]
-            .filter(Boolean)
-            .join(" · ")}
-          description="This removes the conversation from your archive. The booking and the other participant's history are kept."
-          confirmLabel="Delete for me"
-          pendingLabel="Deleting…"
-          pending={deleting}
-          error={deletionError}
-          onClose={() => setDeletionTarget(null)}
-          onConfirm={() => void confirmDeletion()}
-        />
-      )}
     </main>
   )
 }

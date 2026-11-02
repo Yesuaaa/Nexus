@@ -8,7 +8,12 @@ import { PGlite } from "@electric-sql/pglite"
 import { PGLiteSocketServer } from "@electric-sql/pglite-socket"
 import { createApp } from "./app.js"
 import { issueSession } from "./features/auth/auth.service.js"
-import type { Role } from "./generated/prisma/client.js"
+import type {
+  Role,
+  WorkflowEvent,
+  WorkflowFile,
+  WorkflowPayment,
+} from "./generated/prisma/client.js"
 import { getPrisma } from "./lib/db.js"
 import { parseAction } from "./features/request-workflow/workflow.validation.js"
 
@@ -982,18 +987,15 @@ test(
         )
         const signature = await upload(client, "signed.txt", "Signed agreement")
         await act(client, { type: "SIGN_AGREEMENT", fileId: signature.id })
-        const beforeAgreementApproval = await read()
-        const prematurePayment = await send(
-          client,
-          {
-            type: "SUBMIT_PAYMENT",
-            fileId: submittedFileId,
-            reference: "Too early",
-          },
-          beforeAgreementApproval.version,
+        const paymentBeforeAgreementApproval = await act(client, {
+          type: "SUBMIT_PAYMENT",
+          fileId: submittedFileId,
+          reference: "XENDIT-SANDBOX-TEST",
+        })
+        assert.equal(
+          paymentBeforeAgreementApproval.payment!.status,
+          "SUBMITTED",
         )
-        assert.equal(prematurePayment.status, 409)
-        assert.match(await prematurePayment.text(), /agreement.*approved/i)
         await act(head, {
           type: "REVIEW_AGREEMENT",
           approve: true,
@@ -1004,12 +1006,17 @@ test(
           "receipt.txt",
           "Manual bank payment proof",
         )
-        await act(client, {
-          type: "SUBMIT_PAYMENT",
-          fileId: proof.id,
-          reference: "BANK-WF-001",
-        })
         const beforeVerification = await read(head)
+        assert.equal(
+          (
+            await send(
+              client,
+              { type: "COMPLETE_SANDBOX_PAYMENT" },
+              beforeVerification.version,
+            )
+          ).status,
+          409,
+        )
         assert.equal(
           (
             await send(
@@ -1206,6 +1213,145 @@ test(
           where: { id: employee.id },
           data: { departmentId: department.id },
         })
+      },
+    )
+
+    await t.test(
+      "sandbox checkout verifies payment once and retains agreement and activation gates",
+      async () => {
+        for (const requiresAgreement of [false, true]) {
+          const sandboxService = await prisma!.service.create({
+            data: {
+              name: `Sandbox checkout ${requiresAgreement ? "with" : "without"} agreement`,
+              description: "Prototype card checkout",
+              requiresConsultation: false,
+              requiresAgreement,
+              requiresPayment: true,
+              requiresQuotationApproval: false,
+              departments: { connect: { id: department.id } },
+            },
+          })
+          const sandboxRequest: { id: string } =
+            await prisma!.serviceRequest.create({
+              data: {
+                clientId: client.id,
+                serviceId: sandboxService.id,
+                title: "Sandbox booking",
+                pricingModel: "FIXED",
+                agreedPrice: "5000.00",
+                currency: "PHP",
+              },
+            })
+          const id: string = sandboxRequest.id
+          assert.equal((await accept(id)).status, 200)
+          const proposed = await act(head, { type: "FIXED_QUOTATION" }, id)
+          const command = { type: "COMPLETE_SANDBOX_PAYMENT" }
+          assert.equal(
+            (await send(client, command, proposed.version, randomUUID(), id))
+              .status,
+            409,
+          )
+          const approved = await act(
+            client,
+            {
+              type: "RESPOND_QUOTATION",
+              quotationId: proposed.quotations[0]!.id,
+              decision: "ACCEPT",
+              note: "",
+            },
+            id,
+          )
+          assert.equal(
+            (await send(head, command, approved.version, randomUUID(), id))
+              .status,
+            403,
+          )
+          assert.equal(
+            (
+              await send(
+                otherClient,
+                command,
+                approved.version,
+                randomUUID(),
+                id,
+              )
+            ).status,
+            404,
+          )
+          const actionId = randomUUID()
+          const attempts = await Promise.all([
+            send(client, command, approved.version, actionId, id),
+            send(client, command, approved.version, actionId, id),
+          ])
+          for (const attempt of attempts)
+            assert.equal(attempt.status, 200, await attempt.clone().text())
+          const paid = await read(client, id)
+          assert.equal(paid.payment!.status, "VERIFIED")
+          assert.equal(
+            paid.state,
+            requiresAgreement
+              ? "AGREEMENT_PAYMENT_PENDING"
+              : "READY_FOR_ACTIVATION",
+          )
+          assert.equal(paid.agreement!.status, "PENDING")
+          const payment: WorkflowPayment =
+            await prisma!.workflowPayment.findUniqueOrThrow({
+              where: { requestId: id },
+            })
+          assert.match(payment.reference!, /^XENDIT-SANDBOX-[A-F0-9-]{36}$/)
+          assert.ok(payment.verifiedAt)
+          assert.equal(payment.verifiedById, null)
+          const receipt: WorkflowFile =
+            await prisma!.workflowFile.findUniqueOrThrow({
+              where: { id: payment.proofFileId! },
+            })
+          const receiptText = Buffer.from(receipt.data).toString("utf8")
+          assert.match(receiptText, /Status: Automatically verified/)
+          assert.match(receiptText, /Amount: PHP 5000.00/)
+          assert.ok(receiptText.includes(payment.reference!))
+          assert.ok(!receiptText.includes("4000000000000002"))
+          assert.equal(receipt.clientVisible, true)
+          const download = await fetch(`${path(id)}/files/${receipt.id}`, {
+            headers: client.headers,
+          })
+          assert.equal(download.status, 200)
+          assert.equal(await download.text(), receiptText)
+          const confirmations: WorkflowEvent[] =
+            await prisma!.workflowEvent.findMany({
+              where: { requestId: id, type: "PAYMENT_VERIFIED" },
+            })
+          assert.equal(confirmations.length, 1)
+          assert.equal(confirmations[0]!.actorId, null)
+          assert.equal(
+            await prisma!.workflowFile.count({ where: { requestId: id } }),
+            1,
+          )
+          assert.equal(
+            (await send(client, command, paid.version, randomUUID(), id))
+              .status,
+            409,
+          )
+          assert.equal(
+            (
+              await send(
+                head,
+                { type: "ACTIVATE_PROJECT" },
+                paid.version,
+                randomUUID(),
+                id,
+              )
+            ).status,
+            409,
+          )
+          assert.equal(
+            (
+              await prisma!.project.findUniqueOrThrow({
+                where: { requestId: id },
+              })
+            ).status,
+            "PLANNED",
+          )
+        }
       },
     )
 

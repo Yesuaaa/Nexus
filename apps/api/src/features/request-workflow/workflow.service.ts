@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import type { RequestWorkflowState } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import {
@@ -39,6 +39,9 @@ async function requireConsultationComplete(
     consultationRequired &&
     !(await tx.workflowConsultation.count({
       where: { requestId, status: "COMPLETED" },
+    })) &&
+    !(await tx.conversationMeetingBooking.count({
+      where: { bookingId: requestId, meeting: { status: "COMPLETED" } },
     }))
   )
     fail("Complete the required consultation before sending a quotation", 409)
@@ -111,14 +114,6 @@ async function runAction(
       where: { requestId },
       data: { state: nextState },
     })
-  const requireApprovedAgreement = async () => {
-    if (
-      workflow.agreementRequired &&
-      (await tx.workflowAgreement.findUnique({ where: { requestId } }))
-        ?.status !== "APPROVED"
-    )
-      fail("The service agreement must be approved before payment", 409)
-  }
   const event = (
     type: string,
     summary: string,
@@ -654,7 +649,7 @@ async function runAction(
       await event(
         "PAYMENT_CREATED",
         workflow.paymentRequired
-          ? "Submit payment evidence for manual verification before commencement."
+          ? "Complete the commencement payment through checkout or payment evidence before activation."
           : "No mandatory commencement payment is required.",
         payment.id,
       )
@@ -733,10 +728,66 @@ async function runAction(
       )
       break
     }
+    case "COMPLETE_SANDBOX_PAYMENT": {
+      requireClient()
+      requireStage("AGREEMENT_PAYMENT_PENDING", "READY_FOR_ACTIVATION")
+      const payment = await tx.workflowPayment.findUnique({
+        where: { requestId },
+      })
+      if (!payment || payment.status !== "PENDING" || payment.amount.lte(0))
+        fail("No outstanding payment is available for sandbox checkout", 409)
+      const transactionId = randomUUID()
+      const reference = `XENDIT-SANDBOX-${transactionId.toUpperCase()}`
+      const verifiedAt = new Date()
+      const data = Buffer.from(
+        [
+          "Nexus sandbox checkout receipt",
+          "Provider: Xendit prototype (simulated)",
+          "Status: Automatically verified",
+          `Reference: ${reference}`,
+          `Booking: ${request.referenceNumber || requestId}`,
+          `Amount: ${payment.currency} ${payment.amount.toFixed(2)}`,
+          "Card: **** 0002",
+          `Verified at: ${verifiedAt.toISOString()}`,
+          "Test payment only. No money was charged.",
+        ].join("\n"),
+      )
+      const receipt = await tx.workflowFile.create({
+        data: {
+          requestId,
+          uploaderId: userId,
+          uploadId: transactionId,
+          name: `${reference.toLowerCase()}.txt`,
+          mimeType: "text/plain",
+          size: data.length,
+          sha256: createHash("sha256").update(data).digest("hex"),
+          clientVisible: true,
+          data,
+        },
+      })
+      await tx.workflowPayment.update({
+        where: { requestId },
+        data: {
+          proofFileId: receipt.id,
+          reference,
+          status: "VERIFIED",
+          verifiedById: null,
+          verifiedAt,
+        },
+      })
+      await appendEvent(
+        tx,
+        requestId,
+        null,
+        "PAYMENT_VERIFIED",
+        "Sandbox card payment succeeded and was automatically verified. No money was charged.",
+        payment.id,
+      )
+      break
+    }
     case "SUBMIT_PAYMENT": {
       requireClient()
       requireStage("AGREEMENT_PAYMENT_PENDING", "READY_FOR_ACTIVATION")
-      await requireApprovedAgreement()
       const payment = await tx.workflowPayment.findUnique({
         where: { requestId },
       })
@@ -769,7 +820,6 @@ async function runAction(
           403,
         )
       requireStage("AGREEMENT_PAYMENT_PENDING", "READY_FOR_ACTIVATION")
-      await requireApprovedAgreement()
       if (!command.approve && !command.note.trim())
         fail("A reason is required when rejecting payment")
       const payment = await tx.workflowPayment.findUnique({

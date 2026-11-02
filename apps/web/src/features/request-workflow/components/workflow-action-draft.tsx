@@ -13,11 +13,7 @@ import {
 import { QuotationForm } from "./workflow-context-panel"
 
 export type WorkflowDraftAction =
-  | "request-information"
-  | "schedule-consultation"
-  | "quotation"
-  | "approver-assignments"
-  | "internal-note"
+  "request-information" | "quotation" | "approver-assignments" | "internal-note"
 
 type WorkflowActionDraftProps = {
   action: WorkflowDraftAction
@@ -28,6 +24,7 @@ type WorkflowActionDraftProps = {
 
 function DraftFrame({
   title,
+  booking,
   status,
   internal = false,
   description,
@@ -35,6 +32,7 @@ function DraftFrame({
   children,
 }: {
   title: string
+  booking: Workflow["request"]
   status?: string
   internal?: boolean
   description?: string
@@ -62,6 +60,9 @@ function DraftFrame({
               )
             )}
           </div>
+          <p className="mt-1 mb-0 text-[10px] font-medium text-[#294a9b]">
+            {booking.serviceName} · {booking.referenceNumber || booking.id}
+          </p>
           {description && (
             <p className="mt-1 mb-0 text-[11px] leading-5 text-[#52627a]">
               {description}
@@ -126,12 +127,6 @@ function DraftForm({
   )
 }
 
-function localDateInputValue(date: Date) {
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
-    .toISOString()
-    .slice(0, 10)
-}
-
 export function WorkflowActionDraft({
   action,
   workflow,
@@ -141,6 +136,7 @@ export function WorkflowActionDraft({
   if (action === "request-information") {
     return (
       <DraftFrame
+        booking={workflow.request}
         title="Request information"
         status="Draft · Not sent"
         description="What information do you need from the client?"
@@ -197,91 +193,6 @@ export function WorkflowActionDraft({
     )
   }
 
-  if (action === "schedule-consultation") {
-    const today = localDateInputValue(new Date())
-    return (
-      <DraftFrame
-        title="Schedule consultation"
-        status="Draft · Not sent"
-        onClose={onClose}
-      >
-        <DraftForm
-          controls={controls}
-          label="Send invitation"
-          onClose={onClose}
-          action={(data) => {
-            const startsAt = new Date(
-              `${String(data.get("date"))}T${String(data.get("time"))}`,
-            )
-            const endsAt = new Date(
-              startsAt.getTime() + Number(data.get("duration")) * 60_000,
-            )
-            return {
-              type: "SCHEDULE_CONSULTATION",
-              startsAt: startsAt.toISOString(),
-              endsAt: endsAt.toISOString(),
-              location: String(data.get("location")),
-              notes: String(data.get("topic") || ""),
-            }
-          }}
-        >
-          <WorkflowField label="Consultation topic">
-            <input
-              name="topic"
-              maxLength={500}
-              placeholder="e.g. Project overview or technical discussion"
-              className={workflowInput}
-            />
-          </WorkflowField>
-          <div className="grid grid-cols-2 gap-3 max-[520px]:grid-cols-1">
-            <WorkflowField label="Preferred date">
-              <input
-                name="date"
-                type="date"
-                min={today}
-                required
-                className={workflowInput}
-              />
-            </WorkflowField>
-            <WorkflowField label="Preferred time">
-              <input
-                name="time"
-                type="time"
-                required
-                className={workflowInput}
-              />
-            </WorkflowField>
-          </div>
-          <div className="grid grid-cols-2 gap-3 max-[520px]:grid-cols-1">
-            <WorkflowField label="Duration">
-              <select
-                name="duration"
-                defaultValue="30"
-                className={workflowInput}
-              >
-                <option value="15">15 minutes</option>
-                <option value="30">30 minutes</option>
-                <option value="45">45 minutes</option>
-                <option value="60">1 hour</option>
-                <option value="90">1 hour 30 minutes</option>
-                <option value="120">2 hours</option>
-              </select>
-            </WorkflowField>
-            <WorkflowField label="Meeting link or location">
-              <input
-                name="location"
-                required
-                maxLength={1000}
-                placeholder="Teams link or office address"
-                className={workflowInput}
-              />
-            </WorkflowField>
-          </div>
-        </DraftForm>
-      </DraftFrame>
-    )
-  }
-
   if (action === "quotation") {
     if (workflow.state === "CONSULTATION") {
       const pendingRequirements = workflow.requirements.filter(
@@ -290,13 +201,17 @@ export function WorkflowActionDraft({
       ).length
       const consultationIncomplete =
         workflow.consultationRequired &&
-        !workflow.consultations.some(
-          (consultation) => consultation.status === "COMPLETED",
+        !(
+          workflow.consultationComplete ??
+          workflow.consultations.some(
+            (consultation) => consultation.status === "COMPLETED",
+          )
         )
       const canPrepare = pendingRequirements === 0 && !consultationIncomplete
 
       return (
         <DraftFrame
+          booking={workflow.request}
           title="Prepare quotation"
           status="Draft · Not sent"
           description="Review the request requirements before moving to quotation."
@@ -338,6 +253,7 @@ export function WorkflowActionDraft({
 
     return (
       <DraftFrame
+        booking={workflow.request}
         title="Prepare quotation"
         status="Draft · Not sent"
         description="Add scope and pricing details, then review before sending."
@@ -359,6 +275,7 @@ export function WorkflowActionDraft({
     if (!internal) return null
     return (
       <DraftFrame
+        booking={workflow.request}
         title="Approver assignments"
         internal
         description="Assign staff to review the financial steps for this request."
@@ -420,6 +337,7 @@ export function WorkflowActionDraft({
   )
   return (
     <DraftFrame
+      booking={workflow.request}
       title="Internal note"
       internal
       description="Add a private note for your team about this request."
