@@ -10,6 +10,7 @@
     "preview": "pnpm start",
     "typecheck": "next typegen && tsc --noEmit",
     "test:e2e": "playwright test",
+    "test:e2e:messages": "playwright test request-conversations.spec.ts internal-conversations.spec.ts request-inbox.spec.ts request-workflow.spec.ts workflow-approvals.spec.ts project-workspace.spec.ts",
     "test:e2e:live": "node scripts/regression-live.mjs",
     "test": "node --experimental-strip-types --test test/*.test.mjs"
   },

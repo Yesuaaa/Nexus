@@ -2,6 +2,52 @@
 
 `pnpm --filter @nexus/web test:e2e` runs the deterministic mocked regressions.
 
+For the messaging-only run order, test cases, expected results and deployment
+checks, see [Messaging regression workflow](MESSAGING-REGRESSION.md).
+Run `pnpm --filter @nexus/web test:e2e:messages --workers=2` for its browser suite.
+
+Run the complete folder when reviewing a release; `regression.spec.ts` contains
+the shared authentication checks, while feature behavior is split across the
+other specs. Playwright builds and starts a production server by default.
+When setting `NEXUS_E2E_BASE_URL`, point it at a fresh production build:
+development mode can repeat effects and invalidate request-count assertions.
+
+## Review from 42789dd to 636c020
+
+The November 2, 2026 review covers changes after
+`42789dd6b13094b00041b1fb24411602dc350af1` through `636c020`.
+
+| Area                       | Regression files and behavior                                                                                                                                                    |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Authentication and access  | `regression.spec.ts`, `jwt-session.spec.ts`, role specs: refresh, revoked sessions, protected routes and account operations                                                      |
+| Client requests            | `client.spec.ts`, `clients.spec.ts`, `client-service-requests.spec.ts`, `booked-services.spec.ts`: submission, current action labels, receipt links, filters and details         |
+| Department inbox           | `request-inbox.spec.ts`: review stays in the drawer; Go to chat opens messaging; cancellation and failed delete preserve bookings on desktop and mobile                          |
+| Messaging                  | `request-conversations.spec.ts`: internal messaging access, staff message edit retry, delete confirmation and client synchronization, archived conversations                     |
+| Workflow                   | `request-workflow.spec.ts`: quotation approval, consultation reschedule retry with the same action ID, payment evidence preview/removal and upload retry with the same upload ID |
+| Services                   | `services.spec.ts`, `pricing-templates.spec.ts`: package removal payload and reopening, pricing templates and current dialog controls                                            |
+| Profiles and notifications | `profile.spec.ts`, `workflow-approvals.spec.ts`: all-role profile editing/images, notification read-all persistence and failure recovery                                         |
+
+### Known backend gap
+
+At `636c020`, the inbox UI calls `POST /api/request-inbox/:id/decline` and
+`DELETE /api/request-inbox/:id`, but `request-inbox.controller.ts` only implements
+list, detail and accept routes. The booking status enum also has no `DECLINED`
+value (the separate workflow state does). The new inbox tests cover failed
+delete recovery, not successful decline/delete. Implement the server contract
+and its authorization/persistence tests before adding successful browser
+fixtures.
+
+Browser mocks verify frontend behavior only. Use the offline API suite for real
+authorization and persistence; passing mocked tests does not close this gap.
+
+The restored inbox implementation keeps its native confirmation dialog. Because
+the open booking drawer can hide that dialog from assistive-technology queries,
+the browser regression currently covers the delete confirmation from the inbox
+table; decline confirmation remains a known UI follow-up until the dialog
+stacking/accessibility interaction is redesigned.
+
+## Commands and live mode
+
 From the repository root, `pnpm test:e2e -- --ui` runs the isolated backend
 regression and every Playwright spec under `apps/web/e2e/` in the interactive UI
 at the same time. Backend test results remain in the terminal. The browser

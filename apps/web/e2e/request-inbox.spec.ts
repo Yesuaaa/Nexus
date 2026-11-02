@@ -34,6 +34,8 @@ async function mockInbox(
   const state = {
     requests: Array.from({ length: 11 }, (_, index) => fixture(index + 1)),
     accepts: 0,
+    mutations: [] as string[],
+    mutationError: 404,
     inboxReads: 0,
     listError: false,
     detailsError: false,
@@ -115,11 +117,22 @@ async function mockInbox(
       })
     }
     const match = url.pathname.match(
-      /^\/api\/request-inbox\/(booking-\d+)(\/accept)?$/,
+      /^\/api\/request-inbox\/(booking-\d+)(\/accept|\/decline)?$/,
     )
     if (match) {
       const item = state.requests.find((item) => item.id === match[1])!
-      if (match[2]) {
+      if (match[2] === "/decline" || request.method() === "DELETE") {
+        const declining = match[2] === "/decline"
+        expect(request.method()).toBe(declining ? "POST" : "DELETE")
+        state.mutations.push(`${request.method()} ${url.pathname}`)
+        // These UI endpoints are not implemented by the current API. Exercise
+        // failure recovery without inventing a successful server contract.
+        return route.fulfill({
+          status: state.mutationError,
+          json: { error: "Please retry." },
+        })
+      }
+      if (match[2] === "/accept") {
         expect(request.method()).toBe("POST")
         state.accepts++
         if (state.pauseAccept)
@@ -157,6 +170,57 @@ async function mockInbox(
   return state
 }
 test.use({ reducedMotion: "reduce" })
+
+for (const width of [1440, 390]) {
+  test(`failed delete preserves the booking after cancellation and retry at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 920 })
+    const state = await mockInbox(page)
+    await page.goto("/request-inbox")
+    const review = page.getByRole("button", {
+      name: "Review request booking-1",
+      exact: true,
+    })
+    const label = "Delete request"
+    const trigger = page.getByRole("button", {
+      name: "Delete request booking-1",
+      exact: true,
+    })
+
+    await trigger.click()
+    const confirmation = page.getByRole("dialog", {
+      name: "Delete this request?",
+    })
+    await expect(confirmation).toContainText("Website Development")
+    await confirmation
+      .getByRole("button", { name: "Cancel", exact: true })
+      .click()
+    expect(state.mutations).toEqual([])
+    await trigger.click()
+    state.mutationError = 503
+    const confirm = confirmation.getByRole("button", {
+      name: label,
+      exact: true,
+    })
+    await confirm.click()
+    await expect.poll(() => state.mutations.length).toBe(1)
+    await expect(confirm).toBeEnabled()
+    expect(state.requests[0].status).toBe("SUBMITTED")
+    expect(state.requests).toHaveLength(11)
+    state.mutationError = 404
+    await confirm.click()
+    await expect(confirmation).not.toBeVisible()
+    expect(state.mutations).toEqual(
+      Array(2).fill("DELETE /api/request-inbox/booking-1"),
+    )
+    expect(state.requests[0].status).toBe("SUBMITTED")
+    expect(state.requests).toHaveLength(11)
+    await page.reload()
+    await expect(page.getByText("Showing 1–10 of 11")).toBeVisible()
+    await expect(review).toBeVisible()
+  })
+}
 
 for (const width of [1440, 390]) {
   test(`department head reviews and accepts booked services at ${width}px`, async ({
@@ -250,6 +314,10 @@ for (const width of [1440, 390]) {
     await expect(page.getByText("Showing 1–1 of 1")).toBeVisible()
     await page
       .getByRole("button", { name: "Review request booking-1", exact: true })
+      .click()
+    await expect(drawer).toBeVisible()
+    await drawer
+      .getByRole("button", { name: "Go to chat", exact: true })
       .click()
     await expect(page).toHaveURL(/\/messages\?request=booking-1$/)
     await expect(
