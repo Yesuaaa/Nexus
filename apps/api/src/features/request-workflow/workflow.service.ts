@@ -111,6 +111,14 @@ async function runAction(
       where: { requestId },
       data: { state: nextState },
     })
+  const requireApprovedAgreement = async () => {
+    if (
+      workflow.agreementRequired &&
+      (await tx.workflowAgreement.findUnique({ where: { requestId } }))
+        ?.status !== "APPROVED"
+    )
+      fail("The service agreement must be approved before payment", 409)
+  }
   const event = (
     type: string,
     summary: string,
@@ -728,6 +736,7 @@ async function runAction(
     case "SUBMIT_PAYMENT": {
       requireClient()
       requireStage("AGREEMENT_PAYMENT_PENDING", "READY_FOR_ACTIVATION")
+      await requireApprovedAgreement()
       const payment = await tx.workflowPayment.findUnique({
         where: { requestId },
       })
@@ -754,12 +763,15 @@ async function runAction(
       break
     }
     case "VERIFY_PAYMENT": {
-      if (!permissions.verifyPayment)
+      if (!permissions.verifyPayment && !permissions.manage)
         fail(
-          "Only the explicitly assigned payment verifier can verify payment",
+          "Only the department head or assigned payment verifier can review payment",
           403,
         )
       requireStage("AGREEMENT_PAYMENT_PENDING", "READY_FOR_ACTIVATION")
+      await requireApprovedAgreement()
+      if (!command.approve && !command.note.trim())
+        fail("A reason is required when rejecting payment")
       const payment = await tx.workflowPayment.findUnique({
         where: { requestId },
       })
@@ -777,7 +789,7 @@ async function runAction(
         "PAYMENT_VERIFIED",
         command.approve
           ? "Payment was manually verified by the assigned approver."
-          : "Payment evidence needs to be resubmitted.",
+          : `Payment rejected: ${command.note}. Please submit corrected payment proof.`,
         payment.id,
       )
       if (command.note)

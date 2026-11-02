@@ -125,7 +125,10 @@ for (const width of [1440, 390]) {
       .fill("redesign 11")
     await expect(page.getByText("Showing 1–1 of 1")).toBeVisible()
     await page
-      .getByRole("button", { name: "View Website redesign 11", exact: true })
+      .getByRole("button", {
+        name: "View request: Website redesign 11",
+        exact: true,
+      })
       .filter({ visible: true })
       .click()
     const dialog = page.getByRole("dialog")
@@ -150,7 +153,10 @@ for (const width of [1440, 390]) {
     await expect.poll(() => calls.at(-1)).toContain("sortOrder=asc")
     await expect(
       page
-        .getByRole("button", { name: "View Website redesign 12", exact: true })
+        .getByRole("button", {
+          name: "View request: Website redesign 12",
+          exact: true,
+        })
         .filter({ visible: true }),
     ).toBeVisible()
     await page.screenshot({

@@ -72,7 +72,7 @@ function fixture(): Workflow {
   }
 }
 
-async function mock(page: Page, workflow: Workflow) {
+async function mock(page: Page, workflow: Workflow, manager = false) {
   const actions: Record<string, unknown>[] = []
   await page.addInitScript(() =>
     sessionStorage.setItem("nexus.auth.token", "workflow-session"),
@@ -87,7 +87,7 @@ async function mock(page: Page, workflow: Workflow) {
             id: "client-1",
             fullName: "Mara Client",
             email: "client@example.com",
-            role: "USER",
+            role: manager ? "STAFF" : "USER",
             isActive: true,
             permissions: ["dashboard:read", "profile:read"],
             headOf: null,
@@ -204,7 +204,9 @@ test("the conversation records formal quotation approval through a structured ac
   const actions = await mock(page, workflow)
   await page.goto("/messages?request=request-1")
   await expect(
-    page.getByRole("heading", { name: "Website Development", exact: true }),
+    page
+      .getByRole("complementary", { name: "Request context" })
+      .getByText("Website Development", { exact: true }),
   ).toBeVisible()
   await expect(
     page.getByRole("list", { name: "Request progress" }),
@@ -220,7 +222,30 @@ test("the conversation records formal quotation approval through a structured ac
   ).toBeVisible()
   await expect(
     page.getByRole("heading", { name: "Payment requirement", exact: true }),
+  ).toHaveCount(0)
+  await expect(
+    page.getByRole("heading", { name: "Service agreement", exact: true }),
   ).toBeVisible()
+  workflow.agreement!.status = "APPROVED"
+  workflow.events.push({
+    id: "agreement-approved",
+    type: "AGREEMENT_REVIEWED",
+    summary: "Agreement approved.",
+    entityId: "agreement-1",
+    createdAt: "2026-10-30T08:10:00.000Z",
+    actor: { id: "head-1", fullName: "Dani Head" },
+  })
+  await page.reload()
+  await expect(
+    page.getByRole("heading", { name: "Payment requirement", exact: true }),
+  ).toBeVisible()
+  const agreementPosition = await page
+    .getByRole("heading", { name: "Service agreement", exact: true })
+    .boundingBox()
+  const paymentPosition = await page
+    .getByRole("heading", { name: "Payment requirement", exact: true })
+    .boundingBox()
+  expect(paymentPosition!.y).toBeGreaterThan(agreementPosition!.y)
   expect(actions).toHaveLength(1)
   expect(actions[0]).toMatchObject({
     type: "RESPOND_QUOTATION",
@@ -233,6 +258,485 @@ test("the conversation records formal quotation approval through a structured ac
   await expect(
     page.getByRole("button", { name: "Activate project", exact: true }),
   ).toHaveCount(0)
+})
+
+test("requested documents can be uploaded and submitted without leaving the requirement", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 900 })
+  const workflow = fixture()
+  workflow.state = "CONSULTATION"
+  workflow.quotations = []
+  workflow.requirements = [
+    {
+      id: "requirement-1",
+      title: "Project brief",
+      details: "Upload the project brief",
+      mandatory: true,
+      status: "REQUESTED",
+      submission: null,
+      fileId: null,
+      reviewNote: null,
+      createdAt: "2026-10-30T08:00:00.000Z",
+    },
+  ]
+  workflow.events = [
+    {
+      id: "requirement-event",
+      type: "REQUIREMENT_REQUESTED",
+      summary: "Project brief requested",
+      entityId: "requirement-1",
+      createdAt: "2026-10-30T08:00:00.000Z",
+      actor: null,
+    },
+  ]
+  const actions = await mock(page, workflow)
+  await page.route(
+    "**/api/request-workflows/request-1/files",
+    async (route) => {
+      expect(route.request().postDataJSON()).toMatchObject({
+        name: "brief.txt",
+        mimeType: "text/plain",
+        contextual: true,
+      })
+      const file = {
+        id: "uploaded-brief",
+        name: "brief.txt",
+        mimeType: "text/plain",
+        size: 5,
+        uploaderId: "client-1",
+        createdAt: new Date().toISOString(),
+      }
+      workflow.files.push(file)
+      workflow.version++
+      await route.fulfill({ status: 201, json: { file } })
+    },
+  )
+  await page.goto("/messages?request=request-1")
+  const uploadButton = page
+    .getByRole("button", {
+      name: "Upload document",
+      exact: true,
+    })
+    .and(page.locator("button"))
+  const row = await uploadButton.locator("..").boundingBox()
+  const button = await uploadButton.boundingBox()
+  expect(row).not.toBeNull()
+  expect(button).not.toBeNull()
+  expect(row!.x + row!.width).toBeGreaterThan(button!.x + button!.width + 8)
+  const outsidePicker = page
+    .waitForEvent("filechooser", { timeout: 500 })
+    .catch(() => null)
+  await page.mouse.click(
+    button!.x + button!.width + 8,
+    button!.y + button!.height / 2,
+  )
+  expect(await outsidePicker).toBeNull()
+  const picker = page.waitForEvent("filechooser")
+  await uploadButton.click()
+  await (await picker).setFiles([])
+  await page.getByLabel("Upload document", { exact: true }).setInputFiles({
+    name: "brief.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("brief"),
+  })
+  await expect(page.getByText(/Ready to submit/)).toBeVisible()
+  expect(workflow.files).toHaveLength(0)
+  expect(actions).toHaveLength(0)
+  await page
+    .getByRole("button", { name: "Submit requirement", exact: true })
+    .click()
+  await expect.poll(() => actions.length).toBe(1)
+  expect(actions[0]).toMatchObject({
+    type: "SUBMIT_REQUIREMENT",
+    requirementId: "requirement-1",
+    fileId: "uploaded-brief",
+    expectedVersion: 4,
+  })
+})
+
+test("agreement documents upload directly and outstanding checklist statuses are labeled", async ({
+  page,
+}) => {
+  const workflow = fixture()
+  workflow.state = "AGREEMENT_PAYMENT_PENDING"
+  workflow.permissions.manage = true
+  workflow.permissions.isClient = false
+  workflow.quotations[0]!.status = "ACCEPTED"
+  workflow.approval = {
+    quotationId: "quote-1",
+    amount: "25000.00",
+    currency: "PHP",
+    approvedById: "client-1",
+    approvedAt: "2026-10-30T08:00:00.000Z",
+  }
+  workflow.agreement = {
+    id: "agreement-1",
+    mandatory: true,
+    status: "PENDING",
+    documentFileId: null,
+    signedFileId: null,
+  }
+  workflow.events = [
+    {
+      id: "agreement-event",
+      type: "AGREEMENT_REQUIRED",
+      summary: "Agreement required",
+      entityId: "agreement-1",
+      createdAt: "2026-10-30T08:00:00.000Z",
+      actor: null,
+    },
+  ]
+  const actions = await mock(page, workflow, true)
+  await page.route(
+    "**/api/request-workflows/request-1/files",
+    async (route) => {
+      const file = {
+        id: "agreement-file",
+        name: "agreement.txt",
+        mimeType: "text/plain",
+        size: 9,
+        uploaderId: "client-1",
+        createdAt: new Date().toISOString(),
+      }
+      workflow.files.push(file)
+      workflow.version++
+      await route.fulfill({ status: 201, json: { file } })
+    },
+  )
+  await page.goto("/messages?request=request-1")
+  const checklist = page
+    .locator("summary")
+    .filter({ hasText: "Commencement checklist" })
+    .locator("..")
+  await expect(checklist.getByText("Completed", { exact: true })).toBeVisible()
+  await expect(checklist.getByText("Pending", { exact: true })).toHaveCSS(
+    "color",
+    "rgb(180, 35, 24)",
+  )
+  await page.getByLabel("Upload document", { exact: true }).setInputFiles({
+    name: "agreement.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("agreement"),
+  })
+  await expect(page.getByText(/Ready to submit/)).toBeVisible()
+  expect(workflow.files).toHaveLength(0)
+  expect(actions).toHaveLength(0)
+  await page
+    .getByRole("button", { name: "Attach agreement document", exact: true })
+    .click()
+  await expect.poll(() => actions.length).toBe(1)
+  expect(actions[0]).toMatchObject({
+    type: "ATTACH_AGREEMENT",
+    fileId: "agreement-file",
+    expectedVersion: 4,
+  })
+})
+
+test("request detail information rejects blank and whitespace-only instructions", async ({
+  page,
+}) => {
+  const workflow = fixture()
+  workflow.state = "CONSULTATION"
+  workflow.permissions.manage = true
+  workflow.permissions.isClient = false
+  workflow.quotations = []
+  workflow.events = []
+  const actions = await mock(page, workflow, true)
+  await page.goto("/messages?request=request-1")
+  await page
+    .getByRole("button", { name: "Open request actions", exact: true })
+    .click()
+  await page
+    .getByRole("menuitem", { name: "Request information", exact: true })
+    .click()
+  const draft = page.getByRole("region", { name: "Request information" })
+  await draft.getByLabel("Requirement title").fill("Project brief")
+  await draft.getByRole("button", { name: "Send request", exact: true }).click()
+  expect(actions).toHaveLength(0)
+  await draft.getByLabel("Request detail information (required)").fill("   ")
+  await draft.getByRole("button", { name: "Send request", exact: true }).click()
+  expect(actions).toHaveLength(0)
+  await draft
+    .getByLabel("Request detail information (required)")
+    .fill("Please attach the project brief.")
+  await draft.getByRole("button", { name: "Send request", exact: true }).click()
+  await expect.poll(() => actions.length).toBe(1)
+  expect(actions[0]).toMatchObject({
+    type: "REQUEST_REQUIREMENT",
+    details: "Please attach the project brief.",
+  })
+})
+
+for (const width of [1280, 390]) {
+  test(`quotation revisions preserve all items and edits across steps at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const workflow = fixture()
+    workflow.state = "REVISION_REQUESTED"
+    workflow.paymentRequired = true
+    workflow.permissions.manage = true
+    workflow.permissions.isClient = false
+    workflow.quotations[0]!.status = "REVISION_REQUESTED"
+    workflow.quotations[0]!.validUntil = new Date(
+      Date.now() + 14 * 24 * 60 * 60 * 1000,
+    ).toISOString()
+    workflow.quotations[0]!.lineItems.push({
+      description: "Hosting",
+      quantity: 2,
+      unitPrice: "500.00",
+    })
+    const actions = await mock(page, workflow, true)
+    await page.goto("/messages?request=request-1")
+    await page
+      .getByRole("button", { name: "Prepare revised quotation" })
+      .click()
+    const draft = page.getByRole("region", { name: "Prepare quotation" })
+    await draft
+      .getByLabel("Deliverables (one per line)")
+      .fill(
+        Array.from({ length: 31 }, (_, index) => `Deliverable ${index}`).join(
+          "\n",
+        ),
+      )
+    await draft.getByRole("button", { name: "Next", exact: true }).click()
+    await expect(draft.getByLabel("Service scope")).toBeVisible()
+    await draft
+      .getByLabel("Deliverables (one per line)")
+      .fill("Five accessible pages\nProduction deployment")
+    await draft.getByRole("button", { name: "Next", exact: true }).click()
+    await expect(draft.getByLabel("Item 1", { exact: true })).toHaveValue(
+      "Website delivery",
+    )
+    await expect(draft.getByLabel("Item 2", { exact: true })).toHaveValue(
+      "Hosting",
+    )
+    await draft.getByLabel("Item 2", { exact: true }).fill("Managed hosting")
+    await draft.getByRole("button", { name: "Back", exact: true }).click()
+    await draft.getByRole("button", { name: "Next", exact: true }).click()
+    await expect(draft.getByLabel("Item 2", { exact: true })).toHaveValue(
+      "Managed hosting",
+    )
+    await draft.getByRole("button", { name: "Next", exact: true }).click()
+    const validUntil = await draft.getByLabel("Valid until").inputValue()
+    await draft.getByLabel("Valid until").fill("2020-01-01T12:00")
+    await draft.getByRole("button", { name: "Review", exact: true }).click()
+    await expect(draft.getByLabel("Valid until")).toBeVisible()
+    await draft.getByLabel("Valid until").fill(validUntil)
+    await draft.getByLabel("Amount due before commencement").fill("99999")
+    await draft.getByRole("button", { name: "Review", exact: true }).click()
+    await expect(
+      draft.getByLabel("Amount due before commencement"),
+    ).toBeVisible()
+    await draft.getByLabel("Amount due before commencement").fill("0")
+    await draft.getByRole("button", { name: "Review", exact: true }).click()
+    await expect(
+      draft.getByLabel("Amount due before commencement"),
+    ).toBeVisible()
+    await draft.getByLabel("Amount due before commencement").fill("12500.00")
+    await draft.getByRole("button", { name: "Review", exact: true }).click()
+    await expect(
+      draft.getByRole("region", { name: "Quotation review" }),
+    ).toContainText("Managed hosting")
+    await page.screenshot({
+      path: `test-results/issue141-quotation-review-${width}.png`,
+      fullPage: true,
+    })
+    expect(actions).toHaveLength(0)
+    await draft.getByRole("button", { name: "Send revised quotation" }).click()
+    await expect.poll(() => actions.length).toBe(1)
+    expect(actions[0]!.lineItems).toEqual([
+      { description: "Website delivery", quantity: 1, unitPrice: "25000.00" },
+      { description: "Managed hosting", quantity: 2, unitPrice: "500.00" },
+    ])
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true)
+  })
+}
+
+test("declining a quotation requires confirmation and cancel preserves it", async ({
+  page,
+}) => {
+  const actions = await mock(page, fixture())
+  await page.goto("/messages?request=request-1")
+  await page
+    .getByRole("checkbox", { name: /I have reviewed this quotation/ })
+    .check()
+  await page
+    .getByRole("button", { name: "Decline quotation", exact: true })
+    .click()
+  const dialog = page.getByRole("dialog", { name: "Decline quotation?" })
+  await expect(dialog).toBeVisible()
+  expect(actions).toHaveLength(0)
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click()
+  await expect(dialog).toHaveCount(0)
+  expect(actions).toHaveLength(0)
+  await page
+    .getByRole("button", { name: "Decline quotation", exact: true })
+    .click()
+  await dialog
+    .getByRole("button", { name: "Confirm decline", exact: true })
+    .click()
+  await expect.poll(() => actions.length).toBe(1)
+  expect(actions[0]).toMatchObject({ decision: "DECLINE" })
+})
+
+test("department heads can confirm payment or reject it with a required reason", async ({
+  page,
+}) => {
+  const workflow = fixture()
+  workflow.state = "AGREEMENT_PAYMENT_PENDING"
+  workflow.permissions = {
+    manage: true,
+    isClient: false,
+    approveQuotation: false,
+    verifyPayment: false,
+  }
+  workflow.agreement = {
+    id: "agreement-1",
+    mandatory: true,
+    status: "APPROVED",
+    documentFileId: null,
+    signedFileId: null,
+  }
+  workflow.payment = {
+    id: "payment-1",
+    mandatory: true,
+    amount: "12500.00",
+    currency: "PHP",
+    status: "SUBMITTED",
+    proofFileId: null,
+    reference: "BANK-123",
+  }
+  workflow.internal = {
+    staff: [],
+    approvers: [{ id: "admin-1", fullName: "Finance Reviewer" }],
+    quotationApproverId: "quotation-admin",
+    paymentVerifierId: null,
+    events: [],
+  }
+  workflow.events = [
+    {
+      id: "payment-submitted",
+      type: "PAYMENT_SUBMITTED",
+      summary: "Payment proof submitted",
+      entityId: "payment-1",
+      createdAt: "2026-10-30T09:00:00.000Z",
+      actor: null,
+    },
+  ]
+  const actions = await mock(page, workflow, true)
+  await page.goto("/messages?request=request-1")
+  await page
+    .getByRole("button", { name: "Reject payment", exact: true })
+    .click()
+  expect(actions).toHaveLength(0)
+  await page
+    .getByLabel("Verification note", { exact: true })
+    .fill("Receipt does not match the amount")
+  await page
+    .getByRole("button", { name: "Reject payment", exact: true })
+    .click()
+  await expect.poll(() => actions.length).toBe(1)
+  expect(actions[0]).toMatchObject({
+    type: "VERIFY_PAYMENT",
+    approve: false,
+    note: "Receipt does not match the amount",
+  })
+  await expect(
+    page.getByRole("button", { name: "Confirm payment", exact: true }),
+  ).toBeVisible()
+  await page.getByLabel("Verification note", { exact: true }).fill("")
+  await page
+    .getByRole("button", { name: "Confirm payment", exact: true })
+    .click()
+  await expect.poll(() => actions.length).toBe(2)
+  expect(actions[1]).toMatchObject({
+    type: "VERIFY_PAYMENT",
+    approve: true,
+    note: "",
+  })
+})
+
+test("activation controls require staffing approval before proceeding", async ({
+  page,
+}) => {
+  const workflow = fixture()
+  workflow.state = "READY_FOR_ACTIVATION"
+  workflow.permissions.manage = true
+  workflow.permissions.isClient = false
+  workflow.approval = {
+    quotationId: "quote-1",
+    amount: "25000.00",
+    currency: "PHP",
+    approvedById: "client-1",
+    approvedAt: "2026-10-30T08:00:00.000Z",
+  }
+  workflow.internal = {
+    staff: [
+      {
+        id: "employee-1",
+        fullName: "Dani Worker",
+        position: "Designer",
+        status: "ACTIVE",
+        skills: [],
+        activeProjectCount: 0,
+        assigned: false,
+      },
+    ],
+    approvers: [],
+    quotationApproverId: null,
+    paymentVerifierId: null,
+    events: [],
+  }
+  await mock(page, workflow, true)
+  const actions: Record<string, unknown>[] = []
+  await page.route(
+    "**/api/request-workflows/request-1/actions",
+    async (route) => {
+      const action = route.request().postDataJSON() as Record<string, unknown>
+      actions.push(action)
+      if (action.type === "STAFF_PROJECT")
+        workflow.internal!.staff[0]!.assigned = true
+      if (action.type === "ACTIVATE_PROJECT") workflow.state = "ACTIVE_PROJECT"
+      workflow.version++
+      await route.fulfill({ json: workflow })
+    },
+  )
+  await page.goto("/messages?request=request-1")
+  await page
+    .getByRole("button", { name: "Open request actions", exact: true })
+    .click()
+  await page
+    .getByRole("menuitem", { name: "Project activation", exact: true })
+    .click()
+  const activate = page.getByRole("button", {
+    name: "Activate project",
+    exact: true,
+  })
+  await expect(activate).toBeDisabled()
+  await page
+    .getByRole("button", { name: "Open request actions", exact: true })
+    .click()
+  await page
+    .getByRole("menuitem", { name: "Staffing and workload", exact: true })
+    .click()
+  await page.getByRole("checkbox", { name: /Dani Worker/ }).check()
+  await page
+    .getByRole("button", { name: "Approve staffing", exact: true })
+    .click()
+  await expect(activate).toBeEnabled()
+  await activate.click()
+  await expect.poll(() => actions.length).toBe(2)
+  expect(actions[0]).toMatchObject({
+    type: "STAFF_PROJECT",
+    employeeIds: ["employee-1"],
+  })
+  expect(actions[1]).toMatchObject({ type: "ACTIVATE_PROJECT" })
 })
 
 test("expired quotations have no formal approval controls", async ({
@@ -250,6 +754,219 @@ test("expired quotations have no formal approval controls", async ({
   ).toHaveCount(0)
   await expect(page.getByText(/Expired/)).toBeVisible()
 })
+
+for (const width of [1440, 390]) {
+  test(`client retries a consultation reschedule without changing the confirmed schedule at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const workflow = fixture()
+    workflow.state = "CONSULTATION"
+    workflow.quotations = []
+    const consultation = {
+      id: "consultation-1",
+      startsAt: "2030-11-05T08:00:00.000Z",
+      endsAt: "2030-11-05T09:00:00.000Z",
+      location: "https://meet.example.com/consultation",
+      notes: null,
+      status: "SCHEDULED" as const,
+    }
+    workflow.consultations = [consultation]
+    workflow.events = [
+      {
+        id: "scheduled",
+        type: "CONSULTATION_SCHEDULED",
+        summary: "Consultation scheduled",
+        entityId: consultation.id,
+        createdAt: "2026-11-01T08:00:00.000Z",
+        actor: null,
+      },
+    ]
+    await mock(page, workflow)
+    const actions: Record<string, unknown>[] = []
+    await page.route(
+      "**/api/request-workflows/request-1/actions",
+      async (route) => {
+        expect(route.request().method()).toBe("POST")
+        expect(route.request().headers().authorization).toBe(
+          "Bearer workflow-session",
+        )
+        const action = route.request().postDataJSON() as Record<string, unknown>
+        actions.push(action)
+        if (actions.length === 1)
+          return route.fulfill({
+            status: 503,
+            json: { error: "Reschedule unavailable. Try again." },
+          })
+        workflow.version++
+        workflow.events.push({
+          id: "rescheduled",
+          type: "CONSULTATION_RESCHEDULE_REQUESTED",
+          summary: `Client requested a consultation reschedule to ${action.startsAt}. ${action.note}`,
+          entityId: consultation.id,
+          createdAt: "2026-11-02T08:00:00.000Z",
+          actor: { id: "client-1", fullName: "Mara Client" },
+        })
+        return route.fulfill({ json: workflow })
+      },
+    )
+    await page.goto("/messages?request=request-1")
+    const reschedule = page.getByRole("button", {
+      name: "Request reschedule",
+      exact: true,
+    })
+    await reschedule.click()
+    await page.getByLabel("Preferred date and time").fill("2030-11-06T10:00")
+    await page
+      .getByLabel("Reason for rescheduling")
+      .fill("Client meeting conflict")
+    await reschedule.click()
+    await expect(page.getByLabel("Reason for rescheduling")).toHaveValue(
+      "Client meeting conflict",
+    )
+    await expect.poll(() => actions.length).toBe(1)
+    await expect(reschedule).toBeEnabled()
+    await reschedule.click()
+    await expect(
+      page.getByText("Reschedule requested · Awaiting department response", {
+        exact: true,
+      }),
+    ).toBeVisible()
+    expect(actions).toHaveLength(2)
+    expect(actions[1]).toEqual(actions[0])
+    expect(actions[0]).toMatchObject({
+      type: "REQUEST_CONSULTATION_RESCHEDULE",
+      consultationId: consultation.id,
+      note: "Client meeting conflict",
+      expectedVersion: 3,
+    })
+    expect(actions[0].actionId).toMatch(/^[0-9a-f-]{36}$/)
+    expect(consultation.startsAt).toBe("2030-11-05T08:00:00.000Z")
+    await expect(reschedule).toHaveCount(0)
+  })
+
+  test(`client previews and retries payment evidence upload at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const workflow = fixture()
+    workflow.state = "AGREEMENT_PAYMENT_PENDING"
+    workflow.quotations = []
+    workflow.payment = {
+      id: "payment-1",
+      mandatory: true,
+      amount: "12500.00",
+      currency: "PHP",
+      status: "PENDING",
+      proofFileId: null,
+      reference: null,
+    }
+    workflow.events = [
+      {
+        id: "payment",
+        type: "PAYMENT_REQUIRED",
+        summary: "Payment required",
+        entityId: "payment-1",
+        createdAt: "2026-11-01T08:00:00.000Z",
+        actor: null,
+      },
+    ]
+    await mock(page, workflow)
+    const uploads: Record<string, unknown>[] = []
+    const actions: Record<string, unknown>[] = []
+    const buffer = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lY4AAAAASUVORK5CYII=",
+      "base64",
+    )
+    await page.route("**/api/request-workflows/request-1/files", (route) => {
+      expect(route.request().method()).toBe("POST")
+      expect(route.request().headers().authorization).toBe(
+        "Bearer workflow-session",
+      )
+      uploads.push(route.request().postDataJSON() as Record<string, unknown>)
+      if (uploads.length === 1)
+        return route.fulfill({
+          status: 503,
+          json: { error: "Upload unavailable. Try again." },
+        })
+      const file = {
+        id: "proof-1",
+        name: "receipt.png",
+        mimeType: "image/png",
+        size: buffer.length,
+        uploaderId: "client-1",
+        createdAt: "2026-11-02T08:00:00.000Z",
+      }
+      workflow.files = [file]
+      return route.fulfill({ status: 201, json: { file } })
+    })
+    await page.route("**/api/request-workflows/request-1/actions", (route) => {
+      expect(route.request().method()).toBe("POST")
+      actions.push(route.request().postDataJSON() as Record<string, unknown>)
+      workflow.payment!.status = "SUBMITTED"
+      workflow.payment!.proofFileId = "proof-1"
+      workflow.payment!.reference = "BANK-123"
+      workflow.version++
+      return route.fulfill({ json: workflow })
+    })
+    await page.goto("/messages?request=request-1")
+    const submit = page.getByRole("button", {
+      name: "Submit payment proof",
+      exact: true,
+    })
+    await expect(submit).toBeDisabled()
+    await page.getByLabel("Payment reference", { exact: true }).fill("BANK-123")
+    const input = page.getByLabel("Attach proof of payment", { exact: true })
+    await input.setInputFiles({
+      name: "receipt.png",
+      mimeType: "image/png",
+      buffer,
+    })
+    const preview = page.getByRole("img", {
+      name: "Preview of receipt.png",
+      exact: true,
+    })
+    await expect(preview).toBeVisible()
+    await page
+      .getByRole("button", { name: "Remove receipt.png", exact: true })
+      .click()
+    await expect(preview).toHaveCount(0)
+    await expect(submit).toBeDisabled()
+    expect(uploads).toEqual([])
+    await input.setInputFiles({
+      name: "receipt.png",
+      mimeType: "image/png",
+      buffer,
+    })
+    await submit.click()
+    await expect.poll(() => uploads.length).toBe(1)
+    await expect(submit).toBeEnabled()
+    await expect(preview).toBeVisible()
+    expect(actions).toEqual([])
+    await submit.click()
+    await expect(
+      page.getByText(
+        /Your payment proof has been submitted and is awaiting verification/,
+      ),
+    ).toBeVisible()
+    expect(uploads).toHaveLength(2)
+    expect(uploads[1]).toEqual(uploads[0])
+    expect(uploads[0]).toMatchObject({
+      name: "receipt.png",
+      contextual: true,
+      mimeType: "image/png",
+      content: buffer.toString("base64"),
+    })
+    expect(actions).toHaveLength(1)
+    expect(actions[0]).toMatchObject({
+      type: "SUBMIT_PAYMENT",
+      fileId: "proof-1",
+      reference: "BANK-123",
+      expectedVersion: 3,
+    })
+    await expect(submit).toHaveCount(0)
+  })
+}
 
 test("mobile request context collapses and activated projects have a workspace link", async ({
   page,

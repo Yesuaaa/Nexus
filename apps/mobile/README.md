@@ -1,3 +1,6 @@
+# emulator -avd Pixel_6_Pro
+
+
 # Nexus Mobile (Kotlin Multiplatform / Compose Multiplatform)
 
 Cross-platform mobile application for **Nexus**, built using **Kotlin Multiplatform (KMP)** and **Compose Multiplatform (CMP)**. The goal is to have one shared codebase na pwedeng gamitin for both **Android** and **iOS**.

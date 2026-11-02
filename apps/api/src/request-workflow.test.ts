@@ -10,6 +10,24 @@ import { createApp } from "./app.js"
 import { issueSession } from "./features/auth/auth.service.js"
 import type { Role } from "./generated/prisma/client.js"
 import { getPrisma } from "./lib/db.js"
+import { parseAction } from "./features/request-workflow/workflow.validation.js"
+
+test("request information requires nonblank details", () => {
+  for (const details of [undefined, "", "   "]) {
+    assert.throws(
+      () =>
+        parseAction({
+          actionId: randomUUID(),
+          expectedVersion: 1,
+          type: "REQUEST_REQUIREMENT",
+          title: "Documents",
+          mandatory: true,
+          details,
+        }),
+      /Invalid details/,
+    )
+  }
+})
 
 type TestWorkflow = {
   state: string
@@ -348,12 +366,16 @@ test(
         assert.equal((await accept()).status, 200)
         const workflow = await read()
         assert.equal(workflow.state, "CONSULTATION")
-        assert.equal(workflow.requirements.length, 1)
-        assert.equal(workflow.requirements[0]!.status, "REQUESTED")
+        assert.equal(workflow.requirements.length, 0)
+        assert.equal(
+          workflow.events.some(
+            (event) => event.type === "REQUIREMENT_REQUESTED",
+          ),
+          false,
+        )
         assert.equal(workflow.approval, null)
         assert.equal(workflow.project, null)
         assert.ok(workflow.nextAction.length > 0)
-        requirementId = workflow.requirements[0]!.id
         assert.equal(workflow.internal, undefined)
         for (const actor of [otherClient, staff, admin, otherAdmin, superadmin])
           assert.equal((await get(actor)).status, 404)
@@ -365,6 +387,13 @@ test(
     await t.test(
       "requirements and consultations cannot be bypassed; files stay private and retry safely",
       async () => {
+        const requested = await act(head, {
+          type: "REQUEST_REQUIREMENT",
+          title: "Brand guidelines",
+          details: "Please provide your brand guidelines.",
+          mandatory: true,
+        })
+        requirementId = requested.requirements[0]!.id
         const current = await read(head)
         assert.equal(
           (
@@ -373,7 +402,7 @@ test(
               {
                 type: "REQUEST_REQUIREMENT",
                 title: "Forged",
-                details: "",
+                details: "Please supply the requested documents.",
                 mandatory: false,
               },
               current.version,
@@ -442,6 +471,27 @@ test(
             ).status,
             404,
           )
+        const formUpload = await fetch(`${path()}/files`, {
+          method: "POST",
+          headers: { ...client.headers, "content-type": "application/json" },
+          body: JSON.stringify({
+            uploadId: randomUUID(),
+            name: "form.txt",
+            mimeType: "text/plain",
+            content: Buffer.from("Form attachment").toString("base64"),
+            contextual: true,
+          }),
+        })
+        assert.equal(formUpload.status, 201)
+        const formFile = ((await formUpload.json()) as { file: { id: string } })
+          .file
+        assert.equal(
+          (await read(client)).events.some(
+            (event) =>
+              event.type === "FILE_SUBMITTED" && event.entityId === formFile.id,
+          ),
+          false,
+        )
         const submitted = await act(client, {
           type: "SUBMIT_REQUIREMENT",
           requirementId,
@@ -932,6 +982,18 @@ test(
         )
         const signature = await upload(client, "signed.txt", "Signed agreement")
         await act(client, { type: "SIGN_AGREEMENT", fileId: signature.id })
+        const beforeAgreementApproval = await read()
+        const prematurePayment = await send(
+          client,
+          {
+            type: "SUBMIT_PAYMENT",
+            fileId: submittedFileId,
+            reference: "Too early",
+          },
+          beforeAgreementApproval.version,
+        )
+        assert.equal(prematurePayment.status, 409)
+        assert.match(await prematurePayment.text(), /agreement.*approved/i)
         await act(head, {
           type: "REVIEW_AGREEMENT",
           approve: true,
@@ -982,13 +1044,13 @@ test(
               head,
               {
                 type: "VERIFY_PAYMENT",
-                approve: true,
-                note: "Self-verification",
+                approve: false,
+                note: "",
               },
               beforeVerification.version,
             )
           ).status,
-          403,
+          400,
         )
         assert.equal(
           (
@@ -1010,14 +1072,30 @@ test(
           ).status,
           409,
         )
-        const ready = await act(paymentAdmin, {
+        const returned = await act(head, {
+          type: "VERIFY_PAYMENT",
+          approve: false,
+          note: "Receipt amount does not match",
+        })
+        assert.equal(returned.payment!.status, "PENDING")
+        assert.ok(
+          (await read(client)).events.some((event) =>
+            event.summary.includes("Receipt amount does not match"),
+          ),
+        )
+        await act(client, {
+          type: "SUBMIT_PAYMENT",
+          fileId: proof.id,
+          reference: "BANK-WF-001",
+        })
+        const ready = await act(head, {
           type: "VERIFY_PAYMENT",
           approve: true,
           note: "Bank deposit confirmed",
         })
         assert.equal(ready.payment!.status, "VERIFIED")
         assert.equal(ready.state, "READY_FOR_ACTIVATION")
-        assert.equal(ready.project, null)
+        assert.equal(ready.project!.status, "PLANNED")
         assert.equal((await read(head)).project!.status, "PLANNED")
         assert.equal((await read()).project, null)
         const manager = await read(head)
@@ -1177,7 +1255,7 @@ test(
               {
                 type: "REQUEST_REQUIREMENT",
                 title: "Extra",
-                details: "",
+                details: "Please supply the requested documents.",
                 mandatory: true,
               },
               before.version,

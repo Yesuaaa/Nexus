@@ -7,6 +7,7 @@ import { sileo } from "sileo"
 import { Button } from "@/components/ui/button"
 import { ApiError } from "@/features/auth/api/auth-api"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { cn } from "@/lib/utils"
 import { focusRing } from "@/components/layout/styles"
 import { ConversationAvatar } from "./conversation-avatar"
@@ -58,6 +59,10 @@ function InternalConversationPanel({
     null,
   )
   const [error, setError] = useState("")
+  useEffect(() => {
+    if (error)
+      sileo.error({ title: "Couldn't load messages", description: error })
+  }, [error])
   const [draft, setDraft] = useState("")
   const [sending, setSending] = useState(false)
   const [olderLoading, setOlderLoading] = useState(false)
@@ -230,7 +235,11 @@ function InternalConversationPanel({
             >
               <ArrowLeft size={17} aria-hidden="true" />
             </Link>
-            <ConversationAvatar name={name} className="size-8" />
+            <ConversationAvatar
+              name={name}
+              imageUrl={history?.conversation.imageUrl}
+              className="size-8"
+            />
             <div className="min-w-0 flex-1">
               <h2 className="m-0 truncate text-sm font-semibold text-[#182235]">
                 {name}
@@ -242,11 +251,6 @@ function InternalConversationPanel({
               </p>
             </div>
           </header>
-          {error && (
-            <p role="alert" className="m-3 text-xs text-red-700">
-              {error}
-            </p>
-          )}
           {!history ? (
             <p className="p-4 text-xs text-[#52627a]">
               {error
@@ -307,38 +311,49 @@ function InternalConversationPanel({
                       )}
                       <article
                         className={cn(
-                          "w-fit max-w-[85%] pb-1 max-[767px]:max-w-[92%]",
+                          "flex w-fit max-w-[85%] items-end gap-2 pb-1 max-[767px]:max-w-[92%]",
                           grouped ? "mt-1" : "mt-4",
-                          own ? "ml-auto" : "mr-auto",
+                          own ? "ml-auto flex-row-reverse" : "mr-auto",
                         )}
                       >
-                        <p className="sr-only">
-                          {own
-                            ? "You"
-                            : message.sender.fullName || "Participant"}
-                        </p>
-                        <p
-                          className={cn(
-                            "m-0 rounded-2xl px-3.5 py-2.5 text-[13px] leading-5 whitespace-pre-wrap [overflow-wrap:anywhere]",
+                        <ConversationAvatar
+                          name={
                             own
-                              ? "rounded-br-md bg-[#203f8c] text-white"
-                              : "rounded-bl-md bg-[#f1f1ee] text-[#182235]",
-                          )}
-                        >
-                          {message.body}
-                        </p>
-                        <time
-                          dateTime={message.createdAt}
-                          className={cn(
-                            "mt-1 block px-1 text-[11px] text-[#8791a2]",
-                            own && "text-right",
-                          )}
-                        >
-                          {date.toLocaleTimeString("en-PH", {
-                            hour: "numeric",
-                            minute: "2-digit",
-                          })}
-                        </time>
+                              ? account.fullName || "You"
+                              : message.sender.fullName || "Participant"
+                          }
+                          imageUrl={
+                            own
+                              ? account.imageUrl
+                              : history.conversation.imageUrl
+                          }
+                          className={cn("size-7", grouped && "invisible")}
+                        />
+                        <div className="min-w-0">
+                          <p className="sr-only">
+                            {own
+                              ? "You"
+                              : message.sender.fullName || "Participant"}
+                          </p>
+                          <div className="relative w-fit max-w-full">
+                            <p
+                              className={cn(
+                                "m-0 rounded-2xl px-3.5 py-2.5 text-[13px] leading-5 whitespace-pre-wrap [overflow-wrap:anywhere]",
+                                own
+                                  ? "rounded-br-md bg-[#203f8c] text-white"
+                                  : "rounded-bl-md bg-[#f1f1ee] text-[#182235]",
+                              )}
+                            >
+                              {message.body}
+                            </p>
+                            <HoverTooltip>
+                              {date.toLocaleTimeString("en-PH", {
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })}
+                            </HoverTooltip>
+                          </div>
+                        </div>
                       </article>
                     </div>
                   )
@@ -394,8 +409,11 @@ function InternalConversationPanel({
                 </p>
               )}
               {sendError && (
-                <p role="alert" className="m-0 px-5 pb-3 text-xs text-red-700">
-                  {sendError}
+                <p
+                  role="status"
+                  className="m-0 px-5 pb-3 text-xs text-[#52627a]"
+                >
+                  Your text is saved here so you can retry.
                 </p>
               )}
             </>

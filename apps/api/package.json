@@ -14,7 +14,8 @@
     "db:seed:services": "prisma generate && tsx prisma/seed.ts --services-only",
     "db:migrate": "prisma migrate dev",
     "db:studio": "node -e \"process.env.DATABASE_URL = process.env.DIRECT_URL; require('child_process').spawn('npx', ['prisma', 'studio'], { stdio: 'inherit', shell: true })\"",
-    "test:regression": "prisma generate && node node_modules/typescript/lib/tsc.js && node --test dist/backend-regression.test.js"
+    "test:regression": "pnpm test",
+    "test:smoke": "prisma generate && node node_modules/typescript/lib/tsc.js && node --test dist/backend-regression.test.js"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.0.0",

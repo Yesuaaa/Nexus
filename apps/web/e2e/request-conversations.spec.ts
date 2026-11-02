@@ -616,8 +616,11 @@ test("messages page handles an empty inbox and a failed conversation list", asyn
   await mock(page, state, "USER")
   await page.goto("/messages")
   await expect(
+    page.getByText("Couldn't load conversations.", { exact: true }),
+  ).toBeVisible()
+  await expect(
     page.getByRole("navigation", { name: "Conversations" }).getByRole("alert"),
-  ).toHaveText("Couldn't load conversations.")
+  ).toHaveCount(0)
   state.listError = false
   await page.reload()
   await expect(
@@ -631,17 +634,44 @@ test("messages page handles an empty inbox and a failed conversation list", asyn
 })
 
 for (const role of ["STAFF", "ADMIN", "SUPERADMIN"] as const) {
-  test(`${role} without participant access cannot open Messages`, async ({
+  test(`${role} without client requests can open internal Messages`, async ({
     page,
   }) => {
     const state = stateFixture()
+    state.conversations = []
     await mock(page, state, role, false)
+    let internalReads = 0
+    await page.route("**/api/internal-conversations**", (route) => {
+      expect(route.request().headers().authorization).toBe(
+        "Bearer conversation-session",
+      )
+      expect(route.request().method()).toBe("GET")
+      if (new URL(route.request().url()).pathname.endsWith("/contacts"))
+        return route.fulfill({ json: [] })
+      internalReads++
+      return route.fulfill({
+        json: { conversations: [], nextCursor: null, unreadCount: 0 },
+      })
+    })
     await page.goto("/messages")
-    await expect(page).toHaveURL(/\/dashboard$/)
+    await expect(page).toHaveURL(/\/messages$/)
     await expect(
       page.getByRole("link", { name: "Messages", exact: true }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole("heading", { name: "No conversations yet", exact: true }),
+    ).toBeVisible()
+    expect(state.listReads).toBeGreaterThan(0)
+    await page
+      .getByRole("button", { name: "Open internal conversations", exact: true })
+      .click()
+    await expect(page).toHaveURL(/\/messages\?mode=internal$/)
+    await expect.poll(() => internalReads).toBeGreaterThan(0)
+    await expect(
+      page
+        .getByRole("navigation", { name: "Conversations", exact: true })
+        .getByRole("link"),
     ).toHaveCount(0)
-    expect(state.listReads).toBe(0)
   })
 }
 
@@ -724,8 +754,9 @@ test("failed sends retain the draft and retry the same message without duplicati
     .fill("Keep this draft if the connection fails.")
   await chat.getByRole("button", { name: "Send message", exact: true }).click()
   await expect(
-    chat.getByRole("alert").filter({ hasText: /^Connection interrupted/ }),
-  ).toContainText("Connection interrupted")
+    page.getByText("Connection interrupted. Try again.", { exact: true }),
+  ).toBeVisible()
+  await expect(chat.getByRole("alert")).toHaveCount(0)
   await expect(chat.getByLabel("Message", { exact: true })).toHaveValue(
     "Keep this draft if the connection fails.",
   )
@@ -736,6 +767,120 @@ test("failed sends retain the draft and retry the same message without duplicati
   expect(state.messages).toHaveLength(1)
   await expect(chat.getByRole("article")).toHaveCount(1)
 })
+
+for (const width of [1440, 390]) {
+  test(`staff edit and delete their message with client synchronization at ${width}px`, async ({
+    page,
+    context,
+  }) => {
+    await page.setViewportSize({ width, height: 920 })
+    const state = stateFixture()
+    const message: RequestMessage = {
+      id: "editable-1",
+      body: "Original message",
+      clientMessageId: "original-id",
+      editedAt: null,
+      deletedAt: null,
+      purgeAt: null,
+      sender: { id: "head-1", fullName: "Dani Head" },
+      createdAt: new Date().toISOString(),
+    }
+    state.messages = [message]
+    await mock(page, state, "STAFF")
+    let fail = true
+    const mutations: string[] = []
+    await page.route(
+      "**/api/request-conversations/booking-1/messages/editable-1",
+      (route) => {
+        const method = route.request().method()
+        expect(route.request().headers().authorization).toBe(
+          "Bearer conversation-session",
+        )
+        expect(["PATCH", "DELETE"]).toContain(method)
+        mutations.push(method)
+        if (fail)
+          return route.fulfill({
+            status: 503,
+            json: { error: "Message update unavailable. Try again." },
+          })
+        if (method === "PATCH") {
+          message.body = (
+            route.request().postDataJSON() as { body: string }
+          ).body
+          message.editedAt = new Date().toISOString()
+        } else {
+          message.body = null
+          message.deletedAt = new Date().toISOString()
+          message.purgeAt = new Date(Date.now() + 30 * 86400000).toISOString()
+        }
+        emit()
+        return route.fulfill({ json: { message } })
+      },
+    )
+    const client = await context.newPage()
+    await client.setViewportSize({ width, height: 920 })
+    await mock(client, state, "USER")
+    await openMessages(client, "USER")
+    await openMessages(page, "STAFF")
+    const chat = page.getByRole("region", { name: "Request conversation" })
+    const clientChat = client.getByRole("region", {
+      name: "Request conversation",
+    })
+    await expect(
+      clientChat.getByRole("button", { name: /Actions for your message/ }),
+    ).toHaveCount(0)
+    const menu = chat.getByRole("button", { name: /Actions for your message/ })
+    await menu.click()
+    await page
+      .getByRole("menuitem", { name: "Edit message", exact: true })
+      .click()
+    await chat
+      .getByLabel("Edit message", { exact: true })
+      .fill("Corrected message")
+    await chat.getByRole("button", { name: "Save", exact: true }).click()
+    await expect(
+      page.getByText("Message update unavailable. Try again.", { exact: true }),
+    ).toBeVisible()
+    await expect(chat.getByRole("alert")).toHaveCount(0)
+    await expect(chat.getByLabel("Edit message", { exact: true })).toHaveValue(
+      "Corrected message",
+    )
+    fail = false
+    await chat.getByRole("button", { name: "Save", exact: true }).click()
+    await expect(
+      clientChat.getByText("Corrected message", { exact: true }),
+    ).toBeVisible()
+    await expect(chat.getByLabel("Edit message", { exact: true })).toHaveCount(
+      0,
+    )
+    await menu.click()
+    await page
+      .getByRole("menuitem", { name: "Delete message", exact: true })
+      .click()
+    const confirmation = page.getByRole("dialog")
+    await confirmation
+      .getByRole("button", { name: "Cancel", exact: true })
+      .click()
+    expect(mutations).toEqual(["PATCH", "PATCH"])
+    await menu.click()
+    await page
+      .getByRole("menuitem", { name: "Delete message", exact: true })
+      .click()
+    await confirmation
+      .getByRole("button", { name: "Delete message", exact: true })
+      .click()
+    await expect(
+      clientChat.getByText("This message was deleted", { exact: true }),
+    ).toBeVisible()
+    await expect(
+      chat.getByText("This message was deleted", { exact: true }),
+    ).toBeVisible()
+    await expect(menu).toHaveCount(0)
+    expect(mutations).toEqual(["PATCH", "PATCH", "DELETE"])
+    expect(state.messages).toHaveLength(1)
+    await client.close()
+  })
+}
 
 test("reconnection recovers history, loads earlier messages and clears revoked conversations", async ({
   page,
@@ -776,10 +921,11 @@ test("reconnection recovers history, loads earlier messages and clears revoked c
   await expect(chat.getByRole("article")).toHaveCount(53)
   emit("access-revoked")
   await expect(
-    chat.getByRole("alert").filter({
-      hasText: /^You no longer have access to this conversation\.$/,
+    page.getByText("You no longer have access to this conversation.", {
+      exact: true,
     }),
-  ).toHaveText("You no longer have access to this conversation.")
+  ).toBeVisible()
+  await expect(chat.getByRole("alert")).toHaveCount(0)
   await expect(chat.getByRole("article")).toHaveCount(0)
   await expect(chat.getByLabel("Message", { exact: true })).toHaveCount(0)
 })

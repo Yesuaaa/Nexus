@@ -174,7 +174,7 @@ export function parseAction(input: unknown) {
       command = {
         type: body.type,
         title: textField(body.title, "title", 300),
-        details: textField(body.details, "details", 4000, true),
+        details: textField(body.details, "details", 4000),
         mandatory: bool(body.mandatory),
       }
       break

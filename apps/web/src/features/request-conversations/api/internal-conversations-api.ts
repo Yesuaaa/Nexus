@@ -9,6 +9,7 @@ export type InternalParticipant = {
   position: string | null
   isActive: boolean
   accountDeletedAt: string | null
+  imageUrl?: string | null
   department: { id: string; name: string } | null
 }
 

@@ -166,9 +166,17 @@ export function WorkflowActionDraft({
               className={workflowInput}
             />
           </WorkflowField>
-          <WorkflowField label="Instructions for the client">
+          <WorkflowField label="Request detail information (required)">
             <textarea
               name="details"
+              required
+              onChange={(event) =>
+                event.currentTarget.setCustomValidity(
+                  event.currentTarget.value.trim()
+                    ? ""
+                    : "Enter request detail information.",
+                )
+              }
               rows={3}
               maxLength={4000}
               placeholder="e.g. Please provide site address, access instructions, and any induction requirements."
@@ -332,7 +340,7 @@ export function WorkflowActionDraft({
       <DraftFrame
         title="Prepare quotation"
         status="Draft · Not sent"
-        description="Add scope and pricing details for the client’s review."
+        description="Add scope and pricing details, then review before sending."
         onClose={onClose}
       >
         <QuotationForm

@@ -84,6 +84,7 @@ export type Workflow = {
   nextAction: string
   consultationRequired: boolean
   quotationApprovalRequired: boolean
+  paymentRequired?: boolean
   permissions: {
     manage: boolean
     isClient: boolean
