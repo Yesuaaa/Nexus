@@ -291,6 +291,7 @@ function InternalConversationPanel({
                 {timeline.map((message, index) => {
                   const own = message.sender.id === account.id
                   const previous = timeline[index - 1]
+                  const next = timeline[index + 1]
                   const date = new Date(message.createdAt)
                   const newDay =
                     !previous ||
@@ -298,6 +299,12 @@ function InternalConversationPanel({
                       new Date(previous.createdAt).toDateString()
                   const grouped =
                     !newDay && previous?.sender.id === message.sender.id
+                  const groupedWithNext = Boolean(
+                    next &&
+                    date.toDateString() ===
+                      new Date(next.createdAt).toDateString() &&
+                    next.sender.id === message.sender.id,
+                  )
                   return (
                     <div key={message.id}>
                       {newDay && (
@@ -316,19 +323,16 @@ function InternalConversationPanel({
                           own ? "ml-auto flex-row-reverse" : "mr-auto",
                         )}
                       >
-                        <ConversationAvatar
-                          name={
-                            own
-                              ? account.fullName || "You"
-                              : message.sender.fullName || "Participant"
-                          }
-                          imageUrl={
-                            own
-                              ? account.imageUrl
-                              : history.conversation.imageUrl
-                          }
-                          className={cn("size-7", grouped && "invisible")}
-                        />
+                        {!own && (
+                          <ConversationAvatar
+                            name={message.sender.fullName || "Participant"}
+                            imageUrl={history.conversation.imageUrl}
+                            className={cn(
+                              "size-7",
+                              groupedWithNext && "invisible",
+                            )}
+                          />
+                        )}
                         <div className="min-w-0">
                           <p className="sr-only">
                             {own
@@ -341,7 +345,7 @@ function InternalConversationPanel({
                                 "m-0 rounded-2xl px-3.5 py-2.5 text-[13px] leading-5 whitespace-pre-wrap [overflow-wrap:anywhere]",
                                 own
                                   ? "rounded-br-md bg-[#203f8c] text-white"
-                                  : "rounded-bl-md bg-[#f1f1ee] text-[#182235]",
+                                  : "rounded-bl-md bg-[#dfe4eb] text-[#182235]",
                               )}
                             >
                               {message.body}

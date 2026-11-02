@@ -83,6 +83,7 @@ export type Workflow = {
   version: number
   nextAction: string
   consultationRequired: boolean
+  consultationComplete?: boolean
   quotationApprovalRequired: boolean
   paymentRequired?: boolean
   permissions: {
@@ -212,6 +213,7 @@ export type WorkflowAction =
   | { type: "SIGN_AGREEMENT"; fileId: string }
   | { type: "REVIEW_AGREEMENT"; approve: boolean; note: string }
   | { type: "SUBMIT_PAYMENT"; fileId: string; reference: string }
+  | { type: "COMPLETE_SANDBOX_PAYMENT" }
   | { type: "VERIFY_PAYMENT"; approve: boolean; note: string }
   | {
       type: "ASSIGN_APPROVERS"

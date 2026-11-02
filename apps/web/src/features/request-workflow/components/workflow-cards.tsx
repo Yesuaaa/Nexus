@@ -2,8 +2,19 @@
 
 import Link from "next/link"
 import Image from "next/image"
-import { useEffect, useRef, useState } from "react"
-import { Download, FileText, ShieldCheck, Upload, X } from "lucide-react"
+import { type FormEvent, useEffect, useRef, useState } from "react"
+import {
+  CalendarDays,
+  CreditCard,
+  Download,
+  FileText,
+  FileSignature,
+  ReceiptText,
+  Rocket,
+  ShieldCheck,
+  Upload,
+  X,
+} from "lucide-react"
 import { sileo } from "sileo"
 import { AttachmentPreview, attachmentAccept } from "./attachment-preview"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
@@ -21,10 +32,12 @@ export function ConsultationLocation({
   location,
   className,
   showJoinButton = true,
+  label = "Join consultation",
 }: {
   location: string
   className?: string
   showJoinButton?: boolean
+  label?: string
 }) {
   const href = getConsultationMeetingUrl(location)
   if (href && showJoinButton)
@@ -38,7 +51,7 @@ export function ConsultationLocation({
           className,
         )}
       >
-        Join consultation
+        {label}
       </a>
     )
   return (
@@ -542,7 +555,11 @@ export function ConsultationSchedulingCard({
       .slice(0, 16)
   }
   return (
-    <WorkflowCard title="Consultation" status={consultation.status}>
+    <WorkflowCard
+      title="Consultation"
+      status={consultation.status}
+      icon={CalendarDays}
+    >
       <p className="m-0 font-medium text-[#182235]">
         {new Date(consultation.startsAt).toLocaleString("en-PH", {
           dateStyle: "medium",
@@ -827,6 +844,7 @@ export function QuotationProposalCard({
     <WorkflowCard
       title={`Quotation · version ${quotation.version}`}
       status={quotation.status}
+      icon={ReceiptText}
     >
       <p className="m-0 whitespace-pre-wrap text-[#182235]">
         {quotation.scope}
@@ -1062,7 +1080,11 @@ export function ApprovalConfirmationCard({ workflow }: { workflow: Workflow }) {
     (item) => item.id === approval.quotationId,
   )
   return (
-    <WorkflowCard title="Quotation formally accepted" status="APPROVED">
+    <WorkflowCard
+      title="Quotation formally accepted"
+      status="APPROVED"
+      icon={ShieldCheck}
+    >
       <div className="flex gap-3">
         <ShieldCheck
           size={22}
@@ -1094,7 +1116,11 @@ export function AgreementCard({ workflow, controls }: CardProps) {
     "READY_FOR_ACTIVATION",
   ].includes(workflow.state)
   return (
-    <WorkflowCard title="Service agreement" status={agreement.status}>
+    <WorkflowCard
+      title="Service agreement"
+      status={agreement.status}
+      icon={FileSignature}
+    >
       <p className="m-0">
         {agreement.mandatory
           ? "An approved agreement is required before project activation."
@@ -1219,8 +1245,162 @@ export function AgreementCard({ workflow, controls }: CardProps) {
   )
 }
 
+const sandboxCardNumber = "4000000000000002"
+
+function formatSandboxCardNumber(value: string) {
+  return value
+    .replace(/\D/g, "")
+    .slice(0, 16)
+    .replace(/(\d{4})(?=\d)/g, "$1 ")
+}
+
+function formatSandboxExpiry(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 4)
+  return digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits
+}
+
+function SandboxCardPaymentForm({
+  payment,
+  accountName,
+  controls,
+  onManualProof,
+}: {
+  payment: NonNullable<Workflow["payment"]>
+  accountName: string
+  controls: WorkflowControls
+  onManualProof: () => void
+}) {
+  const [cardholder, setCardholder] = useState(
+    accountName || "Nexus Test Customer",
+  )
+  const [cardNumber, setCardNumber] = useState("4000 0000 0000 0002")
+  const [expiry, setExpiry] = useState("12/30")
+  const [cvc, setCvc] = useState("123")
+  const [error, setError] = useState("")
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setError("")
+    const digits = cardNumber.replace(/\D/g, "")
+    if (digits !== sandboxCardNumber) {
+      setError("Use the prefilled sandbox card number for this prototype.")
+      return
+    }
+    if (!/^(0[1-9]|1[0-2])\/\d{2}$/.test(expiry)) {
+      setError("Enter a valid expiry date in MM/YY format.")
+      return
+    }
+    if (!/^\d{3}$/.test(cvc)) {
+      setError("Enter the 3-digit sandbox security code.")
+      return
+    }
+    if (!cardholder.trim()) {
+      setError("Enter the cardholder name.")
+      return
+    }
+
+    await controls.act({ type: "COMPLETE_SANDBOX_PAYMENT" })
+  }
+
+  return (
+    <div className="rounded-xl border border-[#d8e1ef] bg-white p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="m-0 flex items-center gap-2 font-semibold text-[#182235]">
+            <CreditCard size={16} aria-hidden="true" />
+            Pay securely
+          </p>
+          <p className="mt-1 mb-0 text-[11px] text-[#738096]">
+            Xendit sandbox prototype · no real charge will be made
+          </p>
+        </div>
+        <span className="rounded-full bg-[#eaf0fb] px-2.5 py-1 text-[10px] font-medium text-[#203f8c]">
+          Test mode
+        </span>
+      </div>
+      <p className="mt-4 mb-0 text-sm font-semibold text-[#182235]">
+        {workflowMoney(payment.amount, payment.currency)}
+      </p>
+      <form
+        className="mt-4 grid gap-3"
+        onSubmit={(event) => void submit(event)}
+      >
+        <WorkflowField label="Cardholder name">
+          <input
+            autoComplete="cc-name"
+            value={cardholder}
+            onChange={(event) => setCardholder(event.currentTarget.value)}
+            className={workflowInput}
+          />
+        </WorkflowField>
+        <WorkflowField label="Card number">
+          <input
+            inputMode="numeric"
+            autoComplete="cc-number"
+            value={cardNumber}
+            onChange={(event) =>
+              setCardNumber(formatSandboxCardNumber(event.currentTarget.value))
+            }
+            className={workflowInput}
+          />
+        </WorkflowField>
+        <div className="grid grid-cols-2 gap-3">
+          <WorkflowField label="Expiry">
+            <input
+              inputMode="numeric"
+              autoComplete="cc-exp"
+              value={expiry}
+              onChange={(event) =>
+                setExpiry(formatSandboxExpiry(event.currentTarget.value))
+              }
+              className={workflowInput}
+            />
+          </WorkflowField>
+          <WorkflowField label="CVC">
+            <input
+              inputMode="numeric"
+              autoComplete="cc-csc"
+              value={cvc}
+              maxLength={3}
+              onChange={(event) =>
+                setCvc(event.currentTarget.value.replace(/\D/g, "").slice(0, 3))
+              }
+              className={workflowInput}
+            />
+          </WorkflowField>
+        </div>
+        {error && (
+          <p role="alert" className="m-0 text-[11px] text-[#b42318]">
+            {error}
+          </p>
+        )}
+        <Button
+          type="submit"
+          className={workflowPrimaryButton}
+          disabled={controls.busy}
+        >
+          {controls.busy
+            ? "Processing payment…"
+            : `Pay ${workflowMoney(payment.amount, payment.currency)}`}
+        </Button>
+      </form>
+      <p className="mt-3 mb-0 text-[10px] leading-4 text-[#738096]">
+        Prototype card: 4000 0000 0000 0002 · any future MM/YY · CVC 123
+      </p>
+      <button
+        type="button"
+        className="mt-3 min-h-8 cursor-pointer text-left text-[11px] font-medium text-[#294a9b] underline-offset-2 hover:underline"
+        onClick={onManualProof}
+      >
+        Submit payment proof instead
+      </button>
+    </div>
+  )
+}
+
 export function PaymentVerificationCard({ workflow, controls }: CardProps) {
   const [proofDraft, setProofDraft] = useState<File | null>(null)
+  const [manualProofOpen, setManualProofOpen] = useState(false)
   const [proofSource, setProofSource] = useState<"upload" | "existing">(
     "upload",
   )
@@ -1230,131 +1410,177 @@ export function PaymentVerificationCard({ workflow, controls }: CardProps) {
     (file) => file.uploaderId === account.id,
   )
   const payment = workflow.payment
-  if (
-    !payment ||
-    (workflow.agreement?.mandatory && workflow.agreement.status !== "APPROVED")
-  )
-    return null
+  if (!payment) return null
+  const sandboxPayment =
+    Boolean(payment.reference?.startsWith("XENDIT-SANDBOX-")) &&
+    workflow.events.some(
+      (event) =>
+        event.type === "PAYMENT_VERIFIED" &&
+        event.entityId === payment.id &&
+        event.actor === null,
+    )
   const writable = [
     "AGREEMENT_PAYMENT_PENDING",
     "READY_FOR_ACTIVATION",
   ].includes(workflow.state)
   return (
-    <WorkflowCard title="Payment requirement" status={payment.status}>
+    <WorkflowCard
+      title="Payment requirement"
+      status={payment.status}
+      icon={CreditCard}
+    >
       <p className="m-0 font-semibold text-[#182235]">
         {workflowMoney(payment.amount, payment.currency)}
       </p>
       <p className="m-0">
         {payment.mandatory
-          ? "The department head or assigned payment verifier must confirm payment before activation."
+          ? "Card checkout confirms payment automatically. Uploaded payment proof is reviewed by the department head or assigned verifier."
           : "No mandatory commencement payment for this service."}
       </p>
+      {payment.mandatory &&
+        workflow.agreement?.mandatory &&
+        workflow.agreement.status !== "APPROVED" && (
+          <p className="m-0 rounded-lg bg-[#edf2fb] p-3 text-[11px] text-[#294a9b]">
+            Payment can be completed now. Project activation will wait until the
+            required agreement is approved too.
+          </p>
+        )}
       {payment.reference && (
         <p className="m-0">Reference: {payment.reference}</p>
       )}
       <AttachedFile fileId={payment.proofFileId} workflow={workflow} />
+      {sandboxPayment && payment.status === "VERIFIED" && (
+        <p
+          role="status"
+          className="m-0 rounded-lg bg-[#ecfdf3] p-3 text-xs text-[#067647]"
+        >
+          Payment successful. Your sandbox card payment was automatically
+          verified.
+        </p>
+      )}
       {workflow.permissions.isClient && payment.status === "SUBMITTED" && (
         <p
           role="status"
           className="m-0 rounded-lg bg-[#edf2fb] p-3 text-xs text-[#294a9b]"
         >
-          Your payment proof has been submitted and is awaiting verification.
+          Your payment proof has been submitted and is awaiting verification.{" "}
           You can submit another if the verifier returns it.
         </p>
       )}
       {workflow.permissions.isClient &&
         writable &&
+        payment.mandatory &&
         payment.status === "PENDING" && (
-          <form
-            className="grid gap-4"
-            onSubmit={async (event) => {
-              event.preventDefault()
-              const data = new FormData(event.currentTarget)
-              const uploaded = proofDraft
-                ? await controls.attach(proofDraft, true)
-                : null
-              if (proofDraft && !uploaded) return
-              const submitted = await controls.act({
-                type: "SUBMIT_PAYMENT",
-                fileId: uploaded?.id || String(data.get("fileId")),
-                reference: String(data.get("reference")),
-              })
-              if (submitted) setProofDraft(null)
-            }}
-          >
-            <WorkflowField label="Payment reference">
-              <input
-                name="reference"
-                required
-                maxLength={300}
-                className={workflowInput}
+          <>
+            {!manualProofOpen ? (
+              <SandboxCardPaymentForm
+                payment={payment}
+                accountName={account.fullName || ""}
+                controls={controls}
+                onManualProof={() => setManualProofOpen(true)}
               />
-            </WorkflowField>
-            <WorkflowField label="Proof of payment">
-              <input
-                ref={proofInput}
-                type="file"
-                accept={attachmentAccept}
-                disabled={controls.busy}
-                aria-label="Attach proof of payment"
-                className="hidden"
-                onChange={(event) => {
-                  setProofDraft(event.currentTarget.files?.[0] || null)
-                  event.currentTarget.value = ""
-                }}
-              />
-              {proofSource === "existing" ? (
-                <WorkflowFileSelect workflow={workflow} required />
-              ) : proofDraft ? (
-                <AttachmentPreview
-                  file={proofDraft}
-                  disabled={controls.busy}
-                  onRemove={() => setProofDraft(null)}
-                />
-              ) : (
-                <div className="space-y-2 rounded-lg border border-dashed border-[#d8e1ef] bg-[#f6f8fc] p-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="min-h-11 text-xs"
-                    disabled={controls.busy}
-                    onClick={() => proofInput.current?.click()}
-                  >
-                    <FileText size={15} aria-hidden="true" />
-                    Attach payment proof
-                  </Button>
-                  <p className="m-0 text-[11px] text-[#738096]">
-                    Choose a receipt or transfer screenshot. PDF, Word, PNG,
-                    JPEG, or text · Up to 5 MB.
-                  </p>
-                </div>
-              )}
-              {hasExistingFiles && !proofDraft && (
+            ) : (
+              <>
                 <button
                   type="button"
-                  disabled={controls.busy}
-                  className="min-h-11 cursor-pointer text-left text-xs font-medium text-[#294a9b] underline-offset-2 hover:underline disabled:opacity-50"
-                  onClick={() =>
-                    setProofSource(
-                      proofSource === "upload" ? "existing" : "upload",
-                    )
-                  }
+                  className="min-h-8 cursor-pointer text-left text-[11px] font-medium text-[#294a9b] underline-offset-2 hover:underline"
+                  onClick={() => setManualProofOpen(false)}
                 >
-                  {proofSource === "upload"
-                    ? "Choose an existing attachment instead"
-                    : "Upload a new file instead"}
+                  Use sandbox card checkout instead
                 </button>
-              )}
-            </WorkflowField>
-            <Button
-              className={workflowPrimaryButton}
-              disabled={
-                controls.busy || (proofSource === "upload" && !proofDraft)
-              }
-            >
-              Submit payment proof
-            </Button>
-          </form>
+                <form
+                  className="grid gap-4"
+                  onSubmit={async (event) => {
+                    event.preventDefault()
+                    const data = new FormData(event.currentTarget)
+                    const uploaded = proofDraft
+                      ? await controls.attach(proofDraft, true)
+                      : null
+                    if (proofDraft && !uploaded) return
+                    const submitted = await controls.act({
+                      type: "SUBMIT_PAYMENT",
+                      fileId: uploaded?.id || String(data.get("fileId")),
+                      reference: String(data.get("reference")),
+                    })
+                    if (submitted) setProofDraft(null)
+                  }}
+                >
+                  <WorkflowField label="Payment reference">
+                    <input
+                      name="reference"
+                      required
+                      maxLength={300}
+                      className={workflowInput}
+                    />
+                  </WorkflowField>
+                  <WorkflowField label="Proof of payment">
+                    <input
+                      ref={proofInput}
+                      type="file"
+                      accept={attachmentAccept}
+                      disabled={controls.busy}
+                      aria-label="Attach proof of payment"
+                      className="hidden"
+                      onChange={(event) => {
+                        setProofDraft(event.currentTarget.files?.[0] || null)
+                        event.currentTarget.value = ""
+                      }}
+                    />
+                    {proofSource === "existing" ? (
+                      <WorkflowFileSelect workflow={workflow} required />
+                    ) : proofDraft ? (
+                      <AttachmentPreview
+                        file={proofDraft}
+                        disabled={controls.busy}
+                        onRemove={() => setProofDraft(null)}
+                      />
+                    ) : (
+                      <div className="space-y-2 rounded-lg border border-dashed border-[#d8e1ef] bg-[#f6f8fc] p-4">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="min-h-11 text-xs"
+                          disabled={controls.busy}
+                          onClick={() => proofInput.current?.click()}
+                        >
+                          <FileText size={15} aria-hidden="true" />
+                          Attach payment proof
+                        </Button>
+                        <p className="m-0 text-[11px] text-[#738096]">
+                          Choose a receipt or transfer screenshot. PDF, Word,
+                          PNG, JPEG, or text · Up to 5 MB.
+                        </p>
+                      </div>
+                    )}
+                    {hasExistingFiles && !proofDraft && (
+                      <button
+                        type="button"
+                        disabled={controls.busy}
+                        className="min-h-11 cursor-pointer text-left text-xs font-medium text-[#294a9b] underline-offset-2 hover:underline disabled:opacity-50"
+                        onClick={() =>
+                          setProofSource(
+                            proofSource === "upload" ? "existing" : "upload",
+                          )
+                        }
+                      >
+                        {proofSource === "upload"
+                          ? "Choose an existing attachment instead"
+                          : "Upload a new file instead"}
+                      </button>
+                    )}
+                  </WorkflowField>
+                  <Button
+                    className={workflowPrimaryButton}
+                    disabled={
+                      controls.busy || (proofSource === "upload" && !proofDraft)
+                    }
+                  >
+                    Submit payment proof
+                  </Button>
+                </form>
+              </>
+            )}
+          </>
         )}
       {(workflow.permissions.verifyPayment || workflow.permissions.manage) &&
         writable &&
@@ -1421,7 +1647,11 @@ export function PaymentVerificationCard({ workflow, controls }: CardProps) {
 export function ProjectActivationCard({ workflow }: { workflow: Workflow }) {
   if (!workflow.project || workflow.state !== "ACTIVE_PROJECT") return null
   return (
-    <WorkflowCard title="Your project is active" status="ACTIVE_PROJECT">
+    <WorkflowCard
+      title="Your project is active"
+      status="ACTIVE_PROJECT"
+      icon={Rocket}
+    >
       <p className="m-0">{workflow.project.name}</p>
       <p className="m-0">
         Your consultation history and approved documents remain available in
@@ -1439,9 +1669,11 @@ export function ProjectActivationCard({ workflow }: { workflow: Workflow }) {
 export function SystemStatusUpdate({ event }: { event: WorkflowEvent }) {
   const date = new Date(event.createdAt)
   return (
-    <div className="mx-auto my-4 w-full max-w-2xl overflow-x-auto text-[10px] leading-5 text-[#294a9b] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      <div className="relative mx-auto w-max">
-        <p className="mx-auto my-0 whitespace-nowrap">{event.summary}</p>
+    <div className="mx-auto my-3 w-fit max-w-full rounded-xl bg-[#edf2fb] px-3 py-1.5 text-center text-[11px] leading-5 text-[#294a9b]">
+      <div className="relative min-w-0">
+        <p className="my-0 whitespace-pre-wrap [overflow-wrap:anywhere]">
+          {event.summary}
+        </p>
         <HoverTooltip>
           {date.toLocaleTimeString("en-PH", {
             hour: "numeric",
