@@ -1246,7 +1246,7 @@ export function PaymentVerificationCard({ workflow, controls }: CardProps) {
       </p>
       <p className="m-0">
         {payment.mandatory
-          ? "Manual verification by the assigned payment verifier is required before activation."
+          ? "The department head or assigned payment verifier must confirm payment before activation."
           : "No mandatory commencement payment for this service."}
       </p>
       {payment.reference && (
@@ -1271,7 +1271,7 @@ export function PaymentVerificationCard({ workflow, controls }: CardProps) {
               event.preventDefault()
               const data = new FormData(event.currentTarget)
               const uploaded = proofDraft
-                ? await controls.attach(proofDraft)
+                ? await controls.attach(proofDraft, true)
                 : null
               if (proofDraft && !uploaded) return
               const submitted = await controls.act({
@@ -1356,28 +1356,41 @@ export function PaymentVerificationCard({ workflow, controls }: CardProps) {
             </Button>
           </form>
         )}
-      {workflow.permissions.verifyPayment &&
+      {(workflow.permissions.verifyPayment || workflow.permissions.manage) &&
         writable &&
         payment.status === "SUBMITTED" && (
           <form
+            noValidate
             className="grid gap-4"
             onSubmit={async (event) => {
               event.preventDefault()
               const data = new FormData(event.currentTarget)
               const button = (event.nativeEvent as SubmitEvent).submitter
+              const approve =
+                button instanceof HTMLButtonElement &&
+                button.value === "approve"
+              const note = String(data.get("note") || "").trim()
+              const noteInput = event.currentTarget.elements.namedItem(
+                "note",
+              ) as HTMLInputElement
+              noteInput.setCustomValidity(
+                !approve && !note
+                  ? "Enter a reason for rejecting this payment."
+                  : "",
+              )
+              if (!noteInput.reportValidity()) return
               await controls.act({
                 type: "VERIFY_PAYMENT",
-                approve:
-                  button instanceof HTMLButtonElement &&
-                  button.value === "approve",
-                note: String(data.get("note") || ""),
+                approve,
+                note,
               })
             }}
           >
             <WorkflowField label="Verification note">
               <input
                 name="note"
-                required
+                placeholder="Required when rejecting payment"
+                onChange={(event) => event.currentTarget.setCustomValidity("")}
                 maxLength={2000}
                 className={workflowInput}
               />
@@ -1388,15 +1401,15 @@ export function PaymentVerificationCard({ workflow, controls }: CardProps) {
                 className={workflowPrimaryButton}
                 disabled={controls.busy}
               >
-                Verify payment
+                Confirm payment
               </Button>
               <Button
                 value="reject"
                 variant="outline"
-                className={workflowButton}
+                className={`${workflowButton} border-red-200 text-red-700 hover:bg-red-50`}
                 disabled={controls.busy}
               >
-                Return payment proof
+                Reject payment
               </Button>
             </div>
           </form>
@@ -1522,13 +1535,18 @@ export function WorkflowEventCard({
       <>
         {statusUpdate()}
         <AgreementCard workflow={workflow} controls={controls} />
+        <PaymentVerificationCard workflow={workflow} controls={controls} />
       </>
     )
   if (workflow.payment?.id === event.entityId)
     return (
       <>
         {statusUpdate()}
-        <PaymentVerificationCard workflow={workflow} controls={controls} />
+        {!workflow.events.some(
+          (item) => item.entityId === workflow.agreement?.id,
+        ) && (
+          <PaymentVerificationCard workflow={workflow} controls={controls} />
+        )}
       </>
     )
   if (workflow.project?.id === event.entityId)

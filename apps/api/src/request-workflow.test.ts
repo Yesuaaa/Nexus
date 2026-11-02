@@ -1044,13 +1044,13 @@ test(
               head,
               {
                 type: "VERIFY_PAYMENT",
-                approve: true,
-                note: "Self-verification",
+                approve: false,
+                note: "",
               },
               beforeVerification.version,
             )
           ).status,
-          403,
+          400,
         )
         assert.equal(
           (
@@ -1072,14 +1072,30 @@ test(
           ).status,
           409,
         )
-        const ready = await act(paymentAdmin, {
+        const returned = await act(head, {
+          type: "VERIFY_PAYMENT",
+          approve: false,
+          note: "Receipt amount does not match",
+        })
+        assert.equal(returned.payment!.status, "PENDING")
+        assert.ok(
+          (await read(client)).events.some((event) =>
+            event.summary.includes("Receipt amount does not match"),
+          ),
+        )
+        await act(client, {
+          type: "SUBMIT_PAYMENT",
+          fileId: proof.id,
+          reference: "BANK-WF-001",
+        })
+        const ready = await act(head, {
           type: "VERIFY_PAYMENT",
           approve: true,
           note: "Bank deposit confirmed",
         })
         assert.equal(ready.payment!.status, "VERIFIED")
         assert.equal(ready.state, "READY_FOR_ACTIVATION")
-        assert.equal(ready.project, null)
+        assert.equal(ready.project!.status, "PLANNED")
         assert.equal((await read(head)).project!.status, "PLANNED")
         assert.equal((await read()).project, null)
         const manager = await read(head)

@@ -250,7 +250,7 @@ test("assigned payment verifier downloads evidence and records manual verificati
     .getByLabel("Verification note", { exact: true })
     .fill("Bank deposit matched against the statement")
   await page
-    .getByRole("button", { name: "Verify payment", exact: true })
+    .getByRole("button", { name: "Confirm payment", exact: true })
     .click()
   await expect.poll(() => actions.length).toBe(1)
   expect(actions[0]).toMatchObject({
@@ -260,7 +260,7 @@ test("assigned payment verifier downloads evidence and records manual verificati
     expectedVersion: 5,
   })
   await expect(
-    page.getByRole("button", { name: "Verify payment", exact: true }),
+    page.getByRole("button", { name: "Confirm payment", exact: true }),
   ).toHaveCount(0)
 })
 
@@ -276,7 +276,7 @@ test("notification sends an assigned approver to the relevant workflow", async (
     .click()
   await expect(page).toHaveURL(/\/workflow-approvals\?request=request-1$/)
   await expect(
-    page.getByRole("button", { name: "Verify payment", exact: true }),
+    page.getByRole("button", { name: "Confirm payment", exact: true }),
   ).toBeVisible()
 })
 

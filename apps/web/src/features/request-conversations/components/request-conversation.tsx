@@ -12,6 +12,7 @@ import Link from "next/link"
 import {
   ArrowLeft,
   CalendarDays,
+  Check,
   CircleHelp,
   FileText,
   Info,
@@ -1363,6 +1364,30 @@ function ConversationPanel({
                                 )}
                                 {canOpenWorkflowControls && (
                                   <>
+                                    {workflow?.approval &&
+                                      workflow.internal && (
+                                        <DropdownMenuItem
+                                          className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                                          onSelect={() =>
+                                            focusWorkflowSection("staffing")
+                                          }
+                                        >
+                                          <Users aria-hidden="true" />
+                                          Staffing and workload
+                                        </DropdownMenuItem>
+                                      )}
+                                    {workflow?.state ===
+                                      "READY_FOR_ACTIVATION" && (
+                                      <DropdownMenuItem
+                                        className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                                        onSelect={() =>
+                                          focusWorkflowSection("activation")
+                                        }
+                                      >
+                                        <Check aria-hidden="true" />
+                                        Project activation
+                                      </DropdownMenuItem>
+                                    )}
                                     {((canAttach && history.canSend) ||
                                       canRequestInformation ||
                                       canScheduleConsultation ||
