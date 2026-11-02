@@ -58,6 +58,10 @@ function InternalConversationPanel({
     null,
   )
   const [error, setError] = useState("")
+  useEffect(() => {
+    if (error)
+      sileo.error({ title: "Couldn't load messages", description: error })
+  }, [error])
   const [draft, setDraft] = useState("")
   const [sending, setSending] = useState(false)
   const [olderLoading, setOlderLoading] = useState(false)
@@ -242,11 +246,6 @@ function InternalConversationPanel({
               </p>
             </div>
           </header>
-          {error && (
-            <p role="alert" className="m-3 text-xs text-red-700">
-              {error}
-            </p>
-          )}
           {!history ? (
             <p className="p-4 text-xs text-[#52627a]">
               {error
@@ -394,8 +393,11 @@ function InternalConversationPanel({
                 </p>
               )}
               {sendError && (
-                <p role="alert" className="m-0 px-5 pb-3 text-xs text-red-700">
-                  {sendError}
+                <p
+                  role="status"
+                  className="m-0 px-5 pb-3 text-xs text-[#52627a]"
+                >
+                  Your text is saved here so you can retry.
                 </p>
               )}
             </>

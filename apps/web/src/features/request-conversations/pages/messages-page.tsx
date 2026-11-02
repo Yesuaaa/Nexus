@@ -78,6 +78,17 @@ function ConversationInbox({
   >([])
   const [error, setError] = useState("")
   const [internalError, setInternalError] = useState("")
+  useEffect(() => {
+    if (error)
+      sileo.error({ title: "Couldn't load conversations", description: error })
+  }, [error])
+  useEffect(() => {
+    if (internalError)
+      sileo.error({
+        title: "Couldn't load internal chats",
+        description: internalError,
+      })
+  }, [internalError])
   const [loadingMore, setLoadingMore] = useState(false)
   const [internalLoading, setInternalLoading] = useState(false)
   const [internalLoadingMore, setInternalLoadingMore] = useState(false)
@@ -657,32 +668,6 @@ function ConversationInbox({
               )}
             </p>
           )}
-          {mode === "requests" && error && (
-            <p
-              role="alert"
-              className={cn(
-                "px-5 text-xs text-red-700",
-                railCollapsed && "px-1 text-center",
-                "max-[767px]:px-5 max-[767px]:text-left",
-              )}
-            >
-              {railCollapsed ? (
-                <>
-                  <span aria-hidden="true" className="text-base font-bold">
-                    !
-                    {railCollapsed && (
-                      <HoverTooltip side="right">{error}</HoverTooltip>
-                    )}
-                  </span>
-                  <span className="sr-only max-[767px]:not-sr-only">
-                    {error}
-                  </span>
-                </>
-              ) : (
-                error
-              )}
-            </p>
-          )}
           {mode === "internal" && internalLoading && (
             <p
               role="status"
@@ -693,11 +678,6 @@ function ConversationInbox({
               )}
             >
               Loading internal chats…
-            </p>
-          )}
-          {mode === "internal" && internalError && (
-            <p role="alert" className="px-5 text-xs text-red-700">
-              {internalError}
             </p>
           )}
           {mode === "requests" &&

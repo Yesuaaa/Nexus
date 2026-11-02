@@ -48,6 +48,13 @@ export function ConsultationLocation({
   )
 }
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { cn } from "@/lib/utils"
 import {
@@ -218,30 +225,67 @@ export function WorkflowFileSelect({
   workflow,
   name = "fileId",
   required = false,
+  controls,
 }: {
   workflow: Workflow
   name?: string
   required?: boolean
+  controls?: WorkflowControls
 }) {
   const account = usePortalAccount()
+  const [selected, setSelected] = useState("")
+  const [uploaded, setUploaded] = useState<WorkflowFile | null>(null)
+  const files = workflow.files.filter((file) => file.uploaderId === account.id)
+  if (uploaded && !files.some((file) => file.id === uploaded.id))
+    files.push(uploaded)
   return (
-    <select
-      name={name}
-      required={required}
-      className={workflowInput}
-      defaultValue=""
-    >
-      <option value="">
-        {required ? "Select an attached file" : "No attachment"}
-      </option>
-      {workflow.files
-        .filter((file) => file.uploaderId === account.id)
-        .map((file) => (
+    <span className="grid gap-2">
+      {controls && (
+        <input
+          type="file"
+          aria-label="Upload document"
+          accept={attachmentAccept}
+          disabled={controls.busy}
+          className={workflowInput}
+          onChange={async (event) => {
+            const input = event.currentTarget
+            const file = input.files?.[0]
+            if (!file) return
+            const result = await controls.attach(file)
+            if (result) {
+              setUploaded(result)
+              setSelected(result.id)
+            }
+            input.value = ""
+          }}
+        />
+      )}
+      {controls && (
+        <span role="status" className="text-[11px]">
+          {controls.busy
+            ? "Uploading or saving…"
+            : "PDF, Word, PNG, JPEG or text. Maximum 5 MB."}
+        </span>
+      )}
+      <select
+        name={name}
+        aria-label={controls ? "Previously attached document" : undefined}
+        required={required}
+        className={workflowInput}
+        value={selected}
+        onChange={(event) => setSelected(event.target.value)}
+        disabled={controls?.busy}
+      >
+        <option value="">
+          {required ? "Select an attached file" : "No attachment"}
+        </option>
+        {files.map((file) => (
           <option key={file.id} value={file.id}>
             {file.name}
           </option>
         ))}
-    </select>
+      </select>
+    </span>
   )
 }
 
@@ -306,7 +350,7 @@ export function RequirementRequestCard({
               />
             </WorkflowField>
             <WorkflowField label="Supporting document">
-              <WorkflowFileSelect workflow={workflow} />
+              <WorkflowFileSelect workflow={workflow} controls={controls} />
             </WorkflowField>
             <Button className={workflowPrimaryButton} disabled={controls.busy}>
               Submit requirement
@@ -674,6 +718,7 @@ export function QuotationProposalCard({
   onPrepareQuotation,
 }: CardProps & { quotation: WorkflowQuotation }) {
   const now = useCurrentTime()
+  const [declineNote, setDeclineNote] = useState<string | null>(null)
   const latest = quotation.id === workflow.quotations.at(-1)?.id
   const valid = new Date(quotation.validUntil).getTime() > now
   const respond =
@@ -776,11 +821,11 @@ export function QuotationProposalCard({
             const button = (event.nativeEvent as SubmitEvent).submitter
             const decision =
               button instanceof HTMLButtonElement ? button.value : ""
-            if (
-              decision === "ACCEPT" ||
-              decision === "DECLINE" ||
-              decision === "REVISE"
-            )
+            if (decision === "DECLINE") {
+              setDeclineNote(String(data.get("note") || ""))
+              return
+            }
+            if (decision === "ACCEPT" || decision === "REVISE")
               await controls.act({
                 type: "RESPOND_QUOTATION",
                 quotationId: quotation.id,
@@ -840,6 +885,52 @@ export function QuotationProposalCard({
           </div>
         </form>
       )}
+      <Dialog
+        open={declineNote !== null}
+        onOpenChange={(open) => {
+          if (!open && !controls.busy) setDeclineNote(null)
+        }}
+      >
+        <DialogContent
+          showCloseButton={!controls.busy}
+          className="max-w-[calc(100%-2rem)] sm:max-w-md"
+        >
+          <DialogTitle>Decline quotation?</DialogTitle>
+          <DialogDescription>
+            This will reject quotation version {quotation.version} and end this
+            request workflow. Review your decision before continuing.
+          </DialogDescription>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={controls.busy}
+              onClick={() => setDeclineNote(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="bg-[#b42318] text-white hover:bg-[#912018]"
+              disabled={controls.busy}
+              onClick={async () => {
+                if (declineNote === null) return
+                if (
+                  await controls.act({
+                    type: "RESPOND_QUOTATION",
+                    quotationId: quotation.id,
+                    decision: "DECLINE",
+                    note: declineNote,
+                  })
+                )
+                  setDeclineNote(null)
+              }}
+            >
+              {controls.busy ? "Declining…" : "Confirm decline"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {workflow.permissions.approveQuotation &&
         quotation.status === "PENDING_INTERNAL" &&
         latest &&
@@ -929,7 +1020,11 @@ export function AgreementCard({ workflow, controls }: CardProps) {
             }}
           >
             <WorkflowField label="Agreement document">
-              <WorkflowFileSelect workflow={workflow} required />
+              <WorkflowFileSelect
+                workflow={workflow}
+                controls={controls}
+                required
+              />
             </WorkflowField>
             <Button
               variant="outline"
@@ -965,7 +1060,11 @@ export function AgreementCard({ workflow, controls }: CardProps) {
             }}
           >
             <WorkflowField label="Signed agreement">
-              <WorkflowFileSelect workflow={workflow} required />
+              <WorkflowFileSelect
+                workflow={workflow}
+                controls={controls}
+                required
+              />
             </WorkflowField>
             <Button className={workflowPrimaryButton} disabled={controls.busy}>
               Submit signed agreement

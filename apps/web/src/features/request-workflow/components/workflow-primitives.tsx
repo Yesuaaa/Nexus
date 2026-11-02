@@ -14,10 +14,41 @@ export function statusText(value: string) {
     .replace(/^./, (letter) => letter.toUpperCase())
 }
 
-export function WorkflowBadge({ value }: { value: string }) {
+export function WorkflowBadge({
+  value,
+  checklist = false,
+}: {
+  value: string
+  checklist?: boolean
+}) {
+  const complete = [
+    "COMPLETED",
+    "APPROVED",
+    "VERIFIED",
+    "NOT_REQUIRED",
+  ].includes(value)
   return (
-    <span className="inline-flex rounded-full bg-[#eaf0fb] px-2.5 py-1 text-[10px] font-medium text-[#203f8c]">
-      {statusText(value)}
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-medium",
+        checklist
+          ? complete
+            ? "bg-[#ecfdf3] text-[#067647]"
+            : "bg-[#fef3f2] text-[#b42318]"
+          : "bg-[#eaf0fb] text-[#203f8c]",
+      )}
+    >
+      {checklist &&
+        (complete ? (
+          <Check size={12} aria-hidden="true" />
+        ) : (
+          <Circle size={12} aria-hidden="true" />
+        ))}
+      {checklist && value === "SUBMITTED"
+        ? "Pending review"
+        : checklist && value === "REQUESTED"
+          ? "Incomplete"
+          : statusText(value)}
     </span>
   )
 }

@@ -23,6 +23,7 @@ import type { Workflow, WorkflowAction } from "../model/workflow"
 import {
   WorkflowBadge,
   WorkflowField,
+  workflowMoney,
   workflowButton,
   workflowInput,
 } from "./workflow-primitives"
@@ -137,186 +138,396 @@ export function QuotationForm({
   onCancel?: () => void
   inline?: boolean
 }) {
-  const [rows, setRows] = useState([{ key: 0 }])
-  const [nextKey, setNextKey] = useState(1)
   const latest = workflow.quotations.at(-1)
-  return (
-    <ActionForm
-      controls={controls}
-      label={latest ? "Send revised quotation" : "Send quotation"}
-      onComplete={onComplete}
-      onCancel={onCancel}
-      inline={inline}
-      action={(data) => ({
-        type: "CREATE_QUOTATION",
-        scope: String(data.get("scope")),
-        deliverables: String(data.get("deliverables"))
+  const [rows, setRows] = useState(() =>
+    latest?.lineItems.length
+      ? latest.lineItems.map((item, key) => ({ key, ...item }))
+      : [{ key: 0, description: "", quantity: 1, unitPrice: "" }],
+  )
+  const [nextKey, setNextKey] = useState(rows.length)
+  const [step, setStep] = useState(0)
+  const [review, setReview] = useState<FormData | null>(null)
+  const steps = ["Scope", "Pricing", "Terms", "Review"]
+  function validate(form: HTMLFormElement, index: number) {
+    const data = new FormData(form)
+    const section = form.querySelector(`[data-quotation-step="${index}"]`)
+    for (const input of section?.querySelectorAll<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >("input, textarea, select") ?? []) {
+      input.setCustomValidity(
+        input.required && !input.value.trim() ? "Complete this field." : "",
+      )
+      if (input.name === "deliverables" && input.value.trim()) {
+        const items = input.value
           .split("\n")
           .map((item) => item.trim())
-          .filter(Boolean),
-        lineItems: rows.map(({ key }) => ({
-          description: String(data.get(`description-${key}`)),
-          quantity: Number(data.get(`quantity-${key}`)),
-          unitPrice: String(data.get(`price-${key}`)),
-        })),
-        currency: String(data.get("currency")),
-        timeline: String(data.get("timeline")),
-        paymentTerms: String(data.get("paymentTerms")),
-        paymentDue: String(data.get("paymentDue")),
-        validUntil: new Date(String(data.get("validUntil"))).toISOString(),
-      })}
+          .filter(Boolean)
+        if (items.length > 30 || items.some((item) => item.length > 300))
+          input.setCustomValidity(
+            "Provide up to 30 deliverables, each at most 300 characters.",
+          )
+      }
+      if (input.name === "validUntil" && input.value) {
+        const validity = new Date(input.value).getTime()
+        if (
+          validity <= Date.now() ||
+          validity > Date.now() + 366 * 24 * 60 * 60 * 1000
+        )
+          input.setCustomValidity(
+            "Choose a future validity date within the next year.",
+          )
+      }
+      if (input.name === "paymentDue" && input.value) {
+        const total = rows.reduce(
+          (sum, { key }) =>
+            sum +
+            Math.round(Number(data.get(`price-${key}`)) * 100) *
+              Number(data.get(`quantity-${key}`)),
+          0,
+        )
+        if (Math.round(Number(input.value) * 100) > total)
+          input.setCustomValidity(
+            "The commencement payment cannot exceed the quotation total.",
+          )
+      }
+      if (!input.reportValidity()) return false
+    }
+    return true
+  }
+  return (
+    <form
+      className="space-y-3"
+      noValidate
+      onSubmit={async (event) => {
+        event.preventDefault()
+        const form = event.currentTarget
+        if (controls.busy) return
+        if (step < 3) {
+          if (validate(form, step)) {
+            setReview(new FormData(form))
+            setStep(step + 1)
+          }
+          return
+        }
+        const data = new FormData(form)
+        if (
+          await controls.act({
+            type: "CREATE_QUOTATION",
+            scope: String(data.get("scope")),
+            deliverables: String(data.get("deliverables"))
+              .split("\n")
+              .map((item) => item.trim())
+              .filter(Boolean),
+            lineItems: rows.map(({ key }) => ({
+              description: String(data.get(`description-${key}`)),
+              quantity: Number(data.get(`quantity-${key}`)),
+              unitPrice: String(data.get(`price-${key}`)),
+            })),
+            currency: String(data.get("currency")),
+            timeline: String(data.get("timeline")),
+            paymentTerms: String(data.get("paymentTerms")),
+            paymentDue: String(data.get("paymentDue")),
+            validUntil: new Date(String(data.get("validUntil"))).toISOString(),
+          })
+        )
+          onComplete?.()
+      }}
     >
-      <WorkflowField label="Service scope">
-        <textarea
-          name="scope"
-          required
-          rows={3}
-          maxLength={6000}
-          defaultValue={latest?.scope || workflow.request.goals}
-          className={workflowInput}
-        />
-      </WorkflowField>
-      <WorkflowField label="Deliverables (one per line)">
-        <textarea
-          name="deliverables"
-          required
-          rows={3}
-          maxLength={8000}
-          defaultValue={latest?.deliverables.join("\n") || ""}
-          className={workflowInput}
-        />
-      </WorkflowField>
-      <fieldset className="m-0 min-w-0 space-y-2 border-0 p-0">
-        <legend className="mb-2 text-[11px] font-medium">
-          Pricing breakdown
-        </legend>
-        {rows.map(({ key }, index) => (
-          <div
-            key={key}
-            className="space-y-2 rounded-lg border border-[#e1e6ee] p-2"
+      <ol
+        aria-label="Quotation steps"
+        className="m-0 flex list-none flex-wrap gap-3 border-b border-[#e8ebef] p-0 pb-3 text-xs"
+      >
+        {steps.map((label, index) => (
+          <li
+            key={label}
+            aria-current={step === index ? "step" : undefined}
+            className={
+              step === index ? "font-semibold text-[#203f8c]" : "text-[#52627a]"
+            }
           >
-            <WorkflowField label={`Item ${index + 1}`}>
-              <input
-                name={`description-${key}`}
-                required
-                maxLength={300}
-                className={workflowInput}
-              />
-            </WorkflowField>
-            <div className="grid grid-cols-2 gap-2">
-              <WorkflowField label="Quantity">
-                <input
-                  name={`quantity-${key}`}
-                  type="number"
-                  required
-                  min="1"
-                  max="10000"
-                  step="1"
-                  defaultValue="1"
-                  className={workflowInput}
-                />
-              </WorkflowField>
-              <WorkflowField label="Unit price">
-                <input
-                  name={`price-${key}`}
-                  type="number"
-                  required
-                  min="0"
-                  max="999999999"
-                  step="0.01"
-                  className={workflowInput}
-                />
-              </WorkflowField>
-            </div>
-            {rows.length > 1 && (
-              <Button
-                type="button"
-                variant="outline"
-                aria-label={`Remove item ${index + 1}`}
-                className="h-7 text-[10px]"
-                onClick={() =>
-                  setRows((items) => items.filter((item) => item.key !== key))
-                }
-              >
-                <Trash2 size={12} aria-hidden="true" />
-                Remove
-              </Button>
-            )}
-          </div>
+            {index + 1}. {label}
+          </li>
         ))}
-        <Button
-          type="button"
-          variant="outline"
-          className={workflowButton}
-          disabled={rows.length >= 30}
-          onClick={() => {
-            setRows((items) => [...items, { key: nextKey }])
-            setNextKey((value) => value + 1)
-          }}
+      </ol>
+      <div data-quotation-step="0" hidden={step !== 0} className="space-y-3">
+        <WorkflowField label="Service scope">
+          <textarea
+            name="scope"
+            required
+            rows={3}
+            maxLength={6000}
+            defaultValue={latest?.scope || workflow.request.goals}
+            className={workflowInput}
+          />
+        </WorkflowField>
+        <WorkflowField label="Deliverables (one per line)">
+          <textarea
+            name="deliverables"
+            required
+            rows={3}
+            maxLength={8000}
+            defaultValue={latest?.deliverables.join("\n") || ""}
+            className={workflowInput}
+          />
+        </WorkflowField>
+      </div>
+      <div data-quotation-step="1" hidden={step !== 1} className="space-y-3">
+        <fieldset className="m-0 min-w-0 space-y-2 border-0 p-0">
+          <legend className="mb-2 text-[11px] font-medium">
+            Pricing breakdown
+          </legend>
+          {rows.map(({ key }, index) => (
+            <div
+              key={key}
+              className="space-y-2 rounded-lg border border-[#e1e6ee] p-2"
+            >
+              <WorkflowField label={`Item ${index + 1}`}>
+                <input
+                  name={`description-${key}`}
+                  defaultValue={rows[index].description}
+                  required
+                  maxLength={300}
+                  className={workflowInput}
+                />
+              </WorkflowField>
+              <div className="grid grid-cols-2 gap-2">
+                <WorkflowField label="Quantity">
+                  <input
+                    name={`quantity-${key}`}
+                    type="number"
+                    required
+                    min="1"
+                    max="10000"
+                    step="1"
+                    defaultValue={rows[index].quantity}
+                    className={workflowInput}
+                  />
+                </WorkflowField>
+                <WorkflowField label="Unit price">
+                  <input
+                    name={`price-${key}`}
+                    defaultValue={rows[index].unitPrice}
+                    type="number"
+                    required
+                    min="0"
+                    max="999999999"
+                    step="0.01"
+                    className={workflowInput}
+                  />
+                </WorkflowField>
+              </div>
+              {rows.length > 1 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  aria-label={`Remove item ${index + 1}`}
+                  className="h-7 text-[10px]"
+                  onClick={() =>
+                    setRows((items) => items.filter((item) => item.key !== key))
+                  }
+                >
+                  <Trash2 size={12} aria-hidden="true" />
+                  Remove
+                </Button>
+              )}
+            </div>
+          ))}
+          <Button
+            type="button"
+            variant="outline"
+            className={workflowButton}
+            disabled={rows.length >= 30}
+            onClick={() => {
+              setRows((items) => [
+                ...items,
+                { key: nextKey, description: "", quantity: 1, unitPrice: "" },
+              ])
+              setNextKey((value) => value + 1)
+            }}
+          >
+            <Plus size={12} aria-hidden="true" />
+            Add item
+          </Button>
+        </fieldset>
+        <WorkflowField label="Currency">
+          <select
+            name="currency"
+            defaultValue={latest?.currency || "PHP"}
+            className={workflowInput}
+          >
+            <option value="PHP">PHP</option>
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+            <option value="GBP">GBP</option>
+            {latest &&
+              !["PHP", "USD", "EUR", "GBP"].includes(latest.currency) && (
+                <option value={latest.currency}>{latest.currency}</option>
+              )}
+          </select>
+        </WorkflowField>
+      </div>
+      <div data-quotation-step="2" hidden={step !== 2} className="space-y-3">
+        <WorkflowField label="Estimated timeline">
+          <textarea
+            name="timeline"
+            required
+            maxLength={1000}
+            rows={2}
+            defaultValue={latest?.timeline || workflow.request.expectedTimeline}
+            className={workflowInput}
+          />
+        </WorkflowField>
+        <WorkflowField label="Payment terms">
+          <textarea
+            name="paymentTerms"
+            required
+            maxLength={2000}
+            rows={2}
+            defaultValue={latest?.paymentTerms || ""}
+            className={workflowInput}
+          />
+        </WorkflowField>
+        <WorkflowField label="Amount due before commencement">
+          <input
+            name="paymentDue"
+            required
+            type="number"
+            min={workflow.paymentRequired ? "0.01" : "0"}
+            max="999999999"
+            step="0.01"
+            defaultValue={latest?.paymentDue}
+            className={workflowInput}
+          />
+        </WorkflowField>
+        <WorkflowField label="Valid until">
+          <input
+            name="validUntil"
+            defaultValue={
+              latest
+                ? new Date(
+                    new Date(latest.validUntil).getTime() -
+                      new Date(latest.validUntil).getTimezoneOffset() * 60_000,
+                  )
+                    .toISOString()
+                    .slice(0, 16)
+                : ""
+            }
+            required
+            type="datetime-local"
+            className={workflowInput}
+          />
+        </WorkflowField>
+      </div>
+      {step === 3 && review && (
+        <section
+          aria-label="Quotation review"
+          className="space-y-3 text-xs text-[#182235]"
         >
-          <Plus size={12} aria-hidden="true" />
-          Add item
-        </Button>
-      </fieldset>
-      <WorkflowField label="Currency">
-        <select
-          name="currency"
-          defaultValue={latest?.currency || "PHP"}
-          className={workflowInput}
-        >
-          <option value="PHP">PHP</option>
-          <option value="USD">USD</option>
-          <option value="EUR">EUR</option>
-          <option value="GBP">GBP</option>
-        </select>
-      </WorkflowField>
-      <WorkflowField label="Estimated timeline">
-        <textarea
-          name="timeline"
-          required
-          maxLength={1000}
-          rows={2}
-          defaultValue={latest?.timeline || workflow.request.expectedTimeline}
-          className={workflowInput}
-        />
-      </WorkflowField>
-      <WorkflowField label="Payment terms">
-        <textarea
-          name="paymentTerms"
-          required
-          maxLength={2000}
-          rows={2}
-          defaultValue={latest?.paymentTerms || ""}
-          className={workflowInput}
-        />
-      </WorkflowField>
-      <WorkflowField label="Amount due before commencement">
-        <input
-          name="paymentDue"
-          required
-          type="number"
-          min="0"
-          max="999999999"
-          step="0.01"
-          defaultValue={latest?.paymentDue}
-          className={workflowInput}
-        />
-      </WorkflowField>
-      <WorkflowField label="Valid until">
-        <input
-          name="validUntil"
-          required
-          type="datetime-local"
-          className={workflowInput}
-        />
-      </WorkflowField>
+          <h3 className="font-semibold">Review quotation</h3>
+          <p className="whitespace-pre-wrap">
+            <strong>Scope</strong>
+            <br />
+            {String(review.get("scope"))}
+          </p>
+          <p className="whitespace-pre-wrap">
+            <strong>Deliverables</strong>
+            <br />
+            {String(review.get("deliverables"))}
+          </p>
+          <ul className="space-y-2 pl-4">
+            {rows.map(({ key }) => (
+              <li key={key}>
+                {String(review.get(`description-${key}`))} ·{" "}
+                {String(review.get(`quantity-${key}`))} ×{" "}
+                {workflowMoney(
+                  String(review.get(`price-${key}`)),
+                  String(review.get("currency")),
+                )}
+              </li>
+            ))}
+          </ul>
+          <p>
+            <strong>Total: </strong>
+            {workflowMoney(
+              String(
+                rows.reduce(
+                  (total, { key }) =>
+                    total +
+                    Number(review.get(`quantity-${key}`)) *
+                      Number(review.get(`price-${key}`)),
+                  0,
+                ),
+              ),
+              String(review.get("currency")),
+            )}
+          </p>
+          <p className="whitespace-pre-wrap">
+            <strong>Timeline</strong>
+            <br />
+            {String(review.get("timeline"))}
+          </p>
+          <p className="whitespace-pre-wrap">
+            <strong>Payment terms</strong>
+            <br />
+            {String(review.get("paymentTerms"))}
+          </p>
+          <p>
+            Due before commencement:{" "}
+            {workflowMoney(
+              String(review.get("paymentDue")),
+              String(review.get("currency")),
+            )}
+          </p>
+          <p>
+            Valid until: {String(review.get("validUntil")).replace("T", " ")}
+          </p>
+        </section>
+      )}
       {workflow.quotationApprovalRequired && (
         <p className="m-0 text-[11px]">
           The assigned quotation approver must authorize this version before the
           client can accept it.
         </p>
       )}
-    </ActionForm>
+      <div
+        className={cn(
+          "flex flex-wrap gap-2 border-t border-[#e8ebef] pt-3",
+          inline && "justify-end",
+        )}
+      >
+        {onCancel && (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={controls.busy}
+            onClick={onCancel}
+          >
+            Cancel
+          </Button>
+        )}
+        {step > 0 && (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={controls.busy}
+            onClick={() => setStep(step - 1)}
+          >
+            Back
+          </Button>
+        )}
+        <Button className={workflowButton} disabled={controls.busy}>
+          {controls.busy
+            ? "Saving…"
+            : step < 2
+              ? "Next"
+              : step === 2
+                ? "Review"
+                : latest
+                  ? "Send revised quotation"
+                  : "Send quotation"}
+        </Button>
+      </div>
+    </form>
   )
 }
 
@@ -524,7 +735,7 @@ export function WorkflowContextPanel({
                     {item.title}
                     {item.mandatory ? " *" : ""}
                   </a>
-                  <WorkflowBadge value={item.status} />
+                  <WorkflowBadge value={item.status} checklist />
                 </li>
               ))}
             </ul>
@@ -565,7 +776,7 @@ export function WorkflowContextPanel({
               <ul className="m-0 list-none space-y-2 p-0">
                 <li className="flex justify-between gap-2 text-[11px]">
                   <span>Client approval</span>
-                  <WorkflowBadge value="COMPLETED" />
+                  <WorkflowBadge value="COMPLETED" checklist />
                 </li>
                 {workflow.agreement && (
                   <li className="flex justify-between gap-2 text-[11px]">
@@ -575,7 +786,15 @@ export function WorkflowContextPanel({
                     >
                       Agreement{workflow.agreement.mandatory ? " *" : ""}
                     </a>
-                    <WorkflowBadge value={workflow.agreement.status} />
+                    <WorkflowBadge
+                      value={
+                        !workflow.agreement.mandatory &&
+                        !workflow.agreement.documentFileId
+                          ? "NOT_REQUIRED"
+                          : workflow.agreement.status
+                      }
+                      checklist
+                    />
                   </li>
                 )}
                 {workflow.payment && (
@@ -586,9 +805,33 @@ export function WorkflowContextPanel({
                     >
                       Payment{workflow.payment.mandatory ? " *" : ""}
                     </a>
-                    <WorkflowBadge value={workflow.payment.status} />
+                    <WorkflowBadge
+                      value={
+                        !workflow.payment.mandatory &&
+                        workflow.payment.amount === "0.00"
+                          ? "NOT_REQUIRED"
+                          : workflow.payment.status
+                      }
+                      checklist
+                    />
                   </li>
                 )}
+                {workflow.requirements
+                  .filter((item) => item.mandatory)
+                  .map((item) => (
+                    <li
+                      key={item.id}
+                      className="flex items-start justify-between gap-2 border-t border-[#e8ebef] pt-2 text-[11px]"
+                    >
+                      <a
+                        href={`#workflow-${item.id}`}
+                        className="min-w-0 break-words text-[#203f8c]"
+                      >
+                        {item.title} (required)
+                      </a>
+                      <WorkflowBadge value={item.status} checklist />
+                    </li>
+                  ))}
               </ul>
             </WorkflowDisclosure>
           )}

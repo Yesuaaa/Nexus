@@ -157,6 +157,10 @@ function ConversationPanel({
       onArchivedChange?.(history.archived)
   }, [history?.archived, onArchivedChange])
   const [error, setError] = useState("")
+  useEffect(() => {
+    if (error)
+      sileo.error({ title: "Couldn't load messages", description: error })
+  }, [error])
   const [revision, setRevision] = useState(0)
   const [draft, setDraft] = useState("")
   const [sending, setSending] = useState(false)
@@ -671,7 +675,10 @@ function ConversationPanel({
   async function saveEditedMessage(messageId: string) {
     const body = editingMessageBody.trim()
     if (!body) {
-      setMessageActionError("A message cannot be empty.")
+      sileo.error({
+        title: "Message not saved",
+        description: "A message cannot be empty.",
+      })
       return
     }
     setMessageActionBusy(true)
@@ -684,7 +691,7 @@ function ConversationPanel({
     } catch (reason) {
       const message =
         reason instanceof Error ? reason.message : "Couldn't edit this message."
-      setMessageActionError(message)
+      sileo.error({ title: "Message not saved", description: message })
       if (
         reason instanceof ApiError &&
         [401, 403, 404].includes(reason.status)
@@ -712,7 +719,7 @@ function ConversationPanel({
         reason instanceof Error
           ? reason.message
           : "Couldn't delete this message."
-      setDeleteError(message)
+      sileo.error({ title: "Message not deleted", description: message })
       if (
         reason instanceof ApiError &&
         [401, 403, 404].includes(reason.status)
@@ -844,19 +851,6 @@ function ConversationPanel({
               )}
             </header>
             {workflow && <WorkflowProgress workflow={workflow} />}
-            {controls.error && (
-              <p
-                role="alert"
-                className="m-0 shrink-0 border-b border-red-100 bg-red-50 px-5 py-2 text-[11px] text-red-700"
-              >
-                Workflow: {controls.error}
-              </p>
-            )}
-            {error && (
-              <p role="alert" className="m-3 text-xs text-red-700">
-                {error}
-              </p>
-            )}
             {!history ? (
               <p className="p-4 text-xs text-[#52627a]">
                 {error
@@ -1448,8 +1442,11 @@ function ConversationPanel({
                         </div>
                       </div>
                       {sendError && (
-                        <p role="alert" className="mt-2 text-xs text-red-700">
-                          {sendError} Your text is saved here so you can retry.
+                        <p
+                          role="status"
+                          className="mt-2 text-xs text-[#52627a]"
+                        >
+                          Your text is saved here so you can retry.
                         </p>
                       )}
                       <div className="mt-1.5 px-1 text-[9px] text-[#8791a2]">

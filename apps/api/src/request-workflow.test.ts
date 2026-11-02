@@ -10,6 +10,24 @@ import { createApp } from "./app.js"
 import { issueSession } from "./features/auth/auth.service.js"
 import type { Role } from "./generated/prisma/client.js"
 import { getPrisma } from "./lib/db.js"
+import { parseAction } from "./features/request-workflow/workflow.validation.js"
+
+test("request information requires nonblank details", () => {
+  for (const details of [undefined, "", "   "]) {
+    assert.throws(
+      () =>
+        parseAction({
+          actionId: randomUUID(),
+          expectedVersion: 1,
+          type: "REQUEST_REQUIREMENT",
+          title: "Documents",
+          mandatory: true,
+          details,
+        }),
+      /Invalid details/,
+    )
+  }
+})
 
 type TestWorkflow = {
   state: string
@@ -373,7 +391,7 @@ test(
               {
                 type: "REQUEST_REQUIREMENT",
                 title: "Forged",
-                details: "",
+                details: "Please supply the requested documents.",
                 mandatory: false,
               },
               current.version,
@@ -1177,7 +1195,7 @@ test(
               {
                 type: "REQUEST_REQUIREMENT",
                 title: "Extra",
-                details: "",
+                details: "Please supply the requested documents.",
                 mandatory: true,
               },
               before.version,

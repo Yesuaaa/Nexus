@@ -159,9 +159,12 @@ for (const role of ["STAFF", "ADMIN", "SUPERADMIN"] as const) {
       await input.fill(body)
       state.failAfterSave = true
       await send.click()
-      await expect(chat.getByRole("alert")).toHaveText(
-        "Connection interrupted. Retry your message.",
-      )
+      await expect(
+        page.getByText("Connection interrupted. Retry your message.", {
+          exact: true,
+        }),
+      ).toBeVisible()
+      await expect(chat.getByRole("alert")).toHaveCount(0)
       await expect(input).toHaveValue(body)
       await send.click()
       await expect(input).toHaveValue("")
@@ -217,10 +220,13 @@ test("internal chat creation failure can be retried without navigating to an abs
   })
   await contact.click()
   await expect(
+    page.getByText("Chat unavailable. Try again.", { exact: true }),
+  ).toBeVisible()
+  await expect(
     page
       .getByRole("navigation", { name: "Conversations", exact: true })
       .getByRole("alert"),
-  ).toContainText("Chat unavailable. Try again.")
+  ).toHaveCount(0)
   await expect(page).toHaveURL(/\/messages\?mode=internal$/)
   expect(state.created).toBe(false)
   state.failCreate = false
