@@ -1,6 +1,7 @@
 import type { Prisma } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
+import { serviceImagePublicUrl } from "../services/service-image-storage.js"
 
 const internalRoles = ["STAFF", "ADMIN", "SUPERADMIN"] as const
 type InternalRole = (typeof internalRoles)[number]
@@ -25,6 +26,37 @@ type InternalUser = {
   department: { id: string; name: string } | null
   isActive: boolean
   accountDeletedAt: Date | null
+  profileImagePath: string | null
+  employee?: { profileImageUrl: string | null } | null
+}
+
+function avatarUrl(user: Pick<InternalUser, "profileImagePath" | "employee">) {
+  const value =
+    serviceImagePublicUrl(user.profileImagePath) ||
+    user.employee?.profileImageUrl
+  if (!value) return null
+  try {
+    const url = new URL(value)
+    return url.protocol === "https:" && !url.username && !url.password
+      ? url.href
+      : null
+  } catch {
+    return null
+  }
+}
+
+function participantDto(user: InternalUser) {
+  return {
+    id: user.id,
+    fullName: user.fullName,
+    email: user.email,
+    role: user.role,
+    position: user.position,
+    isActive: user.isActive,
+    accountDeletedAt: user.accountDeletedAt,
+    department: user.department,
+    imageUrl: avatarUrl(user),
+  }
 }
 
 function isInternalRole(role: string): role is InternalRole {
@@ -111,12 +143,14 @@ const participantSelect = {
   position: true,
   isActive: true,
   accountDeletedAt: true,
+  profileImagePath: true,
+  employee: { select: { profileImageUrl: true } },
   department: { select: { id: true, name: true } },
 } as const
 
 export async function listInternalContacts(userId: string) {
   await getInternalUser(userId)
-  return getPrisma()!.user.findMany({
+  const users = await getPrisma()!.user.findMany({
     where: {
       id: { not: userId },
       role: { in: [...internalRoles] },
@@ -126,6 +160,7 @@ export async function listInternalContacts(userId: string) {
     select: participantSelect,
     orderBy: [{ fullName: "asc" }, { email: "asc" }],
   })
+  return users.map(participantDto)
 }
 
 export async function createInternalConversation(
@@ -226,7 +261,7 @@ export async function listInternalConversations(
   const conversations = rows.slice(0, 30).map(({ messages, ...row }) => ({
     id: row.id,
     updatedAt: row.updatedAt,
-    participant: otherParticipant(row, userId),
+    participant: participantDto(otherParticipant(row, userId)),
     lastMessage: messages[0] ?? null,
     unreadCount: counts.get(row.id) ?? 0,
   }))
@@ -254,7 +289,7 @@ export async function getInternalConversationAccess(
     throw new ServiceRequestsError(404, "Internal conversation not found")
   const participant = otherParticipant(record, userId)
   return {
-    conversation: participant,
+    conversation: participantDto(participant),
     canSend: participant.isActive && participant.accountDeletedAt === null,
   }
 }

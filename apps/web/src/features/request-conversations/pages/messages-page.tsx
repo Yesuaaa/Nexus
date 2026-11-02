@@ -797,6 +797,7 @@ function ConversationInbox({
                     >
                       <ConversationAvatar
                         name={name}
+                        imageUrl={conversation.participant.imageUrl}
                         className="size-9 shrink-0"
                       />
                       <span className="min-w-0 flex-1">
@@ -855,6 +856,7 @@ function ConversationInbox({
                     >
                       <ConversationAvatar
                         name={name}
+                        imageUrl={contact.imageUrl}
                         className="size-9 shrink-0"
                       />
                       <span className="min-w-0 flex-1">
