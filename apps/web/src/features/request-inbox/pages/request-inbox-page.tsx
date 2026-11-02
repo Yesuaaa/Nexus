@@ -229,9 +229,7 @@ export function RequestInboxPage() {
       const conversation = await getConversation(request.id)
       if (!conversation.conversation)
         throw new Error("This request's conversation is not available yet.")
-      router.push(
-        `/messages?request=${encodeURIComponent(request.id)}${conversation.archived ? "&view=archived" : ""}`,
-      )
+      router.push(`/messages?request=${encodeURIComponent(request.id)}`)
     } catch (reason) {
       sileo.error({
         title: "Conversation unavailable",
