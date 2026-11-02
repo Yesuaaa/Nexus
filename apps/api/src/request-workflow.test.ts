@@ -460,6 +460,27 @@ test(
             ).status,
             404,
           )
+        const formUpload = await fetch(`${path()}/files`, {
+          method: "POST",
+          headers: { ...client.headers, "content-type": "application/json" },
+          body: JSON.stringify({
+            uploadId: randomUUID(),
+            name: "form.txt",
+            mimeType: "text/plain",
+            content: Buffer.from("Form attachment").toString("base64"),
+            contextual: true,
+          }),
+        })
+        assert.equal(formUpload.status, 201)
+        const formFile = ((await formUpload.json()) as { file: { id: string } })
+          .file
+        assert.equal(
+          (await read(client)).events.some(
+            (event) =>
+              event.type === "FILE_SUBMITTED" && event.entityId === formFile.id,
+          ),
+          false,
+        )
         const submitted = await act(client, {
           type: "SUBMIT_REQUIREMENT",
           requirementId,

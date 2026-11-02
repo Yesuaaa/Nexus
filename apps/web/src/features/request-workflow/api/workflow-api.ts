@@ -21,6 +21,7 @@ export async function uploadWorkflowFile(
   id: string,
   file: File,
   uploadId: string,
+  contextual = false,
 ) {
   if (!file.size || file.size > 5 * 1024 * 1024)
     throw new Error("Choose a nonempty file up to 5 MB.")
@@ -54,6 +55,7 @@ export async function uploadWorkflowFile(
     method: "POST",
     body: JSON.stringify({
       uploadId,
+      contextual,
       name: file.name,
       mimeType,
       content,

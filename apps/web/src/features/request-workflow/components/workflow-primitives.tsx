@@ -56,15 +56,18 @@ export function WorkflowBadge({
 export function WorkflowField({
   label,
   children,
+  asGroup = false,
 }: {
   label: ReactNode
   children: ReactNode
+  asGroup?: boolean
 }) {
+  const Container = asGroup ? "div" : "label"
   return (
-    <label className="grid min-w-0 gap-1.5 text-[11px] font-medium text-[#52627a]">
+    <Container className="grid min-w-0 gap-1.5 text-[11px] font-medium text-[#52627a]">
       {label}
       {children}
-    </label>
+    </Container>
   )
 }
 

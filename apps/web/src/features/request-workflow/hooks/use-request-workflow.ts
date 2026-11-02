@@ -148,7 +148,7 @@ export function useRequestWorkflow(requestId: string) {
     }
   }
 
-  async function attach(file: File) {
+  async function attach(file: File, contextual = false) {
     if (flight.current || revoked.current) return null
     if (upload.current?.file !== file)
       upload.current = { file, id: crypto.randomUUID() }
@@ -159,6 +159,7 @@ export function useRequestWorkflow(requestId: string) {
         requestId,
         file,
         upload.current.id,
+        contextual,
       )
       if (!alive.current || revoked.current) return null
       upload.current = null

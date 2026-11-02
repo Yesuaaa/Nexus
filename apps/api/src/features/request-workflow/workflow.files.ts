@@ -98,6 +98,10 @@ export async function uploadWorkflowFile(
   input: unknown,
 ) {
   const parsed = parseFile(input)
+  const body = object(input)
+  if (body.contextual !== undefined && typeof body.contextual !== "boolean")
+    fail("Invalid attachment context")
+  const contextual = body.contextual === true
   return getPrisma()!.$transaction(
     async (tx) => {
       await lockRequest(tx, requestId)
@@ -175,17 +179,18 @@ export async function uploadWorkflowFile(
         data: { version: { increment: 1 } },
       })
       // An approver's unlinked financial document is not a client-facing upload.
-      await appendEvent(
-        tx,
-        requestId,
-        userId,
-        permissions.isClient || permissions.manage
-          ? "FILE_SUBMITTED"
-          : "PAYMENT_DOCUMENT_UPLOADED",
-        `File submitted: ${file.name}`,
-        file.id,
-        !permissions.isClient && !permissions.manage,
-      )
+      if (!contextual)
+        await appendEvent(
+          tx,
+          requestId,
+          userId,
+          permissions.isClient || permissions.manage
+            ? "FILE_SUBMITTED"
+            : "PAYMENT_DOCUMENT_UPLOADED",
+          `File submitted: ${file.name}`,
+          file.id,
+          !permissions.isClient && !permissions.manage,
+        )
       await tx.serviceRequest.update({
         where: { id: requestId },
         data: { updatedAt: new Date() },

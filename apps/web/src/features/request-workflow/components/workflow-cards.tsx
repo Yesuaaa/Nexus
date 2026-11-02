@@ -221,6 +221,26 @@ export function AttachedFile({
   ) : null
 }
 
+const submittedFormFiles = new WeakMap<
+  HTMLFormElement,
+  { file: File; id: string }
+>()
+
+async function resolveFormFile(
+  form: HTMLFormElement,
+  controls: WorkflowControls,
+) {
+  const file =
+    form.querySelector<HTMLInputElement>('input[type="file"]')?.files?.[0]
+  if (!file) return ""
+  const previous = submittedFormFiles.get(form)
+  if (previous?.file === file) return previous.id
+  const uploaded = await controls.attach(file, true)
+  if (!uploaded) return null
+  submittedFormFiles.set(form, { file, id: uploaded.id })
+  return uploaded.id
+}
+
 export function WorkflowFileSelect({
   workflow,
   name = "fileId",
@@ -234,36 +254,47 @@ export function WorkflowFileSelect({
 }) {
   const account = usePortalAccount()
   const [selected, setSelected] = useState("")
-  const [uploaded, setUploaded] = useState<WorkflowFile | null>(null)
+  const [uploaded, setUploaded] = useState<File | null>(null)
   const uploadInput = useRef<HTMLInputElement>(null)
   const files = workflow.files.filter((file) => file.uploaderId === account.id)
-  if (uploaded && !files.some((file) => file.id === uploaded.id))
-    files.push(uploaded)
   if (controls)
     return (
       <span className="grid gap-2">
-        <input type="hidden" name={name} value={selected} />
         <input
           ref={uploadInput}
           type="file"
+          name={`${name}Upload`}
           aria-label="Upload document"
           accept={attachmentAccept}
           disabled={controls.busy}
           className="sr-only"
-          required={required && !selected}
-          onChange={async (event) => {
+          required={required}
+          onChange={(event) => {
             const input = event.currentTarget
             const file = input.files?.[0]
             if (!file) return
-            const result = await controls.attach(file)
-            if (result) {
-              setUploaded(result)
-              setSelected(result.id)
+            if (
+              !file.size ||
+              file.size > 5 * 1024 * 1024 ||
+              !attachmentAccept
+                .split(",")
+                .some((extension) =>
+                  file.name.toLowerCase().endsWith(extension),
+                )
+            ) {
+              sileo.error({
+                title: "Choose a supported document",
+                description:
+                  "Select a nonempty PDF, Word, PNG, JPEG or text file up to 5 MB.",
+              })
+              input.value = ""
+              setUploaded(null)
+              return
             }
-            input.value = ""
+            setUploaded(file)
           }}
         />
-        {uploaded && selected ? (
+        {uploaded ? (
           <span className="flex min-w-0 items-center gap-3 rounded-lg border border-[#d8e1ef] bg-[#f6f8fc] px-3 py-2">
             <FileText
               size={20}
@@ -288,6 +319,7 @@ export function WorkflowFileSelect({
               onClick={() => {
                 setSelected("")
                 setUploaded(null)
+                if (uploadInput.current) uploadInput.current.value = ""
               }}
             >
               <X size={16} aria-hidden="true" />
@@ -372,14 +404,14 @@ export function RequirementRequestCard({
               event.preventDefault()
               const form = event.currentTarget
               const data = new FormData(form)
+              const fileId = await resolveFormFile(form, controls)
+              if (fileId === null) return
               if (
                 await controls.act({
                   type: "SUBMIT_REQUIREMENT",
                   requirementId: requirement.id,
                   submission: String(data.get("submission") || ""),
-                  ...(data.get("fileId")
-                    ? { fileId: String(data.get("fileId")) }
-                    : {}),
+                  ...(fileId ? { fileId } : {}),
                 })
               )
                 form.reset()
@@ -412,6 +444,7 @@ export function RequirementRequestCard({
                   </span>
                 </span>
               }
+              asGroup
             >
               <WorkflowFileSelect workflow={workflow} controls={controls} />
             </WorkflowField>
@@ -1075,14 +1108,18 @@ export function AgreementCard({ workflow, controls }: CardProps) {
             className="flex flex-col gap-2"
             onSubmit={async (event) => {
               event.preventDefault()
-              const data = new FormData(event.currentTarget)
+              const fileId = await resolveFormFile(
+                event.currentTarget,
+                controls,
+              )
+              if (!fileId) return
               await controls.act({
                 type: "ATTACH_AGREEMENT",
-                fileId: String(data.get("fileId")),
+                fileId,
               })
             }}
           >
-            <WorkflowField label="Agreement document">
+            <WorkflowField label="Agreement document" asGroup>
               <WorkflowFileSelect
                 workflow={workflow}
                 controls={controls}
@@ -1115,14 +1152,18 @@ export function AgreementCard({ workflow, controls }: CardProps) {
             className="grid gap-4"
             onSubmit={async (event) => {
               event.preventDefault()
-              const data = new FormData(event.currentTarget)
+              const fileId = await resolveFormFile(
+                event.currentTarget,
+                controls,
+              )
+              if (!fileId) return
               await controls.act({
                 type: "SIGN_AGREEMENT",
-                fileId: String(data.get("fileId")),
+                fileId,
               })
             }}
           >
-            <WorkflowField label="Signed agreement">
+            <WorkflowField label="Signed agreement" asGroup>
               <WorkflowFileSelect
                 workflow={workflow}
                 controls={controls}

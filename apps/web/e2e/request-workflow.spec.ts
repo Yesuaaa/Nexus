@@ -240,6 +240,7 @@ test("the conversation records formal quotation approval through a structured ac
 test("requested documents can be uploaded and submitted without leaving the requirement", async ({
   page,
 }) => {
+  await page.setViewportSize({ width: 1600, height: 900 })
   const workflow = fixture()
   workflow.state = "CONSULTATION"
   workflow.quotations = []
@@ -273,6 +274,7 @@ test("requested documents can be uploaded and submitted without leaving the requ
       expect(route.request().postDataJSON()).toMatchObject({
         name: "brief.txt",
         mimeType: "text/plain",
+        contextual: true,
       })
       const file = {
         id: "uploaded-brief",
@@ -288,14 +290,36 @@ test("requested documents can be uploaded and submitted without leaving the requ
     },
   )
   await page.goto("/messages?request=request-1")
+  const uploadButton = page
+    .getByRole("button", {
+      name: "Upload document",
+      exact: true,
+    })
+    .and(page.locator("button"))
+  const row = await uploadButton.locator("..").boundingBox()
+  const button = await uploadButton.boundingBox()
+  expect(row).not.toBeNull()
+  expect(button).not.toBeNull()
+  expect(row!.x + row!.width).toBeGreaterThan(button!.x + button!.width + 8)
+  const outsidePicker = page
+    .waitForEvent("filechooser", { timeout: 500 })
+    .catch(() => null)
+  await page.mouse.click(
+    button!.x + button!.width + 8,
+    button!.y + button!.height / 2,
+  )
+  expect(await outsidePicker).toBeNull()
+  const picker = page.waitForEvent("filechooser")
+  await uploadButton.click()
+  await (await picker).setFiles([])
   await page.getByLabel("Upload document", { exact: true }).setInputFiles({
     name: "brief.txt",
     mimeType: "text/plain",
     buffer: Buffer.from("brief"),
   })
-  await expect(page.locator('input[type="hidden"][name="fileId"]')).toHaveValue(
-    "uploaded-brief",
-  )
+  await expect(page.getByText(/Ready to submit/)).toBeVisible()
+  expect(workflow.files).toHaveLength(0)
+  expect(actions).toHaveLength(0)
   await page
     .getByRole("button", { name: "Submit requirement", exact: true })
     .click()
@@ -372,9 +396,9 @@ test("agreement documents upload directly and outstanding checklist statuses are
     mimeType: "text/plain",
     buffer: Buffer.from("agreement"),
   })
-  await expect(page.locator('input[type="hidden"][name="fileId"]')).toHaveValue(
-    "agreement-file",
-  )
+  await expect(page.getByText(/Ready to submit/)).toBeVisible()
+  expect(workflow.files).toHaveLength(0)
+  expect(actions).toHaveLength(0)
   await page
     .getByRole("button", { name: "Attach agreement document", exact: true })
     .click()
