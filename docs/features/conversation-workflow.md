@@ -17,10 +17,10 @@ Service Management exposes commencement policies for consultation, signed agreem
 ## Structured actions
 
 - Requirements have requested, submitted, and completed states. The head reviews submissions before mandatory requirements are satisfied.
-- Consultations have a schedule, location, and completion state.
+- **Schedule consultation/meeting** opens a conversation-level invitation form. Meetings can be general or optionally linked to one or several booked services, at any booking stage. They appear once in the shared timeline, retain their schedule independently of sidebar selection, and support client reschedule requests plus head confirmation, completion, and cancellation. A completed meeting satisfies the consultation requirement only for its explicitly linked services; a general meeting does not change booking requirements. Existing booking-specific consultation history remains available.
 - Quotations retain scope, deliverables, line items, timeline, payment terms, validity, and version history. Only the latest published, unexpired version can be accepted.
 - Formal client acceptance stores an immutable approval identifying the account, quotation version, amount, currency, and timestamp. It prepares an agreement, payment requirement, and draft project atomically.
-- Agreement review and manual verification of payment evidence complete the commencement checklist. There is no payment gateway integration.
+- The prototype card checkout automatically verifies its simulated payment and stores a server-generated receipt and sandbox reference in one transaction. Payment can complete while a mandatory agreement is awaiting review; activation still requires the agreement to be approved. Uploaded payment evidence retains manual verification. There is no live payment gateway integration or real charge.
 - Staffing selection records the approving head. Availability, specialties, workload, and department scope inform selection; activation rechecks eligibility.
 - Activation requires the mandatory checklist and approved staffing, then opens the project workspace with deliverables as milestones. Repeated actions cannot create additional projects.
 
@@ -38,6 +38,8 @@ The notification bell links clients and heads to the affected conversation and a
 
 ## Implementation and verification
 
-The migration `20261031010000_request_workflow` adds workflow records, private files, consultation schedules, versioned quotations, immutable approvals/events, action receipts, agreements, payments, project assignments, milestones, and notifications. Existing accepted requests are backfilled conservatively; existing service requests and chat history are preserved. Run the migration through the normal deployment process before starting the updated API.
+The migration `20261031010000_request_workflow` adds workflow records, private files, consultation schedules, versioned quotations, immutable approvals/events, action receipts, agreements, payments, project assignments, milestones, and notifications. Existing accepted requests are backfilled conservatively; existing service requests and chat history are preserved. `20261102010000_conversation_meetings` adds shared meetings and optional service links, with private conversation invalidations and RLS. Run pending migrations with `pnpm --filter @nexus/api exec prisma migrate deploy` before starting the updated API.
+
+`POST /api/request-conversations/:id/meetings` accepts `clientActionId`, `startsAt`, `endsAt`, `location`, `notes`, and `bookingIds` (an empty list creates a general meeting). Only the current active department head may schedule. Invitation retries reuse their UUID. Conversation history includes persisted `meetings`; `PATCH /api/request-conversations/:id/meetings/:meetingId` accepts an `expectedVersion` and `REQUEST_RESCHEDULE`, `RESCHEDULE`, `KEEP_SCHEDULE`, `COMPLETE`, or `CANCEL` action. Only the client may request rescheduling; the head manages the schedule and status. Closed conversations are read-only, and service links must belong to the same shared conversation.
 
 API integration tests use offline PGlite. They verify authoritative transitions, quotation validity/versioning, idempotency, approval history, activation gates, project uniqueness, current-head scope, client data projections, and private downloads. Browser coverage includes quotation review, manual payment evidence review, notifications, project handoff, milestone controls, and mobile layouts.

@@ -16,6 +16,8 @@ import {
   editConversationMessage,
   deleteConversationMessage,
   deleteArchivedConversation,
+  scheduleConversationMeeting,
+  updateConversationMeeting,
 } from "./request-conversations.service.js"
 
 export function createRequestConversationsRouter(
@@ -48,18 +50,48 @@ export function createRequestConversationsRouter(
   router.get("/:id", async (request, response) => {
     const id = String(request.params.id)
     const before = request.query.before
+    const booking = request.query.booking
     if (
       before !== undefined &&
       (typeof before !== "string" || !/^[A-Za-z0-9_-]{1,80}$/.test(before))
     )
       return response.status(400).json({ error: "Invalid message cursor" })
-    const access = await getConversationAccess(request.auth!.user.id, id)
+    if (
+      booking !== undefined &&
+      (typeof booking !== "string" || !/^[A-Za-z0-9_-]{1,80}$/.test(booking))
+    )
+      return response.status(400).json({ error: "Invalid booking id" })
+    const access = await getConversationAccess(
+      request.auth!.user.id,
+      id,
+      booking,
+    )
     const history = await listConversationMessages(
       request.auth!.user.id,
       id,
       before,
     )
     response.json({ ...access, ...history })
+  })
+  router.post("/:id/meetings", async (request, response) => {
+    const meeting = await scheduleConversationMeeting(
+      request.auth!.user.id,
+      String(request.params.id),
+      request.body,
+    )
+    response.status(201).json({ meeting })
+  })
+  router.patch("/:id/meetings/:meetingId", async (request, response) => {
+    const meetingId = String(request.params.meetingId)
+    if (!/^[A-Za-z0-9_-]{1,80}$/.test(meetingId))
+      return response.status(400).json({ error: "Invalid meeting id" })
+    const meeting = await updateConversationMeeting(
+      request.auth!.user.id,
+      String(request.params.id),
+      meetingId,
+      request.body,
+    )
+    response.json({ meeting })
   })
   router.patch("/:id/read", async (request, response) => {
     response.json(
@@ -92,7 +124,11 @@ export function createRequestConversationsRouter(
       typeof input.clientMessageId !== "string" ||
       !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
         input.clientMessageId,
-      )
+      ) ||
+      ("bookingId" in input &&
+        input.bookingId !== null &&
+        (typeof input.bookingId !== "string" ||
+          !/^[A-Za-z0-9_-]{1,80}$/.test(input.bookingId)))
     )
       return response.status(400).json({
         error: "Enter a message of 1–4000 characters and a valid message ID",
@@ -102,6 +138,9 @@ export function createRequestConversationsRouter(
       String(request.params.id),
       input.body.trim(),
       input.clientMessageId,
+      "bookingId" in input && typeof input.bookingId === "string"
+        ? input.bookingId
+        : null,
     )
     response.status(201).json({ message })
   })
@@ -146,7 +185,8 @@ export function createRequestConversationsRouter(
   router.get("/:id/events", async (request, response) => {
     const id = String(request.params.id)
     const { user, sessionId } = request.auth!
-    await getConversationAccess(user.id, id)
+    const initialAccess = await getConversationAccess(user.id, id)
+    const conversationId = initialAccess.conversation.id
     let closed = false
     let headersReady = false
     let release: (() => Promise<void>) | undefined
@@ -196,7 +236,7 @@ export function createRequestConversationsRouter(
     response.once("close", close)
     try {
       release = await realtime.subscribe(
-        id,
+        conversationId,
         () => {
           void validateAndNotify("messages-changed")
         },

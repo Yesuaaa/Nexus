@@ -10,7 +10,7 @@ import {
 } from "../api/workflow-api"
 import type { Workflow, WorkflowAction } from "../model/workflow"
 
-export function useRequestWorkflow(requestId: string) {
+export function useRequestWorkflow(requestId: string | null) {
   const [workflow, setWorkflow] = useState<Workflow | null>(null)
   const [error, setError] = useState("")
   const reportedLoadError = useRef("")
@@ -45,6 +45,10 @@ export function useRequestWorkflow(requestId: string) {
 
   const refresh = useCallback(
     async (signal?: AbortSignal) => {
+      if (!requestId) {
+        if (alive.current) setLoading(false)
+        return
+      }
       if (revoked.current || !alive.current || signal?.aborted) return
       try {
         const result = await getWorkflow(requestId, signal)
@@ -80,8 +84,17 @@ export function useRequestWorkflow(requestId: string) {
 
   useEffect(() => {
     alive.current = true
+    revoked.current = false
+    current.current = null
+    pending.current = null
+    upload.current = null
     const controller = new AbortController()
-    const initial = setTimeout(() => void refresh(controller.signal), 0)
+    const initial = setTimeout(() => {
+      setWorkflow(null)
+      setError("")
+      setLoading(Boolean(requestId))
+      void refresh(controller.signal)
+    }, 0)
     const timer = setInterval(() => {
       if (document.visibilityState === "visible")
         void refresh(controller.signal)
@@ -98,10 +111,11 @@ export function useRequestWorkflow(requestId: string) {
       clearInterval(timer)
       document.removeEventListener("visibilitychange", onVisible)
     }
-  }, [refresh])
+  }, [refresh, requestId])
 
   async function act(action: WorkflowAction) {
-    if (flight.current || revoked.current || !current.current) return false
+    if (flight.current || revoked.current || !current.current || !requestId)
+      return false
     const fingerprint = JSON.stringify(action)
     if (pending.current?.fingerprint !== fingerprint)
       pending.current = {
@@ -149,7 +163,7 @@ export function useRequestWorkflow(requestId: string) {
   }
 
   async function attach(file: File, contextual = false) {
-    if (flight.current || revoked.current) return null
+    if (flight.current || revoked.current || !requestId) return null
     if (upload.current?.file !== file)
       upload.current = { file, id: crypto.randomUUID() }
     flight.current = true

@@ -117,8 +117,24 @@ async function mock(page: Page, workflow: Workflow, manager = false) {
       return route.fulfill({
         json: {
           conversation: {
+            id: workflow.request.id,
             department: workflow.request.department,
             head: { id: "head-1", fullName: "Dani Head" },
+            bookings: [
+              {
+                id: workflow.request.id,
+                title: workflow.request.title,
+                referenceNumber: workflow.request.referenceNumber,
+                status: "UNDER_REVIEW",
+                packageName: workflow.request.packageName,
+                serviceName: workflow.request.serviceName,
+                workflowState: workflow.state,
+                previousWorkflowState: workflow.previousState,
+                createdAt: "2026-10-30T08:00:00.000Z",
+                updatedAt: "2026-10-30T08:00:00.000Z",
+              },
+            ],
+            bookingCount: 1,
           },
           canSend: true,
           messages: [],
@@ -197,6 +213,12 @@ async function mock(page: Page, workflow: Workflow, manager = false) {
   return actions
 }
 
+async function chooseToolBooking(page: Page) {
+  const context = page.getByRole("dialog", { name: /choose a booking/ })
+  await context.getByRole("radio", { name: /REQ-2026-1001/ }).check()
+  await context.getByRole("button", { name: "Continue", exact: true }).click()
+}
+
 test("the conversation records formal quotation approval through a structured action", async ({
   page,
 }) => {
@@ -206,10 +228,7 @@ test("the conversation records formal quotation approval through a structured ac
   await expect(
     page
       .getByRole("complementary", { name: "Request context" })
-      .getByText("Website Development", { exact: true }),
-  ).toBeVisible()
-  await expect(
-    page.getByRole("list", { name: "Request progress" }),
+      .getByRole("button", { name: /Website Development REQ-2026-1001/ }),
   ).toBeVisible()
   await page
     .getByRole("checkbox", { name: /I have reviewed this quotation/ })
@@ -222,7 +241,10 @@ test("the conversation records formal quotation approval through a structured ac
   ).toBeVisible()
   await expect(
     page.getByRole("heading", { name: "Payment requirement", exact: true }),
-  ).toHaveCount(0)
+  ).toBeVisible()
+  await expect(
+    page.getByText(/Xendit sandbox prototype · no real charge will be made/),
+  ).toBeVisible()
   await expect(
     page.getByRole("heading", { name: "Service agreement", exact: true }),
   ).toBeVisible()
@@ -450,6 +472,7 @@ test("request detail information rejects blank and whitespace-only instructions"
   await page
     .getByRole("menuitem", { name: "Request information", exact: true })
     .click()
+  await chooseToolBooking(page)
   const draft = page.getByRole("region", { name: "Request information" })
   await draft.getByLabel("Requirement title").fill("Project brief")
   await draft.getByRole("button", { name: "Send request", exact: true }).click()
@@ -714,6 +737,7 @@ test("activation controls require staffing approval before proceeding", async ({
   await page
     .getByRole("menuitem", { name: "Project activation", exact: true })
     .click()
+  await chooseToolBooking(page)
   const activate = page.getByRole("button", {
     name: "Activate project",
     exact: true,
@@ -725,6 +749,7 @@ test("activation controls require staffing approval before proceeding", async ({
   await page
     .getByRole("menuitem", { name: "Staffing and workload", exact: true })
     .click()
+  await chooseToolBooking(page)
   await page.getByRole("checkbox", { name: /Dani Worker/ }).check()
   await page
     .getByRole("button", { name: "Approve staffing", exact: true })
@@ -845,6 +870,76 @@ for (const width of [1440, 390]) {
     await expect(reschedule).toHaveCount(0)
   })
 
+  test(`sandbox checkout automatically verifies payment after a retry at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const workflow = fixture()
+    await mock(page, workflow)
+    await page.goto("/messages?request=request-1")
+    await page
+      .getByRole("checkbox", { name: /I have reviewed this quotation/ })
+      .check()
+    await page
+      .getByRole("button", { name: "Accept quotation", exact: true })
+      .click()
+    const pay = page.getByRole("button", { name: /^Pay ₱12,500\.00$/ })
+    await expect(pay).toBeVisible()
+    const attempts: Record<string, unknown>[] = []
+    await page.route("**/api/request-workflows/request-1/actions", (route) => {
+      attempts.push(route.request().postDataJSON() as Record<string, unknown>)
+      if (attempts.length === 1)
+        return route.fulfill({
+          status: 503,
+          json: { error: "Checkout unavailable. Try again." },
+        })
+      workflow.payment!.status = "VERIFIED"
+      workflow.payment!.reference =
+        "XENDIT-SANDBOX-00000000-0000-4000-8000-000000000001"
+      workflow.events.push({
+        id: "sandbox-payment-verified",
+        type: "PAYMENT_VERIFIED",
+        summary:
+          "Sandbox card payment succeeded and was automatically verified.",
+        entityId: workflow.payment!.id,
+        createdAt: "2026-10-30T08:06:00.000Z",
+        actor: null,
+      })
+      workflow.version++
+      return route.fulfill({ json: workflow })
+    })
+    await pay.click()
+    await expect.poll(() => attempts.length).toBe(1)
+    await expect(pay).toBeEnabled()
+    await expect(page.getByLabel("Card number", { exact: true })).toHaveValue(
+      "4000 0000 0000 0002",
+    )
+    await pay.click()
+    await expect(
+      page.getByText(
+        "Payment successful. Your sandbox card payment was automatically verified.",
+        { exact: true },
+      ),
+    ).toBeVisible()
+    expect(attempts).toHaveLength(2)
+    expect(attempts[1]).toEqual(attempts[0])
+    expect(attempts[0]).toEqual({
+      type: "COMPLETE_SANDBOX_PAYMENT",
+      actionId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      expectedVersion: 4,
+    })
+    await expect(pay).toHaveCount(0)
+    await expect(page.getByText(/awaiting verification/i)).toHaveCount(0)
+    await expect(page.getByText(/activation will wait until/i)).toBeVisible()
+    await page.reload()
+    await expect(
+      page.getByText(
+        "Payment successful. Your sandbox card payment was automatically verified.",
+        { exact: true },
+      ),
+    ).toBeVisible()
+  })
+
   test(`client previews and retries payment evidence upload at ${width}px`, async ({
     page,
   }) => {
@@ -910,6 +1005,12 @@ for (const width of [1440, 390]) {
       return route.fulfill({ json: workflow })
     })
     await page.goto("/messages?request=request-1")
+    await page
+      .getByRole("button", {
+        name: "Submit payment proof instead",
+        exact: true,
+      })
+      .click()
     const submit = page.getByRole("button", {
       name: "Submit payment proof",
       exact: true,
@@ -998,7 +1099,7 @@ test("mobile request context collapses and activated projects have a workspace l
     .getByText("Request details and actions", { exact: true })
     .click()
   await expect(
-    context.getByText("REQ-2026-1001", { exact: true }),
+    context.getByRole("definition").filter({ hasText: "REQ-2026-1001" }),
   ).toBeVisible()
   await context
     .getByText("Request details and actions", { exact: true })

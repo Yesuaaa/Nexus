@@ -29,7 +29,7 @@ function nextAction(state: string) {
       "The client must formally accept, decline, or request revisions to the latest valid quotation.",
     REVISION_REQUESTED: "The department head will send a revised quotation.",
     AGREEMENT_PAYMENT_PENDING:
-      "Complete the agreement and payment checklist. Payment verification is manual.",
+      "Complete the payment checkout and agreement checklist before activation.",
     READY_FOR_ACTIVATION:
       "The department head must approve staffing and activate the project.",
     ACTIVE_PROJECT: "Your project workspace is ready.",
@@ -52,6 +52,16 @@ export async function snapshot(
   const state =
     workflow?.state ||
     (request.status === "CANCELLED" ? "CANCELLED" : "PENDING_REVIEW")
+  const consultationComplete =
+    participant &&
+    Boolean(
+      (await tx.workflowConsultation.count({
+        where: { requestId, status: "COMPLETED" },
+      })) ||
+      (await tx.conversationMeetingBooking.count({
+        where: { bookingId: requestId, meeting: { status: "COMPLETED" } },
+      })),
+    )
   const base = {
     request: {
       id: request.id,
@@ -77,6 +87,7 @@ export async function snapshot(
     nextAction: nextAction(state),
     consultationRequired:
       workflow?.consultationRequired ?? request.service.requiresConsultation,
+    consultationComplete,
     quotationApprovalRequired:
       workflow?.quotationApprovalRequired ??
       request.service.requiresQuotationApproval,

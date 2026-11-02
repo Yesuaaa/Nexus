@@ -1,6 +1,7 @@
 "use client"
 
 import {
+  useCallback,
   useEffect,
   useId,
   useLayoutEffect,
@@ -11,21 +12,12 @@ import {
 import Link from "next/link"
 import {
   ArrowLeft,
-  CalendarDays,
-  Check,
-  CircleHelp,
-  FileText,
   Info,
   MoreHorizontal,
-  Paperclip,
   Pencil,
-  Plus,
   Send,
-  Settings2,
-  StickyNote,
   Trash2,
   UserRound,
-  Users,
 } from "lucide-react"
 import { sileo } from "sileo"
 import { Button } from "@/components/ui/button"
@@ -35,15 +27,16 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { ApiError } from "@/features/auth/api/auth-api"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { cn } from "@/lib/utils"
 import { focusRing } from "@/components/layout/styles"
-import { useRequestWorkflow } from "@/features/request-workflow/hooks/use-request-workflow"
+import {
+  useRequestWorkflow,
+  type WorkflowControls,
+} from "@/features/request-workflow/hooks/use-request-workflow"
 import { WorkflowEventCard } from "@/features/request-workflow/components/workflow-cards"
 import { WorkflowContextPanel } from "@/features/request-workflow/components/workflow-context-panel"
 import {
@@ -61,8 +54,15 @@ import {
 } from "@/features/services/api/services-api"
 import { SpecialistProfileDialog } from "@/features/services/components/specialist-profile-dialog"
 import { ClientProfileDialog } from "./client-profile-dialog"
-import { WorkflowProgress } from "@/features/request-workflow/components/workflow-primitives"
+import { statusText } from "@/features/request-workflow/components/workflow-primitives"
+import type { Workflow } from "@/features/request-workflow/model/workflow"
 import { ConversationAvatar } from "./conversation-avatar"
+import { ConversationTools } from "./conversation-tools"
+import { ConversationBookingWorkflow } from "./conversation-booking-workflow"
+import {
+  ConversationMeetingCard,
+  ScheduleConversationMeeting,
+} from "./conversation-meetings"
 import {
   getConversation,
   markConversationRead,
@@ -70,8 +70,10 @@ import {
   editMessage,
   deleteMessage,
   sendMessage,
+  visibleConversationBookings,
   type ConversationHistory,
   type RequestMessage,
+  type ConversationMeeting,
 } from "../api/request-conversations-api"
 import {
   mergeMessages,
@@ -82,6 +84,28 @@ const contextPanelStorageKey = "nexus.messages.context-panel-open"
 
 function normalizeSpecialistName(name: string) {
   return name.trim().replace(/\s+/g, " ").toLocaleLowerCase()
+}
+
+const workflowPositions: Record<Workflow["state"], number> = {
+  PENDING_REVIEW: 0,
+  CONSULTATION: 0,
+  QUOTATION_PENDING: 1,
+  REVISION_REQUESTED: 1,
+  CLIENT_APPROVAL: 2,
+  DECLINED: 2,
+  AGREEMENT_PAYMENT_PENDING: 3,
+  READY_FOR_ACTIVATION: 4,
+  ACTIVE_PROJECT: 5,
+  CANCELLED: 0,
+  ON_HOLD: 0,
+}
+
+function bookingProgress(
+  state: Workflow["state"],
+  previous: Workflow["state"] | null,
+) {
+  const effective = state === "ON_HOLD" && previous ? previous : state
+  return Math.min(100, Math.max(8, workflowPositions[effective] * 20))
 }
 
 function MessageDeletionCountdown({ purgeAt }: { purgeAt: string | null }) {
@@ -116,8 +140,6 @@ type RequestConversationProps = {
   clientName?: string
   requestTitle?: string
   listHref?: string
-  onArchivedChange?: (archived: boolean) => void
-  onDelete?: () => void
   onLatestMessage?: (requestId: string, message: RequestMessage) => void
   onConversationRead?: (
     requestId: string,
@@ -147,16 +169,10 @@ function ConversationPanel({
   onLatestMessage,
   onConversationRead,
   listHref = "/messages",
-  onArchivedChange,
-  onDelete,
 }: RequestConversationProps) {
   const account = usePortalAccount()
   const inputId = useId()
   const [history, setHistory] = useState<ConversationHistory | null>(null)
-  useEffect(() => {
-    if (typeof history?.archived === "boolean")
-      onArchivedChange?.(history.archived)
-  }, [history?.archived, onArchivedChange])
   const [error, setError] = useState("")
   useEffect(() => {
     if (error)
@@ -183,6 +199,7 @@ function ConversationPanel({
   })
   const [activeWorkflowDraft, setActiveWorkflowDraft] =
     useState<WorkflowDraftAction | null>(null)
+  const [schedulingMeeting, setSchedulingMeeting] = useState(false)
   const sectionNavigationTimer = useRef<number | null>(null)
   const messageInputRef = useRef<HTMLTextAreaElement>(null)
   const [specialistProfileOpenFor, setSpecialistProfileOpenFor] = useState<
@@ -193,22 +210,68 @@ function ConversationPanel({
   >(null)
   const [specialistProfileResolution, setSpecialistProfileResolution] =
     useState<SpecialistProfileResolution | null>(null)
-  const pending = useRef<{ body: string; id: string } | null>(null)
+  const pending = useRef<{
+    body: string
+    id: string
+  } | null>(null)
   const sendingRef = useRef(false)
   const logRef = useRef<HTMLDivElement>(null)
   const lastMarkedReadMessage = useRef<string | null>(null)
   const followLatest = useRef(true)
-  const controls = useRequestWorkflow(requestId)
-  const {
-    workflow,
-    refresh: refreshWorkflow,
-    revoke: revokeWorkflow,
-  } = controls
+  const accessRevoked = useRef(false)
+  const [selectedBookingOverride, setSelectedBookingId] = useState<
+    string | null
+  >(null)
+  const [bookingControls, setBookingControls] = useState<
+    Record<string, WorkflowControls>
+  >({})
+  const [workflowRevision, setWorkflowRevision] = useState(0)
   const fileInput = useRef<HTMLInputElement>(null)
   const [attachmentDraft, setAttachmentDraft] = useState<File | null>(null)
   const isClient = account.role === "USER"
   const isStaff = account.role === "STAFF"
   const isParticipant = isClient || isStaff
+  const conversationBookings = visibleConversationBookings(
+    history?.conversation?.bookings,
+  )
+  const bookingIds = conversationBookings.map((booking) => booking.id)
+  const selectedBookingId =
+    (selectedBookingOverride && bookingIds.includes(selectedBookingOverride)
+      ? selectedBookingOverride
+      : null) ??
+    (history?.selectedBookingId &&
+    bookingIds.includes(history.selectedBookingId)
+      ? history.selectedBookingId
+      : null) ??
+    bookingIds[0] ??
+    null
+  const controls = useRequestWorkflow(selectedBookingId)
+  const { refresh: refreshWorkflow, revoke: revokeWorkflow } = controls
+  const workflow =
+    controls.workflow?.request.id === selectedBookingId
+      ? controls.workflow
+      : null
+  const refreshWorkflowRef = useRef(refreshWorkflow)
+  useEffect(() => {
+    refreshWorkflowRef.current = refreshWorkflow
+  }, [refreshWorkflow])
+
+  const updateBookingControls = useCallback(
+    (id: string, next: WorkflowControls) => {
+      setBookingControls((previous) =>
+        previous[id] === next ? previous : { ...previous, [id]: next },
+      )
+    },
+    [],
+  )
+  const currentBookingControls = Object.fromEntries(
+    Object.entries(bookingControls).filter(([id]) => bookingIds.includes(id)),
+  )
+  if (workflow) {
+    const cached = currentBookingControls[workflow.request.id]?.workflow
+    if (!cached || workflow.version >= cached.version)
+      currentBookingControls[workflow.request.id] = controls
+  }
   const clientProfile = history?.conversation?.client
   const clientProfileKey = clientProfile
     ? `${requestId}:${clientProfile.id}`
@@ -262,7 +325,8 @@ function ConversationPanel({
     let active = true
     async function resolveSpecialistProfile() {
       try {
-        const booking = await getBooking(requestId)
+        if (!selectedBookingId) return
+        const booking = await getBooking(selectedBookingId)
         const specialists = await listServiceSpecialists(booking.service.id)
         const matches = specialists.filter(
           (specialist) =>
@@ -302,17 +366,19 @@ function ConversationPanel({
     conversationHeadName,
     conversationSpecialistId,
     isClient,
-    requestId,
+    selectedBookingId,
     specialistProfileKey,
   ])
 
   useEffect(() => {
+    if (accessRevoked.current) return
     const controller = new AbortController()
     let loading = false
     let queued = false
     let retryTimer: ReturnType<typeof setTimeout> | undefined
     let wakeRetry: (() => void) | undefined
     function revoke(message: string) {
+      accessRevoked.current = true
       setHistory(null)
       setError(message)
       revokeWorkflow(message)
@@ -346,7 +412,8 @@ function ConversationPanel({
         })
         setError("")
         const latest = result.messages.at(-1)
-        if (latest) onLatestMessage?.(requestId, latest)
+        if (latest)
+          onLatestMessage?.(result.conversation?.id ?? requestId, latest)
       } catch (reason) {
         if (controller.signal.aborted) return
         const message =
@@ -385,7 +452,8 @@ function ConversationPanel({
             }
             if (event === "messages-changed") {
               void refresh()
-              void refreshWorkflow(controller.signal)
+              void refreshWorkflowRef.current(controller.signal)
+              setWorkflowRevision((value) => value + 1)
             }
             if (event === "access-revoked")
               revoke("You no longer have access to this conversation.")
@@ -421,12 +489,12 @@ function ConversationPanel({
       wakeRetry?.()
       clearInterval(fallback)
     }
-  }, [requestId, revision, onLatestMessage, refreshWorkflow, revokeWorkflow])
+  }, [requestId, revision, onLatestMessage, revokeWorkflow])
 
   useEffect(() => {
     if (followLatest.current && logRef.current)
       logRef.current.scrollTop = logRef.current.scrollHeight
-  }, [history?.messages, workflow?.events])
+  }, [history?.messages, history?.meetings, bookingControls])
 
   const latestMessageId = history?.messages.at(-1)?.id
   const conversationReady = Boolean(history?.conversation)
@@ -441,11 +509,12 @@ function ConversationPanel({
 
     lastMarkedReadMessage.current = latestMessageId
     let active = true
-    void markConversationRead(requestId)
+    const conversationId = history?.conversation?.id ?? requestId
+    void markConversationRead(conversationId)
       .then((result) => {
         if (active)
           onConversationRead?.(
-            requestId,
+            conversationId,
             result.unreadCount,
             result.conversationUnreadCount,
           )
@@ -462,6 +531,7 @@ function ConversationPanel({
     latestMessageId,
     onConversationRead,
     requestId,
+    history?.conversation?.id,
   ])
 
   async function loadOlder() {
@@ -503,12 +573,19 @@ function ConversationPanel({
     const body = draft.trim()
     if (!body || !history?.canSend || sendingRef.current) return
     if (pending.current?.body !== body)
-      pending.current = { body, id: crypto.randomUUID() }
+      pending.current = {
+        body,
+        id: crypto.randomUUID(),
+      }
     sendingRef.current = true
     setSending(true)
     setSendError("")
     try {
-      const message = await sendMessage(requestId, body, pending.current.id)
+      const message = await sendMessage(
+        history?.conversation?.id ?? requestId,
+        body,
+        pending.current.id,
+      )
       followLatest.current = true
       setHistory((previous) =>
         previous
@@ -519,7 +596,7 @@ function ConversationPanel({
           : previous,
       )
       setDraft("")
-      onLatestMessage?.(requestId, message)
+      onLatestMessage?.(history?.conversation?.id ?? requestId, message)
       pending.current = null
     } catch (reason) {
       const message =
@@ -548,21 +625,37 @@ function ConversationPanel({
       ? history?.conversation?.head?.fullName ||
         history?.conversation?.department.name ||
         "Department head"
-      : clientName || "Client"
+      : history?.conversation?.client?.fullName || clientName || "Client"
+  const conversationParticipantImageUrl = isClient
+    ? history?.conversation?.head?.imageUrl
+    : history?.conversation?.client?.imageUrl
 
   const timeline = [
+    ...(history?.meetings ?? []).map((meeting) => ({
+      kind: "meeting" as const,
+      id: meeting.id,
+      createdAt: meeting.createdAt,
+      meeting,
+    })),
     ...(history?.messages.map((message) => ({
       kind: "message" as const,
       id: message.id,
       createdAt: message.createdAt,
       message,
     })) || []),
-    ...(workflow?.events.map((event) => ({
-      kind: "event" as const,
-      id: event.id,
-      createdAt: event.createdAt,
-      event,
-    })) || []),
+    ...Object.values(currentBookingControls).flatMap((bookingControl) => {
+      const bookingWorkflow = bookingControl.workflow
+      return bookingWorkflow
+        ? bookingWorkflow.events.map((event) => ({
+            kind: "event" as const,
+            id: event.id,
+            createdAt: event.createdAt,
+            event,
+            workflow: bookingWorkflow,
+            controls: bookingControl,
+          }))
+        : []
+    }),
   ].sort(
     (left, right) =>
       left.createdAt.localeCompare(right.createdAt) ||
@@ -573,44 +666,6 @@ function ConversationPanel({
     !["PENDING_REVIEW", "ON_HOLD", "DECLINED", "CANCELLED"].includes(
       workflow.state,
     ),
-  )
-  const canManageWorkflow = Boolean(!isClient && workflow?.permissions.manage)
-  const terminal = Boolean(
-    workflow &&
-    ["ACTIVE_PROJECT", "DECLINED", "CANCELLED"].includes(workflow.state),
-  )
-  const canRequestInformation = Boolean(
-    canManageWorkflow &&
-    workflow &&
-    [
-      "CONSULTATION",
-      "QUOTATION_PENDING",
-      "CLIENT_APPROVAL",
-      "REVISION_REQUESTED",
-      "AGREEMENT_PAYMENT_PENDING",
-      "READY_FOR_ACTIVATION",
-    ].includes(workflow.state),
-  )
-  const canScheduleConsultation = Boolean(
-    canManageWorkflow && workflow?.state === "CONSULTATION",
-  )
-  const canContinueToQuotation = canScheduleConsultation
-  const canCreateQuotation = Boolean(
-    canManageWorkflow &&
-    workflow &&
-    ["QUOTATION_PENDING", "REVISION_REQUESTED", "CLIENT_APPROVAL"].includes(
-      workflow.state,
-    ),
-  )
-  const canAssignApprovers = Boolean(
-    canManageWorkflow && workflow?.internal && !terminal,
-  )
-  const canOpenInternalNotes = Boolean(canManageWorkflow && workflow?.internal)
-  const canOpenWorkflowControls = Boolean(
-    canManageWorkflow &&
-    workflow &&
-    !terminal &&
-    workflow.state !== "PENDING_REVIEW",
   )
 
   useEffect(
@@ -671,6 +726,25 @@ function ConversationPanel({
         : previous,
     )
     onLatestMessage?.(requestId, message)
+  }
+
+  function applyMeetingUpdate(meeting: ConversationMeeting) {
+    followLatest.current = true
+    setHistory((previous) =>
+      previous
+        ? {
+            ...previous,
+            meetings: [
+              ...(previous.meetings ?? []).filter(
+                (item) => item.id !== meeting.id,
+              ),
+              meeting,
+            ],
+          }
+        : previous,
+    )
+    setWorkflowRevision((value) => value + 1)
+    void refreshWorkflow()
   }
 
   async function saveEditedMessage(messageId: string) {
@@ -737,6 +811,14 @@ function ConversationPanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+      {bookingIds.map((id) => (
+        <ConversationBookingWorkflow
+          key={id}
+          bookingId={id}
+          revision={workflowRevision}
+          onChange={updateBookingControls}
+        />
+      ))}
       <div className="flex min-h-0 flex-1 max-[1023px]:flex-col-reverse">
         <div className="m-3 flex min-h-0 flex-1 overflow-hidden rounded-[13px] border border-[#dedede] bg-background shadow-[0_2px_8px_rgb(20_30_50_/_11%)] max-[767px]:m-2">
           <section
@@ -768,10 +850,9 @@ function ConversationPanel({
                   {participantName}
                 </h2>
                 <p className="mt-0.5 mb-0 truncate text-xs text-[#8791a2]">
-                  {requestTitle ||
-                    history?.conversation?.department.name ||
-                    "Request conversation"}
-                  {history?.archived && " · Archived"}
+                  {history?.conversation
+                    ? `${history.conversation.department.name} · ${conversationBookings.length} ${conversationBookings.length === 1 ? "booking" : "bookings"}`
+                    : requestTitle || "Service conversation"}
                   {requestTitle && <HoverTooltip>{requestTitle}</HoverTooltip>}
                 </p>
               </div>
@@ -851,7 +932,6 @@ function ConversationPanel({
                 </div>
               )}
             </header>
-            {workflow && <WorkflowProgress workflow={workflow} />}
             {!history ? (
               <p className="p-4 text-xs text-[#52627a]">
                 {error
@@ -896,12 +976,54 @@ function ConversationPanel({
                     </p>
                   )}
                   {timeline.map((entry, index) => {
-                    if (entry.kind === "event")
-                      return workflow ? (
+                    const date = new Date(entry.createdAt)
+                    const previousEntry = timeline[index - 1]
+                    const newDay =
+                      !previousEntry ||
+                      date.toDateString() !==
+                        new Date(previousEntry.createdAt).toDateString()
+                    const daySeparator = newDay ? (
+                      <p className="mt-3 mb-5 text-center text-[11px] text-[#8791a2]">
+                        {date.toLocaleDateString("en-PH", {
+                          weekday: "short",
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </p>
+                    ) : null
+                    if (entry.kind === "meeting")
+                      return (
+                        <div
+                          key={`meeting-${entry.id}`}
+                          id={`meeting-${entry.id}`}
+                        >
+                          {daySeparator}
+                          <ConversationMeetingCard
+                            meeting={entry.meeting}
+                            conversationId={
+                              history.conversation?.id ?? requestId
+                            }
+                            isManager={
+                              isStaff &&
+                              history.conversation?.head?.id === account.id
+                            }
+                            canAct={history.canSend}
+                            onSaved={applyMeetingUpdate}
+                            onRefresh={() => setRevision((value) => value + 1)}
+                          />
+                        </div>
+                      )
+                    if (entry.kind === "event") {
+                      const eventWorkflow = entry.workflow
+                      const sameBooking =
+                        previousEntry?.kind === "event" &&
+                        previousEntry.workflow.request.id ===
+                          eventWorkflow.request.id
+                      return (
                         <div
                           id={
                             entry.event.entityId &&
-                            workflow.events
+                            eventWorkflow.events
                               .filter(
                                 (item) =>
                                   item.entityId === entry.event.entityId,
@@ -911,17 +1033,30 @@ function ConversationPanel({
                               : undefined
                           }
                           key={`event-${entry.id}`}
+                          data-booking-event={eventWorkflow.request.id}
                           className="scroll-mt-4"
                         >
+                          {daySeparator}
+                          {(!sameBooking || newDay) && (
+                            <p
+                              title={`${eventWorkflow.request.serviceName} · ${eventWorkflow.request.referenceNumber || eventWorkflow.request.id}`}
+                              className="mx-1 mt-4 mb-1 max-w-full truncate text-[10px] font-medium text-[#52627a]"
+                            >
+                              {eventWorkflow.request.serviceName} ·{" "}
+                              {eventWorkflow.request.referenceNumber ||
+                                eventWorkflow.request.id}
+                            </p>
+                          )}
                           <WorkflowEventCard
-                            onPrepareQuotation={() =>
+                            onPrepareQuotation={() => {
+                              setSelectedBookingId(eventWorkflow.request.id)
                               setActiveWorkflowDraft("quotation")
-                            }
+                            }}
                             event={entry.event}
-                            workflow={workflow}
-                            controls={controls}
+                            workflow={eventWorkflow}
+                            controls={entry.controls}
                             fileClassName={
-                              workflow.files.find(
+                              eventWorkflow.files.find(
                                 (file) => file.id === entry.event.entityId,
                               )?.uploaderId === account.id
                                 ? "ml-auto"
@@ -929,24 +1064,26 @@ function ConversationPanel({
                             }
                           />
                         </div>
-                      ) : null
+                      )
+                    }
                     const message = entry.message
                     const own = message.sender.id === account.id
-                    const previousEntry = timeline[index - 1]
                     const previous =
                       previousEntry?.kind === "message"
                         ? previousEntry.message
                         : undefined
-                    const date = new Date(message.createdAt)
+                    const nextEntry = timeline[index + 1]
                     const deletedAt = message.deletedAt
                       ? new Date(message.deletedAt)
                       : null
-                    const newDay =
-                      !previous ||
-                      date.toDateString() !==
-                        new Date(previous.createdAt).toDateString()
                     const grouped =
                       !newDay && previous?.sender.id === message.sender.id
+                    const groupedWithNext = Boolean(
+                      nextEntry?.kind === "message" &&
+                      date.toDateString() ===
+                        new Date(nextEntry.createdAt).toDateString() &&
+                      nextEntry.message.sender.id === message.sender.id,
+                    )
                     const deleted = Boolean(message.deletedAt)
                     const canManageMessage = Boolean(
                       isStaff && history?.canSend && own && !deleted,
@@ -954,155 +1091,138 @@ function ConversationPanel({
                     const editing = editingMessageId === message.id
                     return (
                       <div key={message.id}>
-                        {newDay && (
-                          <p className="mt-0 mb-5 text-center text-[11px] text-[#8791a2]">
-                            {date.toLocaleDateString("en-PH", {
-                              weekday: "short",
-                              month: "short",
-                              day: "numeric",
-                            })}
-                          </p>
-                        )}
+                        {daySeparator}
                         <article
                           className={cn(
-                            "relative w-fit max-w-[85%] pb-1 max-[767px]:max-w-[92%]",
+                            "relative flex w-fit max-w-[85%] items-end gap-2 pb-1 max-[767px]:max-w-[92%]",
                             canManageMessage && "pl-11",
                             grouped ? "mt-1" : "mt-4",
-                            own ? "ml-auto" : "mr-auto",
+                            own ? "ml-auto flex-row-reverse" : "mr-auto",
                           )}
                         >
-                          <p className="sr-only">
-                            {own
-                              ? "You"
-                              : message.sender.fullName || "Participant"}
-                          </p>
-                          {editing ? (
-                            <form
-                              className="w-[min(70vw,420px)] max-w-full space-y-2 rounded-xl border border-[#d8e1ef] bg-white p-3 shadow-sm"
-                              onSubmit={(event) => {
-                                event.preventDefault()
-                                void saveEditedMessage(message.id)
-                              }}
-                            >
-                              <label
-                                htmlFor={`edit-message-${message.id}`}
-                                className="sr-only"
-                              >
-                                Edit message
-                              </label>
-                              <textarea
-                                id={`edit-message-${message.id}`}
-                                autoFocus
-                                rows={3}
-                                maxLength={4000}
-                                value={editingMessageBody}
-                                onChange={(event) =>
-                                  setEditingMessageBody(event.target.value)
-                                }
-                                onKeyDown={(event) => {
-                                  if (
-                                    event.key !== "Enter" ||
-                                    event.shiftKey ||
-                                    event.nativeEvent.isComposing
-                                  )
-                                    return
-                                  event.preventDefault()
-                                  event.currentTarget.form?.requestSubmit()
-                                }}
-                                className="block min-h-20 w-full resize-y rounded-lg border border-[#d8e1ef] bg-white px-3 py-2 text-xs leading-5 text-[#182235] outline-none focus-visible:ring-2 focus-visible:ring-[#294a9b]"
-                              />
-                              {messageActionError && (
-                                <p
-                                  role="alert"
-                                  className="m-0 text-xs text-red-700"
-                                >
-                                  {messageActionError}
-                                </p>
-                              )}
-                              <div className="flex justify-end gap-2">
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className="h-9 min-w-16 text-xs"
-                                  disabled={messageActionBusy}
-                                  onClick={() => {
-                                    setEditingMessageId(null)
-                                    setEditingMessageBody("")
-                                    setMessageActionError("")
-                                  }}
-                                >
-                                  Cancel
-                                </Button>
-                                <Button
-                                  type="submit"
-                                  className="h-9 min-w-20 bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
-                                  disabled={
-                                    messageActionBusy ||
-                                    !editingMessageBody.trim()
-                                  }
-                                >
-                                  {messageActionBusy ? "Saving…" : "Save"}
-                                </Button>
-                              </div>
-                            </form>
-                          ) : (
-                            <p
+                          {!own && (
+                            <ConversationAvatar
+                              name={message.sender.fullName || participantName}
+                              imageUrl={conversationParticipantImageUrl}
                               className={cn(
-                                "m-0 rounded-2xl px-3.5 py-2.5 text-[13px] leading-5 whitespace-pre-wrap [overflow-wrap:anywhere]",
-                                deleted
-                                  ? "border border-dashed border-[#d8e1ef] bg-[#f6f8fc] text-[#52627a]"
-                                  : own
-                                    ? "rounded-br-md bg-[#203f8c] text-white"
-                                    : "rounded-bl-md bg-[#f1f1ee] text-[#182235]",
-                                deleted && "w-fit max-w-full py-1.5 italic",
-                                deleted && own && "ml-auto",
+                                "size-7",
+                                groupedWithNext && "invisible",
                               )}
-                            >
-                              {deleted
-                                ? "This message was deleted"
-                                : message.body}
-                            </p>
+                            />
                           )}
-                          {deleted ? (
-                            <div
-                              className={cn(
-                                "mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 px-1 text-[11px] text-[#8791a2]",
-                                own && "justify-end",
-                              )}
-                            >
-                              <time dateTime={deletedAt!.toISOString()}>
-                                Deleted{" "}
-                                {deletedAt!.toLocaleDateString("en-PH", {
-                                  month: "short",
-                                  day: "numeric",
-                                })}
-                                {", "}
-                                {deletedAt!.toLocaleTimeString("en-PH", {
-                                  hour: "numeric",
-                                  minute: "2-digit",
-                                })}
-                              </time>
-                              <MessageDeletionCountdown
-                                purgeAt={message.purgeAt}
-                              />
-                            </div>
-                          ) : (
-                            <div
-                              className={cn(
-                                "mt-1 flex items-center gap-1 px-1 text-[11px] text-[#8791a2]",
-                                own && "justify-end",
-                              )}
-                            >
-                              {message.editedAt && (
-                                <span className="mr-1">Edited</span>
-                              )}
-                              <time dateTime={message.createdAt}>
-                                {date.toLocaleTimeString("en-PH", {
-                                  hour: "numeric",
-                                  minute: "2-digit",
-                                })}
-                              </time>
-                              {canManageMessage && (
+                          <div className="min-w-0">
+                            <p className="sr-only">
+                              {own
+                                ? "You"
+                                : message.sender.fullName || "Participant"}
+                            </p>
+                            {editing ? (
+                              <form
+                                className="w-[min(70vw,420px)] max-w-full space-y-2 rounded-xl border border-[#d8e1ef] bg-white p-3 shadow-sm"
+                                onSubmit={(event) => {
+                                  event.preventDefault()
+                                  void saveEditedMessage(message.id)
+                                }}
+                              >
+                                <label
+                                  htmlFor={`edit-message-${message.id}`}
+                                  className="sr-only"
+                                >
+                                  Edit message
+                                </label>
+                                <textarea
+                                  id={`edit-message-${message.id}`}
+                                  autoFocus
+                                  rows={3}
+                                  maxLength={4000}
+                                  value={editingMessageBody}
+                                  onChange={(event) =>
+                                    setEditingMessageBody(event.target.value)
+                                  }
+                                  onKeyDown={(event) => {
+                                    if (
+                                      event.key !== "Enter" ||
+                                      event.shiftKey ||
+                                      event.nativeEvent.isComposing
+                                    )
+                                      return
+                                    event.preventDefault()
+                                    event.currentTarget.form?.requestSubmit()
+                                  }}
+                                  className="block min-h-20 w-full resize-y rounded-lg border border-[#d8e1ef] bg-white px-3 py-2 text-xs leading-5 text-[#182235] outline-none focus-visible:ring-2 focus-visible:ring-[#294a9b]"
+                                />
+                                {messageActionError && (
+                                  <p
+                                    role="alert"
+                                    className="m-0 text-xs text-red-700"
+                                  >
+                                    {messageActionError}
+                                  </p>
+                                )}
+                                <div className="flex justify-end gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-9 min-w-16 text-xs"
+                                    disabled={messageActionBusy}
+                                    onClick={() => {
+                                      setEditingMessageId(null)
+                                      setEditingMessageBody("")
+                                      setMessageActionError("")
+                                    }}
+                                  >
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    type="submit"
+                                    className="h-9 min-w-20 bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
+                                    disabled={
+                                      messageActionBusy ||
+                                      !editingMessageBody.trim()
+                                    }
+                                  >
+                                    {messageActionBusy ? "Saving…" : "Save"}
+                                  </Button>
+                                </div>
+                              </form>
+                            ) : (
+                              <div className="relative w-fit max-w-full">
+                                <p
+                                  className={cn(
+                                    "m-0 rounded-2xl px-3.5 py-2.5 text-[13px] leading-5 whitespace-pre-wrap [overflow-wrap:anywhere]",
+                                    deleted
+                                      ? "border border-dashed border-[#d8e1ef] bg-[#f6f8fc] text-[#52627a]"
+                                      : own
+                                        ? "rounded-br-md bg-[#203f8c] text-white"
+                                        : "rounded-bl-md bg-[#dfe4eb] text-[#182235]",
+                                    deleted && "w-fit max-w-full py-1.5 italic",
+                                    deleted && own && "ml-auto",
+                                  )}
+                                >
+                                  {deleted
+                                    ? "This message was deleted"
+                                    : message.body}
+                                </p>
+                                <HoverTooltip>
+                                  {deleted
+                                    ? `Deleted ${deletedAt!.toLocaleDateString("en-PH", { month: "short", day: "numeric" })}, ${deletedAt!.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })}`
+                                    : `${message.editedAt ? "Edited · " : ""}${date.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })}`}
+                                </HoverTooltip>
+                              </div>
+                            )}
+                            {deleted ? (
+                              <div
+                                className={cn(
+                                  "mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 px-1 text-[11px] text-[#8791a2]",
+                                  own && "justify-end",
+                                )}
+                              >
+                                <MessageDeletionCountdown
+                                  purgeAt={message.purgeAt}
+                                />
+                              </div>
+                            ) : canManageMessage ? (
+                              <div className="mt-1 flex items-center gap-1 px-1 text-[11px] text-[#8791a2]">
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
                                     <Button
@@ -1147,9 +1267,9 @@ function ConversationPanel({
                                     </DropdownMenuItem>
                                   </DropdownMenuContent>
                                 </DropdownMenu>
-                              )}
-                            </div>
-                          )}
+                              </div>
+                            ) : null}
+                          </div>
                         </article>
                       </div>
                     )
@@ -1159,7 +1279,7 @@ function ConversationPanel({
                   {workflow && activeWorkflowDraft && (
                     <div className="absolute right-0 bottom-full left-0 z-10">
                       <WorkflowActionDraft
-                        key={activeWorkflowDraft}
+                        key={`${workflow.request.id}:${activeWorkflowDraft}`}
                         action={activeWorkflowDraft}
                         workflow={workflow}
                         controls={controls}
@@ -1170,25 +1290,13 @@ function ConversationPanel({
                   {!history.canSend && (
                     <div className="mx-4 my-3 flex flex-wrap items-center justify-between gap-2">
                       <p className="m-0 min-w-0 flex-1 basis-48 text-xs leading-5 text-[#52627a]">
-                        {history.archived
-                          ? "This service is archived. Your message history is available to read."
-                          : "Messaging is paused while this request has no active department head. Your message history is still available."}
+                        Messaging is paused while this conversation has no
+                        active department head. Your message history is still
+                        available.
                       </p>
-                      {history.archived && onDelete && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          aria-label="Delete conversation for me"
-                          className="min-h-11 shrink-0 cursor-pointer text-xs text-red-700 hover:bg-red-50 hover:text-red-800"
-                          onClick={onDelete}
-                        >
-                          <Trash2 size={15} aria-hidden="true" />
-                          Delete for me
-                        </Button>
-                      )}
                     </div>
                   )}
-                  {!history.archived && (
+                  {history.canSend && (
                     <form
                       onSubmit={(event) => void submit(event)}
                       className="border-t border-[#efefee] px-5 py-3 max-[767px]:px-3"
@@ -1224,211 +1332,47 @@ function ConversationPanel({
                         Message
                       </label>
                       <div className="flex items-center gap-2">
-                        {workflow && (
-                          <>
-                            <input
-                              ref={fileInput}
-                              type="file"
-                              accept={attachmentAccept}
-                              className="sr-only"
-                              aria-label="Attach a file"
-                              disabled={
-                                controls.busy || !history.canSend || !canAttach
-                              }
-                              onChange={(event) => {
-                                const file = event.currentTarget.files?.[0]
-                                if (file) setAttachmentDraft(file)
-                              }}
-                            />
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  type="button"
-                                  aria-label={
-                                    isClient
-                                      ? "Open attachment options"
-                                      : "Open request actions"
-                                  }
-                                  className="size-10 shrink-0 rounded-full bg-[#203f8c] p-0 text-white hover:bg-[#172f70]"
-                                >
-                                  <Plus size={16} aria-hidden="true" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent
-                                side="top"
-                                align="start"
-                                sideOffset={8}
-                                className="w-[320px] rounded-xl border-[#dce3ee] bg-white p-2 text-[#203047] shadow-[0_12px_30px_rgb(18_36_73_/_16%)]"
-                              >
-                                {canAttach && history.canSend && (
-                                  <DropdownMenuItem
-                                    className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
-                                    disabled={controls.busy}
-                                    onSelect={() => fileInput.current?.click()}
-                                  >
-                                    <Paperclip aria-hidden="true" />
-                                    Attach file
-                                  </DropdownMenuItem>
-                                )}
-                                {canRequestInformation && (
-                                  <DropdownMenuItem
-                                    className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
-                                    onSelect={() =>
-                                      setActiveWorkflowDraft(
-                                        "request-information",
-                                      )
-                                    }
-                                  >
-                                    <CircleHelp aria-hidden="true" />
-                                    Request information
-                                  </DropdownMenuItem>
-                                )}
-                                {canScheduleConsultation && (
-                                  <DropdownMenuItem
-                                    className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
-                                    onSelect={() =>
-                                      setActiveWorkflowDraft(
-                                        "schedule-consultation",
-                                      )
-                                    }
-                                  >
-                                    <CalendarDays aria-hidden="true" />
-                                    Schedule consultation
-                                  </DropdownMenuItem>
-                                )}
-                                {canContinueToQuotation && (
-                                  <DropdownMenuItem
-                                    className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
-                                    onSelect={() =>
-                                      setActiveWorkflowDraft("quotation")
-                                    }
-                                  >
-                                    <FileText aria-hidden="true" />
-                                    Continue to quotation
-                                  </DropdownMenuItem>
-                                )}
-                                {canCreateQuotation && (
-                                  <DropdownMenuItem
-                                    className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
-                                    onSelect={() =>
-                                      setActiveWorkflowDraft("quotation")
-                                    }
-                                  >
-                                    <FileText aria-hidden="true" />
-                                    Create quotation
-                                  </DropdownMenuItem>
-                                )}
-                                {(canAssignApprovers ||
-                                  canOpenInternalNotes) && (
-                                  <>
-                                    {((canAttach && history.canSend) ||
-                                      canRequestInformation ||
-                                      canScheduleConsultation ||
-                                      canContinueToQuotation ||
-                                      canCreateQuotation) && (
-                                      <DropdownMenuSeparator className="my-1.5 bg-[#e8ebef]" />
-                                    )}
-                                    <DropdownMenuLabel className="flex items-center justify-between gap-2 px-2.5 py-1.5 text-[9px] font-semibold tracking-[0.08em] text-[#6b7a90] uppercase">
-                                      <span>
-                                        Internal · Department head only
-                                      </span>
-                                      <span className="rounded-full bg-[#edf2fb] px-2 py-0.5 text-[9px] font-medium tracking-normal text-[#294a9b] normal-case">
-                                        Staff only
-                                      </span>
-                                    </DropdownMenuLabel>
-                                  </>
-                                )}
-                                {canAssignApprovers && (
-                                  <DropdownMenuItem
-                                    className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
-                                    onSelect={() =>
-                                      setActiveWorkflowDraft(
-                                        "approver-assignments",
-                                      )
-                                    }
-                                  >
-                                    <Users aria-hidden="true" />
-                                    Approver assignments
-                                  </DropdownMenuItem>
-                                )}
-                                {canOpenInternalNotes && (
-                                  <DropdownMenuItem
-                                    className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
-                                    onSelect={() =>
-                                      setActiveWorkflowDraft("internal-note")
-                                    }
-                                  >
-                                    <StickyNote aria-hidden="true" />
-                                    Internal notes
-                                  </DropdownMenuItem>
-                                )}
-                                {canOpenWorkflowControls && (
-                                  <>
-                                    {workflow?.approval &&
-                                      workflow.internal && (
-                                        <DropdownMenuItem
-                                          className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
-                                          onSelect={() =>
-                                            focusWorkflowSection("staffing")
-                                          }
-                                        >
-                                          <Users aria-hidden="true" />
-                                          Staffing and workload
-                                        </DropdownMenuItem>
-                                      )}
-                                    {workflow?.state ===
-                                      "READY_FOR_ACTIVATION" && (
-                                      <DropdownMenuItem
-                                        className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
-                                        onSelect={() =>
-                                          focusWorkflowSection("activation")
-                                        }
-                                      >
-                                        <Check aria-hidden="true" />
-                                        Project activation
-                                      </DropdownMenuItem>
-                                    )}
-                                    {((canAttach && history.canSend) ||
-                                      canRequestInformation ||
-                                      canScheduleConsultation ||
-                                      canContinueToQuotation ||
-                                      canCreateQuotation ||
-                                      canAssignApprovers ||
-                                      canOpenInternalNotes) && (
-                                      <DropdownMenuSeparator className="my-1.5 bg-[#e8ebef]" />
-                                    )}
-                                    <DropdownMenuItem
-                                      className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
-                                      onSelect={() =>
-                                        focusWorkflowSection(
-                                          "workflow-controls",
-                                        )
-                                      }
-                                    >
-                                      <Settings2 aria-hidden="true" />
-                                      Workflow controls
-                                    </DropdownMenuItem>
-                                  </>
-                                )}
-                                {!(canAttach && history.canSend) &&
-                                  !canRequestInformation &&
-                                  !canScheduleConsultation &&
-                                  !canContinueToQuotation &&
-                                  !canCreateQuotation &&
-                                  !canAssignApprovers &&
-                                  !canOpenInternalNotes &&
-                                  !canOpenWorkflowControls && (
-                                    <DropdownMenuItem
-                                      disabled
-                                      className="min-h-9 px-2.5 py-2 text-xs text-[#8791a2]"
-                                    >
-                                      No actions available
-                                    </DropdownMenuItem>
-                                  )}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </>
-                        )}
+                        <input
+                          ref={fileInput}
+                          type="file"
+                          accept={attachmentAccept}
+                          className="sr-only"
+                          aria-label="Attach a file"
+                          disabled={
+                            controls.busy || !history.canSend || !canAttach
+                          }
+                          onChange={(event) => {
+                            const file = event.currentTarget.files?.[0]
+                            if (file) setAttachmentDraft(file)
+                          }}
+                        />
+                        <ConversationTools
+                          workflow={workflow}
+                          bookings={conversationBookings}
+                          isClient={isClient}
+                          isManager={
+                            isStaff &&
+                            (history.conversation.head?.id === account.id ||
+                              Boolean(workflow?.permissions.manage))
+                          }
+                          canSend={history.canSend}
+                          loading={
+                            controls.loading || (!workflow && !controls.error)
+                          }
+                          busy={controls.busy}
+                          error={controls.error}
+                          onSelectBooking={(id) => {
+                            setSelectedBookingId(id)
+                            setActiveWorkflowDraft(null)
+                            setAttachmentDraft(null)
+                            if (fileInput.current) fileInput.current.value = ""
+                          }}
+                          onDraft={setActiveWorkflowDraft}
+                          onScheduleMeeting={() => setSchedulingMeeting(true)}
+                          onSection={focusWorkflowSection}
+                          onAttach={() => fileInput.current?.click()}
+                          onRetry={() => void refreshWorkflow()}
+                        />
                         <div className="flex min-w-0 flex-1 items-end gap-2 rounded-2xl border border-[#e8e9eb] bg-[#fafaf9] p-2">
                           <textarea
                             ref={messageInputRef}
@@ -1438,7 +1382,7 @@ function ConversationPanel({
                             maxLength={4000}
                             rows={1}
                             disabled={sending || !history.canSend}
-                            placeholder="Write a message about this request…"
+                            placeholder="Write a message…"
                             onKeyDown={(event) => {
                               if (
                                 event.key !== "Enter" ||
@@ -1486,12 +1430,133 @@ function ConversationPanel({
             )}
           </section>
         </div>
-        {workflow && (
+        {(workflow || (history?.conversation && selectedBookingId)) && (
           <WorkflowContextPanel
             id={`request-context-${requestId}`}
             hidden={isParticipant && !contextPanelOpen}
             workflow={workflow}
             controls={controls}
+            conversationOverview={
+              history?.conversation ? (
+                <>
+                  <section className="border-b border-[#e8ebef] py-3">
+                    <h3 className="m-0 text-xs font-semibold text-[#182235]">
+                      Conversation details
+                    </h3>
+                    <div className="mt-3 flex items-center gap-3">
+                      <ConversationAvatar
+                        name={participantName}
+                        imageUrl={
+                          isClient
+                            ? history.conversation.head?.imageUrl
+                            : history.conversation.client?.imageUrl
+                        }
+                        className="size-10"
+                      />
+                      <div className="min-w-0">
+                        <p className="m-0 truncate text-xs font-semibold text-[#182235]">
+                          {participantName}
+                        </p>
+                        <p className="mt-0.5 mb-0 text-[10px] text-[#8791a2]">
+                          {isClient ? "Department head" : "Client"}
+                        </p>
+                      </div>
+                    </div>
+                    <dl className="mt-3 mb-0 grid gap-2 text-[11px]">
+                      {[
+                        [
+                          "Client",
+                          isClient
+                            ? "You"
+                            : history.conversation.client?.fullName ||
+                              clientName ||
+                              "Client",
+                        ],
+                        ["Department", history.conversation.department.name],
+                        [
+                          "Status",
+                          statusText(history.conversation.status || "ACTIVE"),
+                        ],
+                        [
+                          "Manager",
+                          history.conversation.head?.fullName ||
+                            "No active manager",
+                        ],
+                        ["Bookings", String(conversationBookings.length)],
+                      ].map(([label, value]) => (
+                        <div
+                          key={label}
+                          className="flex items-start justify-between gap-3"
+                        >
+                          <dt className="text-[#8791a2]">{label}</dt>
+                          <dd className="m-0 text-right font-medium text-[#182235]">
+                            {value}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </section>
+                  <section className="border-b border-[#e8ebef] py-3">
+                    <h3 className="m-0 text-xs font-semibold text-[#182235]">
+                      Booked services
+                    </h3>
+                    <p className="mt-1 mb-0 text-[10px] leading-4 text-[#52627a]">
+                      Use + to choose a tool, then choose the service it applies
+                      to.
+                    </p>
+                    <div className="mt-3 space-y-2">
+                      {conversationBookings.map((booking) => {
+                        const selected = booking.id === selectedBookingId
+                        return (
+                          <button
+                            key={booking.id}
+                            type="button"
+                            aria-pressed={selected}
+                            onClick={() => {
+                              setSelectedBookingId(booking.id)
+                              setActiveWorkflowDraft(null)
+                            }}
+                            className={cn(
+                              "w-full rounded-xl border p-3 text-left transition-colors",
+                              selected
+                                ? "border-[#294a9b] bg-[#edf1f8]"
+                                : "border-[#e1e6ee] bg-white hover:bg-[#f7f9fc]",
+                            )}
+                          >
+                            <span className="block truncate text-[11px] font-semibold text-[#182235]">
+                              {booking.serviceName}
+                            </span>
+                            <span className="mt-0.5 block truncate text-[9px] text-[#52627a]">
+                              {booking.referenceNumber || booking.id}
+                            </span>
+                            <span className="mt-2 flex items-center justify-between gap-2 text-[9px] text-[#52627a]">
+                              <span>{statusText(booking.workflowState)}</span>
+                              <span>{statusText(booking.status)}</span>
+                            </span>
+                            <span className="mt-2 block h-1 overflow-hidden rounded-full bg-[#dce3ef]">
+                              <span
+                                className="block h-full rounded-full bg-[#294a9b]"
+                                style={{
+                                  width: `${bookingProgress(
+                                    booking.workflowState,
+                                    booking.previousWorkflowState,
+                                  )}%`,
+                                }}
+                              />
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </section>
+                  {/*
+                      {workflow.request.serviceName} ·{" "}
+                      {workflow.request.referenceNumber || workflow.request.id}
+                    </p>
+                    */}
+                </>
+              ) : null
+            }
             onViewEvent={(entityId) => {
               const log = logRef.current
               const target = document.getElementById(`workflow-${entityId}`)
@@ -1512,6 +1577,18 @@ function ConversationPanel({
           />
         )}
       </div>
+      {schedulingMeeting &&
+        history?.canSend &&
+        history.conversation &&
+        isStaff &&
+        history.conversation.head?.id === account.id && (
+          <ScheduleConversationMeeting
+            conversationId={history.conversation.id}
+            bookings={conversationBookings}
+            onClose={() => setSchedulingMeeting(false)}
+            onSaved={applyMeetingUpdate}
+          />
+        )}
       {deleteTarget && (
         <ConfirmationDialog
           title="Delete this message?"

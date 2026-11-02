@@ -74,6 +74,7 @@ export type WorkflowCommand =
       note: string
     }
   | { type: "SUBMIT_PAYMENT"; fileId: string; reference: string }
+  | { type: "COMPLETE_SANDBOX_PAYMENT" }
   | {
       type: "ASSIGN_APPROVERS"
       quotationApproverId: string | null
@@ -236,6 +237,7 @@ export function parseAction(input: unknown) {
     case "PREPARE_QUOTATION":
     case "FIXED_QUOTATION":
     case "ACTIVATE_PROJECT":
+    case "COMPLETE_SANDBOX_PAYMENT":
       command = { type: body.type }
       break
     case "CREATE_QUOTATION": {
