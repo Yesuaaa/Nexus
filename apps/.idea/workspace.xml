@@ -4,7 +4,9 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="bed6f787-9c89-48c1-837e-63ec5bd8175f" name="Changes" comment="" />
+    <list default="true" id="bed6f787-9c89-48c1-837e-63ec5bd8175f" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/mobile/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/mobile/README.md" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -47,7 +49,7 @@
     "RunOnceActivity.readMode.enableVisualFormatting": "true",
     "cf.first.check.clang-format": "false",
     "cidr.known.project.marker": "true",
-    "git-widget-placeholder": "141-hotfix-enhance-messageschats-quotation-and-document-management-workflow",
+    "git-widget-placeholder": "development",
     "kotlin-language-version-configured": "true",
     "last_opened_file_path": "C:/Users/ADMIN/Documents/Thesis/Nexus/apps",
     "settings.editor.selected.configurable": "reference.settingsdialog.project.gradle"

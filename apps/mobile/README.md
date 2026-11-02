@@ -1,5 +1,5 @@
 # emulator -avd Pixel_6_Pro
-
+# & "$sdk\emulator\emulator.exe" -avd Pixel_10a
 
 # Nexus Mobile (Kotlin Multiplatform / Compose Multiplatform)
 
