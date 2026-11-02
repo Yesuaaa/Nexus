@@ -590,9 +590,11 @@ export function QuotationForm({
 function InternalWorkspace({
   workflow,
   controls,
+  id,
 }: {
   workflow: Workflow
   controls: WorkflowControls
+  id: string
 }) {
   const internal = workflow.internal
   if (!workflow.permissions.manage || !internal || !workflow.approval)
@@ -606,7 +608,11 @@ function InternalWorkspace({
         Internal · Department head only
       </p>
       {workflow.approval && (
-        <WorkflowDisclosure title="Staffing and workload">
+        <WorkflowDisclosure
+          id={id}
+          title="Staffing and workload"
+          open={workflow.state === "READY_FOR_ACTIVATION"}
+        >
           <p className="m-0 text-[11px]">
             Review department assignments, specialties, availability, and active
             project counts. Personnel selection requires your approval.
@@ -711,6 +717,11 @@ export function WorkflowContextPanel({
     workflow.state,
   )
   const sectionId = (name: string) => `${id ?? "request-context"}-${name}`
+  const assignedStaff =
+    workflow.internal?.staff.filter((person) => person.assigned) || []
+  const staffingApproved =
+    assignedStaff.length > 0 &&
+    assignedStaff.every((person) => person.status === "ACTIVE")
   return (
     <aside
       onClickCapture={(event) => {
@@ -1153,25 +1164,11 @@ export function WorkflowContextPanel({
             </WorkflowDisclosure>
           )}
           */}
-          {workflow.permissions.manage &&
-            workflow.state === "READY_FOR_ACTIVATION" && (
-              <div className="py-4">
-                <Button
-                  disabled={controls.busy}
-                  className={`${workflowButton} w-full`}
-                  onClick={() =>
-                    void controls.act({ type: "ACTIVATE_PROJECT" })
-                  }
-                >
-                  Activate project
-                </Button>
-                <p className="mt-2 mb-0 text-[10px] leading-5 text-[#8791a2]">
-                  Activation validates mandatory documents, payment, and
-                  approved staffing.
-                </p>
-              </div>
-            )}
-          <InternalWorkspace workflow={workflow} controls={controls} />
+          <InternalWorkspace
+            workflow={workflow}
+            controls={controls}
+            id={sectionId("staffing")}
+          />
           {(workflow.permissions.manage || workflow.permissions.isClient) &&
             !terminal &&
             workflow.state !== "PENDING_REVIEW" && (
@@ -1179,6 +1176,50 @@ export function WorkflowContextPanel({
                 id={sectionId("workflow-controls")}
                 title="Workflow controls"
               >
+                {workflow.permissions.manage &&
+                  workflow.state === "READY_FOR_ACTIVATION" && (
+                    <WorkflowDisclosure
+                      id={sectionId("activation")}
+                      title="Project activation"
+                      open
+                    >
+                      <p className="m-0 text-xs text-[#52627a]">
+                        {staffingApproved
+                          ? "Documents, payment and staffing are approved. Activate the project to start delivery."
+                          : "Choose at least one active department employee under Staffing and workload, then click Approve staffing before activating the project."}
+                      </p>
+                      {!staffingApproved && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className={`${workflowButton} w-full text-[#203f8c]`}
+                          onClick={() => {
+                            const section = document.getElementById(
+                              sectionId("staffing"),
+                            )
+                            if (section instanceof HTMLDetailsElement)
+                              section.open = true
+                            section?.scrollIntoView({
+                              block: "nearest",
+                              behavior: "smooth",
+                            })
+                          }}
+                        >
+                          Review staffing
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        disabled={controls.busy || !staffingApproved}
+                        className={`${workflowButton} w-full bg-[#203f8c] text-white hover:bg-[#172f70]`}
+                        onClick={() =>
+                          void controls.act({ type: "ACTIVATE_PROJECT" })
+                        }
+                      >
+                        Activate project
+                      </Button>
+                    </WorkflowDisclosure>
+                  )}
                 {workflow.permissions.manage &&
                   (workflow.state === "ON_HOLD" ? (
                     <ActionForm

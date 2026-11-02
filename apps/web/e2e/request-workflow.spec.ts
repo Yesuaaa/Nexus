@@ -227,10 +227,25 @@ test("the conversation records formal quotation approval through a structured ac
     page.getByRole("heading", { name: "Service agreement", exact: true }),
   ).toBeVisible()
   workflow.agreement!.status = "APPROVED"
+  workflow.events.push({
+    id: "agreement-approved",
+    type: "AGREEMENT_REVIEWED",
+    summary: "Agreement approved.",
+    entityId: "agreement-1",
+    createdAt: "2026-10-30T08:10:00.000Z",
+    actor: { id: "head-1", fullName: "Dani Head" },
+  })
   await page.reload()
   await expect(
     page.getByRole("heading", { name: "Payment requirement", exact: true }),
   ).toBeVisible()
+  const agreementPosition = await page
+    .getByRole("heading", { name: "Service agreement", exact: true })
+    .boundingBox()
+  const paymentPosition = await page
+    .getByRole("heading", { name: "Payment requirement", exact: true })
+    .boundingBox()
+  expect(paymentPosition!.y).toBeGreaterThan(agreementPosition!.y)
   expect(actions).toHaveLength(1)
   expect(actions[0]).toMatchObject({
     type: "RESPOND_QUOTATION",
@@ -570,6 +585,160 @@ test("declining a quotation requires confirmation and cancel preserves it", asyn
   expect(actions[0]).toMatchObject({ decision: "DECLINE" })
 })
 
+test("department heads can confirm payment or reject it with a required reason", async ({
+  page,
+}) => {
+  const workflow = fixture()
+  workflow.state = "AGREEMENT_PAYMENT_PENDING"
+  workflow.permissions = {
+    manage: true,
+    isClient: false,
+    approveQuotation: false,
+    verifyPayment: false,
+  }
+  workflow.agreement = {
+    id: "agreement-1",
+    mandatory: true,
+    status: "APPROVED",
+    documentFileId: null,
+    signedFileId: null,
+  }
+  workflow.payment = {
+    id: "payment-1",
+    mandatory: true,
+    amount: "12500.00",
+    currency: "PHP",
+    status: "SUBMITTED",
+    proofFileId: null,
+    reference: "BANK-123",
+  }
+  workflow.internal = {
+    staff: [],
+    approvers: [{ id: "admin-1", fullName: "Finance Reviewer" }],
+    quotationApproverId: "quotation-admin",
+    paymentVerifierId: null,
+    events: [],
+  }
+  workflow.events = [
+    {
+      id: "payment-submitted",
+      type: "PAYMENT_SUBMITTED",
+      summary: "Payment proof submitted",
+      entityId: "payment-1",
+      createdAt: "2026-10-30T09:00:00.000Z",
+      actor: null,
+    },
+  ]
+  const actions = await mock(page, workflow, true)
+  await page.goto("/messages?request=request-1")
+  await page
+    .getByRole("button", { name: "Reject payment", exact: true })
+    .click()
+  expect(actions).toHaveLength(0)
+  await page
+    .getByLabel("Verification note", { exact: true })
+    .fill("Receipt does not match the amount")
+  await page
+    .getByRole("button", { name: "Reject payment", exact: true })
+    .click()
+  await expect.poll(() => actions.length).toBe(1)
+  expect(actions[0]).toMatchObject({
+    type: "VERIFY_PAYMENT",
+    approve: false,
+    note: "Receipt does not match the amount",
+  })
+  await expect(
+    page.getByRole("button", { name: "Confirm payment", exact: true }),
+  ).toBeVisible()
+  await page.getByLabel("Verification note", { exact: true }).fill("")
+  await page
+    .getByRole("button", { name: "Confirm payment", exact: true })
+    .click()
+  await expect.poll(() => actions.length).toBe(2)
+  expect(actions[1]).toMatchObject({
+    type: "VERIFY_PAYMENT",
+    approve: true,
+    note: "",
+  })
+})
+
+test("activation controls require staffing approval before proceeding", async ({
+  page,
+}) => {
+  const workflow = fixture()
+  workflow.state = "READY_FOR_ACTIVATION"
+  workflow.permissions.manage = true
+  workflow.permissions.isClient = false
+  workflow.approval = {
+    quotationId: "quote-1",
+    amount: "25000.00",
+    currency: "PHP",
+    approvedById: "client-1",
+    approvedAt: "2026-10-30T08:00:00.000Z",
+  }
+  workflow.internal = {
+    staff: [
+      {
+        id: "employee-1",
+        fullName: "Dani Worker",
+        position: "Designer",
+        status: "ACTIVE",
+        skills: [],
+        activeProjectCount: 0,
+        assigned: false,
+      },
+    ],
+    approvers: [],
+    quotationApproverId: null,
+    paymentVerifierId: null,
+    events: [],
+  }
+  await mock(page, workflow, true)
+  const actions: Record<string, unknown>[] = []
+  await page.route(
+    "**/api/request-workflows/request-1/actions",
+    async (route) => {
+      const action = route.request().postDataJSON() as Record<string, unknown>
+      actions.push(action)
+      if (action.type === "STAFF_PROJECT")
+        workflow.internal!.staff[0]!.assigned = true
+      if (action.type === "ACTIVATE_PROJECT") workflow.state = "ACTIVE_PROJECT"
+      workflow.version++
+      await route.fulfill({ json: workflow })
+    },
+  )
+  await page.goto("/messages?request=request-1")
+  await page
+    .getByRole("button", { name: "Open request actions", exact: true })
+    .click()
+  await page
+    .getByRole("menuitem", { name: "Project activation", exact: true })
+    .click()
+  const activate = page.getByRole("button", {
+    name: "Activate project",
+    exact: true,
+  })
+  await expect(activate).toBeDisabled()
+  await page
+    .getByRole("button", { name: "Open request actions", exact: true })
+    .click()
+  await page
+    .getByRole("menuitem", { name: "Staffing and workload", exact: true })
+    .click()
+  await page.getByRole("checkbox", { name: /Dani Worker/ }).check()
+  await page
+    .getByRole("button", { name: "Approve staffing", exact: true })
+    .click()
+  await expect(activate).toBeEnabled()
+  await activate.click()
+  await expect.poll(() => actions.length).toBe(2)
+  expect(actions[0]).toMatchObject({
+    type: "STAFF_PROJECT",
+    employeeIds: ["employee-1"],
+  })
+  expect(actions[1]).toMatchObject({ type: "ACTIVATE_PROJECT" })
+})
+
 test("expired quotations have no formal approval controls", async ({
   page,
 }) => {
@@ -784,6 +953,7 @@ for (const width of [1440, 390]) {
     expect(uploads[1]).toEqual(uploads[0])
     expect(uploads[0]).toMatchObject({
       name: "receipt.png",
+      contextual: true,
       mimeType: "image/png",
       content: buffer.toString("base64"),
     })
