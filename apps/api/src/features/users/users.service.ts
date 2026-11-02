@@ -307,7 +307,7 @@ export const usersService = {
     ) {
       throw new UsersError(
         400,
-        "Provide a valid email, role, and password of at least 12 characters",
+        "Provide a valid email, role, and password meeting the password policy",
       )
     }
 

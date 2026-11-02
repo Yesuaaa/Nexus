@@ -55,6 +55,10 @@ export function validPassword(value: unknown): value is string {
   return (
     typeof value === "string" &&
     value.length >= 12 &&
-    Buffer.byteLength(value) <= 1024
+    Buffer.byteLength(value) <= 1024 &&
+    /[A-Z]/.test(value) &&
+    /[a-z]/.test(value) &&
+    /\d/.test(value) &&
+    /[^A-Za-z0-9]/.test(value)
   )
 }

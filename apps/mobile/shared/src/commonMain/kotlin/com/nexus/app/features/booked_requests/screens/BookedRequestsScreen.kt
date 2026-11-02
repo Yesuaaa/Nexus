@@ -6,6 +6,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -20,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nexus.app.core.components.KpiCard
+import com.nexus.app.core.components.LocalNexusLayout
 import com.nexus.app.core.components.NexusButton
 import com.nexus.app.core.components.StatusBadge
 import com.nexus.app.core.theme.NexusColors
@@ -30,68 +34,73 @@ fun BookedRequestsScreen(
     onRequestClick: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .background(NexusColors.Background)
-            .padding(horizontal = 20.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    text = "Booked Requests",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = NexusColors.HeaderDarkNavy
-                )
-                Text(
-                    text = "Track your requests, review project details, and follow their progress.",
-                    fontSize = 13.sp,
-                    color = NexusColors.TextSecondary
+    val layout = LocalNexusLayout.current
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        val kpiColumns = if (maxWidth < 600.dp) 2 else 4
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(NexusColors.Background),
+            contentPadding = PaddingValues(horizontal = layout.gutter, vertical = layout.gap),
+            verticalArrangement = Arrangement.spacedBy(layout.gap)
+        ) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "Booked Requests",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = NexusColors.HeaderDarkNavy
+                    )
+                    Text(
+                        text = "Track your requests, review project details, and follow their progress.",
+                        fontSize = 13.sp,
+                        color = NexusColors.TextSecondary
+                    )
+                }
+            }
+
+            item {
+                NexusButton(
+                    text = "+ New Service Request",
+                    onClick = onNewRequestClick
                 )
             }
-        }
 
-        item {
-            NexusButton(
-                text = "+ New Service Request",
-                onClick = onNewRequestClick
-            )
-        }
-
-        // 4 KPI Counters Row
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                KpiCard(count = 7, label = "Total Requests", modifier = Modifier.weight(1f))
-                KpiCard(count = 1, label = "Pending Review", modifier = Modifier.weight(1f))
-                KpiCard(count = 5, label = "In Review", modifier = Modifier.weight(1f))
-                KpiCard(count = 0, label = "Closed", modifier = Modifier.weight(1f))
+            // 4 KPI Counters Row
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(7 to "Total Requests", 1 to "Pending Review", 5 to "In Review", 0 to "Closed")
+                        .chunked(kpiColumns).forEach { group ->
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                group.forEach { (count, label) ->
+                                    KpiCard(count, label, Modifier.weight(1f))
+                                }
+                            }
+                        }
+                }
             }
-        }
 
-        // Sample Request Cards matching Figma
-        item {
-            RequestCard(
-                title = "Lil Max request",
-                subtitle = "Lil Max · Premium",
-                status = "PENDING",
-                date = "Nov 1, 2026",
-                onClick = { onRequestClick("1") }
-            )
-        }
+            // Sample Request Cards matching Figma
+            item {
+                RequestCard(
+                    title = "Lil Max request",
+                    subtitle = "Lil Max · Premium",
+                    status = "PENDING",
+                    date = "Nov 1, 2026",
+                    onClick = { onRequestClick("1") }
+                )
+            }
 
-        item {
-            RequestCard(
-                title = "Lil Max request",
-                subtitle = "Lil Max · Standard service",
-                status = "UNDER_REVIEW",
-                date = "Nov 1, 2026",
-                onClick = { onRequestClick("2") }
-            )
+            item {
+                RequestCard(
+                    title = "Lil Max request",
+                    subtitle = "Lil Max · Standard service",
+                    status = "UNDER_REVIEW",
+                    date = "Nov 1, 2026",
+                    onClick = { onRequestClick("2") }
+                )
+            }
         }
     }
 }
@@ -119,7 +128,7 @@ private fun RequestCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(modifier = Modifier.weight(1f).padding(end = 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     text = title,
                     fontSize = 15.sp,
@@ -141,10 +150,10 @@ private fun RequestCard(
             )
         }
 
-        Row(
+        FlowRow(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             StatusBadge(status = status)
             Text(

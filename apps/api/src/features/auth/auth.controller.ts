@@ -47,7 +47,7 @@ authRouter.patch(
   "/profile",
   requireAuth,
   requirePermission(Permission.PROFILE_READ),
-  authRateLimit(30),
+  authRateLimit({ production: 30 }),
   async (request, response, next) => {
     try {
       response.json(await updateProfile(request.auth!.user.id, request.body))
@@ -61,7 +61,7 @@ authRouter.patch(
 authRouter.put(
   "/profile/specialist",
   requireAuth,
-  authRateLimit(30),
+  authRateLimit({ production: 30 }),
   async (request, response, next) => {
     try {
       response.json(
@@ -77,7 +77,7 @@ authRouter.put(
 
 authRouter.post(
   "/register",
-  authRateLimit(10),
+  authRateLimit({ production: 10, development: 50 }),
   async (request, response, next) => {
     try {
       const session = await authService.register(request.body ?? {})
@@ -93,7 +93,7 @@ authRouter.post(
 
 authRouter.post(
   "/login",
-  authRateLimit(60),
+  authRateLimit({ production: 60, development: 300 }),
   async (request, response, next) => {
     try {
       const session = await authService.login({
@@ -113,7 +113,7 @@ authRouter.post(
 
 authRouter.post(
   "/refresh",
-  authRateLimit(120),
+  authRateLimit({ production: 120 }),
   async (request, response, next) => {
     try {
       return response.json(

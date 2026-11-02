@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -19,7 +19,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -32,13 +31,14 @@ fun NexusBottomBar(
     onTabSelected: (BottomTab) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val layout = LocalNexusLayout.current
     Row(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
             .background(NexusColors.Background)
             .border(width = 1.dp, color = NexusColors.Border)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 8.dp, vertical = if (layout.short) 4.dp else 6.dp),
         horizontalArrangement = Arrangement.SpaceAround,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -48,28 +48,43 @@ fun NexusBottomBar(
             Box(
                 modifier = Modifier
                     .weight(1f)
+                    .heightIn(min = 48.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(if (isSelected) NexusColors.SurfaceHover else NexusColors.Background)
                     .clickable { onTabSelected(tab) }
-                    .padding(vertical = 8.dp),
+                    .padding(horizontal = 4.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Icon(
-                        imageVector = tab.icon,
-                        contentDescription = tab.label,
-                        tint = if (isSelected) NexusColors.ServiceCardNavy else NexusColors.TextSecondary,
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Text(
-                        text = tab.label,
-                        fontSize = 11.sp,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (isSelected) NexusColors.ServiceCardNavy else NexusColors.TextSecondary
-                    )
+                if (layout.short) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(tab.icon, contentDescription = null, tint = NexusColors.PrimaryBlue, modifier = Modifier.size(20.dp))
+                        Text(
+                            tab.label, fontSize = 11.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) NexusColors.ServiceCardNavy else NexusColors.TextSecondary
+                        )
+                    }
+                } else {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = tab.icon,
+                            contentDescription = tab.label,
+                            tint = if (isSelected) NexusColors.ServiceCardNavy else NexusColors.TextSecondary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Text(
+                            text = tab.label,
+                            fontSize = 11.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) NexusColors.ServiceCardNavy else NexusColors.TextSecondary
+                        )
+                    }
                 }
             }
         }

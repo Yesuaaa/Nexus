@@ -37,7 +37,7 @@ export function createApp(
   app.use(
     "/api/auth/profile/images",
     requireAuth,
-    authRateLimit(20),
+    authRateLimit({ production: 20 }),
     express.json({ limit: "3mb" }),
   )
   app.use(
