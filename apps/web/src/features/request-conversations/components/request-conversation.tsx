@@ -964,7 +964,8 @@ function ConversationPanel({
                         )}
                         <article
                           className={cn(
-                            "w-fit max-w-[85%] pb-1 max-[767px]:max-w-[92%]",
+                            "relative w-fit max-w-[85%] pb-1 max-[767px]:max-w-[92%]",
+                            canManageMessage && "pl-11",
                             grouped ? "mt-1" : "mt-4",
                             own ? "ml-auto" : "mr-auto",
                           )}
@@ -1107,7 +1108,7 @@ function ConversationPanel({
                                       type="button"
                                       variant="outline"
                                       aria-label={`Actions for your message at ${date.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })}`}
-                                      className="size-11 shrink-0 border-0 bg-transparent p-0 text-[#52627a] hover:bg-[#f1f4fa]"
+                                      className="absolute top-0 left-0 size-11 shrink-0 border-0 bg-transparent p-0 text-[#52627a] hover:bg-[#f1f4fa]"
                                     >
                                       <MoreHorizontal
                                         size={16}
