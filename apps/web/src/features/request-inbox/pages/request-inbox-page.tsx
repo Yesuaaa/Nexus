@@ -2,7 +2,6 @@
 
 import { useEffect, useId, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { RefreshCw } from "lucide-react"
 import { sileo } from "sileo"
 import { contentClass } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
@@ -331,15 +330,6 @@ export function RequestInboxPage() {
             .
           </p>
         </div>
-        <Button
-          variant="outline"
-          disabled={loading}
-          onClick={refresh}
-          className="h-[34px] flex-none text-xs max-[560px]:h-11"
-        >
-          <RefreshCw size={14} aria-hidden="true" />
-          Refresh
-        </Button>
       </header>
       <section aria-label="Department bookings" className="mt-[18px] min-w-0">
         <div className="flex flex-wrap items-center gap-2.5 pb-4 max-[560px]:flex-col max-[560px]:items-stretch">

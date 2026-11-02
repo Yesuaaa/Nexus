@@ -1217,20 +1217,18 @@ export function ProjectActivationCard({ workflow }: { workflow: Workflow }) {
 }
 
 export function SystemStatusUpdate({ event }: { event: WorkflowEvent }) {
+  const date = new Date(event.createdAt)
   return (
-    <div className="mx-auto my-4 w-full max-w-2xl overflow-x-auto text-[10px] leading-5 text-[#8791a2] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      <p className="mx-auto my-0 w-max whitespace-nowrap">{event.summary}</p>
-      <time
-        dateTime={event.createdAt}
-        className="mt-0.5 block text-center text-[9px] leading-4"
-      >
-        {new Date(event.createdAt).toLocaleString("en-PH", {
-          month: "short",
-          day: "numeric",
-          hour: "numeric",
-          minute: "2-digit",
-        })}
-      </time>
+    <div className="mx-auto my-4 w-full max-w-2xl overflow-x-auto text-[10px] leading-5 text-[#294a9b] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="relative mx-auto w-max">
+        <p className="mx-auto my-0 whitespace-nowrap">{event.summary}</p>
+        <HoverTooltip>
+          {date.toLocaleTimeString("en-PH", {
+            hour: "numeric",
+            minute: "2-digit",
+          })}
+        </HoverTooltip>
+      </div>
     </div>
   )
 }
