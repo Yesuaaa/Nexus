@@ -7,6 +7,7 @@ object ApiEndpoints {
     // Auth
     const val AUTH_LOGIN = "/api/auth/login"
     const val AUTH_REGISTER = "/api/auth/register"
+    const val AUTH_ME = "/api/auth/me"
     const val AUTH_REFRESH = "/api/auth/refresh"
     const val AUTH_LOGOUT = "/api/auth/logout"
     const val AUTH_PROFILE = "/api/auth/profile"

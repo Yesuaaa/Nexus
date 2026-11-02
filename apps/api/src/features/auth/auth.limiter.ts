@@ -3,13 +3,31 @@ import type { RequestHandler } from "express"
 // This limits repeated guesses in a single API process. Use a shared limiter for multiple replicas.
 const loginAttempts = new Map<string, { count: number; until: number }>()
 
+export interface AuthRateLimitOptions {
+  production: number
+  development?: number
+}
+
+export function authRateLimitLimit({
+  production,
+  development,
+}: AuthRateLimitOptions): number {
+  return process.env.NODE_ENV === "development" && development !== undefined
+    ? development
+    : production
+}
+
+export function loginFailureLimit(): number {
+  return process.env.NODE_ENV === "development" ? 50 : 10
+}
+
 export function loginAllowed(key: string): boolean {
   const attempt = loginAttempts.get(key)
   if (!attempt || attempt.until < Date.now()) {
     loginAttempts.delete(key)
     return true
   }
-  return attempt.count < 10
+  return attempt.count < loginFailureLimit()
 }
 
 export function recordFailure(key: string) {
@@ -35,7 +53,11 @@ export function clearFailures(key: string) {
   loginAttempts.delete(key)
 }
 
-export function authRateLimit(limit: number): RequestHandler {
+export function clearAuthRateLimitsForTests() {
+  loginAttempts.clear()
+}
+
+export function authRateLimit(options: AuthRateLimitOptions): RequestHandler {
   const attempts = new Map<string, { count: number; until: number }>()
   return (request, response, next) => {
     const now = Date.now()
@@ -56,7 +78,7 @@ export function authRateLimit(limit: number): RequestHandler {
       attempts.set(key, entry)
     }
     entry.count += 1
-    if (entry.count > limit) {
+    if (entry.count > authRateLimitLimit(options)) {
       response.setHeader(
         "Retry-After",
         String(Math.ceil((entry.until - now) / 1000)),

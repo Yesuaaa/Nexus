@@ -70,8 +70,24 @@ emulator -avd <Pangalan_ng_AVD_mo>
 Example:
 
 ```powershell
-emulator -avd Pixel_8
+Start-Process emulator -ArgumentList "-avd", "Pixel_8"
 ```
+
+Wait for the Android home screen before installing. `adb devices` must show the
+emulator with status `device`. You can also check readiness with
+`adb -e shell getprop sys.boot_completed`; continue when it prints `1`.
+
+### Start the backend (separate PowerShell terminal)
+
+From the repository root, with the existing API environment configured:
+
+```powershell
+$env:NODE_ENV = "development"
+pnpm.cmd --filter @nexus/api dev
+```
+
+Keep this terminal running. Android uses `http://10.0.2.2:3001` to reach the API
+on your computer. The web server is optional for mobile authentication.
 
 ### 2. I-install and Run yung App
 
@@ -84,10 +100,16 @@ cd apps/mobile
 Then run:
 
 ```powershell
-.\gradlew :androidApp:installDebug
+.\gradlew.bat :androidApp:installDebug
+adb -e shell am start -n com.nexus.app/.MainActivity
 ```
 
 This will build the debug version of the app and install it sa running Android emulator.
+
+`No connected devices` means the emulator is not running or ADB has not connected
+yet. If installation fails while Android is booting, wait for boot completion and
+retry the same install command. You do not need to open Android Studio to start
+an already configured emulator.
 
 **Note:** If macOS or Linux yung gamit mo, use:
 
@@ -176,9 +198,66 @@ Make sure na running yung backend API and accessible siya sa device or emulator 
 Para ma-run yung shared unit tests natin, execute:
 
 ```powershell
-.\gradlew :shared:testDebugUnitTest
+.\gradlew.bat :shared:testAndroidHostTest
+.\gradlew.bat :androidApp:assembleDebug
 ```
 
 This will run the debug unit tests under the shared module.
 
 If may errors, check muna yung Gradle configuration, SDK setup, and kung properly configured yung environment mo.
+
+## Authentication contract and smoke test
+
+Registration and login return `token`, `refreshToken`, `expiresIn`, and `user`.
+The account status field is `user.isActive`. Use these existing web/API names;
+there are no `accessToken` or `active` aliases.
+
+Registration requires a full name (2–100 characters), a valid `.com` or `.ph`
+email, an 11-digit contact number starting with `08` or `09`, and a password of
+at least 12 characters (at most 1,024 UTF-8 bytes), including uppercase, lowercase,
+a number, and a special character. Email is normalized by the backend. Accounts
+always register as active clients (`USER`). Passwords use the existing scrypt
+hashing implementation.
+
+Use the team-managed development client account, with credentials shared
+privately. The seed script does not create or reset a fixed client credential.
+Do not put shared credentials in source code, issue descriptions, or logs.
+
+For ticket #149, verify these flows against the local API:
+
+1. Register a fresh development-only account and confirm the dashboard appears.
+2. Open the profile icon next to Notifications; verify the account details.
+3. Close and reopen the app; a valid saved session is checked with `/api/auth/me`.
+4. Select **Profile → Log out**; verify login appears and restarting stays signed out.
+5. Register again with the same email; verify the duplicate-email message.
+6. Sign in with a wrong password; verify the invalid-credentials message.
+7. Sign in correctly after logout; verify the new account/session is used.
+
+The access token lasts 15 minutes. Automatic refresh remains a follow-up task;
+reopening with an expired token requires signing in again. Logout calls the API
+to revoke the current session and clears both local tokens. If the API cannot be
+reached, local logout still completes and login shows a notice that server
+sign-out could not be confirmed.
+
+In development, registration allows 50 requests/minute, login 300 requests/minute,
+and failed passwords 50 attempts per IP/email in 15 minutes. Production remains
+10, 60, and 10 respectively; refresh stays at 120 requests/minute in all modes.
+
+## Responsive screens and feedback
+
+The mobile layout uses the available logical screen width/height rather than a
+fixed device resolution. Auth forms are capped at 480dp and scroll when space is
+limited or the keyboard opens. The header shows the language label; auth navigation
+uses the account-switch links beneath the forms. Fields, password help, submit button, and the alternate
+sign-in/register link form one compact scrolling group, matching the web flow.
+Portal content is bounded on tablets, service
+cards use an adaptive grid, and request counters use two columns below 600dp and
+four on wider screens. Text continues to respect the device font scale; buttons
+retain a minimum 48dp touch target.
+
+Native top-center toasts match the web app's EXP navy styling and use a spring
+entrance, compact-pill expansion, and collapse/slide/fade exit. They sit below the
+header so its content remains visible. They report sign-in,
+registration, logout, and request failures, survive navigation, can be dismissed,
+and announce their text to accessibility services. Local validation and
+registration input/duplicate-email errors stay inline, matching the web flow.

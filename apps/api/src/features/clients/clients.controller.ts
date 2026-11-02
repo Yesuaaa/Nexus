@@ -25,7 +25,7 @@ for (const method of ["post", "patch"] as const) {
       if (!input)
         return response.status(400).json({
           error:
-            "Provide a valid name, email, contact number, account status, and a password of at least 12 characters when creating a client.",
+            "Provide a valid name, email, contact number, account status, and a password meeting the password policy when creating a client.",
         })
       try {
         const client = await clientsRepository.save(

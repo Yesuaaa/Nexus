@@ -23,7 +23,7 @@ async function seedSuperadmin(
   const password = process.env.BOOTSTRAP_PASSWORD
   if (!email || !validPassword(password)) {
     throw new Error(
-      "Set BOOTSTRAP_EMAIL and BOOTSTRAP_PASSWORD (at least 12 characters) to seed the first Superadmin",
+      "Set BOOTSTRAP_EMAIL and BOOTSTRAP_PASSWORD meeting the password policy to seed the first Superadmin",
     )
   }
   if (await prisma.user.findUnique({ where: { email } })) {
@@ -50,7 +50,7 @@ async function seedAdmin(prisma: NonNullable<ReturnType<typeof getPrisma>>) {
   const email = normalizedEmail(emailValue)
   if (!email || !validPassword(password)) {
     throw new Error(
-      "Set ADMIN_BOOTSTRAP_EMAIL and ADMIN_BOOTSTRAP_PASSWORD (at least 12 characters) to seed an Admin",
+      "Set ADMIN_BOOTSTRAP_EMAIL and ADMIN_BOOTSTRAP_PASSWORD meeting the password policy to seed an Admin",
     )
   }
 

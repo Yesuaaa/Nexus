@@ -1,6 +1,5 @@
 package com.nexus.app.core.components
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,14 +9,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nexus.app.core.theme.NexusColors
@@ -25,17 +25,21 @@ import com.nexus.app.core.theme.NexusColors
 @Composable
 fun NexusTopAppBar(
     modifier: Modifier = Modifier,
-    onNotificationClick: () -> Unit = {}
+    onNotificationClick: () -> Unit = {},
+    onProfileClick: () -> Unit = {},
+    accountActionsEnabled: Boolean = true
 ) {
+    val layout = LocalNexusLayout.current
     Row(
         modifier = modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(horizontal = layout.gutter, vertical = if (layout.short) 4.dp else 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Row(
+            modifier = Modifier.weight(1f).padding(end = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
@@ -47,32 +51,51 @@ fun NexusTopAppBar(
                 letterSpacing = (-0.5).sp,
                 color = NexusColors.HeaderDarkNavy
             )
-            Column {
+            Column(Modifier.weight(1f)) {
                 Text(
                     text = "Digital Solutions",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = NexusColors.TextPrimary
+                    color = NexusColors.TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = "CLIENT ACCESS",
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp,
-                    color = NexusColors.PrimaryBlue
+                    color = NexusColors.PrimaryBlue,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
 
-        IconButton(
-            onClick = onNotificationClick,
-            modifier = Modifier.size(40.dp)
+        Row(
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = Icons.Outlined.Notifications,
-                contentDescription = "Notifications",
-                tint = NexusColors.TextPrimary
-            )
+            IconButton(
+                onClick = onNotificationClick,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Notifications,
+                    contentDescription = "Notifications",
+                    tint = NexusColors.TextPrimary
+                )
+            }
+            IconButton(
+                onClick = onProfileClick,
+                enabled = accountActionsEnabled,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.AccountCircle,
+                    contentDescription = "Open profile",
+                    tint = NexusColors.PrimaryBlue
+                )
+            }
         }
     }
 }
