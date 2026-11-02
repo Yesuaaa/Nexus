@@ -136,12 +136,6 @@ export async function initializeWorkflow(
       agreementRequired: request.service.requiresAgreement,
       paymentRequired: request.service.requiresPayment,
       quotationApprovalRequired: request.service.requiresQuotationApproval,
-      requirements: {
-        create: request.service.clientRequirements.map((title) => ({
-          title,
-          mandatory: true,
-        })),
-      },
     },
   })
   await appendEvent(
@@ -151,17 +145,5 @@ export async function initializeWorkflow(
     "CONSULTATION_OPENED",
     "Request accepted for consultation. Service delivery starts only after quotation approval and commencement requirements are completed.",
   )
-  const requirements = await tx.workflowRequirement.findMany({
-    where: { requestId },
-  })
-  for (const requirement of requirements)
-    await appendEvent(
-      tx,
-      requestId,
-      actorId,
-      "REQUIREMENT_REQUESTED",
-      `Required information: ${requirement.title}`,
-      requirement.id,
-    )
   return workflow
 }

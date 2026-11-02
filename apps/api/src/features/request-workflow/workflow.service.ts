@@ -111,6 +111,14 @@ async function runAction(
       where: { requestId },
       data: { state: nextState },
     })
+  const requireApprovedAgreement = async () => {
+    if (
+      workflow.agreementRequired &&
+      (await tx.workflowAgreement.findUnique({ where: { requestId } }))
+        ?.status !== "APPROVED"
+    )
+      fail("The service agreement must be approved before payment", 409)
+  }
   const event = (
     type: string,
     summary: string,
@@ -728,6 +736,7 @@ async function runAction(
     case "SUBMIT_PAYMENT": {
       requireClient()
       requireStage("AGREEMENT_PAYMENT_PENDING", "READY_FOR_ACTIVATION")
+      await requireApprovedAgreement()
       const payment = await tx.workflowPayment.findUnique({
         where: { requestId },
       })
@@ -760,6 +769,7 @@ async function runAction(
           403,
         )
       requireStage("AGREEMENT_PAYMENT_PENDING", "READY_FOR_ACTIVATION")
+      await requireApprovedAgreement()
       const payment = await tx.workflowPayment.findUnique({
         where: { requestId },
       })

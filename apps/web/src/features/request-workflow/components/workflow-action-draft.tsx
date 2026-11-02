@@ -3,12 +3,6 @@
 import type { ReactNode } from "react"
 import { X } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog"
 import type { WorkflowControls } from "../hooks/use-request-workflow"
 import type { Workflow, WorkflowAction } from "../model/workflow"
 import {
@@ -343,29 +337,20 @@ export function WorkflowActionDraft({
     }
 
     return (
-      <Dialog
-        open
-        onOpenChange={(open) => {
-          if (!open && !controls.busy) onClose()
-        }}
+      <DraftFrame
+        title="Prepare quotation"
+        status="Draft · Not sent"
+        description="Add scope and pricing details, then review before sending."
+        onClose={onClose}
       >
-        <DialogContent
-          showCloseButton={!controls.busy}
-          className="max-h-[85dvh] w-[calc(100%-2rem)] max-w-2xl overflow-y-auto overscroll-contain"
-        >
-          <DialogTitle>Prepare quotation</DialogTitle>
-          <DialogDescription>
-            Add scope and pricing details, then review before sending.
-          </DialogDescription>
-          <QuotationForm
-            workflow={workflow}
-            controls={controls}
-            inline
-            onComplete={onClose}
-            onCancel={onClose}
-          />
-        </DialogContent>
-      </Dialog>
+        <QuotationForm
+          workflow={workflow}
+          controls={controls}
+          inline
+          onComplete={onClose}
+          onCancel={onClose}
+        />
+      </DraftFrame>
     )
   }
 

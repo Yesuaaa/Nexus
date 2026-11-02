@@ -366,12 +366,16 @@ test(
         assert.equal((await accept()).status, 200)
         const workflow = await read()
         assert.equal(workflow.state, "CONSULTATION")
-        assert.equal(workflow.requirements.length, 1)
-        assert.equal(workflow.requirements[0]!.status, "REQUESTED")
+        assert.equal(workflow.requirements.length, 0)
+        assert.equal(
+          workflow.events.some(
+            (event) => event.type === "REQUIREMENT_REQUESTED",
+          ),
+          false,
+        )
         assert.equal(workflow.approval, null)
         assert.equal(workflow.project, null)
         assert.ok(workflow.nextAction.length > 0)
-        requirementId = workflow.requirements[0]!.id
         assert.equal(workflow.internal, undefined)
         for (const actor of [otherClient, staff, admin, otherAdmin, superadmin])
           assert.equal((await get(actor)).status, 404)
@@ -383,6 +387,13 @@ test(
     await t.test(
       "requirements and consultations cannot be bypassed; files stay private and retry safely",
       async () => {
+        const requested = await act(head, {
+          type: "REQUEST_REQUIREMENT",
+          title: "Brand guidelines",
+          details: "Please provide your brand guidelines.",
+          mandatory: true,
+        })
+        requirementId = requested.requirements[0]!.id
         const current = await read(head)
         assert.equal(
           (
@@ -971,6 +982,18 @@ test(
         )
         const signature = await upload(client, "signed.txt", "Signed agreement")
         await act(client, { type: "SIGN_AGREEMENT", fileId: signature.id })
+        const beforeAgreementApproval = await read()
+        const prematurePayment = await send(
+          client,
+          {
+            type: "SUBMIT_PAYMENT",
+            fileId: submittedFileId,
+            reference: "Too early",
+          },
+          beforeAgreementApproval.version,
+        )
+        assert.equal(prematurePayment.status, 409)
+        assert.match(await prematurePayment.text(), /agreement.*approved/i)
         await act(head, {
           type: "REVIEW_AGREEMENT",
           approve: true,

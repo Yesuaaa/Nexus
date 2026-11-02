@@ -1230,7 +1230,11 @@ export function PaymentVerificationCard({ workflow, controls }: CardProps) {
     (file) => file.uploaderId === account.id,
   )
   const payment = workflow.payment
-  if (!payment) return null
+  if (
+    !payment ||
+    (workflow.agreement?.mandatory && workflow.agreement.status !== "APPROVED")
+  )
+    return null
   const writable = [
     "AGREEMENT_PAYMENT_PENDING",
     "READY_FOR_ACTIVATION",

@@ -3,6 +3,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import {
   CalendarDays,
+  Check,
+  Circle,
+  LoaderCircle,
   ChevronDown,
   Clock3,
   ExternalLink,
@@ -196,7 +199,7 @@ export function QuotationForm({
   }
   return (
     <form
-      className="space-y-3"
+      className="space-y-4 [&_input]:min-h-10 [&_input]:bg-white [&_label]:text-xs [&_select]:min-h-10 [&_select]:bg-white [&_textarea]:bg-white"
       noValidate
       onSubmit={async (event) => {
         event.preventDefault()
@@ -235,20 +238,69 @@ export function QuotationForm({
     >
       <ol
         aria-label="Quotation steps"
-        className="m-0 flex list-none flex-wrap gap-3 border-b border-[#e8ebef] p-0 pb-3 text-xs"
+        className="m-0 flex list-none items-center gap-2 overflow-x-auto border-b border-[#e8ebef] p-0 pb-3"
       >
         {steps.map((label, index) => (
           <li
             key={label}
             aria-current={step === index ? "step" : undefined}
-            className={
-              step === index ? "font-semibold text-[#203f8c]" : "text-[#52627a]"
-            }
+            className={cn(
+              "flex min-w-fit flex-1 items-center gap-1.5 text-[10px] font-semibold last:flex-none",
+              index <= step ? "text-[#203f8c]" : "text-[#52627a]",
+            )}
           >
-            {index + 1}. {label}
+            {index < step ? (
+              <Check size={13} className="shrink-0" aria-hidden="true" />
+            ) : index === step ? (
+              <LoaderCircle size={13} className="shrink-0" aria-hidden="true" />
+            ) : (
+              <Circle size={12} className="shrink-0" aria-hidden="true" />
+            )}
+            <span>{label}</span>
+            <span className="sr-only">
+              {index < step
+                ? " completed"
+                : index === step
+                  ? " current step"
+                  : " upcoming"}
+            </span>
+            {index < steps.length - 1 && (
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "ml-1 h-0.5 min-w-1 flex-1 rounded-full",
+                  index < step ? "bg-[#203f8c]" : "bg-[#cbd5e1]",
+                )}
+              />
+            )}
           </li>
         ))}
       </ol>
+      <header className="space-y-1">
+        <p className="m-0 text-[10px] font-medium text-[#52627a]">
+          Step {step + 1} of {steps.length}
+        </p>
+        <h3 className="m-0 text-sm font-semibold text-[#182235]">
+          {
+            [
+              "Define the scope",
+              "Set the pricing",
+              "Add timeline and payment terms",
+              "Review quotation",
+            ][step]
+          }
+        </h3>
+        <p className="m-0 text-[11px] leading-5 text-[#52627a]">
+          {
+            [
+              "Describe the work and what the client will receive.",
+              "List each item with its quantity and unit price.",
+              "Confirm delivery, payment and quotation validity.",
+              "Check the details before sending to the client.",
+            ][step]
+          }
+        </p>
+      </header>
       <div data-quotation-step="0" hidden={step !== 0} className="space-y-3">
         <WorkflowField label="Service scope">
           <textarea
@@ -279,7 +331,7 @@ export function QuotationForm({
           {rows.map(({ key }, index) => (
             <div
               key={key}
-              className="space-y-2 rounded-lg border border-[#e1e6ee] p-2"
+              className="space-y-3 rounded-lg border border-[#d8e1ef] bg-[#f6f8fc] p-3"
             >
               <WorkflowField label={`Item ${index + 1}`}>
                 <input
@@ -423,7 +475,6 @@ export function QuotationForm({
           aria-label="Quotation review"
           className="space-y-3 text-xs text-[#182235]"
         >
-          <h3 className="font-semibold">Review quotation</h3>
           <p className="whitespace-pre-wrap">
             <strong>Scope</strong>
             <br />
@@ -446,7 +497,7 @@ export function QuotationForm({
               </li>
             ))}
           </ul>
-          <p>
+          <p className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[#edf2fb] px-3 py-2.5 text-sm font-semibold text-[#203f8c]">
             <strong>Total: </strong>
             {workflowMoney(
               String(
@@ -491,7 +542,7 @@ export function QuotationForm({
       )}
       <div
         className={cn(
-          "flex flex-wrap gap-2 border-t border-[#e8ebef] pt-3",
+          "sticky bottom-0 z-10 flex flex-wrap gap-2 border-t border-[#e8ebef] bg-white py-3",
           inline && "justify-end",
         )}
       >
@@ -501,6 +552,7 @@ export function QuotationForm({
             variant="outline"
             disabled={controls.busy}
             onClick={onCancel}
+            className="mr-auto min-h-10 border-[#d8e1ef] text-xs text-[#52627a]"
           >
             Cancel
           </Button>
@@ -511,11 +563,15 @@ export function QuotationForm({
             variant="outline"
             disabled={controls.busy}
             onClick={() => setStep(step - 1)}
+            className="min-h-10 border-[#d8e1ef] text-xs text-[#203f8c]"
           >
             Back
           </Button>
         )}
-        <Button className={workflowButton} disabled={controls.busy}>
+        <Button
+          className={`${workflowButton} min-h-10 min-w-20 bg-[#203f8c] text-xs text-white hover:bg-[#172f70]`}
+          disabled={controls.busy}
+        >
           {controls.busy
             ? "Saving…"
             : step < 2

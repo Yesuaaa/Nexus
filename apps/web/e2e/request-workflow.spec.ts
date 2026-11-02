@@ -222,6 +222,14 @@ test("the conversation records formal quotation approval through a structured ac
   ).toBeVisible()
   await expect(
     page.getByRole("heading", { name: "Payment requirement", exact: true }),
+  ).toHaveCount(0)
+  await expect(
+    page.getByRole("heading", { name: "Service agreement", exact: true }),
+  ).toBeVisible()
+  workflow.agreement!.status = "APPROVED"
+  await page.reload()
+  await expect(
+    page.getByRole("heading", { name: "Payment requirement", exact: true }),
   ).toBeVisible()
   expect(actions).toHaveLength(1)
   expect(actions[0]).toMatchObject({
@@ -469,7 +477,7 @@ for (const width of [1280, 390]) {
     await page
       .getByRole("button", { name: "Prepare revised quotation" })
       .click()
-    const draft = page.getByRole("dialog", { name: "Prepare quotation" })
+    const draft = page.getByRole("region", { name: "Prepare quotation" })
     await draft
       .getByLabel("Deliverables (one per line)")
       .fill(
