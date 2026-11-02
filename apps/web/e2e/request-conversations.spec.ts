@@ -616,8 +616,11 @@ test("messages page handles an empty inbox and a failed conversation list", asyn
   await mock(page, state, "USER")
   await page.goto("/messages")
   await expect(
+    page.getByText("Couldn't load conversations.", { exact: true }),
+  ).toBeVisible()
+  await expect(
     page.getByRole("navigation", { name: "Conversations" }).getByRole("alert"),
-  ).toHaveText("Couldn't load conversations.")
+  ).toHaveCount(0)
   state.listError = false
   await page.reload()
   await expect(
@@ -751,8 +754,9 @@ test("failed sends retain the draft and retry the same message without duplicati
     .fill("Keep this draft if the connection fails.")
   await chat.getByRole("button", { name: "Send message", exact: true }).click()
   await expect(
-    chat.getByRole("alert").filter({ hasText: /^Connection interrupted/ }),
-  ).toContainText("Connection interrupted")
+    page.getByText("Connection interrupted. Try again.", { exact: true }),
+  ).toBeVisible()
+  await expect(chat.getByRole("alert")).toHaveCount(0)
   await expect(chat.getByLabel("Message", { exact: true })).toHaveValue(
     "Keep this draft if the connection fails.",
   )
@@ -835,8 +839,9 @@ for (const width of [1440, 390]) {
       .fill("Corrected message")
     await chat.getByRole("button", { name: "Save", exact: true }).click()
     await expect(
-      chat.getByRole("alert").filter({ hasText: "Message update unavailable" }),
-    ).toContainText("Message update unavailable")
+      page.getByText("Message update unavailable. Try again.", { exact: true }),
+    ).toBeVisible()
+    await expect(chat.getByRole("alert")).toHaveCount(0)
     await expect(chat.getByLabel("Edit message", { exact: true })).toHaveValue(
       "Corrected message",
     )
@@ -916,10 +921,11 @@ test("reconnection recovers history, loads earlier messages and clears revoked c
   await expect(chat.getByRole("article")).toHaveCount(53)
   emit("access-revoked")
   await expect(
-    chat.getByRole("alert").filter({
-      hasText: /^You no longer have access to this conversation\.$/,
+    page.getByText("You no longer have access to this conversation.", {
+      exact: true,
     }),
-  ).toHaveText("You no longer have access to this conversation.")
+  ).toBeVisible()
+  await expect(chat.getByRole("alert")).toHaveCount(0)
   await expect(chat.getByRole("article")).toHaveCount(0)
   await expect(chat.getByLabel("Message", { exact: true })).toHaveCount(0)
 })

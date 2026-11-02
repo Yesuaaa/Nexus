@@ -80,6 +80,8 @@ export async function snapshot(
     quotationApprovalRequired:
       workflow?.quotationApprovalRequired ??
       request.service.requiresQuotationApproval,
+    paymentRequired:
+      workflow?.paymentRequired ?? request.service.requiresPayment,
     permissions,
   }
   if (!workflow)

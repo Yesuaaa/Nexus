@@ -12,6 +12,7 @@ import Link from "next/link"
 import {
   ArrowLeft,
   CalendarDays,
+  Check,
   CircleHelp,
   FileText,
   Info,
@@ -157,6 +158,10 @@ function ConversationPanel({
       onArchivedChange?.(history.archived)
   }, [history?.archived, onArchivedChange])
   const [error, setError] = useState("")
+  useEffect(() => {
+    if (error)
+      sileo.error({ title: "Couldn't load messages", description: error })
+  }, [error])
   const [revision, setRevision] = useState(0)
   const [draft, setDraft] = useState("")
   const [sending, setSending] = useState(false)
@@ -671,7 +676,10 @@ function ConversationPanel({
   async function saveEditedMessage(messageId: string) {
     const body = editingMessageBody.trim()
     if (!body) {
-      setMessageActionError("A message cannot be empty.")
+      sileo.error({
+        title: "Message not saved",
+        description: "A message cannot be empty.",
+      })
       return
     }
     setMessageActionBusy(true)
@@ -684,7 +692,7 @@ function ConversationPanel({
     } catch (reason) {
       const message =
         reason instanceof Error ? reason.message : "Couldn't edit this message."
-      setMessageActionError(message)
+      sileo.error({ title: "Message not saved", description: message })
       if (
         reason instanceof ApiError &&
         [401, 403, 404].includes(reason.status)
@@ -712,7 +720,7 @@ function ConversationPanel({
         reason instanceof Error
           ? reason.message
           : "Couldn't delete this message."
-      setDeleteError(message)
+      sileo.error({ title: "Message not deleted", description: message })
       if (
         reason instanceof ApiError &&
         [401, 403, 404].includes(reason.status)
@@ -844,19 +852,6 @@ function ConversationPanel({
               )}
             </header>
             {workflow && <WorkflowProgress workflow={workflow} />}
-            {controls.error && (
-              <p
-                role="alert"
-                className="m-0 shrink-0 border-b border-red-100 bg-red-50 px-5 py-2 text-[11px] text-red-700"
-              >
-                Workflow: {controls.error}
-              </p>
-            )}
-            {error && (
-              <p role="alert" className="m-3 text-xs text-red-700">
-                {error}
-              </p>
-            )}
             {!history ? (
               <p className="p-4 text-xs text-[#52627a]">
                 {error
@@ -970,181 +965,190 @@ function ConversationPanel({
                         )}
                         <article
                           className={cn(
-                            "flex w-fit max-w-[85%] items-end gap-2 pb-1 max-[767px]:max-w-[92%]",
+                            "relative w-fit max-w-[85%] pb-1 max-[767px]:max-w-[92%]",
+                            canManageMessage && "pl-11",
                             grouped ? "mt-1" : "mt-4",
-                            own ? "ml-auto flex-row-reverse" : "mr-auto",
+                            own ? "ml-auto" : "mr-auto",
                           )}
                         >
-                          <ConversationAvatar
-                            name={
-                              own
-                                ? account.fullName || "You"
-                                : message.sender.fullName || "Participant"
-                            }
-                            imageUrl={
-                              own
-                                ? account.imageUrl
-                                : isClient
-                                  ? history.conversation?.head?.imageUrl
-                                  : history.conversation?.client?.imageUrl
-                            }
-                            className={cn("size-7", grouped && "invisible")}
-                          />
-                          <div className="min-w-0">
-                            <p className="sr-only">
-                              {own
-                                ? "You"
-                                : message.sender.fullName || "Participant"}
-                            </p>
-                            {editing ? (
-                              <form
-                                className="w-[min(70vw,420px)] max-w-full space-y-2 rounded-xl border border-[#d8e1ef] bg-white p-3 shadow-sm"
-                                onSubmit={(event) => {
-                                  event.preventDefault()
-                                  void saveEditedMessage(message.id)
-                                }}
+                          <p className="sr-only">
+                            {own
+                              ? "You"
+                              : message.sender.fullName || "Participant"}
+                          </p>
+                          {editing ? (
+                            <form
+                              className="w-[min(70vw,420px)] max-w-full space-y-2 rounded-xl border border-[#d8e1ef] bg-white p-3 shadow-sm"
+                              onSubmit={(event) => {
+                                event.preventDefault()
+                                void saveEditedMessage(message.id)
+                              }}
+                            >
+                              <label
+                                htmlFor={`edit-message-${message.id}`}
+                                className="sr-only"
                               >
-                                <label
-                                  htmlFor={`edit-message-${message.id}`}
-                                  className="sr-only"
-                                >
-                                  Edit message
-                                </label>
-                                <textarea
-                                  id={`edit-message-${message.id}`}
-                                  autoFocus
-                                  rows={3}
-                                  maxLength={4000}
-                                  value={editingMessageBody}
-                                  onChange={(event) =>
-                                    setEditingMessageBody(event.target.value)
-                                  }
-                                  onKeyDown={(event) => {
-                                    if (
-                                      event.key !== "Enter" ||
-                                      event.shiftKey ||
-                                      event.nativeEvent.isComposing
-                                    )
-                                      return
-                                    event.preventDefault()
-                                    event.currentTarget.form?.requestSubmit()
-                                  }}
-                                  className="block min-h-20 w-full resize-y rounded-lg border border-[#d8e1ef] bg-white px-3 py-2 text-xs leading-5 text-[#182235] outline-none focus-visible:ring-2 focus-visible:ring-[#294a9b]"
-                                />
-                                {messageActionError && (
-                                  <p
-                                    role="alert"
-                                    className="m-0 text-xs text-red-700"
-                                  >
-                                    {messageActionError}
-                                  </p>
-                                )}
-                                <div className="flex justify-end gap-2">
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    className="h-9 min-w-16 text-xs"
-                                    disabled={messageActionBusy}
-                                    onClick={() => {
-                                      setEditingMessageId(null)
-                                      setEditingMessageBody("")
-                                      setMessageActionError("")
-                                    }}
-                                  >
-                                    Cancel
-                                  </Button>
-                                  <Button
-                                    type="submit"
-                                    className="h-9 min-w-20 bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
-                                    disabled={
-                                      messageActionBusy ||
-                                      !editingMessageBody.trim()
-                                    }
-                                  >
-                                    {messageActionBusy ? "Saving…" : "Save"}
-                                  </Button>
-                                </div>
-                              </form>
-                            ) : (
-                              <div className="relative w-fit max-w-full">
+                                Edit message
+                              </label>
+                              <textarea
+                                id={`edit-message-${message.id}`}
+                                autoFocus
+                                rows={3}
+                                maxLength={4000}
+                                value={editingMessageBody}
+                                onChange={(event) =>
+                                  setEditingMessageBody(event.target.value)
+                                }
+                                onKeyDown={(event) => {
+                                  if (
+                                    event.key !== "Enter" ||
+                                    event.shiftKey ||
+                                    event.nativeEvent.isComposing
+                                  )
+                                    return
+                                  event.preventDefault()
+                                  event.currentTarget.form?.requestSubmit()
+                                }}
+                                className="block min-h-20 w-full resize-y rounded-lg border border-[#d8e1ef] bg-white px-3 py-2 text-xs leading-5 text-[#182235] outline-none focus-visible:ring-2 focus-visible:ring-[#294a9b]"
+                              />
+                              {messageActionError && (
                                 <p
-                                  className={cn(
-                                    "m-0 rounded-2xl px-3.5 py-2.5 text-[13px] leading-5 whitespace-pre-wrap [overflow-wrap:anywhere]",
-                                    deleted
-                                      ? "border border-dashed border-[#d8e1ef] bg-[#f6f8fc] text-[#52627a]"
-                                      : own
-                                        ? "rounded-br-md bg-[#203f8c] text-white"
-                                        : "rounded-bl-md bg-[#f1f1ee] text-[#182235]",
-                                    deleted && "w-fit max-w-full py-1.5 italic",
-                                    deleted && own && "ml-auto",
-                                  )}
+                                  role="alert"
+                                  className="m-0 text-xs text-red-700"
                                 >
-                                  {deleted
-                                    ? "This message was deleted"
-                                    : message.body}
+                                  {messageActionError}
                                 </p>
-                                <HoverTooltip>
-                                  {(deletedAt ?? date).toLocaleTimeString(
-                                    "en-PH",
-                                    {
-                                      hour: "numeric",
-                                      minute: "2-digit",
-                                    },
-                                  )}
-                                </HoverTooltip>
-                              </div>
-                            )}
-                            {deleted && (
-                              <div className="mt-1 px-1 text-[11px] text-[#8791a2]">
-                                <MessageDeletionCountdown
-                                  purgeAt={message.purgeAt}
-                                />
-                              </div>
-                            )}
-                          </div>
-                          {canManageMessage && (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
+                              )}
+                              <div className="flex justify-end gap-2">
                                 <Button
                                   type="button"
                                   variant="outline"
-                                  aria-label={`Actions for your message at ${date.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })}`}
-                                  className="size-8 shrink-0 border-0 bg-transparent p-0 text-[#52627a] hover:bg-[#f1f4fa]"
-                                >
-                                  <MoreHorizontal
-                                    size={16}
-                                    aria-hidden="true"
-                                  />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent
-                                side="top"
-                                align="end"
-                                className="min-w-36 rounded-xl border-[#dce3ee] bg-white p-1.5 text-[#203047] shadow-[0_12px_30px_rgb(18_36_73_/_16%)]"
-                              >
-                                <DropdownMenuItem
-                                  className="min-h-10 cursor-pointer gap-2 rounded-md px-2.5 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
-                                  onSelect={() => {
-                                    setEditingMessageId(message.id)
-                                    setEditingMessageBody(message.body || "")
+                                  className="h-9 min-w-16 text-xs"
+                                  disabled={messageActionBusy}
+                                  onClick={() => {
+                                    setEditingMessageId(null)
+                                    setEditingMessageBody("")
                                     setMessageActionError("")
                                   }}
                                 >
-                                  <Pencil aria-hidden="true" />
-                                  Edit message
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="min-h-10 cursor-pointer gap-2 rounded-md px-2.5 text-xs font-medium text-red-700 focus:bg-red-50 focus:text-red-700"
-                                  onSelect={() => {
-                                    setDeleteTarget(message)
-                                    setDeleteError("")
-                                  }}
+                                  Cancel
+                                </Button>
+                                <Button
+                                  type="submit"
+                                  className="h-9 min-w-20 bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
+                                  disabled={
+                                    messageActionBusy ||
+                                    !editingMessageBody.trim()
+                                  }
                                 >
-                                  <Trash2 aria-hidden="true" />
-                                  Delete message
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                                  {messageActionBusy ? "Saving…" : "Save"}
+                                </Button>
+                              </div>
+                            </form>
+                          ) : (
+                            <p
+                              className={cn(
+                                "m-0 rounded-2xl px-3.5 py-2.5 text-[13px] leading-5 whitespace-pre-wrap [overflow-wrap:anywhere]",
+                                deleted
+                                  ? "border border-dashed border-[#d8e1ef] bg-[#f6f8fc] text-[#52627a]"
+                                  : own
+                                    ? "rounded-br-md bg-[#203f8c] text-white"
+                                    : "rounded-bl-md bg-[#f1f1ee] text-[#182235]",
+                                deleted && "w-fit max-w-full py-1.5 italic",
+                                deleted && own && "ml-auto",
+                              )}
+                            >
+                              {deleted
+                                ? "This message was deleted"
+                                : message.body}
+                            </p>
+                          )}
+                          {deleted ? (
+                            <div
+                              className={cn(
+                                "mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 px-1 text-[11px] text-[#8791a2]",
+                                own && "justify-end",
+                              )}
+                            >
+                              <time dateTime={deletedAt!.toISOString()}>
+                                Deleted{" "}
+                                {deletedAt!.toLocaleDateString("en-PH", {
+                                  month: "short",
+                                  day: "numeric",
+                                })}
+                                {", "}
+                                {deletedAt!.toLocaleTimeString("en-PH", {
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                })}
+                              </time>
+                              <MessageDeletionCountdown
+                                purgeAt={message.purgeAt}
+                              />
+                            </div>
+                          ) : (
+                            <div
+                              className={cn(
+                                "mt-1 flex items-center gap-1 px-1 text-[11px] text-[#8791a2]",
+                                own && "justify-end",
+                              )}
+                            >
+                              {message.editedAt && (
+                                <span className="mr-1">Edited</span>
+                              )}
+                              <time dateTime={message.createdAt}>
+                                {date.toLocaleTimeString("en-PH", {
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                })}
+                              </time>
+                              {canManageMessage && (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      aria-label={`Actions for your message at ${date.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })}`}
+                                      className="absolute top-0 left-0 size-11 shrink-0 border-0 bg-transparent p-0 text-[#52627a] hover:bg-[#f1f4fa]"
+                                    >
+                                      <MoreHorizontal
+                                        size={16}
+                                        aria-hidden="true"
+                                      />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent
+                                    side="top"
+                                    align="end"
+                                    className="min-w-36 rounded-xl border-[#dce3ee] bg-white p-1.5 text-[#203047] shadow-[0_12px_30px_rgb(18_36_73_/_16%)]"
+                                  >
+                                    <DropdownMenuItem
+                                      className="min-h-10 cursor-pointer gap-2 rounded-md px-2.5 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                                      onSelect={() => {
+                                        setEditingMessageId(message.id)
+                                        setEditingMessageBody(
+                                          message.body || "",
+                                        )
+                                        setMessageActionError("")
+                                      }}
+                                    >
+                                      <Pencil aria-hidden="true" />
+                                      Edit message
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      className="min-h-10 cursor-pointer gap-2 rounded-md px-2.5 text-xs font-medium text-red-700 focus:bg-red-50 focus:text-red-700"
+                                      onSelect={() => {
+                                        setDeleteTarget(message)
+                                        setDeleteError("")
+                                      }}
+                                    >
+                                      <Trash2 aria-hidden="true" />
+                                      Delete message
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              )}
+                            </div>
                           )}
                         </article>
                       </div>
@@ -1360,6 +1364,30 @@ function ConversationPanel({
                                 )}
                                 {canOpenWorkflowControls && (
                                   <>
+                                    {workflow?.approval &&
+                                      workflow.internal && (
+                                        <DropdownMenuItem
+                                          className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                                          onSelect={() =>
+                                            focusWorkflowSection("staffing")
+                                          }
+                                        >
+                                          <Users aria-hidden="true" />
+                                          Staffing and workload
+                                        </DropdownMenuItem>
+                                      )}
+                                    {workflow?.state ===
+                                      "READY_FOR_ACTIVATION" && (
+                                      <DropdownMenuItem
+                                        className="min-h-9 cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                                        onSelect={() =>
+                                          focusWorkflowSection("activation")
+                                        }
+                                      >
+                                        <Check aria-hidden="true" />
+                                        Project activation
+                                      </DropdownMenuItem>
+                                    )}
                                     {((canAttach && history.canSend) ||
                                       canRequestInformation ||
                                       canScheduleConsultation ||
@@ -1440,8 +1468,11 @@ function ConversationPanel({
                         </div>
                       </div>
                       {sendError && (
-                        <p role="alert" className="mt-2 text-xs text-red-700">
-                          {sendError} Your text is saved here so you can retry.
+                        <p
+                          role="status"
+                          className="mt-2 text-xs text-[#52627a]"
+                        >
+                          Your text is saved here so you can retry.
                         </p>
                       )}
                       <div className="mt-1.5 px-1 text-[9px] text-[#8791a2]">

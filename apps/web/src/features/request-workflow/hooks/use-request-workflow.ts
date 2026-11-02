@@ -13,6 +13,12 @@ import type { Workflow, WorkflowAction } from "../model/workflow"
 export function useRequestWorkflow(requestId: string) {
   const [workflow, setWorkflow] = useState<Workflow | null>(null)
   const [error, setError] = useState("")
+  const reportedLoadError = useRef("")
+  function reportLoadError(message: string) {
+    if (reportedLoadError.current !== message)
+      sileo.error({ title: "Couldn't load workflow", description: message })
+    reportedLoadError.current = message
+  }
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
   const flight = useRef(false)
@@ -48,20 +54,23 @@ export function useRequestWorkflow(requestId: string) {
           setWorkflow(result)
         }
         setError("")
+        reportedLoadError.current = ""
       } catch (reason) {
         if (!alive.current || revoked.current || signal?.aborted) return
         if (
           reason instanceof ApiError &&
           [401, 403, 404].includes(reason.status)
         ) {
+          reportLoadError(reason.message)
           revoke(reason.message)
           return
         }
-        setError(
+        const message =
           reason instanceof Error
             ? reason.message
-            : "Couldn't load the request workflow.",
-        )
+            : "Couldn't load the request workflow."
+        setError(message)
+        reportLoadError(message)
       } finally {
         if (alive.current && !signal?.aborted) setLoading(false)
       }
@@ -139,7 +148,7 @@ export function useRequestWorkflow(requestId: string) {
     }
   }
 
-  async function attach(file: File) {
+  async function attach(file: File, contextual = false) {
     if (flight.current || revoked.current) return null
     if (upload.current?.file !== file)
       upload.current = { file, id: crypto.randomUUID() }
@@ -150,6 +159,7 @@ export function useRequestWorkflow(requestId: string) {
         requestId,
         file,
         upload.current.id,
+        contextual,
       )
       if (!alive.current || revoked.current) return null
       upload.current = null
