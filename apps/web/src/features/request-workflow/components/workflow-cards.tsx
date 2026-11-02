@@ -3,7 +3,7 @@
 import Link from "next/link"
 import Image from "next/image"
 import { useEffect, useRef, useState } from "react"
-import { Download, FileText, ShieldCheck } from "lucide-react"
+import { Download, FileText, ShieldCheck, Upload, X } from "lucide-react"
 import { sileo } from "sileo"
 import { AttachmentPreview, attachmentAccept } from "./attachment-preview"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
@@ -235,18 +235,22 @@ export function WorkflowFileSelect({
   const account = usePortalAccount()
   const [selected, setSelected] = useState("")
   const [uploaded, setUploaded] = useState<WorkflowFile | null>(null)
+  const uploadInput = useRef<HTMLInputElement>(null)
   const files = workflow.files.filter((file) => file.uploaderId === account.id)
   if (uploaded && !files.some((file) => file.id === uploaded.id))
     files.push(uploaded)
-  return (
-    <span className="grid gap-2">
-      {controls && (
+  if (controls)
+    return (
+      <span className="grid gap-2">
+        <input type="hidden" name={name} value={selected} />
         <input
+          ref={uploadInput}
           type="file"
           aria-label="Upload document"
           accept={attachmentAccept}
           disabled={controls.busy}
-          className={workflowInput}
+          className="sr-only"
+          required={required && !selected}
           onChange={async (event) => {
             const input = event.currentTarget
             const file = input.files?.[0]
@@ -259,22 +263,63 @@ export function WorkflowFileSelect({
             input.value = ""
           }}
         />
-      )}
-      {controls && (
-        <span role="status" className="text-[11px]">
+        {uploaded && selected ? (
+          <span className="flex min-w-0 items-center gap-3 rounded-lg border border-[#d8e1ef] bg-[#f6f8fc] px-3 py-2">
+            <FileText
+              size={20}
+              className="shrink-0 text-[#203f8c]"
+              aria-hidden="true"
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-xs font-medium text-[#182235]">
+                {uploaded.name}
+              </span>
+              <span className="block text-[11px] text-[#52627a]">
+                {Math.max(1, Math.ceil(uploaded.size / 1024))} KB · Ready to
+                submit
+              </span>
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              aria-label={`Remove ${uploaded.name}`}
+              disabled={controls.busy}
+              className="size-9 shrink-0 border-0 bg-transparent p-0"
+              onClick={() => {
+                setSelected("")
+                setUploaded(null)
+              }}
+            >
+              <X size={16} aria-hidden="true" />
+            </Button>
+          </span>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={controls.busy}
+            className="h-11 w-fit gap-2 border-[#d8e1ef] px-4 text-xs text-[#203f8c]"
+            onClick={() => uploadInput.current?.click()}
+          >
+            <Upload size={16} aria-hidden="true" />
+            {controls.busy ? "Uploading…" : "Upload document"}
+          </Button>
+        )}
+        <span role="status" className="text-[11px] font-normal text-[#52627a]">
           {controls.busy
             ? "Uploading or saving…"
-            : "PDF, Word, PNG, JPEG or text. Maximum 5 MB."}
+            : "PDF, Word, PNG, JPEG or text. Up to 5 MB."}
         </span>
-      )}
+      </span>
+    )
+  return (
+    <span className="grid gap-2">
       <select
         name={name}
-        aria-label={controls ? "Previously attached document" : undefined}
         required={required}
         className={workflowInput}
         value={selected}
         onChange={(event) => setSelected(event.target.value)}
-        disabled={controls?.busy}
       >
         <option value="">
           {required ? "Select an attached file" : "No attachment"}
@@ -340,7 +385,16 @@ export function RequirementRequestCard({
                 form.reset()
             }}
           >
-            <WorkflowField label="Your response">
+            <WorkflowField
+              label={
+                <span>
+                  Your response{" "}
+                  <span className="text-red-600" aria-hidden="true">
+                    *
+                  </span>
+                </span>
+              }
+            >
               <textarea
                 name="submission"
                 rows={2}
@@ -349,7 +403,16 @@ export function RequirementRequestCard({
                 className={workflowInput}
               />
             </WorkflowField>
-            <WorkflowField label="Supporting document">
+            <WorkflowField
+              label={
+                <span>
+                  Supporting document{" "}
+                  <span className="text-red-600" aria-hidden="true">
+                    *
+                  </span>
+                </span>
+              }
+            >
               <WorkflowFileSelect workflow={workflow} controls={controls} />
             </WorkflowField>
             <Button className={workflowPrimaryButton} disabled={controls.busy}>

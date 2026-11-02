@@ -293,7 +293,7 @@ test("requested documents can be uploaded and submitted without leaving the requ
     mimeType: "text/plain",
     buffer: Buffer.from("brief"),
   })
-  await expect(page.locator('select[name="fileId"]')).toHaveValue(
+  await expect(page.locator('input[type="hidden"][name="fileId"]')).toHaveValue(
     "uploaded-brief",
   )
   await page
@@ -372,7 +372,7 @@ test("agreement documents upload directly and outstanding checklist statuses are
     mimeType: "text/plain",
     buffer: Buffer.from("agreement"),
   })
-  await expect(page.locator('select[name="fileId"]')).toHaveValue(
+  await expect(page.locator('input[type="hidden"][name="fileId"]')).toHaveValue(
     "agreement-file",
   )
   await page

@@ -57,7 +57,7 @@ export function WorkflowField({
   label,
   children,
 }: {
-  label: string
+  label: ReactNode
   children: ReactNode
 }) {
   return (
