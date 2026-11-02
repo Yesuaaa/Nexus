@@ -16,6 +16,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { ApiError } from "@/features/auth/api/auth-api"
+import { watchVisibleRefresh } from "@/lib/visible-refresh"
 import { listBookedServices, type BookingList } from "../api/bookings-api"
 import { BookedServicesTable } from "../components/booked-services-table"
 import { BookingDetailsDrawer } from "../components/booking-details-drawer"
@@ -54,30 +56,48 @@ export function BookedServicesPage({
 
   useEffect(() => {
     let active = true
-    listBookedServices({ search: debouncedSearch, status, page })
-      .then((value) => {
-        if (!active) return
-        const lastPage = Math.max(1, Math.ceil(value.total / value.pageSize))
-        if (page > lastPage) {
-          setPage(lastPage)
-          return
-        }
-        setResult(value)
-        setError("")
-        setResolvedKey(requestKey)
-        setResolvedViewKey(viewKey)
-      })
-      .catch((reason: unknown) => {
-        if (!active) return
-        setError(
-          reason instanceof Error
-            ? reason.message
-            : "Couldn't load booked services.",
-        )
-        setResolvedKey(requestKey)
-      })
+    let inFlight = false
+    let hasLoaded = false
+    const load = () => {
+      if (inFlight) return
+      inFlight = true
+      void listBookedServices({ search: debouncedSearch, status, page })
+        .then((value) => {
+          if (!active) return
+          const lastPage = Math.max(1, Math.ceil(value.total / value.pageSize))
+          if (page > lastPage) {
+            setPage(lastPage)
+            return
+          }
+          hasLoaded = true
+          setResult(value)
+          setError("")
+          setResolvedKey(requestKey)
+          setResolvedViewKey(viewKey)
+        })
+        .catch((reason: unknown) => {
+          if (!active) return
+          if (
+            hasLoaded &&
+            (!(reason instanceof ApiError) || reason.status >= 500)
+          )
+            return
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "Couldn't load booked services.",
+          )
+          setResolvedKey(requestKey)
+        })
+        .finally(() => {
+          inFlight = false
+        })
+    }
+    load()
+    const stopRefresh = watchVisibleRefresh(load)
     return () => {
       active = false
+      stopRefresh()
     }
   }, [debouncedSearch, status, page, revision, requestKey, viewKey])
 

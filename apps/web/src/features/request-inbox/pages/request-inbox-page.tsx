@@ -17,8 +17,9 @@ import {
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { ApiError } from "@/features/auth/api/auth-api"
 import { BookingDetailsDrawer } from "@/features/bookings/components/booking-details-drawer"
-import { listConversations } from "@/features/request-conversations/api/request-conversations-api"
+import { getConversation } from "@/features/request-conversations/api/request-conversations-api"
 import { cn } from "@/lib/utils"
+import { watchVisibleRefresh } from "@/lib/visible-refresh"
 import {
   acceptInboxRequest,
   declineInboxRequest,
@@ -28,11 +29,11 @@ import {
   type InboxList,
   type InboxRequest,
   type InboxView,
+  type InboxSort,
 } from "../api/request-inbox-api"
 import { RequestInboxTable } from "../components/request-inbox-table"
 
 type ConfirmAction = { kind: "decline" | "delete"; request: InboxRequest }
-type ClientLike = { id?: string; fullName?: string | null }
 
 function ConfirmModal({
   open,
@@ -122,6 +123,8 @@ export function RequestInboxPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [view, setView] = useState<InboxView>("pending")
   const [page, setPage] = useState(1)
+  const [sortBy, setSortBy] = useState<InboxSort>("createdAt")
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
   const [revision, setRevision] = useState(0)
   const [selected, setSelected] = useState<InboxRequest | null>(null)
   const [accepting, setAccepting] = useState(false)
@@ -135,7 +138,13 @@ export function RequestInboxPage() {
   const [error, setError] = useState("")
   const [resolvedKey, setResolvedKey] = useState("")
   const [resolvedViewKey, setResolvedViewKey] = useState("")
-  const viewKey = JSON.stringify({ search: debouncedSearch, view, page })
+  const viewKey = JSON.stringify({
+    search: debouncedSearch,
+    view,
+    page,
+    sortBy,
+    sortDir,
+  })
   const requestKey = `${viewKey}:${revision}`
   const loading =
     resolvedKey !== requestKey || search.trim() !== debouncedSearch
@@ -146,71 +155,92 @@ export function RequestInboxPage() {
   }, [search])
   useEffect(() => {
     let active = true
-    listInbox({ search: debouncedSearch, view, page })
-      .then((value) => {
-        if (!active) return
-        const lastPage = Math.max(1, Math.ceil(value.total / value.pageSize))
-        if (page > lastPage) {
-          setPage(lastPage)
-          return
-        }
-        setResult(value)
-        setError("")
-        setResolvedKey(requestKey)
-        setResolvedViewKey(viewKey)
-      })
-      .catch((reason: unknown) => {
-        if (!active) return
-        setError(
-          reason instanceof Error ? reason.message : "Couldn't load requests.",
-        )
-        setResolvedKey(requestKey)
-      })
+    let inFlight = false
+    let hasLoaded = false
+    const load = () => {
+      if (inFlight) return
+      inFlight = true
+      void listInbox({ search: debouncedSearch, view, page, sortBy, sortDir })
+        .then((value) => {
+          if (!active) return
+          const lastPage = Math.max(1, Math.ceil(value.total / value.pageSize))
+          if (page > lastPage) {
+            setPage(lastPage)
+            return
+          }
+          hasLoaded = true
+          setResult(value)
+          setError("")
+          setResolvedKey(requestKey)
+          setResolvedViewKey(viewKey)
+        })
+        .catch((reason: unknown) => {
+          if (!active) return
+          if (
+            hasLoaded &&
+            (!(reason instanceof ApiError) || reason.status >= 500)
+          )
+            return
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "Couldn't load requests.",
+          )
+          setResolvedKey(requestKey)
+        })
+        .finally(() => {
+          inFlight = false
+        })
+    }
+    load()
+    const stopRefresh = watchVisibleRefresh(load)
     return () => {
       active = false
+      stopRefresh()
     }
-  }, [debouncedSearch, view, page, revision, requestKey, viewKey])
+  }, [
+    debouncedSearch,
+    view,
+    page,
+    sortBy,
+    sortDir,
+    revision,
+    requestKey,
+    viewKey,
+  ])
 
   function refresh() {
     setRevision((value) => value + 1)
   }
 
   async function goToChat(request: InboxRequest) {
-    // Conversations are keyed by request id, and one only exists once a
-    // department has accepted the request.
-    if (request.acceptedDepartmentId === account.headOf?.id) {
-      router.push(`/messages?request=${encodeURIComponent(request.id)}`)
+    if (
+      !request.acceptedDepartmentId ||
+      request.acceptedDepartmentId !== account.headOf?.id
+    ) {
+      sileo.error({
+        title: "Conversation unavailable",
+        description:
+          "Accept this request for your department before opening its conversation.",
+      })
       return
     }
-    // Not accepted yet: open this department's most recent conversation
-    // with the same client.
     try {
-      const target = request.client as ClientLike
-      const departmentId = account.headOf?.id
-      let before: string | undefined
-      for (let i = 0; i < 5; i++) {
-        const { conversations, nextCursor } = await listConversations(before)
-        const match = conversations.find((row) => {
-          const sameDepartment =
-            !departmentId ||
-            !row.acceptedDepartment ||
-            row.acceptedDepartment.id === departmentId
-          const sameClient = target.id
-            ? row.client.id === target.id
-            : !!row.client.fullName && row.client.fullName === target.fullName
-          return sameDepartment && sameClient
-        })
-        if (match) {
-          router.push(`/messages?request=${encodeURIComponent(match.id)}`)
-          return
-        }
-        if (!nextCursor) break
-        before = nextCursor
-      }
-    } catch {
-      // Fall through to the plain Messages page.
+      const conversation = await getConversation(request.id)
+      if (!conversation.conversation)
+        throw new Error("This request's conversation is not available yet.")
+      router.push(
+        `/messages?request=${encodeURIComponent(request.id)}${conversation.archived ? "&view=archived" : ""}`,
+      )
+    } catch (reason) {
+      sileo.error({
+        title: "Conversation unavailable",
+        description:
+          reason instanceof Error
+            ? reason.message
+            : "Couldn't open this request's conversation. Try again.",
+      })
     }
-    router.push("/messages")
   }
 
   async function accept(id: string) {
@@ -358,10 +388,37 @@ export function RequestInboxPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
               <SelectItem value="pending">Awaiting acceptance</SelectItem>
               <SelectItem value="under-review">Under review</SelectItem>
+              <SelectItem value="awaiting-information">
+                Awaiting information
+              </SelectItem>
+              <SelectItem value="ready-for-quotation">
+                Ready for quotation
+              </SelectItem>
+              <SelectItem value="closed">Closed</SelectItem>
+              <SelectItem value="cancelled">Cancelled</SelectItem>
             </SelectContent>
           </Select>
+          <select
+            aria-label="Sort requests"
+            className="h-[34px] rounded-md border border-[#e1e4ea] bg-background px-3 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring max-[560px]:h-11"
+            value={`${sortBy}:${sortDir}`}
+            onChange={(event) => {
+              const [column, direction] = event.target.value.split(":")
+              setSortBy(column as InboxSort)
+              setSortDir(direction as "asc" | "desc")
+              setPage(1)
+            }}
+          >
+            <option value="createdAt:asc">Oldest requests first</option>
+            <option value="createdAt:desc">Newest requests first</option>
+            <option value="reference:asc">Reference: A–Z</option>
+            <option value="reference:desc">Reference: Z–A</option>
+            <option value="service:asc">Service: A–Z</option>
+            <option value="service:desc">Service: Z–A</option>
+          </select>
           {search && (
             <Button
               variant="outline"
@@ -382,6 +439,13 @@ export function RequestInboxPage() {
           error={error}
           viewKey={resolvedViewKey}
           quickKey={debouncedSearch}
+          sortBy={sortBy}
+          sortDir={sortDir}
+          onSort={(column) => {
+            setSortDir(sortBy === column && sortDir === "asc" ? "desc" : "asc")
+            setSortBy(column)
+            setPage(1)
+          }}
           onRetry={refresh}
           onView={(request) => {
             setSelected(request)

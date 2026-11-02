@@ -22,6 +22,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { ApiError } from "@/features/auth/api/auth-api"
+import { watchVisibleRefresh } from "@/lib/visible-refresh"
 import {
   listMyServiceRequests,
   type ClientRequestsResponse,
@@ -66,29 +68,47 @@ export function ClientServiceRequestsPage() {
   }, [search])
   useEffect(() => {
     let active = true
-    listMyServiceRequests({ page, search: query, status, sortOrder })
-      .then((data) => {
-        if (!active) return
-        const lastPage = Math.max(1, Math.ceil(data.total / data.pageSize))
-        if (page > lastPage) {
-          setPage(lastPage)
-          return
-        }
-        setResult(data)
-        setError("")
-        setResolvedKey(requestKey)
-      })
-      .catch((reason: unknown) => {
-        if (!active) return
-        setError(
-          reason instanceof Error
-            ? reason.message
-            : "Could not load your service requests.",
-        )
-        setResolvedKey(requestKey)
-      })
+    let inFlight = false
+    let hasLoaded = false
+    const load = () => {
+      if (inFlight) return
+      inFlight = true
+      void listMyServiceRequests({ page, search: query, status, sortOrder })
+        .then((data) => {
+          if (!active) return
+          const lastPage = Math.max(1, Math.ceil(data.total / data.pageSize))
+          if (page > lastPage) {
+            setPage(lastPage)
+            return
+          }
+          hasLoaded = true
+          setResult(data)
+          setError("")
+          setResolvedKey(requestKey)
+        })
+        .catch((reason: unknown) => {
+          if (!active) return
+          if (
+            hasLoaded &&
+            (!(reason instanceof ApiError) || reason.status >= 500)
+          )
+            return
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "Could not load your service requests.",
+          )
+          setResolvedKey(requestKey)
+        })
+        .finally(() => {
+          inFlight = false
+        })
+    }
+    load()
+    const stopRefresh = watchVisibleRefresh(load)
     return () => {
       active = false
+      stopRefresh()
     }
   }, [page, query, status, sortOrder, revision, requestKey])
   function clearFilters() {

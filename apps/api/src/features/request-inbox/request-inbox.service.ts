@@ -73,10 +73,18 @@ export async function listInbox(userId: string, filters: InboxFilters) {
       JOIN pg_namespace n ON n.oid = t.typnamespace
       WHERE t.typname = 'ServiceRequestStatus' AND n.nspname = current_schema()
     `
+      const statusByView = {
+        pending: "SUBMITTED",
+        "under-review": "UNDER_REVIEW",
+        "awaiting-information": "AWAITING_CLIENT_INFO",
+        "ready-for-quotation": "READY_FOR_QUOTATION",
+        closed: "CLOSED",
+        cancelled: "CANCELLED",
+      } as const
       const statuses =
-        filters.view === "pending"
-          ? (["SUBMITTED"] as const)
-          : (["UNDER_REVIEW"] as const)
+        filters.view === "all"
+          ? Object.values(statusByView)
+          : [statusByView[filters.view]]
       const where: Prisma.ServiceRequestWhereInput = {
         ...departmentScope(userId),
         status: {
@@ -122,7 +130,14 @@ export async function listInbox(userId: string, filters: InboxFilters) {
       const serviceRequests = await tx.serviceRequest.findMany({
         where,
         select: requestSelect,
-        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        orderBy: [
+          filters.sortBy === "service"
+            ? { service: { name: filters.sortDir } }
+            : filters.sortBy === "reference"
+              ? { referenceNumber: { sort: filters.sortDir, nulls: "last" } }
+              : { createdAt: filters.sortDir },
+          { id: "asc" },
+        ],
         take: 10,
         skip: (filters.page - 1) * 10,
       })

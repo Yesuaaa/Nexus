@@ -32,6 +32,36 @@ function bookingFixture(index = 1): BookingDetails {
   }
 }
 
+test("booking row status refreshes automatically and after reconnection", async ({
+  page,
+}) => {
+  const state = await mockBookings(page, { bookings: [bookingFixture(1)] })
+  await page.goto("/booked-services")
+  await expect(page.getByText("Submitted", { exact: true })).toBeVisible()
+  state.bookings[0]!.status = "UNDER_REVIEW"
+  await expect(page.getByText("Under review", { exact: true })).toBeVisible({
+    timeout: 10_000,
+  })
+  state.listError = true
+  const failedRefresh = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/service-requests?") &&
+      response.status() === 503,
+  )
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")))
+  await (await failedRefresh).finished()
+  await expect(
+    page
+      .getByRole("table", { name: "Booked services", exact: true })
+      .getByRole("alert"),
+  ).toHaveCount(0)
+  await expect(page.getByText("Under review", { exact: true })).toBeVisible()
+  state.listError = false
+  state.bookings[0]!.status = "CANCELLED"
+  await page.evaluate(() => window.dispatchEvent(new Event("online")))
+  await expect(page.getByText("Cancelled", { exact: true })).toBeVisible()
+})
+
 function deferred() {
   let release: () => void = () => {}
   const promise = new Promise<void>((resolve) => {
