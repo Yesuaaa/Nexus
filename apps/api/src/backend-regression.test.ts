@@ -136,6 +136,15 @@ test(
       ["/services", ["ADMIN"]],
       ["/services/pricing-templates", ["ADMIN"]],
       ["/services/available", roles],
+      ["/auth/profile", roles],
+      ["/client/services", ["USER"]],
+      ["/client/service-requests", ["USER"]],
+      ["/request-inbox", []], // STAFF also needs a department-head assignment.
+      ["/request-conversations", roles],
+      ["/internal-conversations", ["SUPERADMIN", "ADMIN", "STAFF"]],
+      ["/internal-conversations/contacts", ["SUPERADMIN", "ADMIN", "STAFF"]],
+      ["/request-workflows/notifications", roles],
+      ["/request-workflows/approvals", roles],
     ]
     for (const [path, allowed] of reads) {
       await t.test(
@@ -156,6 +165,91 @@ test(
         },
       )
     }
+
+    await t.test(
+      "new mutation routes reject anonymous callers before writing",
+      async () => {
+        const mutations: [string, string, unknown][] = [
+          [
+            "/auth/profile",
+            "PATCH",
+            { fullName: "Injected Name", contactNumber: "09123456789" },
+          ],
+          ["/auth/profile/specialist", "PUT", {}],
+          ["/auth/profile/images", "POST", {}],
+          ["/request-inbox/missing/accept", "POST", {}],
+          ["/client/service-requests/missing/cancel", "POST", {}],
+          ["/request-conversations/missing/messages", "POST", {}],
+          ["/request-conversations/missing/read", "PATCH", {}],
+          ["/request-conversations/missing", "DELETE", undefined],
+          ["/internal-conversations", "POST", { recipientId: "ADMIN" }],
+          ["/internal-conversations/missing/messages", "POST", {}],
+          ["/internal-conversations/missing/read", "PATCH", {}],
+          ["/request-workflows/missing/actions", "POST", {}],
+          ["/request-workflows/missing/files", "POST", {}],
+          ["/request-workflows/notifications/read-all", "PATCH", {}],
+          ["/request-workflows/notifications/missing/read", "PATCH", {}],
+          [
+            "/projects/missing/milestones/missing",
+            "PATCH",
+            { completed: true },
+          ],
+        ]
+        for (const [path, method, body] of mutations) {
+          const response = await request(path, undefined, method, body)
+          assert.equal(response.status, 401, `${method} ${path}`)
+          assert.equal(
+            typeof ((await response.json()) as { error: string }).error,
+            "string",
+          )
+        }
+        assert.equal(await prisma.internalConversation.count(), 0)
+        assert.equal(await prisma.workflowActionReceipt.count(), 0)
+        assert.equal(await prisma.workflowFile.count(), 0)
+        assert.equal(
+          await prisma.user.count({ where: { fullName: "Injected Name" } }),
+          0,
+        )
+      },
+    )
+
+    await t.test(
+      "invalid profile updates preserve both account and HR data",
+      async () => {
+        const employee = await prisma.employee.create({
+          data: {
+            employeeId: "REG-PROFILE",
+            fullName: "Regression Person",
+            email: "staff@example.com",
+            userId: "STAFF",
+          },
+        })
+        const before = await prisma.user.findUniqueOrThrow({
+          where: { id: "STAFF" },
+        })
+        for (const body of [
+          null,
+          [],
+          { fullName: "A", contactNumber: "09123456789" },
+          { fullName: "Changed Name", contactNumber: "invalid" },
+        ]) {
+          assert.equal(
+            (await request("/auth/profile", "STAFF", "PATCH", body)).status,
+            400,
+          )
+        }
+        assert.deepEqual(
+          await prisma.user.findUniqueOrThrow({ where: { id: "STAFF" } }),
+          before,
+        )
+        assert.deepEqual(
+          await prisma.employee.findUniqueOrThrow({
+            where: { id: employee.id },
+          }),
+          employee,
+        )
+      },
+    )
 
     await t.test(
       "department, team, employee and service provisioning stay linked",

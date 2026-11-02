@@ -528,6 +528,76 @@ test.describe("Service management", () => {
       await expect(
         page.getByRole("rowheader", { name: "Consulting", exact: true }),
       ).toBeVisible()
+      if (offering === "Packages") {
+        await page.unroute("**/api/services/service-2")
+        await page
+          .getByRole("button", { name: "Edit Consulting", exact: true })
+          .click()
+        await dialog
+          .getByRole("navigation", { name: "Service form progress" })
+          .getByRole("button", { name: "5 Packages", exact: true })
+          .click()
+        const premium = dialog.getByRole("article").filter({
+          has: page.getByRole("heading", { name: "Package 2", exact: true }),
+        })
+        await premium
+          .getByRole("button", { name: "Remove", exact: true })
+          .click()
+        await expect(dialog.getByLabel("Package Name")).toHaveCount(1)
+        await expect(dialog.getByLabel("Package Name")).toHaveValue("Starter")
+        await dialog
+          .getByRole("button", { name: "Save Changes", exact: true })
+          .click()
+        await expect(dialog.getByRole("alert")).toHaveText(
+          "Add at least two packages, or choose Pricing for a single option",
+        )
+        expect(updates).toHaveLength(1)
+        await dialog
+          .getByRole("button", { name: "Add Package", exact: true })
+          .click()
+        await dialog.getByLabel("Package Name").nth(1).fill("Replacement")
+        await dialog
+          .getByLabel("Description", { exact: true })
+          .nth(1)
+          .fill("Replacement consulting")
+        await dialog
+          .getByLabel("Included Features")
+          .nth(1)
+          .fill("Business analysis")
+        const update = page.waitForRequest(
+          (request) =>
+            request.method() === "PUT" &&
+            new URL(request.url()).pathname === "/api/services/service-2",
+        )
+        await dialog
+          .getByRole("button", { name: "Save Changes", exact: true })
+          .click()
+        const body = (await update).postDataJSON() as {
+          packages: { name: string }[]
+        }
+        expect(body.packages.map((item) => item.name)).toEqual([
+          "Starter",
+          "Replacement",
+        ])
+        await expect(dialog).toHaveCount(0)
+        await page
+          .getByRole("button", { name: "Edit Consulting", exact: true })
+          .click()
+        await dialog
+          .getByRole("navigation", { name: "Service form progress" })
+          .getByRole("button", { name: "5 Packages", exact: true })
+          .click()
+        await expect(dialog.getByLabel("Package Name")).toHaveCount(2)
+        await expect(dialog.getByLabel("Package Name").nth(0)).toHaveValue(
+          "Starter",
+        )
+        await expect(dialog.getByLabel("Package Name").nth(1)).toHaveValue(
+          "Replacement",
+        )
+        await dialog
+          .getByRole("button", { name: "Close dialog", exact: true })
+          .click()
+      }
     })
   }
 

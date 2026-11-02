@@ -179,7 +179,7 @@ test.describe("Pricing template management", () => {
         "Unsubmitted service draft",
       )
       await serviceDialog
-        .getByRole("button", { name: "Cancel", exact: true })
+        .getByRole("button", { name: "Close dialog", exact: true })
         .click()
       await page
         .getByRole("button", { name: "Edit Test Service", exact: true })

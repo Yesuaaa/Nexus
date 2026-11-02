@@ -204,7 +204,9 @@ test("the conversation records formal quotation approval through a structured ac
   const actions = await mock(page, workflow)
   await page.goto("/messages?request=request-1")
   await expect(
-    page.getByRole("heading", { name: "Website Development", exact: true }),
+    page
+      .getByRole("complementary", { name: "Request context" })
+      .getByText("Website Development", { exact: true }),
   ).toBeVisible()
   await expect(
     page.getByRole("list", { name: "Request progress" }),
@@ -250,6 +252,218 @@ test("expired quotations have no formal approval controls", async ({
   ).toHaveCount(0)
   await expect(page.getByText(/Expired/)).toBeVisible()
 })
+
+for (const width of [1440, 390]) {
+  test(`client retries a consultation reschedule without changing the confirmed schedule at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const workflow = fixture()
+    workflow.state = "CONSULTATION"
+    workflow.quotations = []
+    const consultation = {
+      id: "consultation-1",
+      startsAt: "2030-11-05T08:00:00.000Z",
+      endsAt: "2030-11-05T09:00:00.000Z",
+      location: "https://meet.example.com/consultation",
+      notes: null,
+      status: "SCHEDULED" as const,
+    }
+    workflow.consultations = [consultation]
+    workflow.events = [
+      {
+        id: "scheduled",
+        type: "CONSULTATION_SCHEDULED",
+        summary: "Consultation scheduled",
+        entityId: consultation.id,
+        createdAt: "2026-11-01T08:00:00.000Z",
+        actor: null,
+      },
+    ]
+    await mock(page, workflow)
+    const actions: Record<string, unknown>[] = []
+    await page.route(
+      "**/api/request-workflows/request-1/actions",
+      async (route) => {
+        expect(route.request().method()).toBe("POST")
+        expect(route.request().headers().authorization).toBe(
+          "Bearer workflow-session",
+        )
+        const action = route.request().postDataJSON() as Record<string, unknown>
+        actions.push(action)
+        if (actions.length === 1)
+          return route.fulfill({
+            status: 503,
+            json: { error: "Reschedule unavailable. Try again." },
+          })
+        workflow.version++
+        workflow.events.push({
+          id: "rescheduled",
+          type: "CONSULTATION_RESCHEDULE_REQUESTED",
+          summary: `Client requested a consultation reschedule to ${action.startsAt}. ${action.note}`,
+          entityId: consultation.id,
+          createdAt: "2026-11-02T08:00:00.000Z",
+          actor: { id: "client-1", fullName: "Mara Client" },
+        })
+        return route.fulfill({ json: workflow })
+      },
+    )
+    await page.goto("/messages?request=request-1")
+    const reschedule = page.getByRole("button", {
+      name: "Request reschedule",
+      exact: true,
+    })
+    await reschedule.click()
+    await page.getByLabel("Preferred date and time").fill("2030-11-06T10:00")
+    await page
+      .getByLabel("Reason for rescheduling")
+      .fill("Client meeting conflict")
+    await reschedule.click()
+    await expect(page.getByLabel("Reason for rescheduling")).toHaveValue(
+      "Client meeting conflict",
+    )
+    await expect.poll(() => actions.length).toBe(1)
+    await expect(reschedule).toBeEnabled()
+    await reschedule.click()
+    await expect(
+      page.getByText("Reschedule requested · Awaiting department response", {
+        exact: true,
+      }),
+    ).toBeVisible()
+    expect(actions).toHaveLength(2)
+    expect(actions[1]).toEqual(actions[0])
+    expect(actions[0]).toMatchObject({
+      type: "REQUEST_CONSULTATION_RESCHEDULE",
+      consultationId: consultation.id,
+      note: "Client meeting conflict",
+      expectedVersion: 3,
+    })
+    expect(actions[0].actionId).toMatch(/^[0-9a-f-]{36}$/)
+    expect(consultation.startsAt).toBe("2030-11-05T08:00:00.000Z")
+    await expect(reschedule).toHaveCount(0)
+  })
+
+  test(`client previews and retries payment evidence upload at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const workflow = fixture()
+    workflow.state = "AGREEMENT_PAYMENT_PENDING"
+    workflow.quotations = []
+    workflow.payment = {
+      id: "payment-1",
+      mandatory: true,
+      amount: "12500.00",
+      currency: "PHP",
+      status: "PENDING",
+      proofFileId: null,
+      reference: null,
+    }
+    workflow.events = [
+      {
+        id: "payment",
+        type: "PAYMENT_REQUIRED",
+        summary: "Payment required",
+        entityId: "payment-1",
+        createdAt: "2026-11-01T08:00:00.000Z",
+        actor: null,
+      },
+    ]
+    await mock(page, workflow)
+    const uploads: Record<string, unknown>[] = []
+    const actions: Record<string, unknown>[] = []
+    const buffer = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lY4AAAAASUVORK5CYII=",
+      "base64",
+    )
+    await page.route("**/api/request-workflows/request-1/files", (route) => {
+      expect(route.request().method()).toBe("POST")
+      expect(route.request().headers().authorization).toBe(
+        "Bearer workflow-session",
+      )
+      uploads.push(route.request().postDataJSON() as Record<string, unknown>)
+      if (uploads.length === 1)
+        return route.fulfill({
+          status: 503,
+          json: { error: "Upload unavailable. Try again." },
+        })
+      const file = {
+        id: "proof-1",
+        name: "receipt.png",
+        mimeType: "image/png",
+        size: buffer.length,
+        uploaderId: "client-1",
+        createdAt: "2026-11-02T08:00:00.000Z",
+      }
+      workflow.files = [file]
+      return route.fulfill({ status: 201, json: { file } })
+    })
+    await page.route("**/api/request-workflows/request-1/actions", (route) => {
+      expect(route.request().method()).toBe("POST")
+      actions.push(route.request().postDataJSON() as Record<string, unknown>)
+      workflow.payment!.status = "SUBMITTED"
+      workflow.payment!.proofFileId = "proof-1"
+      workflow.payment!.reference = "BANK-123"
+      workflow.version++
+      return route.fulfill({ json: workflow })
+    })
+    await page.goto("/messages?request=request-1")
+    const submit = page.getByRole("button", {
+      name: "Submit payment proof",
+      exact: true,
+    })
+    await expect(submit).toBeDisabled()
+    await page.getByLabel("Payment reference", { exact: true }).fill("BANK-123")
+    const input = page.getByLabel("Attach proof of payment", { exact: true })
+    await input.setInputFiles({
+      name: "receipt.png",
+      mimeType: "image/png",
+      buffer,
+    })
+    const preview = page.getByRole("img", {
+      name: "Preview of receipt.png",
+      exact: true,
+    })
+    await expect(preview).toBeVisible()
+    await page
+      .getByRole("button", { name: "Remove receipt.png", exact: true })
+      .click()
+    await expect(preview).toHaveCount(0)
+    await expect(submit).toBeDisabled()
+    expect(uploads).toEqual([])
+    await input.setInputFiles({
+      name: "receipt.png",
+      mimeType: "image/png",
+      buffer,
+    })
+    await submit.click()
+    await expect.poll(() => uploads.length).toBe(1)
+    await expect(submit).toBeEnabled()
+    await expect(preview).toBeVisible()
+    expect(actions).toEqual([])
+    await submit.click()
+    await expect(
+      page.getByText(
+        /Your payment proof has been submitted and is awaiting verification/,
+      ),
+    ).toBeVisible()
+    expect(uploads).toHaveLength(2)
+    expect(uploads[1]).toEqual(uploads[0])
+    expect(uploads[0]).toMatchObject({
+      name: "receipt.png",
+      mimeType: "image/png",
+      content: buffer.toString("base64"),
+    })
+    expect(actions).toHaveLength(1)
+    expect(actions[0]).toMatchObject({
+      type: "SUBMIT_PAYMENT",
+      fileId: "proof-1",
+      reference: "BANK-123",
+      expectedVersion: 3,
+    })
+    await expect(submit).toHaveCount(0)
+  })
+}
 
 test("mobile request context collapses and activated projects have a workspace link", async ({
   page,

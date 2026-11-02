@@ -224,7 +224,7 @@ test.describe("Client management", () => {
         ).toBeFocused()
         await expect(
           page.getByRole("link", {
-            name: "View service requests",
+            name: "View my booked requests",
             exact: true,
           }),
         ).toHaveAttribute("href", "/service-requests")
