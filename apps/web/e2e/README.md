@@ -14,6 +14,10 @@ development mode can repeat effects and invalidate request-count assertions.
 
 ## Review from 42789dd to 636c020
 
+For the follow-up backend review through `61a24a8`, the expanded regression
+command, and remaining architecture gaps, see
+[Backend regression architecture review](../../../docs/backend-regression-review.md).
+
 The November 2, 2026 review covers changes after
 `42789dd6b13094b00041b1fb24411602dc350af1` through `636c020`.
 
@@ -48,8 +52,8 @@ stacking/accessibility interaction is redesigned.
 
 ## Commands and live mode
 
-From the repository root, `pnpm test:e2e -- --ui` runs the isolated backend
-regression and every Playwright spec under `apps/web/e2e/` in the interactive UI
+From the repository root, `pnpm test:e2e -- --ui` runs the complete offline backend
+suite and every Playwright spec under `apps/web/e2e/` in the interactive UI
 at the same time. Backend test results remain in the terminal. The browser
 specs use mocked API responses, so the backend test validates the API
 independently rather than serving requests to the browser.
@@ -65,13 +69,13 @@ The main file also checks desktop and mobile service-request retries: a failed
 submission keeps the form open, reuses the same UUID and payload on retry, and
 only shows confirmation after a successful response.
 
-Run `pnpm --filter @nexus/api test:regression` for the separate backend-only
+Run `pnpm --filter @nexus/api test:smoke` for the separate backend-only
 suite in `apps/api/src/backend-regression.test.ts`. It starts Express on an
 ephemeral loopback port, applies every Prisma migration to a fresh in-memory
 PGlite database, and exercises real HTTP requests and Prisma writes. It needs
 neither a browser, a running development server, nor live account credentials.
 
-Coverage includes all four roles and anonymous reads across the mounted API
+Smoke coverage includes all four roles and anonymous reads across the mounted API
 modules; security headers; department/team/employee/service provisioning;
 duplicate employee rollback; specialist discovery; account retirement preserving
 HR records; service-request ownership, replay, conflict and stale-selection
@@ -85,7 +89,8 @@ pnpm --filter @nexus/web test:e2e regression.spec.ts --workers=2
 pnpm --filter @nexus/api test:regression
 ```
 
-Run `pnpm --filter @nexus/api test` for real JWT verification, rotation/reuse
+`pnpm --filter @nexus/api test:regression` runs the full API suite (an alias of
+`pnpm --filter @nexus/api test`) for real JWT verification, rotation/reuse
 detection, password-reset session revocation, and account restoration against
 offline PGlite databases. No live database is used by that suite.
 
