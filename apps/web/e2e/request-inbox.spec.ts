@@ -26,6 +26,151 @@ function fixture(index: number): RequestDetails {
     additionalDetails: "Follow the brand guidelines.",
   }
 }
+
+for (const width of [1440, 390]) {
+  test(`inbox rows refresh when a booking status changes elsewhere at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const state = await mockInbox(page)
+    state.requests = [fixture(1)]
+    await page.goto("/request-inbox")
+    await expect(page.getByText("SR-INBOX-1", { exact: true })).toBeVisible()
+    state.requests[0]!.status = "UNDER_REVIEW"
+    state.requests[0]!.acceptedDepartmentId = "design"
+    await expect(
+      page.getByText("No requests match this view.", { exact: true }),
+    ).toBeVisible({ timeout: 10_000 })
+    await page
+      .getByRole("combobox", { name: "Filter requests", exact: true })
+      .click()
+    await page
+      .getByRole("option", { name: "All statuses", exact: true })
+      .click()
+    await expect(page.getByText("Under review", { exact: true })).toBeVisible()
+    state.requests[0]!.status = "CLOSED"
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")))
+    await expect(page.getByText("Closed", { exact: true })).toBeVisible()
+    expect(state.queries.at(-1)).toContain("view=all")
+  })
+  test(`status filtering, sorting and exact-request chat feedback at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const state = await mockInbox(page)
+    state.requests.forEach((request, index) => {
+      request.service.name = index % 2 ? "Zebra service" : "Alpha service"
+    })
+    state.requests.push({ ...fixture(12), status: "CANCELLED" })
+    await page.goto("/request-inbox")
+    await page
+      .getByRole("button", {
+        name: "Go to chat for request booking-1",
+        exact: true,
+      })
+      .click()
+    await expect(
+      page.getByText(
+        "Accept this request for your department before opening its conversation.",
+        { exact: true },
+      ),
+    ).toBeVisible()
+    await expect(page).toHaveURL(/\/request-inbox$/)
+    await page
+      .getByRole("combobox", { name: "Sort requests", exact: true })
+      .selectOption("reference:desc")
+    await expect.poll(() => state.queries.at(-1)).toContain("sortDir=desc")
+    await page.getByRole("button", { name: "Page 2", exact: true }).click()
+    await expect.poll(() => state.queries.at(-1)).toContain("page=2")
+    expect(state.queries.at(-1)).toContain("sortBy=reference")
+    expect(state.queries.at(-1)).toContain("sortDir=desc")
+    await page
+      .getByRole("combobox", { name: "Filter requests", exact: true })
+      .click()
+    await page.getByRole("option", { name: "Cancelled", exact: true }).click()
+    await expect(page.getByText("Showing 1–1 of 1")).toBeVisible()
+    await expect(page.getByText("SR-INBOX-12", { exact: true })).toBeVisible()
+    expect(state.queries.at(-1)).toContain("page=1")
+    await page
+      .getByRole("combobox", { name: "Filter requests", exact: true })
+      .click()
+    await page.getByRole("option", { name: "Closed", exact: true }).click()
+    await expect(
+      page.getByText("No requests match this view.", { exact: true }),
+    ).toBeVisible()
+    await page
+      .getByRole("combobox", { name: "Filter requests", exact: true })
+      .click()
+    await page
+      .getByRole("option", { name: "All statuses", exact: true })
+      .click()
+    await expect(page.getByText("Showing 1–10 of 12")).toBeVisible()
+    await page
+      .getByRole("combobox", { name: "Sort requests", exact: true })
+      .selectOption("service:asc")
+    await expect.poll(() => state.queries.at(-1)).toContain("sortBy=service")
+    if (width === 1440) {
+      await page
+        .getByRole("button", {
+          name: "Sort by service, ascending",
+          exact: true,
+        })
+        .click()
+      await expect(
+        page.getByRole("columnheader", { name: /service/i }),
+      ).toHaveAttribute("aria-sort", "descending")
+      await page
+        .getByRole("button", { name: "Sort by reference", exact: true })
+        .click()
+      await expect(
+        page.getByRole("columnheader", { name: /reference/i }),
+      ).toHaveAttribute("aria-sort", "ascending")
+    }
+    await page.screenshot({
+      path: `test-results/issue142-inbox-${width}.png`,
+      fullPage: true,
+    })
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true)
+  })
+}
+
+test("chat icons open the exact accepted request and report access failures", async ({
+  page,
+}) => {
+  const state = await mockInbox(page)
+  state.requests[0]!.status = "UNDER_REVIEW"
+  state.requests[0]!.acceptedDepartmentId = "design"
+  state.conversationError = true
+  await page.goto("/request-inbox")
+  await page
+    .getByRole("combobox", { name: "Filter requests", exact: true })
+    .click()
+  await page.getByRole("option", { name: "Under review", exact: true }).click()
+  await page
+    .getByRole("button", {
+      name: "Go to chat for request booking-1",
+      exact: true,
+    })
+    .click()
+  await expect(
+    page.getByText("Conversation unavailable for this account.", {
+      exact: true,
+    }),
+  ).toBeVisible()
+  await expect(page).toHaveURL(/\/request-inbox$/)
+  state.conversationError = false
+  await page
+    .getByRole("button", {
+      name: "Go to chat for request booking-1",
+      exact: true,
+    })
+    .click()
+  await expect(page).toHaveURL(/\/messages\?request=booking-1$/)
+})
 async function mockInbox(
   page: Page,
   role: Account["role"] = "STAFF",
@@ -42,6 +187,8 @@ async function mockInbox(
     acceptError: 0,
     releaseAccept: null as (() => void) | null,
     pauseAccept: false,
+    queries: [] as string[],
+    conversationError: false,
   }
   await page.addInitScript(() =>
     sessionStorage.setItem("nexus.auth.token", "test-session"),
@@ -51,6 +198,11 @@ async function mockInbox(
     const url = new URL(request.url())
     expect(request.headers().authorization).toBe("Bearer test-session")
     if (url.pathname.startsWith("/api/request-conversations/")) {
+      if (state.conversationError)
+        return route.fulfill({
+          status: 403,
+          json: { error: "Conversation unavailable for this account." },
+        })
       if (url.pathname.endsWith("/events"))
         return route.fulfill({
           contentType: "text/event-stream",
@@ -86,6 +238,7 @@ async function mockInbox(
       })
     if (url.pathname === "/api/request-inbox") {
       state.inboxReads++
+      state.queries.push(url.search)
       if (state.listError)
         return route.fulfill({
           status: 503,
@@ -96,13 +249,35 @@ async function mockInbox(
       const currentPage = Number(url.searchParams.get("page") ?? "1")
       const filtered = state.requests.filter(
         (item) =>
-          (view === "under-review"
-            ? item.status === "UNDER_REVIEW"
-            : item.status === "SUBMITTED") &&
+          (view === "all" ||
+            item.status ===
+              {
+                pending: "SUBMITTED",
+                "under-review": "UNDER_REVIEW",
+                "awaiting-information": "AWAITING_CLIENT_INFO",
+                "ready-for-quotation": "READY_FOR_QUOTATION",
+                closed: "CLOSED",
+                cancelled: "CANCELLED",
+              }[view || "pending"]) &&
           `${item.id} ${item.referenceNumber ?? ""} ${item.client.fullName} ${item.service.name}`
             .toLowerCase()
             .includes(search),
       )
+      const sortBy = url.searchParams.get("sortBy")
+      const sign = url.searchParams.get("sortDir") === "desc" ? -1 : 1
+      if (sortBy === "reference" || sortBy === "service")
+        filtered.sort((a, b) => {
+          if (
+            sortBy === "reference" &&
+            (!a.referenceNumber || !b.referenceNumber)
+          )
+            return !a.referenceNumber ? 1 : -1
+          const left =
+            sortBy === "reference" ? a.referenceNumber! : a.service.name
+          const right =
+            sortBy === "reference" ? b.referenceNumber! : b.service.name
+          return left.localeCompare(right) * sign || a.id.localeCompare(b.id)
+        })
       return route.fulfill({
         json: {
           department: { id: "design", name: "Design" },
