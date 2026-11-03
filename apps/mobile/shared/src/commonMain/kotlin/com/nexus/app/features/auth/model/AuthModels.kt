@@ -32,7 +32,12 @@ data class AuthSession(
     val refreshToken: String,
     val expiresIn: Int,
     val user: AuthUser
-)
+) {
+    val accessToken: String get() = token
+}
+
+typealias AuthResponse = AuthSession
+typealias UserDto = AuthUser
 
 @Serializable
 data class CurrentUserResponse(
