@@ -11,7 +11,7 @@ interface TokenStorage {
 }
 
 class SettingsTokenStorage(
-    private val settings: Settings = Settings()
+    private val settings: Settings = createSecureSettings()
 ) : TokenStorage {
 
     companion object {
@@ -43,8 +43,5 @@ class SettingsTokenStorage(
         settings.remove(KEY_REFRESH_TOKEN)
     }
 
-    override fun hasValidSession(): Boolean {
-        return getAccessToken() != null
-    }
+    override fun hasValidSession(): Boolean = getAccessToken() != null
 }
-

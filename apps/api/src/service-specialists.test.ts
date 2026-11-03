@@ -784,6 +784,15 @@ test(
             "projectGoals",
             "projectRequirements",
             "additionalDetails",
+            "acceptedDepartmentId",
+            "billingInterval",
+            "currency",
+            "description",
+            "package",
+            "preferredSpecialist",
+            "pricingModel",
+            "quotedPrice",
+            "referenceNumber",
           ].sort(),
         )
         assert.equal(

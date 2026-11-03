@@ -24,24 +24,17 @@ fun DashboardScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(NexusColors.Background)
+            .background(androidx.compose.ui.graphics.Color(0xFFF7F8FA))
             .verticalScroll(rememberScrollState())
             .padding(horizontal = layout.gutter, vertical = layout.gap),
         verticalArrangement = Arrangement.spacedBy(layout.gap)
     ) {
         Text(
             text = "Dashboard",
-            fontSize = 26.sp,
-            fontWeight = FontWeight.Bold,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.SemiBold,
             color = NexusColors.HeaderDarkNavy
         )
 
-        Text(
-            text = "Welcome to your Nexus Client Portal. Use the tabs below to explore available EXP services or track your booked requests.",
-            fontSize = 14.sp,
-            color = NexusColors.TextSecondary,
-            lineHeight = 20.sp
-        )
     }
 }
-

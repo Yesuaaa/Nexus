@@ -1,5 +1,15 @@
 package com.nexus.app.core.components
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
+import org.jetbrains.compose.resources.painterResource
+import nexusmobile.shared.generated.resources.Res
+import nexusmobile.shared.generated.resources.exp_logo
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -43,14 +53,13 @@ fun NexusTopAppBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // EXP Brand Label
-            Text(
-                text = "EXP",
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Black,
-                letterSpacing = (-0.5).sp,
-                color = NexusColors.HeaderDarkNavy
-            )
+            Box(Modifier.width(80.dp).height(42.dp).clipToBounds()) {
+                Image(
+                    painterResource(Res.drawable.exp_logo),
+                    contentDescription = "EXP Digital Solutions",
+                    modifier = Modifier.fillMaxSize().graphicsLayer(scaleX = 2f, scaleY = 2f)
+                )
+            }
             Column(Modifier.weight(1f)) {
                 Text(
                     text = "Digital Solutions",
@@ -82,7 +91,7 @@ fun NexusTopAppBar(
                 Icon(
                     imageVector = Icons.Outlined.Notifications,
                     contentDescription = "Notifications",
-                    tint = NexusColors.TextPrimary
+                    tint = NexusColors.PrimaryBlue
                 )
             }
             IconButton(
