@@ -117,9 +117,15 @@ async function findExisting(clientId: string, input: ServiceRequestInput) {
     },
   })
   if (!existing) return null
+  const packageMatches = input.packageId
+    ? existing.packageId === input.packageId
+    : input.packageTier
+      ? existing.packageName?.toLowerCase() === input.packageTier.toLowerCase()
+      : existing.packageId === null
+
   if (
     existing.serviceId !== input.serviceId ||
-    existing.packageId !== input.packageId ||
+    !packageMatches ||
     existing.preferredSpecialistId !== input.preferredSpecialistId ||
     existing.projectGoals !== input.goals ||
     existing.projectRequirements !== input.requirements ||
@@ -162,10 +168,18 @@ export async function submitServiceRequest(clientId: string, body: unknown) {
           )
         const selectedPackage = input.packageId
           ? service.packages.find((item) => item.id === input.packageId)
-          : null
+          : input.packageTier
+            ? service.packages.find(
+                (item) =>
+                  item.name.toLowerCase() === input.packageTier!.toLowerCase(),
+              )
+            : null
         if (
           (input.packageId && !selectedPackage) ||
-          (!input.packageId && service.packages.length > 0)
+          (input.packageTier && !selectedPackage) ||
+          (!input.packageId &&
+            !input.packageTier &&
+            service.packages.length > 0)
         )
           throw new ServiceRequestsError(
             409,
