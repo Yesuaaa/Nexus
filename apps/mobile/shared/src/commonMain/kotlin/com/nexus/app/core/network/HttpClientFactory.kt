@@ -3,6 +3,7 @@ package com.nexus.app.core.network
 import com.nexus.app.core.storage.TokenStorage
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.DefaultRequest
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.auth.Auth
 import io.ktor.client.plugins.auth.providers.BearerTokens
 import io.ktor.client.plugins.auth.providers.bearer
@@ -33,6 +34,12 @@ object HttpClientFactory {
                         prettyPrint = false
                     }
                 )
+            }
+
+            install(HttpTimeout) {
+                requestTimeoutMillis = 20_000
+                connectTimeoutMillis = 10_000
+                socketTimeoutMillis = 20_000
             }
 
             install(Logging) {
