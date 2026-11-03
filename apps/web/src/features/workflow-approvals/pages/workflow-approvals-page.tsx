@@ -1,4 +1,5 @@
 "use client"
+import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 
 import Link from "next/link"
 import { useEffect, useState } from "react"
@@ -23,6 +24,8 @@ type ApprovalRequest = {
 }
 
 function ApprovalReview({ requestId }: { requestId: string }) {
+  const { formatDateTime } = useDatePreferences()
+
   const controls = useRequestWorkflow(requestId)
   const { workflow, loading, error } = controls
   return (
@@ -135,7 +138,7 @@ function ApprovalReview({ requestId }: { requestId: string }) {
                       dateTime={event.createdAt}
                       className="text-[10px] text-muted-foreground"
                     >
-                      {new Date(event.createdAt).toLocaleString("en-PH")}
+                      {formatDateTime(event.createdAt)}
                     </time>
                   </li>
                 ))}

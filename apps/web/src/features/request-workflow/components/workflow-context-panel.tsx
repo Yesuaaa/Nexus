@@ -1,4 +1,5 @@
 "use client"
+import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import {
@@ -705,6 +706,8 @@ export function WorkflowContextPanel({
   onViewEvent?: (entityId: string) => void
   conversationOverview?: ReactNode
 }) {
+  const { formatDate, formatTime } = useDatePreferences()
+
   const detailsRef = useRef<HTMLDetailsElement>(null)
   useEffect(() => {
     const screen = window.matchMedia("(min-width: 1024px)")
@@ -969,24 +972,12 @@ export function WorkflowContextPanel({
                                 />
                                 <div>
                                   <p className="m-0 font-medium text-white">
-                                    {startsAt.toLocaleDateString("en-PH", {
-                                      weekday: "short",
-                                      month: "short",
-                                      day: "numeric",
-                                      year: "numeric",
-                                    })}
+                                    {formatDate(startsAt)}
                                   </p>
                                   <p className="m-0 flex items-center gap-1 text-[10px] text-blue-100">
                                     <Clock3 size={11} aria-hidden="true" />
-                                    {startsAt.toLocaleTimeString("en-PH", {
-                                      hour: "numeric",
-                                      minute: "2-digit",
-                                    })}{" "}
-                                    –{" "}
-                                    {endsAt.toLocaleTimeString("en-PH", {
-                                      hour: "numeric",
-                                      minute: "2-digit",
-                                    })}
+                                    {formatTime(startsAt)} –{" "}
+                                    {formatTime(endsAt)}
                                   </p>
                                 </div>
                               </div>

@@ -1,4 +1,5 @@
 "use client"
+import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 
 import Link from "next/link"
 import { useEffect, useState } from "react"
@@ -14,6 +15,7 @@ import {
 } from "../api/projects-api"
 
 export function ProjectPage({ projectId }: { projectId: string }) {
+  const { formatDate } = useDatePreferences()
   const account = usePortalAccount()
   const [project, setProject] = useState<ProjectWorkspace | null>(null)
   const [error, setError] = useState("")
@@ -140,10 +142,7 @@ export function ProjectPage({ projectId }: { projectId: string }) {
                         </p>
                         {milestone.completedAt && (
                           <p className="mt-1 mb-0 text-[11px] text-muted-foreground">
-                            Completed{" "}
-                            {new Date(milestone.completedAt).toLocaleDateString(
-                              "en-PH",
-                            )}
+                            Completed {formatDate(milestone.completedAt)}
                           </p>
                         )}
                       </div>
@@ -189,10 +188,7 @@ export function ProjectPage({ projectId }: { projectId: string }) {
                   <dt className="text-muted-foreground">Started</dt>
                   <dd className="m-0 mt-1">
                     {project.startDate
-                      ? new Date(project.startDate).toLocaleDateString(
-                          "en-PH",
-                          { dateStyle: "medium" },
-                        )
+                      ? formatDate(project.startDate)
                       : "Not started"}
                   </dd>
                 </div>

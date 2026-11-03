@@ -1,0 +1,2 @@
+ALTER TABLE "User" ADD COLUMN "settings" JSONB NOT NULL DEFAULT '{}';
+ALTER TABLE "Session" ADD COLUMN "userAgent" TEXT, ADD COLUMN "lastActiveAt" TIMESTAMP(3);

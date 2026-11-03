@@ -1,3 +1,4 @@
+import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 import Link from "next/link"
 import { Eye, MessageSquare, X } from "lucide-react"
 import { useState } from "react"
@@ -8,10 +9,7 @@ import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Pill } from "@/components/ui/pill"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import type { ServiceRequestSummary } from "../api/client-services-api"
-import {
-  requestDate,
-  serviceRequestStatuses,
-} from "../model/service-request-status"
+import { serviceRequestStatuses } from "../model/service-request-status"
 
 function RequestActions({
   request,
@@ -148,6 +146,7 @@ export function ClientRequestsTable({
   onView: (request: ServiceRequestSummary) => void
   onCancelled: () => void
 }) {
+  const { formatDate } = useDatePreferences()
   return (
     <>
       <div className="overflow-hidden rounded-lg border border-[#e8ebef] bg-background @max-[900px]:hidden">
@@ -208,7 +207,7 @@ export function ClientRequestsTable({
                 </td>
                 <td className="px-4 py-[7px] align-middle text-[#52627a]">
                   <time dateTime={request.createdAt}>
-                    {requestDate(request.createdAt)}
+                    {formatDate(request.createdAt)}
                   </time>
                 </td>
                 <td className="px-3 py-[7px] align-middle">
@@ -265,7 +264,7 @@ export function ClientRequestsTable({
                 className="block text-[11px] whitespace-nowrap text-[#52627a]"
                 dateTime={request.createdAt}
               >
-                {requestDate(request.createdAt)}
+                {formatDate(request.createdAt)}
               </time>
               <RequestActions
                 request={request}

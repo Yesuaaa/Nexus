@@ -50,20 +50,22 @@ export function ProfileImageUpload({
     const nextReader = new FileReader()
     reader.current = nextReader
     nextReader.onload = () => {
-      if (typeof nextReader.result === "string")
-        setSelected({ name: file.name, dataUrl: nextReader.result })
+      if (typeof nextReader.result === "string") {
+        const image = { name: file.name, dataUrl: nextReader.result }
+        setSelected(image)
+      }
     }
     nextReader.onerror = () =>
       setError("This image could not be read. Choose another file.")
     nextReader.readAsDataURL(file)
   }
-  async function upload() {
-    if (!selected || busy) return
+  async function upload(image = selected) {
+    if (!image || busy) return
     setBusy(true)
     onUploadingChange?.(true)
     setError("")
     try {
-      const result = await uploadProfileImage(kind, selected.dataUrl)
+      const result = await uploadProfileImage(kind, image.dataUrl)
       onUploaded(result.url, result.profile)
       setSelected(null)
     } catch (reason) {
@@ -118,8 +120,18 @@ export function ProfileImageUpload({
           disabled={busy}
           onClick={() => input.current?.click()}
         >
-          <ImagePlus size={15} aria-hidden="true" />
-          {value || selected ? "Choose another image" : "Choose image"}
+          {kind === "project" ? (
+            <ImagePlus size={15} aria-hidden="true" />
+          ) : (
+            <Upload size={15} aria-hidden="true" />
+          )}
+          {kind === "project"
+            ? value || selected
+              ? "Choose another image"
+              : "Choose image"
+            : busy
+              ? "Uploading…"
+              : "Upload image"}
         </Button>
         {selected && (
           <>
@@ -130,7 +142,7 @@ export function ProfileImageUpload({
               onClick={() => void upload()}
             >
               <Upload size={15} aria-hidden="true" />
-              {busy ? "Uploading…" : "Upload image"}
+              {busy ? "Saving…" : kind === "project" ? "Upload image" : "Save"}
             </Button>
             <Button
               type="button"

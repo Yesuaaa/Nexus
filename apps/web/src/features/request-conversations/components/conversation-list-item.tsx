@@ -1,4 +1,5 @@
 "use client"
+import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 
 import Link from "next/link"
 import { focusRing } from "@/components/layout/styles"
@@ -19,6 +20,8 @@ export function ConversationListItem({
   requestId: string | null
   railCollapsed: boolean
 }) {
+  const { formatDate } = useDatePreferences()
+
   const selected =
     requestId === conversation.id ||
     conversation.bookings?.some((booking) => booking.id === requestId)
@@ -81,9 +84,9 @@ export function ConversationListItem({
                 selected ? "text-white/70" : "text-[#52627a]",
               )}
             >
-              {new Date(
+              {formatDate(
                 conversation.lastMessage?.createdAt || conversation.updatedAt,
-              ).toLocaleDateString("en-PH", { month: "short", day: "numeric" })}
+              )}
             </time>
           </span>
           <span

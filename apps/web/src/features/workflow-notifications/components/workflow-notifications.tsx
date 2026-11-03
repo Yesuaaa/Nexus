@@ -1,4 +1,8 @@
 "use client"
+import {
+  useDatePreferences,
+  usePreferences,
+} from "@/features/settings/providers/preferences-provider"
 
 import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
@@ -26,6 +30,8 @@ type Notification = {
 type Notifications = { notifications: Notification[]; unreadCount: number }
 
 export function WorkflowNotifications() {
+  const { formatDateTime } = useDatePreferences()
+  const { preferences } = usePreferences()
   const account = usePortalAccount()
   const [result, setResult] = useState<Notifications | null>(null)
   const [error, setError] = useState(false)
@@ -57,7 +63,7 @@ export function WorkflowNotifications() {
       controller.abort()
       clearInterval(timer)
     }
-  }, [load])
+  }, [load, preferences.workflowNotifications])
   async function read(id: string) {
     try {
       await apiRequest(
@@ -145,10 +151,7 @@ export function WorkflowNotifications() {
                   dateTime={item.createdAt}
                   className="text-[10px] text-muted-foreground"
                 >
-                  {new Date(item.createdAt).toLocaleString("en-PH", {
-                    dateStyle: "medium",
-                    timeStyle: "short",
-                  })}
+                  {formatDateTime(item.createdAt)}
                 </time>
               </Link>
             </DropdownMenuItem>

@@ -20,6 +20,7 @@ import {
 } from "@/features/auth/model/permissions"
 import { AccountContext } from "@/features/auth/providers/account-context"
 import { useAuthTransition } from "@/features/auth/providers/auth-provider"
+import { PreferencesProvider } from "@/features/settings/providers/preferences-provider"
 import { RoleLayout } from "./role-layout"
 
 const stateClassName =
@@ -90,9 +91,11 @@ export function PortalLayout({ children }: { children: ReactNode }) {
 
   return (
     <AccountContext value={account}>
-      <RoleLayout account={account} onSignOut={() => void handleSignOut()}>
-        {children}
-      </RoleLayout>
+      <PreferencesProvider key={account.id}>
+        <RoleLayout account={account} onSignOut={() => void handleSignOut()}>
+          {children}
+        </RoleLayout>
+      </PreferencesProvider>
     </AccountContext>
   )
 }
