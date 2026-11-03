@@ -1,11 +1,9 @@
 "use client"
 import { useState, type FormEvent, type ReactNode } from "react"
-import { useRouter } from "next/navigation"
 import { Eye, EyeOff } from "lucide-react"
 import { sileo } from "sileo"
 import { Button } from "@/components/ui/button"
 import { focusRing } from "@/components/layout/styles"
-import { clearToken } from "@/features/auth/api/auth-api"
 import { changeProfilePassword } from "@/features/profile/api/profile-api"
 const inputClass =
   "min-h-11 w-full min-w-0 rounded-lg border border-[#d8e1ef] bg-background px-3 py-2 text-sm text-[#182235] outline-none focus-visible:ring-2 focus-visible:ring-[#294a9b] disabled:opacity-60"
@@ -114,8 +112,11 @@ function PasswordField({
 }
 export function SecurityDetails({
   onBusyChange,
-}: { onBusyChange?: (busy: boolean) => void } = {}) {
-  const router = useRouter()
+  onChanged,
+}: {
+  onBusyChange?: (busy: boolean) => void
+  onChanged: () => void
+}) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   async function save(event: FormEvent<HTMLFormElement>) {
@@ -134,16 +135,12 @@ export function SecurityDetails({
         String(data.get("currentPassword")),
         String(data.get("newPassword")),
       )
-      clearToken()
-      sileo.success({
-        title: "Password changed",
-        description: "Sign in with your new password.",
-      })
-      router.replace("/login")
+      sileo.success({ title: "Password changed" })
+      onChanged()
     } catch (reason) {
       setError(errorText(reason))
-      setBusy(false)
     } finally {
+      setBusy(false)
       onBusyChange?.(false)
     }
   }
@@ -151,7 +148,7 @@ export function SecurityDetails({
     <Section
       id="security"
       title="Password & security"
-      description="Use at least 12 characters. Changing your password signs out all active sessions."
+      description="Use at least 12 characters. After saving, you can choose whether to log out of all devices."
     >
       <form onSubmit={save} className="grid gap-5">
         <fieldset

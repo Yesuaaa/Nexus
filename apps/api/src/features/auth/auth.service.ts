@@ -178,9 +178,6 @@ export const authService = {
       throw new AuthError(400, "Current password is incorrect")
     }
     const newPasswordHash = await hashPassword(newPassword)
-    await authRepository.updatePasswordAndRevokeSessions(
-      input.userId,
-      newPasswordHash,
-    )
+    await authRepository.updatePassword(input.userId, newPasswordHash)
   },
 }

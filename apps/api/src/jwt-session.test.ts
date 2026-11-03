@@ -273,28 +273,60 @@ test(
         assert.equal((await me("a".repeat(43))).status, 401)
       },
     )
-    await t.test("password changes revoke every session", async () => {
-      const first = await login()
-      const second = await login()
-      assert.equal(
-        (
-          await post(
-            "change-password",
-            { currentPassword: password, newPassword: "Another-password-123!" },
-            first.token,
-          )
-        ).status,
-        204,
-      )
-      for (const session of [first, second]) {
-        assert.equal((await me(session.token)).status, 401)
+    await t.test(
+      "password changes retain sessions until explicitly revoked",
+      async () => {
+        const first = await login()
+        const second = await login()
         assert.equal(
-          (await post("refresh", { refreshToken: session.refreshToken }))
-            .status,
+          (
+            await post(
+              "change-password",
+              {
+                currentPassword: password,
+                newPassword: "Another-password-123!",
+              },
+              first.token,
+            )
+          ).status,
+          204,
+        )
+        assert.equal(
+          (await post("login", { email: "jwt@example.com", password })).status,
           401,
         )
-      }
-    })
+        assert.equal(
+          (
+            await post("login", {
+              email: "jwt@example.com",
+              password: "Another-password-123!",
+            })
+          ).status,
+          200,
+        )
+        for (const session of [first, second]) {
+          assert.equal((await me(session.token)).status, 200)
+          const response = await post("refresh", {
+            refreshToken: session.refreshToken,
+          })
+          assert.equal(response.status, 200)
+          const rotated = (await response.json()) as { refreshToken: string }
+          session.refreshToken = rotated.refreshToken
+        }
+        assert.equal(
+          (await post("sessions/revoke-all", {}, first.token)).status,
+          204,
+        )
+        for (const session of [first, second]) {
+          assert.equal((await me(session.token)).status, 401)
+          assert.equal(
+            (await post("refresh", { refreshToken: session.refreshToken }))
+              .status,
+            401,
+          )
+        }
+      },
+    )
     await t.test(
       "authentication endpoints bound requests and advertise retry timing",
       async () => {

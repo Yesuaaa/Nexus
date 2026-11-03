@@ -139,8 +139,8 @@ export function SettingsSidebar({
             </div>
           </dl>
           <p className="mt-5 mb-0 border-t border-[#e7ecf3] pt-4 text-[11px] leading-5 text-[#738096]">
-            Changing your password ends all active sessions. You’ll need to sign
-            in again.
+            After changing your password, you can choose whether to log out of
+            all devices.
           </p>
         </section>
       )}

@@ -138,14 +138,10 @@ export const authRepository = {
     return prisma.session.deleteMany({ where: { id: sessionId } })
   },
 
-  async updatePasswordAndRevokeSessions(userId: string, passwordHash: string) {
-    const prisma = getPrisma()!
-    return prisma.$transaction([
-      prisma.user.update({
-        where: { id: userId },
-        data: { passwordHash },
-      }),
-      prisma.session.deleteMany({ where: { userId } }),
-    ])
+  async updatePassword(userId: string, passwordHash: string) {
+    return getPrisma()!.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    })
   },
 }

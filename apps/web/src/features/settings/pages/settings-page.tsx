@@ -18,6 +18,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import { SettingsSidebar } from "../components/settings-sidebar"
+import { PasswordSessionChoice } from "../components/password-session-choice"
 import { SecurityDetails } from "../components/security-details"
 import {
   getSettings,
@@ -51,6 +52,7 @@ export function SettingsPage() {
   const [sessionError, setSessionError] = useState("")
   const [tab, setTab] = useState("security")
   const [passwordOpen, setPasswordOpen] = useState(false)
+  const [passwordChoice, setPasswordChoice] = useState(false)
   const [passwordBusy, setPasswordBusy] = useState(false)
   const [focusTarget, setFocusTarget] = useState<string | null>(null)
   useEffect(() => {
@@ -263,7 +265,7 @@ export function SettingsPage() {
                           {!session.current && (
                             <Button
                               variant="outline"
-                              className="min-h-10 text-xs"
+                              className="min-h-10 border-[#bc3649] text-xs text-[#bc3649] hover:bg-[#fff0f1] hover:text-[#9f2638] focus-visible:ring-[#bc3649]"
                               onClick={() => {
                                 setSessionError("")
                                 setTarget(session)
@@ -509,10 +511,19 @@ export function SettingsPage() {
             Enter your current password and choose a new password.
           </DialogDescription>
           <div className="[&>section]:rounded-none [&>section]:border-0">
-            <SecurityDetails onBusyChange={setPasswordBusy} />
+            <SecurityDetails
+              onBusyChange={setPasswordBusy}
+              onChanged={() => {
+                setPasswordOpen(false)
+                setPasswordChoice(true)
+              }}
+            />
           </div>
         </DialogContent>
       </Dialog>
+      {passwordChoice && (
+        <PasswordSessionChoice onClose={() => setPasswordChoice(false)} />
+      )}
       {target && (
         <ConfirmationDialog
           title={

@@ -279,11 +279,16 @@ for (const role of ["USER", "STAFF", "ADMIN", "SUPERADMIN"] as const) {
         page.getByRole("dialog", { name: "Change password", exact: true }),
       ).toBeVisible()
       finishPassword?.()
-      await expect(page).toHaveURL(/\/login/)
+      await expect(
+        page.getByRole("dialog", { name: "Password changed", exact: true }),
+      ).toContainText("Do you want to log out of all devices?")
+      await page.getByRole("button", { name: "No", exact: true }).click()
+      await expect(page.getByRole("dialog")).toHaveCount(0)
+      await expect(page).toHaveURL(/\/settings/)
       expect(changedPassword).toBe(true)
       expect(
         await page.evaluate(() => sessionStorage.getItem("nexus.auth.token")),
-      ).toBeNull()
+      ).toBe("settings-test")
     },
   )
 }

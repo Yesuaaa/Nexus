@@ -33,3 +33,6 @@ export const revokeSession = (id: string) =>
   })
 export const revokeOtherSessions = () =>
   apiRequest<void>("/api/auth/sessions/revoke-others", { method: "POST" })
+
+export const revokeAllSessions = () =>
+  apiRequest<void>("/api/auth/sessions/revoke-all", { method: "POST" })

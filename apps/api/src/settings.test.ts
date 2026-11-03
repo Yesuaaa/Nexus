@@ -172,6 +172,15 @@ test(
       204,
     )
     assert.equal((await request(second.token, "/settings")).status, 401)
+    assert.equal(
+      (
+        await request(actor.token, "/refresh", "POST", {
+          refreshToken: second.refreshToken,
+        })
+      ).status,
+      401,
+    )
+    assert.equal((await request(actor.token, "/settings")).status, 200)
     const third = await issueSession(actor.user)
     assert.equal(
       (await request(actor.token, "/sessions/revoke-others", "POST")).status,
@@ -179,6 +188,21 @@ test(
     )
     assert.equal((await request(third.token, "/settings")).status, 401)
     assert.equal((await request(actor.token, "/settings")).status, 200)
+    const fourth = await issueSession(actor.user)
+    assert.equal(
+      (await request(actor.token, "/sessions/revoke-all", "POST")).status,
+      204,
+    )
+    for (const session of [actor, fourth])
+      assert.equal((await request(session.token, "/settings")).status, 401)
+    assert.equal(
+      (
+        await request(fourth.token, "/refresh", "POST", {
+          refreshToken: fourth.refreshToken,
+        })
+      ).status,
+      401,
+    )
     assert.equal((await request(other.token, "/settings")).status, 200)
   },
 )

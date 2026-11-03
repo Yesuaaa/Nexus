@@ -38,6 +38,20 @@ settingsRouter.patch(
   },
 )
 settingsRouter.post(
+  "/sessions/revoke-all",
+  requireAuth,
+  async (request, response, next) => {
+    try {
+      await getPrisma()!.session.deleteMany({
+        where: { userId: request.auth!.user.id },
+      })
+      response.status(204).send()
+    } catch (error) {
+      next(error)
+    }
+  },
+)
+settingsRouter.post(
   "/sessions/revoke-others",
   requireAuth,
   async (request, response, next) => {
