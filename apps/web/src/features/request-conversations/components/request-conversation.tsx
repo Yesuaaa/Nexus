@@ -1,4 +1,5 @@
 "use client"
+import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 
 import {
   useCallback,
@@ -170,6 +171,7 @@ function ConversationPanel({
   onConversationRead,
   listHref = "/messages",
 }: RequestConversationProps) {
+  const { formatDate, formatTime } = useDatePreferences()
   const account = usePortalAccount()
   const inputId = useId()
   const [history, setHistory] = useState<ConversationHistory | null>(null)
@@ -980,15 +982,10 @@ function ConversationPanel({
                     const previousEntry = timeline[index - 1]
                     const newDay =
                       !previousEntry ||
-                      date.toDateString() !==
-                        new Date(previousEntry.createdAt).toDateString()
+                      formatDate(date) !== formatDate(previousEntry.createdAt)
                     const daySeparator = newDay ? (
                       <p className="mt-3 mb-5 text-center text-[11px] text-[#8791a2]">
-                        {date.toLocaleDateString("en-PH", {
-                          weekday: "short",
-                          month: "short",
-                          day: "numeric",
-                        })}
+                        {formatDate(date)}
                       </p>
                     ) : null
                     if (entry.kind === "meeting")
@@ -1205,8 +1202,8 @@ function ConversationPanel({
                                 </p>
                                 <HoverTooltip>
                                   {deleted
-                                    ? `Deleted ${deletedAt!.toLocaleDateString("en-PH", { month: "short", day: "numeric" })}, ${deletedAt!.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })}`
-                                    : `${message.editedAt ? "Edited · " : ""}${date.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })}`}
+                                    ? `Deleted ${formatDate(deletedAt!)}, ${formatTime(deletedAt!)}`
+                                    : `${message.editedAt ? "Edited · " : ""}${formatTime(date)}`}
                                 </HoverTooltip>
                               </div>
                             )}
@@ -1228,7 +1225,7 @@ function ConversationPanel({
                                     <Button
                                       type="button"
                                       variant="outline"
-                                      aria-label={`Actions for your message at ${date.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })}`}
+                                      aria-label={`Actions for your message at ${formatTime(date)}`}
                                       className="absolute top-0 left-0 size-11 shrink-0 border-0 bg-transparent p-0 text-[#52627a] hover:bg-[#f1f4fa]"
                                     >
                                       <MoreHorizontal

@@ -8,6 +8,7 @@ import { focusRing } from "./styles"
 const routeLabels: Record<string, string> = {
   dashboard: "Dashboard",
   profile: "My Profile",
+  settings: "Settings",
   messages: "Messages",
   projects: "Projects",
   "workflow-approvals": "Workflow Approvals",

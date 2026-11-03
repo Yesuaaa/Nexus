@@ -1,3 +1,4 @@
+import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 import {
   ArrowDown,
   ArrowUp,
@@ -11,7 +12,6 @@ import { Button } from "@/components/ui/button"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import { BookingStatusPill } from "@/features/bookings/components/booking-status-pill"
-import { bookingDate } from "@/features/bookings/model/booking-status"
 import { cn } from "@/lib/utils"
 import type { InboxRequest, InboxSort } from "../api/request-inbox-api"
 
@@ -67,6 +67,7 @@ export function RequestInboxTable({
   sortDir: "asc" | "desc"
   onSort: (column: "reference" | "service") => void
 }) {
+  const { formatDate } = useDatePreferences()
   return (
     <div
       role="table"
@@ -210,7 +211,7 @@ export function RequestInboxTable({
                   Requested
                 </span>
                 <time dateTime={request.createdAt}>
-                  {bookingDate(request.createdAt)}
+                  {formatDate(request.createdAt)}
                 </time>
               </div>
               <div

@@ -10,12 +10,20 @@ export interface CreateUserData {
 }
 
 export interface CreateSessionData {
+  approximateLocation?: string | null
+  userAgent?: string
   tokenHash: string
   userId: string
   expiresAt: Date
 }
 
 export const authRepository = {
+  async touchSession(id: string) {
+    await getPrisma()!.session.updateMany({
+      where: { id },
+      data: { lastActiveAt: new Date() },
+    })
+  },
   isDatabaseAvailable(): boolean {
     return Boolean(getPrisma())
   },
@@ -52,6 +60,9 @@ export const authRepository = {
     const prisma = getPrisma()!
     return prisma.session.create({
       data: {
+        userAgent: data.userAgent,
+        approximateLocation: data.approximateLocation,
+        lastActiveAt: new Date(),
         tokenHash: data.tokenHash,
         userId: data.userId,
         expiresAt: data.expiresAt,
@@ -127,14 +138,10 @@ export const authRepository = {
     return prisma.session.deleteMany({ where: { id: sessionId } })
   },
 
-  async updatePasswordAndRevokeSessions(userId: string, passwordHash: string) {
-    const prisma = getPrisma()!
-    return prisma.$transaction([
-      prisma.user.update({
-        where: { id: userId },
-        data: { passwordHash },
-      }),
-      prisma.session.deleteMany({ where: { userId } }),
-    ])
+  async updatePassword(userId: string, passwordHash: string) {
+    return getPrisma()!.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    })
   },
 }

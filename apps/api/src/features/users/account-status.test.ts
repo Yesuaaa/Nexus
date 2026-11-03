@@ -27,6 +27,7 @@ test("account status, deletion, and authentication enforce access", async (t) =>
     profileImagePath: null,
     profileBannerPath: null,
     position: null,
+    settings: {},
     passwordHash: await hashPassword(password),
     role: Role.USER,
     isActive: true,

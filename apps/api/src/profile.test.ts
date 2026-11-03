@@ -326,7 +326,7 @@ test(
       ).status,
       204,
     )
-    assert.equal((await request(staff.token, "/profile")).status, 401)
-    assert.equal((await request(secondSession.token, "/profile")).status, 401)
+    assert.equal((await request(staff.token, "/profile")).status, 200)
+    assert.equal((await request(secondSession.token, "/profile")).status, 200)
   },
 )

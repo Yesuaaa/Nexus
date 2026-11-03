@@ -1659,6 +1659,20 @@ test(
         const before = await list()
         assert.equal(before.notifications.length, 40)
         assert.ok(before.unreadCount >= 45)
+        await prisma!.user.update({
+          where: { id: client.id },
+          data: { settings: { workflowNotifications: false } },
+        })
+        const muted = await list()
+        assert.deepEqual(muted, { notifications: [], unreadCount: 0 })
+        await prisma!.user.update({
+          where: { id: client.id },
+          data: { settings: {} },
+        })
+        const restored = await list()
+        assert.equal(restored.notifications.length, 40)
+        assert.equal(restored.unreadCount, before.unreadCount)
+
         assert.equal(
           (await fetch(`${endpoint}/read-all`, { method: "PATCH" })).status,
           401,

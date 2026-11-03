@@ -1,4 +1,5 @@
 "use client"
+import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 
 import Link from "next/link"
 import Image from "next/image"
@@ -527,6 +528,8 @@ export function ConsultationSchedulingCard({
   workflow,
   controls,
 }: CardProps & { consultation: Workflow["consultations"][number] }) {
+  const { formatDateTime, formatTime } = useDatePreferences()
+
   const now = useCurrentTime()
   const [rescheduling, setRescheduling] = useState(false)
   const rescheduleEvent = workflow.events
@@ -561,18 +564,11 @@ export function ConsultationSchedulingCard({
       icon={CalendarDays}
     >
       <p className="m-0 font-medium text-[#182235]">
-        {new Date(consultation.startsAt).toLocaleString("en-PH", {
-          dateStyle: "medium",
-          timeStyle: "short",
-        })}
+        {formatDateTime(consultation.startsAt)}
       </p>
       <p className="m-0">
-        Until{" "}
-        {new Date(consultation.endsAt).toLocaleTimeString("en-PH", {
-          hour: "numeric",
-          minute: "2-digit",
-        })}{" "}
-        · <ConsultationLocation location={consultation.location} />
+        Until {formatTime(consultation.endsAt)} ·{" "}
+        <ConsultationLocation location={consultation.location} />
       </p>
       {consultation.notes && (
         <p className="m-0 whitespace-pre-wrap">{consultation.notes}</p>
@@ -585,10 +581,7 @@ export function ConsultationSchedulingCard({
           <div className="space-y-2 text-xs leading-6">
             <p className="m-0">
               <span className="font-medium">Preferred time: </span>
-              {new Date(preferredTime).toLocaleString("en-PH", {
-                dateStyle: "medium",
-                timeStyle: "short",
-              })}
+              {formatDateTime(preferredTime)}
             </p>
             <p className="m-0 whitespace-pre-wrap">
               <span className="font-medium">Reason: </span>
@@ -830,6 +823,8 @@ export function QuotationProposalCard({
   controls,
   onPrepareQuotation,
 }: CardProps & { quotation: WorkflowQuotation }) {
+  const { formatDateTime } = useDatePreferences()
+
   const now = useCurrentTime()
   const [declineNote, setDeclineNote] = useState<string | null>(null)
   const latest = quotation.id === workflow.quotations.at(-1)?.id
@@ -897,7 +892,7 @@ export function QuotationProposalCard({
         <div>
           <dt className="font-medium">Valid until</dt>
           <dd className="m-0">
-            {new Date(quotation.validUntil).toLocaleString("en-PH")}
+            {formatDateTime(quotation.validUntil)}
             {!valid && quotation.status === "SENT" ? " · Expired" : ""}
           </dd>
         </div>
@@ -1074,6 +1069,8 @@ export function QuotationProposalCard({
 }
 
 export function ApprovalConfirmationCard({ workflow }: { workflow: Workflow }) {
+  const { formatDateTime } = useDatePreferences()
+
   const approval = workflow.approval
   if (!approval) return null
   const quotation = workflow.quotations.find(
@@ -1099,8 +1096,8 @@ export function ApprovalConfirmationCard({ workflow }: { workflow: Workflow }) {
             .
           </p>
           <p className="mt-1 mb-0 text-[10px]">
-            {new Date(approval.approvedAt).toLocaleString("en-PH")} · Approval
-            recorded for account {approval.approvedById}
+            {formatDateTime(approval.approvedAt)} · Approval recorded for
+            account {approval.approvedById}
           </p>
         </div>
       </div>
@@ -1667,6 +1664,8 @@ export function ProjectActivationCard({ workflow }: { workflow: Workflow }) {
 }
 
 export function SystemStatusUpdate({ event }: { event: WorkflowEvent }) {
+  const { formatTime } = useDatePreferences()
+
   const date = new Date(event.createdAt)
   return (
     <div className="mx-auto my-3 w-fit max-w-full rounded-xl bg-[#edf2fb] px-3 py-1.5 text-center text-[11px] leading-5 text-[#294a9b]">
@@ -1674,12 +1673,7 @@ export function SystemStatusUpdate({ event }: { event: WorkflowEvent }) {
         <p className="my-0 whitespace-pre-wrap [overflow-wrap:anywhere]">
           {event.summary}
         </p>
-        <HoverTooltip>
-          {date.toLocaleTimeString("en-PH", {
-            hour: "numeric",
-            minute: "2-digit",
-          })}
-        </HoverTooltip>
+        <HoverTooltip>{formatTime(date)}</HoverTooltip>
       </div>
     </div>
   )

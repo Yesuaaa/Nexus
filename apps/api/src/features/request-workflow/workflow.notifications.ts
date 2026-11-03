@@ -56,6 +56,18 @@ export function notificationScope(
 export async function listWorkflowNotifications(userId: string) {
   return getPrisma()!.$transaction(
     async (tx) => {
+      const user = await tx.user.findUniqueOrThrow({
+        where: { id: userId },
+        select: { settings: true },
+      })
+      const settings = user.settings
+      if (
+        settings &&
+        typeof settings === "object" &&
+        !Array.isArray(settings) &&
+        settings.workflowNotifications === false
+      )
+        return { notifications: [], unreadCount: 0 }
       const where = notificationScope(userId)
       const [notifications, unreadCount] = await Promise.all([
         tx.workflowNotification.findMany({

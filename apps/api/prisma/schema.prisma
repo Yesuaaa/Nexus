@@ -120,6 +120,7 @@ model User {
   profileImagePath                  String?
   profileBannerPath                 String?
   position                          String?
+  settings                          Json                              @default("{}")
   passwordHash                      String
   role                              Role                              @default(USER)
   isActive                          Boolean                           @default(true)
@@ -765,6 +766,9 @@ model SpecialistSocialLink {
 }
 
 model Session {
+  approximateLocation String?
+  userAgent     String?
+  lastActiveAt  DateTime?
   id            String         @id @default(cuid())
   tokenHash     String         @unique
   userId        String

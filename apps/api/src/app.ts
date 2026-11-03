@@ -1,4 +1,5 @@
 import cors from "cors"
+import { trustedProxyAddresses } from "./features/auth/session-location.js"
 import { requireAuth } from "./features/auth/auth.middleware.js"
 import { authRateLimit } from "./features/auth/auth.limiter.js"
 import express, { type ErrorRequestHandler } from "express"
@@ -22,6 +23,7 @@ export function createApp(
   options: { conversationRealtime?: ConversationRealtime } = {},
 ) {
   const app = express()
+  app.set("trust proxy", trustedProxyAddresses(process.env.TRUST_PROXY))
   app.disable("x-powered-by")
   app.use(securityHeaders)
   app.use(cors({ origin: process.env.WEB_ORIGIN || "http://localhost:5173" }))

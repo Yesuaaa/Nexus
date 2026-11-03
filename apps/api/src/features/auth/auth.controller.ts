@@ -11,7 +11,10 @@ import {
   updateSpecialistProfile,
 } from "./profile.service.js"
 
+import { settingsRouter } from "./settings.controller.js"
+
 export const authRouter = Router()
+authRouter.use(settingsRouter)
 
 authRouter.post(
   "/profile/images",
@@ -80,7 +83,11 @@ authRouter.post(
   authRateLimit(10),
   async (request, response, next) => {
     try {
-      const session = await authService.register(request.body ?? {})
+      const session = await authService.register({
+        ...request.body,
+        ip: request.ip,
+        userAgent: request.header("user-agent"),
+      })
       return response.status(201).json(session)
     } catch (error) {
       if (error instanceof AuthError) {
@@ -100,6 +107,7 @@ authRouter.post(
         email: request.body?.email,
         password: request.body?.password,
         ip: request.ip,
+        userAgent: request.header("user-agent"),
       })
       return response.json(session)
     } catch (error) {

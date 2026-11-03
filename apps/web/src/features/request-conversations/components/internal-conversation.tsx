@@ -1,4 +1,5 @@
 "use client"
+import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 
 import { useEffect, useRef, useState, type FormEvent } from "react"
 import Link from "next/link"
@@ -54,6 +55,8 @@ function InternalConversationPanel({
   onLatestMessage,
   onConversationRead,
 }: InternalConversationProps) {
+  const { formatDate, formatTime } = useDatePreferences()
+
   const account = usePortalAccount()
   const [history, setHistory] = useState<InternalConversationHistory | null>(
     null,
@@ -309,11 +312,7 @@ function InternalConversationPanel({
                     <div key={message.id}>
                       {newDay && (
                         <p className="mt-0 mb-5 text-center text-[11px] text-[#8791a2]">
-                          {date.toLocaleDateString("en-PH", {
-                            weekday: "short",
-                            month: "short",
-                            day: "numeric",
-                          })}
+                          {formatDate(date)}
                         </p>
                       )}
                       <article
@@ -350,12 +349,7 @@ function InternalConversationPanel({
                             >
                               {message.body}
                             </p>
-                            <HoverTooltip>
-                              {date.toLocaleTimeString("en-PH", {
-                                hour: "numeric",
-                                minute: "2-digit",
-                              })}
-                            </HoverTooltip>
+                            <HoverTooltip>{formatTime(date)}</HoverTooltip>
                           </div>
                         </div>
                       </article>

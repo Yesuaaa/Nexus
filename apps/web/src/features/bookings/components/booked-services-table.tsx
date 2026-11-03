@@ -1,3 +1,4 @@
+import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 import { Eye } from "lucide-react"
 import type { ReactNode } from "react"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
@@ -6,7 +7,6 @@ import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import { cn } from "@/lib/utils"
 import type { BookedService } from "../api/bookings-api"
-import { bookingDate } from "../model/booking-status"
 import { BookingStatusPill } from "./booking-status-pill"
 
 const bookingGrid =
@@ -46,6 +46,7 @@ export function BookedServicesTable({
   onRetry: () => void
   onView: (booking: BookedService) => void
 }) {
+  const { formatDate } = useDatePreferences()
   const initialLoading = loading && bookings.length === 0
   return (
     <div
@@ -154,7 +155,7 @@ export function BookedServicesTable({
                   Requested
                 </span>
                 <time dateTime={booking.createdAt}>
-                  {bookingDate(booking.createdAt)}
+                  {formatDate(booking.createdAt)}
                 </time>
               </div>
               <div

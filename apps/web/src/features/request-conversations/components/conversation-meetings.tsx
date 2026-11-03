@@ -1,4 +1,5 @@
 "use client"
+import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 
 import { useEffect, useRef, useState, type FormEvent } from "react"
 import { CalendarDays } from "lucide-react"
@@ -267,6 +268,8 @@ export function ConversationMeetingCard({
   onSaved: (meeting: ConversationMeeting) => void
   onRefresh: () => void
 }) {
+  const { formatDateTime, formatTime } = useDatePreferences()
+
   const [form, setForm] = useState<"reschedule" | "request" | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
@@ -316,16 +319,10 @@ export function ConversationMeetingCard({
       </p>
       <p className="m-0">
         <time dateTime={meeting.startsAt}>
-          {new Date(meeting.startsAt).toLocaleString("en-PH", {
-            dateStyle: "medium",
-            timeStyle: "short",
-          })}
+          {formatDateTime(meeting.startsAt)}
         </time>
         {" – "}
-        {new Date(meeting.endsAt).toLocaleTimeString("en-PH", {
-          hour: "numeric",
-          minute: "2-digit",
-        })}
+        {formatTime(meeting.endsAt)}
         {" · "}
         <ConsultationLocation
           location={meeting.location}
@@ -349,8 +346,7 @@ export function ConversationMeetingCard({
       {scheduled && meeting.proposedStartsAt && (
         <div className="space-y-2 rounded-lg bg-[#f1f4fa] p-3">
           <p className="m-0 font-medium">
-            Reschedule requested:{" "}
-            {new Date(meeting.proposedStartsAt).toLocaleString("en-PH")}
+            Reschedule requested: {formatDateTime(meeting.proposedStartsAt)}
           </p>
           <p className="m-0 whitespace-pre-wrap">{meeting.rescheduleNote}</p>
           <p className="m-0 text-[11px]">
