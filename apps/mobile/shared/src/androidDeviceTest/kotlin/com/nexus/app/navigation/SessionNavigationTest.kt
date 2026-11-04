@@ -22,6 +22,29 @@ import org.junit.runner.RunWith
 /** Exercise real Navigation saved stacks, not mocked reset callbacks. */
 @RunWith(AndroidJUnit4::class)
 class SessionNavigationTest {
+    @Test
+    fun repeatedTabSelectionDoesNotDuplicateBackStackEntries() {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val controller = controller()
+            repeat(3) { controller.switchTab(Routes.SERVICES) }
+            assertEquals(Routes.SERVICES, controller.currentDestination?.route)
+            controller.popBackStack()
+            assertEquals(Routes.DASHBOARD, controller.currentDestination?.route)
+        }
+    }
+
+    @Test
+    fun loginResetPreventsBackNavigationIntoProtectedScreens() {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val controller = controller()
+            controller.switchTab(Routes.SERVICES)
+            controller.navigate(Routes.PROFILE)
+            controller.resetTo(Routes.LOGIN)
+            assertEquals(Routes.LOGIN, controller.currentDestination?.route)
+            assertNull(controller.previousBackStackEntry)
+        }
+    }
+
     @Navigator.Name("session-test")
     private class SessionTestNavigator : Navigator<NavDestination>() {
         override fun createDestination() = NavDestination(this)
