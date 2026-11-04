@@ -1,6 +1,10 @@
 package com.nexus.app.features.booking.api
 
 import com.nexus.app.core.network.ApiEndpoints
+import com.nexus.app.core.network.repositoryResult
+import com.nexus.app.features.services.model.CreateServiceRequestDto
+import com.nexus.app.features.services.model.BookingReceiptDto
+import kotlinx.coroutines.CancellationException
 import com.nexus.app.features.auth.model.ApiErrorResponse
 import com.nexus.app.features.booking.model.*
 import io.ktor.client.HttpClient
@@ -38,6 +42,22 @@ class BookingApiException(message: String, val status: Int) : Exception(message)
 )
 
 class BookingRepository(private val client: HttpClient) : BookingGateway {
+    /** Reuse submissionKey (UUID v4) after a transport failure; writes are never automatically retried. */
+    suspend fun submitBooking(request: CreateServiceRequestDto, submissionKey: String): Result<BookingReceiptDto> =
+        repositoryResult {
+            submit(BookingDraft(
+                serviceId = request.serviceId, packageId = request.packageId,
+                preferredSpecialistId = request.preferredSpecialistId, submissionKey = submissionKey,
+                goals = request.goals, requirements = request.requirements,
+                expectedTimeline = request.expectedTimeline, additionalDetails = request.additionalDetails
+            ))
+        }
+
+    /** Fetch current acceptance state before choosing the backend cancellation route. */
+    suspend fun cancelRequest(requestId: String): Result<Unit> = repositoryResult {
+        cancel(request(requestId), newSubmissionKey())
+    }
+
     override suspend fun services() = checked(client.get(ApiEndpoints.CLIENT_SERVICES)).body<CatalogResponse>().services.filter { it.isActive }
     override suspend fun service(id: String) = checked(client.get(ApiEndpoints.clientServiceDetails(id.encodeURLPathPart()))).body<ServiceResponse>().service
     override suspend fun specialists(serviceId: String) = checked(client.get(ApiEndpoints.clientServiceSpecialists(serviceId.encodeURLPathPart()))).body<SpecialistsResponse>().specialists
@@ -70,7 +90,13 @@ class BookingRepository(private val client: HttpClient) : BookingGateway {
     }
     private suspend fun checked(response: HttpResponse): HttpResponse {
         if (!response.status.isSuccess()) {
-            val message = runCatching { response.body<ApiErrorResponse>().error }.getOrNull()
+            val message = try {
+                response.body<ApiErrorResponse>().error
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                null
+            }
             throw BookingApiException(message ?: "Request failed. Please retry.", response.status.value)
         }
         return response

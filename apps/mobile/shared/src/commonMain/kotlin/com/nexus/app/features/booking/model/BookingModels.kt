@@ -26,50 +26,24 @@ fun priceLabel(model: String?, amount: String?, currency: String?, interval: Str
     return "$prefix${currency ?: "PHP"} $amount$suffix"
 }
 
-@Serializable
-data class ServicePackage(
-    val id: String, val name: String, val description: String = "",
-    val includedFeatures: List<String> = emptyList(),
-    val pricingModel: String = "CUSTOM_QUOTE", val currency: String = "PHP",
-    val amount: String? = null, val billingInterval: String? = null,
-    val isPricingPublic: Boolean = false, val isActive: Boolean = true,
-    val isRecommended: Boolean = false, val displayOrder: Int = 0
-) {
-    fun price(): String = priceLabel(pricingModel, if (isPricingPublic) amount else null, currency, billingInterval)
-}
+typealias ServicePackage = com.nexus.app.features.services.model.ServicePackageDto
 
 @Serializable
 data class ServiceBenefit(val id: String, val title: String, val description: String = "")
 @Serializable
 data class ServiceDepartment(val id: String, val name: String)
-@Serializable
-data class CatalogService(
-    val id: String, val name: String, val description: String = "",
-    val iconKey: String = "business", val imageUrl: String? = null, val imageAltText: String? = null,
-    val isActive: Boolean = true, val requiresConsultation: Boolean = false,
-    val consultationNotes: String? = null, val clientRequirements: List<String> = emptyList(),
-    val keyBenefits: List<ServiceBenefit> = emptyList(),
-    val pricingTemplate: Pricing? = null, val packages: List<ServicePackage> = emptyList(),
-    val departments: List<ServiceDepartment> = emptyList()
-) {
-    fun price(): String = pricingTemplate?.label() ?: "Contact for pricing"
-}
-@Serializable
-data class Specialist(
-    val id: String, val fullName: String, val position: String? = null,
-    val imageUrl: String? = null, val department: ServiceDepartment? = null
-)
+typealias CatalogService = com.nexus.app.features.services.model.ServiceDto
+
+typealias Specialist = com.nexus.app.features.services.model.SpecialistDto
+
 @Serializable
 data class SpecialistProfile(
     val id: String, val fullName: String, val position: String? = null,
     val imageUrl: String? = null, val bio: String? = null,
     val specialties: List<String> = emptyList()
 )
-@Serializable
-data class RequestReceipt(
-    val id: String, val referenceNumber: String? = null, val status: String = "SUBMITTED",
-    val createdAt: String = ""
-)
+typealias RequestReceipt = com.nexus.app.features.services.model.BookingReceiptDto
+
 @Serializable
 data class BookingDraft(
     val serviceId: String = "", val packageId: String? = null,
@@ -91,34 +65,12 @@ data class BookingDraft(
 }
 @Serializable
 data class RequestService(val id: String, val name: String)
-@Serializable
-data class RequestRecord(
-    val id: String, val title: String = "", val referenceNumber: String? = null,
-    val status: String = "SUBMITTED", val acceptedDepartmentId: String? = null,
-    val packageName: String? = null, val preferredSpecialistName: String? = null,
-    val projectGoals: String = "", val projectRequirements: String = "",
-    val expectedTimeline: String = "", val additionalDetails: String? = null,
-    val pricingModel: String? = null, val quotedPrice: String? = null,
-    val currency: String? = null, val billingInterval: String? = null,
-    val createdAt: String = "", val updatedAt: String = "",
-    val service: RequestService,
-    val preferredSpecialist: Specialist? = null
-) {
-    val canCancel get() = status !in setOf("CANCELLED", "CLOSED")
-    fun price() = priceLabel(pricingModel, quotedPrice, currency, billingInterval)
-}
-@Serializable
-data class RequestSummary(
-    val total: Int = 0, val pending: Int = 0, val inProgress: Int = 0,
-    val completed: Int = 0, val cancelled: Int = 0
-)
-@Serializable
-data class RequestsPage(
-    val requests: List<RequestRecord> = emptyList(), val total: Int = 0,
-    val page: Int = 1, val pageSize: Int = 10, val summary: RequestSummary = RequestSummary()
-) {
-    val pages get() = ((total + pageSize.coerceAtLeast(1) - 1) / pageSize.coerceAtLeast(1)).coerceAtLeast(1)
-}
+typealias RequestRecord = com.nexus.app.features.booked_requests.model.BookedRequestDto
+
+typealias RequestSummary = com.nexus.app.features.booked_requests.model.RequestKpisDto
+
+typealias RequestsPage = com.nexus.app.features.booked_requests.model.BookedRequestsResponse
+
 data class RequestFilters(val search: String = "", val status: String = "", val sortOrder: String = "desc", val page: Int = 1)
 
 fun statusLabel(status: String): String = when (status) {
