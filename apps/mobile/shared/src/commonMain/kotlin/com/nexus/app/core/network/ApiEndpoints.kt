@@ -1,7 +1,7 @@
 package com.nexus.app.core.network
 
 object ApiEndpoints {
-    // Android emulator loopback alias to host machine's localhost:3001
+    // Local loopback; Android devices require adb reverse (pnpm dev:mobile).
     const val DEFAULT_BASE_URL = "http://localhost:3001"
 
     // Auth

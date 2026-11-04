@@ -13,8 +13,27 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.test.assertFailsWith
+import kotlinx.io.IOException
 
 class HttpClientFactoryTest {
+    @Test
+    fun connectionFailureIncludesConfiguredEndpointAndStartupCommand() = runBlocking {
+        val engine = MockEngine { throw IOException("Connection refused") }
+        val client = HttpClientFactory.create("http://10.0.2.2:3001", FakeStorage(), engine = engine)
+        try {
+            val error = assertFailsWith<ApiConnectionException> {
+                client.get(ApiEndpoints.AUTH_LOGIN)
+            }
+            assertEquals(
+                "Cannot reach API at http://10.0.2.2:3001. Ensure backend is running via `pnpm dev:mobile`.",
+                error.message
+            )
+        } finally {
+            client.close()
+        }
+    }
+
     private val json = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
     private val challenge = headersOf(HttpHeaders.WWWAuthenticate, "Bearer")
 

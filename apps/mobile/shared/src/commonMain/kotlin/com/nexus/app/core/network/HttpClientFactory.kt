@@ -8,6 +8,8 @@ import io.ktor.client.call.body
 import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.plugins.DefaultRequest
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.HttpResponseValidator
+import kotlinx.io.IOException
 import io.ktor.client.plugins.auth.Auth
 import io.ktor.client.plugins.auth.authProvider
 import io.ktor.client.plugins.auth.providers.BearerAuthProvider
@@ -47,6 +49,9 @@ internal fun HttpClient.clearCachedBearerTokens() {
 internal class SessionRefreshUnavailableException(cause: Throwable? = null) :
     Exception("Can't refresh your session right now. Check your connection and retry.", cause)
 
+internal class ApiConnectionException(baseUrl: String, cause: Throwable) :
+    Exception("Cannot reach API at ${baseUrl.trimEnd('/')}. Ensure backend is running via `pnpm dev:mobile`.", cause)
+
 object HttpClientFactory {
 
     /**
@@ -71,6 +76,14 @@ private fun HttpClientConfig<*>.configure(
     tokenStorage: TokenStorage,
     onSessionExpired: () -> Unit
 ) {
+    HttpResponseValidator {
+        handleResponseExceptionWithRequest { error, _ ->
+            if (error is IOException) {
+                throw ApiConnectionException(baseUrl, error)
+            }
+        }
+    }
+
     install(ContentNegotiation) {
         json(
             Json {

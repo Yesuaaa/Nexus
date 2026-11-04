@@ -8,6 +8,7 @@
     "lint": "eslint . --max-warnings 0",
     "audit:dependencies": "pnpm audit --audit-level high",
     "dev": "pnpm -r --parallel dev",
+    "dev:mobile": "adb reverse tcp:3001 tcp:3001 && pnpm --filter @nexus/api dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test:e2e": "node scripts/run-e2e.mjs",
