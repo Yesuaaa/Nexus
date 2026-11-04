@@ -15,9 +15,30 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import com.nexus.app.core.network.ApiConnectionException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.runTest
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AuthViewModelTest {
+    @Test
+    fun offlineLoginEmitsDiagnosticToast() = runTest {
+        val vm = AuthViewModel { _, _ ->
+            Result.failure(ApiConnectionException("http://10.0.2.2:3001", Exception("Connection refused")))
+        }
+        val toast = async(start = CoroutineStart.UNDISPATCHED) { vm.toasts.first() }
+        vm.onEmailChange("client@example.com")
+        vm.onPasswordChange("secret")
+        vm.submit {}
+        assertEquals(
+            "Cannot reach API at http://10.0.2.2:3001. Ensure backend is running via `pnpm dev:mobile`.",
+            toast.await().message
+        )
+        assertTrue(vm.state.value.offline)
+    }
+
 
     private val user = AuthUser(
         id = "1",

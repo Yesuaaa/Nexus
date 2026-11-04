@@ -1,5 +1,6 @@
 package com.nexus.app.features.auth.viewmodel
 
+import com.nexus.app.core.network.ApiConnectionException
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexus.app.core.components.ToastKind
@@ -97,6 +98,8 @@ class RegisterViewModel(
                     val fromServer = error is AuthRequestException
                     val message = if (fromServer) {
                         error.message ?: "Couldn't create the account. Try again."
+                    } else if (error is ApiConnectionException) {
+                        error.message.orEmpty()
                     } else {
                         "Can't reach the server. Check your connection and try again."
                     }

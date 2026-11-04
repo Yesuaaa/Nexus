@@ -83,11 +83,14 @@ From the repository root, with the existing API environment configured:
 
 ```powershell
 $env:NODE_ENV = "development"
-pnpm.cmd --filter @nexus/api dev
+pnpm dev:mobile
 ```
 
-Keep this terminal running. Android uses `http://10.0.2.2:3001` to reach the API
-on your computer. The web server is optional for mobile authentication.
+Keep this terminal running. This runs `adb reverse tcp:3001 tcp:3001` and starts
+the API in watch mode. Put Android SDK `platform-tools` on PATH first (Windows:
+`%LOCALAPPDATA%\Android\Sdk\platform-tools`). The app defaults to
+`http://localhost:3001`, which reaches the computer through ADB reverse.
+The web server is optional for mobile authentication.
 
 ### 2. I-install and Run yung App
 
@@ -179,17 +182,49 @@ Kapag magco-connect tayo sa local Express backend natin running at:
 
 Take note na magkaiba yung URL na gagamitin depending sa environment na ginagamit mo.
 
-- **Android Emulator:** Use `http://10.0.2.2:3001`
+### Android physical device over USB
 
-  Yung `10.0.2.2` is basically an alias ng Android emulator para ma-access yung `localhost` ng host machine mo.
+1. Enable Developer options and USB debugging, connect a data-capable USB cable,
+   and accept the computer authorization prompt.
+2. Run `adb devices`; the phone must show `device`, not `unauthorized` or `offline`.
+3. Run `pnpm dev:mobile` from the repository root. If multiple devices are connected,
+   select one with `$env:ANDROID_SERIAL = "<serial>"` in PowerShell or
+   `export ANDROID_SERIAL=<serial>` on macOS/Linux before running the command.
+4. Keep `DEFAULT_BASE_URL` in
+   `shared/src/commonMain/kotlin/com/nexus/app/core/network/ApiEndpoints.kt` set to
+   `http://localhost:3001` (or `http://127.0.0.1:3001`). Rebuild/reinstall after edits.
+5. Check `adb reverse --list` for `tcp:3001 tcp:3001`. After reconnecting or rebooting,
+   stop the previous backend and rerun `pnpm dev:mobile` to restore forwarding.
 
-- **iOS Simulator:** Use `http://localhost:3001`
+The script stops if ADB fails. Fix PATH, authorization, or device selection and
+retry. API environment/database configuration is still required. Keep the API on
+port 3001 for this mapping. The command does not install or launch the mobile app.
 
-- **Physical Device:** Use the local IP address ng PC mo, for example:
+### Physical device over Wi-Fi
 
-  `http://192.168.x.x:3001`
+- Connect both devices to the same Wi-Fi network without client isolation.
+- Change `DEFAULT_BASE_URL` in `ApiEndpoints.kt` to the computer's LAN IPv4 address,
+  e.g. `http://192.168.1.20:3001`. Find it using `ipconfig` on Windows.
+- For Android local HTTP development, add that exact IP as a `<domain>` inside the
+  existing domain-config in `androidApp/src/main/res/xml/network_security_config.xml`.
+  Rebuild/reinstall, and remove the machine-specific entry afterward.
+- Start the backend with `pnpm --filter @nexus/api dev` when ADB is unavailable.
+  The API binds to `0.0.0.0`. Allow inbound TCP 3001 on the private-network firewall
+  and check VPN routing if necessary.
+- Open `http://<computer-LAN-IP>:3001/api/health` on the phone to verify reachability.
+  Phone localhost requires ADB reverse; it does not refer to your computer over Wi-Fi.
 
-Make sure na running yung backend API and accessible siya sa device or emulator na ginagamit mo.
+### Emulator and connection diagnostics
+
+Android emulators can use localhost with `pnpm dev:mobile`, or `http://10.0.2.2:3001`
+with the backend started directly. The `10.0.2.2` alias is emulator-only. iOS
+simulators use `http://localhost:3001` and start the backend directly; ADB is Android-only.
+
+Connection failure toasts show the configured URL, for example:
+"Cannot reach API at http://10.0.2.2:3001. Ensure backend is running via `pnpm dev:mobile`."
+Check the backend terminal and `http://localhost:3001/api/health` on the computer.
+To smoke-test the toast, stop the API and submit a validly formatted login or
+registration form.
 
 ---
 
