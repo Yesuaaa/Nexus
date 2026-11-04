@@ -5,9 +5,10 @@ import { purgeExpiredConversationMessages } from "./features/request-conversatio
 
 jwtKey()
 const port = Number(process.env.PORT || 3001)
-createApp().listen(port, "0.0.0.0", () =>
+const host = process.env.HOST || "0.0.0.0"
+createApp().listen(port, host, () =>
   console.log(
-    `API listening on http://0.0.0.0:${port} (and http://localhost:${port})`,
+    `API listening on http://${host === "0.0.0.0" ? "localhost" : host}:${port}`,
   ),
 )
 
