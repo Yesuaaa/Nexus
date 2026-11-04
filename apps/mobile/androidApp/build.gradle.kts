@@ -1,5 +1,4 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import java.util.Properties
 
 plugins {
     alias(libs.plugins.androidApplication)
@@ -20,13 +19,6 @@ dependencies {
     debugImplementation(libs.compose.uiTooling)
 }
 
-val localSettings = Properties().apply {
-    val localFile = rootProject.file("local.properties")
-    if (localFile.exists()) localFile.inputStream().use { load(it) }
-}
-val localApiBaseUrl = localSettings.getProperty("nexus.api.baseUrl")
-    ?.trim()?.takeIf { it.isNotEmpty() } ?: "http://10.0.2.2:3001"
-
 android {
     namespace = "com.nexus.app"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
@@ -37,7 +29,6 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
         versionName = "1.0"
-        resValue("string", "nexus_api_base_url", "http://10.0.2.2:3001")
     }
     packaging {
         resources {
@@ -45,9 +36,6 @@ android {
         }
     }
     buildTypes {
-        debug {
-            resValue("string", "nexus_api_base_url", localApiBaseUrl)
-        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -62,6 +50,5 @@ android {
     }
     buildFeatures {
         compose = true
-        resValues = true
     }
 }
