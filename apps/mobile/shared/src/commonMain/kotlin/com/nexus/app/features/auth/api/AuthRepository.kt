@@ -1,6 +1,7 @@
 package com.nexus.app.features.auth.api
 
 import com.nexus.app.core.network.ApiEndpoints
+import com.nexus.app.core.network.clearCachedBearerTokens
 import com.nexus.app.core.storage.TokenStorage
 import com.nexus.app.features.auth.model.ApiErrorResponse
 import com.nexus.app.features.auth.model.AuthSession
@@ -15,17 +16,20 @@ import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
-import io.ktor.http.HttpStatusCode
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
+
+private const val CLIENT_ROLE = "USER"
+private const val CLIENT_ONLY_MESSAGE = "This app is only for client accounts."
 
 class AuthRepository(
     private val client: HttpClient,
     private val tokenStorage: TokenStorage
 ) {
-    suspend fun login(email: String, password: String): Result<AuthUser> = runCatching {
+    suspend fun login(email: String, password: String): Result<AuthUser> = authResult {
         completeAuthentication(
             client.post(ApiEndpoints.AUTH_LOGIN) {
                 header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
@@ -39,7 +43,7 @@ class AuthRepository(
         contactNumber: String,
         email: String,
         password: String
-    ): Result<AuthUser> = runCatching {
+    ): Result<AuthUser> = authResult {
         completeAuthentication(
             client.post(ApiEndpoints.AUTH_REGISTER) {
                 header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
@@ -55,20 +59,26 @@ class AuthRepository(
         )
     }
 
-    suspend fun currentUser(): Result<AuthUser> = runCatching {
+    suspend fun currentUser(): Result<AuthUser> = authResult {
         val response = client.get(ApiEndpoints.AUTH_ME) {
             tokenStorage.getAccessToken()?.let {
                 header(HttpHeaders.Authorization, "Bearer $it")
             }
         }
         if (!response.status.isSuccess()) throw response.toAuthException()
-        response.body<CurrentUserResponse>().user
+        val user = response.body<CurrentUserResponse>().user
+        if (user.role != CLIENT_ROLE) throw AuthRequestException(CLIENT_ONLY_MESSAGE, 403)
+        user
     }
 
     suspend fun restoreSession(): Result<AuthUser?> {
-        if (!tokenStorage.hasValidSession()) return Result.success(null)
+        if (!tokenStorage.hasValidSession()) {
+            clearSession()
+            return Result.success(null)
+        }
         val result = currentUser()
-        if (result.isFailure) clearSession()
+        val error = result.exceptionOrNull()
+        if (error is AuthRequestException && error.status in setOf(401, 403)) clearSession()
         return result
     }
 
@@ -94,12 +104,16 @@ class AuthRepository(
 
     fun clearSession() {
         tokenStorage.clearTokens()
+        client.clearCachedBearerTokens()
     }
 
     private suspend fun completeAuthentication(response: HttpResponse): AuthUser {
         if (!response.status.isSuccess()) throw response.toAuthException()
         val session = response.body<AuthSession>()
+        // USER role enforcement: never store tokens for non-client accounts.
+        if (session.user.role != CLIENT_ROLE) throw AuthRequestException(CLIENT_ONLY_MESSAGE, 403)
         tokenStorage.setTokens(session.token, session.refreshToken)
+        client.clearCachedBearerTokens()
         return session.user
     }
 }
@@ -117,4 +131,12 @@ private suspend fun HttpResponse.toAuthException(): AuthRequestException {
             ?: "Authentication is currently unavailable."
     }
     return AuthRequestException(message, status.value)
+}
+
+private suspend fun <T> authResult(block: suspend () -> T): Result<T> = try {
+    Result.success(block())
+} catch (error: CancellationException) {
+    throw error
+} catch (error: Exception) {
+    Result.failure(error)
 }

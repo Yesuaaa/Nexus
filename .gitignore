@@ -18,3 +18,11 @@ apps/api/src/generated/
 *.log
 .DS_Store
 Thumbs.db
+
+
+# Local IDE state and machine-specific emulator shortcuts
+/.idea/
+/.vscode/tasks.json
+
+# This workspace uses pnpm; do not commit an npm-generated API lockfile.
+/apps/api/package-lock.json

@@ -1,3 +1,4 @@
+import { clientRequestSelect } from "../client-services/client-services.repository.js"
 import type { Prisma } from "../../generated/prisma/client.js"
 import { randomUUID } from "node:crypto"
 import { getPrisma } from "../../lib/db.js"
@@ -98,12 +99,7 @@ export async function listClientBookings(
 export async function getClientBooking(clientId: string, id: string) {
   const serviceRequest = await getPrisma()!.serviceRequest.findFirst({
     where: { id, clientId },
-    select: {
-      ...bookingSelect,
-      projectGoals: true,
-      projectRequirements: true,
-      additionalDetails: true,
-    },
+    select: clientRequestSelect,
   })
   if (!serviceRequest)
     throw new ServiceRequestsError(404, "Booked service not found")

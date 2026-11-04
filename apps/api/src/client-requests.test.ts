@@ -478,6 +478,40 @@ test(
         assert.equal(record.preferredSpecialistName, specialistA.fullName)
         assert.equal(record.packageName, activePackage.name)
         assert.equal(Number(record.quotedPrice), 150000)
+        const detailsUrl =
+          base.replace(/\/client$/, "") + "/service-requests/" + receipt.id
+        const detailsResponse = await fetch(detailsUrl, {
+          headers: { authorization: `Bearer ${tokens.get("USER")}` },
+        })
+        assert.equal(detailsResponse.status, 200)
+        const details = (
+          (await detailsResponse.json()) as {
+            serviceRequest: {
+              referenceNumber: string
+              packageName: string
+              preferredSpecialistName: string
+              quotedPrice: string
+              projectRequirements: string
+              acceptedDepartmentId: string | null
+              clientId?: string
+            }
+          }
+        ).serviceRequest
+        assert.equal(details.referenceNumber, receipt.referenceNumber)
+        assert.equal(details.packageName, activePackage.name)
+        assert.equal(details.preferredSpecialistName, specialistA.fullName)
+        assert.equal(Number(details.quotedPrice), 150000)
+        assert.equal(details.projectRequirements, input.requirements)
+        assert.equal(details.acceptedDepartmentId, null)
+        assert.equal(details.clientId, undefined)
+        assert.equal(
+          (
+            await fetch(detailsUrl, {
+              headers: { authorization: `Bearer ${tokens.get("CLIENT_B")}` },
+            })
+          ).status,
+          404,
+        )
         const replay = await request("/service-requests", "USER", "POST", input)
         assert.equal(replay.status, 201)
         assert.deepEqual(

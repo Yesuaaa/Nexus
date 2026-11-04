@@ -1,58 +1,62 @@
 package com.nexus.app.features.auth.components
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Text
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import com.nexus.app.core.components.LocalNexusLayout
-import com.nexus.app.core.theme.NexusColors
+import androidx.compose.ui.unit.sp
+import nexusmobile.shared.generated.resources.Res
+import nexusmobile.shared.generated.resources.exp_logo
+import nexusmobile.shared.generated.resources.inter
+import org.jetbrains.compose.resources.Font
+import org.jetbrains.compose.resources.painterResource
 
 @Composable
 fun AuthScreenLayout(
     modifier: Modifier = Modifier,
+    registering: Boolean = false,
     header: @Composable () -> Unit = {},
-    footer: @Composable () -> Unit = {},
     action: @Composable () -> Unit,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val layout = LocalNexusLayout.current
-    BoxWithConstraints(
-        modifier.fillMaxSize().background(NexusColors.Background)
-            .safeDrawingPadding().imePadding(),
-        contentAlignment = Alignment.TopCenter
-    ) {
-        Column(
-            modifier = Modifier.widthIn(max = 480.dp).fillMaxSize()
-                .padding(horizontal = layout.gutter),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+    ProvideTextStyle(LocalTextStyle.current.copy(fontFamily = FontFamily(Font(Res.font.inter)))) {
+        BoxWithConstraints(
+            modifier.fillMaxSize().background(Color.White).safeDrawingPadding().imePadding(),
+            contentAlignment = Alignment.TopCenter
         ) {
-            Box(Modifier.fillMaxWidth().padding(top = 8.dp)) { header() }
-            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-                Column(
-                    Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
-                        .heightIn(min = maxHeight).padding(vertical = layout.gap),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically)
-                ) {
+            val viewportHeight = maxHeight
+            val scrollState = rememberScrollState()
+            Column(
+                Modifier.widthIn(max = 440.dp).fillMaxWidth().verticalScroll(scrollState, enabled = scrollState.maxValue > 0)
+                    .heightIn(min = viewportHeight).padding(horizontal = 23.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(Modifier.padding(top = 20.dp)) { header() }
+                Spacer(Modifier.height(if (registering) 4.dp else
+                    (viewportHeight - 706.dp).coerceIn(12.dp, 100.dp)))
+                Image(painterResource(Res.drawable.exp_logo), "EXP Digital Solutions",
+                    Modifier.size(240.dp, 124.dp))
+                Spacer(Modifier.height(4.dp))
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(if (registering) 12.dp else 20.dp)) {
                     content()
                     action()
-                    footer()
+                }
+                Spacer(Modifier.heightIn(min = 16.dp).weight(1f))
+                Row(Modifier.fillMaxWidth().padding(bottom = 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally)) {
+                    listOf("About", "Terms of Use", "Privacy Policy").forEach {
+                        Text(it, color = Color(0xFF8EA5CA), fontSize = 11.sp)
+                    }
                 }
             }
         }

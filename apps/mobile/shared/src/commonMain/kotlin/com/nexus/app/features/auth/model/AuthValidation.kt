@@ -19,20 +19,32 @@ fun validateRegistration(
     email: String,
     password: String,
     confirmation: String
-): String? = when {
-    name.trim().length !in 2..100 || !fullName.matches(name.trim()) ->
-        "Enter a valid full name."
-    !contactNumber.matches(contact.trim()) ->
-        "Use an 11-digit Philippine mobile number starting with 08 or 09."
-    !registrationEmail.matches(email.trim()) ->
-        "Use a valid .com or .ph email address."
-    password.length < 12 -> "Use at least 12 characters for your password."
-    password.encodeToByteArray().size > 1024 -> "Password is too long."
-    !password.any(Char::isUpperCase) ||
-        !password.any(Char::isLowerCase) ||
-        !password.any(Char::isDigit) ||
-        password.all(Char::isLetterOrDigit) ->
-        "Password needs uppercase, lowercase, number, and special characters."
-    password != confirmation -> "Passwords do not match."
-    else -> null
+): String? = registrationFieldErrors(name, contact, email, password, confirmation).values.firstOrNull()
+
+/** Ordered errors shared by the submit guard and individual form fields. */
+fun registrationFieldErrors(
+    name: String,
+    contact: String,
+    email: String,
+    password: String,
+    confirmation: String
+): Map<String, String> = buildMap {
+    if (name.trim().length !in 2..100 || !fullName.matches(name.trim()))
+        put("fullName", "Enter a valid full name.")
+    if (!contactNumber.matches(contact.trim()))
+        put("contactNumber", "Use an 11-digit Philippine mobile number starting with 08 or 09.")
+    if (!registrationEmail.matches(email.trim()))
+        put("email", "Use a valid .com or .ph email address.")
+    val passwordError = when {
+        password.length < 12 -> "Use at least 12 characters for your password."
+        password.encodeToByteArray().size > 1024 -> "Password is too long."
+        !password.any(Char::isUpperCase) ||
+            !password.any(Char::isLowerCase) ||
+            !password.any(Char::isDigit) ||
+            password.all(Char::isLetterOrDigit) ->
+            "Password needs uppercase, lowercase, number, and special characters."
+        else -> null
+    }
+    passwordError?.let { put("password", it) }
+    if (password != confirmation) put("confirmation", "Passwords do not match.")
 }
