@@ -1,9 +1,8 @@
 package com.nexus.app.core.network
 
 object ApiEndpoints {
-    /** Platform-specific development host for the local API. */
-    val DEFAULT_BASE_URL: String
-        get() = defaultApiBaseUrl()
+    // Android emulator loopback alias to host machine's localhost:3001
+    const val DEFAULT_BASE_URL = "http://localhost:3001"
 
     // Auth
     const val AUTH_LOGIN = "/api/auth/login"
