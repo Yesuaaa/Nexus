@@ -243,6 +243,11 @@ If may errors, check muna yung Gradle configuration, SDK setup, and kung properl
 
 ## Authentication contract and smoke test
 
+For automated API, native networking, routing, and rendered UI coverage, see
+[Mobile regression coverage](../../docs/mobile-regression.md). Run
+`pnpm test:mobile --device` from the repository root with an Android emulator
+running; omit `--device` for API and shared host tests only.
+
 Registration and login return `token`, `refreshToken`, `expiresIn`, and `user`.
 The account status field is `user.isActive`. Use these existing web/API names;
 there are no `accessToken` or `active` aliases.

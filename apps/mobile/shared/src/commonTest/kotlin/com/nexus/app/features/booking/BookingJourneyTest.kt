@@ -8,7 +8,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.test.*
 import kotlin.test.*
 
-private class FakeBookingGateway : BookingGateway {
+internal class FakeBookingGateway : BookingGateway {
     val service = CatalogService("service", "Design", packages = listOf(ServicePackage("pkg", "Standard")))
     val record = RequestRecord("request", service = RequestService("service", "Design"))
     var submission: suspend (BookingDraft) -> RequestReceipt = { RequestReceipt("request") }
@@ -17,6 +17,8 @@ private class FakeBookingGateway : BookingGateway {
     val filters = mutableListOf<RequestFilters>()
     var cancellations = 0
     var listFailure = false
+    var details: suspend (String) -> RequestRecord = { record.copy(id = it) }
+    val actionIds = mutableListOf<String>()
     override suspend fun services() = listOf(service)
     override suspend fun service(id: String) = service
     override suspend fun specialists(serviceId: String) = listOf(Specialist("eligible", "Alex"))
@@ -27,8 +29,8 @@ private class FakeBookingGateway : BookingGateway {
         if (listFailure) throw Exception("Connection lost")
         return RequestsPage(listOf(record), total = 21, page = filters.page, summary = RequestSummary(total = 21))
     }
-    override suspend fun request(id: String) = record
-    override suspend fun cancel(request: RequestRecord, actionId: String) { cancellations++; cancellation() }
+    override suspend fun request(id: String) = details(id)
+    override suspend fun cancel(request: RequestRecord, actionId: String) { cancellations++; actionIds += actionId; cancellation() }
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)

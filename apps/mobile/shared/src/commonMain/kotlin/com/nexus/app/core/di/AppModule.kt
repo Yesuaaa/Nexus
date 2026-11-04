@@ -10,8 +10,11 @@ import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
 val appModule = module {
+    single { com.nexus.app.features.services.api.ServicesRepository(get()) }
+    single { com.nexus.app.features.booked_requests.api.BookedRequestsRepository(get()) }
+    single { com.nexus.app.features.booking.api.BookingRepository(get()) }
     single<com.nexus.app.features.booking.api.BookingGateway> {
-        com.nexus.app.features.booking.api.BookingRepository(get())
+        get<com.nexus.app.features.booking.api.BookingRepository>()
     }
     viewModel { com.nexus.app.features.booking.viewmodel.BookingViewModel(get()) }
     viewModel { com.nexus.app.features.booked_requests.viewmodel.RequestsViewModel(get()) }

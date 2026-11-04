@@ -98,6 +98,8 @@ kotlin {
             implementation(libs.junit)
             implementation(libs.androidx.testExt.junit)
             implementation(libs.androidx.espresso.core)
+            implementation("org.jetbrains.compose.ui:ui-test-junit4:${libs.versions.composeMultiplatform.get()}")
+            implementation("androidx.compose.ui:ui-test-manifest:1.10.4")
         }
     }
 }

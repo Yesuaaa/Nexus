@@ -17,7 +17,8 @@
     "preview:web": "pnpm --filter @nexus/web preview",
     "db:generate": "pnpm --filter @nexus/api db:generate",
     "db:migrate": "pnpm --filter @nexus/api db:migrate",
-    "db:studio": "pnpm --filter @nexus/api db:studio"
+    "db:studio": "pnpm --filter @nexus/api db:studio",
+    "test:mobile": "node scripts/run-mobile-regression.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
