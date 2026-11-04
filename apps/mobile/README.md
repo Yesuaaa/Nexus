@@ -86,8 +86,8 @@ $env:NODE_ENV = "development"
 pnpm.cmd --filter @nexus/api dev
 ```
 
-Keep this terminal running. Android uses `http://10.0.2.2:3001` to reach the API
-on your computer. The web server is optional for mobile authentication.
+Keep this terminal running. Android defaults to `http://10.0.2.2:3001` to reach
+the API on your computer. The web server is optional for mobile authentication.
 
 ### 2. I-install and Run yung App
 
@@ -179,17 +179,30 @@ Kapag magco-connect tayo sa local Express backend natin running at:
 
 Take note na magkaiba yung URL na gagamitin depending sa environment na ginagamit mo.
 
-- **Android Emulator:** Use `http://10.0.2.2:3001`
+- **Android Emulator:** The default is `http://10.0.2.2:3001`; no tunnel is required.
 
-  Yung `10.0.2.2` is basically an alias ng Android emulator para ma-access yung `localhost` ng host machine mo.
-
-- **iOS Simulator:** Use `http://localhost:3001`
+- **iOS Simulator:** The app uses `http://localhost:3001` automatically.
 
 - **Physical Device:** Use the local IP address ng PC mo, for example:
 
   `http://192.168.x.x:3001`
 
 Make sure na running yung backend API and accessible siya sa device or emulator na ginagamit mo.
+
+### Optional local Android tunnel override
+
+If the emulator host alias times out, add this to `apps/mobile/local.properties`
+(Git ignores this file):
+
+```properties
+nexus.api.baseUrl=http://127.0.0.1:3001
+```
+
+Run `adb reverse tcp:3001 tcp:3001`, then rebuild and install the debug app.
+Repeat the forwarding command after reconnecting or restarting the device.
+This also works with an Android phone connected through ADB. The override applies
+only to debug builds on your computer. Teammates without the setting continue to
+use `10.0.2.2`. Remove the property and rebuild to restore the default.
 
 ---
 
