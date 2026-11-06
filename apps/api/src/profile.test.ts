@@ -11,7 +11,10 @@ import { issueSession } from "./features/auth/auth.service.js"
 import { hashPassword } from "./features/auth/auth.password.js"
 import type { getProfile } from "./features/auth/profile.service.js"
 import type { User } from "./generated/prisma/client.js"
-import { setServiceImageStorageForTests } from "./features/services/service-image-storage.js"
+import {
+  ServiceImageStorageError,
+  setServiceImageStorageForTests,
+} from "./features/services/service-image-storage.js"
 type ProfileResponse = Awaited<ReturnType<typeof getProfile>>
 const readProfile = async (response: Response) =>
   (await response.json()) as ProfileResponse
@@ -196,6 +199,46 @@ test(
       employeeDetail.employee.imageUrl!,
       new RegExp(`/profiles/${staff.user.id}/avatar/`),
     )
+    const oversized = Buffer.alloc(2 * 1024 * 1024 + 1)
+    oversized.set([137, 80, 78, 71, 13, 10, 26, 10])
+    for (const dataUrl of [
+      `data:image/png;base64,${oversized.toString("base64")}`,
+      "data:image/gif;base64,R0lGODlh",
+      "data:image/png;base64,%%%",
+    ])
+      assert.equal(
+        (
+          await request(actors[0]!.token, "/profile/images", "POST", {
+            kind: "avatar",
+            dataUrl,
+          })
+        ).status,
+        400,
+      )
+    setServiceImageStorageForTests({
+      upload: async () => {
+        throw new ServiceImageStorageError("private storage failure")
+      },
+      remove: async () => {},
+      publicUrl: (path) => `https://images.example.com/${path}`,
+    })
+    const unavailable = await request(
+      actors[0]!.token,
+      "/profile/images",
+      "POST",
+      { kind: "avatar", dataUrl: pngData },
+    )
+    assert.equal(unavailable.status, 503)
+    assert.equal(
+      (await unavailable.text()).includes("private storage failure"),
+      false,
+    )
+    setServiceImageStorageForTests({
+      upload: async (_dataUrl, directory = "services") =>
+        `${directory}/${++imageUploads}.png`,
+      publicUrl: (path) => `https://images.example.com/${path}`,
+      remove: async () => {},
+    })
     const uploadsBeforeInvalid = imageUploads
     assert.equal(
       (

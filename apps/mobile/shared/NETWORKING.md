@@ -51,3 +51,8 @@ Run offline tests from `apps/mobile`:
 ```powershell
 ./gradlew.bat :shared:testAndroidHostTest
 ```
+
+## Backend contract readiness (#155)
+
+See the [mobile client contract and audit](../../../docs/features/mobile-client-contract.md) for the endpoint inventory,
+security behavior, cancellation/retry rules, errors and platform base URLs.
