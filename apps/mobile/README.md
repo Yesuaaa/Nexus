@@ -94,17 +94,20 @@ The web server is optional for mobile authentication.
 
 ### 2. I-install and Run yung App
 
-Once na running na yung emulator, navigate ka sa `apps/mobile` directory:
+From the monorepo root (easiest way):
+
+```powershell
+pnpm run:mobile
+```
+
+This single command automatically applies `adb reverse tcp:3001 tcp:3001`, builds and installs the debug APK (`:androidApp:installDebug`), and starts the application on your running emulator or connected device.
+
+Alternatively, navigate sa `apps/mobile` directory and run via Gradle:
 
 ```powershell
 cd apps/mobile
-```
-
-Then run:
-
-```powershell
 .\gradlew.bat :androidApp:installDebug
-adb -e shell am start -n com.nexus.app/.MainActivity
+adb shell am start -n com.nexus.app/.MainActivity
 ```
 
 This will build the debug version of the app and install it sa running Android emulator.
