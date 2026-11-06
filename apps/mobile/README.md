@@ -61,13 +61,19 @@ Ang pinakamabilis at pinakamadaling paraan ay gamit ang dalawang monorepo `pnpm`
 
 ### Step 1: Simulan ang Backend API (Terminal 1)
 
-Sa repository root:
+Sa repository root, piliin ang isa sa dalawang paraan:
 
+**Option A: Gamit ang Local Node / pnpm (Default)**
 ```powershell
 pnpm dev:mobile
 ```
 
-- Pinapatakbo nito ang Express backend sa `0.0.0.0:3001` na may watch mode.
+**Option B: Gamit ang Docker (Zero-setup Backend)**
+```powershell
+pnpm dev:mobile:docker
+```
+
+- Pinapatakbo nito ang Express backend sa `0.0.0.0:3001` (sa host o sa loob ng Docker container).
 - Awtomatiko nitong ina-apply ang `adb reverse tcp:3001 tcp:3001` para ma-access ng emulator o USB device ang backend sa `http://localhost:3001`.
 - *Note:* Kahit hindi pa bukas ang emulator mo, magsisimula pa rin nang maayos ang backend nang hindi nagka-crash.
 
@@ -135,6 +141,33 @@ Kung may access ka sa Mac at Xcode, ganito naman ang process:
 1. Buksan ang `apps/mobile/iosApp` folder sa Xcode.
 2. Piliin ang target iPhone Simulator o physical device.
 3. I-click ang **Run** o pindutin ang `Cmd + R`.
+
+---
+
+## 🐳 Docker Setup para sa Mobile Development
+
+Kung mas gusto mong gumamit ng Docker para sa backend o kaya'y mag-build/test nang walang lokal na Java o Android Studio:
+
+### 1. Patakbuhin ang Backend gamit ang Docker
+```powershell
+pnpm dev:mobile:docker
+```
+- Awtomatikong nagche-check kung bukas ang Docker Desktop.
+- Ina-apply ang `adb reverse tcp:3001 tcp:3001` para sa active emulator o device.
+- Nagsisimula ang backend API sa port `3001` nang walang kailangang manual node_modules setup sa host.
+
+### 2. Patakbuhin ang Shared Tests sa loob ng Docker
+```powershell
+pnpm docker:mobile:test
+```
+- Gumagamit ng `eclipse-temurin:21` image na may Android SDK command-line tools.
+- Pinapatakbo ang `./gradlew :shared:testAndroidHostTest` sa loob ng container.
+
+### 3. I-compile ang Debug APK sa loob ng Docker
+```powershell
+pnpm docker:mobile:build
+```
+- Bina-build ang `:androidApp:assembleDebug` sa loob ng container at sine-save ang APK sa `apps/mobile/androidApp/build/outputs/apk/debug/`.
 
 ---
 
