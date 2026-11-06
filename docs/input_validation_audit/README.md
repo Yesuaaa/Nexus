@@ -7,8 +7,8 @@
 
 - **Overall validation status:** Pass for client validation, API boundaries, PGlite integration paths, typechecks, lint, and formatting checks that ran. Playwright browser interactions could not be executed because the sandbox denied spawning its worker process.
 - **Input surfaces identified:** 9 UI surfaces: 3 on Login and 6 on Register, including each page's language selector. The API separately accepts 2 Login JSON properties and 4 Register properties. Password confirmation and language selection are client-only; neither page has hidden form fields.
-- **Validation issues discovered:** 10 total, counted by independent rule or handling gap: 2 Login and 8 Register.
-- **Issues fixed:** 10.
+- **Validation issues discovered:** 11 total, counted by independent rule or handling gap: 2 Login and 9 Register.
+- **Issues fixed:** 11.
 - **Unresolved validation issues:** 0 known in the audited flows. Browser interaction results remain unverified in this environment.
 - **Test results:** Web auth validation 8 passed; API auth schema 4 passed; PGlite JWT/session suite 11 passed; API login boundary suite 6 passed; client integration suite 10 passed; password management test 1 passed. Direct Prettier, ESLint, API TypeScript compile, Next route type generation, and web TypeScript checks passed.
 - **Remaining risks:** Playwright flows could not run because of `spawn EPERM`. The Login failure limiter is process-local and does not coordinate across multiple API replicas. PGlite does not establish behavior against a production database or deployment.

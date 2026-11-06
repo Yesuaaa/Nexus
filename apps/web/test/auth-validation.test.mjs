@@ -211,6 +211,7 @@ test("registration validates each field boundary and keeps Unicode names valid",
     "jane..doe@example.com",
     "name@-example.com",
     "name@example..com",
+    "---@email.com",
     `${"a".repeat(65)}@example.com`,
     `${"a".repeat(243)}@example.com`,
   ]) {

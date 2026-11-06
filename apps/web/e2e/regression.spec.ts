@@ -725,6 +725,16 @@ test.describe("Authentication and session regression", () => {
       await confirmPassword.fill("CorrectHorse123!")
     }
 
+    await email.fill("---@email.com")
+    await submit.click()
+    await expect(
+      page.getByText("Enter a valid email address, such as name@example.com.", {
+        exact: true,
+      }),
+    ).toBeVisible()
+    expect(registrationRequests).toBe(0)
+
+    await email.fill("valid@example.com")
     await contactNumber.fill("09abc345678")
     await expect(contactNumber).toHaveValue("09abc345678")
     await submit.click()

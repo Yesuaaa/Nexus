@@ -34,7 +34,13 @@ function validRegistrationEmail(email: string): boolean {
   const normalized = email.normalize("NFC").toLowerCase().normalize("NFC")
   if (normalized.length > 254 || !emailPattern.test(normalized)) return false
   const [local, domain, extra] = normalized.split("@")
-  if (!local || local.length > 64 || !domain || extra !== undefined)
+  if (
+    !local ||
+    local.length > 64 ||
+    !/[\p{L}\p{N}]/u.test(local) ||
+    !domain ||
+    extra !== undefined
+  )
     return false
 
   try {

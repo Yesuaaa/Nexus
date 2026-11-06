@@ -94,15 +94,15 @@ test(
       [],
       { email: [] },
       {
-        email: "duplicate..dots@example.com",
-        password,
-        fullName: "JWT Tester",
-        contactNumber: "09123456789",
-      },
-      {
         email: "valid@example.com",
         password,
         fullName: "JWT Tester123",
+        contactNumber: "09123456789",
+      },
+      {
+        email: "---@email.com",
+        password,
+        fullName: "JWT Tester",
         contactNumber: "09123456789",
       },
       {

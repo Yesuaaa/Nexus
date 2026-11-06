@@ -57,6 +57,7 @@ test("registration emails follow the .com and .ph requirements", () => {
   assert.equal(registrationEmail("person..name@example.com"), undefined)
   assert.equal(registrationEmail("person@example..com"), undefined)
   assert.equal(registrationEmail("person@-example.com"), undefined)
+  assert.equal(registrationEmail("---@email.com"), undefined)
   assert.equal(
     registrationEmail(
       `${"a".repeat(64)}@${"b".repeat(63)}.${"c".repeat(63)}.${"d".repeat(58)}.com`,

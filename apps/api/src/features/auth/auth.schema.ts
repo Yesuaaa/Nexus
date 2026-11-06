@@ -30,6 +30,7 @@ export function registrationEmail(value: unknown): string | undefined {
   if (
     !local ||
     local.length > 64 ||
+    !/[\p{L}\p{N}]/u.test(local) ||
     !domain ||
     domain.length > 253 ||
     !emailPattern.test(email)
