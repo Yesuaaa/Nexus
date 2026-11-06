@@ -5,12 +5,12 @@ import { useEffect, useRef, useState, type FormEvent } from "react"
 import { CalendarDays } from "lucide-react"
 import { sileo } from "sileo"
 import { Button } from "@/components/ui/button"
+import { WorkflowDraftFrame } from "@/features/request-workflow/components/workflow-draft-frame"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog"
+  WorkflowDraftFooter,
+  draftSecondaryButton,
+  draftPrimaryButton,
+} from "@/features/request-workflow/components/workflow-draft-footer"
 import {
   WorkflowCard,
   WorkflowField,
@@ -53,7 +53,7 @@ function ScheduleFields({ meeting }: { meeting?: ConversationMeeting }) {
     : 30
   return (
     <>
-      <div className="grid grid-cols-2 gap-3 max-[420px]:grid-cols-1">
+      <div className="grid grid-cols-1 gap-3 @[360px]:grid-cols-2">
         <WorkflowField label="Date and time">
           <input
             name="startsAt"
@@ -150,106 +150,94 @@ export function ScheduleConversationMeeting({
     }
   }
   return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open && !busy) onClose()
-      }}
+    <WorkflowDraftFrame
+      title="Schedule consultation/meeting"
+      status="Draft · Not sent"
+      description="Arrange a general meeting with the client or discuss one or more booked services. Selecting services is optional."
+      onClose={onClose}
+      closeDisabled={busy}
     >
-      <DialogContent
-        className="z-[141] max-h-[85dvh] w-[calc(100%-32px)] max-w-lg overflow-y-auto rounded-2xl border-[#dce3ee] bg-white text-[#182235]"
-        overlayClassName="z-[140] bg-[#14213d]/35"
+      <form
+        onSubmit={(event) => void submit(event)}
+        className="@container space-y-3"
       >
-        <DialogTitle className="pr-5 text-sm">
-          Schedule consultation/meeting
-        </DialogTitle>
-        <DialogDescription className="text-xs leading-5 text-[#52627a]">
-          Arrange a general meeting with the client or discuss one or more
-          booked services. Selecting services is optional.
-        </DialogDescription>
-        <form onSubmit={(event) => void submit(event)} className="space-y-4">
-          <fieldset
-            disabled={busy}
-            className="m-0 min-w-0 space-y-4 border-0 p-0"
-          >
-            <WorkflowField label="Meeting topic">
-              <textarea
-                name="notes"
-                maxLength={2000}
-                rows={2}
-                placeholder="What would you like to discuss?"
-                className={workflowInput}
-              />
-            </WorkflowField>
-            <ScheduleFields />
-            <fieldset className="m-0 min-w-0 space-y-2 border-0 p-0">
-              <legend className="mb-2 text-[11px] font-medium text-[#52627a]">
-                Related services (optional)
-              </legend>
-              <p className="m-0 mb-3 text-xs text-[#52627a]">
-                Leave all services unchecked for a general meeting. Select
-                several to discuss them together.
-              </p>
-              {bookings.map((booking) => (
-                <label
-                  key={booking.id}
-                  className="flex cursor-pointer items-start gap-3 rounded-xl border border-[#dce3ee] p-3 has-checked:border-[#294a9b] has-checked:bg-[#edf1f8]"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.includes(booking.id)}
-                    onChange={(event) =>
-                      setSelectedIds((previous) =>
-                        event.target.checked
-                          ? [...previous, booking.id]
-                          : previous.filter((id) => id !== booking.id),
-                      )
-                    }
-                    className="mt-1 accent-[#203f8c]"
-                  />
-                  <span className="min-w-0 text-xs">
-                    <span className="block font-semibold">
-                      {booking.serviceName}
-                    </span>
-                    <span className="mt-1 block text-[10px] break-all text-[#52627a]">
-                      {booking.referenceNumber || booking.id}
-                    </span>
+        <fieldset
+          disabled={busy}
+          className="m-0 min-w-0 space-y-3 border-0 p-0"
+        >
+          <WorkflowField label="Meeting topic">
+            <textarea
+              name="notes"
+              maxLength={2000}
+              rows={2}
+              placeholder="What would you like to discuss?"
+              className={workflowInput}
+            />
+          </WorkflowField>
+          <ScheduleFields />
+          <fieldset className="m-0 min-w-0 space-y-2 border-0 p-0">
+            <legend className="mb-2 text-[11px] font-medium text-[#52627a]">
+              Related services (optional)
+            </legend>
+            <p className="m-0 mb-3 text-xs text-[#52627a]">
+              Leave all services unchecked for a general meeting. Select several
+              to discuss them together.
+            </p>
+            {bookings.map((booking) => (
+              <label
+                key={booking.id}
+                className="flex cursor-pointer items-start gap-3 rounded-xl border border-[#dce3ee] p-3 has-checked:border-[#294a9b] has-checked:bg-[#edf1f8]"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(booking.id)}
+                  onChange={(event) =>
+                    setSelectedIds((previous) =>
+                      event.target.checked
+                        ? [...previous, booking.id]
+                        : previous.filter((id) => id !== booking.id),
+                    )
+                  }
+                  className="mt-1 accent-[#203f8c]"
+                />
+                <span className="min-w-0 text-xs">
+                  <span className="block font-semibold">
+                    {booking.serviceName}
                   </span>
-                </label>
-              ))}
-            </fieldset>
-            <p className="m-0 text-xs font-medium text-[#203f8c]">
-              {selectedIds.length
-                ? `${selectedIds.length} related ${selectedIds.length === 1 ? "service" : "services"}`
-                : "General meeting · No specific service"}
-            </p>
+                  <span className="mt-1 block text-[10px] break-all text-[#52627a]">
+                    {booking.referenceNumber || booking.id}
+                  </span>
+                </span>
+              </label>
+            ))}
           </fieldset>
-          {error && (
-            <p role="alert" className="m-0 text-xs text-red-700">
-              {error}
-            </p>
-          )}
-          <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy}
-              onClick={onClose}
-              className="text-xs"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={busy}
-              className="bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
-            >
-              {busy ? "Sending…" : "Send invitation"}
-            </Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
+          <p className="m-0 text-xs font-medium text-[#203f8c]">
+            {selectedIds.length
+              ? `${selectedIds.length} related ${selectedIds.length === 1 ? "service" : "services"}`
+              : "General meeting · No specific service"}
+          </p>
+        </fieldset>
+        {error && (
+          <p role="alert" className="m-0 text-xs text-red-700">
+            {error}
+          </p>
+        )}
+        <WorkflowDraftFooter sticky>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            onClick={onClose}
+            className={draftSecondaryButton}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={busy} className={draftPrimaryButton}>
+            {busy ? "Sending…" : "Send invitation"}
+          </Button>
+        </WorkflowDraftFooter>
+      </form>
+    </WorkflowDraftFrame>
   )
 }
 
@@ -410,7 +398,7 @@ export function ConversationMeetingCard({
           </div>
           {form && (
             <form
-              className="space-y-3 rounded-xl border border-[#dce3ee] p-3"
+              className="@container space-y-3 rounded-xl border border-[#dce3ee] p-3"
               onSubmit={(event) => {
                 event.preventDefault()
                 const data = new FormData(event.currentTarget)

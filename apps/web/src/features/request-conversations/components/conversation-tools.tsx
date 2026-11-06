@@ -8,10 +8,6 @@ import {
   FileText,
   Paperclip,
   Plus,
-  Settings2,
-  StickyNote,
-  Users,
-  Wallet,
   type LucideIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -37,17 +33,15 @@ import type { ConversationBooking } from "../api/request-conversations-api"
 
 type Tool = {
   id:
-    | WorkflowDraftAction
+    | Extract<WorkflowDraftAction, "request-information" | "quotation">
     | "schedule-consultation"
     | "attachment"
-    | "commencement"
-    | "staffing"
     | "activation"
-    | "workflow-controls"
   label: string
   description: string
   icon: LucideIcon
   managerOnly?: boolean
+  stages?: readonly Workflow["state"][]
 }
 
 const tools: Tool[] = [
@@ -57,6 +51,15 @@ const tools: Tool[] = [
     description:
       "Share a supporting file for a booking, such as a brief, reference, or document.",
     icon: Paperclip,
+    stages: [
+      "CONSULTATION",
+      "QUOTATION_PENDING",
+      "CLIENT_APPROVAL",
+      "REVISION_REQUESTED",
+      "AGREEMENT_PAYMENT_PENDING",
+      "READY_FOR_ACTIVATION",
+      "ACTIVE_PROJECT",
+    ],
   },
   {
     id: "request-information",
@@ -64,6 +67,14 @@ const tools: Tool[] = [
     description:
       "Ask the client for details or documents needed for a booking and track their response.",
     icon: CircleHelp,
+    stages: [
+      "CONSULTATION",
+      "QUOTATION_PENDING",
+      "CLIENT_APPROVAL",
+      "REVISION_REQUESTED",
+      "AGREEMENT_PAYMENT_PENDING",
+      "READY_FOR_ACTIVATION",
+    ],
     managerOnly: true,
   },
   {
@@ -80,53 +91,21 @@ const tools: Tool[] = [
     description:
       "Prepare a proposal with the scope, deliverables, pricing, timeline, and payment terms for a booking.",
     icon: FileText,
-    managerOnly: true,
-  },
-  {
-    id: "commencement",
-    label: "Agreement and payment",
-    description:
-      "Review a booking's agreement, signed documents, and payment requirements before work begins.",
-    icon: Wallet,
-  },
-  {
-    id: "approver-assignments",
-    label: "Approver assignments",
-    description:
-      "Choose who reviews a booking's quotations and verifies its payments.",
-    icon: Users,
-    managerOnly: true,
-  },
-  {
-    id: "internal-note",
-    label: "Internal notes",
-    description:
-      "Add a private note about a booking for internal reference. The client cannot see it.",
-    icon: StickyNote,
-    managerOnly: true,
-  },
-  {
-    id: "staffing",
-    label: "Staffing and workload",
-    description:
-      "Review staff availability and workload, then assign employees to an approved booking.",
-    icon: Users,
+    stages: [
+      "CONSULTATION",
+      "QUOTATION_PENDING",
+      "CLIENT_APPROVAL",
+      "REVISION_REQUESTED",
+    ],
     managerOnly: true,
   },
   {
     id: "activation",
     label: "Project activation",
     description:
-      "Start project delivery for a booking once its agreement, payment, and staffing requirements are complete.",
+      "Activate a paid service and open its project workspace once staffing is approved.",
     icon: Check,
-    managerOnly: true,
-  },
-  {
-    id: "workflow-controls",
-    label: "Workflow controls",
-    description:
-      "Pause, resume, or cancel a booking's workflow and record the reason for the change.",
-    icon: Settings2,
+    stages: ["READY_FOR_ACTIVATION"],
     managerOnly: true,
   },
 ]
@@ -134,68 +113,15 @@ const tools: Tool[] = [
 function unavailableReason(tool: Tool, workflow: Workflow): string | null {
   if (tool.managerOnly && !workflow.permissions.manage)
     return "Only the department head can use this tool for this booking."
-  const terminal = ["ACTIVE_PROJECT", "DECLINED", "CANCELLED"].includes(
-    workflow.state,
-  )
-  switch (tool.id) {
-    case "attachment":
-      return ["PENDING_REVIEW", "ON_HOLD", "DECLINED", "CANCELLED"].includes(
-        workflow.state,
-      )
-        ? "Files can be attached while the booking is in progress."
-        : null
-    case "request-information":
-      return [
-        "CONSULTATION",
-        "QUOTATION_PENDING",
-        "CLIENT_APPROVAL",
-        "REVISION_REQUESTED",
-        "AGREEMENT_PAYMENT_PENDING",
-        "READY_FOR_ACTIVATION",
-      ].includes(workflow.state)
-        ? null
-        : "Information can be requested before activation while the booking is in progress."
-    case "schedule-consultation":
-      return null
-    case "quotation":
-      return [
-        "CONSULTATION",
-        "QUOTATION_PENDING",
-        "REVISION_REQUESTED",
-        "CLIENT_APPROVAL",
-      ].includes(workflow.state)
-        ? null
-        : "Quotations can be prepared during consultation, quotation, or client review."
-    case "commencement":
-      return workflow.approval
-        ? null
-        : "The client must approve the quotation before agreement and payment."
-    case "approver-assignments":
-      return workflow.internal && !terminal
-        ? null
-        : "Approvers can be assigned before activation."
-    case "internal-note":
-      return workflow.internal
-        ? null
-        : "Internal notes are only available to the department head."
-    case "staffing":
-      return workflow.approval && workflow.internal && !terminal
-        ? null
-        : "The client must approve the quotation before assigning staff."
-    case "activation":
-      return workflow.state === "READY_FOR_ACTIVATION"
-        ? null
-        : "Complete this booking's agreement and payment requirements before activation."
-    case "workflow-controls":
-      return !terminal && workflow.state !== "PENDING_REVIEW"
-        ? null
-        : "Workflow controls are available while the booking is in progress."
-  }
+  if (tool.stages && !tool.stages.includes(workflow.state))
+    return "This action is not available at the current booking stage."
+  return null
 }
 
 export function ConversationTools({
   workflow,
   bookings,
+  workflows,
   isClient,
   isManager,
   canSend,
@@ -211,6 +137,7 @@ export function ConversationTools({
 }: {
   workflow: Workflow | null
   bookings: ConversationBooking[]
+  workflows: Workflow[]
   isClient: boolean
   isManager: boolean
   canSend: boolean
@@ -227,6 +154,24 @@ export function ConversationTools({
   const [tool, setTool] = useState<Tool | null>(null)
   const [targetId, setTargetId] = useState<string | null>(null)
   const [optionsRevision, setOptionsRevision] = useState(0)
+  const latestWorkflows = new Map(
+    workflows.map((snapshot) => [snapshot.request.id, snapshot]),
+  )
+  if (workflow) latestWorkflows.set(workflow.request.id, workflow)
+  const currentStages = bookings.length
+    ? bookings.map(
+        (booking) =>
+          latestWorkflows.get(booking.id)?.state ?? booking.workflowState,
+      )
+    : workflow
+      ? [workflow.state]
+      : []
+  const relevantTools = tools.filter(
+    (item) =>
+      (!item.managerOnly || isManager) &&
+      (!item.stages ||
+        currentStages.some((stage) => item.stages?.includes(stage))),
+  )
   const [options, setOptions] = useState<{
     key: string
     workflows: Workflow[]
@@ -299,10 +244,7 @@ export function ConversationTools({
       case "attachment":
         onAttach()
         break
-      case "commencement":
-      case "staffing":
       case "activation":
-      case "workflow-controls":
         onSection(tool.id)
         break
       default:
@@ -333,7 +275,7 @@ export function ConversationTools({
           <DropdownMenuLabel className="px-2.5 py-2 text-[10px] text-[#52627a]">
             Conversation tools
           </DropdownMenuLabel>
-          {tools
+          {relevantTools
             .filter((item) => !item.managerOnly || isManager)
             .map((item) => (
               <DropdownMenuItem
@@ -353,6 +295,11 @@ export function ConversationTools({
                 {item.label}
               </DropdownMenuItem>
             ))}
+          {!relevantTools.length && (
+            <p className="m-0 px-2.5 py-2 text-xs text-[#52627a]">
+              No actions available for the current bookings.
+            </p>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       <Dialog

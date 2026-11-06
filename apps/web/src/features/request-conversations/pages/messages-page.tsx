@@ -448,7 +448,7 @@ function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
         "grid h-[calc(100dvh-116px)] min-h-[480px] overflow-hidden rounded-[20px] transition-[grid-template-columns] duration-[240ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none max-[767px]:h-[calc(100dvh-98px)] max-[767px]:min-h-[420px] max-[767px]:grid-cols-1",
         railCollapsed
           ? "grid-cols-[76px_minmax(0,1fr)]"
-          : "grid-cols-[360px_minmax(0,1fr)]",
+          : "grid-cols-[clamp(220px,20vw,360px)_minmax(0,1fr)]",
       )}
     >
       <nav
@@ -461,7 +461,7 @@ function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
         <header
           className={cn(
             "flex h-[68px] shrink-0 items-center gap-2 transition-[padding] duration-[240ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
-            railCollapsed ? "justify-end px-4" : "px-5",
+            railCollapsed ? "justify-center px-3" : "px-5",
             "max-[767px]:justify-between max-[767px]:px-5",
           )}
         >
@@ -469,7 +469,7 @@ function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
             className={cn(
               "m-0 mr-auto min-w-0 flex-none overflow-hidden text-sm font-semibold whitespace-nowrap transition-[max-width,opacity,transform] duration-[160ms] ease-out motion-reduce:transition-none",
               railCollapsed
-                ? "max-w-0 translate-x-1 opacity-0 max-[767px]:max-w-24 max-[767px]:translate-x-0 max-[767px]:opacity-100"
+                ? "hidden max-[767px]:block max-[767px]:max-w-24"
                 : "max-w-24 opacity-100",
             )}
           >
@@ -483,8 +483,7 @@ function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
               aria-label={`${unreadCount} unread messages`}
               className={cn(
                 "grid max-w-10 min-w-5 place-items-center overflow-hidden rounded-full bg-[#294a9b] px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap text-white transition-[max-width,min-width,opacity,transform,padding] duration-[160ms] ease-out motion-reduce:transition-none",
-                railCollapsed &&
-                  "max-w-0 min-w-0 scale-95 px-0 py-0 opacity-0 max-[767px]:max-w-10 max-[767px]:min-w-5 max-[767px]:scale-100 max-[767px]:px-1.5 max-[767px]:py-0.5 max-[767px]:opacity-100",
+                railCollapsed && "hidden max-[767px]:grid",
               )}
             >
               {unreadCount! > 99 ? "99+" : unreadCount}
@@ -515,18 +514,42 @@ function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
         <div
           className={cn(
             "mb-3 flex gap-1 px-3",
-            railCollapsed && "flex-col max-[767px]:flex-row",
+            railCollapsed &&
+              "flex-col items-center max-[767px]:flex-row max-[767px]:items-start",
           )}
         >
-          {canUseInternalChat && (
+          {canUseInternalChat && mode === "internal" && (
+            <Button
+              asChild
+              variant="outline"
+              className={cn(
+                "h-11 shrink-0 border-transparent text-xs text-[#203f8c]",
+                railCollapsed &&
+                  "size-11 p-0 max-[767px]:w-auto max-[767px]:px-4",
+              )}
+            >
+              <Link
+                href="/messages"
+                scroll={false}
+                aria-label="Back to client chats"
+              >
+                <MessageSquare size={16} aria-hidden="true" />
+                <span
+                  className={cn(
+                    railCollapsed && "sr-only max-[767px]:not-sr-only",
+                  )}
+                >
+                  Client chats
+                </span>
+                <HoverTooltip>Back to client chats</HoverTooltip>
+              </Link>
+            </Button>
+          )}
+          {canUseInternalChat && mode === "requests" && (
             <Button
               variant="outline"
               aria-label="Open internal conversations"
-              aria-pressed={mode === "internal"}
-              className={cn(
-                "size-11 shrink-0 cursor-pointer border-transparent p-0",
-                mode === "internal" && "bg-[#edf1f8] text-[#203f8c]",
-              )}
+              className="size-11 shrink-0 cursor-pointer border-transparent p-0"
               onClick={() =>
                 router.push("/messages?mode=internal", { scroll: false })
               }
@@ -538,7 +561,7 @@ function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
         </div>
         <div
           id="conversation-list"
-          className="min-h-0 flex-1 overflow-y-auto px-2 pb-3"
+          className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2 pb-3"
         >
           {mode === "requests" && loading && (
             <p
@@ -664,8 +687,18 @@ function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
           )}
           {mode === "internal" && !internalLoading && !internalError && (
             <>
-              <div className="px-2 pb-2">
-                <p className="px-3 pt-2 pb-1 text-[11px] font-semibold tracking-[0.08em] text-[#8791a2] uppercase">
+              <div
+                className={cn(
+                  "px-2 pb-2",
+                  railCollapsed && "px-0 max-[767px]:px-2",
+                )}
+              >
+                <p
+                  className={cn(
+                    "px-3 pt-2 pb-1 text-[11px] font-semibold tracking-[0.08em] text-[#8791a2] uppercase",
+                    railCollapsed && "hidden max-[767px]:block",
+                  )}
+                >
                   Internal chats
                 </p>
                 {internalResult?.conversations.map((conversation) => {
@@ -686,6 +719,8 @@ function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
                         selected
                           ? "bg-[#203f8c] text-white"
                           : "text-[#182235] hover:bg-[#e9eef5] hover:text-[#203a78]",
+                        railCollapsed &&
+                          "relative mx-auto h-14 w-full max-w-14 justify-center gap-0 px-0 max-[767px]:h-auto max-[767px]:w-full max-[767px]:justify-start max-[767px]:gap-3 max-[767px]:px-3",
                       )}
                     >
                       <ConversationAvatar
@@ -693,7 +728,22 @@ function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
                         imageUrl={conversation.participant.imageUrl}
                         className="size-9 shrink-0"
                       />
-                      <span className="min-w-0 flex-1">
+                      {railCollapsed && Boolean(conversation.unreadCount) && (
+                        <span
+                          aria-hidden="true"
+                          className="absolute top-1 right-1 rounded-full bg-white px-1 text-[10px] text-[#203f8c] max-[767px]:hidden"
+                        >
+                          {conversation.unreadCount > 99
+                            ? "99+"
+                            : conversation.unreadCount}
+                        </span>
+                      )}
+                      <span
+                        className={cn(
+                          "min-w-0 flex-1",
+                          railCollapsed && "hidden max-[767px]:block",
+                        )}
+                      >
                         <span className="flex items-center gap-1.5">
                           <span className="min-w-0 flex-1 truncate text-xs font-semibold">
                             {name}
@@ -724,12 +774,25 @@ function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
                             "Staff and admin chat"}
                         </span>
                       </span>
+                      {railCollapsed && (
+                        <HoverTooltip side="right">{name}</HoverTooltip>
+                      )}
                     </Link>
                   )
                 })}
               </div>
-              <div className="border-t border-[#efefee] px-2 pt-2">
-                <p className="px-3 pt-2 pb-1 text-[11px] font-semibold tracking-[0.08em] text-[#8791a2] uppercase">
+              <div
+                className={cn(
+                  "border-t border-[#efefee] px-2 pt-2",
+                  railCollapsed && "px-0 max-[767px]:px-2",
+                )}
+              >
+                <p
+                  className={cn(
+                    "px-3 pt-2 pb-1 text-[11px] font-semibold tracking-[0.08em] text-[#8791a2] uppercase",
+                    railCollapsed && "hidden max-[767px]:block",
+                  )}
+                >
                   Start a chat
                 </p>
                 {internalContacts.map((contact) => {
@@ -739,11 +802,23 @@ function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
                   )
                   if (existing) return null
                   const name = contact.fullName?.trim() || contact.email
+                  const description =
+                    creatingInternal === contact.id
+                      ? "Opening chat…"
+                      : contact.position ||
+                        contact.department?.name ||
+                        "Staff and admin"
                   return (
                     <button
                       key={contact.id}
                       type="button"
-                      className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-[#e9eef5]"
+                      aria-label={`${name} ${description}`}
+                      className={cn(
+                        "flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-[#e9eef5]",
+                        focusRing,
+                        railCollapsed &&
+                          "mx-auto h-14 w-full max-w-14 justify-center gap-0 px-0 max-[767px]:h-auto max-[767px]:w-full max-[767px]:justify-start max-[767px]:gap-3 max-[767px]:px-3",
+                      )}
                       disabled={creatingInternal === contact.id}
                       onClick={() => void openInternalChat(contact.id)}
                     >
@@ -752,18 +827,24 @@ function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
                         imageUrl={contact.imageUrl}
                         className="size-9 shrink-0"
                       />
-                      <span className="min-w-0 flex-1">
+                      <span
+                        className={cn(
+                          "min-w-0 flex-1",
+                          railCollapsed && "hidden max-[767px]:block",
+                        )}
+                      >
                         <span className="block truncate text-xs font-semibold text-[#182235]">
                           {name}
                         </span>
                         <span className="block truncate text-[11px] text-[#8791a2]">
-                          {creatingInternal === contact.id
-                            ? "Opening chat…"
-                            : contact.position ||
-                              contact.department?.name ||
-                              "Staff and admin"}
+                          {description}
                         </span>
                       </span>
+                      {railCollapsed && (
+                        <HoverTooltip side="right">
+                          {name} · {description}
+                        </HoverTooltip>
+                      )}
                     </button>
                   )
                 })}
@@ -771,11 +852,33 @@ function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
               {internalResult?.nextCursor && (
                 <Button
                   variant="outline"
-                  className="m-4 text-xs"
+                  aria-label={
+                    internalLoadingMore
+                      ? "Loading more chats"
+                      : "Load more chats"
+                  }
+                  className={cn(
+                    "m-4 text-xs",
+                    railCollapsed &&
+                      "mx-auto flex size-11 items-center p-0 max-[767px]:m-4 max-[767px]:h-9 max-[767px]:w-auto max-[767px]:px-4",
+                  )}
                   disabled={internalLoadingMore}
                   onClick={() => void loadMoreInternal()}
                 >
-                  {internalLoadingMore ? "Loading…" : "Load more chats"}
+                  {railCollapsed && (
+                    <ChevronDown
+                      size={16}
+                      aria-hidden="true"
+                      className="max-[767px]:hidden"
+                    />
+                  )}
+                  <span
+                    className={cn(
+                      railCollapsed && "sr-only max-[767px]:not-sr-only",
+                    )}
+                  >
+                    {internalLoadingMore ? "Loading…" : "Load more chats"}
+                  </span>
                 </Button>
               )}
             </>

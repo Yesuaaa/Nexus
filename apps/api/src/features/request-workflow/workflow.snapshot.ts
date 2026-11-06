@@ -29,9 +29,9 @@ function nextAction(state: string) {
       "The client must formally accept, decline, or request revisions to the latest valid quotation.",
     REVISION_REQUESTED: "The department head will send a revised quotation.",
     AGREEMENT_PAYMENT_PENDING:
-      "Complete the payment checkout and agreement checklist before activation.",
+      "Complete the required payment before the department head assigns staff and activates the service workspace.",
     READY_FOR_ACTIVATION:
-      "The department head must approve staffing and activate the project.",
+      "Next: activate the service and open its project workspace. The department head reviews staff assignments during setup.",
     ACTIVE_PROJECT: "Your project workspace is ready.",
     ON_HOLD: "This request is on hold. The department head can resume it.",
     CANCELLED: "This workflow has been cancelled.",
@@ -131,6 +131,10 @@ export async function snapshot(
             status: true,
             submission: true,
             fileId: true,
+            attachments: {
+              select: { id: true },
+              orderBy: { createdAt: "asc" },
+            },
             reviewNote: true,
             createdAt: true,
           },
@@ -345,7 +349,10 @@ export async function snapshot(
   // Prisma decimals use a canonical two-place string in the public contract.
   return {
     ...base,
-    requirements,
+    requirements: requirements.map(({ attachments, ...requirement }) => ({
+      ...requirement,
+      fileIds: attachments.map((file) => file.id),
+    })),
     files,
     consultations,
     quotations: quotations.map((quote) => ({
@@ -370,5 +377,9 @@ export async function snapshot(
 export function getWorkflow(userId: string, requestId: string) {
   return getPrisma()!.$transaction((tx) => snapshot(tx, userId, requestId), {
     isolationLevel: "RepeatableRead",
+    // Heads also load staffing and approval data. Allow for remote database
+    // latency and other bookings loading in the same conversation.
+    maxWait: 10_000,
+    timeout: 20_000,
   })
 }

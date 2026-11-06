@@ -28,6 +28,7 @@ export type WorkflowRequirement = {
   status: "REQUESTED" | "SUBMITTED" | "COMPLETED"
   submission: string | null
   fileId: string | null
+  fileIds: string[]
   reviewNote: string | null
   createdAt: string
 }
@@ -173,6 +174,7 @@ export type WorkflowAction =
       requirementId: string
       submission: string
       fileId?: string
+      fileIds?: string[]
     }
   | {
       type: "REVIEW_REQUIREMENT"
