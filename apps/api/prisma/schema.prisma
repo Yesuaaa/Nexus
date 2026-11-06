@@ -546,41 +546,43 @@ model RequestWorkflow {
 }
 
 model WorkflowRequirement {
-  id         String                    @id @default(cuid())
-  requestId  String
-  workflow   RequestWorkflow           @relation(fields: [requestId], references: [requestId], onDelete: Restrict)
-  title      String                    @db.VarChar(300)
-  details    String?                   @db.VarChar(4000)
-  mandatory  Boolean                   @default(true)
-  status     WorkflowRequirementStatus @default(REQUESTED)
-  submission String?                   @db.VarChar(4000)
-  fileId     String?
-  file       WorkflowFile?             @relation(fields: [fileId], references: [id], onDelete: Restrict)
-  reviewNote String?                   @db.VarChar(2000)
-  createdAt  DateTime                  @default(now())
-  updatedAt  DateTime                  @updatedAt
+  id          String                    @id @default(cuid())
+  requestId   String
+  workflow    RequestWorkflow           @relation(fields: [requestId], references: [requestId], onDelete: Restrict)
+  title       String                    @db.VarChar(300)
+  details     String?                   @db.VarChar(4000)
+  mandatory   Boolean                   @default(true)
+  status      WorkflowRequirementStatus @default(REQUESTED)
+  submission  String?                   @db.VarChar(4000)
+  fileId      String?
+  file        WorkflowFile?             @relation(fields: [fileId], references: [id], onDelete: Restrict)
+  attachments WorkflowFile[]            @relation("RequirementAttachments")
+  reviewNote  String?                   @db.VarChar(2000)
+  createdAt   DateTime                  @default(now())
+  updatedAt   DateTime                  @updatedAt
 
   @@index([requestId, createdAt])
 }
 
 model WorkflowFile {
-  id            String                @id @default(cuid())
-  requestId     String
-  workflow      RequestWorkflow       @relation(fields: [requestId], references: [requestId], onDelete: Restrict)
-  uploaderId    String
-  uploader      User                  @relation(fields: [uploaderId], references: [id], onDelete: Restrict)
-  uploadId      String                @db.VarChar(36)
-  name          String                @db.VarChar(160)
-  mimeType      String                @db.VarChar(100)
-  size          Int
-  sha256        String                @db.VarChar(64)
-  clientVisible Boolean               @default(true)
-  data          Bytes
-  createdAt     DateTime              @default(now())
-  requirements  WorkflowRequirement[]
-  agreements    WorkflowAgreement[]   @relation("AgreementDocument")
-  signatures    WorkflowAgreement[]   @relation("AgreementSignature")
-  payments      WorkflowPayment[]
+  id                     String                @id @default(cuid())
+  requestId              String
+  workflow               RequestWorkflow       @relation(fields: [requestId], references: [requestId], onDelete: Restrict)
+  uploaderId             String
+  uploader               User                  @relation(fields: [uploaderId], references: [id], onDelete: Restrict)
+  uploadId               String                @db.VarChar(36)
+  name                   String                @db.VarChar(160)
+  mimeType               String                @db.VarChar(100)
+  size                   Int
+  sha256                 String                @db.VarChar(64)
+  clientVisible          Boolean               @default(true)
+  data                   Bytes
+  createdAt              DateTime              @default(now())
+  requirements           WorkflowRequirement[]
+  requirementAttachments WorkflowRequirement[] @relation("RequirementAttachments")
+  agreements             WorkflowAgreement[]   @relation("AgreementDocument")
+  signatures             WorkflowAgreement[]   @relation("AgreementSignature")
+  payments               WorkflowPayment[]
 
   @@unique([requestId, uploaderId, uploadId])
   @@index([requestId, createdAt])
@@ -783,15 +785,15 @@ model SpecialistSocialLink {
 
 model Session {
   approximateLocation String?
-  userAgent     String?
-  lastActiveAt  DateTime?
-  id            String         @id @default(cuid())
-  tokenHash     String         @unique
-  userId        String
-  expiresAt     DateTime
-  createdAt     DateTime       @default(now())
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  refreshTokens RefreshToken[]
+  userAgent           String?
+  lastActiveAt        DateTime?
+  id                  String         @id @default(cuid())
+  tokenHash           String         @unique
+  userId              String
+  expiresAt           DateTime
+  createdAt           DateTime       @default(now())
+  user                User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokens       RefreshToken[]
 
   @@index([userId])
   @@index([expiresAt])

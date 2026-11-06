@@ -274,6 +274,22 @@ async function mock(
           archived: false,
           conversation: state.accepted
             ? {
+                id: booking.id,
+                bookings: [
+                  {
+                    id: booking.id,
+                    title: booking.title,
+                    referenceNumber: null,
+                    status: booking.status,
+                    packageName: booking.packageName,
+                    serviceName: booking.service.name,
+                    workflowState: "CONSULTATION",
+                    previousWorkflowState: null,
+                    createdAt: booking.createdAt,
+                    updatedAt: booking.updatedAt,
+                  },
+                ],
+                bookingCount: 1,
                 department: { id: "design", name: "Design" },
                 head: {
                   id: "head-1",
@@ -296,16 +312,25 @@ async function mock(
       .find(
         (booking) => url.pathname === `/api/request-workflows/${booking.id}`,
       )
-    const workflowThread = serviceThreads
-      ?.flatMap(
-        (row) =>
-          row.bookings?.map((booking) => ({
-            ...row,
+    const workflowThread =
+      serviceThreads
+        ?.flatMap(
+          (row) =>
+            row.bookings?.map((booking) => ({
+              ...row,
+              ...booking,
+              service: { name: booking.serviceName },
+            })) ?? [row],
+        )
+        .find((row) => url.pathname === `/api/request-workflows/${row.id}`) ??
+      (url.pathname === "/api/request-workflows/booking-1"
+        ? {
             ...booking,
-            service: { name: booking.serviceName },
-          })) ?? [row],
-      )
-      .find((row) => url.pathname === `/api/request-workflows/${row.id}`)
+            referenceNumber: null,
+            client: { id: "client-1", fullName: "Mara Client" },
+            acceptedDepartment: { id: "design", name: "Design" },
+          }
+        : null)
     if (workflowThread) {
       const workflow: Workflow = {
         request: {
@@ -469,6 +494,38 @@ async function openMessages(page: Page, role: "USER" | "STAFF") {
 }
 
 test.use({ reducedMotion: "reduce" })
+
+test("department-head chat loads and polls each booking workflow once", async ({
+  page,
+}) => {
+  const state = sharedFixture()
+  await page.clock.install()
+  await mock(page, state, "STAFF")
+  const reads = new Map<string, number>()
+  await page.route("**/api/request-workflows/*", async (route) => {
+    const id = new URL(route.request().url()).pathname.split("/").at(-1)!
+    if (state.conversations![0]!.bookings!.some((booking) => booking.id === id))
+      reads.set(id, (reads.get(id) ?? 0) + 1)
+    await route.fallback()
+  })
+  await page.goto("/messages?request=shared-design")
+  const bookingIds = state.conversations![0]!.bookings!.map(
+    (booking) => booking.id,
+  )
+  await expect
+    .poll(() => bookingIds.map((id) => reads.get(id)))
+    .toEqual([1, 1, 1])
+  await expect(
+    page.getByRole("complementary", { name: "Request context" }),
+  ).toContainText("SR-101")
+  await page.clock.fastForward(16_000)
+  await expect
+    .poll(() => bookingIds.map((id) => reads.get(id)))
+    .toEqual([2, 2, 2])
+  await expect(
+    page.getByText("Couldn't load workflow", { exact: true }),
+  ).toHaveCount(0)
+})
 
 for (const width of [1440, 390]) {
   test(`client sees the latest uploaded specialist profile at ${width}px`, async ({
@@ -746,8 +803,8 @@ for (const role of ["STAFF", "ADMIN", "SUPERADMIN"] as const) {
     await expect(
       page
         .getByRole("navigation", { name: "Conversations", exact: true })
-        .getByRole("link"),
-    ).toHaveCount(0)
+        .getByRole("link", { name: "Back to client chats", exact: true }),
+    ).toBeVisible()
   })
 }
 
@@ -1185,39 +1242,50 @@ for (const width of [1440, 390]) {
           exact: true,
         })
         .click()
-      const dialog = page.getByRole("dialog", {
+      const sheet = chat.getByRole("region", {
         name: "Schedule consultation/meeting",
         exact: true,
       })
-      await expect(dialog).toContainText("Selecting services is optional.")
-      await expect(dialog.getByRole("radio")).toHaveCount(0)
-      await expect(dialog.locator("input:checked")).toHaveCount(0)
-      await expect(dialog).toContainText(
-        "General meeting · No specific service",
-      )
-      await dialog
+      await expect(page.getByRole("dialog")).toHaveCount(0)
+      await expect(sheet).toBeVisible()
+      const sheetBox = await sheet.boundingBox()
+      const composerBox = await chat
+        .getByRole("form", { name: "Send a message" })
+        .boundingBox()
+      expect(sheetBox).not.toBeNull()
+      expect(composerBox).not.toBeNull()
+      expect(sheetBox!.height).toBeLessThanOrEqual(400)
+      expect(composerBox!.y - sheetBox!.y - sheetBox!.height).toBeCloseTo(8, 0)
+      await chat
+        .getByRole("textbox", { name: "Message", exact: true })
+        .fill("Keep this general message draft")
+      await expect(sheet).toContainText("Selecting services is optional.")
+      await expect(sheet.getByRole("radio")).toHaveCount(0)
+      await expect(sheet.locator("input:checked")).toHaveCount(0)
+      await expect(sheet).toContainText("General meeting · No specific service")
+      await sheet
         .getByLabel("Meeting topic", { exact: true })
         .fill(
           scope === "general" ? "General catch-up" : "Website and SEO review",
         )
-      await dialog.getByLabel("Date and time", { exact: true }).fill(startsAt)
-      await dialog
+      await sheet.getByLabel("Date and time", { exact: true }).fill(startsAt)
+      await sheet
         .getByLabel("Meeting link or location", { exact: true })
         .fill("https://meet.example.com/shared")
       if (scope === "multiple") {
-        await dialog
+        await sheet
           .getByRole("checkbox", { name: "Website SR-101", exact: true })
           .check()
-        await dialog
+        await sheet
           .getByRole("checkbox", { name: "SEO SR-102", exact: true })
           .check()
-        await expect(dialog).toContainText("2 related services")
+        await expect(sheet).toContainText("2 related services")
       }
       if (scope === "general") {
-        await dialog
+        await sheet
           .getByRole("button", { name: "Send invitation", exact: true })
           .click()
-        await expect(dialog.getByRole("alert")).toHaveText(
+        await expect(sheet.getByRole("alert")).toHaveText(
           "Connection interrupted. Try again.",
         )
       } else {
@@ -1226,10 +1294,10 @@ for (const width of [1440, 390]) {
           fullPage: true,
         })
       }
-      await dialog
+      await sheet
         .getByRole("button", { name: "Send invitation", exact: true })
         .click()
-      await expect(dialog).toHaveCount(0)
+      await expect(sheet).toHaveCount(0)
       await expect(
         chat.getByRole("textbox", { name: "Message", exact: true }),
       ).toHaveValue("Keep this general message draft")
@@ -1538,16 +1606,22 @@ for (const width of [1440, 390]) {
       "Request information",
       "Schedule consultation/meeting",
       "Create quotation",
-      "Agreement and payment",
-      "Approver assignments",
-      "Internal notes",
-      "Staffing and workload",
-      "Project activation",
-      "Workflow controls",
     ])
       await expect(
         menu.getByRole("menuitem", { name, exact: true }),
       ).toBeEnabled()
+    await expect(menu.getByRole("menuitem")).toHaveCount(4)
+    for (const name of [
+      "Payment and commencement",
+      "Approver assignments",
+      "Internal notes",
+      "Staffing and workload",
+      "Workflow controls",
+      "Project activation",
+    ])
+      await expect(
+        menu.getByRole("menuitem", { name, exact: true }),
+      ).toHaveCount(0)
     await menu
       .getByRole("menuitem", { name: "Create quotation", exact: true })
       .click()
@@ -1658,6 +1732,16 @@ for (const width of [1440, 390]) {
     await expect(
       context.getByRole("button", { name: "Continue", exact: true }),
     ).toBeDisabled()
+    await context.getByRole("button", { name: "Cancel", exact: true }).click()
+    await page.reload()
+    await tools.click()
+    await expect(
+      page.getByRole("menuitem", { name: "Create quotation", exact: true }),
+    ).toHaveCount(0)
+    await expect(
+      page.getByRole("menuitem", { name: "Project activation", exact: true }),
+    ).toHaveCount(0)
+    await expect(page.getByRole("menuitem")).toHaveCount(3)
     await expect(page).toHaveURL(/request=shared-design$/)
   })
 }
@@ -1698,7 +1782,20 @@ for (const width of [1440, 390]) {
       requirements: [],
       consultations: [],
       quotations: [],
-      approval: null,
+      approval: {
+        quotationId: "seo-quote",
+        amount: "1500.00",
+        currency: "PHP",
+        approvedById: "client-1",
+        approvedAt: "2026-10-30T09:00:00Z",
+      },
+      internal: {
+        staff: [],
+        approvers: [],
+        quotationApproverId: null,
+        paymentVerifierId: null,
+        events: [],
+      },
       agreement: null,
       project: null,
       files: [
@@ -1750,6 +1847,7 @@ for (const width of [1440, 390]) {
       actions.push(route.request().postDataJSON() as Record<string, unknown>)
       seo.version++
       seo.payment!.status = "VERIFIED"
+      seo.state = "READY_FOR_ACTIVATION"
       return route.fulfill({ json: seo })
     })
     await page.goto("/messages?request=shared-design")
@@ -1787,11 +1885,35 @@ for (const width of [1440, 390]) {
     const before = await log
       .locator('[data-booking-event="seo"]')
       .allTextContents()
-    if (width === 390)
-      await panel
-        .getByText("Request details and actions", { exact: true })
-        .click()
-    await panel.getByRole("button", { name: /SEO SR-102/ }).click()
+    await chat
+      .getByRole("button", { name: "Open request actions", exact: true })
+      .click()
+    const activation = page.getByRole("menuitem", {
+      name: "Project activation",
+      exact: true,
+    })
+    await expect(page.getByRole("menuitem").last()).toHaveText(
+      "Project activation",
+    )
+    await activation.click()
+    const picker = page.getByRole("dialog", {
+      name: "Project activation: choose a booking",
+      exact: true,
+    })
+    await picker.getByRole("radio", { name: "SEO SR-102", exact: true }).check()
+    await picker.getByRole("button", { name: "Continue", exact: true }).click()
+    const setup = page.getByRole("dialog", {
+      name: "Activate project",
+      exact: true,
+    })
+    await expect(setup).toContainText("SR-102")
+    await expect(setup).toContainText(
+      "No employees are assigned to this department.",
+    )
+    await expect(
+      setup.getByRole("button", { name: "Approve staffing", exact: true }),
+    ).toBeDisabled()
+    await setup.getByRole("button", { name: "Cancel", exact: true }).click()
     await expect(panel.locator('button[aria-pressed="true"]')).toContainText(
       "SR-102",
     )
@@ -2078,6 +2200,90 @@ test("refresh removes newly archived threads from all loaded inbox pages", async
 */
 
 for (const role of ["USER", "STAFF"] as const) {
+  for (const width of [1440, 390]) {
+    for (const scenario of ["none", "ended"] as const) {
+      test(`${role} retains chat details with ${scenario} current bookings at ${width}px`, async ({
+        page,
+      }) => {
+        await page.setViewportSize({ width, height: 900 })
+        await page.clock.install()
+        const state = sharedFixture()
+        const bookings = state.conversations![0]!.bookings!
+        for (const [index, booking] of bookings.entries())
+          booking.status = index % 2 ? "CANCELLED" : "CLOSED"
+        if (scenario === "none") state.conversations![0]!.bookings = []
+        await mock(page, state, role)
+        const workflowReads: string[] = []
+        await page.route("**/api/request-workflows/*", async (route) => {
+          const id = new URL(route.request().url()).pathname.split("/").at(-1)!
+          if (bookings.some((booking) => booking.id === id))
+            workflowReads.push(id)
+          await route.fallback()
+        })
+        await page.goto("/messages?request=shared-design")
+        const chat = page.getByRole("region", { name: "Request conversation" })
+        const panel = page.getByRole("complementary", {
+          name: "Request context",
+        })
+        await expect(panel).toBeVisible()
+        if (width === 390)
+          await panel
+            .getByText("Request details and actions", { exact: true })
+            .click()
+        await expect(
+          panel.getByRole("heading", {
+            name: "Conversation details",
+            exact: true,
+          }),
+        ).toBeVisible()
+        await expect(
+          panel.getByText("No current booked services.", { exact: true }),
+        ).toBeVisible()
+        await expect(
+          panel.getByText("Service details", { exact: true }),
+        ).toHaveCount(0)
+        await expect(
+          panel.getByText("Loading service details…", { exact: true }),
+        ).toHaveCount(0)
+        await expect(
+          chat.getByText("Let us discuss all our services here.", {
+            exact: true,
+          }),
+        ).toBeVisible()
+        expect(workflowReads).toEqual([])
+        await chat
+          .getByRole("textbox", { name: "Message", exact: true })
+          .fill("Our conversation stays available.")
+        state.conversations![0]!.bookings = bookings
+        bookings[0]!.status = "UNDER_REVIEW"
+        await page.clock.fastForward(16_000)
+        await expect(
+          panel.getByRole("button", { name: /SR-101/ }),
+        ).toBeVisible()
+        await expect(
+          panel.getByText("Service details", { exact: true }),
+        ).toBeVisible()
+        bookings[0]!.status = "CLOSED"
+        await page.clock.fastForward(16_000)
+        await expect(
+          panel.getByText("No current booked services.", { exact: true }),
+        ).toBeVisible()
+        await expect(
+          panel.getByRole("heading", {
+            name: "Conversation details",
+            exact: true,
+          }),
+        ).toBeVisible()
+        await expect(
+          panel.getByText("Service details", { exact: true }),
+        ).toHaveCount(0)
+        await expect(
+          chat.getByRole("textbox", { name: "Message", exact: true }),
+        ).toHaveValue("Our conversation stays available.")
+      })
+    }
+  }
+
   test(`${role} keeps ended bookings in the shared conversation but hides them from context`, async ({
     page,
   }) => {
@@ -2101,4 +2307,56 @@ for (const role of ["USER", "STAFF"] as const) {
       page.getByRole("button", { name: "Archived conversations", exact: true }),
     ).toHaveCount(0)
   })
+}
+
+for (const width of [1440, 390]) {
+  for (const role of ["STAFF", "USER"] as const) {
+    test(
+      role + " only sees relevant tools for active projects at " + width + "px",
+      async ({ page }) => {
+        await page.setViewportSize({ width, height: 920 })
+        const state = sharedFixture()
+        for (const booking of state.conversations![0]!.bookings!)
+          booking.workflowState = "ACTIVE_PROJECT"
+        await mock(page, state, role)
+        await page.goto("/messages?request=shared-design")
+        await page
+          .getByRole("button", {
+            name:
+              role === "STAFF"
+                ? "Open request actions"
+                : "Open attachment options",
+            exact: true,
+          })
+          .click()
+        const menu = page.getByRole("menu")
+        await expect(
+          menu.getByRole("menuitem", { name: "Attach file", exact: true }),
+        ).toBeVisible()
+        await expect(menu.getByRole("menuitem")).toHaveCount(
+          role === "STAFF" ? 2 : 1,
+        )
+        if (role === "STAFF")
+          await expect(
+            menu.getByRole("menuitem", {
+              name: "Schedule consultation/meeting",
+              exact: true,
+            }),
+          ).toBeVisible()
+        for (const name of [
+          "Request information",
+          "Create quotation",
+          "Project activation",
+          "Payment and commencement",
+          "Approver assignments",
+          "Internal notes",
+          "Staffing and workload",
+          "Workflow controls",
+        ])
+          await expect(
+            menu.getByRole("menuitem", { name, exact: true }),
+          ).toHaveCount(0)
+      },
+    )
+  }
 }

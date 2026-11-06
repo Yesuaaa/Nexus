@@ -188,7 +188,6 @@ export function WorkloadPage() {
           </p>
         </div>
         <WorkloadWeekInput
-          key={week}
           week={week}
           onChange={(value) => {
             setLoading(true)

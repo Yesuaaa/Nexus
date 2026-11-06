@@ -9,6 +9,7 @@ import { PGLiteSocketServer } from "@electric-sql/pglite-socket"
 import { createApp } from "./app.js"
 import { issueSession } from "./features/auth/auth.service.js"
 import type {
+  Prisma,
   Role,
   WorkflowEvent,
   WorkflowFile,
@@ -34,6 +35,76 @@ test("request information requires nonblank details", () => {
   }
 })
 
+test("requirement attachments accept 1–5 distinct IDs and reject invalid batches", () => {
+  const action = {
+    actionId: randomUUID(),
+    expectedVersion: 1,
+    type: "SUBMIT_REQUIREMENT",
+    requirementId: "requirement-1",
+    submission: "",
+  }
+  for (let count = 1; count <= 5; count++) {
+    const fileIds = Array.from({ length: count }, (_, i) => `file-${i}`)
+    assert.deepEqual(parseAction({ ...action, fileIds }).command, {
+      type: action.type,
+      requirementId: action.requirementId,
+      submission: "",
+      fileIds,
+    })
+  }
+  for (const fileIds of [
+    [],
+    Array.from({ length: 6 }, (_, i) => `file-${i}`),
+    ["file-1", "file-1"],
+    ["file-1", null],
+    ["file-1", "invalid/file"],
+    "file-1",
+    null,
+  ])
+    assert.throws(() => parseAction({ ...action, fileIds }))
+  assert.throws(() =>
+    parseAction({ ...action, fileId: "file-1", fileIds: ["file-2"] }),
+  )
+  assert.throws(() => parseAction(action), /Submit text or a file/)
+  assert.doesNotThrow(() => parseAction({ ...action, submission: "Text only" }))
+  assert.doesNotThrow(() => parseAction({ ...action, fileId: "legacy-file" }))
+})
+
+test("attachment migration preserves existing single-file submissions", async () => {
+  const db = new PGlite()
+  try {
+    await db.exec(`
+      CREATE TABLE "WorkflowFile" ("id" TEXT PRIMARY KEY);
+      CREATE TABLE "WorkflowRequirement" ("id" TEXT PRIMARY KEY, "fileId" TEXT);
+      INSERT INTO "WorkflowFile" VALUES ('legacy-file');
+      INSERT INTO "WorkflowRequirement" VALUES ('with-file', 'legacy-file'), ('text-only', NULL);
+    `)
+    await db.exec(
+      await readFile(
+        new URL(
+          "20261106000000_requirement_attachments/migration.sql",
+          migrationDirectory,
+        ),
+        "utf8",
+      ),
+    )
+    assert.deepEqual(
+      (await db.query('SELECT * FROM "_RequirementAttachments"')).rows,
+      [{ A: "legacy-file", B: "with-file" }],
+    )
+    assert.deepEqual(
+      (
+        await db.query(
+          `SELECT relrowsecurity FROM pg_class WHERE relname = '_RequirementAttachments'`,
+        )
+      ).rows,
+      [{ relrowsecurity: true }],
+    )
+  } finally {
+    await db.close()
+  }
+})
+
 type TestWorkflow = {
   state: string
   version: number
@@ -44,7 +115,13 @@ type TestWorkflow = {
     approveQuotation: boolean
     verifyPayment: boolean
   }
-  requirements: { id: string; status: string; submission: string | null }[]
+  requirements: {
+    id: string
+    status: string
+    submission: string | null
+    fileId: string | null
+    fileIds: string[]
+  }[]
   consultations: { id: string; status: string }[]
   quotations: { id: string; version: number; status: string; total: string }[]
   approval: {
@@ -66,6 +143,120 @@ type TestWorkflow = {
 
 const migrationDirectory = new URL("../prisma/migrations/", import.meta.url)
 const workflowMigrationName = "20261031010000_request_workflow"
+
+test("quotation acceptance migration releases paid bookings and preserves holds and documents", async () => {
+  const db = new PGlite()
+  try {
+    await db.exec(`
+      CREATE TYPE "RequestWorkflowState" AS ENUM ('AGREEMENT_PAYMENT_PENDING', 'READY_FOR_ACTIVATION', 'ON_HOLD', 'CANCELLED');
+      CREATE TABLE "RequestWorkflow" ("requestId" TEXT PRIMARY KEY, "state" "RequestWorkflowState", "previousState" "RequestWorkflowState", "paymentRequired" BOOLEAN, "version" INT DEFAULT 1, "updatedAt" TIMESTAMP);
+      CREATE TABLE "WorkflowApproval" ("requestId" TEXT, "approvedById" TEXT, "approvedAt" TIMESTAMP DEFAULT '2026-11-01');
+      CREATE TABLE "WorkflowAgreement" ("requestId" TEXT, "status" TEXT, "reviewedById" TEXT, "reviewedAt" TIMESTAMP, "signedFileId" TEXT);
+      CREATE TABLE "WorkflowPayment" ("requestId" TEXT, "status" TEXT);
+      CREATE TABLE "WorkflowRequirement" ("requestId" TEXT, "mandatory" BOOLEAN, "status" TEXT);
+      INSERT INTO "RequestWorkflow" ("requestId", "state", "previousState", "paymentRequired") VALUES
+        ('paid', 'AGREEMENT_PAYMENT_PENDING', NULL, true),
+        ('unpaid', 'AGREEMENT_PAYMENT_PENDING', NULL, true),
+        ('held', 'ON_HOLD', 'AGREEMENT_PAYMENT_PENDING', true),
+        ('outstanding', 'AGREEMENT_PAYMENT_PENDING', NULL, true),
+        ('cancelled', 'CANCELLED', NULL, true),
+        ('unaccepted', 'AGREEMENT_PAYMENT_PENDING', NULL, true),
+        ('no-payment', 'AGREEMENT_PAYMENT_PENDING', NULL, false);
+      INSERT INTO "WorkflowApproval" ("requestId", "approvedById")
+        SELECT "requestId", 'client' FROM "RequestWorkflow" WHERE "requestId" <> 'unaccepted';
+      INSERT INTO "WorkflowAgreement" ("requestId", "status", "signedFileId")
+        SELECT "requestId", 'PENDING', 'existing-signed-copy' FROM "RequestWorkflow";
+      INSERT INTO "WorkflowPayment" SELECT "requestId", CASE WHEN "requestId" = 'unpaid' THEN 'SUBMITTED' ELSE 'VERIFIED' END FROM "RequestWorkflow";
+      INSERT INTO "WorkflowRequirement" VALUES ('outstanding', true, 'SUBMITTED');
+    `)
+    await db.exec(
+      await readFile(
+        new URL(
+          "20261106010000_quotation_acceptance_agreement/migration.sql",
+          migrationDirectory,
+        ),
+        "utf8",
+      ),
+    )
+    const rows = (
+      await db.query<{
+        requestId: string
+        state: string
+        previousState: string | null
+        version: number
+      }>(
+        `SELECT "requestId", "state", "previousState", "version" FROM "RequestWorkflow" ORDER BY "requestId"`,
+      )
+    ).rows
+    assert.deepEqual(rows, [
+      {
+        requestId: "cancelled",
+        state: "CANCELLED",
+        previousState: null,
+        version: 1,
+      },
+      {
+        requestId: "held",
+        state: "ON_HOLD",
+        previousState: "READY_FOR_ACTIVATION",
+        version: 2,
+      },
+      {
+        requestId: "no-payment",
+        state: "READY_FOR_ACTIVATION",
+        previousState: null,
+        version: 2,
+      },
+      {
+        requestId: "outstanding",
+        state: "AGREEMENT_PAYMENT_PENDING",
+        previousState: null,
+        version: 1,
+      },
+      {
+        requestId: "paid",
+        state: "READY_FOR_ACTIVATION",
+        previousState: null,
+        version: 2,
+      },
+      {
+        requestId: "unaccepted",
+        state: "AGREEMENT_PAYMENT_PENDING",
+        previousState: null,
+        version: 1,
+      },
+      {
+        requestId: "unpaid",
+        state: "AGREEMENT_PAYMENT_PENDING",
+        previousState: null,
+        version: 1,
+      },
+    ])
+    const agreements = (
+      await db.query<{
+        requestId: string
+        status: string
+        reviewedById: string | null
+        signedFileId: string
+      }>(
+        `SELECT "requestId", "status", "reviewedById", "signedFileId" FROM "WorkflowAgreement"`,
+      )
+    ).rows
+    for (const agreement of agreements) {
+      assert.equal(
+        agreement.status,
+        agreement.requestId === "unaccepted" ? "PENDING" : "APPROVED",
+      )
+      assert.equal(
+        agreement.reviewedById,
+        agreement.requestId === "unaccepted" ? null : "client",
+      )
+      assert.equal(agreement.signedFileId, "existing-signed-copy")
+    }
+  } finally {
+    await db.close()
+  }
+})
 
 test("workflow migration preserves accepted history without granting approvals", async () => {
   const db = new PGlite()
@@ -390,6 +581,35 @@ test(
     )
 
     await t.test(
+      "head workflow reads tolerate database latency beyond five seconds",
+      async () => {
+        const originalTransaction = prisma!.$transaction
+        const transaction = prisma!.$transaction.bind(prisma!)
+        Reflect.set(
+          prisma!,
+          "$transaction",
+          async (
+            operation: (tx: Prisma.TransactionClient) => Promise<unknown>,
+            options?: Parameters<typeof transaction>[1],
+          ) =>
+            transaction(async (tx) => {
+              await new Promise<void>((resolve) => setTimeout(resolve, 5200))
+              return operation(tx)
+            }, options),
+        )
+        try {
+          const workflow = await read(head)
+          assert.equal(workflow.permissions.manage, true)
+          assert.ok(
+            workflow.internal?.staff.some((item) => item.id === employee.id),
+          )
+        } finally {
+          Reflect.set(prisma!, "$transaction", originalTransaction)
+        }
+      },
+    )
+
+    await t.test(
       "requirements and consultations cannot be bypassed; files stay private and retry safely",
       async () => {
         const requested = await act(head, {
@@ -504,6 +724,7 @@ test(
           fileId: file.id,
         })
         assert.equal(submitted.requirements[0]!.status, "SUBMITTED")
+        assert.deepEqual(submitted.requirements[0]!.fileIds, [file.id])
         await act(head, {
           type: "REVIEW_REQUIREMENT",
           requirementId,
@@ -511,12 +732,84 @@ test(
           note: "Include the latest logo",
         })
         assert.equal((await read()).requirements[0]!.status, "REQUESTED")
-        await act(client, {
+        const headFile = await upload(head, "head-only.txt")
+        assert.equal((await accept(anotherRequest.id)).status, 200)
+        const foreignFile = await upload(
+          otherClient,
+          "other-request.txt",
+          "Other request",
+          anotherRequest.id,
+        )
+        for (const invalidId of [headFile.id, foreignFile.id, "missing-file"]) {
+          const before = await read()
+          const denied = await send(
+            client,
+            {
+              type: "SUBMIT_REQUIREMENT",
+              requirementId,
+              submission: "Invalid attachment",
+              fileIds: [file.id, invalidId],
+            },
+            before.version,
+          )
+          assert.equal(denied.status, 404)
+          const after = await read()
+          assert.equal(after.version, before.version)
+          assert.equal(after.requirements[0]!.status, "REQUESTED")
+          assert.deepEqual(after.requirements[0]!.fileIds, [file.id])
+        }
+        const fileIds = [file.id, formFile.id]
+        for (let i = 0; i < 3; i++)
+          fileIds.push((await upload(client, `support-${i}.txt`)).id)
+        const batch = {
           type: "SUBMIT_REQUIREMENT",
           requirementId,
           submission: "Latest logo included",
-          fileId: file.id,
+          fileIds,
+        }
+        const beforeBatch = await read()
+        const batchActionId = randomUUID()
+        for (let retry = 0; retry < 2; retry++) {
+          const response = await send(
+            client,
+            batch,
+            beforeBatch.version,
+            batchActionId,
+          )
+          assert.equal(response.status, 200, await response.clone().text())
+          const result = (await response.json()) as TestWorkflow
+          assert.equal(result.version, beforeBatch.version + 1)
+          assert.deepEqual(
+            new Set(result.requirements[0]!.fileIds),
+            new Set(fileIds),
+          )
+        }
+        assert.deepEqual(
+          new Set((await read(head)).requirements[0]!.fileIds),
+          new Set(fileIds),
+        )
+        for (const fileId of fileIds)
+          assert.equal(
+            (
+              await fetch(`${path()}/files/${fileId}`, {
+                headers: head.headers,
+              })
+            ).status,
+            200,
+          )
+        await act(head, {
+          type: "REVIEW_REQUIREMENT",
+          requirementId,
+          approve: false,
+          note: "Replace supporting files",
         })
+        const replacement = await act(client, {
+          type: "SUBMIT_REQUIREMENT",
+          requirementId,
+          submission: "Updated supporting document",
+          fileIds: [formFile.id],
+        })
+        assert.deepEqual(replacement.requirements[0]!.fileIds, [formFile.id])
         await act(head, {
           type: "REVIEW_REQUIREMENT",
           requirementId,
@@ -868,6 +1161,7 @@ test(
         assert.equal(accepted.status, 200, await accepted.clone().text())
         const acceptedBody = (await accepted.json()) as TestWorkflow
         assert.equal(acceptedBody.state, "AGREEMENT_PAYMENT_PENDING")
+        assert.equal(acceptedBody.agreement!.status, "APPROVED")
         assert.equal(Number(acceptedBody.approval!.amount), 30000)
         assert.equal(acceptedBody.approval!.approvedById, client.id)
         assert.ok(acceptedBody.approval!.approvedAt)
@@ -932,7 +1226,7 @@ test(
     )
 
     await t.test(
-      "agreement, payment and staffing gates block premature project activation",
+      "quotation acceptance satisfies agreement while payment and staffing block premature activation",
       async () => {
         const current = await read(head)
         assert.equal(
@@ -952,55 +1246,13 @@ test(
             409,
           )
         await act(head, { type: "STAFF_PROJECT", employeeIds: [employee.id] })
-        const agreement = await upload(
-          paymentAdmin,
-          "agreement.txt",
-          "Agreement terms",
-        )
-        assert.equal(
-          (
-            await fetch(`${path()}/files/${agreement.id}`, {
-              headers: client.headers,
-            })
-          ).status,
-          404,
-        )
-        await act(paymentAdmin, {
-          type: "ATTACH_AGREEMENT",
-          fileId: agreement.id,
-        })
-        assert.equal(
-          (
-            await fetch(`${path()}/files/${agreement.id}`, {
-              headers: client.headers,
-            })
-          ).status,
-          200,
-        )
-        assert.equal(
-          (
-            await fetch(`${path()}/files/${agreement.id}`, {
-              headers: admin.headers,
-            })
-          ).status,
-          404,
-        )
-        const signature = await upload(client, "signed.txt", "Signed agreement")
-        await act(client, { type: "SIGN_AGREEMENT", fileId: signature.id })
-        const paymentBeforeAgreementApproval = await act(client, {
+        assert.equal((await read(client)).agreement!.status, "APPROVED")
+        const submitted = await act(client, {
           type: "SUBMIT_PAYMENT",
           fileId: submittedFileId,
           reference: "XENDIT-SANDBOX-TEST",
         })
-        assert.equal(
-          paymentBeforeAgreementApproval.payment!.status,
-          "SUBMITTED",
-        )
-        await act(head, {
-          type: "REVIEW_AGREEMENT",
-          approve: true,
-          note: "Signed by client",
-        })
+        assert.equal(submitted.payment!.status, "SUBMITTED")
         const proof = await upload(
           client,
           "receipt.txt",
@@ -1217,7 +1469,81 @@ test(
     )
 
     await t.test(
-      "sandbox checkout verifies payment once and retains agreement and activation gates",
+      "department heads can update active service staffing without creating another workspace",
+      async () => {
+        const current = await read(head)
+        assert.equal(current.state, "ACTIVE_PROJECT")
+        for (const actor of [client, paymentAdmin])
+          assert.equal(
+            (
+              await send(
+                actor,
+                { type: "STAFF_PROJECT", employeeIds: [employee.id] },
+                current.version,
+              )
+            ).status,
+            403,
+          )
+        for (const id of [inactiveEmployee.id, foreignEmployee.id])
+          assert.equal(
+            (
+              await send(
+                head,
+                { type: "STAFF_PROJECT", employeeIds: [id] },
+                current.version,
+              )
+            ).status,
+            409,
+          )
+        const newStaff = await user("WorkflowNewContributor", "STAFF")
+        const newEmployee = await prisma!.employee.create({
+          data: {
+            employeeId: "WF-NEW-CONTRIBUTOR",
+            fullName: "New Contributor",
+            departmentId: department.id,
+            userId: newStaff.id,
+          },
+        })
+        const updated = await act(head, {
+          type: "STAFF_PROJECT",
+          employeeIds: [newEmployee.id],
+        })
+        assert.equal(updated.state, "ACTIVE_PROJECT")
+        assert.equal(updated.project!.id, projectId)
+        assert.equal(
+          await prisma!.project.count({ where: { requestId: request.id } }),
+          1,
+        )
+        assert.equal(
+          await prisma!.projectStaff.count({ where: { projectId } }),
+          1,
+        )
+        assert.equal(
+          await prisma!.projectMilestone.count({ where: { projectId } }),
+          2,
+        )
+        assert.equal(
+          (
+            await fetch(`${base}/projects/${projectId}`, {
+              headers: staff.headers,
+            })
+          ).status,
+          404,
+        )
+        assert.equal(
+          (
+            await fetch(`${base}/projects/${projectId}`, {
+              headers: newStaff.headers,
+            })
+          ).status,
+          200,
+        )
+        await act(head, { type: "STAFF_PROJECT", employeeIds: [employee.id] })
+      },
+    )
+
+    await t.test(
+      "sandbox checkout verifies payment once and enables staffing and activation without another agreement",
       async () => {
         for (const requiresAgreement of [false, true]) {
           const sandboxService = await prisma!.service.create({
@@ -1287,13 +1613,8 @@ test(
             assert.equal(attempt.status, 200, await attempt.clone().text())
           const paid = await read(client, id)
           assert.equal(paid.payment!.status, "VERIFIED")
-          assert.equal(
-            paid.state,
-            requiresAgreement
-              ? "AGREEMENT_PAYMENT_PENDING"
-              : "READY_FOR_ACTIVATION",
-          )
-          assert.equal(paid.agreement!.status, "PENDING")
+          assert.equal(paid.state, "READY_FOR_ACTIVATION")
+          assert.equal(paid.agreement!.status, "APPROVED")
           const payment: WorkflowPayment =
             await prisma!.workflowPayment.findUniqueOrThrow({
               where: { requestId: id },

@@ -14,10 +14,13 @@ import * as Dialog from "@radix-ui/react-dialog"
 import { CalendarDays } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Calendar, calendarToday } from "./calendar"
+import { HoverTooltip } from "./hover-tooltip"
 
 type DateInputProps = Omit<ComponentProps<"input">, "type"> & {
   type?: "date" | "datetime-local"
   selectionMode?: "date" | "week"
+  iconOnly?: boolean
+  onDateSelect?: (value: string) => void
 }
 
 export const DateInput = forwardRef<HTMLInputElement, DateInputProps>(
@@ -26,6 +29,8 @@ export const DateInput = forwardRef<HTMLInputElement, DateInputProps>(
       className,
       type = "date",
       selectionMode = "date",
+      iconOnly = false,
+      onDateSelect,
       onChange,
       onClick,
       onKeyDown,
@@ -34,6 +39,7 @@ export const DateInput = forwardRef<HTMLInputElement, DateInputProps>(
     ref,
   ) => {
     const input = useRef<HTMLInputElement>(null)
+    const trigger = useRef<HTMLButtonElement>(null)
     const field = useRef<HTMLDivElement>(null)
     const popup = useRef<HTMLDivElement>(null)
     const restoreFocus = useRef(true)
@@ -88,19 +94,26 @@ export const DateInput = forwardRef<HTMLInputElement, DateInputProps>(
       )?.set?.call(element, value)
       element.dispatchEvent(new Event("input", { bubbles: true }))
       element.dispatchEvent(new Event("change", { bubbles: true }))
+      onDateSelect?.(value)
       if (close) {
         setOpen(false)
-        element.focus()
-        element.blur()
+        if (!iconOnly) {
+          element.focus()
+          element.blur()
+        }
       }
     }
     return (
       <Dialog.Root open={open} onOpenChange={changeOpen} modal={false}>
-        <div ref={field} className="relative min-w-0">
+        <div
+          ref={field}
+          className={cn("relative min-w-0", iconOnly && "size-[34px]")}
+        >
           <input
             {...props}
             ref={input}
             type={type}
+            hidden={iconOnly || props.hidden}
             className={cn(
               "w-full min-w-0 rounded-lg border border-[#dfe5ee] bg-background py-2 pl-3 pr-9 text-xs leading-5 outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60 aria-invalid:border-[#d64557] [&::-webkit-calendar-picker-indicator]:hidden",
               className,
@@ -130,12 +143,28 @@ export const DateInput = forwardRef<HTMLInputElement, DateInputProps>(
           />
           <Dialog.Trigger asChild>
             <button
+              ref={trigger}
               type="button"
-              aria-label="Open calendar"
+              aria-label={
+                iconOnly
+                  ? props["aria-label"] || "Open calendar"
+                  : "Open calendar"
+              }
+              title={iconOnly ? props.title : undefined}
               disabled={props.disabled || props.readOnly}
-              className="absolute inset-y-0 right-0 grid w-9 cursor-pointer place-items-center rounded-r-lg text-[#667b9e] hover:text-[#203f8c] focus-visible:outline-2 focus-visible:outline-[#294a9b] disabled:pointer-events-none disabled:opacity-40"
+              className={cn(
+                "grid cursor-pointer place-items-center text-[#667b9e] hover:text-[#203f8c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#294a9b] disabled:pointer-events-none disabled:opacity-40",
+                iconOnly
+                  ? "size-[34px] rounded-lg border border-[#dfe5ee] bg-background hover:bg-[#eaf0fb]"
+                  : "absolute inset-y-0 right-0 w-9 rounded-r-lg",
+              )}
             >
-              <CalendarDays size={15} aria-hidden="true" />
+              <CalendarDays size={iconOnly ? 17 : 15} aria-hidden="true" />
+              {iconOnly && (
+                <HoverTooltip>
+                  {props.title || props["aria-label"] || "Open calendar"}
+                </HoverTooltip>
+              )}
             </button>
           </Dialog.Trigger>
         </div>
@@ -154,7 +183,10 @@ export const DateInput = forwardRef<HTMLInputElement, DateInputProps>(
             }}
             onCloseAutoFocus={(event) => {
               event.preventDefault()
-              if (restoreFocus.current) input.current?.focus()
+              if (restoreFocus.current) {
+                if (iconOnly) trigger.current?.focus()
+                else input.current?.focus()
+              }
             }}
             onInteractOutside={(event) => {
               if (

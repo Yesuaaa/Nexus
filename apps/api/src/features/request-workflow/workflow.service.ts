@@ -54,7 +54,7 @@ async function refreshReadiness(
 ) {
   const workflow = await tx.requestWorkflow.findUniqueOrThrow({
     where: { requestId },
-    include: { approval: true, agreement: true, payment: true },
+    include: { approval: true, payment: true },
   })
   if (
     !workflow.approval ||
@@ -67,8 +67,6 @@ async function refreshReadiness(
   })
   const ready =
     !outstanding &&
-    (!workflow.agreementRequired ||
-      workflow.agreement?.status === "APPROVED") &&
     (!workflow.paymentRequired || workflow.payment?.status === "VERIFIED")
   const nextState = ready ? "READY_FOR_ACTIVATION" : "AGREEMENT_PAYMENT_PENDING"
   if (workflow.state !== nextState) {
@@ -132,7 +130,10 @@ async function runAction(
       )
     return record.id
   }
-  if (terminal.some((value) => value === state))
+  if (
+    terminal.some((value) => value === state) &&
+    !(state === "ACTIVE_PROJECT" && command.type === "STAFF_PROJECT")
+  )
     fail(
       "This workflow has ended or the project has already been activated",
       409,
@@ -293,11 +294,15 @@ async function runAction(
         fail("This requirement is already complete", 409)
       if (requirement.status === "SUBMITTED")
         fail("This response is awaiting department review", 409)
+      const fileIds =
+        command.fileIds ?? (command.fileId ? [command.fileId] : [])
+      for (const fileId of fileIds) await file(fileId, true)
       await tx.workflowRequirement.update({
         where: { id: requirement.id },
         data: {
           submission: command.submission || null,
-          fileId: command.fileId ? await file(command.fileId, true) : null,
+          fileId: fileIds[0] ?? null,
+          attachments: { set: fileIds.map((id) => ({ id })) },
           status: "SUBMITTED",
           reviewNote: null,
         },
@@ -599,7 +604,13 @@ async function runAction(
         },
       })
       const agreement = await tx.workflowAgreement.create({
-        data: { requestId, mandatory: workflow.agreementRequired },
+        data: {
+          requestId,
+          mandatory: workflow.agreementRequired,
+          status: "APPROVED",
+          reviewedById: userId,
+          reviewedAt: approval.approvedAt,
+        },
       })
       const payment = await tx.workflowPayment.create({
         data: {
@@ -636,14 +647,12 @@ async function runAction(
       await setState("AGREEMENT_PAYMENT_PENDING")
       await event(
         "APPROVAL_CONFIRMED",
-        `The client formally accepted quotation v${quote.version} for ${quote.currency} ${quote.total.toFixed(2)}. Agreement and payment requirements are now available.`,
+        `The client formally accepted quotation v${quote.version} for ${quote.currency} ${quote.total.toFixed(2)}. This acceptance confirms the service agreement. Complete any required payment before activation.`,
         approval.id,
       )
       await event(
-        "AGREEMENT_CREATED",
-        workflow.agreementRequired
-          ? "A signed agreement is required before commencement."
-          : "An optional agreement checklist is available.",
+        "AGREEMENT_CONFIRMED",
+        "The service agreement is confirmed by the client's formal quotation acceptance. No separate signed agreement is required.",
         agreement.id,
       )
       await event(
@@ -890,10 +899,14 @@ async function runAction(
     }
     case "STAFF_PROJECT": {
       requireManager()
-      requireStage("AGREEMENT_PAYMENT_PENDING", "READY_FOR_ACTIVATION")
+      requireStage(
+        "AGREEMENT_PAYMENT_PENDING",
+        "READY_FOR_ACTIVATION",
+        "ACTIVE_PROJECT",
+      )
       const project = await tx.project.findUnique({ where: { requestId } })
-      if (!project || project.status !== "PLANNED")
-        fail("No project draft is available", 409)
+      if (!project || !["PLANNED", "IN_PROGRESS"].includes(project.status))
+        fail("No planned or active project is available", 409)
       const eligible = await tx.employee.findMany({
         where: {
           id: { in: command.employeeIds },
@@ -935,9 +948,8 @@ async function runAction(
         requestId,
         workflow.consultationRequired,
       )
-      const [approval, agreement, payment, project] = await Promise.all([
+      const [approval, payment, project] = await Promise.all([
         tx.workflowApproval.findUnique({ where: { requestId } }),
-        tx.workflowAgreement.findUnique({ where: { requestId } }),
         tx.workflowPayment.findUnique({ where: { requestId } }),
         tx.project.findUnique({
           where: { requestId },
@@ -951,14 +963,8 @@ async function runAction(
           "A formally accepted quotation and matching draft project are required",
           409,
         )
-      if (
-        (workflow.agreementRequired && agreement?.status !== "APPROVED") ||
-        (workflow.paymentRequired && payment?.status !== "VERIFIED")
-      )
-        fail(
-          "All mandatory agreement and payment requirements must be completed",
-          409,
-        )
+      if (workflow.paymentRequired && payment?.status !== "VERIFIED")
+        fail("The required commencement payment must be verified", 409)
       if (
         !project.staff.length ||
         project.staff.some(

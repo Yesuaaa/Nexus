@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 import { sileo } from "sileo"
 import { AttachmentPreview, attachmentAccept } from "./attachment-preview"
+import { RequirementResponseForm } from "./requirement-response-form"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 
 export function getConsultationMeetingUrl(location: string) {
@@ -405,67 +406,24 @@ export function RequirementRequestCard({
           {requirement.submission}
         </p>
       )}
-      <AttachedFile fileId={requirement.fileId} workflow={workflow} />
+      {(requirement.fileIds?.length
+        ? requirement.fileIds
+        : requirement.fileId
+          ? [requirement.fileId]
+          : []
+      ).map((fileId) => (
+        <AttachedFile key={fileId} fileId={fileId} workflow={workflow} />
+      ))}
       {requirement.reviewNote && (
         <p className="m-0 text-[11px]">Review: {requirement.reviewNote}</p>
       )}
       {workflow.permissions.isClient &&
         requirement.status === "REQUESTED" &&
         writable && (
-          <form
-            className="grid gap-4"
-            onSubmit={async (event) => {
-              event.preventDefault()
-              const form = event.currentTarget
-              const data = new FormData(form)
-              const fileId = await resolveFormFile(form, controls)
-              if (fileId === null) return
-              if (
-                await controls.act({
-                  type: "SUBMIT_REQUIREMENT",
-                  requirementId: requirement.id,
-                  submission: String(data.get("submission") || ""),
-                  ...(fileId ? { fileId } : {}),
-                })
-              )
-                form.reset()
-            }}
-          >
-            <WorkflowField
-              label={
-                <span>
-                  Your response{" "}
-                  <span className="text-red-600" aria-hidden="true">
-                    *
-                  </span>
-                </span>
-              }
-            >
-              <textarea
-                name="submission"
-                rows={2}
-                maxLength={4000}
-                defaultValue={requirement.submission || ""}
-                className={workflowInput}
-              />
-            </WorkflowField>
-            <WorkflowField
-              label={
-                <span>
-                  Supporting document{" "}
-                  <span className="text-red-600" aria-hidden="true">
-                    *
-                  </span>
-                </span>
-              }
-              asGroup
-            >
-              <WorkflowFileSelect workflow={workflow} controls={controls} />
-            </WorkflowField>
-            <Button className={workflowPrimaryButton} disabled={controls.busy}>
-              Submit requirement
-            </Button>
-          </form>
+          <RequirementResponseForm
+            requirement={requirement}
+            controls={controls}
+          />
         )}
       {workflow.permissions.manage &&
         requirement.status === "SUBMITTED" &&
@@ -841,6 +799,17 @@ export function QuotationProposalCard({
       status={quotation.status}
       icon={ReceiptText}
     >
+      <dl
+        aria-label="Quotation reference"
+        className="m-0 border-b border-[#e1e6ee] pb-3"
+      >
+        <dt className="text-[10px] font-medium text-[#738096]">
+          Reference number
+        </dt>
+        <dd className="m-0 break-all text-xs font-semibold text-[#203f8c]">
+          {workflow.request.referenceNumber || workflow.request.id}
+        </dd>
+      </dl>
       <p className="m-0 whitespace-pre-wrap text-[#182235]">
         {quotation.scope}
       </p>
@@ -1119,8 +1088,8 @@ export function AgreementCard({ workflow, controls }: CardProps) {
       icon={FileSignature}
     >
       <p className="m-0">
-        {agreement.mandatory
-          ? "An approved agreement is required before project activation."
+        {workflow.approval
+          ? "The client's quotation acceptance confirms the service agreement. No separate signature is required."
           : "An agreement is optional for this service."}
       </p>
       <AttachedFile fileId={agreement.documentFileId} workflow={workflow} />
@@ -1434,14 +1403,6 @@ export function PaymentVerificationCard({ workflow, controls }: CardProps) {
           ? "Card checkout confirms payment automatically. Uploaded payment proof is reviewed by the department head or assigned verifier."
           : "No mandatory commencement payment for this service."}
       </p>
-      {payment.mandatory &&
-        workflow.agreement?.mandatory &&
-        workflow.agreement.status !== "APPROVED" && (
-          <p className="m-0 rounded-lg bg-[#edf2fb] p-3 text-[11px] text-[#294a9b]">
-            Payment can be completed now. Project activation will wait until the
-            required agreement is approved too.
-          </p>
-        )}
       {payment.reference && (
         <p className="m-0">Reference: {payment.reference}</p>
       )}
