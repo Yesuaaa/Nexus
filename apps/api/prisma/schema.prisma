@@ -65,6 +65,11 @@ enum ProjectStatus {
   CANCELLED
 }
 
+enum ProjectWorkspaceStructure {
+  SEPARATE
+  MULTI_WORKSTREAM
+}
+
 enum RequestWorkflowState {
   PENDING_REVIEW
   CONSULTATION
@@ -147,6 +152,8 @@ model User {
   internalConversationParticipants  InternalConversationParticipant[]
   internalMessages                  InternalMessage[]                 @relation("InternalMessageSender")
   projects                          Project[]
+  createdProjectWorkspaces          ProjectWorkspaceGroup[]            @relation("ProjectWorkspaceCreator")
+  clientProjectWorkspaces            ProjectWorkspaceGroup[]            @relation("ProjectWorkspaceClient")
   workflowEvents                    WorkflowEvent[]
   workflowFiles                     WorkflowFile[]
   workflowApprovals                 WorkflowApproval[]
@@ -457,8 +464,28 @@ model Project {
   request     ServiceRequest?    @relation(fields: [requestId], references: [id], onDelete: Restrict)
   quotationId String?            @unique
   quotation   WorkflowQuotation? @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+  templateKey String?            @db.VarChar(60)
+  workPlan    Json?
+  workspaceGroupId String?
+  workspaceGroup ProjectWorkspaceGroup? @relation(fields: [workspaceGroupId], references: [id], onDelete: SetNull)
   staff       ProjectStaff[]
   milestones  ProjectMilestone[]
+
+  @@index([clientId, createdAt, id])
+  @@index([workspaceGroupId])
+}
+
+model ProjectWorkspaceGroup {
+  id            String                    @id @default(cuid())
+  name          String                    @db.VarChar(200)
+  structure     ProjectWorkspaceStructure
+  clientId      String
+  client        User                      @relation("ProjectWorkspaceClient", fields: [clientId], references: [id], onDelete: Restrict)
+  createdById   String
+  createdBy     User                      @relation("ProjectWorkspaceCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+  projects      Project[]
 
   @@index([clientId, createdAt, id])
 }
