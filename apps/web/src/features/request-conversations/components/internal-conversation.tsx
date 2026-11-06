@@ -1,4 +1,6 @@
 "use client"
+
+import { Form } from "@/components/ui/form"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 
 import { useEffect, useRef, useState, type FormEvent } from "react"
@@ -358,7 +360,7 @@ function InternalConversationPanel({
                 })}
               </div>
               {history.canSend ? (
-                <form
+                <Form
                   className="flex shrink-0 items-end gap-2 border-t border-[#efefee] bg-white px-5 py-4 max-[767px]:px-3"
                   onSubmit={(event) => void submit(event)}
                 >
@@ -400,7 +402,7 @@ function InternalConversationPanel({
                       <Send size={16} aria-hidden="true" />
                     )}
                   </Button>
-                </form>
+                </Form>
               ) : (
                 <p className="m-0 shrink-0 border-t border-[#efefee] px-5 py-4 text-xs text-[#52627a]">
                   Messaging is unavailable for this account.

@@ -91,6 +91,12 @@ workloadRouter.get("/", async (req, res) => {
           name: true,
           status: true,
           requestId: true,
+          request: {
+            select: {
+              referenceNumber: true,
+              service: { select: { name: true } },
+            },
+          },
           staff: { select: { employeeId: true } },
         },
         orderBy: { createdAt: "desc" },

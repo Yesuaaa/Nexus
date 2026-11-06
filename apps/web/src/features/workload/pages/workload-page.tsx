@@ -1,5 +1,7 @@
 "use client"
 
+import { Form } from "@/components/ui/form"
+
 import { WorkloadWeekInput } from "../components/workload-week-input"
 import { CapacityFields } from "../components/capacity-fields"
 import { WorkloadRowActions } from "../components/workload-row-actions"
@@ -8,9 +10,13 @@ import { BriefcaseBusiness, Trash2 } from "lucide-react"
 import {
   panelAssignButton,
   panelDangerButton,
+  panelField,
+  panelInput,
+  panelSecondaryButton,
+  panelSelectTrigger,
 } from "@/features/departments/styles/member-panel-styles"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
-import { CloseIcon } from "@/components/layout/icons"
+import { WorkloadDialog } from "../components/workload-dialog"
 import { WorkloadKpiCards } from "../components/workload-kpi-cards"
 import {
   getWorkloadMetrics as metrics,
@@ -35,12 +41,7 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select"
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog"
+import { Dialog } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 
 type Project = {
@@ -48,6 +49,7 @@ type Project = {
   name: string
   status: string
   requestId: string | null
+  request: { referenceNumber: string | null; service: { name: string } } | null
   staff: { employeeId: string }[]
 }
 type Data = {
@@ -55,6 +57,9 @@ type Data = {
   week: string
   staff: Staff[]
   projects: Project[]
+}
+function projectLabel(project: Project) {
+  return `${project.request?.service.name ?? project.name} · ${project.request?.referenceNumber ?? project.requestId ?? project.id}`
 }
 function monday() {
   const d = new Date()
@@ -139,6 +144,9 @@ export function WorkloadPage() {
       `${s.fullName} ${s.position ?? ""} ${s.profileSpecialties.join(" ")}`
         .toLowerCase()
         .includes(search.toLowerCase()),
+  )
+  const selectedProject = data?.projects.find(
+    (project) => project.id === allocation?.projectId,
   )
   const pending = (data?.projects ?? []).filter((p) => p.staff.length === 0)
   const openAssignment = (
@@ -270,12 +278,14 @@ export function WorkloadPage() {
           </Select>
           <Button
             type="button"
-            variant="outline"
-            className="ml-auto h-[34px] text-xs max-[560px]:ml-0"
+            className={`${panelAssignButton} ml-auto max-[560px]:ml-0`}
             disabled={!data || loading}
             onClick={() => setRequestsOpen(true)}
           >
-            Staffing requests ({pending.length})
+            Assign staff
+            <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-white px-1 text-[9px] font-semibold tabular-nums text-[#203f8c]">
+              {pending.length}
+            </span>
           </Button>
         </div>
         <div
@@ -583,35 +593,54 @@ export function WorkloadPage() {
         </WorkloadDetailsDrawer>
       )}
       <Dialog open={requestsOpen} onOpenChange={setRequestsOpen}>
-        <DialogContent className="max-h-[85dvh] overflow-y-auto">
-          <DialogTitle>Staffing requests ({pending.length})</DialogTitle>
-          <DialogDescription>
-            Authorized projects awaiting their first staff allocation.
-          </DialogDescription>
-          {pending.map((p) => (
-            <div
-              key={p.id}
-              className="flex items-center justify-between gap-3 border-b py-3 text-xs"
-            >
-              <strong>{p.name}</strong>
-              <Button
-                variant="outline"
-                className="h-8 text-xs"
-                onClick={() => {
-                  setRequestsOpen(false)
-                  openAssignment(p.id)
-                }}
+        <WorkloadDialog
+          title="Assign staff"
+          description="Choose an authorized project awaiting its first staff assignment."
+          onClose={() => setRequestsOpen(false)}
+        >
+          <div className="grid gap-3 p-5 sm:p-6">
+            {pending.map((project) => (
+              <div
+                key={project.id}
+                className="flex items-center justify-between gap-3 rounded-lg border border-[#e8ebef] p-4 max-[420px]:flex-col max-[420px]:items-stretch"
               >
-                Assign staff
-              </Button>
-            </div>
-          ))}
-          {!pending.length && (
-            <p className="text-xs text-[#738096]">
-              No authorized projects are awaiting staff.
-            </p>
-          )}
-        </DialogContent>
+                <div className="min-w-0">
+                  <p className="m-0 break-words text-xs font-semibold">
+                    {project.request?.service.name ?? project.name}
+                  </p>
+                  <p className="mt-1 mb-0 break-all text-[11px] text-[#738096]">
+                    {project.request?.referenceNumber ??
+                      project.requestId ??
+                      project.id}
+                  </p>
+                </div>
+                <Button
+                  className={panelAssignButton}
+                  onClick={() => {
+                    setRequestsOpen(false)
+                    openAssignment(project.id)
+                  }}
+                >
+                  Assign staff
+                </Button>
+              </div>
+            ))}
+            {!pending.length && (
+              <p className="m-0 py-6 text-center text-xs text-[#738096]">
+                No authorized projects are awaiting staff.
+              </p>
+            )}
+          </div>
+          <footer className="flex justify-end border-t border-[#eceef1] px-5 py-4 sm:px-6">
+            <Button
+              variant="outline"
+              className={panelSecondaryButton}
+              onClick={() => setRequestsOpen(false)}
+            >
+              Close
+            </Button>
+          </footer>
+        </WorkloadDialog>
       </Dialog>
       <Dialog
         open={!!capacityTarget}
@@ -619,36 +648,14 @@ export function WorkloadPage() {
           if (!open && !busy) setCapacityTarget(null)
         }}
       >
-        <DialogContent
-          showCloseButton={false}
-          overlayClassName="bg-[rgb(13_28_57_/_48%)]"
-          className="max-h-[calc(100dvh-28px)] w-[min(620px,calc(100vw-28px))] gap-0 overflow-y-auto rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_22px_75px_rgb(18_36_73_/_22%)]"
-          onInteractOutside={(event) => event.preventDefault()}
-          onEscapeKeyDown={(event) => event.preventDefault()}
+        <WorkloadDialog
+          title="Edit weekly capacity"
+          description={`${capacityTarget?.fullName ?? ""} · Week of ${week}. Include leave and holidays in time off.`}
+          onClose={() => setCapacityTarget(null)}
+          busy={busy}
         >
-          <header className="flex items-start justify-between gap-4 border-b border-[#eceef1] p-5 sm:px-6 sm:pt-6 sm:pb-5">
-            <div className="min-w-0">
-              <DialogTitle className="m-0 text-[20px] font-[650] tracking-[-0.03em]">
-                Edit weekly capacity
-              </DialogTitle>
-              <DialogDescription className="mt-1 mb-0 text-xs text-[#738096]">
-                {capacityTarget?.fullName} · Week of {week}. Include leave and
-                holidays in time off.
-              </DialogDescription>
-            </div>
-            <Button
-              variant="outline"
-              type="button"
-              className="grid size-8 flex-none place-items-center rounded-[7px] border border-[#e1e4ea] bg-background p-0 text-[#65718a] shadow-none hover:bg-[#f1f5fc] disabled:opacity-50"
-              aria-label="Close form"
-              disabled={busy}
-              onClick={() => setCapacityTarget(null)}
-            >
-              <CloseIcon width="16" height="16" />
-            </Button>
-          </header>{" "}
           {capacityTarget && (
-            <form
+            <Form
               key={`${capacityTarget.id}:${week}`}
               onSubmit={(e) => {
                 e.preventDefault()
@@ -680,22 +687,23 @@ export function WorkloadPage() {
                 <Button
                   variant="outline"
                   type="button"
+                  className={panelSecondaryButton}
                   disabled={busy}
                   onClick={() => setCapacityTarget(null)}
                 >
                   Cancel
                 </Button>
                 <Button
-                  className="h-[34px] bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
+                  className={panelAssignButton}
                   disabled={busy}
                   type="submit"
                 >
                   {busy ? "Saving…" : "Save capacity"}
                 </Button>
               </footer>
-            </form>
+            </Form>
           )}
-        </DialogContent>
+        </WorkloadDialog>
       </Dialog>
       <Dialog
         open={!!allocation}
@@ -703,38 +711,18 @@ export function WorkloadPage() {
           if (!open && !busy) setAllocation(null)
         }}
       >
-        <DialogContent
-          showCloseButton={false}
-          overlayClassName="bg-[rgb(13_28_57_/_48%)]"
-          className="max-h-[calc(100dvh-28px)] w-[min(620px,calc(100vw-28px))] gap-0 overflow-y-auto rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_22px_75px_rgb(18_36_73_/_22%)]"
-          onInteractOutside={(event) => event.preventDefault()}
-          onEscapeKeyDown={(event) => event.preventDefault()}
+        <WorkloadDialog
+          title={
+            allocation?.previousEmployeeId
+              ? "Reassign / edit allocation"
+              : "Assign staff"
+          }
+          description={`Allocate weekly hours to an authorized project, starting the week of ${week}.`}
+          onClose={() => setAllocation(null)}
+          busy={busy}
         >
-          <header className="flex items-start justify-between gap-4 border-b border-[#eceef1] p-5 sm:px-6 sm:pt-6 sm:pb-5">
-            <div className="min-w-0">
-              <DialogTitle className="m-0 text-[20px] font-[650] tracking-[-0.03em]">
-                {allocation?.previousEmployeeId
-                  ? "Reassign / edit allocation"
-                  : "Assign staff"}
-              </DialogTitle>
-              <DialogDescription className="mt-1 mb-0 text-xs text-[#738096]">
-                Allocate weekly hours to an authorized project, starting the
-                week of {week}.
-              </DialogDescription>
-            </div>
-            <Button
-              variant="outline"
-              type="button"
-              className="grid size-8 flex-none place-items-center rounded-[7px] border border-[#e1e4ea] bg-background p-0 text-[#65718a] shadow-none hover:bg-[#f1f5fc] disabled:opacity-50"
-              aria-label="Close form"
-              disabled={busy}
-              onClick={() => setAllocation(null)}
-            >
-              <CloseIcon width="16" height="16" />
-            </Button>
-          </header>{" "}
           {allocation && (
-            <form
+            <Form
               onChange={(event) => {
                 const form = new FormData(event.currentTarget)
                 const target = staff.find(
@@ -782,47 +770,63 @@ export function WorkloadPage() {
               }}
               className="grid gap-4 p-5 sm:grid-cols-2 sm:p-6"
             >
-              <label className="grid min-w-0 gap-[7px] text-xs font-semibold text-foreground">
-                Staff
-                <select
-                  aria-label="Staff"
-                  name="employeeId"
-                  required
-                  defaultValue={allocation.employeeId}
-                  className="h-10 min-w-0 rounded-lg border border-[#d6dfec] bg-background px-[11px] text-sm"
-                >
-                  {" "}
-                  <option value="" disabled>
-                    Select staff
-                  </option>
-                  {staff
-                    .filter((s) => s.status === "ACTIVE")
-                    .map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.fullName} · {metrics(s).availability}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              <label className="grid min-w-0 gap-[7px] text-xs font-semibold text-foreground">
-                Project
-                <select
-                  aria-label="Project"
+              <div
+                className={cn(panelField, "sm:col-span-2")}
+                data-validation-field
+              >
+                <span>Project</span>
+                <Select
                   name="projectId"
                   required
                   defaultValue={allocation.projectId}
-                  disabled={!!allocation.previousEmployeeId}
-                  className="h-10 min-w-0 rounded-lg border border-[#d6dfec] bg-background px-[11px] text-sm"
+                  onValueChange={(projectId) =>
+                    setAllocation({ ...allocation, projectId })
+                  }
+                  disabled={busy || !!allocation.previousEmployeeId}
                 >
-                  <option value="" disabled>
-                    Select project
-                  </option>
-                  {data?.projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger
+                    aria-label="Project"
+                    className={cn(
+                      panelSelectTrigger,
+                      "h-auto min-h-[54px] py-2 [&>span]:line-clamp-none [&>span]:whitespace-normal [&>span]:text-left",
+                    )}
+                  >
+                    <SelectValue placeholder="Select project">
+                      {selectedProject ? (
+                        <span className="block min-w-0">
+                          <span className="block break-words font-medium">
+                            {selectedProject.request?.service.name ??
+                              selectedProject.name}
+                          </span>
+                          <span className="mt-0.5 block break-all text-[11px] text-[#738096]">
+                            {selectedProject.request?.referenceNumber ??
+                              selectedProject.requestId ??
+                              selectedProject.id}
+                          </span>
+                        </span>
+                      ) : undefined}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {data?.projects.map((project) => (
+                      <SelectItem
+                        key={project.id}
+                        value={project.id}
+                        textValue={projectLabel(project)}
+                        className="[&>span:last-child]:whitespace-normal"
+                      >
+                        <span className="block font-medium">
+                          {project.request?.service.name ?? project.name}
+                        </span>
+                        <span className="mt-0.5 block break-all text-[11px] text-[#738096]">
+                          {project.request?.referenceNumber ??
+                            project.requestId ??
+                            project.id}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 {allocation.previousEmployeeId && (
                   <input
                     type="hidden"
@@ -830,11 +834,42 @@ export function WorkloadPage() {
                     value={allocation.projectId}
                   />
                 )}
-              </label>
-              <label className="grid min-w-0 gap-[7px] text-xs font-semibold text-foreground">
+              </div>
+              <div
+                className={cn(panelField, "sm:col-span-2")}
+                data-validation-field
+              >
+                <span>Staff</span>
+                <Select
+                  name="employeeId"
+                  required
+                  defaultValue={allocation.employeeId}
+                  onValueChange={(employeeId) =>
+                    setAllocation({ ...allocation, employeeId })
+                  }
+                  disabled={busy}
+                >
+                  <SelectTrigger
+                    aria-label="Staff"
+                    className={panelSelectTrigger}
+                  >
+                    <SelectValue placeholder="Select staff" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {staff
+                      .filter((person) => person.status === "ACTIVE")
+                      .map((person) => (
+                        <SelectItem key={person.id} value={person.id}>
+                          {person.fullName} · {metrics(person).availability}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <label className={panelField}>
                 Hours per week
                 <Input
-                  className="h-10 min-w-0 rounded-lg border-[#d6dfec] bg-background px-[11px] text-sm"
+                  className={panelInput}
                   name="weeklyHours"
                   type="number"
                   min="0.25"
@@ -850,9 +885,10 @@ export function WorkloadPage() {
                   }
                 />
               </label>
-              <label className="grid min-w-0 gap-[7px] text-xs font-semibold text-foreground">
+              <label className={panelField}>
                 End date
                 <DateInput
+                  className={panelInput}
                   name="endDate"
                   min={week}
                   required
@@ -884,22 +920,23 @@ export function WorkloadPage() {
                 <Button
                   variant="outline"
                   type="button"
+                  className={panelSecondaryButton}
                   disabled={busy}
                   onClick={() => setAllocation(null)}
                 >
                   Cancel
                 </Button>
                 <Button
-                  className="h-[34px] bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
+                  className={panelAssignButton}
                   type="submit"
                   disabled={busy}
                 >
                   {busy ? "Saving…" : "Confirm assignment"}
                 </Button>
               </footer>
-            </form>
+            </Form>
           )}
-        </DialogContent>
+        </WorkloadDialog>
       </Dialog>
       <Dialog
         open={!!assignmentPicker}
@@ -907,20 +944,22 @@ export function WorkloadPage() {
           if (!open) setAssignmentPicker(null)
         }}
       >
-        <DialogContent
-          overlayClassName="bg-[rgb(13_28_57_/_48%)]"
-          className="max-h-[calc(100dvh-28px)] overflow-y-auto rounded-[13px] border border-[#dedede] bg-background p-6 text-foreground shadow-[0_22px_75px_rgb(18_36_73_/_22%)]"
-        >
-          <DialogTitle className="m-0 text-[20px] font-[650] tracking-[-0.03em]">
-            {assignmentPicker?.action === "reassign"
+        <WorkloadDialog
+          title={
+            assignmentPicker?.action === "reassign"
               ? "Choose assignment to reassign"
-              : "Choose assignment to unassign"}
-          </DialogTitle>
-          <DialogDescription className="mt-1 mb-0 text-xs text-[#738096]">
-            Select a project assigned to {assignmentPicker?.staff.fullName} for
-            the week of {week}.
-          </DialogDescription>
-          <div className="grid gap-2">
+              : "Choose assignment to unassign"
+          }
+          description={
+            "Select a project assigned to " +
+            (assignmentPicker?.staff.fullName ?? "") +
+            " for the week of " +
+            week +
+            "."
+          }
+          onClose={() => setAssignmentPicker(null)}
+        >
+          <div className="grid gap-2 p-5 sm:p-6">
             {assignmentPicker?.staff.assignments.map((assignment) => (
               <Button
                 key={assignment.id}
@@ -942,7 +981,7 @@ export function WorkloadPage() {
               </Button>
             ))}
           </div>
-        </DialogContent>
+        </WorkloadDialog>
       </Dialog>
       {confirmation && (
         <ConfirmationDialog

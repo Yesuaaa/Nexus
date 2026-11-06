@@ -1,3 +1,4 @@
+import { Form } from "@/components/ui/form"
 import { useEffect, useRef, useState, type FormEvent } from "react"
 import { cn } from "@/lib/utils"
 import { ApiError } from "@/features/auth/api/auth-api"
@@ -204,7 +205,7 @@ export function CreateAccountDialog({
       aria-labelledby="create-account-title"
       onClose={closeDialog}
     >
-      <form noValidate onSubmit={(event) => void handleSubmit(event)}>
+      <Form noValidate onSubmit={(event) => void handleSubmit(event)}>
         <div className="flex justify-between gap-4 border-b border-[#e9edf4] px-7 pt-[26px] pb-5 max-[560px]:px-5">
           <div>
             <p className="mt-0 mb-2 text-[11px] font-bold tracking-[0.09em] text-[#32549a]">
@@ -395,7 +396,7 @@ export function CreateAccountDialog({
             {saving ? "Creating…" : "Create account"}
           </button>
         </div>
-      </form>
+      </Form>
     </dialog>
   )
 }

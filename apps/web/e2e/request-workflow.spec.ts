@@ -219,6 +219,42 @@ async function chooseToolBooking(page: Page) {
   await context.getByRole("button", { name: "Continue", exact: true }).click()
 }
 
+test("workflow refreshes queue while a previous read is pending", async ({
+  page,
+}) => {
+  const workflow = fixture()
+  await mock(page, workflow)
+  let requests = 0
+  let active = 0
+  let maximumActive = 0
+  let release = () => {}
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  await page.route("**/api/request-workflows/request-1", async (route) => {
+    requests++
+    active++
+    maximumActive = Math.max(maximumActive, active)
+    if (requests === 1) await blocked
+    await route.fulfill({ json: workflow })
+    active--
+  })
+  await page.goto("/messages?request=request-1")
+  await expect.poll(() => requests).toBe(1)
+  await page.evaluate(() => {
+    for (let count = 0; count < 5; count++)
+      document.dispatchEvent(new Event("visibilitychange"))
+  })
+  // All visibility handlers have run; the pending read must still be the only request.
+  expect(requests).toBe(1)
+  release()
+  await expect.poll(() => requests).toBe(2)
+  await expect(
+    page.getByLabel("Quotation reference").getByRole("definition"),
+  ).toHaveText("REQ-2026-1001")
+  expect(maximumActive).toBe(1)
+})
+
 for (const width of [1280, 390]) {
   for (const manager of [false, true]) {
     test(`sent quotation shows its reference for ${manager ? "department heads" : "clients"} at ${width}px`, async ({
@@ -677,9 +713,23 @@ for (const width of [1280, 390]) {
     expect(sheetBox!.height).toBeLessThanOrEqual(400)
     const details = page.getByRole("complementary", { name: "Request context" })
     await expect(details).toBeVisible()
+    await draft.getByRole("button", { name: "Next", exact: true }).click()
+    const deliverables = draft.getByLabel("Deliverables (one per line)")
+    await expect(deliverables).toBeFocused()
+    await expect(deliverables).toHaveAttribute("aria-invalid", "true")
+    await expect(deliverables).toHaveAccessibleDescription(
+      "Complete this field.",
+    )
+    await expect(draft.locator("[data-field-error]")).toHaveText(
+      "Complete this field.",
+    )
+    await expect(draft.locator("form")).toHaveAttribute("novalidate", "")
+    expect(actions).toHaveLength(0)
     await draft
       .getByLabel("Deliverables (one per line)")
       .fill("Accessible website\nProduction deployment")
+    await expect(deliverables).not.toHaveAttribute("aria-invalid", "true")
+    await expect(draft.locator("[data-field-error]")).toHaveCount(0)
     await chat
       .getByRole("button", { name: "Hide service details", exact: true })
       .click()
@@ -699,10 +749,47 @@ for (const width of [1280, 390]) {
     await page
       .getByRole("option", { name: "USD · US Dollar", exact: true })
       .click()
-    await draft.getByLabel("Item 1", { exact: true }).fill("Website delivery")
+    await draft.getByRole("button", { name: "Next", exact: true }).click()
+    const item = draft.getByRole("textbox", { name: "Item 1", exact: true })
+    await expect(item).toBeFocused()
+    await expect(item).toHaveAccessibleDescription("Complete this field.")
+    await expect(item).toBeInViewport()
+    await expect(draft.locator("[data-field-error]")).toBeInViewport()
+    await expect
+      .poll(() =>
+        draft.locator("[data-field-error]").evaluate((element) => {
+          const box = element.getBoundingClientRect()
+          return (
+            document.elementFromPoint(
+              box.x + box.width / 2,
+              box.y + box.height / 2,
+            ) === element
+          )
+        }),
+      )
+      .toBe(true)
+    await page.screenshot({
+      path: `test-results/quotation-validation-${width}.png`,
+    })
+    await item.fill("Website delivery")
+    const quantity = draft.getByRole("spinbutton", {
+      name: "Quantity",
+      exact: true,
+    })
+    await quantity.fill("0")
+    await draft.getByRole("button", { name: "Next", exact: true }).click()
+    await expect(quantity).toBeFocused()
+    await expect(quantity).toHaveAccessibleDescription(
+      "Enter a value of 1 or more.",
+    )
+    await quantity.fill("1")
+    await draft.getByRole("button", { name: "Next", exact: true }).click()
     const price = draft.getByLabel("Unit price", { exact: true })
+    await expect(price).toBeFocused()
+    await expect(price).toHaveAccessibleDescription("Complete this field.")
     await price.pressSequentially("1234567.89", { delay: 20 })
     await expect(price).toHaveValue("1,234,567.89")
+    await expect(draft.locator("[data-field-error]")).toHaveCount(0)
     await draft.getByRole("button", { name: "Next", exact: true }).click()
     await draft
       .getByLabel("Payment terms", { exact: true })
@@ -723,7 +810,12 @@ for (const width of [1280, 390]) {
     })
     const amountBox = await amount.boundingBox()
     const dateBox = await validity.boundingBox()
-    expect(Math.abs(amountBox!.y - dateBox!.y)).toBeLessThan(1)
+    expect(
+      Math.abs(amountBox!.y + amountBox!.height - dateBox!.y - dateBox!.height),
+    ).toBeLessThan(1)
+    expect(Math.abs(amountBox!.height - dateBox!.height)).toBeLessThan(1)
+    expect(Math.abs(amountBox!.width - dateBox!.width)).toBeLessThan(1)
+    await expect(validity).toHaveText("Select date & time")
     expect(dateBox!.x).toBeGreaterThan(amountBox!.x + amountBox!.width)
     await validity.click()
     const picker = page.getByRole("dialog", {
@@ -734,10 +826,13 @@ for (const width of [1280, 390]) {
       picker.getByRole("button", { name: "Previous month", exact: true }),
     ).toBeDisabled()
     await expect(
-      picker.getByRole("gridcell", { name: "November 1, 2026", exact: true }),
+      picker.getByRole("button", {
+        name: "Sunday, November 1, 2026",
+        exact: true,
+      }),
     ).toBeDisabled()
     await picker
-      .getByRole("gridcell", { name: "November 20, 2026", exact: true })
+      .getByRole("button", { name: "Friday, November 20, 2026", exact: true })
       .click()
     await picker.getByRole("combobox", { name: "Hour", exact: true }).click()
     await page.getByRole("option", { name: "09", exact: true }).click()
@@ -752,6 +847,8 @@ for (const width of [1280, 390]) {
       .getByRole("button", { name: "Apply date & time", exact: true })
       .click()
     await expect(picker).toHaveCount(0)
+    await expect(validity).toBeFocused()
+    await expect(validity).toHaveAttribute("title", /November 20, 2026/)
     await expect(draft.locator('input[name="validUntil"]')).toHaveValue(
       "2026-11-20T09:30",
     )
@@ -956,8 +1053,14 @@ test("department heads can confirm payment or reject it with a required reason",
     .getByRole("button", { name: "Reject payment", exact: true })
     .click()
   expect(actions).toHaveLength(0)
+  await expect(page.locator("[data-field-error]")).toHaveText(
+    "Enter a reason for rejecting this payment.",
+  )
+  await expect(
+    page.getByRole("textbox", { name: "Verification note", exact: true }),
+  ).toBeFocused()
   await page
-    .getByLabel("Verification note", { exact: true })
+    .getByRole("textbox", { name: "Verification note", exact: true })
     .fill("Receipt does not match the amount")
   await page
     .getByRole("button", { name: "Reject payment", exact: true })

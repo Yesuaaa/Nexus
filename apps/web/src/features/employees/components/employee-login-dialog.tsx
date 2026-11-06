@@ -1,5 +1,7 @@
 "use client"
 
+import { Form } from "@/components/ui/form"
+
 import { useRef, useState } from "react"
 import { Eye, EyeOff } from "lucide-react"
 import { CloseIcon } from "@/components/layout/icons"
@@ -89,7 +91,7 @@ export function EmployeeLoginDialog({
             opener.current.focus()
         }}
       >
-        <form onSubmit={submit}>
+        <Form onSubmit={submit}>
           <header className="flex items-start justify-between gap-4 border-b border-[#eceef1] p-5 sm:px-6 sm:pt-6 sm:pb-5">
             <div>
               <DialogTitle className="m-0 text-[20px] font-[650] tracking-[-0.03em]">
@@ -194,7 +196,7 @@ export function EmployeeLoginDialog({
               {pending ? "Creating…" : "Create login"}
             </Button>
           </footer>
-        </form>
+        </Form>
       </DialogContent>
     </Dialog>
   )

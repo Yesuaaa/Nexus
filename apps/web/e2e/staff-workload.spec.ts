@@ -56,6 +56,10 @@ test("department head manages capacity and reviews real allocation state", async
               name: "Website Redesign",
               status: "IN_PROGRESS",
               requestId: "request-1",
+              request: {
+                referenceNumber: "SR-8F2ED60A-7A2B-4FD3-9D2C-39AEB23C6D01",
+                service: { name: "Website Design and Development" },
+              },
               staff: allocated ? [{ employeeId: "maria" }] : [],
             },
           ],
@@ -211,7 +215,22 @@ test("department head manages capacity and reviews real allocation state", async
   await expect(
     page.getByText("Time off cannot exceed scheduled hours.", { exact: true }),
   ).toBeVisible()
+  await page.getByRole("button", { name: "Save capacity" }).click()
+  expect(saved).toBe(false)
+  const timeOff = page.getByLabel("Time off / holiday hours")
+  await expect(timeOff).toBeFocused()
+  await expect(timeOff).toHaveAccessibleDescription(
+    /Enter a value of 40 or less\./,
+  )
+  await expect(timeOff).toHaveCSS("border-color", "rgb(214, 69, 87)")
+  await expect(
+    page
+      .locator("[data-field-error]")
+      .filter({ hasText: "Enter a value of 40 or less." }),
+  ).toBeVisible()
   await page.getByLabel("Time off / holiday hours").fill("8")
+  await expect(timeOff).not.toHaveAttribute("aria-invalid", "true")
+  await expect(timeOff).toHaveAttribute("aria-describedby", "capacity-help")
   await page.screenshot({
     path: "test-results/staff-workload-edit.png",
     fullPage: true,
@@ -236,6 +255,29 @@ test("department head manages capacity and reviews real allocation state", async
   ).toBeVisible()
   await page.getByRole("button", { name: "Cancel", exact: true }).click()
   await page
+    .getByRole("button", { name: "Assign staff 1", exact: true })
+    .click()
+  const assignmentDialog = page.getByRole("dialog", {
+    name: "Assign staff",
+    exact: true,
+  })
+  await expect(assignmentDialog).toContainText("Website Design and Development")
+  await expect(assignmentDialog).toContainText(
+    "SR-8F2ED60A-7A2B-4FD3-9D2C-39AEB23C6D01",
+  )
+  await assignmentDialog
+    .getByRole("button", { name: "Assign staff", exact: true })
+    .click()
+  await expect(
+    assignmentDialog.getByRole("combobox", { name: "Project", exact: true }),
+  ).toContainText("Website Design and Development")
+  await expect(
+    assignmentDialog.getByRole("combobox", { name: "Project", exact: true }),
+  ).toContainText("SR-8F2ED60A-7A2B-4FD3-9D2C-39AEB23C6D01")
+  await assignmentDialog
+    .getByRole("button", { name: "Cancel", exact: true })
+    .click()
+  await page
     .getByRole("button", { name: "More actions for Maria Santos" })
     .click()
   await page.keyboard.press("Escape")
@@ -246,8 +288,16 @@ test("department head manages capacity and reviews real allocation state", async
     .getByRole("button", { name: "More actions for Maria Santos" })
     .click()
   await page.getByRole("menuitem", { name: "Assign to project" }).click()
-  await page.getByLabel("Staff", { exact: true }).selectOption("maria")
-  await page.getByLabel("Project", { exact: true }).selectOption("project-1")
+  await page.getByRole("combobox", { name: "Staff", exact: true }).click()
+  await page.getByRole("option", { name: /Maria Santos/ }).click()
+  await page.getByRole("combobox", { name: "Project", exact: true }).click()
+  const projectOption = page.getByRole("option", {
+    name: /Website Design and Development/,
+  })
+  await expect(projectOption).toContainText(
+    "SR-8F2ED60A-7A2B-4FD3-9D2C-39AEB23C6D01",
+  )
+  await projectOption.click()
   await page.getByLabel("Hours per week").fill("10")
   await page
     .getByRole("dialog")
@@ -269,6 +319,28 @@ test("department head manages capacity and reviews real allocation state", async
   await expect(
     page.getByText(/Projected utilization: 10 \/ 32 hrs/),
   ).toBeVisible()
+  await page.screenshot({
+    path: "test-results/staff-workload-assignment-desktop.png",
+    fullPage: true,
+  })
+  const viewport = page.viewportSize()!
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect
+    .poll(async () => (await assignmentDialog.boundingBox())?.width)
+    .toBeLessThanOrEqual(362)
+  const dialogBounds = await assignmentDialog.boundingBox()
+  expect(dialogBounds!.x).toBeGreaterThanOrEqual(14)
+  expect(dialogBounds!.x + dialogBounds!.width).toBeLessThanOrEqual(376)
+  expect(
+    await assignmentDialog.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth,
+    ),
+  ).toBe(true)
+  await page.screenshot({
+    path: "test-results/staff-workload-assignment-mobile.png",
+    fullPage: true,
+  })
+  await page.setViewportSize(viewport)
   await page.getByRole("button", { name: "Confirm assignment" }).click()
   await expect(page.getByRole("dialog")).toHaveCount(0)
   await expect(page.getByText("10 / 32 hrs", { exact: true })).toBeVisible()

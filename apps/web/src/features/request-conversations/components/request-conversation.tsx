@@ -1,4 +1,6 @@
 "use client"
+
+import { Form } from "@/components/ui/form"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 
 import {
@@ -1094,7 +1096,7 @@ function ConversationPanel({
                                 : message.sender.fullName || "Participant"}
                             </p>
                             {editing ? (
-                              <form
+                              <Form
                                 className="w-[min(70vw,420px)] max-w-full space-y-2 rounded-xl border border-[#d8e1ef] bg-white p-3 shadow-sm"
                                 onSubmit={(event) => {
                                   event.preventDefault()
@@ -1161,7 +1163,7 @@ function ConversationPanel({
                                     {messageActionBusy ? "Saving…" : "Save"}
                                   </Button>
                                 </div>
-                              </form>
+                              </Form>
                             ) : (
                               <div className="relative w-fit max-w-full">
                                 <p
@@ -1288,7 +1290,7 @@ function ConversationPanel({
                     </div>
                   )}
                   {history.canSend && (
-                    <form
+                    <Form
                       aria-label="Send a message"
                       onSubmit={(event) => void submit(event)}
                       className="border-t border-[#efefee] px-5 py-3 max-[767px]:px-3"
@@ -1427,7 +1429,7 @@ function ConversationPanel({
                         {draft.length}/4000
                         {workflow ? " · Attachments up to 5 MB" : ""}
                       </div>
-                    </form>
+                    </Form>
                   )}
                 </div>
               </>

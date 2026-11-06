@@ -1,3 +1,4 @@
+import { Form } from "@/components/ui/form"
 import { useRef, type FormEvent } from "react"
 import { CloseIcon } from "@/components/layout/icons"
 import { Button } from "@/components/ui/button"
@@ -78,7 +79,7 @@ export function EditMemberDialog({
         }}
         onInteractOutside={(event) => event.preventDefault()}
       >
-        <form onSubmit={onSubmit}>
+        <Form onSubmit={onSubmit}>
           <header className="flex items-start justify-between gap-4 border-b border-[#eceef1] p-5">
             <div className="min-w-0">
               <DialogTitle className="m-0 text-lg font-[650] tracking-[-0.03em]">
@@ -176,7 +177,7 @@ export function EditMemberDialog({
               {submitting ? "Saving..." : "Save details"}
             </Button>
           </footer>
-        </form>
+        </Form>
       </DialogContent>
     </Dialog>
   )

@@ -656,6 +656,7 @@ test(
             clientId: client.id,
             serviceId: service.id,
             title: "Workload project",
+            referenceNumber: "SR-WORKLOAD-001",
             acceptedDepartmentId: design.id,
             workflow: { create: { state: "READY_FOR_ACTIVATION" } },
           },
@@ -673,6 +674,21 @@ test(
             headers: { ...actor.headers, "content-type": "application/json" },
             body: JSON.stringify(body),
           })
+        const available = await get("/workload?week=2026-11-02")
+        const availableBody = (await available.json()) as {
+          projects: {
+            id: string
+            request: { referenceNumber: string; service: { name: string } }
+          }[]
+        }
+        assert.deepEqual(
+          availableBody.projects.find((entry) => entry.id === project.id)
+            ?.request,
+          {
+            referenceNumber: "SR-WORKLOAD-001",
+            service: { name: service.name },
+          },
+        )
         const allocation = {
           employeeId: employee.id,
           projectId: project.id,

@@ -1,3 +1,4 @@
+import { Form } from "@/components/ui/form"
 import { useEffect, useRef, useState } from "react"
 import { CloseIcon } from "@/components/layout/icons"
 import { focusRing } from "@/components/layout/styles"
@@ -185,7 +186,7 @@ export function CreateEditDepartmentDialog({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit}>
+        <Form onSubmit={handleSubmit}>
           <fieldset
             disabled={submitting}
             className="m-0 grid min-w-0 gap-4 border-0 p-5 disabled:opacity-60"
@@ -358,7 +359,7 @@ export function CreateEditDepartmentDialog({
                   : "Create Department"}
             </button>
           </footer>
-        </form>
+        </Form>
       </DialogContent>
     </Dialog>
   )

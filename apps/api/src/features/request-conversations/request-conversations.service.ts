@@ -1,5 +1,6 @@
 import type { Prisma } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
+import { readDatabase, readTransaction } from "../../lib/database-read.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 import { serviceImagePublicUrl } from "../services/service-image-storage.js"
 import {
@@ -356,6 +357,22 @@ export async function markConversationRead(
   }
 }
 
+// Stream checks only need membership, not the full booking list and profiles.
+export function getConversationStreamAccess(userId: string, id: string) {
+  return readDatabase(async () => {
+    const conversation = await getPrisma()!.requestConversation.findFirst({
+      where: {
+        ...visibleScope(userId),
+        OR: [{ id }, { bookings: { some: { id } } }],
+      },
+      select: { id: true },
+    })
+    if (!conversation)
+      throw new ServiceRequestsError(404, "Conversation not found")
+    return conversation
+  })
+}
+
 export async function getConversationAccess(
   userId: string,
   id: string,
@@ -435,47 +452,44 @@ export async function listConversationMessages(
   id: string,
   before?: string,
 ) {
-  return getPrisma()!.$transaction(
-    async (tx) => {
-      const conversation = await resolveConversation(tx, userId, id)
-      const boundary = before
-        ? await tx.serviceRequestMessage.findFirst({
-            where: { id: before, conversationId: conversation.id },
-            select: { createdAt: true, id: true },
-          })
-        : null
-      if (before && !boundary)
-        throw new ServiceRequestsError(400, "Invalid message cursor")
-      const rows = await tx.serviceRequestMessage.findMany({
-        where: {
-          conversationId: conversation.id,
-          ...(boundary
-            ? {
-                OR: [
-                  { createdAt: { lt: boundary.createdAt } },
-                  { createdAt: boundary.createdAt, id: { lt: boundary.id } },
-                ],
-              }
-            : {}),
-        },
-        select: messageSelect,
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: 51,
-      })
-      const messages = rows.slice(0, 50).reverse().map(serializeMessage)
-      const meetings = await tx.conversationMeeting.findMany({
-        where: { conversationId: conversation.id },
-        include: meetingInclude,
-        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      })
-      return {
-        messages,
-        meetings,
-        nextCursor: rows.length > 50 ? messages[0]!.id : null,
-      }
-    },
-    { isolationLevel: "RepeatableRead" },
-  )
+  return readTransaction(async (tx) => {
+    const conversation = await resolveConversation(tx, userId, id)
+    const boundary = before
+      ? await tx.serviceRequestMessage.findFirst({
+          where: { id: before, conversationId: conversation.id },
+          select: { createdAt: true, id: true },
+        })
+      : null
+    if (before && !boundary)
+      throw new ServiceRequestsError(400, "Invalid message cursor")
+    const rows = await tx.serviceRequestMessage.findMany({
+      where: {
+        conversationId: conversation.id,
+        ...(boundary
+          ? {
+              OR: [
+                { createdAt: { lt: boundary.createdAt } },
+                { createdAt: boundary.createdAt, id: { lt: boundary.id } },
+              ],
+            }
+          : {}),
+      },
+      select: messageSelect,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: 51,
+    })
+    const messages = rows.slice(0, 50).reverse().map(serializeMessage)
+    const meetings = await tx.conversationMeeting.findMany({
+      where: { conversationId: conversation.id },
+      include: meetingInclude,
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    })
+    return {
+      messages,
+      meetings,
+      nextCursor: rows.length > 50 ? messages[0]!.id : null,
+    }
+  })
 }
 
 async function lockWritableConversation(

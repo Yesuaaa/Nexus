@@ -1,4 +1,6 @@
 "use client"
+
+import { Form } from "@/components/ui/form"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 
 import { useEffect, useRef, type ReactNode } from "react"
@@ -86,7 +88,7 @@ function ActionForm({
       "border border-[#b42318] bg-background text-[#b42318] hover:bg-[#fef3f2] hover:text-[#912018] disabled:opacity-50",
   )
   return (
-    <form
+    <Form
       className="space-y-3"
       onSubmit={async (event) => {
         event.preventDefault()
@@ -119,7 +121,7 @@ function ActionForm({
           {controls.busy ? "Saving…" : label}
         </Button>
       )}
-    </form>
+    </Form>
   )
 }
 

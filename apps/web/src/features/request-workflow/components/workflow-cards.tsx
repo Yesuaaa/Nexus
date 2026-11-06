@@ -1,4 +1,6 @@
 "use client"
+
+import { Form, validateFields } from "@/components/ui/form"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 
 import Link from "next/link"
@@ -428,7 +430,7 @@ export function RequirementRequestCard({
       {workflow.permissions.manage &&
         requirement.status === "SUBMITTED" &&
         writable && (
-          <form
+          <Form
             className="grid gap-4"
             onSubmit={async (event) => {
               event.preventDefault()
@@ -466,7 +468,7 @@ export function RequirementRequestCard({
                 Request changes
               </Button>
             </div>
-          </form>
+          </Form>
         )}
       {workflow.permissions.isClient && requirement.status === "SUBMITTED" && (
         <p
@@ -565,7 +567,7 @@ export function ConsultationSchedulingCard({
               "CLIENT_APPROVAL",
               "REVISION_REQUESTED",
             ].includes(workflow.state) && (
-              <form
+              <Form
                 key={pendingReschedule.id}
                 className="grid gap-5 border-t border-[#d8e1ef] pt-5"
                 onSubmit={async (event) => {
@@ -652,7 +654,7 @@ export function ConsultationSchedulingCard({
                     Decline
                   </Button>
                 </div>
-              </form>
+              </Form>
             )}
         </div>
       )}
@@ -666,7 +668,7 @@ export function ConsultationSchedulingCard({
           "REVISION_REQUESTED",
         ].includes(workflow.state) &&
         (rescheduling ? (
-          <form
+          <Form
             className="grid gap-4"
             onSubmit={async (event) => {
               event.preventDefault()
@@ -722,7 +724,7 @@ export function ConsultationSchedulingCard({
                 Keep schedule
               </Button>
             </div>
-          </form>
+          </Form>
         ) : (
           <Button
             variant="outline"
@@ -891,7 +893,7 @@ export function QuotationProposalCard({
         </div>
       )}
       {respond && (
-        <form
+        <Form
           className="space-y-3 border-t border-[#e1e6ee] pt-3"
           onSubmit={async (event) => {
             event.preventDefault()
@@ -961,7 +963,7 @@ export function QuotationProposalCard({
               Decline quotation
             </Button>
           </div>
-        </form>
+        </Form>
       )}
       <Dialog
         open={declineNote !== null}
@@ -1096,7 +1098,7 @@ export function AgreementCard({ workflow, controls }: CardProps) {
       {(workflow.permissions.manage || workflow.permissions.verifyPayment) &&
         writable &&
         agreement.status === "PENDING" && (
-          <form
+          <Form
             className="flex flex-col gap-2"
             onSubmit={async (event) => {
               event.preventDefault()
@@ -1125,7 +1127,7 @@ export function AgreementCard({ workflow, controls }: CardProps) {
             >
               Attach agreement document
             </Button>
-          </form>
+          </Form>
         )}
       <AttachedFile fileId={agreement.signedFileId} workflow={workflow} />
       {workflow.permissions.isClient && agreement.status === "SUBMITTED" && (
@@ -1140,7 +1142,7 @@ export function AgreementCard({ workflow, controls }: CardProps) {
         writable &&
         agreement.documentFileId &&
         agreement.status === "PENDING" && (
-          <form
+          <Form
             className="grid gap-4"
             onSubmit={async (event) => {
               event.preventDefault()
@@ -1165,12 +1167,12 @@ export function AgreementCard({ workflow, controls }: CardProps) {
             <Button className={workflowPrimaryButton} disabled={controls.busy}>
               Submit signed agreement
             </Button>
-          </form>
+          </Form>
         )}
       {workflow.permissions.manage &&
         writable &&
         agreement.status === "SUBMITTED" && (
-          <form
+          <Form
             className="grid gap-4"
             onSubmit={async (event) => {
               event.preventDefault()
@@ -1205,7 +1207,7 @@ export function AgreementCard({ workflow, controls }: CardProps) {
                 Return agreement
               </Button>
             </div>
-          </form>
+          </Form>
         )}
     </WorkflowCard>
   )
@@ -1287,7 +1289,7 @@ function SandboxCardPaymentForm({
       <p className="mt-4 mb-0 text-sm font-semibold text-[#182235]">
         {workflowMoney(payment.amount, payment.currency)}
       </p>
-      <form
+      <Form
         className="mt-4 grid gap-3"
         onSubmit={(event) => void submit(event)}
       >
@@ -1349,7 +1351,7 @@ function SandboxCardPaymentForm({
             ? "Processing payment…"
             : `Pay ${workflowMoney(payment.amount, payment.currency)}`}
         </Button>
-      </form>
+      </Form>
       <p className="mt-3 mb-0 text-[10px] leading-4 text-[#738096]">
         Prototype card: 4000 0000 0000 0002 · any future MM/YY · CVC 123
       </p>
@@ -1446,7 +1448,7 @@ export function PaymentVerificationCard({ workflow, controls }: CardProps) {
                 >
                   Use sandbox card checkout instead
                 </button>
-                <form
+                <Form
                   className="grid gap-4"
                   onSubmit={async (event) => {
                     event.preventDefault()
@@ -1535,7 +1537,7 @@ export function PaymentVerificationCard({ workflow, controls }: CardProps) {
                   >
                     Submit payment proof
                   </Button>
-                </form>
+                </Form>
               </>
             )}
           </>
@@ -1543,7 +1545,7 @@ export function PaymentVerificationCard({ workflow, controls }: CardProps) {
       {(workflow.permissions.verifyPayment || workflow.permissions.manage) &&
         writable &&
         payment.status === "SUBMITTED" && (
-          <form
+          <Form
             noValidate
             className="grid gap-4"
             onSubmit={async (event) => {
@@ -1562,7 +1564,7 @@ export function PaymentVerificationCard({ workflow, controls }: CardProps) {
                   ? "Enter a reason for rejecting this payment."
                   : "",
               )
-              if (!noteInput.reportValidity()) return
+              if (!validateFields([noteInput])) return
               await controls.act({
                 type: "VERIFY_PAYMENT",
                 approve,
@@ -1596,7 +1598,7 @@ export function PaymentVerificationCard({ workflow, controls }: CardProps) {
                 Reject payment
               </Button>
             </div>
-          </form>
+          </Form>
         )}
     </WorkflowCard>
   )

@@ -1,5 +1,7 @@
 "use client"
 
+import { Form } from "@/components/ui/form"
+
 import { useEffect, useRef, useState } from "react"
 import { ArrowLeft, ShieldCheck, UsersRound } from "lucide-react"
 import { focusRing } from "@/components/layout/styles"
@@ -87,7 +89,7 @@ export function ServiceSpecialistStep({
       >
         <ArrowLeft size={17} aria-hidden="true" /> Back to project requirements
       </button>
-      <form
+      <Form
         className="grid grid-cols-[minmax(0,1fr)_300px] gap-6 max-[1000px]:grid-cols-1"
         onSubmit={(event) => {
           event.preventDefault()
@@ -407,7 +409,7 @@ export function ServiceSpecialistStep({
             </p>
           )}
         </footer>
-      </form>
+      </Form>
       {viewedSpecialist && (
         <SpecialistProfileDialog
           serviceId={service.id}

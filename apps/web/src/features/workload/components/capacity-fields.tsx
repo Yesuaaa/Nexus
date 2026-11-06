@@ -1,4 +1,8 @@
 import { useState } from "react"
+import {
+  panelField,
+  panelInput,
+} from "@/features/departments/styles/member-panel-styles"
 import { Input } from "@/components/ui/input"
 
 export function CapacityFields({
@@ -31,10 +35,10 @@ export function CapacityFields({
     value.toLocaleString("en-US", { maximumFractionDigits: 2 })
   return (
     <>
-      <label className="grid min-w-0 gap-[7px] text-xs font-semibold text-foreground">
+      <label className={panelField}>
         Scheduled hours
         <Input
-          className="h-10 min-w-0 rounded-lg border-[#d6dfec] bg-background px-[11px] text-sm placeholder:text-[#9aa8bb]"
+          className={panelInput}
           name="scheduledHours"
           type="number"
           min="0"
@@ -46,10 +50,10 @@ export function CapacityFields({
           aria-describedby="capacity-help"
         />
       </label>
-      <label className="grid min-w-0 gap-[7px] text-xs font-semibold text-foreground">
+      <label className={panelField}>
         Time off / holiday hours
         <Input
-          className="h-10 min-w-0 rounded-lg border-[#d6dfec] bg-background px-[11px] text-sm placeholder:text-[#9aa8bb]"
+          className={panelInput}
           name="timeOffHours"
           type="number"
           min="0"

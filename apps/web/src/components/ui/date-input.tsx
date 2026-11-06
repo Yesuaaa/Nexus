@@ -15,11 +15,14 @@ import { CalendarDays } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Calendar, calendarToday } from "./calendar"
 import { HoverTooltip } from "./hover-tooltip"
+import { TimeInput } from "./time-input"
+import { Button } from "./button"
 
 type DateInputProps = Omit<ComponentProps<"input">, "type"> & {
   type?: "date" | "datetime-local"
   selectionMode?: "date" | "week"
   iconOnly?: boolean
+  triggerLabel?: string
   onDateSelect?: (value: string) => void
 }
 
@@ -30,6 +33,7 @@ export const DateInput = forwardRef<HTMLInputElement, DateInputProps>(
       type = "date",
       selectionMode = "date",
       iconOnly = false,
+      triggerLabel,
       onDateSelect,
       onChange,
       onClick,
@@ -44,12 +48,21 @@ export const DateInput = forwardRef<HTMLInputElement, DateInputProps>(
     const popup = useRef<HTMLDivElement>(null)
     const restoreFocus = useRef(true)
     const [open, setOpen] = useState(false)
+    const [draft, setDraft] = useState("")
     const [internalValue, setInternalValue] = useState(
       String(props.defaultValue ?? ""),
     )
     const [position, setPosition] = useState({ left: 8, top: 8 })
     const titleId = useId()
     const selected = String(props.value ?? internalValue)
+    const buttonTrigger = iconOnly || triggerLabel !== undefined
+    const dateTime = type === "datetime-local"
+    const pickerValue = dateTime ? draft : selected
+    const validDraft =
+      !!draft &&
+      Number.isFinite(new Date(draft).getTime()) &&
+      (!props.min || draft >= String(props.min)) &&
+      (!props.max || draft <= String(props.max))
     useImperativeHandle(ref, () => input.current!, [])
     const place = useCallback(() => {
       const rect = field.current?.getBoundingClientRect()
@@ -79,6 +92,18 @@ export const DateInput = forwardRef<HTMLInputElement, DateInputProps>(
     function changeOpen(next: boolean) {
       if (props.disabled || props.readOnly) return
       if (next) {
+        if (dateTime) {
+          const validSaved =
+            !!selected &&
+            Number.isFinite(new Date(selected).getTime()) &&
+            (!props.min || selected >= String(props.min)) &&
+            (!props.max || selected <= String(props.max))
+          setDraft(
+            validSaved
+              ? selected
+              : String(props.min || `${calendarToday()}T09:00`),
+          )
+        }
         restoreFocus.current = true
         place()
       }
@@ -94,10 +119,11 @@ export const DateInput = forwardRef<HTMLInputElement, DateInputProps>(
       )?.set?.call(element, value)
       element.dispatchEvent(new Event("input", { bubbles: true }))
       element.dispatchEvent(new Event("change", { bubbles: true }))
+      if (buttonTrigger) setInternalValue(value)
       onDateSelect?.(value)
       if (close) {
         setOpen(false)
-        if (!iconOnly) {
+        if (!buttonTrigger) {
           element.focus()
           element.blur()
         }
@@ -107,13 +133,17 @@ export const DateInput = forwardRef<HTMLInputElement, DateInputProps>(
       <Dialog.Root open={open} onOpenChange={changeOpen} modal={false}>
         <div
           ref={field}
-          className={cn("relative min-w-0", iconOnly && "size-[34px]")}
+          className={cn(
+            "relative min-w-0",
+            triggerLabel && "w-full",
+            iconOnly && !triggerLabel && "size-[34px]",
+          )}
         >
           <input
             {...props}
             ref={input}
-            type={type}
-            hidden={iconOnly || props.hidden}
+            type={buttonTrigger ? "hidden" : type}
+            hidden={buttonTrigger || props.hidden}
             className={cn(
               "w-full min-w-0 rounded-lg border border-[#dfe5ee] bg-background py-2 pl-3 pr-9 text-xs leading-5 outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60 aria-invalid:border-[#d64557] [&::-webkit-calendar-picker-indicator]:hidden",
               className,
@@ -146,22 +176,38 @@ export const DateInput = forwardRef<HTMLInputElement, DateInputProps>(
               ref={trigger}
               type="button"
               aria-label={
-                iconOnly
+                buttonTrigger
                   ? props["aria-label"] || "Open calendar"
                   : "Open calendar"
               }
-              title={iconOnly ? props.title : undefined}
+              title={buttonTrigger ? props.title : undefined}
               disabled={props.disabled || props.readOnly}
               className={cn(
                 "grid cursor-pointer place-items-center text-[#667b9e] hover:text-[#203f8c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#294a9b] disabled:pointer-events-none disabled:opacity-40",
-                iconOnly
-                  ? "size-[34px] rounded-lg border border-[#dfe5ee] bg-background hover:bg-[#eaf0fb]"
-                  : "absolute inset-y-0 right-0 w-9 rounded-r-lg",
+                triggerLabel
+                  ? "flex h-[38px] w-full min-w-0 items-center gap-2 rounded-lg border border-[#dfe5ee] bg-background px-3 text-left text-xs hover:bg-[#eaf0fb]"
+                  : iconOnly
+                    ? "size-[34px] rounded-lg border border-[#dfe5ee] bg-background hover:bg-[#eaf0fb]"
+                    : "absolute inset-y-0 right-0 w-9 rounded-r-lg",
               )}
             >
-              <CalendarDays size={iconOnly ? 17 : 15} aria-hidden="true" />
-              {iconOnly && (
-                <HoverTooltip>
+              <CalendarDays
+                size={buttonTrigger ? 17 : 15}
+                className="shrink-0"
+                aria-hidden="true"
+              />
+              {triggerLabel && (
+                <span
+                  className={cn(
+                    "min-w-0 truncate",
+                    selected ? "text-foreground" : "text-[#9aa8bb]",
+                  )}
+                >
+                  {triggerLabel}
+                </span>
+              )}
+              {buttonTrigger && (
+                <HoverTooltip className="whitespace-normal leading-4">
                   {props.title || props["aria-label"] || "Open calendar"}
                 </HoverTooltip>
               )}
@@ -184,7 +230,7 @@ export const DateInput = forwardRef<HTMLInputElement, DateInputProps>(
             onCloseAutoFocus={(event) => {
               event.preventDefault()
               if (restoreFocus.current) {
-                if (iconOnly) trigger.current?.focus()
+                if (buttonTrigger) trigger.current?.focus()
                 else input.current?.focus()
               }
             }}
@@ -197,44 +243,66 @@ export const DateInput = forwardRef<HTMLInputElement, DateInputProps>(
             }}
           >
             <Dialog.Title id={titleId} className="sr-only">
-              Choose a date
+              {dateTime ? "Select date and time" : "Choose a date"}
             </Dialog.Title>
             <Calendar
-              value={selected}
+              value={pickerValue}
               min={typeof props.min === "string" ? props.min : undefined}
               max={typeof props.max === "string" ? props.max : undefined}
               week={selectionMode === "week"}
-              onSelect={(date) =>
-                choose(
-                  type === "date"
-                    ? date
-                    : `${date}T${selected.slice(11, 16) || "09:00"}`,
-                  type === "date",
-                )
-              }
+              onSelect={(date) => {
+                if (dateTime)
+                  setDraft(`${date}T${draft.slice(11, 16) || "09:00"}`)
+                else choose(date, true)
+              }}
             />
-            {type === "datetime-local" && (
-              <div className="mt-3 flex items-center justify-between gap-3 border-t border-[#e8ebef] pt-3">
-                <label className="flex items-center gap-2 text-xs text-[#52627a]">
-                  Time
-                  <input
-                    type="time"
-                    aria-label="Time"
-                    value={selected.slice(11, 16) || "09:00"}
-                    className="min-w-0 rounded-lg border border-[#dfe5ee] bg-white px-2 py-1 text-xs focus-visible:outline-2 focus-visible:outline-[#294a9b]"
-                    onChange={(event) => {
-                      if (event.target.value)
-                        choose(
-                          `${selected.slice(0, 10) || calendarToday()}T${event.target.value}`,
-                          false,
-                        )
-                    }}
+            {dateTime && (
+              <>
+                <section
+                  aria-label="Expiry time"
+                  className="mt-3 space-y-3 border-t border-[#e8ebef] pt-3"
+                >
+                  <h3 className="m-0 text-xs font-semibold text-[#182235]">
+                    Time
+                  </h3>
+                  <TimeInput
+                    value={draft.slice(11, 16) || "09:00"}
+                    onChange={(time) =>
+                      setDraft(
+                        `${draft.slice(0, 10) || calendarToday()}T${time}`,
+                      )
+                    }
                   />
-                </label>
-                <Dialog.Close className="rounded-lg bg-[#203f8c] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#172f70] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#294a9b]">
-                  Done
-                </Dialog.Close>
-              </div>
+                  <p className="m-0 text-[10px] text-[#8791a2]">
+                    Time zone:{" "}
+                    {Intl.DateTimeFormat().resolvedOptions().timeZone}
+                  </p>
+                  {!validDraft && (
+                    <p role="alert" className="m-0 text-xs text-[#bc3649]">
+                      Choose a date and time within the allowed range.
+                    </p>
+                  )}
+                </section>
+                <div className="mt-3 flex justify-between gap-2 border-t border-[#e8ebef] pt-3">
+                  <Dialog.Close asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-8 px-3 text-xs"
+                    >
+                      Cancel
+                    </Button>
+                  </Dialog.Close>
+                  <Button
+                    type="button"
+                    disabled={!validDraft}
+                    onClick={() => choose(draft, true)}
+                    className="h-8 bg-[#203f8c] px-3 text-xs text-white hover:bg-[#172f70]"
+                  >
+                    Apply date &amp; time
+                  </Button>
+                </div>
+              </>
             )}
           </Dialog.Content>
         </Dialog.Portal>
