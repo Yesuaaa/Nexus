@@ -86,10 +86,6 @@ export function canAccessMessages(account: Account): boolean {
   )
 }
 
-export function canAccessWorkflowApprovals(account: Account): boolean {
-  return account.role === "ADMIN" || account.role === "SUPERADMIN"
-}
-
 export function canAccessProjects(account: Account): boolean {
   return account.role === "USER" || account.role === "STAFF"
 }

@@ -554,5 +554,165 @@ test(
         )
       },
     )
+    await t.test(
+      "workload capacity is department scoped and validates weekly hours",
+      async () => {
+        const employee = await prisma.employee.create({
+          data: {
+            employeeId: "WL-1",
+            fullName: "Workload Staff",
+            departmentId: design.id,
+            userId: staff.id,
+          },
+        })
+        const foreignEmployee = await prisma.employee.create({
+          data: {
+            employeeId: "WL-2",
+            fullName: "Foreign Staff",
+            departmentId: marketing.id,
+          },
+        })
+        const save = (body: unknown, actor = head) =>
+          fetch(base + "/workload/capacity", {
+            method: "PUT",
+            headers: { ...actor.headers, "content-type": "application/json" },
+            body: JSON.stringify(body),
+          })
+        const input = {
+          employeeId: employee.id,
+          week: "2026-11-02",
+          scheduledHours: 40,
+          timeOffHours: 8,
+        }
+        assert.equal((await save(input)).status, 200)
+        assert.equal(
+          (await save({ ...input, employeeId: foreignEmployee.id })).status,
+          404,
+        )
+        assert.equal((await save(input, admin)).status, 403)
+        assert.equal((await save(input, superadmin)).status, 403)
+        assert.equal((await save({ ...input, timeOffHours: 41 })).status, 400)
+        assert.equal((await save({ ...input, scheduledHours: -1 })).status, 400)
+        assert.equal((await save({ ...input, week: "2026-11-03" })).status, 400)
+        const result = await get("/workload?week=2026-11-02")
+        assert.equal(result.status, 200)
+        const body = (await result.json()) as {
+          staff: {
+            id: string
+            capacity: { scheduledHours: number; timeOffHours: number }
+          }[]
+        }
+        assert.equal(body.staff.length, 1)
+        assert.equal(body.staff[0]!.id, employee.id)
+        assert.equal(body.staff[0]!.capacity.timeOffHours, 8)
+        assert.equal(
+          (await get("/workload?week=2026-11-02", staff)).status,
+          403,
+        )
+        const blocked = await fetch(base + "/workload/assignment", {
+          method: "PUT",
+          headers: { ...head.headers, "content-type": "application/json" },
+          body: JSON.stringify({
+            employeeId: employee.id,
+            projectId: "not-authorized",
+            weeklyHours: 10,
+            week: input.week,
+            endDate: "2026-11-08",
+          }),
+        })
+        assert.equal(blocked.status, 409)
+        const request = await prisma.serviceRequest.create({
+          data: {
+            clientId: client.id,
+            serviceId: service.id,
+            title: "Workload project",
+            acceptedDepartmentId: design.id,
+            workflow: { create: { state: "READY_FOR_ACTIVATION" } },
+          },
+        })
+        const project = await prisma.project.create({
+          data: {
+            clientId: client.id,
+            name: "Workload project",
+            requestId: request.id,
+          },
+        })
+        const assign = (body: unknown, actor = head) =>
+          fetch(base + "/workload/assignment", {
+            method: "PUT",
+            headers: { ...actor.headers, "content-type": "application/json" },
+            body: JSON.stringify(body),
+          })
+        const allocation = {
+          employeeId: employee.id,
+          projectId: project.id,
+          weeklyHours: 26,
+          week: input.week,
+          endDate: "2026-11-08",
+        }
+        assert.equal((await assign(allocation)).status, 200)
+        assert.equal(
+          (await assign({ ...allocation, employeeId: foreignEmployee.id }))
+            .status,
+          409,
+        )
+        assert.equal((await assign(allocation, otherHead)).status, 409)
+        const assignment = await prisma.projectStaff.findFirstOrThrow({
+          where: { projectId: project.id },
+        })
+        assert.equal(assignment.weeklyHours, 26)
+        const nextWeek = await get("/workload?week=2026-11-09")
+        const nextBody = (await nextWeek.json()) as {
+          staff: { assignments: unknown[] }[]
+        }
+        assert.equal(nextBody.staff[0]!.assignments.length, 0)
+        const secondUser = await user("WorkloadSecond", "STAFF")
+        const second = await prisma.employee.create({
+          data: {
+            employeeId: "WL-3",
+            fullName: "Second staff",
+            userId: secondUser.id,
+            departmentId: design.id,
+          },
+        })
+        assert.equal(
+          (
+            await assign({
+              ...allocation,
+              employeeId: second.id,
+              previousEmployeeId: employee.id,
+            })
+          ).status,
+          200,
+        )
+        assert.equal(
+          await prisma.projectStaff.count({
+            where: { projectId: project.id, employeeId: employee.id },
+          }),
+          0,
+        )
+        const replacement = await prisma.projectStaff.findFirstOrThrow({
+          where: { projectId: project.id },
+        })
+        assert.equal(
+          (
+            await fetch(base + "/workload/assignment/" + replacement.id, {
+              method: "DELETE",
+              headers: otherHead.headers,
+            })
+          ).status,
+          404,
+        )
+        assert.equal(
+          (
+            await fetch(base + "/workload/assignment/" + replacement.id, {
+              method: "DELETE",
+              headers: head.headers,
+            })
+          ).status,
+          200,
+        )
+      },
+    )
   },
 )

@@ -19,6 +19,8 @@ import type { ConversationRealtime } from "./features/request-conversations/requ
 import { requestWorkflowRouter } from "./features/request-workflow/workflow.controller.js"
 import { projectsRouter } from "./features/projects/projects.controller.js"
 
+import { workloadRouter } from "./features/workload/workload.controller.js"
+
 export function createApp(
   options: { conversationRealtime?: ConversationRealtime } = {},
 ) {
@@ -55,6 +57,7 @@ export function createApp(
   app.use("/api/clients", clientsRouter)
   app.use("/api/request-inbox", requestInboxRouter)
   app.use("/api/projects", projectsRouter)
+  app.use("/api/workload", workloadRouter)
   app.use(
     "/api/request-conversations",
     createRequestConversationsRouter(options.conversationRealtime),

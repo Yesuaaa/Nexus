@@ -15,7 +15,6 @@ import {
   canAccessServiceManagement,
   canAccessClientManagement,
   canAccessMessages,
-  canAccessWorkflowApprovals,
   canAccessProjects,
 } from "@/features/auth/model/permissions"
 import { AccountContext } from "@/features/auth/providers/account-context"
@@ -36,8 +35,6 @@ export function PortalLayout({ children }: { children: ReactNode }) {
     ((pathname.startsWith("/accounts") &&
       !canAccessAccountManagement(account)) ||
       (pathname.startsWith("/messages") && !canAccessMessages(account)) ||
-      (pathname.startsWith("/workflow-approvals") &&
-        !canAccessWorkflowApprovals(account)) ||
       (pathname.startsWith("/projects") && !canAccessProjects(account)) ||
       (pathname === "/departments" &&
         !canAccessDepartmentManagement(account)) ||
@@ -52,6 +49,8 @@ export function PortalLayout({ children }: { children: ReactNode }) {
         !canAccessClientManagement(account)) ||
       (pathname.startsWith("/booked-services") &&
         !canAccessBookedServices(account)) ||
+      (pathname.startsWith("/staff-workload") &&
+        !canAccessRequestInbox(account)) ||
       (pathname.startsWith("/request-inbox") &&
         !canAccessRequestInbox(account)))
 

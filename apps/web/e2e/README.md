@@ -31,7 +31,7 @@ The November 2, 2026 review covers changes after
 | Messaging                  | `request-conversations.spec.ts`: internal messaging access, staff message edit retry, delete confirmation and client synchronization, archived conversations                     |
 | Workflow                   | `request-workflow.spec.ts`: quotation approval, consultation reschedule retry with the same action ID, payment evidence preview/removal and upload retry with the same upload ID |
 | Services                   | `services.spec.ts`, `pricing-templates.spec.ts`: package removal payload and reopening, pricing templates and current dialog controls                                            |
-| Profiles and notifications | `profile.spec.ts`, `workflow-approvals.spec.ts`: all-role profile editing/images, notification read-all persistence and failure recovery                                         |
+| Profiles and notifications | `profile.spec.ts`: all-role profile editing/images, notification read-all persistence and failure recovery                                                                       |
 
 ### Known backend gap
 

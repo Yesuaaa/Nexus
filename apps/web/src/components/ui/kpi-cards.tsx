@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils"
 export type KpiMetric = {
   label: string
   value: number
+  formattedValue?: string
   description: string
   icon: LucideIcon
   iconClassName: string
@@ -119,7 +120,10 @@ export function KpiCards({
             ) : (
               <>
                 <p className="mt-3 mb-0 text-2xl leading-none font-semibold tracking-[-0.025em] text-foreground tabular-nums">
-                  {unavailable ? "—" : metric.value.toLocaleString("en-US")}
+                  {unavailable
+                    ? "—"
+                    : (metric.formattedValue ??
+                      metric.value.toLocaleString("en-US"))}
                 </p>
                 <p className="mt-1.5 mb-0 truncate text-[11px] text-[#738096]">
                   {unavailable ? "Data unavailable" : metric.description}
