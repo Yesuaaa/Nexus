@@ -682,6 +682,124 @@ test.describe("Authentication and session regression", () => {
     await expect(page).toHaveURL(/\/register$/)
   })
 
+  test("registration requires every field and rejects whitespace without a request", async ({
+    page,
+  }) => {
+    let registrationRequests = 0
+    page.on("request", (request) => {
+      if (request.url().endsWith("/api/auth/register"))
+        registrationRequests += 1
+    })
+    await page.goto("/register")
+    const fullName = page.getByLabel("Full name", { exact: true })
+    const contactNumber = page.getByLabel("Contact number", { exact: true })
+    const email = page.getByLabel("Email address", { exact: true })
+    const password = page.getByLabel("Password", { exact: true })
+    const confirmPassword = page.getByLabel("Confirm Password", { exact: true })
+    const submit = page.getByRole("button", {
+      name: "Create Account",
+      exact: true,
+    })
+
+    await fullName.fill("Valid Person")
+    await contactNumber.fill("09123456789")
+    await email.fill("valid@example.com")
+    await password.fill("CorrectHorse123!")
+    await confirmPassword.fill("CorrectHorse123!")
+
+    for (const [field, value, error] of [
+      [fullName, "   ", "Enter your full name."],
+      [contactNumber, "   ", "Enter your contact number."],
+      [email, "   ", "Enter your email address."],
+      [password, "   ", "Use at least 12 characters for your password."],
+      [confirmPassword, "", "Confirm your password."],
+    ] as const) {
+      await field.fill(value)
+      await submit.click()
+      await expect(page.getByText(error, { exact: true })).toBeVisible()
+      expect(registrationRequests).toBe(0)
+      await fullName.fill("Valid Person")
+      await contactNumber.fill("09123456789")
+      await email.fill("valid@example.com")
+      await password.fill("CorrectHorse123!")
+      await confirmPassword.fill("CorrectHorse123!")
+    }
+
+    await contactNumber.fill("09abc345678")
+    await expect(contactNumber).toHaveValue("09abc345678")
+    await submit.click()
+    await expect(
+      page.getByText("Enter 11 digits starting with 09 or 08.", {
+        exact: true,
+      }),
+    ).toBeVisible()
+    expect(registrationRequests).toBe(0)
+  })
+
+  test("registration accepts Unicode names and sends only the registration fields", async ({
+    page,
+  }) => {
+    await mockApi(page, "USER")
+    await page.goto("/register?role=SUPERADMIN&email=forged@example.org")
+    await page
+      .getByLabel("Full name", { exact: true })
+      .fill("Jose\u0301 O'Neil")
+    await page.getByLabel("Contact number", { exact: true }).fill("08123456789")
+    await page
+      .getByLabel("Email address", { exact: true })
+      .fill("José@例え.example.ph")
+    await page.getByLabel("Password", { exact: true }).fill("Éléphant١٢٣!")
+    await page
+      .getByLabel("Confirm Password", { exact: true })
+      .fill("Éléphant١٢٣!")
+
+    const submitted = page.waitForRequest("**/api/auth/register")
+    await page
+      .getByRole("button", { name: "Create Account", exact: true })
+      .click()
+    const registrationRequest = await submitted
+    expect(registrationRequest.postDataJSON()).toEqual({
+      fullName: "Jose\u0301 O'Neil",
+      contactNumber: "08123456789",
+      email: "José@例え.example.ph",
+      password: "Éléphant١٢٣!",
+    })
+    expect(registrationRequest.url()).toContain("/api/auth/register")
+    expect(registrationRequest.headers()["content-type"]).toContain(
+      "application/json",
+    )
+    expect(registrationRequest.headers().authorization).toBeUndefined()
+    await expect(page).toHaveURL(/\/dashboard$/)
+  })
+
+  test("rapid repeated registration submissions send one request", async ({
+    page,
+  }) => {
+    await mockApi(page, "USER")
+    await page.goto("/register")
+    await page.getByLabel("Full name", { exact: true }).fill("Valid Person")
+    await page.getByLabel("Contact number", { exact: true }).fill("09123456789")
+    await page
+      .getByLabel("Email address", { exact: true })
+      .fill("rapid@example.com")
+    await page.getByLabel("Password", { exact: true }).fill("CorrectHorse123!")
+    await page
+      .getByLabel("Confirm Password", { exact: true })
+      .fill("CorrectHorse123!")
+
+    let registrationRequests = 0
+    page.on("request", (request) => {
+      if (request.url().endsWith("/api/auth/register"))
+        registrationRequests += 1
+    })
+    await page.locator("form").evaluate((form: HTMLFormElement) => {
+      form.requestSubmit()
+      form.requestSubmit()
+    })
+    await expect(page).toHaveURL(/\/dashboard$/)
+    expect(registrationRequests).toBe(1)
+  })
+
   test("duplicate email registration displays inline server error alert", async ({
     page,
   }) => {

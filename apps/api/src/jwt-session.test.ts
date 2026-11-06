@@ -79,7 +79,7 @@ test(
       token: string
       refreshToken: string
       expiresIn: number
-      user: { id: string }
+      user: { id: string; role?: string }
     }
     const login = async () => {
       const response = await post("login", {
@@ -89,14 +89,77 @@ test(
       assert.equal(response.status, 200)
       return (await response.json()) as Tokens
     }
+    const invalidRegistrationBodies: unknown[] = [
+      null,
+      [],
+      { email: [] },
+      {
+        email: "duplicate..dots@example.com",
+        password,
+        fullName: "JWT Tester",
+        contactNumber: "09123456789",
+      },
+      {
+        email: "valid@example.com",
+        password,
+        fullName: "JWT Tester123",
+        contactNumber: "09123456789",
+      },
+      {
+        email: "valid@example.com",
+        password,
+        fullName: "JWT Tester",
+        contactNumber: "+63 912 345 6789",
+      },
+      {
+        email: "valid@example.com",
+        password: "strongpassword12!",
+        fullName: "JWT Tester",
+        contactNumber: "09123456789",
+      },
+      {
+        email: "valid@example.com",
+        password: "A".repeat(1022) + "a1!",
+        fullName: "JWT Tester",
+        contactNumber: "09123456789",
+      },
+    ]
+    for (const body of invalidRegistrationBodies) {
+      const response = await post("register", body)
+      assert.equal(response.status, 400)
+    }
+
     const registration = await post("register", {
       email: "jwt@example.com",
       password,
       fullName: "JWT Tester",
       contactNumber: "09123456789",
+      role: "SUPERADMIN",
+      isActive: true,
     })
     assert.equal(registration.status, 201)
     const initial = (await registration.json()) as Tokens
+    assert.equal(initial.user.role, "USER")
+    const internationalRegistration = await post("register", {
+      email: "José@例え.example.ph",
+      password: "Éléphant١٢٣!",
+      fullName: "李 明",
+      contactNumber: "08123456789",
+    })
+    assert.equal(internationalRegistration.status, 201)
+    const internationalResult = (await internationalRegistration.json()) as {
+      user: { email: string }
+    }
+    assert.equal(internationalResult.user.email, "josé@xn--r8jz45g.example.ph")
+    assert.equal(
+      (
+        await post("login", {
+          email: "José@例え.example.ph",
+          password: "Éléphant١٢٣!",
+        })
+      ).status,
+      200,
+    )
     assert.equal(initial.token.split(".").length, 3)
     assert.equal(initial.expiresIn, 900)
     assert.match(initial.refreshToken, /^[A-Za-z0-9_-]{43}$/)

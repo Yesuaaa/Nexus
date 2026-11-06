@@ -418,9 +418,9 @@ test(
         const input = {
           fullName: "New Client",
           email: "New.Client@example.com",
-          contactNumber: "+63 917 123 4567",
+          contactNumber: "09171234567",
           isActive: true,
-          password: "client initial password",
+          password: "ClientInitialPassword123!",
         }
         for (const actor of ["STAFF", "USER", "SUPERADMIN"]) {
           assert.equal((await mutate("", "POST", input, actor)).status, 403)

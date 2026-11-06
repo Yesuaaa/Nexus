@@ -172,9 +172,7 @@ export function AuthContent({
                 label={copy.contactNumber}
                 type="tel"
                 value={contactNumber}
-                onChange={(value) =>
-                  changeValue(setContactNumber, value.replace(/\D/g, ""))
-                }
+                onChange={(value) => changeValue(setContactNumber, value)}
                 onBlur={() => markTouched("contactNumber")}
                 onFocus={() => handleFieldFocus("contactNumber")}
                 autoComplete="tel"

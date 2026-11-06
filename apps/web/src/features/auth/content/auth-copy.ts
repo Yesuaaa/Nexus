@@ -55,7 +55,8 @@ const copy = {
     forgotPassword: "Forgot password?",
     showPassword: "Show",
     hidePassword: "Hide",
-    passwordHint: "Use at least 12 characters.",
+    passwordHint:
+      "Use 12 or more characters, including uppercase and lowercase letters, a number and a special character.",
     signingIn: "Signing In…",
     creatingAccount: "Creating Account…",
     signInButton: "Sign In",
@@ -133,7 +134,8 @@ const copy = {
     forgotPassword: "Nakalimutan ang password?",
     showPassword: "Ipakita ang",
     hidePassword: "Itago ang",
-    passwordHint: "Gumamit ng hindi bababa sa 12 character.",
+    passwordHint:
+      "Gumamit ng 12 o higit pang character na may malaking at maliit na letra, numero, at espesyal na character.",
     signingIn: "Nag-si-sign in…",
     creatingAccount: "Gumagawa ng account…",
     signInButton: "Mag-sign In",

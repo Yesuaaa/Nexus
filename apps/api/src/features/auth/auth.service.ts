@@ -5,7 +5,11 @@ import { publicUser } from "../users/users.dto.js"
 import { clearFailures, loginAllowed, recordFailure } from "./auth.limiter.js"
 import { hashPassword, validPassword, verifyPassword } from "./auth.password.js"
 import { authRepository } from "./auth.repository.js"
-import { normalizedEmail, validRegistrationProfile } from "./auth.schema.js"
+import {
+  normalizedEmail,
+  registrationEmail,
+  validRegistrationProfile,
+} from "./auth.schema.js"
 import { signAccessToken, jwtKey } from "./auth.jwt.js"
 
 import { approximateSessionLocation } from "./session-location.js"
@@ -79,7 +83,7 @@ export const authService = {
     if (!authRepository.isDatabaseAvailable()) {
       throw new AuthError(503, "Database unavailable")
     }
-    const cleanEmail = normalizedEmail(input.email)
+    const cleanEmail = registrationEmail(input.email)
     const password = input.password
     const fullName = input.fullName
     const contactNumber = input.contactNumber
@@ -87,7 +91,7 @@ export const authService = {
     if (!cleanEmail || !validPassword(password)) {
       throw new AuthError(
         400,
-        "Provide a valid email and password of at least 12 characters",
+        "Provide a valid email and password with at least 12 characters, including uppercase, lowercase, number, and special character",
       )
     }
     if (!validRegistrationProfile(fullName, contactNumber)) {
@@ -172,7 +176,7 @@ export const authService = {
     ) {
       throw new AuthError(
         400,
-        "Provide the current password and a new password of at least 12 characters",
+        "Provide the current password and a new password with at least 12 characters, including uppercase, lowercase, number, and special character",
       )
     }
     if (!(await verifyPassword(currentPassword, input.currentPasswordHash))) {
