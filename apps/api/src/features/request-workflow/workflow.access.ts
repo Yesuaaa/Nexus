@@ -86,6 +86,7 @@ export async function appendEvent(
     where: { id: requestId },
     select: {
       clientId: true,
+      conversationId: true,
       acceptedDepartment: { select: { headId: true } },
       workflow: {
         select: { quotationApproverId: true, paymentVerifierId: true },
@@ -103,6 +104,11 @@ export async function appendEvent(
       : null,
   ].filter((id): id is string => Boolean(id) && id !== actorId)
   const userIds = [...new Set(candidates)]
+  if (request.conversationId)
+    await tx.requestConversation.update({
+      where: { id: request.conversationId },
+      data: { updatedAt: new Date() },
+    })
   if (userIds.length)
     await tx.workflowNotification.createMany({
       data: userIds.map((userId) => ({ requestId, userId, eventId: event.id })),

@@ -39,6 +39,9 @@ async function requireConsultationComplete(
     consultationRequired &&
     !(await tx.workflowConsultation.count({
       where: { requestId, status: "COMPLETED" },
+    })) &&
+    !(await tx.conversationMeetingBooking.count({
+      where: { bookingId: requestId, meeting: { status: "COMPLETED" } },
     }))
   )
     fail("Complete the required consultation before sending a quotation", 409)

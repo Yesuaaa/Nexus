@@ -52,6 +52,16 @@ export async function snapshot(
   const state =
     workflow?.state ||
     (request.status === "CANCELLED" ? "CANCELLED" : "PENDING_REVIEW")
+  const consultationComplete =
+    participant &&
+    Boolean(
+      (await tx.workflowConsultation.count({
+        where: { requestId, status: "COMPLETED" },
+      })) ||
+      (await tx.conversationMeetingBooking.count({
+        where: { bookingId: requestId, meeting: { status: "COMPLETED" } },
+      })),
+    )
   const base = {
     request: {
       id: request.id,
@@ -75,6 +85,7 @@ export async function snapshot(
     previousState: workflow?.previousState ?? null,
     version: workflow?.version ?? 0,
     nextAction: nextAction(state),
+    consultationComplete,
     consultationRequired:
       workflow?.consultationRequired ?? request.service.requiresConsultation,
     quotationApprovalRequired:
