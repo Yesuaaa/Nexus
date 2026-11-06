@@ -136,6 +136,24 @@ function MessageDeletionCountdown({ purgeAt }: { purgeAt: string | null }) {
   return <span className="text-[11px] text-[#8791a2]">{label}</span>
 }
 
+function revealWorkflowSection(panelId: string, section: string) {
+  const panel = document.getElementById(panelId)
+  const target = document.getElementById(`${panelId}-${section}`)
+  if (!panel || !target) return
+  let parent: HTMLElement | null = target
+  while (parent) {
+    if (parent instanceof HTMLDetailsElement) parent.open = true
+    if (parent === panel) break
+    parent = parent.parentElement
+  }
+  target.scrollIntoView({
+    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ? "auto"
+      : "smooth",
+    block: "nearest",
+  })
+}
+
 type RequestConversationProps = {
   requestId: string
   clientName?: string
@@ -696,20 +714,7 @@ function ConversationPanel({
     ).matches
     sectionNavigationTimer.current = window.setTimeout(
       () => {
-        const panelId = `request-context-${requestId}`
-        const panel = document.getElementById(panelId)
-        const target = document.getElementById(`${panelId}-${section}`)
-        if (!panel || !target) return
-        let parent: HTMLElement | null = target
-        while (parent) {
-          if (parent instanceof HTMLDetailsElement) parent.open = true
-          if (parent === panel) break
-          parent = parent.parentElement
-        }
-        target.scrollIntoView({
-          behavior: reducedMotion ? "auto" : "smooth",
-          block: "nearest",
-        })
+        revealWorkflowSection(`request-context-${requestId}`, section)
         sectionNavigationTimer.current = null
       },
       contextPanelOpen || reducedMotion ? 0 : 260,
@@ -813,14 +818,16 @@ function ConversationPanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-      {bookingIds.map((id) => (
-        <ConversationBookingWorkflow
-          key={id}
-          bookingId={id}
-          revision={workflowRevision}
-          onChange={updateBookingControls}
-        />
-      ))}
+      {bookingIds
+        .filter((id) => id !== selectedBookingId)
+        .map((id) => (
+          <ConversationBookingWorkflow
+            key={id}
+            bookingId={id}
+            revision={workflowRevision}
+            onChange={updateBookingControls}
+          />
+        ))}
       <div className="flex min-h-0 flex-1 max-[1023px]:flex-col-reverse">
         <div className="m-3 flex min-h-0 flex-1 overflow-hidden rounded-[13px] border border-[#dedede] bg-background shadow-[0_2px_8px_rgb(20_30_50_/_11%)] max-[767px]:m-2">
           <section
@@ -1046,6 +1053,7 @@ function ConversationPanel({
                           )}
                           <WorkflowEventCard
                             onPrepareQuotation={() => {
+                              setSchedulingMeeting(false)
                               setSelectedBookingId(eventWorkflow.request.id)
                               setActiveWorkflowDraft("quotation")
                             }}
@@ -1273,6 +1281,20 @@ function ConversationPanel({
                   })}
                 </div>
                 <div className="relative shrink-0">
+                  {schedulingMeeting &&
+                    history.canSend &&
+                    history.conversation &&
+                    isStaff &&
+                    history.conversation.head?.id === account.id && (
+                      <div className="absolute right-0 bottom-full left-0 z-10">
+                        <ScheduleConversationMeeting
+                          conversationId={history.conversation.id}
+                          bookings={conversationBookings}
+                          onClose={() => setSchedulingMeeting(false)}
+                          onSaved={applyMeetingUpdate}
+                        />
+                      </div>
+                    )}
                   {workflow && activeWorkflowDraft && (
                     <div className="absolute right-0 bottom-full left-0 z-10">
                       <WorkflowActionDraft
@@ -1295,6 +1317,7 @@ function ConversationPanel({
                   )}
                   {history.canSend && (
                     <form
+                      aria-label="Send a message"
                       onSubmit={(event) => void submit(event)}
                       className="border-t border-[#efefee] px-5 py-3 max-[767px]:px-3"
                     >
@@ -1346,6 +1369,12 @@ function ConversationPanel({
                         <ConversationTools
                           workflow={workflow}
                           bookings={conversationBookings}
+                          workflows={Object.values(bookingControls)
+                            .map((booking) => booking.workflow)
+                            .filter(
+                              (booking): booking is Workflow =>
+                                booking !== null,
+                            )}
                           isClient={isClient}
                           isManager={
                             isStaff &&
@@ -1364,8 +1393,14 @@ function ConversationPanel({
                             setAttachmentDraft(null)
                             if (fileInput.current) fileInput.current.value = ""
                           }}
-                          onDraft={setActiveWorkflowDraft}
-                          onScheduleMeeting={() => setSchedulingMeeting(true)}
+                          onDraft={(action) => {
+                            setSchedulingMeeting(false)
+                            setActiveWorkflowDraft(action)
+                          }}
+                          onScheduleMeeting={() => {
+                            setActiveWorkflowDraft(null)
+                            setSchedulingMeeting(true)
+                          }}
                           onSection={focusWorkflowSection}
                           onAttach={() => fileInput.current?.click()}
                           onRetry={() => void refreshWorkflow()}
@@ -1427,12 +1462,17 @@ function ConversationPanel({
             )}
           </section>
         </div>
-        {(workflow || (history?.conversation && selectedBookingId)) && (
+        {(workflow || history?.conversation) && (
           <WorkflowContextPanel
             id={`request-context-${requestId}`}
             hidden={isParticipant && !contextPanelOpen}
             workflow={workflow}
+            hasSelectedBooking={Boolean(selectedBookingId)}
             controls={controls}
+            onDraft={(action) => {
+              setSchedulingMeeting(false)
+              setActiveWorkflowDraft(action)
+            }}
             conversationOverview={
               history?.conversation ? (
                 <>
@@ -1498,8 +1538,9 @@ function ConversationPanel({
                       Booked services
                     </h3>
                     <p className="mt-1 mb-0 text-[10px] leading-4 text-[#52627a]">
-                      Use + to choose a tool, then choose the service it applies
-                      to.
+                      {conversationBookings.length
+                        ? "Use + to choose a tool, then choose the service it applies to."
+                        : "No current booked services."}
                     </p>
                     <div className="mt-3 space-y-2">
                       {conversationBookings.map((booking) => {
@@ -1574,18 +1615,6 @@ function ConversationPanel({
           />
         )}
       </div>
-      {schedulingMeeting &&
-        history?.canSend &&
-        history.conversation &&
-        isStaff &&
-        history.conversation.head?.id === account.id && (
-          <ScheduleConversationMeeting
-            conversationId={history.conversation.id}
-            bookings={conversationBookings}
-            onClose={() => setSchedulingMeeting(false)}
-            onSaved={applyMeetingUpdate}
-          />
-        )}
       {deleteTarget && (
         <ConfirmationDialog
           title="Delete this message?"

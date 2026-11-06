@@ -1,7 +1,6 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { WorkflowControls } from "../hooks/use-request-workflow"
 import type { Workflow, WorkflowAction } from "../model/workflow"
@@ -10,7 +9,13 @@ import {
   workflowButton,
   workflowInput,
 } from "./workflow-primitives"
-import { QuotationForm } from "./workflow-context-panel"
+import { WorkflowDraftFrame } from "./workflow-draft-frame"
+import { QuotationForm } from "./quotation-form"
+import {
+  WorkflowDraftFooter,
+  draftSecondaryButton,
+  draftPrimaryButton,
+} from "./workflow-draft-footer"
 
 export type WorkflowDraftAction =
   "request-information" | "quotation" | "approver-assignments" | "internal-note"
@@ -20,68 +25,6 @@ type WorkflowActionDraftProps = {
   workflow: Workflow
   controls: WorkflowControls
   onClose: () => void
-}
-
-function DraftFrame({
-  title,
-  booking,
-  status,
-  internal = false,
-  description,
-  onClose,
-  children,
-}: {
-  title: string
-  booking: Workflow["request"]
-  status?: string
-  internal?: boolean
-  description?: string
-  onClose: () => void
-  children: ReactNode
-}) {
-  return (
-    <section
-      aria-label={title}
-      className="mx-5 mb-2 max-h-[min(45dvh,400px)] overflow-y-auto overscroll-contain rounded-xl border border-[#d8e1ef] bg-white px-4 py-3 shadow-[0_2px_8px_rgb(18_36_73_/_4%)] max-[767px]:mx-3"
-    >
-      <header className="mb-3 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <h2 className="m-0 text-sm font-semibold text-[#182235]">
-              {title}
-            </h2>
-            {internal ? (
-              <span className="rounded-full bg-[#fff3e0] px-2.5 py-1 text-[9px] font-semibold tracking-wide text-[#9a4f00]">
-                INTERNAL · STAFF ONLY
-              </span>
-            ) : (
-              status && (
-                <span className="text-[10px] text-[#8791a2]">{status}</span>
-              )
-            )}
-          </div>
-          <p className="mt-1 mb-0 text-[10px] font-medium text-[#294a9b]">
-            {booking.serviceName} · {booking.referenceNumber || booking.id}
-          </p>
-          {description && (
-            <p className="mt-1 mb-0 text-[11px] leading-5 text-[#52627a]">
-              {description}
-            </p>
-          )}
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          aria-label={`Close ${title.toLowerCase()} draft`}
-          className="size-8 shrink-0 border-0 bg-transparent p-0 text-[#52627a] hover:bg-[#f1f4fa]"
-          onClick={onClose}
-        >
-          <X size={16} aria-hidden="true" />
-        </Button>
-      </header>
-      {children}
-    </section>
-  )
 }
 
 function DraftForm({
@@ -107,22 +50,19 @@ function DraftForm({
       }}
     >
       {children}
-      <div className="flex flex-wrap justify-end gap-2 border-t border-[#e8ebef] pt-3">
+      <WorkflowDraftFooter>
         <Button
           type="button"
           variant="outline"
-          className="h-9 min-w-[92px] text-[11px]"
+          className={draftSecondaryButton}
           onClick={onClose}
         >
           Cancel
         </Button>
-        <Button
-          className={`${workflowButton} min-w-[130px] bg-[#203f8c] text-white hover:bg-[#172f70]`}
-          disabled={controls.busy}
-        >
+        <Button className={draftPrimaryButton} disabled={controls.busy}>
           {controls.busy ? "Saving…" : label}
         </Button>
-      </div>
+      </WorkflowDraftFooter>
     </form>
   )
 }
@@ -135,7 +75,7 @@ export function WorkflowActionDraft({
 }: WorkflowActionDraftProps) {
   if (action === "request-information") {
     return (
-      <DraftFrame
+      <WorkflowDraftFrame
         booking={workflow.request}
         title="Request information"
         status="Draft · Not sent"
@@ -189,7 +129,7 @@ export function WorkflowActionDraft({
             Required before activation
           </label>
         </DraftForm>
-      </DraftFrame>
+      </WorkflowDraftFrame>
     )
   }
 
@@ -210,7 +150,7 @@ export function WorkflowActionDraft({
       const canPrepare = pendingRequirements === 0 && !consultationIncomplete
 
       return (
-        <DraftFrame
+        <WorkflowDraftFrame
           booking={workflow.request}
           title="Prepare quotation"
           status="Draft · Not sent"
@@ -247,12 +187,12 @@ export function WorkflowActionDraft({
               </Button>
             </div>
           </div>
-        </DraftFrame>
+        </WorkflowDraftFrame>
       )
     }
 
     return (
-      <DraftFrame
+      <WorkflowDraftFrame
         booking={workflow.request}
         title="Prepare quotation"
         status="Draft · Not sent"
@@ -262,11 +202,10 @@ export function WorkflowActionDraft({
         <QuotationForm
           workflow={workflow}
           controls={controls}
-          inline
           onComplete={onClose}
           onCancel={onClose}
         />
-      </DraftFrame>
+      </WorkflowDraftFrame>
     )
   }
 
@@ -274,7 +213,7 @@ export function WorkflowActionDraft({
     const internal = workflow.internal
     if (!internal) return null
     return (
-      <DraftFrame
+      <WorkflowDraftFrame
         booking={workflow.request}
         title="Approver assignments"
         internal
@@ -328,7 +267,7 @@ export function WorkflowActionDraft({
             their role.
           </p>
         </DraftForm>
-      </DraftFrame>
+      </WorkflowDraftFrame>
     )
   }
 
@@ -336,7 +275,7 @@ export function WorkflowActionDraft({
     workflow.state,
   )
   return (
-    <DraftFrame
+    <WorkflowDraftFrame
       booking={workflow.request}
       title="Internal note"
       internal
@@ -372,6 +311,6 @@ export function WorkflowActionDraft({
           Notes can’t be added after this request is closed.
         </p>
       )}
-    </DraftFrame>
+    </WorkflowDraftFrame>
   )
 }
