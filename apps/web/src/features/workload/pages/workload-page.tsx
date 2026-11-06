@@ -1,5 +1,6 @@
 "use client"
 
+import { WorkloadWeekInput } from "../components/workload-week-input"
 import { CapacityFields } from "../components/capacity-fields"
 import { WorkloadRowActions } from "../components/workload-row-actions"
 import { WorkloadDetailsDrawer } from "../components/workload-details-drawer"
@@ -12,20 +13,11 @@ import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { CloseIcon } from "@/components/layout/icons"
 import { KpiCards, type KpiMetric } from "@/components/ui/kpi-cards"
 import {
-  MoreHorizontal,
-  RefreshCw,
   Users,
   UserCheck,
   ChartNoAxesColumn,
   TriangleAlert,
 } from "lucide-react"
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "@/components/ui/dropdown-menu"
-import { rowActionButton } from "@/components/ui/row-action-styles"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
 import { useEffect, useState } from "react"
 import { apiRequest } from "@/features/auth/api/auth-api"
@@ -295,70 +287,17 @@ export function WorkloadPage() {
             .
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 max-[560px]:w-full">
-          {" "}
-          <Input
-            aria-label="Week starting"
-            title="Choose a date to review its Monday-starting week"
-            type="date"
-            value={week}
-            className="h-[34px] w-[160px] text-xs max-[560px]:w-full"
-            onChange={(e) => {
-              if (!e.target.value) return
-              const date = new Date(`${e.target.value}T00:00:00Z`)
-              date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7))
-              setLoading(true)
-              setData(null)
-              setSelected("")
-              setPage(1)
-              setWeek(date.toISOString().slice(0, 10))
-            }}
-          />
-          <Button
-            type="button"
-            className="h-[34px] gap-2 rounded-lg bg-[#203f8c] px-[13px] text-xs font-semibold text-white hover:bg-[#172f70] max-[560px]:w-full"
-            disabled={loading || busy}
-            aria-label="Refresh workload"
-            aria-busy={loading}
-            onClick={() => {
-              setLoading(true)
-              setError("")
-              setRevision((value) => value + 1)
-            }}
-          >
-            <RefreshCw
-              size={14}
-              aria-hidden="true"
-              className={cn(
-                loading && "animate-spin motion-reduce:animate-none",
-              )}
-            />
-            {loading ? "Refreshing…" : "Refresh"}
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className={rowActionButton}
-                aria-label="Workload actions"
-                disabled={!data || loading}
-              >
-                <MoreHorizontal size={16} />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="text-xs">
-              <DropdownMenuItem onSelect={() => setRequestsOpen(true)}>
-                Staffing requests ({pending.length})
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={!data?.projects.length}
-                onSelect={() => openAssignment()}
-              >
-                Assign staff
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+        <WorkloadWeekInput
+          key={week}
+          week={week}
+          onChange={(value) => {
+            setLoading(true)
+            setData(null)
+            setSelected("")
+            setPage(1)
+            setWeek(value)
+          }}
+        />
       </header>
       <div className="mt-[18px] max-[560px]:mt-[14px]">
         <KpiCards
@@ -433,6 +372,15 @@ export function WorkloadPage() {
               ))}
             </SelectContent>
           </Select>
+          <Button
+            type="button"
+            variant="outline"
+            className="ml-auto h-[34px] text-xs max-[560px]:ml-0"
+            disabled={!data || loading}
+            onClick={() => setRequestsOpen(true)}
+          >
+            Staffing requests ({pending.length})
+          </Button>
         </div>
         <div
           className="overflow-x-auto rounded-lg border border-[#e8ebef]"
