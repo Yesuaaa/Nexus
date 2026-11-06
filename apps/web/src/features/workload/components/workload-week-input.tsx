@@ -39,6 +39,7 @@ export function WorkloadWeekInput({
   return (
     <div className="relative w-[140px] flex-none">
       <DateInput
+        selectionMode="week"
         aria-label="Week starting"
         title="Choose a date; its Monday-starting week is shown"
         min="0001-01-01"

@@ -39,6 +39,7 @@ test("department head manages capacity and reviews real allocation state", async
         employeeId: "maria",
         projectId: "project-1",
         weeklyHours: 10,
+        endDate: "2026-11-09",
       })
       allocated = true
       return route.fulfill({ json: { saved: true } })
@@ -159,6 +160,42 @@ test("department head manages capacity and reviews real allocation state", async
   ).toBeVisible()
   await dateControl.fill(initialWeek)
   await dateControl.blur()
+  await dateControl.fill("2026-11-02")
+  await dateControl.blur()
+  await page.getByRole("button", { name: "Open calendar", exact: true }).click()
+  const calendar = page.getByRole("dialog", {
+    name: "Choose a date",
+    exact: true,
+  })
+  await expect(
+    calendar.getByRole("grid", { name: "November 2026" }),
+  ).toBeVisible()
+  await calendar
+    .getByRole("button", { name: "Next month", exact: true })
+    .click()
+  await expect(
+    calendar.getByRole("grid", { name: "December 2026" }),
+  ).toBeVisible()
+  await calendar
+    .getByRole("button", { name: "Previous month", exact: true })
+    .click()
+  await page.screenshot({
+    path: "test-results/staff-workload-calendar-desktop.png",
+    fullPage: true,
+  })
+  await calendar
+    .getByRole("button", { name: "Wednesday, November 4, 2026", exact: true })
+    .focus()
+  await page.keyboard.press("ArrowRight")
+  await expect(
+    calendar.getByRole("button", {
+      name: "Thursday, November 5, 2026",
+      exact: true,
+    }),
+  ).toBeFocused()
+  await page.keyboard.press("Enter")
+  await expect(calendar).toHaveCount(0)
+  await expect(dateControl).toHaveValue("2026-11-02")
   await page
     .getByRole("button", { name: "Edit capacity for Maria Santos" })
     .click()
@@ -209,6 +246,23 @@ test("department head manages capacity and reviews real allocation state", async
   await page.getByLabel("Staff", { exact: true }).selectOption("maria")
   await page.getByLabel("Project", { exact: true }).selectOption("project-1")
   await page.getByLabel("Hours per week").fill("10")
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Open calendar", exact: true })
+    .click()
+  await expect(
+    calendar.getByRole("button", {
+      name: "Sunday, November 1, 2026",
+      exact: true,
+    }),
+  ).toBeDisabled()
+  await calendar
+    .getByRole("button", { name: "Monday, November 9, 2026", exact: true })
+    .click()
+  await expect(calendar).toHaveCount(0)
+  await expect(page.getByLabel("End date", { exact: true })).toHaveValue(
+    "2026-11-09",
+  )
   await expect(
     page.getByText(/Projected utilization: 10 \/ 32 hrs/),
   ).toBeVisible()
@@ -314,6 +368,18 @@ test("department head manages capacity and reviews real allocation state", async
     path: "test-results/staff-workload-mobile.png",
     fullPage: true,
   })
+  await page.getByRole("button", { name: "Open calendar", exact: true }).click()
+  await expect(calendar).toBeVisible()
+  const calendarBounds = await calendar.boundingBox()
+  expect(calendarBounds!.x).toBeGreaterThanOrEqual(8)
+  expect(calendarBounds!.x + calendarBounds!.width).toBeLessThanOrEqual(382)
+  await page.screenshot({
+    path: "test-results/staff-workload-calendar-mobile.png",
+    fullPage: true,
+  })
+  await page.keyboard.press("Escape")
+  await expect(calendar).toHaveCount(0)
+  await expect(dateControl).toBeFocused()
   empty = true
   await dateControl.fill("2026-11-23")
   await dateControl.blur()

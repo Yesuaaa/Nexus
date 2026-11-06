@@ -543,6 +543,24 @@ for (const width of [1280, 390]) {
     )
     await draft.getByRole("button", { name: "Next", exact: true }).click()
     const validUntil = await draft.getByLabel("Valid until").inputValue()
+    await draft
+      .getByRole("button", { name: "Open calendar", exact: true })
+      .click()
+    const calendar = page.getByRole("dialog", {
+      name: "Choose a date",
+      exact: true,
+    })
+    await expect(calendar.getByRole("grid")).toBeVisible()
+    await calendar
+      .getByRole("gridcell", { selected: true })
+      .getByRole("button")
+      .click()
+    await calendar.getByLabel("Time", { exact: true }).fill("14:30")
+    await expect(draft.getByLabel("Valid until")).toHaveValue(
+      `${validUntil.slice(0, 10)}T14:30`,
+    )
+    await calendar.getByRole("button", { name: "Done", exact: true }).click()
+    await expect(calendar).toHaveCount(0)
     await draft.getByLabel("Valid until").fill("2020-01-01T12:00")
     await draft.getByRole("button", { name: "Review", exact: true }).click()
     await expect(draft.getByLabel("Valid until")).toBeVisible()
