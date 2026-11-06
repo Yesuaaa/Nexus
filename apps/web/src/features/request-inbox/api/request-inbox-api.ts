@@ -26,7 +26,8 @@ export type InboxView =
   | "ready-for-quotation"
   | "closed"
   | "cancelled"
-export type InboxSort = "createdAt" | "reference" | "service"
+export type InboxSort =
+  "createdAt" | "reference" | "service" | "client" | "status"
 
 export function listInbox(filters: {
   search: string

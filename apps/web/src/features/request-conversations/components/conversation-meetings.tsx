@@ -1,4 +1,6 @@
 "use client"
+
+import { Form } from "@/components/ui/form"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 
 import { useEffect, useRef, useState, type FormEvent } from "react"
@@ -157,7 +159,7 @@ export function ScheduleConversationMeeting({
       onClose={onClose}
       closeDisabled={busy}
     >
-      <form
+      <Form
         onSubmit={(event) => void submit(event)}
         className="@container space-y-3"
       >
@@ -236,7 +238,7 @@ export function ScheduleConversationMeeting({
             {busy ? "Sending…" : "Send invitation"}
           </Button>
         </WorkflowDraftFooter>
-      </form>
+      </Form>
     </WorkflowDraftFrame>
   )
 }
@@ -397,7 +399,7 @@ export function ConversationMeetingCard({
             )}
           </div>
           {form && (
-            <form
+            <Form
               className="@container space-y-3 rounded-xl border border-[#dce3ee] p-3"
               onSubmit={(event) => {
                 event.preventDefault()
@@ -462,7 +464,7 @@ export function ConversationMeetingCard({
                   </Button>
                 </div>
               </fieldset>
-            </form>
+            </Form>
           )}
         </>
       )}

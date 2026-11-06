@@ -1,4 +1,6 @@
 "use client"
+
+import { Form } from "@/components/ui/form"
 import { useState, type FormEvent, type ReactNode } from "react"
 import { Eye, EyeOff } from "lucide-react"
 import { sileo } from "sileo"
@@ -150,7 +152,7 @@ export function SecurityDetails({
       title="Password & security"
       description="Use at least 12 characters. After saving, you can choose whether to log out of all devices."
     >
-      <form onSubmit={save} className="grid gap-5">
+      <Form onSubmit={save} className="grid gap-5">
         <fieldset
           disabled={busy}
           className="m-0 grid min-w-0 gap-5 border-0 p-0"
@@ -181,7 +183,7 @@ export function SecurityDetails({
             {busy ? "Updating…" : "Update password"}
           </Button>
         </div>
-      </form>
+      </Form>
     </Section>
   )
 }

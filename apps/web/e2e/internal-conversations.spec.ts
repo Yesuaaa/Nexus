@@ -409,3 +409,37 @@ test("collapsed internal rail keeps chats and contacts within its width", async 
   await expect(nav.getByText("Start a chat", { exact: true })).toBeVisible()
   await expect(nav.getByText("Senior Designer", { exact: true })).toBeVisible()
 })
+
+test("reading an internal chat clears its topbar badge immediately", async ({
+  page,
+}) => {
+  const state = await internalChat(page, "STAFF")
+  state.created = true
+  state.unread = 3
+  state.messages.push({
+    id: "unread-reply",
+    clientMessageId: "unread-reply",
+    body: "Please review this update",
+    sender: { id: "recipient-1", fullName: "Dani Colleague" },
+    createdAt: new Date().toISOString(),
+    editedAt: null,
+    deletedAt: null,
+    purgeAt: null,
+  })
+  await page.goto("/messages?mode=internal")
+  const topbar = page.getByRole("banner")
+  await expect(
+    topbar.getByRole("link", { name: "Messages, 3 unread", exact: true }),
+  ).toHaveText("3")
+  await page
+    .getByRole("navigation", { name: "Conversations", exact: true })
+    .getByRole("link", {
+      name: "Dani Colleague, 3 unread messages",
+      exact: true,
+    })
+    .click()
+  const link = topbar.getByRole("link", { name: "Messages", exact: true })
+  await expect(link).toBeVisible()
+  await expect(link.locator("span")).toHaveCount(0)
+  expect(state.unread).toBe(0)
+})

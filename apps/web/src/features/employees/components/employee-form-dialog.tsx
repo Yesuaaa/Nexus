@@ -1,3 +1,4 @@
+import { Form } from "@/components/ui/form"
 import { useEffect, useRef, useState, type FormEvent } from "react"
 import { Eye, EyeOff } from "lucide-react"
 import { CloseIcon } from "@/components/layout/icons"
@@ -309,7 +310,7 @@ export function EmployeeFormDialog({
             opener.focus()
         }}
       >
-        <form ref={formRef} noValidate onSubmit={(event) => void submit(event)}>
+        <Form ref={formRef} noValidate onSubmit={(event) => void submit(event)}>
           <header className="flex items-start justify-between gap-4 border-b border-[#eceef1] p-5 sm:px-6 sm:pt-6 sm:pb-5">
             <div className="min-w-0">
               <DialogTitle className="m-0 text-[20px] font-[650] tracking-[-0.03em]">
@@ -817,7 +818,7 @@ export function EmployeeFormDialog({
                   : "Add Employee"}
             </Button>
           </footer>
-        </form>
+        </Form>
       </DialogContent>
     </Dialog>
   )

@@ -301,10 +301,10 @@ export function ServiceTable({
 
   return (
     <>
-      <div className="flex items-center justify-between gap-3 pb-4 max-[920px]:items-stretch max-[920px]:flex-col max-[560px]:pb-3">
+      <div className="flex flex-wrap items-start gap-[10px] pb-4 max-[560px]:flex-col max-[560px]:pb-3">
         <SearchField
           label="Search services"
-          containerClassName="max-[920px]:w-full max-[920px]:flex-none"
+          containerClassName="flex-none max-[560px]:w-full"
           placeholder="Search services…"
           value={search}
           maxLength={100}
@@ -313,10 +313,10 @@ export function ServiceTable({
             setSearch(event.target.value)
           }}
         />
-        <div className="flex min-w-0 gap-2 max-[560px]:flex-col">
+        <div className="flex min-w-0 flex-wrap gap-[10px] max-[560px]:w-full max-[560px]:flex-col">
           <Dropdown
-            className="w-[180px] max-[560px]:w-full"
-            triggerClassName="h-[34px] border-[#e1e4ea]"
+            className="w-[170px] max-[560px]:w-full"
+            triggerClassName="h-[34px] rounded-md border-[#e1e4ea] bg-transparent text-xs font-normal shadow-sm"
             label="Filter by department"
             value={departmentId}
             options={[
@@ -334,7 +334,7 @@ export function ServiceTable({
           />
           <Dropdown
             className="w-[140px] max-[560px]:w-full"
-            triggerClassName="h-[34px] border-[#e1e4ea]"
+            triggerClassName="h-[34px] rounded-md border-[#e1e4ea] bg-transparent text-xs font-normal shadow-sm"
             label="Filter by status"
             value={status}
             options={[

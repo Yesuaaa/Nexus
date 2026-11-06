@@ -1,5 +1,7 @@
 "use client"
 
+import { Form } from "@/components/ui/form"
+
 import { useRef, useState, type FormEvent } from "react"
 import { sileo } from "sileo"
 import { CloseIcon } from "@/components/layout/icons"
@@ -124,7 +126,7 @@ function TemplateEditor({
   }
 
   return (
-    <form onSubmit={(event) => void save(event)}>
+    <Form onSubmit={(event) => void save(event)}>
       <fieldset
         disabled={pending}
         className="m-0 grid min-w-0 gap-4 border-0 p-0"
@@ -260,7 +262,7 @@ function TemplateEditor({
           </div>
         )}
       </fieldset>
-    </form>
+    </Form>
   )
 }
 

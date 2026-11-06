@@ -8,6 +8,7 @@ import {
   Clock3,
   LoaderCircle,
   Plus,
+  RefreshCw,
 } from "lucide-react"
 import { contentClass } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
@@ -83,6 +84,11 @@ export function ClientServiceRequestsPage() {
           }
           hasLoaded = true
           setResult(data)
+          setSelected((current) =>
+            current
+              ? (data.requests.find((item) => item.id === current.id) ?? null)
+              : null,
+          )
           setError("")
           setResolvedKey(requestKey)
         })
@@ -105,7 +111,7 @@ export function ClientServiceRequestsPage() {
         })
     }
     load()
-    const stopRefresh = watchVisibleRefresh(load)
+    const stopRefresh = watchVisibleRefresh(load, { poll: false })
     return () => {
       active = false
       stopRefresh()
@@ -162,15 +168,27 @@ export function ClientServiceRequestsPage() {
             progress.
           </p>
         </div>
-        <Button
-          asChild
-          className="h-[34px] bg-[#203f8c] text-xs text-white hover:bg-[#172f70] max-[560px]:h-11"
-        >
-          <Link href="/services">
-            <Plus size={16} aria-hidden="true" />
-            New Service Request
-          </Link>
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-[34px] gap-2 text-xs"
+            disabled={loading}
+            onClick={() => setRevision((value) => value + 1)}
+          >
+            <RefreshCw size={14} aria-hidden="true" />
+            Refresh
+          </Button>
+          <Button
+            asChild
+            className="h-[34px] bg-[#203f8c] text-xs text-white hover:bg-[#172f70] max-[560px]:h-11"
+          >
+            <Link href="/services">
+              <Plus size={16} aria-hidden="true" />
+              New Service Request
+            </Link>
+          </Button>
+        </div>
       </header>
       <div className="mt-[18px]">
         <KpiCards
@@ -267,7 +285,10 @@ export function ClientServiceRequestsPage() {
         ) : result.requests.length ? (
           <ClientRequestsTable
             requests={result.requests}
-            onView={setSelected}
+            onView={(request) => {
+              setSelected(request)
+              setRevision((value) => value + 1)
+            }}
             onCancelled={() => setRevision((value) => value + 1)}
           />
         ) : (

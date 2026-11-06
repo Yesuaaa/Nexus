@@ -131,7 +131,7 @@ export function ConversationTools({
   onSelectBooking,
   onDraft,
   onScheduleMeeting,
-  onSection,
+  onActivate,
   onAttach,
   onRetry,
 }: {
@@ -147,7 +147,7 @@ export function ConversationTools({
   onSelectBooking: (id: string) => void
   onDraft: (action: WorkflowDraftAction) => void
   onScheduleMeeting: () => void
-  onSection: (section: string) => void
+  onActivate: () => void
   onAttach: () => void
   onRetry: () => void
 }) {
@@ -245,7 +245,7 @@ export function ConversationTools({
         onAttach()
         break
       case "activation":
-        onSection(tool.id)
+        onActivate()
         break
       default:
         onDraft(tool.id)

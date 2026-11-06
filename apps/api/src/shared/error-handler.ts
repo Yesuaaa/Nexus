@@ -5,6 +5,7 @@ import type {
   NextFunction,
   ErrorRequestHandler,
 } from "express"
+import { isTemporaryDatabaseError } from "../lib/database-read.js"
 
 /**
  * Extracts the file path and line number of the caller or the error source,
@@ -129,14 +130,16 @@ export const devErrorInterceptor = (
         errorBody.location = extractErrorLocation()
       }
 
-      logDevError({
-        status: response.statusCode,
-        method: request.method,
-        url: request.originalUrl || request.url,
-        clientMessage: errorBody.error,
-        location: errorBody.location,
-        devDetails: errorBody.details,
-      })
+      if (!(response.locals as Record<string, unknown>)._devErrorLogged) {
+        logDevError({
+          status: response.statusCode,
+          method: request.method,
+          url: request.originalUrl || request.url,
+          clientMessage: errorBody.error,
+          location: errorBody.location,
+          devDetails: errorBody.details,
+        })
+      }
     }
     return originalJson(body)
   }
@@ -150,9 +153,10 @@ export const handleError: ErrorRequestHandler = (
   error: unknown,
   request: Request,
   response: Response,
-  _next: NextFunction,
+  next: NextFunction,
 ) => {
-  void _next
+  if (response.headersSent) return next(error)
+  ;(response.locals as Record<string, unknown>)._devErrorLogged = true
   const isDev = process.env.NODE_ENV === "development"
 
   if (
@@ -200,6 +204,30 @@ export const handleError: ErrorRequestHandler = (
     return
   }
 
+  console.error("API request failed:", request.method, request.path, error)
+
+  if (isTemporaryDatabaseError(error)) {
+    const location = extractErrorLocation(error)
+    const clientMessage =
+      "The database is temporarily busy or unavailable. Please try again."
+    const details =
+      error instanceof Error ? error.message : "Temporary database failure"
+    logDevError({
+      status: 503,
+      method: request.method,
+      url: request.originalUrl || request.url,
+      clientMessage,
+      location,
+      devDetails: details,
+    })
+    response.setHeader("Retry-After", "2")
+    response.status(503).json({
+      error: clientMessage,
+      ...(isDev ? { location, details } : {}),
+    })
+    return
+  }
+
   // Handle errors that carry an explicit HTTP status (e.g. AuthError, ServicesError)
   if (
     error instanceof Error &&
@@ -242,10 +270,6 @@ export const handleError: ErrorRequestHandler = (
     devDetails: message,
     stack,
   })
-
-  if (!isDev) {
-    console.error("API request failed:", error)
-  }
 
   response.status(500).json({
     error: "Internal server error",

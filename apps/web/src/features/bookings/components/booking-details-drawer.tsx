@@ -31,6 +31,7 @@ export function BookingDetailsDrawer({
   closeDisabled = false,
   showMessagesLink = true,
   statusLabels,
+  onLoaded,
 }: {
   id: string
   onClose: () => void
@@ -42,6 +43,7 @@ export function BookingDetailsDrawer({
   fallbackFocusId?: string
   closeDisabled?: boolean
   showMessagesLink?: boolean | ((details: BookingDetails) => boolean)
+  onLoaded?: (details: BookingDetails) => void
   statusLabels?: Partial<Record<string, string>>
 }) {
   const { formatDate } = useDatePreferences()
@@ -61,6 +63,7 @@ export function BookingDetailsDrawer({
       .then((value) => {
         if (!active) return
         setDetails(value)
+        onLoaded?.(value)
         setError("")
         setResolvedKey(requestKey)
       })
@@ -76,7 +79,7 @@ export function BookingDetailsDrawer({
     return () => {
       active = false
     }
-  }, [id, revision, requestKey, loadDetails])
+  }, [id, revision, requestKey, loadDetails, onLoaded])
 
   return (
     <Sheet

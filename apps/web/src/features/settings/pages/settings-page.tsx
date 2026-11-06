@@ -1,4 +1,6 @@
 "use client"
+
+import { Form } from "@/components/ui/form"
 import { useEffect, useState, type FormEvent } from "react"
 import {
   Bell,
@@ -304,7 +306,7 @@ export function SettingsPage() {
               </div>
             </TabsContent>
             <TabsContent value="notifications" className="m-0">
-              <form onSubmit={save} className="grid gap-6">
+              <Form onSubmit={save} className="grid gap-6">
                 <section
                   id="notification-settings"
                   tabIndex={-1}
@@ -367,10 +369,10 @@ export function SettingsPage() {
                     {saving ? "Saving…" : "Save notifications"}
                   </Button>
                 </div>
-              </form>
+              </Form>
             </TabsContent>
             <TabsContent value="preferences" className="m-0 max-w-3xl">
-              <form onSubmit={save} className="grid gap-6">
+              <Form onSubmit={save} className="grid gap-6">
                 <section className="grid gap-4">
                   <div>
                     <h2 className="m-0 text-base font-semibold">
@@ -477,7 +479,7 @@ export function SettingsPage() {
                     {saving ? "Saving…" : "Save preferences"}
                   </Button>
                 </div>
-              </form>
+              </Form>
             </TabsContent>
           </div>
           <SettingsSidebar

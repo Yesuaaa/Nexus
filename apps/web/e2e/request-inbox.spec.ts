@@ -13,7 +13,7 @@ function fixture(index: number): RequestDetails {
     packageName: "Business Website",
     expectedTimeline: "Launch in six weeks",
     preferredSpecialistName: "Sam Developer",
-    createdAt: "2026-10-30T08:00:00Z",
+    createdAt: new Date(Date.UTC(2026, 9, 30, 8, index)).toISOString(),
     updatedAt: "2026-10-30T08:00:00Z",
     service: { id: "service-1", name: "Website Development" },
     client: {
@@ -76,9 +76,18 @@ for (const width of [1440, 390]) {
       ),
     ).toBeVisible()
     await expect(page).toHaveURL(/\/request-inbox$/)
+    await expect(
+      page.getByRole("combobox", { name: "Sort requests", exact: true }),
+    ).toHaveCount(0)
     await page
-      .getByRole("combobox", { name: "Sort requests", exact: true })
-      .selectOption("reference:desc")
+      .getByRole("button", { name: "Sort by reference", exact: true })
+      .click()
+    await page
+      .getByRole("button", {
+        name: "Sort by reference, ascending",
+        exact: true,
+      })
+      .click()
     await expect.poll(() => state.queries.at(-1)).toContain("sortDir=desc")
     await page.getByRole("button", { name: "Page 2", exact: true }).click()
     await expect.poll(() => state.queries.at(-1)).toContain("page=2")
@@ -106,26 +115,47 @@ for (const width of [1440, 390]) {
       .click()
     await expect(page.getByText("Showing 1–10 of 12")).toBeVisible()
     await page
-      .getByRole("combobox", { name: "Sort requests", exact: true })
-      .selectOption("service:asc")
+      .getByRole("button", { name: "Sort by service", exact: true })
+      .click()
     await expect.poll(() => state.queries.at(-1)).toContain("sortBy=service")
-    if (width === 1440) {
+    for (const [column, label] of [
+      ["service", "service"],
+      ["reference", "reference"],
+      ["client", "client"],
+      ["status", "status"],
+      ["createdAt", "date requested"],
+    ] as const) {
+      if (column !== "service") {
+        await page
+          .getByRole("button", { name: `Sort by ${label}`, exact: true })
+          .click()
+      }
+      await expect
+        .poll(() => state.queries.at(-1))
+        .toContain(`sortBy=${column}`)
+      await expect(
+        page.getByRole("columnheader", { name: new RegExp(label, "i") }),
+      ).toHaveAttribute("aria-sort", "ascending")
       await page
         .getByRole("button", {
-          name: "Sort by service, ascending",
+          name: `Sort by ${label}, ascending`,
           exact: true,
         })
         .click()
       await expect(
-        page.getByRole("columnheader", { name: /service/i }),
+        page.getByRole("columnheader", { name: new RegExp(label, "i") }),
       ).toHaveAttribute("aria-sort", "descending")
-      await page
-        .getByRole("button", { name: "Sort by reference", exact: true })
-        .click()
-      await expect(
-        page.getByRole("columnheader", { name: /reference/i }),
-      ).toHaveAttribute("aria-sort", "ascending")
+      await expect.poll(() => state.queries.at(-1)).toContain("sortDir=desc")
     }
+    await page.getByRole("button", { name: "Page 2", exact: true }).click()
+    await expect.poll(() => state.queries.at(-1)).toContain("page=2")
+    await page
+      .getByRole("button", {
+        name: "Sort by date requested, descending",
+        exact: true,
+      })
+      .click()
+    await expect.poll(() => state.queries.at(-1)).toContain("page=1")
     await page.screenshot({
       path: `test-results/issue142-inbox-${width}.png`,
       fullPage: true,
@@ -265,19 +295,38 @@ async function mockInbox(
       )
       const sortBy = url.searchParams.get("sortBy")
       const sign = url.searchParams.get("sortDir") === "desc" ? -1 : 1
-      if (sortBy === "reference" || sortBy === "service")
-        filtered.sort((a, b) => {
-          if (
-            sortBy === "reference" &&
-            (!a.referenceNumber || !b.referenceNumber)
-          )
-            return !a.referenceNumber ? 1 : -1
-          const left =
-            sortBy === "reference" ? a.referenceNumber! : a.service.name
-          const right =
-            sortBy === "reference" ? b.referenceNumber! : b.service.name
-          return left.localeCompare(right) * sign || a.id.localeCompare(b.id)
-        })
+      filtered.sort((a, b) => {
+        if (
+          sortBy === "reference" &&
+          (!a.referenceNumber || !b.referenceNumber)
+        )
+          return !a.referenceNumber ? 1 : -1
+        const statusOrder = [
+          "SUBMITTED",
+          "UNDER_REVIEW",
+          "AWAITING_CLIENT_INFO",
+          "READY_FOR_QUOTATION",
+          "CLOSED",
+          "CANCELLED",
+        ]
+        const value = (item: InboxRequest) => {
+          switch (sortBy) {
+            case "reference":
+              return item.referenceNumber ?? ""
+            case "service":
+              return item.service.name
+            case "client":
+              return item.client.fullName ?? ""
+            case "status":
+              return String(statusOrder.indexOf(item.status))
+            default:
+              return item.createdAt
+          }
+        }
+        const left = value(a)
+        const right = value(b)
+        return left.localeCompare(right) * sign || a.id.localeCompare(b.id)
+      })
       return route.fulfill({
         json: {
           department: { id: "design", name: "Design" },

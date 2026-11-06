@@ -1,3 +1,4 @@
+import { Form } from "@/components/ui/form"
 import { useRef } from "react"
 import { focusRing } from "@/components/layout/styles"
 import {
@@ -55,7 +56,7 @@ export function ConfirmationDialog({
             opener.focus()
         }}
       >
-        <form
+        <Form
           onSubmit={(event) => {
             event.preventDefault()
             if (!pending) onConfirm()
@@ -103,7 +104,7 @@ export function ConfirmationDialog({
               {pending ? pendingLabel : confirmLabel}
             </button>
           </footer>
-        </form>
+        </Form>
       </DialogContent>
     </Dialog>
   )
