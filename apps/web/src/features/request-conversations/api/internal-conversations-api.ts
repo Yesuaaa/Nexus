@@ -1,5 +1,6 @@
 import { apiRequest } from "@/features/auth/api/auth-api"
 import type { RequestMessage } from "./request-conversations-api"
+import { withUnreadCount } from "../model/unread-messages"
 
 export type InternalParticipant = {
   id: string
@@ -51,9 +52,14 @@ export function listInternalConversations(
   signal?: AbortSignal,
 ) {
   const query = before ? `?before=${encodeURIComponent(before)}` : ""
-  return apiRequest<InternalConversationList>(
-    `/api/internal-conversations${query}`,
-    { signal },
+  return withUnreadCount(
+    "internal",
+    () =>
+      apiRequest<InternalConversationList>(
+        `/api/internal-conversations${query}`,
+        { signal },
+      ),
+    signal,
   )
 }
 
@@ -79,11 +85,13 @@ export function getInternalConversation(
 }
 
 export function markInternalConversationRead(id: string) {
-  return apiRequest<{
-    ok: true
-    unreadCount: number
-    conversationUnreadCount: number
-  }>(`${path(id)}/read`, { method: "PATCH" })
+  return withUnreadCount("internal", () =>
+    apiRequest<{
+      ok: true
+      unreadCount: number
+      conversationUnreadCount: number
+    }>(`${path(id)}/read`, { method: "PATCH" }),
+  )
 }
 
 export async function sendInternalMessage(

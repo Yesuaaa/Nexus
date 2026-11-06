@@ -1,4 +1,6 @@
 "use client"
+
+import { Form } from "@/components/ui/form"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 
 import { useEffect, useRef, type ReactNode } from "react"
@@ -86,7 +88,7 @@ function ActionForm({
       "border border-[#b42318] bg-background text-[#b42318] hover:bg-[#fef3f2] hover:text-[#912018] disabled:opacity-50",
   )
   return (
-    <form
+    <Form
       className="space-y-3"
       onSubmit={async (event) => {
         event.preventDefault()
@@ -119,102 +121,62 @@ function ActionForm({
           {controls.busy ? "Saving…" : label}
         </Button>
       )}
-    </form>
+    </Form>
   )
 }
 
 function InternalWorkspace({
   workflow,
-  controls,
-  id,
+  onManageStaff,
 }: {
   workflow: Workflow
-  controls: WorkflowControls
-  id: string
+  onManageStaff?: () => void
 }) {
-  const internal = workflow.internal
-  if (!workflow.permissions.manage || !internal || !workflow.approval)
+  if (!workflow.permissions.manage || !workflow.internal || !workflow.approval)
     return null
-  const mutable = !["DECLINED", "CANCELLED"].includes(workflow.state)
+  const assigned = workflow.internal.staff.filter((person) => person.assigned)
+  const mutable = [
+    "AGREEMENT_PAYMENT_PENDING",
+    "READY_FOR_ACTIVATION",
+    "ACTIVE_PROJECT",
+  ].includes(workflow.state)
   return (
-    <div className="mt-3 rounded-xl border border-[#d8e1ef] bg-[#f6f8fc] px-3 pt-3 pb-1">
-      <p className="mb-1 text-[10px] font-semibold tracking-wide text-[#52627a] uppercase">
-        Internal · Department head only
-      </p>
-      {workflow.approval && (
-        <WorkflowDisclosure
-          id={id}
-          title="Staffing and workload"
-          open={workflow.state === "READY_FOR_ACTIVATION"}
-        >
-          <p className="m-0 text-[11px]">
-            Review department assignments, specialties, availability, and active
-            project counts. Personnel selection requires your approval.
-          </p>
-          <ActionForm
-            controls={controls}
-            label="Approve staffing"
-            readOnly={!mutable || workflow.state === "ON_HOLD"}
-            action={(data) => ({
-              type: "STAFF_PROJECT",
-              employeeIds: data.getAll("employeeIds").map(String),
-            })}
-          >
-            <fieldset className="m-0 space-y-2 border-0 p-0">
-              <legend className="sr-only">Department employees</legend>
-              {internal.staff.length ? (
-                internal.staff.map((person) => (
-                  <label
-                    key={person.id}
-                    className="flex items-start gap-2 rounded-lg border border-[#e1e6ee] bg-background p-2"
-                  >
-                    <input
-                      type="checkbox"
-                      name="employeeIds"
-                      value={person.id}
-                      defaultChecked={person.assigned}
-                      disabled={
-                        person.status !== "ACTIVE" ||
-                        !mutable ||
-                        workflow.state === "ON_HOLD"
-                      }
-                      className="mt-1 accent-[#203f8c]"
-                    />
-                    <span className="min-w-0">
-                      <strong className="block text-[11px] text-[#182235]">
-                        {person.fullName}
-                      </strong>
-                      <span className="block text-[10px]">
-                        {person.position || "Staff"} ·{" "}
-                        {person.status.toLowerCase().replaceAll("_", " ")}
-                      </span>
-                      <span className="block text-[10px]">
-                        {person.activeProjectCount} active{" "}
-                        {person.activeProjectCount === 1
-                          ? "project"
-                          : "projects"}
-                      </span>
-                      {!!person.skills.length && (
-                        <span className="block text-[10px]">
-                          {person.skills.join(", ")}
-                        </span>
-                      )}
-                    </span>
-                  </label>
-                ))
-              ) : (
-                <p className="m-0 text-[11px]">
-                  No eligible employees are assigned to this department.
-                </p>
-              )}
-            </fieldset>
-          </ActionForm>
-        </WorkflowDisclosure>
+    <WorkflowDisclosure title="Assigned staff" open>
+      {assigned.length ? (
+        <ul className="m-0 list-none space-y-2 p-0">
+          {assigned.map((person) => (
+            <li
+              key={person.id}
+              className="rounded-lg border border-[#e1e6ee] bg-white px-3 py-2"
+            >
+              <p className="m-0 text-[11px] font-semibold text-[#182235]">
+                {person.fullName}
+              </p>
+              <p className="mt-1 mb-0 text-[10px] text-[#738096]">
+                {person.position || "Staff"}
+                {person.status !== "ACTIVE" &&
+                  ` · ${person.status.toLowerCase().replaceAll("_", " ")}`}
+              </p>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="m-0 text-[11px] text-[#738096]">No staff assigned yet.</p>
       )}
-    </div>
+      {onManageStaff && (
+        <Button
+          type="button"
+          variant="outline"
+          disabled={!mutable}
+          onClick={onManageStaff}
+          className={`${workflowButton} w-full text-[#203f8c]`}
+        >
+          {assigned.length ? "Manage staff" : "Assign staff"}
+        </Button>
+      )}
+    </WorkflowDisclosure>
   )
 }
-
 export function WorkflowContextPanel({
   workflow,
   controls,
@@ -224,6 +186,7 @@ export function WorkflowContextPanel({
   conversationOverview,
   hasSelectedBooking,
   onDraft,
+  onProjectSetup,
 }: {
   workflow: Workflow | null
   controls: WorkflowControls
@@ -233,6 +196,7 @@ export function WorkflowContextPanel({
   conversationOverview?: ReactNode
   hasSelectedBooking: boolean
   onDraft?: (action: "approver-assignments" | "internal-note") => void
+  onProjectSetup?: (mode: "activation" | "staffing") => void
 }) {
   const { formatDate, formatTime } = useDatePreferences()
 
@@ -444,38 +408,16 @@ export function WorkflowContextPanel({
                   >
                     <p className="m-0 text-xs text-[#52627a]">
                       {staffingApproved
-                        ? "Quotation acceptance, payment and staffing are complete. Activate the service to open its project workspace."
-                        : "Choose at least one active department employee under Staffing and workload, then click Approve staffing before activating the project."}
+                        ? "Staffing is approved. Review and activate the project to open its workspace."
+                        : "Assign your project team and approve staffing in project setup before activating."}
                     </p>
-                    {!staffingApproved && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className={`${workflowButton} w-full text-[#203f8c]`}
-                        onClick={() => {
-                          const section = document.getElementById(
-                            sectionId("staffing"),
-                          )
-                          if (section instanceof HTMLDetailsElement)
-                            section.open = true
-                          section?.scrollIntoView({
-                            block: "nearest",
-                            behavior: "smooth",
-                          })
-                        }}
-                      >
-                        Review staffing
-                      </Button>
-                    )}
                     <Button
                       type="button"
-                      disabled={controls.busy || !staffingApproved}
+                      disabled={controls.busy || !onProjectSetup}
                       className={`${workflowButton} w-full bg-[#203f8c] text-white hover:bg-[#172f70]`}
-                      onClick={() =>
-                        void controls.act({ type: "ACTIVATE_PROJECT" })
-                      }
+                      onClick={() => onProjectSetup?.("activation")}
                     >
-                      Activate project
+                      Review and activate
                     </Button>
                   </WorkflowDisclosure>
                 )}
@@ -733,8 +675,9 @@ export function WorkflowContextPanel({
           */}
               <InternalWorkspace
                 workflow={workflow}
-                controls={controls}
-                id={sectionId("staffing")}
+                onManageStaff={
+                  onProjectSetup ? () => onProjectSetup("staffing") : undefined
+                }
               />
               {workflow.permissions.manage &&
                 workflow.internal &&

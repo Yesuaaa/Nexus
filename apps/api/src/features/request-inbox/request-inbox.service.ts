@@ -135,7 +135,15 @@ export async function listInbox(userId: string, filters: InboxFilters) {
             ? { service: { name: filters.sortDir } }
             : filters.sortBy === "reference"
               ? { referenceNumber: { sort: filters.sortDir, nulls: "last" } }
-              : { createdAt: filters.sortDir },
+              : filters.sortBy === "client"
+                ? {
+                    client: {
+                      fullName: { sort: filters.sortDir, nulls: "last" },
+                    },
+                  }
+                : filters.sortBy === "status"
+                  ? { status: filters.sortDir }
+                  : { createdAt: filters.sortDir },
           { id: "asc" },
         ],
         take: 10,

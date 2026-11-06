@@ -1902,15 +1902,21 @@ for (const width of [1440, 390]) {
     })
     await picker.getByRole("radio", { name: "SEO SR-102", exact: true }).check()
     await picker.getByRole("button", { name: "Continue", exact: true }).click()
+    const setup = page.getByRole("dialog", {
+      name: "Activate project",
+      exact: true,
+    })
+    await expect(setup).toContainText("SR-102")
+    await expect(setup).toContainText(
+      "No employees are assigned to this department.",
+    )
+    await expect(
+      setup.getByRole("button", { name: "Approve staffing", exact: true }),
+    ).toBeDisabled()
+    await setup.getByRole("button", { name: "Cancel", exact: true }).click()
     await expect(panel.locator('button[aria-pressed="true"]')).toContainText(
       "SR-102",
     )
-    await expect(
-      panel.getByRole("button", { name: "Activate project", exact: true }),
-    ).toBeVisible()
-    await expect(
-      panel.getByRole("button", { name: "Activate project", exact: true }),
-    ).toBeDisabled()
     expect(
       await log.locator('[data-booking-event="seo"]').allTextContents(),
     ).toEqual(before)

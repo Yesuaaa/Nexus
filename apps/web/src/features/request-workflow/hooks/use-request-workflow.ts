@@ -21,6 +21,12 @@ export function useRequestWorkflow(requestId: string | null) {
   }
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
+  const refreshFlight = useRef<{
+    requestId: string
+    signal?: AbortSignal
+    queued: boolean
+    promise: Promise<void>
+  } | null>(null)
   const flight = useRef(false)
   const alive = useRef(true)
   const revoked = useRef(false)
@@ -44,40 +50,85 @@ export function useRequestWorkflow(requestId: string | null) {
   )
 
   const refresh = useCallback(
-    async (signal?: AbortSignal) => {
+    (signal?: AbortSignal): Promise<void> => {
       if (!requestId) {
         if (alive.current) setLoading(false)
-        return
+        return Promise.resolve()
       }
-      if (revoked.current || !alive.current || signal?.aborted) return
-      try {
-        const result = await getWorkflow(requestId, signal)
-        if (!alive.current || revoked.current || signal?.aborted) return
-        if (!current.current || result.version >= current.current.version) {
-          current.current = result
-          setWorkflow(result)
-        }
-        setError("")
-        reportedLoadError.current = ""
-      } catch (reason) {
-        if (!alive.current || revoked.current || signal?.aborted) return
-        if (
-          reason instanceof ApiError &&
-          [401, 403, 404].includes(reason.status)
-        ) {
-          reportLoadError(reason.message)
-          revoke(reason.message)
-          return
-        }
-        const message =
-          reason instanceof Error
-            ? reason.message
-            : "Couldn't load the request workflow."
-        setError(message)
-        reportLoadError(message)
-      } finally {
-        if (alive.current && !signal?.aborted) setLoading(false)
+      if (revoked.current || !alive.current || signal?.aborted)
+        return Promise.resolve()
+      const existing = refreshFlight.current
+      if (existing?.requestId === requestId && !existing.signal?.aborted) {
+        existing.queued = true
+        return existing.promise
       }
+      const task = {
+        requestId,
+        signal,
+        queued: false,
+        promise: Promise.resolve(),
+      }
+      refreshFlight.current = task
+      const load = async () => {
+        do {
+          task.queued = false
+          try {
+            const result = await getWorkflow(requestId, signal)
+            if (
+              !alive.current ||
+              revoked.current ||
+              signal?.aborted ||
+              refreshFlight.current !== task
+            )
+              return
+            if (!current.current || result.version >= current.current.version) {
+              current.current = result
+              setWorkflow(result)
+            }
+            setError("")
+            reportedLoadError.current = ""
+          } catch (reason) {
+            if (
+              !alive.current ||
+              revoked.current ||
+              signal?.aborted ||
+              refreshFlight.current !== task
+            )
+              return
+            if (
+              reason instanceof ApiError &&
+              [401, 403, 404].includes(reason.status)
+            ) {
+              reportLoadError(reason.message)
+              revoke(reason.message)
+              return
+            }
+            const message =
+              reason instanceof Error
+                ? reason.message
+                : "Couldn't load the request workflow."
+            setError(message)
+            reportLoadError(message)
+          } finally {
+            if (
+              alive.current &&
+              !signal?.aborted &&
+              refreshFlight.current === task
+            )
+              setLoading(false)
+          }
+        } while (
+          task.queued &&
+          alive.current &&
+          !revoked.current &&
+          refreshFlight.current === task &&
+          !signal?.aborted
+        )
+      }
+      task.promise = load().finally(() => {
+        if (refreshFlight.current === task) refreshFlight.current = null
+      })
+      return task.promise
     },
     [requestId, revoke],
   )
@@ -107,6 +158,8 @@ export function useRequestWorkflow(requestId: string | null) {
     return () => {
       alive.current = false
       controller.abort()
+      if (refreshFlight.current?.requestId === requestId)
+        refreshFlight.current = null
       clearTimeout(initial)
       clearInterval(timer)
       document.removeEventListener("visibilitychange", onVisible)

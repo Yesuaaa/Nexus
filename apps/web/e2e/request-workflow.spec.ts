@@ -219,6 +219,42 @@ async function chooseToolBooking(page: Page) {
   await context.getByRole("button", { name: "Continue", exact: true }).click()
 }
 
+test("workflow refreshes queue while a previous read is pending", async ({
+  page,
+}) => {
+  const workflow = fixture()
+  await mock(page, workflow)
+  let requests = 0
+  let active = 0
+  let maximumActive = 0
+  let release = () => {}
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  await page.route("**/api/request-workflows/request-1", async (route) => {
+    requests++
+    active++
+    maximumActive = Math.max(maximumActive, active)
+    if (requests === 1) await blocked
+    await route.fulfill({ json: workflow })
+    active--
+  })
+  await page.goto("/messages?request=request-1")
+  await expect.poll(() => requests).toBe(1)
+  await page.evaluate(() => {
+    for (let count = 0; count < 5; count++)
+      document.dispatchEvent(new Event("visibilitychange"))
+  })
+  // All visibility handlers have run; the pending read must still be the only request.
+  expect(requests).toBe(1)
+  release()
+  await expect.poll(() => requests).toBe(2)
+  await expect(
+    page.getByLabel("Quotation reference").getByRole("definition"),
+  ).toHaveText("REQ-2026-1001")
+  expect(maximumActive).toBe(1)
+})
+
 for (const width of [1280, 390]) {
   for (const manager of [false, true]) {
     test(`sent quotation shows its reference for ${manager ? "department heads" : "clients"} at ${width}px`, async ({
@@ -677,9 +713,23 @@ for (const width of [1280, 390]) {
     expect(sheetBox!.height).toBeLessThanOrEqual(400)
     const details = page.getByRole("complementary", { name: "Request context" })
     await expect(details).toBeVisible()
+    await draft.getByRole("button", { name: "Next", exact: true }).click()
+    const deliverables = draft.getByLabel("Deliverables (one per line)")
+    await expect(deliverables).toBeFocused()
+    await expect(deliverables).toHaveAttribute("aria-invalid", "true")
+    await expect(deliverables).toHaveAccessibleDescription(
+      "Complete this field.",
+    )
+    await expect(draft.locator("[data-field-error]")).toHaveText(
+      "Complete this field.",
+    )
+    await expect(draft.locator("form")).toHaveAttribute("novalidate", "")
+    expect(actions).toHaveLength(0)
     await draft
       .getByLabel("Deliverables (one per line)")
       .fill("Accessible website\nProduction deployment")
+    await expect(deliverables).not.toHaveAttribute("aria-invalid", "true")
+    await expect(draft.locator("[data-field-error]")).toHaveCount(0)
     await chat
       .getByRole("button", { name: "Hide service details", exact: true })
       .click()
@@ -699,10 +749,47 @@ for (const width of [1280, 390]) {
     await page
       .getByRole("option", { name: "USD · US Dollar", exact: true })
       .click()
-    await draft.getByLabel("Item 1", { exact: true }).fill("Website delivery")
+    await draft.getByRole("button", { name: "Next", exact: true }).click()
+    const item = draft.getByRole("textbox", { name: "Item 1", exact: true })
+    await expect(item).toBeFocused()
+    await expect(item).toHaveAccessibleDescription("Complete this field.")
+    await expect(item).toBeInViewport()
+    await expect(draft.locator("[data-field-error]")).toBeInViewport()
+    await expect
+      .poll(() =>
+        draft.locator("[data-field-error]").evaluate((element) => {
+          const box = element.getBoundingClientRect()
+          return (
+            document.elementFromPoint(
+              box.x + box.width / 2,
+              box.y + box.height / 2,
+            ) === element
+          )
+        }),
+      )
+      .toBe(true)
+    await page.screenshot({
+      path: `test-results/quotation-validation-${width}.png`,
+    })
+    await item.fill("Website delivery")
+    const quantity = draft.getByRole("spinbutton", {
+      name: "Quantity",
+      exact: true,
+    })
+    await quantity.fill("0")
+    await draft.getByRole("button", { name: "Next", exact: true }).click()
+    await expect(quantity).toBeFocused()
+    await expect(quantity).toHaveAccessibleDescription(
+      "Enter a value of 1 or more.",
+    )
+    await quantity.fill("1")
+    await draft.getByRole("button", { name: "Next", exact: true }).click()
     const price = draft.getByLabel("Unit price", { exact: true })
+    await expect(price).toBeFocused()
+    await expect(price).toHaveAccessibleDescription("Complete this field.")
     await price.pressSequentially("1234567.89", { delay: 20 })
     await expect(price).toHaveValue("1,234,567.89")
+    await expect(draft.locator("[data-field-error]")).toHaveCount(0)
     await draft.getByRole("button", { name: "Next", exact: true }).click()
     await draft
       .getByLabel("Payment terms", { exact: true })
@@ -723,7 +810,12 @@ for (const width of [1280, 390]) {
     })
     const amountBox = await amount.boundingBox()
     const dateBox = await validity.boundingBox()
-    expect(Math.abs(amountBox!.y - dateBox!.y)).toBeLessThan(1)
+    expect(
+      Math.abs(amountBox!.y + amountBox!.height - dateBox!.y - dateBox!.height),
+    ).toBeLessThan(1)
+    expect(Math.abs(amountBox!.height - dateBox!.height)).toBeLessThan(1)
+    expect(Math.abs(amountBox!.width - dateBox!.width)).toBeLessThan(1)
+    await expect(validity).toHaveText("Select date & time")
     expect(dateBox!.x).toBeGreaterThan(amountBox!.x + amountBox!.width)
     await validity.click()
     const picker = page.getByRole("dialog", {
@@ -734,10 +826,13 @@ for (const width of [1280, 390]) {
       picker.getByRole("button", { name: "Previous month", exact: true }),
     ).toBeDisabled()
     await expect(
-      picker.getByRole("gridcell", { name: "November 1, 2026", exact: true }),
+      picker.getByRole("button", {
+        name: "Sunday, November 1, 2026",
+        exact: true,
+      }),
     ).toBeDisabled()
     await picker
-      .getByRole("gridcell", { name: "November 20, 2026", exact: true })
+      .getByRole("button", { name: "Friday, November 20, 2026", exact: true })
       .click()
     await picker.getByRole("combobox", { name: "Hour", exact: true }).click()
     await page.getByRole("option", { name: "09", exact: true }).click()
@@ -752,6 +847,8 @@ for (const width of [1280, 390]) {
       .getByRole("button", { name: "Apply date & time", exact: true })
       .click()
     await expect(picker).toHaveCount(0)
+    await expect(validity).toBeFocused()
+    await expect(validity).toHaveAttribute("title", /November 20, 2026/)
     await expect(draft.locator('input[name="validUntil"]')).toHaveValue(
       "2026-11-20T09:30",
     )
@@ -956,8 +1053,14 @@ test("department heads can confirm payment or reject it with a required reason",
     .getByRole("button", { name: "Reject payment", exact: true })
     .click()
   expect(actions).toHaveLength(0)
+  await expect(page.locator("[data-field-error]")).toHaveText(
+    "Enter a reason for rejecting this payment.",
+  )
+  await expect(
+    page.getByRole("textbox", { name: "Verification note", exact: true }),
+  ).toBeFocused()
   await page
-    .getByLabel("Verification note", { exact: true })
+    .getByRole("textbox", { name: "Verification note", exact: true })
     .fill("Receipt does not match the amount")
   await page
     .getByRole("button", { name: "Reject payment", exact: true })
@@ -989,7 +1092,7 @@ for (const width of [1440, 390]) {
       width +
       "px",
     async ({ page }) => {
-      await page.setViewportSize({ width, height: 1000 })
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 })
       const workflow = fixture()
       workflow.state = "AGREEMENT_PAYMENT_PENDING"
       workflow.permissions.manage = true
@@ -1043,6 +1146,24 @@ for (const width of [1440, 390]) {
             activeProjectCount: 0,
             assigned: false,
           },
+          {
+            id: "employee-2",
+            fullName: "Alex Designer",
+            position: "Designer",
+            status: "ACTIVE",
+            skills: ["Figma"],
+            activeProjectCount: 2,
+            assigned: false,
+          },
+          {
+            id: "employee-3",
+            fullName: "Sam Worker",
+            position: "Designer",
+            status: "ON_LEAVE",
+            skills: [],
+            activeProjectCount: 1,
+            assigned: false,
+          },
         ],
         approvers: [],
         quotationApproverId: null,
@@ -1051,6 +1172,7 @@ for (const width of [1440, 390]) {
       }
       await mock(page, workflow, true)
       const actions: Record<string, unknown>[] = []
+      const staffingAttempts: Record<string, unknown>[] = []
       await page.route(
         "**/api/request-workflows/request-1/actions",
         async (route) => {
@@ -1058,9 +1180,23 @@ for (const width of [1440, 390]) {
             string,
             unknown
           >
+          if (action.type === "STAFF_PROJECT") {
+            staffingAttempts.push(action)
+            if (staffingAttempts.length === 1) {
+              await route.fulfill({
+                status: 503,
+                json: {
+                  error: "Staffing temporarily unavailable. Please retry.",
+                },
+              })
+              return
+            }
+            for (const person of workflow.internal!.staff)
+              person.assigned = (action.employeeIds as string[]).includes(
+                person.id,
+              )
+          }
           actions.push(action)
-          if (action.type === "STAFF_PROJECT")
-            workflow.internal!.staff[0]!.assigned = true
           if (action.type === "VERIFY_PAYMENT") {
             workflow.payment!.status = "VERIFIED"
             workflow.state = "READY_FOR_ACTIVATION"
@@ -1089,6 +1225,9 @@ for (const width of [1440, 390]) {
         .getByRole("button", { name: "Confirm payment", exact: true })
         .click()
       await page
+        .getByRole("button", { name: "Hide service details", exact: true })
+        .click()
+      await page
         .getByRole("button", { name: "Open request actions", exact: true })
         .click()
       const nextTool = page.getByRole("menuitem", {
@@ -1101,21 +1240,64 @@ for (const width of [1440, 390]) {
       await expect(nextTool).toHaveText("Project activation")
       await nextTool.click()
       await chooseToolBooking(page)
-      const activate = page.getByRole("button", {
+      const setup = page.getByRole("dialog", {
         name: "Activate project",
         exact: true,
       })
-      await expect(activate).toBeDisabled()
-      await expect(activate).toBeVisible()
+      await expect(setup).toBeVisible()
+      const activate = setup.getByRole("button", {
+        name: "Activate project",
+        exact: true,
+      })
+      await expect(activate).toHaveCount(0)
+      await expect(
+        setup.getByRole("button", { name: "Approve staffing", exact: true }),
+      ).toBeDisabled()
+      await expect(
+        setup.getByRole("checkbox", { name: /Sam Worker/ }),
+      ).toBeDisabled()
+      await setup.getByRole("checkbox", { name: /Dani Worker/ }).check()
+      await setup.getByRole("button", { name: "Cancel", exact: true }).click()
+      await expect(setup).toHaveCount(0)
+      await expect(
+        page.getByRole("button", { name: "Open request actions", exact: true }),
+      ).toBeFocused()
+      expect(actions).toHaveLength(1)
       await page
-        .getByRole("button", { name: "Review staffing", exact: true })
+        .getByRole("button", { name: "Open request actions", exact: true })
         .click()
-      await page.getByRole("checkbox", { name: /Dani Worker/ }).check()
-      await page
+      await nextTool.click()
+      await chooseToolBooking(page)
+      await expect(
+        setup.getByRole("checkbox", { name: /Dani Worker/ }),
+      ).not.toBeChecked()
+      await setup.getByRole("checkbox", { name: /Dani Worker/ }).check()
+      await page.screenshot({
+        path: `test-results/project-staffing-modal-${width}.png`,
+        fullPage: true,
+      })
+      await setup
         .getByRole("button", { name: "Approve staffing", exact: true })
         .click()
+      await expect(setup.getByRole("alert")).toContainText(
+        "Staffing temporarily unavailable",
+      )
+      await expect(
+        setup.getByRole("checkbox", { name: /Dani Worker/ }),
+      ).toBeChecked()
+      await expect(activate).toHaveCount(0)
+      await setup
+        .getByRole("button", { name: "Approve staffing", exact: true })
+        .click()
+      expect(staffingAttempts[0]!.actionId).toBe(staffingAttempts[1]!.actionId)
       await expect(activate).toBeEnabled()
+      expect(actions).toHaveLength(2)
+      await page.screenshot({
+        path: `test-results/project-activation-modal-${width}.png`,
+        fullPage: true,
+      })
       await activate.click()
+      await expect(setup).toHaveCount(0)
       await expect(
         page.getByRole("button", {
           name: "Set up project workspace",
@@ -1135,20 +1317,41 @@ for (const width of [1440, 390]) {
       await expect(
         page.getByRole("link", { name: "View Project", exact: true }),
       ).toHaveAttribute("href", "/projects/project-1")
-      await page
-        .locator("summary")
-        .filter({ hasText: /^Staffing and workload$/ })
-        .click()
       await expect(
         page.getByRole("checkbox", { name: /Dani Worker/ }),
-      ).toBeEnabled()
+      ).toHaveCount(0)
+      const context = page.getByRole("complementary", {
+        name: "Request context",
+      })
       await page
-        .getByRole("button", { name: "Approve staffing", exact: true })
+        .getByRole("button", { name: "Show service details", exact: true })
         .click()
+      const details = context
+        .locator("summary")
+        .filter({ hasText: /^Request details and actions$/ })
+      if (
+        (await context.locator("details").first().getAttribute("open")) === null
+      )
+        await details.click()
+      await context
+        .getByRole("button", { name: "Manage staff", exact: true })
+        .click()
+      const manage = page.getByRole("dialog", {
+        name: "Manage project staff",
+        exact: true,
+      })
+      await expect(
+        manage.getByRole("checkbox", { name: /Dani Worker/ }),
+      ).toBeChecked()
+      await manage.getByRole("checkbox", { name: /Alex Designer/ }).check()
+      await manage
+        .getByRole("button", { name: "Save staffing", exact: true })
+        .click()
+      await expect(manage).toHaveCount(0)
       await expect.poll(() => actions.length).toBe(4)
       expect(actions[3]).toMatchObject({
         type: "STAFF_PROJECT",
-        employeeIds: ["employee-1"],
+        employeeIds: ["employee-1", "employee-2"],
       })
     },
   )

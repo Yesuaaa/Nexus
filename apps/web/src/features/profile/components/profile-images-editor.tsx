@@ -1,4 +1,6 @@
 "use client"
+
+import { Form } from "@/components/ui/form"
 import { useEffect, useRef, useState, type FormEvent } from "react"
 import { ImagePlus, UserRound } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -116,7 +118,7 @@ export function ProfileImagesEditor({
           Choose your images, review the previews, then save your changes.
         </p>
       </header>
-      <form onSubmit={save} className="grid gap-5">
+      <Form onSubmit={save} className="grid gap-5">
         <fieldset
           disabled={busy}
           className="m-0 grid min-w-0 gap-5 border-0 p-0"
@@ -225,7 +227,7 @@ export function ProfileImagesEditor({
             {busy ? "Saving…" : "Save changes"}
           </Button>
         </footer>
-      </form>
+      </Form>
     </section>
   )
 }

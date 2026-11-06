@@ -399,24 +399,6 @@ export function RequestInboxPage() {
               <SelectItem value="cancelled">Cancelled</SelectItem>
             </SelectContent>
           </Select>
-          <select
-            aria-label="Sort requests"
-            className="h-[34px] rounded-md border border-[#e1e4ea] bg-background px-3 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring max-[560px]:h-11"
-            value={`${sortBy}:${sortDir}`}
-            onChange={(event) => {
-              const [column, direction] = event.target.value.split(":")
-              setSortBy(column as InboxSort)
-              setSortDir(direction as "asc" | "desc")
-              setPage(1)
-            }}
-          >
-            <option value="createdAt:asc">Oldest requests first</option>
-            <option value="createdAt:desc">Newest requests first</option>
-            <option value="reference:asc">Reference: A–Z</option>
-            <option value="reference:desc">Reference: Z–A</option>
-            <option value="service:asc">Service: A–Z</option>
-            <option value="service:desc">Service: Z–A</option>
-          </select>
           {search && (
             <Button
               variant="outline"

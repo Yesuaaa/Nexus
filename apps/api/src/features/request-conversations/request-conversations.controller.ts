@@ -9,6 +9,7 @@ import {
 } from "./request-conversations.realtime.js"
 import {
   getConversationAccess,
+  getConversationStreamAccess,
   listConversations,
   listConversationMessages,
   markConversationRead,
@@ -185,17 +186,21 @@ export function createRequestConversationsRouter(
   router.get("/:id/events", async (request, response) => {
     const id = String(request.params.id)
     const { user, sessionId } = request.auth!
-    const initialAccess = await getConversationAccess(user.id, id)
-    const conversationId = initialAccess.conversation.id
+    const { id: conversationId } = await getConversationStreamAccess(
+      user.id,
+      id,
+    )
     let closed = false
     let headersReady = false
     let release: (() => Promise<void>) | undefined
     let heartbeat: ReturnType<typeof setInterval> | undefined
+    let keepAlive: ReturnType<typeof setInterval> | undefined
     let expiry: ReturnType<typeof setTimeout> | undefined
     function close() {
       if (closed) return
       closed = true
       clearInterval(heartbeat)
+      clearInterval(keepAlive)
       clearTimeout(expiry)
       void release?.().catch(() => {})
       response.end()
@@ -205,8 +210,13 @@ export function createRequestConversationsRouter(
       if (!response.write(`event: ${name}\ndata: {}\n\n`)) close()
     }
     let checking = false
+    let pendingChange = false
     async function validateAndNotify(name: string) {
-      if (closed || checking) return
+      if (closed) return
+      if (checking) {
+        if (name === "messages-changed") pendingChange = true
+        return
+      }
       checking = true
       try {
         await verifyAccessToken(request.header("authorization")!.slice(7))
@@ -224,13 +234,29 @@ export function createRequestConversationsRouter(
           close()
           return
         }
-        await getConversationAccess(user.id, id)
+        await getConversationStreamAccess(user.id, id)
         event(name)
       } catch (error) {
-        if (error instanceof ServiceRequestsError) event("access-revoked")
+        if (
+          error instanceof ServiceRequestsError &&
+          [403, 404].includes(error.status)
+        )
+          event("access-revoked")
+        else {
+          event("reconnecting")
+          console.error(
+            "Conversation stream check failed:",
+            conversationId,
+            error,
+          )
+        }
         close()
       } finally {
         checking = false
+        if (pendingChange && !closed) {
+          pendingChange = false
+          void validateAndNotify("messages-changed")
+        }
       }
     }
     response.once("close", close)
@@ -252,7 +278,7 @@ export function createRequestConversationsRouter(
         return
       }
       // Recheck access after waiting for Supabase before opening the stream.
-      await getConversationAccess(user.id, id)
+      await getConversationStreamAccess(user.id, id)
       if (closed) {
         await release()
         return
@@ -265,6 +291,11 @@ export function createRequestConversationsRouter(
       })
       response.flushHeaders()
       headersReady = true
+      // Keep the proxy socket active even while a database access check is slow.
+      // Comments carry no private data and do not replace authorization checks.
+      keepAlive = setInterval(() => {
+        if (!closed && !response.write(": keep-alive\n\n")) close()
+      }, 10_000)
       event("connected")
       // Resync after subscribing to cover messages written during the handshake.
       event("messages-changed")

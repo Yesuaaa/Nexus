@@ -1,3 +1,4 @@
+import { Form } from "@/components/ui/form"
 import { useEffect, useRef, useState } from "react"
 import {
   CloseIcon,
@@ -985,7 +986,7 @@ export function ManageMembersDrawer({
                       )}
                     </div>
                     {canManage && creatingTeam && (
-                      <form
+                      <Form
                         onSubmit={(event) => void handleCreateTeam(event)}
                         className="grid gap-4 rounded-lg border border-[#e8ebef] p-4"
                       >
@@ -1037,7 +1038,7 @@ export function ManageMembersDrawer({
                             {submitting ? "Saving..." : "Save team"}
                           </Button>
                         </div>
-                      </form>
+                      </Form>
                     )}
                     {detail?.teams.length === 0 ? (
                       <div className="rounded-lg border border-[#e8ebef]">

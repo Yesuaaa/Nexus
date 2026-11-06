@@ -1,5 +1,7 @@
 "use client"
 
+import { Form } from "@/components/ui/form"
+
 import Image from "next/image"
 import { useRef, useState } from "react"
 import {
@@ -556,7 +558,7 @@ export function ServiceFormDialog({
           </ol>
         </nav>
 
-        <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
+        <Form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
           <div className="min-h-0 flex-1 overflow-y-auto">
             <fieldset
               disabled={submitting}
@@ -1444,7 +1446,7 @@ export function ServiceFormDialog({
               </button>
             </div>
           </footer>
-        </form>
+        </Form>
       </DialogContent>
     </Dialog>
   )

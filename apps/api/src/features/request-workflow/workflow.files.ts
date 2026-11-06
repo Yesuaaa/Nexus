@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto"
 import { getPrisma } from "../../lib/db.js"
+import { readTransaction } from "../../lib/database-read.js"
 import { appendEvent, lockRequest, workflowAccess } from "./workflow.access.js"
 import { fileSelect } from "./workflow.snapshot.js"
 import { fail, object, textField, uuid } from "./workflow.validation.js"
@@ -206,33 +207,30 @@ export async function downloadWorkflowFile(
   requestId: string,
   fileId: string,
 ) {
-  return getPrisma()!.$transaction(
-    async (tx) => {
-      const { permissions } = await workflowAccess(tx, userId, requestId)
-      const file = await tx.workflowFile.findFirst({
-        where: {
-          id: fileId,
-          requestId,
-          ...(permissions.isClient ? { clientVisible: true } : {}),
-          ...(!permissions.isClient && !permissions.manage
-            ? {
-                OR: [
-                  ...(permissions.verifyPayment
-                    ? [
-                        { agreements: { some: { requestId } } },
-                        { signatures: { some: { requestId } } },
-                        { payments: { some: { requestId } } },
-                      ]
-                    : []),
-                  { uploaderId: userId },
-                ],
-              }
-            : {}),
-        },
-      })
-      if (!file) fail("File not found", 404)
-      return file
-    },
-    { isolationLevel: "RepeatableRead" },
-  )
+  return readTransaction(async (tx) => {
+    const { permissions } = await workflowAccess(tx, userId, requestId)
+    const file = await tx.workflowFile.findFirst({
+      where: {
+        id: fileId,
+        requestId,
+        ...(permissions.isClient ? { clientVisible: true } : {}),
+        ...(!permissions.isClient && !permissions.manage
+          ? {
+              OR: [
+                ...(permissions.verifyPayment
+                  ? [
+                      { agreements: { some: { requestId } } },
+                      { signatures: { some: { requestId } } },
+                      { payments: { some: { requestId } } },
+                    ]
+                  : []),
+                { uploaderId: userId },
+              ],
+            }
+          : {}),
+      },
+    })
+    if (!file) fail("File not found", 404)
+    return file
+  })
 }

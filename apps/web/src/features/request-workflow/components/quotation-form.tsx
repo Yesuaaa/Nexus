@@ -1,4 +1,6 @@
 "use client"
+
+import { Form, validateFields } from "@/components/ui/form"
 import { useState } from "react"
 import { Check, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -98,7 +100,7 @@ export function QuotationForm({
             "The commencement payment cannot exceed the quotation total.",
           )
       }
-      if (!input.reportValidity()) return false
+      if (!validateFields([input])) return false
     }
     if (index === 2) {
       const validity = new Date(validUntil).getTime()
@@ -109,7 +111,7 @@ export function QuotationForm({
       ) {
         setError("Choose a future validity date and time within the next year.")
         form
-          .querySelector<HTMLButtonElement>("[data-quotation-validity]")
+          .querySelector<HTMLButtonElement>("[data-quotation-validity] button")
           ?.focus()
         return false
       }
@@ -117,7 +119,7 @@ export function QuotationForm({
     return true
   }
   return (
-    <form
+    <Form
       className="@container space-y-3 [&_label]:grid-cols-[minmax(0,1fr)] [&_label]:[overflow-wrap:anywhere]"
       noValidate
       onSubmit={async (event) => {
@@ -518,6 +520,6 @@ export function QuotationForm({
                   : "Send quotation"}
         </Button>
       </WorkflowDraftFooter>
-    </form>
+    </Form>
   )
 }

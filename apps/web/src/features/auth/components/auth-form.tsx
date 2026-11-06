@@ -1,3 +1,4 @@
+import { Form } from "@/components/ui/form"
 import { useRef, useState, type FormEvent } from "react"
 import Link from "next/link"
 import { motion, useReducedMotion } from "framer-motion"
@@ -145,7 +146,7 @@ export function AuthContent({
           </p>
         </div>
 
-        <form
+        <Form
           ref={formRef}
           className={`grid gap-2 ${mode === "register" ? "mt-7" : "mt-9"}`}
           noValidate
@@ -264,7 +265,7 @@ export function AuthContent({
                 ? copy.signInButton
                 : copy.createAccountButton}
           </Button>
-        </form>
+        </Form>
 
         <p className="mt-6 text-center text-sm leading-[1.4] text-[#52688d]">
           {mode === "login" ? copy.noAccountYet : copy.haveAccountYet}{" "}

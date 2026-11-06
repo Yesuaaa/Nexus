@@ -81,10 +81,26 @@ for (const width of [1440, 390]) {
       .getByRole("button", { name: "Create Client", exact: true })
       .click()
     let dialog = page.getByRole("dialog")
+    await dialog.getByRole("button", { name: "Create Client" }).click()
+    await expect(dialog.getByLabel("Full Name")).toBeFocused()
+    await expect(dialog.locator("[data-field-error]")).toHaveCount(4)
+    expect(rejectSave).toBe(true)
     await dialog.getByLabel("Full Name").fill("Test Client")
-    await dialog.getByLabel("Email Address").fill("test@example.com")
+    await dialog.getByLabel("Email Address").fill("invalid-email")
     await dialog.getByLabel("Contact Number").fill("09171234567")
     await dialog.getByLabel("Initial Password").fill("initial client password")
+    await dialog.getByRole("button", { name: "Create Client" }).click()
+    await expect(dialog.getByLabel("Email Address")).toBeFocused()
+    await expect(
+      dialog.getByLabel("Email Address"),
+    ).toHaveAccessibleDescription("Enter a valid email address.")
+    await expect(dialog.locator("[data-field-error]")).toHaveCount(1)
+    expect(rejectSave).toBe(true)
+    await page.screenshot({
+      path: `test-results/client-validation-${width}.png`,
+    })
+    await dialog.getByLabel("Email Address").fill("test@example.com")
+    await expect(dialog.locator("[data-field-error]")).toHaveCount(0)
     await dialog.getByRole("button", { name: "Create Client" }).click()
     await expect(dialog.getByRole("alert")).toContainText("already exists")
     await expect(dialog.getByLabel("Full Name")).toHaveValue("Test Client")

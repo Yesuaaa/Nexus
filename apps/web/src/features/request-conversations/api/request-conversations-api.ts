@@ -1,6 +1,7 @@
 import { apiRequest, apiStreamRequest } from "@/features/auth/api/auth-api"
 import type { ServiceRequestStatus } from "@/features/services/api/services-api"
 import type { WorkflowState } from "@/features/request-workflow/model/workflow"
+import { withUnreadCount } from "../model/unread-messages"
 
 export type RequestMessage = {
   id: string
@@ -71,20 +72,27 @@ export type ConversationList = {
 export function listConversations(before?: string, signal?: AbortSignal) {
   const query = new URLSearchParams()
   if (before) query.set("before", before)
-  return apiRequest<ConversationList>(
-    `/api/request-conversations${query.size ? `?${query}` : ""}`,
-    { signal },
+  return withUnreadCount(
+    "requests",
+    () =>
+      apiRequest<ConversationList>(
+        `/api/request-conversations${query.size ? `?${query}` : ""}`,
+        { signal },
+      ),
+    signal,
   )
 }
 
 export function markConversationRead(id: string) {
-  return apiRequest<{
-    ok: true
-    unreadCount: number
-    conversationUnreadCount: number
-  }>(`/api/request-conversations/${encodeURIComponent(id)}/read`, {
-    method: "PATCH",
-  })
+  return withUnreadCount("requests", () =>
+    apiRequest<{
+      ok: true
+      unreadCount: number
+      conversationUnreadCount: number
+    }>(`/api/request-conversations/${encodeURIComponent(id)}/read`, {
+      method: "PATCH",
+    }),
+  )
 }
 
 export type ConversationHistory = {
