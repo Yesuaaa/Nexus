@@ -1,5 +1,7 @@
 "use client"
 
+import { Form } from "@/components/ui/form"
+
 import { useRef, useState } from "react"
 import { Upload } from "lucide-react"
 import { sileo } from "sileo"
@@ -28,7 +30,7 @@ export function RequirementResponseForm({
   const busy = submitting || controls.busy
 
   return (
-    <form
+    <Form
       className="grid gap-4"
       onSubmit={async (event) => {
         event.preventDefault()
@@ -168,6 +170,6 @@ export function RequirementResponseForm({
       >
         Submit requirement
       </Button>
-    </form>
+    </Form>
   )
 }

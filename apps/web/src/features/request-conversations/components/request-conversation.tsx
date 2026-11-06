@@ -1,4 +1,6 @@
 "use client"
+
+import { Form } from "@/components/ui/form"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 
 import {
@@ -40,6 +42,7 @@ import {
 } from "@/features/request-workflow/hooks/use-request-workflow"
 import { WorkflowEventCard } from "@/features/request-workflow/components/workflow-cards"
 import { WorkflowContextPanel } from "@/features/request-workflow/components/workflow-context-panel"
+import { ProjectStaffingDialog } from "@/features/request-workflow/components/project-staffing-dialog"
 import {
   AttachmentPreview,
   attachmentAccept,
@@ -136,24 +139,6 @@ function MessageDeletionCountdown({ purgeAt }: { purgeAt: string | null }) {
   return <span className="text-[11px] text-[#8791a2]">{label}</span>
 }
 
-function revealWorkflowSection(panelId: string, section: string) {
-  const panel = document.getElementById(panelId)
-  const target = document.getElementById(`${panelId}-${section}`)
-  if (!panel || !target) return
-  let parent: HTMLElement | null = target
-  while (parent) {
-    if (parent instanceof HTMLDetailsElement) parent.open = true
-    if (parent === panel) break
-    parent = parent.parentElement
-  }
-  target.scrollIntoView({
-    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-      ? "auto"
-      : "smooth",
-    block: "nearest",
-  })
-}
-
 type RequestConversationProps = {
   requestId: string
   clientName?: string
@@ -220,7 +205,11 @@ function ConversationPanel({
   const [activeWorkflowDraft, setActiveWorkflowDraft] =
     useState<WorkflowDraftAction | null>(null)
   const [schedulingMeeting, setSchedulingMeeting] = useState(false)
-  const sectionNavigationTimer = useRef<number | null>(null)
+  const [projectSetup, setProjectSetup] = useState<{
+    requestId: string
+    mode: "activation" | "staffing"
+  } | null>(null)
+  const projectSetupTrigger = useRef<HTMLElement | null>(null)
   const messageInputRef = useRef<HTMLTextAreaElement>(null)
   const [specialistProfileOpenFor, setSpecialistProfileOpenFor] = useState<
     string | null
@@ -688,14 +677,6 @@ function ConversationPanel({
     ),
   )
 
-  useEffect(
-    () => () => {
-      if (sectionNavigationTimer.current !== null)
-        window.clearTimeout(sectionNavigationTimer.current)
-    },
-    [],
-  )
-
   function setContextPanel(open: boolean) {
     setContextPanelOpen(open)
     try {
@@ -705,20 +686,13 @@ function ConversationPanel({
     }
   }
 
-  function focusWorkflowSection(section: string) {
-    if (sectionNavigationTimer.current !== null)
-      window.clearTimeout(sectionNavigationTimer.current)
-    setContextPanel(true)
-    const reducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches
-    sectionNavigationTimer.current = window.setTimeout(
-      () => {
-        revealWorkflowSection(`request-context-${requestId}`, section)
-        sectionNavigationTimer.current = null
-      },
-      contextPanelOpen || reducedMotion ? 0 : 260,
-    )
+  function openProjectSetup(mode: "activation" | "staffing") {
+    if (!workflow) return
+    projectSetupTrigger.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null
+    setProjectSetup({ requestId: workflow.request.id, mode })
   }
 
   function applyMessageUpdate(message: RequestMessage) {
@@ -1122,7 +1096,7 @@ function ConversationPanel({
                                 : message.sender.fullName || "Participant"}
                             </p>
                             {editing ? (
-                              <form
+                              <Form
                                 className="w-[min(70vw,420px)] max-w-full space-y-2 rounded-xl border border-[#d8e1ef] bg-white p-3 shadow-sm"
                                 onSubmit={(event) => {
                                   event.preventDefault()
@@ -1189,7 +1163,7 @@ function ConversationPanel({
                                     {messageActionBusy ? "Saving…" : "Save"}
                                   </Button>
                                 </div>
-                              </form>
+                              </Form>
                             ) : (
                               <div className="relative w-fit max-w-full">
                                 <p
@@ -1316,7 +1290,7 @@ function ConversationPanel({
                     </div>
                   )}
                   {history.canSend && (
-                    <form
+                    <Form
                       aria-label="Send a message"
                       onSubmit={(event) => void submit(event)}
                       className="border-t border-[#efefee] px-5 py-3 max-[767px]:px-3"
@@ -1401,7 +1375,7 @@ function ConversationPanel({
                             setActiveWorkflowDraft(null)
                             setSchedulingMeeting(true)
                           }}
-                          onSection={focusWorkflowSection}
+                          onActivate={() => openProjectSetup("activation")}
                           onAttach={() => fileInput.current?.click()}
                           onRetry={() => void refreshWorkflow()}
                         />
@@ -1455,7 +1429,7 @@ function ConversationPanel({
                         {draft.length}/4000
                         {workflow ? " · Attachments up to 5 MB" : ""}
                       </div>
-                    </form>
+                    </Form>
                   )}
                 </div>
               </>
@@ -1469,6 +1443,7 @@ function ConversationPanel({
             workflow={workflow}
             hasSelectedBooking={Boolean(selectedBookingId)}
             controls={controls}
+            onProjectSetup={openProjectSetup}
             onDraft={(action) => {
               setSchedulingMeeting(false)
               setActiveWorkflowDraft(action)
@@ -1615,6 +1590,29 @@ function ConversationPanel({
           />
         )}
       </div>
+      {workflow &&
+        projectSetup?.requestId === workflow.request.id &&
+        workflow.permissions.manage &&
+        workflow.internal &&
+        workflow.approval && (
+          <ProjectStaffingDialog
+            key={`${projectSetup.requestId}-${projectSetup.mode}`}
+            workflow={workflow}
+            controls={controls}
+            mode={projectSetup.mode}
+            onClose={() => setProjectSetup(null)}
+            onReturnFocus={() => {
+              if (projectSetupTrigger.current?.isConnected)
+                projectSetupTrigger.current.focus()
+              else
+                messageInputRef.current?.form
+                  ?.querySelector<HTMLButtonElement>(
+                    '[aria-label="Open request actions"]',
+                  )
+                  ?.focus()
+            }}
+          />
+        )}
       {deleteTarget && (
         <ConfirmationDialog
           title="Delete this message?"

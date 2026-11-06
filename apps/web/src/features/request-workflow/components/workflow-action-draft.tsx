@@ -1,5 +1,7 @@
 "use client"
 
+import { Form } from "@/components/ui/form"
+
 import type { ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import type { WorkflowControls } from "../hooks/use-request-workflow"
@@ -41,7 +43,7 @@ function DraftForm({
   children: ReactNode
 }) {
   return (
-    <form
+    <Form
       className="space-y-3"
       onSubmit={async (event) => {
         event.preventDefault()
@@ -63,7 +65,7 @@ function DraftForm({
           {controls.busy ? "Saving…" : label}
         </Button>
       </WorkflowDraftFooter>
-    </form>
+    </Form>
   )
 }
 

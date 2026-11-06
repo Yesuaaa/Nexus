@@ -1,5 +1,7 @@
 "use client"
 
+import { Form } from "@/components/ui/form"
+
 import {
   useEffect,
   useRef,
@@ -128,7 +130,7 @@ export function ServiceRequirementsStep({
       </button>
 
       <div className="grid grid-cols-[minmax(0,1fr)_300px] items-start gap-6 max-[1000px]:grid-cols-1">
-        <form
+        <Form
           noValidate
           onSubmit={handleSubmit}
           className="min-w-0 rounded-2xl border border-[#dce3ee] bg-white p-6 max-[560px]:p-5"
@@ -265,7 +267,7 @@ export function ServiceRequirementsStep({
               Saved in this browser tab.
             </p>
           )}
-        </form>
+        </Form>
 
         <aside className="grid min-w-0 gap-4" aria-label="Project context">
           <div className="overflow-hidden rounded-2xl border border-[#dce3ee] bg-white">

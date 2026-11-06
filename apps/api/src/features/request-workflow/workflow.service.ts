@@ -918,8 +918,14 @@ async function runAction(
       })
       if (eligible.length !== command.employeeIds.length)
         fail("Select active staff from the responsible department", 409)
-      await tx.projectStaff.deleteMany({ where: { projectId: project.id } })
+      await tx.projectStaff.deleteMany({
+        where: {
+          projectId: project.id,
+          employeeId: { notIn: eligible.map((employee) => employee.id) },
+        },
+      })
       await tx.projectStaff.createMany({
+        skipDuplicates: true,
         data: eligible.map((employee) => ({
           projectId: project.id,
           employeeId: employee.id,

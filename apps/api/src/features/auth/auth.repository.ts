@@ -1,5 +1,6 @@
 import { Role, type User } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
+import { readDatabase } from "../../lib/database-read.js"
 
 export interface CreateUserData {
   email: string
@@ -74,20 +75,22 @@ export const authRepository = {
   async findSessionById(id: string) {
     const prisma = getPrisma()
     if (!prisma) return null
-    return prisma.session.findUnique({
-      where: { id },
-      include: {
-        user: {
-          include: {
-            department: {
-              select: { id: true, name: true, code: true, color: true },
+    return readDatabase(() =>
+      prisma.session.findUnique({
+        where: { id },
+        include: {
+          user: {
+            include: {
+              department: {
+                select: { id: true, name: true, code: true, color: true },
+              },
+              team: { select: { id: true, name: true } },
+              headOf: { select: { id: true, name: true } },
             },
-            team: { select: { id: true, name: true } },
-            headOf: { select: { id: true, name: true } },
           },
         },
-      },
-    })
+      }),
+    )
   },
 
   async rotateRefreshToken(currentHash: string, nextHash: string) {

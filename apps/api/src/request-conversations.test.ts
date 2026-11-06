@@ -10,6 +10,8 @@ import { createApp } from "./app.js"
 import { issueSession } from "./features/auth/auth.service.js"
 import { getPrisma } from "./lib/db.js"
 import type { Role } from "./generated/prisma/client.js"
+import { Prisma } from "./generated/prisma/client.js"
+import { authRepository } from "./features/auth/auth.repository.js"
 
 const sharedConversationMigration =
   "20261102000000_shared_request_conversations"
@@ -170,7 +172,19 @@ test(
       ),
     )
 
-    const server = createApp().listen(0, "127.0.0.1")
+    let notify: (() => void) | undefined
+    let released = 0
+    const server = createApp({
+      conversationRealtime: {
+        async subscribe(_id, onChange, onStatus) {
+          notify = onChange
+          onStatus(true)
+          return async () => {
+            released++
+          }
+        },
+      },
+    }).listen(0, "127.0.0.1")
     resources.server = server
     await new Promise<void>((resolve) => server!.once("listening", resolve))
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`
@@ -252,6 +266,148 @@ test(
           },
         },
       })
+
+    await t.test(
+      "temporary database failures return 503 without discarding the session",
+      async (subtest) => {
+        const failure = new Prisma.PrismaClientKnownRequestError(
+          "Connection closed",
+          {
+            code: "P1017",
+            clientVersion: Prisma.prismaVersion.client,
+          },
+        )
+        subtest.mock.method(authRepository, "findSessionById", async () => {
+          throw failure
+        })
+        const logs = subtest.mock.method(console, "error", () => {})
+        const response = await fetch(`${base}/auth/me`, {
+          headers: client.headers,
+        })
+        assert.equal(response.status, 503)
+        assert.equal(response.headers.get("retry-after"), "2")
+        assert.match(
+          ((await response.json()) as { error: string }).error,
+          /temporarily/,
+        )
+        assert.ok(
+          logs.mock.calls.some(
+            (call) =>
+              call.arguments[1] === "GET" &&
+              call.arguments[2] === "/api/auth/me",
+          ),
+        )
+      },
+    )
+
+    await t.test(
+      "streams stay alive during slow validation, queue changes, and still revoke access",
+      { timeout: 25_000 },
+      async (subtest) => {
+        const controller = new AbortController()
+        subtest.after(() => controller.abort())
+        const response = await fetch(
+          `${base}/request-conversations/${designConversation.id}/events`,
+          {
+            headers: head.headers,
+            signal: controller.signal,
+          },
+        )
+        assert.equal(response.status, 200)
+        const reader = response.body!.getReader()
+        let received = ""
+        const readUntil = async (ready: () => boolean) => {
+          while (!ready()) {
+            const next = await reader.read()
+            assert.equal(next.done, false)
+            received += new TextDecoder().decode(next.value)
+          }
+        }
+        await readUntil(() => received.includes("event: messages-changed"))
+        received = ""
+        let unblock = () => {}
+        const blocked = new Promise<void>((resolve) => {
+          unblock = resolve
+        })
+        subtest.after(unblock)
+        const originalMethod = prisma.session.findFirst
+        const originalFind = originalMethod.bind(prisma.session)
+        let checks = 0
+        const restore = () => {
+          Reflect.set(prisma.session, "findFirst", originalMethod)
+        }
+        subtest.after(restore)
+        Reflect.set(
+          prisma.session,
+          "findFirst",
+          async (...args: Parameters<typeof originalFind>) => {
+            checks++
+            await blocked
+            return originalFind(...args)
+          },
+        )
+        notify!()
+        notify!()
+        await readUntil(() => received.includes(": keep-alive"))
+        assert.equal(checks, 1)
+        assert.equal(received.includes("event: messages-changed"), false)
+        unblock()
+        await readUntil(
+          () => (received.match(/event: messages-changed/g) ?? []).length === 2,
+        )
+        assert.equal(checks, 2)
+        restore()
+
+        await prisma.department.update({
+          where: { id: design.id },
+          data: { headId: null },
+        })
+        try {
+          notify!()
+          await readUntil(() => received.includes("event: access-revoked"))
+          assert.equal((await reader.read()).done, true)
+          assert.equal(released, 1)
+        } finally {
+          await prisma.department.update({
+            where: { id: design.id },
+            data: { headId: head.id },
+          })
+          await reader.cancel()
+        }
+      },
+    )
+
+    await t.test(
+      "a temporary stream failure ends cleanly and asks the client to reconnect",
+      async (subtest) => {
+        const controller = new AbortController()
+        subtest.after(() => controller.abort())
+        const response = await fetch(
+          `${base}/request-conversations/${designConversation.id}/events`,
+          {
+            headers: head.headers,
+            signal: controller.signal,
+          },
+        )
+        assert.equal(response.status, 200)
+        const original = prisma.session.findFirst
+        subtest.after(() => {
+          Reflect.set(prisma.session, "findFirst", original)
+        })
+        subtest.mock.method(console, "error", () => {})
+        Reflect.set(prisma.session, "findFirst", async () => {
+          throw new Prisma.PrismaClientKnownRequestError("Connection closed", {
+            code: "P1017",
+            clientVersion: Prisma.prismaVersion.client,
+          })
+        })
+        notify!()
+        const events = await response.text()
+        assert.match(events, /event: reconnecting/)
+        assert.doesNotMatch(events, /event: access-revoked/)
+        assert.equal(released, 2)
+      },
+    )
 
     await t.test(
       "general and booking-specific messages share one chronological history",

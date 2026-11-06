@@ -176,22 +176,22 @@ export function ClientManagementPage() {
       className={cn(contentClass, "p-[clamp(16px,2.1vw,32px)]")}
       aria-label="Client management"
     >
-      <header className="-mx-[clamp(16px,2.1vw,32px)] flex items-center justify-between gap-6 border-b border-[#eceef1] px-[clamp(16px,2.1vw,32px)] pt-0.5 pb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-4">
+      <header className="-mx-[clamp(16px,2.1vw,32px)] flex items-center justify-between gap-6 border-b border-[#eceef1] px-[clamp(16px,2.1vw,32px)] pt-0.5 pb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-4 max-[560px]:pb-[18px]">
         <div>
           <h1
             id="client-directory-heading"
             tabIndex={-1}
-            className="m-0 text-[clamp(21px,2vw,25px)] leading-[1.25] font-[650] tracking-[-0.03em]"
+            className="m-0 text-[clamp(21px,2vw,25px)] leading-[1.25] font-[650] tracking-[-0.03em] text-foreground"
           >
             Client Management
           </h1>
-          <p className="mt-[5px] mb-0 text-xs leading-[1.45] text-[#52627a]">
+          <p className="mt-[5px] mb-0 text-xs leading-[1.45] text-[#738096]">
             Create and manage client accounts and contact information.
           </p>
         </div>
         <Button
           onClick={() => setFormTarget("create")}
-          className="h-[34px] bg-[#203f8c] text-xs text-white hover:bg-[#172f70] max-[560px]:h-11"
+          className="h-[34px] bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
         >
           <Plus size={16} aria-hidden="true" />
           Create Client
@@ -199,7 +199,7 @@ export function ClientManagementPage() {
       </header>
       <section
         aria-label="Client directory"
-        className="@container mt-[18px] min-w-0"
+        className="@container mt-[18px] min-w-0 max-[767px]:mt-[14px]"
       >
         <div className="flex flex-wrap items-center gap-2.5 pb-4 max-[560px]:flex-col max-[560px]:items-stretch">
           <SearchField
@@ -223,7 +223,7 @@ export function ClientManagementPage() {
           >
             <SelectTrigger
               aria-label="Filter by account status"
-              className="h-[34px] w-[150px] border-[#e1e4ea] text-xs max-[560px]:h-11 max-[560px]:w-full"
+              className="h-[34px] w-[135px] flex-none border-[#e1e4ea] text-xs max-[560px]:w-full"
             >
               <SelectValue />
             </SelectTrigger>
@@ -246,7 +246,7 @@ export function ClientManagementPage() {
             >
               <SelectTrigger
                 aria-label="Sort clients"
-                className="h-[34px] w-[180px] text-xs max-[560px]:h-11 max-[560px]:w-full"
+                className="h-[34px] w-[180px] text-xs max-[560px]:w-full"
               >
                 <SelectValue />
               </SelectTrigger>
@@ -263,7 +263,7 @@ export function ClientManagementPage() {
             <Button
               variant="outline"
               onClick={clearFilters}
-              className="h-[34px] text-xs text-[#244993] max-[560px]:h-11"
+              className="h-[34px] text-xs text-[#244993]"
             >
               Clear filters
             </Button>
@@ -297,7 +297,7 @@ export function ClientManagementPage() {
           }}
         />
         {!error && result.total > 0 && (
-          <footer className="flex flex-wrap items-center justify-between gap-3 pt-4 text-[11px] text-[#52627a]">
+          <footer className="flex flex-wrap items-center justify-between gap-3 pt-4 text-[11px] text-[#738096]">
             <span role="status" aria-live="polite" aria-atomic="true">
               Showing {from}–{to} of {result.total}
             </span>

@@ -9,7 +9,6 @@ import { useCallback, useEffect, useState } from "react"
 import { Bell, CheckCheck } from "lucide-react"
 import { sileo } from "sileo"
 import { apiRequest } from "@/features/auth/api/auth-api"
-import { usePortalAccount } from "@/features/auth/providers/account-context"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,7 +31,6 @@ type Notifications = { notifications: Notification[]; unreadCount: number }
 export function WorkflowNotifications() {
   const { formatDateTime } = useDatePreferences()
   const { preferences } = usePreferences()
-  const account = usePortalAccount()
   const [result, setResult] = useState<Notifications | null>(null)
   const [error, setError] = useState(false)
   const [markingRead, setMarkingRead] = useState(false)
@@ -136,7 +134,7 @@ export function WorkflowNotifications() {
           result.notifications.map((item) => (
             <DropdownMenuItem key={item.id} asChild>
               <Link
-                href={`${account.role === "ADMIN" || account.role === "SUPERADMIN" ? "/workflow-approvals" : "/messages"}?request=${encodeURIComponent(item.requestId)}`}
+                href={`/messages?request=${encodeURIComponent(item.requestId)}`}
                 onClick={() => {
                   if (!item.readAt) void read(item.id)
                 }}

@@ -1,5 +1,7 @@
 "use client"
 
+import { Form } from "@/components/ui/form"
+
 import { useRef, useState } from "react"
 import { CloseIcon } from "@/components/layout/icons"
 import { Input } from "@/components/ui/input"
@@ -134,7 +136,7 @@ export function ClientFormDialog({
             <CloseIcon width="16" height="16" />
           </Button>
         </header>
-        <form onSubmit={submit}>
+        <Form onSubmit={submit}>
           <fieldset
             disabled={pending}
             className="m-0 grid min-w-0 gap-4 border-0 p-5 disabled:opacity-60 sm:grid-cols-2 sm:p-6"
@@ -256,7 +258,7 @@ export function ClientFormDialog({
               {pending ? "Saving…" : client ? "Save Changes" : "Create Client"}
             </Button>
           </footer>
-        </form>
+        </Form>
       </DialogContent>
     </Dialog>
   )

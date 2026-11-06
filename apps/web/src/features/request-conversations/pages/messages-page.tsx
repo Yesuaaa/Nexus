@@ -731,7 +731,7 @@ function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
                       {railCollapsed && Boolean(conversation.unreadCount) && (
                         <span
                           aria-hidden="true"
-                          className="absolute top-1 right-1 rounded-full bg-white px-1 text-[10px] text-[#203f8c] max-[767px]:hidden"
+                          className="absolute top-1 right-1 grid size-4 place-items-center rounded-full bg-[#203f8c] text-[10px] leading-none text-white max-[767px]:hidden"
                         >
                           {conversation.unreadCount > 99
                             ? "99+"
@@ -751,7 +751,7 @@ function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
                           {Boolean(conversation.unreadCount) && (
                             <span
                               className={cn(
-                                "grid min-w-4 shrink-0 place-items-center rounded-full px-1 text-[11px] leading-4",
+                                "grid h-4 min-w-4 shrink-0 place-items-center rounded-full px-1 text-[10px] leading-none",
                                 selected
                                   ? "bg-white text-[#203f8c]"
                                   : "bg-[#203f8c] text-white",

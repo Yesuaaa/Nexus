@@ -1,4 +1,5 @@
 import cors from "cors"
+import { isTemporaryDatabaseError } from "./lib/database-read.js"
 import { trustedProxyAddresses } from "./features/auth/session-location.js"
 import { requireAuth } from "./features/auth/auth.middleware.js"
 import { authRateLimit } from "./features/auth/auth.limiter.js"
@@ -19,6 +20,8 @@ import type { ConversationRealtime } from "./features/request-conversations/requ
 import { requestWorkflowRouter } from "./features/request-workflow/workflow.controller.js"
 import { projectsRouter } from "./features/projects/projects.controller.js"
 import { projectWorkspaceRouter } from "./features/project-workspace/project-workspace.controller.js"
+
+import { workloadRouter } from "./features/workload/workload.controller.js"
 
 export function createApp(
   options: { conversationRealtime?: ConversationRealtime } = {},
@@ -57,6 +60,7 @@ export function createApp(
   app.use("/api/request-inbox", requestInboxRouter)
   app.use("/api/projects", projectsRouter)
   app.use("/api/project-workspace", projectWorkspaceRouter)
+  app.use("/api/workload", workloadRouter)
   app.use(
     "/api/request-conversations",
     createRequestConversationsRouter(options.conversationRealtime),
@@ -83,11 +87,11 @@ const noStore: express.RequestHandler = (_request, response, next) => {
 
 const handleError: ErrorRequestHandler = (
   error: unknown,
-  _request,
+  request,
   response,
-  _next,
+  next,
 ) => {
-  void _next
+  if (response.headersSent) return next(error)
   if (
     error instanceof SyntaxError &&
     "status" in error &&
@@ -100,6 +104,14 @@ const handleError: ErrorRequestHandler = (
     response.status(413).json({ error: "Request payload is too large" })
     return
   }
-  console.error("API request failed:", error)
+  console.error("API request failed:", request.method, request.path, error)
+  if (isTemporaryDatabaseError(error)) {
+    response.setHeader("Retry-After", "2")
+    response.status(503).json({
+      error:
+        "The database is temporarily busy or unavailable. Please try again.",
+    })
+    return
+  }
   response.status(500).json({ error: "Internal server error" })
 }

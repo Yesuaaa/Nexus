@@ -31,6 +31,12 @@ function request(index: number): ServiceRequestSummary {
   }
 }
 async function session(page: Page, role = "USER") {
+  await page.route("**/api/**", (route) =>
+    route.fulfill({
+      status: 404,
+      json: { error: "Endpoint not used by this test" },
+    }),
+  )
   await page.route("**/api/request-conversations/**", (route) => {
     if (new URL(route.request().url()).pathname.endsWith("/events"))
       return route.fulfill({
@@ -285,3 +291,60 @@ for (const role of ["ADMIN", "STAFF", "SUPERADMIN"]) {
     expect(calls).toEqual([])
   })
 }
+
+test("request history refreshes explicitly and keeps details status aligned without polling", async ({
+  page,
+}) => {
+  await session(page)
+  let current = request(1)
+  let reads = 0
+  await page.route("**/api/client/service-requests?*", (route) => {
+    reads++
+    return route.fulfill({
+      json: {
+        requests: [current],
+        total: 1,
+        page: 1,
+        pageSize: 10,
+        summary: {
+          total: 1,
+          pending: current.status === "SUBMITTED" ? 1 : 0,
+          inProgress: current.status === "UNDER_REVIEW" ? 1 : 0,
+          completed: 0,
+          cancelled: 0,
+        },
+      },
+    })
+  })
+  await page.goto("/service-requests")
+  await expect(page.getByText("Showing 1–1 of 1")).toBeVisible()
+  const initialReads = reads
+  await page.waitForTimeout(6_000)
+  expect(reads).toBe(initialReads)
+  current = { ...current, status: "UNDER_REVIEW" }
+  await page
+    .getByRole("button", {
+      name: "View request: Website redesign 1",
+      exact: true,
+    })
+    .filter({ visible: true })
+    .click()
+  await expect(page.getByRole("dialog")).toContainText("Under review")
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Close", exact: true })
+    .click()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(
+    page
+      .getByRole("region", { name: "Request history" })
+      .getByText("Under review", { exact: true })
+      .filter({ visible: true }),
+  ).toBeVisible()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  current = { ...current, status: "CLOSED" }
+  await page.getByRole("button", { name: "Refresh", exact: true }).click()
+  await expect(
+    page.getByText("Closed", { exact: true }).filter({ visible: true }).last(),
+  ).toBeVisible()
+})

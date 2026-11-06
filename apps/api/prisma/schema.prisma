@@ -534,6 +534,7 @@ model Employee {
   portfolioProjects        SpecialistPortfolioProject[]
   socialLinks              SpecialistSocialLink[]
   projectAssignments       ProjectStaff[]
+  workloadCapacities       WorkloadCapacity[]
 
   @@index([departmentId])
   @@index([teamId])
@@ -740,14 +741,29 @@ model WorkflowNotification {
   @@index([userId, readAt, createdAt])
 }
 
+model WorkloadCapacity {
+  id             String   @id @default(cuid())
+  employee       Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId     String
+  week           String   @db.VarChar(10)
+  scheduledHours Float
+  timeOffHours   Float    @default(0)
+  updatedById    String
+
+  @@unique([employeeId, week])
+}
+
 model ProjectStaff {
-  id           String   @id @default(cuid())
-  projectId    String
-  project      Project  @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  employeeId   String
-  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-  approvedById String
-  approvedAt   DateTime @default(now())
+  weeklyHours     Float?
+  allocationStart DateTime?
+  allocationEnd   DateTime?
+  id              String    @id @default(cuid())
+  projectId       String
+  project         Project   @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  employeeId      String
+  employee        Employee  @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  approvedById    String
+  approvedAt      DateTime  @default(now())
 
   @@unique([projectId, employeeId])
   @@index([employeeId])

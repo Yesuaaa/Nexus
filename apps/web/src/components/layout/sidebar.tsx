@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ClipboardList, Inbox, ShieldCheck, UsersRound } from "lucide-react"
+import { ClipboardList, Inbox, UsersRound } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Account } from "@/features/auth/model/types"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
@@ -14,7 +14,6 @@ import {
   canAccessServiceCatalog,
   canAccessServiceManagement,
   canAccessClientManagement,
-  canAccessWorkflowApprovals,
   canAccessProjectWorkspace,
 } from "@/features/auth/model/permissions"
 import { ProjectWorkspaceSidebarLinks } from "@/features/project-workspace/components/project-workspace-sidebar-links"
@@ -257,6 +256,23 @@ export function Sidebar({
           )}
           {canAccessRequestInbox(account) && (
             <Link
+              href="/staff-workload"
+              aria-current={pathname === "/staff-workload" ? "page" : undefined}
+              className={cn(
+                navLinkClass,
+                pathname === "/staff-workload" && "bg-[#e1e3e5]",
+                collapsed &&
+                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
+              )}
+              onClick={onCloseDrawer}
+            >
+              <UsersRound size={20} strokeWidth={1.7} className="flex-none" />
+              <span className={collapsedLabelClass}>Staff Workload</span>
+              {collapsed && <CollapsedTooltip>Staff Workload</CollapsedTooltip>}
+            </Link>
+          )}
+          {canAccessRequestInbox(account) && (
+            <Link
               href="/request-inbox"
               aria-current={
                 pathname.startsWith("/request-inbox") ? "page" : undefined
@@ -280,27 +296,6 @@ export function Sidebar({
               active={pathname.startsWith("/project-workspace")}
               onNavigate={onCloseDrawer}
             />
-          )}
-          {canAccessWorkflowApprovals(account) && (
-            <Link
-              href="/workflow-approvals"
-              aria-current={
-                pathname.startsWith("/workflow-approvals") ? "page" : undefined
-              }
-              className={cn(
-                navLinkClass,
-                collapsed &&
-                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
-                pathname.startsWith("/workflow-approvals") && "bg-[#e1e3e5]",
-              )}
-              onClick={onCloseDrawer}
-            >
-              <ShieldCheck size={20} strokeWidth={1.7} className="flex-none" />
-              <span className={collapsedLabelClass}>Workflow Approvals</span>
-              {collapsed && (
-                <CollapsedTooltip>Workflow Approvals</CollapsedTooltip>
-              )}
-            </Link>
           )}
           {canAccessClientManagement(account) && (
             <Link

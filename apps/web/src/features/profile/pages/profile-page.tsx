@@ -1,5 +1,7 @@
 "use client"
 
+import { Form } from "@/components/ui/form"
+
 import {
   useEffect,
   useId,
@@ -135,7 +137,7 @@ function PersonalDetails({
       title="Personal details"
       description="Keep your name and contact information up to date."
     >
-      <form onSubmit={save} className="grid gap-5">
+      <Form onSubmit={save} className="grid gap-5">
         <fieldset
           disabled={busy}
           className="m-0 grid min-w-0 gap-5 border-0 p-0 sm:grid-cols-2"
@@ -186,7 +188,7 @@ function PersonalDetails({
             {busy ? "Saving…" : "Save personal details"}
           </Button>
         </div>
-      </form>
+      </Form>
     </Section>
   )
 }
@@ -253,7 +255,7 @@ function SpecialistEditor({
       title="Specialist profile"
       description="Introduce yourself to clients. Published projects, specialties, and social links appear on your specialist profile."
     >
-      <form onSubmit={save} className="grid gap-6">
+      <Form onSubmit={save} className="grid gap-6">
         <fieldset
           disabled={busy || uploadingImage}
           className="m-0 grid min-w-0 gap-6 border-0 p-0"
@@ -527,7 +529,7 @@ function SpecialistEditor({
                 : "Save specialist profile"}
           </Button>
         </div>
-      </form>
+      </Form>
     </Section>
   )
 }

@@ -1,4 +1,4 @@
-import { getPrisma } from "../../lib/db.js"
+import { readTransaction } from "../../lib/database-read.js"
 import { workflowAccess, type WorkflowTx } from "./workflow.access.js"
 
 const eventSelect = {
@@ -375,11 +375,5 @@ export async function snapshot(
 }
 
 export function getWorkflow(userId: string, requestId: string) {
-  return getPrisma()!.$transaction((tx) => snapshot(tx, userId, requestId), {
-    isolationLevel: "RepeatableRead",
-    // Heads also load staffing and approval data. Allow for remote database
-    // latency and other bookings loading in the same conversation.
-    maxWait: 10_000,
-    timeout: 20_000,
-  })
+  return readTransaction((tx) => snapshot(tx, userId, requestId))
 }
