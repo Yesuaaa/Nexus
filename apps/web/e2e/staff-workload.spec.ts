@@ -144,6 +144,21 @@ test("department head manages capacity and reviews real allocation state", async
       exact: true,
     }),
   ).toBeVisible()
+  await expect(
+    page.getByRole("button", { name: "Refresh workload" }),
+  ).toHaveCount(0)
+  await expect(
+    page.getByRole("button", { name: "Workload actions" }),
+  ).toHaveCount(0)
+  const dateControl = page.getByLabel("Week starting", { exact: true })
+  const initialWeek = await dateControl.inputValue()
+  await dateControl.fill("")
+  await dateControl.blur()
+  await expect(
+    page.getByText("Enter a valid date (year 0001–9999).", { exact: true }),
+  ).toBeVisible()
+  await dateControl.fill(initialWeek)
+  await dateControl.blur()
   await page
     .getByRole("button", { name: "Edit capacity for Maria Santos" })
     .click()
@@ -232,7 +247,8 @@ test("department head manages capacity and reviews real allocation state", async
   ).toBeVisible()
   await page.getByRole("button", { name: "Cancel", exact: true }).click()
   multiple = true
-  await page.getByRole("button", { name: "Refresh workload" }).click()
+  await page.getByLabel("Week starting", { exact: true }).fill("2026-11-09")
+  await page.getByLabel("Week starting", { exact: true }).blur()
   await expect(page.getByText("12 / 32 hrs", { exact: true })).toBeVisible()
   await page
     .getByRole("button", { name: "More actions for Maria Santos" })
@@ -256,7 +272,8 @@ test("department head manages capacity and reviews real allocation state", async
   await page.getByRole("button", { name: "Close workload details" }).click()
   await expect(page.getByRole("dialog")).toHaveCount(0)
   overloaded = true
-  await page.getByRole("button", { name: "Refresh workload" }).click()
+  await dateControl.fill("2026-11-16")
+  await dateControl.blur()
   await expect(page.getByText("50 / 32 hrs", { exact: true })).toBeVisible()
   await expect(overview.getByRole("img")).toHaveCount(4)
   await expect(
@@ -298,7 +315,8 @@ test("department head manages capacity and reviews real allocation state", async
     fullPage: true,
   })
   empty = true
-  await page.getByRole("button", { name: "Refresh workload" }).click()
+  await dateControl.fill("2026-11-23")
+  await dateControl.blur()
   await expect(
     overview.getByRole("img", {
       name: "Staff by status: Active: 0; On leave: 0; Inactive: 0",

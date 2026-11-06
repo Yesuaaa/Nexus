@@ -16,6 +16,7 @@ import {
   Video,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { DateInput } from "@/components/ui/date-input"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import {
   ConsultationLocation,
@@ -453,7 +454,7 @@ export function QuotationForm({
           />
         </WorkflowField>
         <WorkflowField label="Valid until">
-          <input
+          <DateInput
             name="validUntil"
             defaultValue={
               latest
@@ -467,7 +468,6 @@ export function QuotationForm({
             }
             required
             type="datetime-local"
-            className={workflowInput}
           />
         </WorkflowField>
       </div>
