@@ -29,6 +29,7 @@ export function AuthContent({
 }) {
   const reduceMotion = useReducedMotion()
   const formRef = useRef<HTMLFormElement>(null)
+  const submissionInFlight = useRef(false)
   const [fullName, setFullName] = useState("")
   const [contactNumber, setContactNumber] = useState("")
   const [email, setEmail] = useState("")
@@ -74,7 +75,7 @@ export function AuthContent({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (pending) return
+    if (submissionInFlight.current) return
     setFormError(null)
     const firstInvalid = (Object.keys(fieldIds) as Field[]).find(
       (field) => errors[field],
@@ -86,6 +87,7 @@ export function AuthContent({
       setVisibleErrorField(firstInvalid)
       return
     }
+    submissionInFlight.current = true
     setPending(true)
     try {
       if (mode === "login") {
@@ -120,6 +122,7 @@ export function AuthContent({
         })
       }
     } finally {
+      submissionInFlight.current = false
       setPending(false)
     }
   }

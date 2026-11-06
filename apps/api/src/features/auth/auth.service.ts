@@ -130,6 +130,7 @@ export const authService = {
     if (
       !cleanEmail ||
       typeof password !== "string" ||
+      password.length === 0 ||
       Buffer.byteLength(password) > 1024
     ) {
       throw new AuthError(400, "Provide a valid email and password")
