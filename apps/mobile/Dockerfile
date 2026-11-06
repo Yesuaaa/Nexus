@@ -24,9 +24,9 @@ RUN mkdir -p ${ANDROID_HOME}/cmdline-tools && \
 # Accept licenses and install platform tools, compileSdk 37, and build-tools 36.0.0
 RUN yes | sdkmanager --licenses > /dev/null && \
     sdkmanager --install \
-        "platform-tools" \
-        "platforms;android-37.0" \
-        "build-tools;36.0.0"
+    "platform-tools" \
+    "platforms;android-37.0" \
+    "build-tools;36.0.0"
 
 WORKDIR /workspace/apps/mobile
 
