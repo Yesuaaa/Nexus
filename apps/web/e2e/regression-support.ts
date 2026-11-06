@@ -9,6 +9,7 @@ import type {
   Service,
   ServiceInput,
 } from "../src/features/services/api/services-api"
+import { defaultPreferences } from "../src/features/settings/api/settings-api"
 
 const pageErrors = new WeakMap<Page, string[]>()
 export const live = process.env.NEXUS_E2E_LIVE === "1"
@@ -316,6 +317,13 @@ export async function mockApi(
 
     if (pathname === "/api/auth/me") {
       await route.fulfill({ json: { user: currentUser } })
+      return
+    }
+
+    if (pathname === "/api/auth/settings" && method === "GET") {
+      await route.fulfill({
+        json: { preferences: defaultPreferences, sessions: [] },
+      })
       return
     }
 

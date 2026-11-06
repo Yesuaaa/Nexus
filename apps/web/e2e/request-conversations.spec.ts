@@ -7,6 +7,7 @@ import type {
   ConversationMeeting,
 } from "../src/features/request-conversations/api/request-conversations-api"
 import type { Workflow } from "../src/features/request-workflow/model/workflow"
+import { defaultPreferences } from "../src/features/settings/api/settings-api"
 
 let server: Server
 let streamOrigin: string
@@ -114,6 +115,10 @@ async function mock(
             createdAt: "2026-01-01T00:00:00Z",
           },
         },
+      })
+    if (url.pathname === "/api/auth/settings")
+      return route.fulfill({
+        json: { preferences: defaultPreferences, sessions: [] },
       })
     if (url.pathname === "/api/request-conversations") {
       state.listReads++
@@ -522,6 +527,43 @@ for (const width of [1440, 390]) {
           },
         })
       },
+    )
+    await page.route("**/api/request-conversations/booking-1", (route) =>
+      route.fulfill({
+        json: {
+          archived: false,
+          selectedBookingId: "booking-1",
+          conversation: {
+            id: "booking-1",
+            status: "ACTIVE",
+            department: { id: "design", name: "Design" },
+            head: {
+              id: "head-1",
+              fullName: "Dani Head",
+              specialistId: "specialist-1",
+              imageUrl,
+            },
+            bookings: [
+              {
+                id: "booking-1",
+                title: "Website request",
+                referenceNumber: "SR-20261030-001",
+                status: "UNDER_REVIEW",
+                packageName: "Business Website",
+                serviceName: "Website Development",
+                workflowState: "CONSULTATION",
+                previousWorkflowState: null,
+                createdAt: "2026-10-30T08:00:00Z",
+                updatedAt: "2026-10-30T08:00:00Z",
+              },
+            ],
+            bookingCount: 1,
+          },
+          canSend: true,
+          messages: [],
+          nextCursor: null,
+        },
+      }),
     )
     await page.goto("/messages?request=booking-1", {
       waitUntil: "domcontentloaded",
@@ -1726,7 +1768,7 @@ for (const width of [1440, 390]) {
         exact: true,
       }),
     ).toBeVisible()
-    await expect(log.getByText("Fri, Oct 30", { exact: true })).toHaveCount(1)
+    await expect(log.getByText("10/30/2026", { exact: true })).toHaveCount(1)
     await chat
       .getByLabel("Message", { exact: true })
       .fill("A shared reply stays here")

@@ -82,6 +82,7 @@ test("account status, deletion, and authentication enforce access", async (t) =>
       userId: actor.id,
       user: actor,
       expiresAt: new Date(Date.now() + 60_000),
+      lastActiveAt: new Date(),
     }),
     create: sessionCreate,
     deleteMany: revoke,
