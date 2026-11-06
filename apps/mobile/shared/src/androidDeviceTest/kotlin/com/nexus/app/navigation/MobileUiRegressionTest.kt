@@ -27,6 +27,17 @@ class MobileUiRegressionTest {
     @get:Rule val compose = createComposeRule()
     private val user = AuthUser("client", "mobile@example.com", role = "USER", isActive = true)
 
+    @Test fun headerExposesChatBetweenNotificationAndProfile() {
+        var chats = 0
+        compose.setContent { MaterialTheme { NexusTopAppBar(onChatClick = { chats++ }, notificationUnread = 6) } }
+        val notification = compose.onNodeWithContentDescription("Notifications").fetchSemanticsNode().boundsInRoot
+        val chat = compose.onNodeWithContentDescription("Messages").fetchSemanticsNode().boundsInRoot
+        val profile = compose.onNodeWithContentDescription("Open profile").fetchSemanticsNode().boundsInRoot
+        org.junit.Assert.assertTrue(notification.left < chat.left && chat.left < profile.left)
+        compose.onNodeWithContentDescription("Messages").performClick()
+        compose.runOnIdle { assertEquals(1, chats) }
+    }
+
     @Test fun emptyLoginShowsValidationWithoutMakingANetworkCall() {
         var calls = 0
         compose.setContent {
