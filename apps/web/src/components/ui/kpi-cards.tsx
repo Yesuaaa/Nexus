@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react"
+import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
 
 export type KpiMetric = {
@@ -11,6 +12,7 @@ export type KpiMetric = {
   chartValues?: number[]
   chartLabel?: string
   chartColor?: string
+  chart?: ReactNode
 }
 
 function MiniGraph({
@@ -48,6 +50,7 @@ function MiniGraph({
       role="img"
       aria-label={label}
     >
+      <title>{label}</title>
       <path d={`M 0 ${bottom} H ${width}`} stroke="#dfe6eb" />
       <path d={areaPath} fill={color} fillOpacity="0.1" />
       <path
@@ -95,7 +98,7 @@ export function KpiCards({
         return (
           <article
             key={metric.label}
-            className="min-w-0 rounded-xl border border-[#dfe6eb] bg-[#f8fafb] p-4 shadow-[0_2px_8px_rgb(30_55_80_/_5%)]"
+            className="relative min-w-0 rounded-xl border border-[#dfe6eb] bg-[#f8fafb] p-4 shadow-[0_2px_8px_rgb(30_55_80_/_5%)]"
           >
             <div className="flex min-w-0 items-center gap-2.5">
               <Icon
@@ -114,12 +117,24 @@ export function KpiCards({
                   <span className="sr-only">Loading {metric.label}</span>
                 </div>
                 {showCharts && (
-                  <div className="mt-3 h-10 animate-pulse rounded-md bg-[#edf1f4] motion-reduce:animate-none" />
+                  <div
+                    className={cn(
+                      "animate-pulse rounded-md bg-[#edf1f4] motion-reduce:animate-none",
+                      metric.chart
+                        ? "absolute top-[41px] right-4 h-8 w-[72px]"
+                        : "mt-3 h-10",
+                    )}
+                  />
                 )}
               </>
             ) : (
               <>
-                <p className="mt-3 mb-0 text-2xl leading-none font-semibold tracking-[-0.025em] text-foreground tabular-nums">
+                <p
+                  className={cn(
+                    "mt-3 mb-0 text-2xl leading-none font-semibold tracking-[-0.025em] text-foreground tabular-nums",
+                    showCharts && metric.chart && "pr-[84px]",
+                  )}
+                >
                   {unavailable
                     ? "—"
                     : (metric.formattedValue ??
@@ -128,7 +143,19 @@ export function KpiCards({
                 <p className="mt-1.5 mb-0 truncate text-[11px] text-[#738096]">
                   {unavailable ? "Data unavailable" : metric.description}
                 </p>
+                {showCharts && metric.chart && (
+                  <div className="absolute top-[41px] right-4 h-8 w-[72px]">
+                    {unavailable ? (
+                      <p className="m-0 text-[10px] text-[#738096]">
+                        Unavailable
+                      </p>
+                    ) : (
+                      metric.chart
+                    )}
+                  </div>
+                )}
                 {showCharts &&
+                  !metric.chart &&
                   metric.chartValues &&
                   metric.chartLabel &&
                   metric.chartColor && (

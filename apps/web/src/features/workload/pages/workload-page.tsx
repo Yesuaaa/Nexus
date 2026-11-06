@@ -10,15 +10,13 @@ import {
 } from "@/features/departments/styles/member-panel-styles"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { CloseIcon } from "@/components/layout/icons"
-import { KpiCards, type KpiMetric } from "@/components/ui/kpi-cards"
+import { WorkloadKpiCards } from "../components/workload-kpi-cards"
 import {
-  MoreHorizontal,
-  RefreshCw,
-  Users,
-  UserCheck,
-  ChartNoAxesColumn,
-  TriangleAlert,
-} from "lucide-react"
+  getWorkloadMetrics as metrics,
+  type WorkloadStaff as Staff,
+  type WorkloadAssignment as Assignment,
+} from "../model/workload"
+import { MoreHorizontal, RefreshCw } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -51,25 +49,6 @@ import {
 } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 
-type Assignment = {
-  id: string
-  projectId: string
-  employeeId: string
-  weeklyHours: number | null
-  allocationStart: string | null
-  allocationEnd: string | null
-  project: { id: string; name: string; status: string }
-}
-type Staff = {
-  id: string
-  fullName: string
-  position: string | null
-  status: string
-  profileSpecialties: string[]
-  team: { id: string; name: string } | null
-  capacity: { scheduledHours: number; timeOffHours: number } | null
-  assignments: Assignment[]
-}
 type Project = {
   id: string
   name: string
@@ -89,33 +68,6 @@ function monday() {
   d.setDate(d.getDate() - ((day + 6) % 7))
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
 }
-function metrics(s: Staff) {
-  const capacity = s.capacity
-    ? Math.max(0, s.capacity.scheduledHours - s.capacity.timeOffHours)
-    : null
-  const assigned = s.assignments.reduce((n, a) => n + (a.weeklyHours ?? 0), 0)
-  const unknown = s.assignments.some((a) => a.weeklyHours === null)
-  const utilization =
-    capacity !== null && capacity > 0
-      ? Math.round((assigned / capacity) * 100)
-      : null
-  const availability =
-    s.status !== "ACTIVE"
-      ? s.status === "ON_LEAVE"
-        ? "On leave"
-        : "Inactive"
-      : capacity === null || unknown
-        ? "Needs setup"
-        : assigned > (capacity ?? 0)
-          ? "Overloaded"
-          : capacity === 0
-            ? "Unavailable"
-            : (utilization ?? 0) >= 90
-              ? "Near capacity"
-              : "Available"
-  return { capacity, assigned, unknown, utilization, availability }
-}
-
 export function WorkloadPage() {
   const account = usePortalAccount()
   const [week, setWeek] = useState(monday)
@@ -204,60 +156,6 @@ export function WorkloadPage() {
     setProjection("")
     setAllocation({ projectId, employeeId, previousEmployeeId })
   }
-  const recorded = staff.filter(
-    (person) =>
-      person.status === "ACTIVE" &&
-      metrics(person).capacity !== null &&
-      !metrics(person).unknown,
-  )
-  const totalCapacity = recorded.reduce(
-    (total, person) => total + (metrics(person).capacity ?? 0),
-    0,
-  )
-  const totalHours = recorded.reduce(
-    (total, person) => total + metrics(person).assigned,
-    0,
-  )
-  const summaryMetrics: KpiMetric[] = [
-    {
-      label: "Total Staff",
-      value: staff.length,
-      description: "Staff in your department",
-      icon: Users,
-      iconClassName: "text-[#2058d4]",
-    },
-    {
-      label: "Available Staff",
-      value: staff.filter(
-        (person) => metrics(person).availability === "Available",
-      ).length,
-      description: "Available for additional work",
-      icon: UserCheck,
-      iconClassName: "text-[#159447]",
-    },
-    {
-      label: "Avg. Utilization",
-      value: totalCapacity ? Math.round((totalHours / totalCapacity) * 100) : 0,
-      formattedValue: totalCapacity
-        ? Math.round((totalHours / totalCapacity) * 100) + "%"
-        : "—",
-      description:
-        recorded.length < staff.length
-          ? "Based on staff with recorded hours"
-          : "Assigned hours against capacity",
-      icon: ChartNoAxesColumn,
-      iconClassName: "text-[#2058d4]",
-    },
-    {
-      label: "Overloaded",
-      value: staff.filter(
-        (person) => metrics(person).availability === "Overloaded",
-      ).length,
-      description: "Staff exceeding weekly capacity",
-      icon: TriangleAlert,
-      iconClassName: "text-[#d81758]",
-    },
-  ]
   function selectAssignment(person: Staff, action: "reassign" | "unassign") {
     if (person.assignments.length === 1)
       applyAssignmentAction(person, person.assignments[0], action)
@@ -361,13 +259,10 @@ export function WorkloadPage() {
         </div>
       </header>
       <div className="mt-[18px] max-[560px]:mt-[14px]">
-        <KpiCards
-          metrics={summaryMetrics}
-          label="Staff workload overview"
+        <WorkloadKpiCards
+          staff={staff}
           pending={loading && !data}
           unavailable={!!error && !data}
-          showCharts={false}
-          className="grid-cols-4 max-[1000px]:grid-cols-2 max-[560px]:grid-cols-1"
         />
       </div>
       <section className="mt-4 min-w-0" aria-label="Staff workload directory">

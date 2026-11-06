@@ -65,7 +65,7 @@ export function RequestInboxTable({
   onDelete: (request: InboxRequest) => void
   sortBy: InboxSort
   sortDir: "asc" | "desc"
-  onSort: (column: "reference" | "service") => void
+  onSort: (column: InboxSort) => void
 }) {
   const { formatDate } = useDatePreferences()
   return (
@@ -75,15 +75,23 @@ export function RequestInboxTable({
       aria-busy={loading}
       className="@container min-w-0 overflow-x-clip rounded-lg border border-[#e8ebef] bg-background"
     >
-      <div role="rowgroup" className="@max-[800px]:hidden">
+      <div role="rowgroup">
         <div
           role="row"
           className={cn(
             grid,
-            "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground",
+            "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground @max-[800px]:flex @max-[800px]:flex-wrap @max-[800px]:gap-x-4 @max-[800px]:gap-y-0",
           )}
         >
-          {(["service", "reference"] as const).map((column) => (
+          {(
+            [
+              ["service", "Service"],
+              ["reference", "Reference"],
+              ["client", "Client"],
+              ["status", "Status"],
+              ["createdAt", "Date requested"],
+            ] as const
+          ).map(([column, label]) => (
             <span
               key={column}
               role="columnheader"
@@ -97,11 +105,11 @@ export function RequestInboxTable({
             >
               <button
                 type="button"
-                className="inline-flex min-h-9 cursor-pointer items-center gap-1 rounded-sm text-xs font-semibold text-[#203f8c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#203f8c]"
+                className="inline-flex min-h-9 cursor-pointer items-center gap-1 rounded-sm text-xs font-semibold whitespace-nowrap text-[#203f8c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#203f8c] @max-[800px]:min-h-11"
                 onClick={() => onSort(column)}
-                aria-label={`Sort by ${column}${sortBy === column ? `, ${sortDir === "asc" ? "ascending" : "descending"}` : ""}`}
+                aria-label={`Sort by ${label.toLowerCase()}${sortBy === column ? `, ${sortDir === "asc" ? "ascending" : "descending"}` : ""}`}
               >
-                {column === "service" ? "Service" : "Reference"}
+                {label}
                 {sortBy === column ? (
                   sortDir === "asc" ? (
                     <ArrowUp size={12} aria-hidden="true" />
@@ -114,11 +122,9 @@ export function RequestInboxTable({
               </button>
             </span>
           ))}
-          {["Client", "Status", "Date requested", "Actions"].map((title) => (
-            <span role="columnheader" key={title}>
-              {title}
-            </span>
-          ))}
+          <span role="columnheader" className="@max-[800px]:hidden">
+            Actions
+          </span>
         </div>
       </div>
       {(loading && requests.length === 0) || error ? (

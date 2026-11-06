@@ -11,7 +11,7 @@ export type InboxFilters = {
     | "ready-for-quotation"
     | "closed"
     | "cancelled"
-  sortBy: "createdAt" | "reference" | "service"
+  sortBy: "createdAt" | "reference" | "service" | "client" | "status"
   sortDir: "asc" | "desc"
 }
 
@@ -40,7 +40,9 @@ export function parseInboxFilters(
     typeof view !== "string" ||
     (sortBy !== "createdAt" &&
       sortBy !== "reference" &&
-      sortBy !== "service") ||
+      sortBy !== "service" &&
+      sortBy !== "client" &&
+      sortBy !== "status") ||
     (sortDir !== "asc" && sortDir !== "desc")
   )
     return null

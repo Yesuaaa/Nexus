@@ -179,7 +179,7 @@ test(
       })
 
     await t.test(
-      "all status filters and stable reference/service sorting work across pages",
+      "all status filters and stable column sorting work across pages",
       async () => {
         const names = await Promise.all(
           ["Aardvark", "Zebra"].map((name) =>
@@ -200,21 +200,32 @@ test(
           "CLOSED",
           "CANCELLED",
         ] as const
+        const alphaClient = await user("AlphaClient", "USER")
+        const zebraClient = await user("ZebraClient", "USER")
+        const unnamedClient = await user("UnnamedClient", "USER")
+        await prisma.user.update({
+          where: { id: unnamedClient.id },
+          data: { fullName: null },
+        })
+        const clients = [client, zebraClient, alphaClient, unnamedClient]
         try {
           await prisma.serviceRequest.createMany({
             data: Array.from({ length: 13 }, (_, index) => ({
-              clientId: client.id,
+              clientId: clients[index % clients.length]!.id,
               serviceId: names[index % 2]!.id,
               referenceNumber: `SR-SORT-${String(index).padStart(2, "0")}`,
               title: "Sorting fixture",
               status: statuses[index % statuses.length],
+              createdAt: new Date(Date.UTC(2026, 9, 1 + (index % 5))),
             })),
           })
           type Row = {
             id: string
             referenceNumber: string
             status: string
+            createdAt: string
             service: { name: string }
+            client: { fullName: string | null }
           }
           const list = async (query: string) => {
             const response = await get(
@@ -242,7 +253,13 @@ test(
               result.serviceRequests.every((row) => row.status === status),
             )
           }
-          for (const sortBy of ["reference", "service"])
+          for (const sortBy of [
+            "reference",
+            "service",
+            "client",
+            "status",
+            "createdAt",
+          ] as const)
             for (const direction of ["asc", "desc"]) {
               const one = await list(
                 `view=all&sortBy=${sortBy}&sortDir=${direction}&page=1`,
@@ -255,10 +272,23 @@ test(
               assert.equal(rows.length, 13)
               assert.equal(new Set(rows.map((row) => row.id)).size, 13)
               const expected = [...rows].sort((a, b) => {
-                const left =
-                  sortBy === "reference" ? a.referenceNumber : a.service.name
-                const right =
-                  sortBy === "reference" ? b.referenceNumber : b.service.name
+                if (sortBy === "client") {
+                  if (a.client.fullName === null && b.client.fullName !== null)
+                    return 1
+                  if (a.client.fullName !== null && b.client.fullName === null)
+                    return -1
+                }
+                const values = (row: Row) => ({
+                  reference: row.referenceNumber,
+                  service: row.service.name,
+                  client: row.client.fullName ?? "",
+                  status: String(
+                    statuses.indexOf(row.status as (typeof statuses)[number]),
+                  ),
+                  createdAt: row.createdAt,
+                })
+                const left = values(a)[sortBy]
+                const right = values(b)[sortBy]
                 return (
                   left.localeCompare(right) * (direction === "asc" ? 1 : -1) ||
                   a.id.localeCompare(b.id)
