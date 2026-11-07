@@ -73,10 +73,18 @@ export async function listInbox(userId: string, filters: InboxFilters) {
       JOIN pg_namespace n ON n.oid = t.typnamespace
       WHERE t.typname = 'ServiceRequestStatus' AND n.nspname = current_schema()
     `
+      const statusByView = {
+        pending: "SUBMITTED",
+        "under-review": "UNDER_REVIEW",
+        "awaiting-information": "AWAITING_CLIENT_INFO",
+        "ready-for-quotation": "READY_FOR_QUOTATION",
+        closed: "CLOSED",
+        cancelled: "CANCELLED",
+      } as const
       const statuses =
-        filters.view === "pending"
-          ? (["SUBMITTED"] as const)
-          : (["UNDER_REVIEW"] as const)
+        filters.view === "all"
+          ? Object.values(statusByView)
+          : [statusByView[filters.view]]
       const where: Prisma.ServiceRequestWhereInput = {
         ...departmentScope(userId),
         status: {
@@ -122,7 +130,22 @@ export async function listInbox(userId: string, filters: InboxFilters) {
       const serviceRequests = await tx.serviceRequest.findMany({
         where,
         select: requestSelect,
-        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        orderBy: [
+          filters.sortBy === "service"
+            ? { service: { name: filters.sortDir } }
+            : filters.sortBy === "reference"
+              ? { referenceNumber: { sort: filters.sortDir, nulls: "last" } }
+              : filters.sortBy === "client"
+                ? {
+                    client: {
+                      fullName: { sort: filters.sortDir, nulls: "last" },
+                    },
+                  }
+                : filters.sortBy === "status"
+                  ? { status: filters.sortDir }
+                  : { createdAt: filters.sortDir },
+          { id: "asc" },
+        ],
         take: 10,
         skip: (filters.page - 1) * 10,
       })
@@ -160,7 +183,7 @@ export async function acceptInboxRequest(userId: string, id: string) {
     const where = { id, ...departmentScope(userId) }
     const request = await tx.serviceRequest.findFirst({
       where,
-      select: { status: true, acceptedDepartmentId: true },
+      select: { clientId: true, status: true, acceptedDepartmentId: true },
     })
     if (!request) throw new ServiceRequestsError(404, "Request not found")
     if (
@@ -200,6 +223,21 @@ export async function acceptInboxRequest(userId: string, id: string) {
         409,
         "This request changed. Refresh the inbox and try again.",
       )
+    const conversation = await tx.requestConversation.upsert({
+      where: {
+        clientId_departmentId: {
+          clientId: request.clientId,
+          departmentId: department.id,
+        },
+      },
+      create: { clientId: request.clientId, departmentId: department.id },
+      update: { updatedAt: new Date() },
+      select: { id: true },
+    })
+    await tx.serviceRequest.update({
+      where: { id },
+      data: { conversationId: conversation.id },
+    })
     await initializeWorkflow(tx, id, userId)
     return tx.serviceRequest.findUniqueOrThrow({
       where: { id },

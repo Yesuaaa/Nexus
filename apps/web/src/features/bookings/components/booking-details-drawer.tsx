@@ -1,5 +1,7 @@
 "use client"
 
+import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
+
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import { X } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -14,7 +16,6 @@ import {
 import { useAnimatedPanelClose } from "@/components/ui/use-animated-panel-close"
 import { cn } from "@/lib/utils"
 import { getBooking, type BookingDetails } from "../api/bookings-api"
-import { bookingDate } from "../model/booking-status"
 import { BookingStatusPill } from "./booking-status-pill"
 import { RequestMessagesLink } from "@/features/request-conversations/components/request-messages-link"
 
@@ -30,6 +31,7 @@ export function BookingDetailsDrawer({
   closeDisabled = false,
   showMessagesLink = true,
   statusLabels,
+  onLoaded,
 }: {
   id: string
   onClose: () => void
@@ -41,8 +43,10 @@ export function BookingDetailsDrawer({
   fallbackFocusId?: string
   closeDisabled?: boolean
   showMessagesLink?: boolean | ((details: BookingDetails) => boolean)
+  onLoaded?: (details: BookingDetails) => void
   statusLabels?: Partial<Record<string, string>>
 }) {
+  const { formatDate } = useDatePreferences()
   const { open, handleOpenChange } = useAnimatedPanelClose(onClose)
   const openerRef = useRef(
     typeof document === "undefined" ? null : document.activeElement,
@@ -59,6 +63,7 @@ export function BookingDetailsDrawer({
       .then((value) => {
         if (!active) return
         setDetails(value)
+        onLoaded?.(value)
         setError("")
         setResolvedKey(requestKey)
       })
@@ -74,7 +79,7 @@ export function BookingDetailsDrawer({
     return () => {
       active = false
     }
-  }, [id, revision, requestKey, loadDetails])
+  }, [id, revision, requestKey, loadDetails, onLoaded])
 
   return (
     <Sheet
@@ -165,8 +170,8 @@ export function BookingDetailsDrawer({
                       details.referenceNumber || details.id,
                     ],
                     ["Package", details.packageName || "Standard service"],
-                    ["Date requested", bookingDate(details.createdAt)],
-                    ["Last updated", bookingDate(details.updatedAt)],
+                    ["Date requested", formatDate(details.createdAt)],
+                    ["Last updated", formatDate(details.updatedAt)],
                     [
                       "Expected timeline",
                       details.expectedTimeline || "Not specified",

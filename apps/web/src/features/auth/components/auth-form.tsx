@@ -1,3 +1,4 @@
+import { Form } from "@/components/ui/form"
 import { useRef, useState, type FormEvent } from "react"
 import Link from "next/link"
 import { motion, useReducedMotion } from "framer-motion"
@@ -29,6 +30,7 @@ export function AuthContent({
 }) {
   const reduceMotion = useReducedMotion()
   const formRef = useRef<HTMLFormElement>(null)
+  const submissionInFlight = useRef(false)
   const [fullName, setFullName] = useState("")
   const [contactNumber, setContactNumber] = useState("")
   const [email, setEmail] = useState("")
@@ -74,7 +76,7 @@ export function AuthContent({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (pending) return
+    if (submissionInFlight.current) return
     setFormError(null)
     const firstInvalid = (Object.keys(fieldIds) as Field[]).find(
       (field) => errors[field],
@@ -86,6 +88,7 @@ export function AuthContent({
       setVisibleErrorField(firstInvalid)
       return
     }
+    submissionInFlight.current = true
     setPending(true)
     try {
       if (mode === "login") {
@@ -120,6 +123,7 @@ export function AuthContent({
         })
       }
     } finally {
+      submissionInFlight.current = false
       setPending(false)
     }
   }
@@ -142,7 +146,7 @@ export function AuthContent({
           </p>
         </div>
 
-        <form
+        <Form
           ref={formRef}
           className={`grid gap-2 ${mode === "register" ? "mt-7" : "mt-9"}`}
           noValidate
@@ -261,7 +265,7 @@ export function AuthContent({
                 ? copy.signInButton
                 : copy.createAccountButton}
           </Button>
-        </form>
+        </Form>
 
         <p className="mt-6 text-center text-sm leading-[1.4] text-[#52688d]">
           {mode === "login" ? copy.noAccountYet : copy.haveAccountYet}{" "}

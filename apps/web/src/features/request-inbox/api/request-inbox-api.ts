@@ -18,17 +18,30 @@ export type InboxList = {
   page: number
   pageSize: number
 }
-export type InboxView = "pending" | "under-review"
+export type InboxView =
+  | "pending"
+  | "under-review"
+  | "all"
+  | "awaiting-information"
+  | "ready-for-quotation"
+  | "closed"
+  | "cancelled"
+export type InboxSort =
+  "createdAt" | "reference" | "service" | "client" | "status"
 
 export function listInbox(filters: {
   search: string
   view: InboxView
   page: number
+  sortBy: InboxSort
+  sortDir: "asc" | "desc"
 }): Promise<InboxList> {
   const query = new URLSearchParams({
     search: filters.search,
     view: filters.view,
     page: String(filters.page),
+    sortBy: filters.sortBy,
+    sortDir: filters.sortDir,
   })
   return apiRequest(`/api/request-inbox?${query}`)
 }

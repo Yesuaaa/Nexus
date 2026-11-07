@@ -1,5 +1,7 @@
 "use client"
 
+import { Form } from "@/components/ui/form"
+
 import { useRef, useState, type FormEvent } from "react"
 import { useRouter } from "next/navigation"
 import { Eye, EyeOff, LoaderCircle } from "lucide-react"
@@ -139,7 +141,7 @@ export function ChangePasswordDialog({
             required.
           </DialogDescription>
         </DialogHeader>
-        <form
+        <Form
           noValidate
           onSubmit={(event) => void handleSubmit(event)}
           aria-busy={saving}
@@ -262,7 +264,7 @@ export function ChangePasswordDialog({
               </button>
             </div>
           </fieldset>
-        </form>
+        </Form>
       </DialogContent>
     </Dialog>
   )

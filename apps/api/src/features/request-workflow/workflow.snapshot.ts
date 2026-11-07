@@ -1,4 +1,4 @@
-import { getPrisma } from "../../lib/db.js"
+import { readTransaction } from "../../lib/database-read.js"
 import { workflowAccess, type WorkflowTx } from "./workflow.access.js"
 
 const eventSelect = {
@@ -29,9 +29,9 @@ function nextAction(state: string) {
       "The client must formally accept, decline, or request revisions to the latest valid quotation.",
     REVISION_REQUESTED: "The department head will send a revised quotation.",
     AGREEMENT_PAYMENT_PENDING:
-      "Complete the agreement and payment checklist. Payment verification is manual.",
+      "Complete the required payment before the department head assigns staff and activates the service workspace.",
     READY_FOR_ACTIVATION:
-      "The department head must approve staffing and activate the project.",
+      "Next: activate the service and open its project workspace. The department head reviews staff assignments during setup.",
     ACTIVE_PROJECT: "Your project workspace is ready.",
     ON_HOLD: "This request is on hold. The department head can resume it.",
     CANCELLED: "This workflow has been cancelled.",
@@ -52,6 +52,16 @@ export async function snapshot(
   const state =
     workflow?.state ||
     (request.status === "CANCELLED" ? "CANCELLED" : "PENDING_REVIEW")
+  const consultationComplete =
+    participant &&
+    Boolean(
+      (await tx.workflowConsultation.count({
+        where: { requestId, status: "COMPLETED" },
+      })) ||
+      (await tx.conversationMeetingBooking.count({
+        where: { bookingId: requestId, meeting: { status: "COMPLETED" } },
+      })),
+    )
   const base = {
     request: {
       id: request.id,
@@ -77,9 +87,12 @@ export async function snapshot(
     nextAction: nextAction(state),
     consultationRequired:
       workflow?.consultationRequired ?? request.service.requiresConsultation,
+    consultationComplete,
     quotationApprovalRequired:
       workflow?.quotationApprovalRequired ??
       request.service.requiresQuotationApproval,
+    paymentRequired:
+      workflow?.paymentRequired ?? request.service.requiresPayment,
     permissions,
   }
   if (!workflow)
@@ -118,6 +131,10 @@ export async function snapshot(
             status: true,
             submission: true,
             fileId: true,
+            attachments: {
+              select: { id: true },
+              orderBy: { createdAt: "asc" },
+            },
             reviewNote: true,
             createdAt: true,
           },
@@ -332,7 +349,10 @@ export async function snapshot(
   // Prisma decimals use a canonical two-place string in the public contract.
   return {
     ...base,
-    requirements,
+    requirements: requirements.map(({ attachments, ...requirement }) => ({
+      ...requirement,
+      fileIds: attachments.map((file) => file.id),
+    })),
     files,
     consultations,
     quotations: quotations.map((quote) => ({
@@ -355,7 +375,5 @@ export async function snapshot(
 }
 
 export function getWorkflow(userId: string, requestId: string) {
-  return getPrisma()!.$transaction((tx) => snapshot(tx, userId, requestId), {
-    isolationLevel: "RepeatableRead",
-  })
+  return readTransaction((tx) => snapshot(tx, userId, requestId))
 }

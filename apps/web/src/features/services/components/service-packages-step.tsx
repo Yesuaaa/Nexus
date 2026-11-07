@@ -114,6 +114,10 @@ export function ServicePackagesStep({
                     isSelected
                       ? "border-[#203f80] bg-[#294c96] text-white"
                       : "border-[#e1e7f0] bg-[#fafbfd]",
+                    recommended &&
+                      (isSelected
+                        ? "bg-linear-to-br from-[#365fb2] via-[#294c96] to-[#172f68] shadow-[0_8px_24px_rgb(32_63_128_/_16%)]"
+                        : "border-[#b9cdf2] bg-linear-to-br from-[#e4edff] via-[#f0f5ff] to-[#fafbfd] shadow-[0_6px_20px_rgb(32_63_128_/_9%)]"),
                   )}
                   aria-labelledby={`package-${option.id}-name`}
                 >
@@ -135,7 +139,7 @@ export function ServicePackagesStep({
                           "rounded-md px-2.5 py-1.5 text-xs font-semibold",
                           isSelected
                             ? "bg-white text-[#234488]"
-                            : "bg-[#eaf0ff] text-[#234488]",
+                            : "bg-[#234488] text-white",
                         )}
                       >
                         Recommended

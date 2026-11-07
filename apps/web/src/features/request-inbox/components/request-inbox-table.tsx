@@ -1,20 +1,27 @@
-import { Eye, MessageSquare, Trash2 } from "lucide-react"
+import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Eye,
+  MessageSquare,
+  Trash2,
+} from "lucide-react"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { Button } from "@/components/ui/button"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import { BookingStatusPill } from "@/features/bookings/components/booking-status-pill"
-import { bookingDate } from "@/features/bookings/model/booking-status"
 import { cn } from "@/lib/utils"
-import type { InboxRequest } from "../api/request-inbox-api"
+import type { InboxRequest, InboxSort } from "../api/request-inbox-api"
 
 const grid =
-  "grid grid-cols-[minmax(180px,1.6fr)_minmax(150px,1.2fr)_minmax(110px,1fr)_minmax(120px,1fr)_112px] items-center gap-3.5 @max-[800px]:grid-cols-[minmax(0,1fr)_auto]"
+  "grid grid-cols-[minmax(120px,1.2fr)_minmax(120px,1.2fr)_minmax(130px,1.2fr)_minmax(100px,1fr)_minmax(100px,1fr)_112px] items-center gap-3.5 @max-[800px]:grid-cols-[minmax(0,1fr)_auto]"
 
 function rowClass(_request: InboxRequest, _index: number, isLast: boolean) {
   return cn(
     grid,
-    "h-[58px] border-b border-[#eceef1] bg-background px-4 py-[7px] text-xs text-foreground transition-colors hover:bg-[#e8eef2] @max-[800px]:h-[184px] @max-[800px]:gap-y-2",
+    "h-[58px] border-b border-[#eceef1] bg-background px-4 py-[7px] text-xs text-foreground transition-colors hover:bg-[#e8eef2] @max-[800px]:h-[210px] @max-[800px]:gap-y-2",
     isLast && "rounded-b-[7px] border-b-0",
   )
 }
@@ -43,6 +50,9 @@ export function RequestInboxTable({
   onView,
   onGoToChat,
   onDelete,
+  sortBy,
+  sortDir,
+  onSort,
 }: {
   requests: InboxRequest[]
   loading: boolean
@@ -53,7 +63,11 @@ export function RequestInboxTable({
   onView: (request: InboxRequest) => void
   onGoToChat: (request: InboxRequest) => void
   onDelete: (request: InboxRequest) => void
+  sortBy: InboxSort
+  sortDir: "asc" | "desc"
+  onSort: (column: InboxSort) => void
 }) {
+  const { formatDate } = useDatePreferences()
   return (
     <div
       role="table"
@@ -61,25 +75,56 @@ export function RequestInboxTable({
       aria-busy={loading}
       className="@container min-w-0 overflow-x-clip rounded-lg border border-[#e8ebef] bg-background"
     >
-      <div role="rowgroup" className="@max-[800px]:sr-only">
+      <div role="rowgroup">
         <div
           role="row"
           className={cn(
             grid,
-            "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground",
+            "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground @max-[800px]:flex @max-[800px]:flex-wrap @max-[800px]:gap-x-4 @max-[800px]:gap-y-0",
           )}
         >
-          {[
-            "Service / Reference",
-            "Client",
-            "Status",
-            "Date requested",
-            "Actions",
-          ].map((title) => (
-            <span role="columnheader" key={title}>
-              {title}
+          {(
+            [
+              ["service", "Service"],
+              ["reference", "Reference"],
+              ["client", "Client"],
+              ["status", "Status"],
+              ["createdAt", "Date requested"],
+            ] as const
+          ).map(([column, label]) => (
+            <span
+              key={column}
+              role="columnheader"
+              aria-sort={
+                sortBy === column
+                  ? sortDir === "asc"
+                    ? "ascending"
+                    : "descending"
+                  : "none"
+              }
+            >
+              <button
+                type="button"
+                className="inline-flex min-h-9 cursor-pointer items-center gap-1 rounded-sm text-xs font-semibold whitespace-nowrap text-[#203f8c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#203f8c] @max-[800px]:min-h-11"
+                onClick={() => onSort(column)}
+                aria-label={`Sort by ${label.toLowerCase()}${sortBy === column ? `, ${sortDir === "asc" ? "ascending" : "descending"}` : ""}`}
+              >
+                {label}
+                {sortBy === column ? (
+                  sortDir === "asc" ? (
+                    <ArrowUp size={12} aria-hidden="true" />
+                  ) : (
+                    <ArrowDown size={12} aria-hidden="true" />
+                  )
+                ) : (
+                  <ArrowUpDown size={12} aria-hidden="true" />
+                )}
+              </button>
             </span>
           ))}
+          <span role="columnheader" className="@max-[800px]:hidden">
+            Actions
+          </span>
         </div>
       </div>
       {(loading && requests.length === 0) || error ? (
@@ -87,7 +132,7 @@ export function RequestInboxTable({
           <div role="row">
             <div
               role="cell"
-              aria-colspan={5}
+              aria-colspan={6}
               className="grid min-h-[150px] place-content-center gap-3 p-6 text-center text-xs text-[#52627a]"
             >
               {loading ? (
@@ -128,8 +173,16 @@ export function RequestInboxTable({
                   {request.service.name}
                   <HoverTooltip>{request.service.name}</HoverTooltip>
                 </p>
-                <p className="mt-1 mb-0 truncate text-[11px] text-[#738096]">
-                  {request.referenceNumber || request.id}
+              </div>
+              <div
+                role="cell"
+                className="min-w-0 @max-[800px]:col-span-2 @max-[800px]:row-start-2"
+              >
+                <p className="m-0 truncate text-[11px] text-[#52627a]">
+                  <span className="mr-1.5 hidden text-[#738096] @max-[800px]:inline">
+                    Reference
+                  </span>
+                  <span>{request.referenceNumber || request.id}</span>
                   <HoverTooltip>
                     {request.referenceNumber || request.id}
                   </HoverTooltip>
@@ -137,7 +190,7 @@ export function RequestInboxTable({
               </div>
               <div
                 role="cell"
-                className="min-w-0 @max-[800px]:col-span-2 @max-[800px]:row-start-2"
+                className="min-w-0 @max-[800px]:col-span-2 @max-[800px]:row-start-3"
               >
                 <p className="m-0 truncate font-medium">
                   <span className="mr-1.5 hidden text-[#738096] @max-[800px]:inline">
@@ -152,19 +205,19 @@ export function RequestInboxTable({
               </div>
               <div
                 role="cell"
-                className="@max-[800px]:col-span-2 @max-[800px]:row-start-3"
+                className="@max-[800px]:col-span-2 @max-[800px]:row-start-4"
               >
                 <StatusCell request={request} />
               </div>
               <div
                 role="cell"
-                className="text-[#52627a] @max-[800px]:col-span-2 @max-[800px]:row-start-4"
+                className="text-[#52627a] @max-[800px]:col-span-2 @max-[800px]:row-start-5"
               >
                 <span className="mr-2 hidden text-[#738096] @max-[800px]:inline">
                   Requested
                 </span>
                 <time dateTime={request.createdAt}>
-                  {bookingDate(request.createdAt)}
+                  {formatDate(request.createdAt)}
                 </time>
               </div>
               <div

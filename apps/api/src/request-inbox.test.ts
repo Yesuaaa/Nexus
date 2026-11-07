@@ -179,6 +179,153 @@ test(
       })
 
     await t.test(
+      "all status filters and stable column sorting work across pages",
+      async () => {
+        const names = await Promise.all(
+          ["Aardvark", "Zebra"].map((name) =>
+            prisma.service.create({
+              data: {
+                name,
+                description: name,
+                departments: { connect: { id: design.id } },
+              },
+            }),
+          ),
+        )
+        const statuses = [
+          "SUBMITTED",
+          "UNDER_REVIEW",
+          "AWAITING_CLIENT_INFO",
+          "READY_FOR_QUOTATION",
+          "CLOSED",
+          "CANCELLED",
+        ] as const
+        const alphaClient = await user("AlphaClient", "USER")
+        const zebraClient = await user("ZebraClient", "USER")
+        const unnamedClient = await user("UnnamedClient", "USER")
+        await prisma.user.update({
+          where: { id: unnamedClient.id },
+          data: { fullName: null },
+        })
+        const clients = [client, zebraClient, alphaClient, unnamedClient]
+        try {
+          await prisma.serviceRequest.createMany({
+            data: Array.from({ length: 13 }, (_, index) => ({
+              clientId: clients[index % clients.length]!.id,
+              serviceId: names[index % 2]!.id,
+              referenceNumber: `SR-SORT-${String(index).padStart(2, "0")}`,
+              title: "Sorting fixture",
+              status: statuses[index % statuses.length],
+              createdAt: new Date(Date.UTC(2026, 9, 1 + (index % 5))),
+            })),
+          })
+          type Row = {
+            id: string
+            referenceNumber: string
+            status: string
+            createdAt: string
+            service: { name: string }
+            client: { fullName: string | null }
+          }
+          const list = async (query: string) => {
+            const response = await get(
+              `/request-inbox?search=SR-SORT-&${query}`,
+            )
+            assert.equal(response.status, 200)
+            return (await response.json()) as {
+              serviceRequests: Row[]
+              total: number
+            }
+          }
+          for (const [view, status] of Object.entries({
+            pending: "SUBMITTED",
+            "under-review": "UNDER_REVIEW",
+            "awaiting-information": "AWAITING_CLIENT_INFO",
+            "ready-for-quotation": "READY_FOR_QUOTATION",
+            closed: "CLOSED",
+            cancelled: "CANCELLED",
+          })) {
+            const result = await list(
+              `view=${view}&sortBy=reference&sortDir=asc`,
+            )
+            assert.equal(result.total, status === "SUBMITTED" ? 3 : 2)
+            assert.ok(
+              result.serviceRequests.every((row) => row.status === status),
+            )
+          }
+          for (const sortBy of [
+            "reference",
+            "service",
+            "client",
+            "status",
+            "createdAt",
+          ] as const)
+            for (const direction of ["asc", "desc"]) {
+              const one = await list(
+                `view=all&sortBy=${sortBy}&sortDir=${direction}&page=1`,
+              )
+              const two = await list(
+                `view=all&sortBy=${sortBy}&sortDir=${direction}&page=2`,
+              )
+              const rows = [...one.serviceRequests, ...two.serviceRequests]
+              assert.equal(one.total, 13)
+              assert.equal(rows.length, 13)
+              assert.equal(new Set(rows.map((row) => row.id)).size, 13)
+              const expected = [...rows].sort((a, b) => {
+                if (sortBy === "client") {
+                  if (a.client.fullName === null && b.client.fullName !== null)
+                    return 1
+                  if (a.client.fullName !== null && b.client.fullName === null)
+                    return -1
+                }
+                const values = (row: Row) => ({
+                  reference: row.referenceNumber,
+                  service: row.service.name,
+                  client: row.client.fullName ?? "",
+                  status: String(
+                    statuses.indexOf(row.status as (typeof statuses)[number]),
+                  ),
+                  createdAt: row.createdAt,
+                })
+                const left = values(a)[sortBy]
+                const right = values(b)[sortBy]
+                return (
+                  left.localeCompare(right) * (direction === "asc" ? 1 : -1) ||
+                  a.id.localeCompare(b.id)
+                )
+              })
+              assert.deepEqual(
+                rows.map((row) => row.id),
+                expected.map((row) => row.id),
+              )
+            }
+          for (const query of [
+            "sortBy=invalid",
+            "sortDir=invalid",
+            "sortBy=reference&sortBy=service",
+          ])
+            assert.equal((await get(`/request-inbox?${query}`)).status, 400)
+          assert.equal(
+            (
+              (await (
+                await get(
+                  "/request-inbox?view=closed&search=missing-sort-fixture",
+                )
+              ).json()) as { total: number }
+            ).total,
+            0,
+          )
+        } finally {
+          await prisma.serviceRequest.deleteMany({
+            where: { serviceId: { in: names.map((item) => item.id) } },
+          })
+          await prisma.service.deleteMany({
+            where: { id: { in: names.map((item) => item.id) } },
+          })
+        }
+      },
+    )
+    await t.test(
       "only assigned staff heads have access, with no administrator override",
       async () => {
         assert.equal((await fetch(`${base}/request-inbox`)).status, 401)
@@ -434,6 +581,182 @@ test(
             })
           ).status,
           "UNDER_REVIEW",
+        )
+      },
+    )
+    await t.test(
+      "workload capacity is department scoped and validates weekly hours",
+      async () => {
+        const employee = await prisma.employee.create({
+          data: {
+            employeeId: "WL-1",
+            fullName: "Workload Staff",
+            departmentId: design.id,
+            userId: staff.id,
+          },
+        })
+        const foreignEmployee = await prisma.employee.create({
+          data: {
+            employeeId: "WL-2",
+            fullName: "Foreign Staff",
+            departmentId: marketing.id,
+          },
+        })
+        const save = (body: unknown, actor = head) =>
+          fetch(base + "/workload/capacity", {
+            method: "PUT",
+            headers: { ...actor.headers, "content-type": "application/json" },
+            body: JSON.stringify(body),
+          })
+        const input = {
+          employeeId: employee.id,
+          week: "2026-11-02",
+          scheduledHours: 40,
+          timeOffHours: 8,
+        }
+        assert.equal((await save(input)).status, 200)
+        assert.equal(
+          (await save({ ...input, employeeId: foreignEmployee.id })).status,
+          404,
+        )
+        assert.equal((await save(input, admin)).status, 403)
+        assert.equal((await save(input, superadmin)).status, 403)
+        assert.equal((await save({ ...input, timeOffHours: 41 })).status, 400)
+        assert.equal((await save({ ...input, scheduledHours: -1 })).status, 400)
+        assert.equal((await save({ ...input, week: "2026-11-03" })).status, 400)
+        const result = await get("/workload?week=2026-11-02")
+        assert.equal(result.status, 200)
+        const body = (await result.json()) as {
+          staff: {
+            id: string
+            capacity: { scheduledHours: number; timeOffHours: number }
+          }[]
+        }
+        assert.equal(body.staff.length, 1)
+        assert.equal(body.staff[0]!.id, employee.id)
+        assert.equal(body.staff[0]!.capacity.timeOffHours, 8)
+        assert.equal(
+          (await get("/workload?week=2026-11-02", staff)).status,
+          403,
+        )
+        const blocked = await fetch(base + "/workload/assignment", {
+          method: "PUT",
+          headers: { ...head.headers, "content-type": "application/json" },
+          body: JSON.stringify({
+            employeeId: employee.id,
+            projectId: "not-authorized",
+            weeklyHours: 10,
+            week: input.week,
+            endDate: "2026-11-08",
+          }),
+        })
+        assert.equal(blocked.status, 409)
+        const request = await prisma.serviceRequest.create({
+          data: {
+            clientId: client.id,
+            serviceId: service.id,
+            title: "Workload project",
+            referenceNumber: "SR-WORKLOAD-001",
+            acceptedDepartmentId: design.id,
+            workflow: { create: { state: "READY_FOR_ACTIVATION" } },
+          },
+        })
+        const project = await prisma.project.create({
+          data: {
+            clientId: client.id,
+            name: "Workload project",
+            requestId: request.id,
+          },
+        })
+        const assign = (body: unknown, actor = head) =>
+          fetch(base + "/workload/assignment", {
+            method: "PUT",
+            headers: { ...actor.headers, "content-type": "application/json" },
+            body: JSON.stringify(body),
+          })
+        const available = await get("/workload?week=2026-11-02")
+        const availableBody = (await available.json()) as {
+          projects: {
+            id: string
+            request: { referenceNumber: string; service: { name: string } }
+          }[]
+        }
+        assert.deepEqual(
+          availableBody.projects.find((entry) => entry.id === project.id)
+            ?.request,
+          {
+            referenceNumber: "SR-WORKLOAD-001",
+            service: { name: service.name },
+          },
+        )
+        const allocation = {
+          employeeId: employee.id,
+          projectId: project.id,
+          weeklyHours: 26,
+          week: input.week,
+          endDate: "2026-11-08",
+        }
+        assert.equal((await assign(allocation)).status, 200)
+        assert.equal(
+          (await assign({ ...allocation, employeeId: foreignEmployee.id }))
+            .status,
+          409,
+        )
+        assert.equal((await assign(allocation, otherHead)).status, 409)
+        const assignment = await prisma.projectStaff.findFirstOrThrow({
+          where: { projectId: project.id },
+        })
+        assert.equal(assignment.weeklyHours, 26)
+        const nextWeek = await get("/workload?week=2026-11-09")
+        const nextBody = (await nextWeek.json()) as {
+          staff: { assignments: unknown[] }[]
+        }
+        assert.equal(nextBody.staff[0]!.assignments.length, 0)
+        const secondUser = await user("WorkloadSecond", "STAFF")
+        const second = await prisma.employee.create({
+          data: {
+            employeeId: "WL-3",
+            fullName: "Second staff",
+            userId: secondUser.id,
+            departmentId: design.id,
+          },
+        })
+        assert.equal(
+          (
+            await assign({
+              ...allocation,
+              employeeId: second.id,
+              previousEmployeeId: employee.id,
+            })
+          ).status,
+          200,
+        )
+        assert.equal(
+          await prisma.projectStaff.count({
+            where: { projectId: project.id, employeeId: employee.id },
+          }),
+          0,
+        )
+        const replacement = await prisma.projectStaff.findFirstOrThrow({
+          where: { projectId: project.id },
+        })
+        assert.equal(
+          (
+            await fetch(base + "/workload/assignment/" + replacement.id, {
+              method: "DELETE",
+              headers: otherHead.headers,
+            })
+          ).status,
+          404,
+        )
+        assert.equal(
+          (
+            await fetch(base + "/workload/assignment/" + replacement.id, {
+              method: "DELETE",
+              headers: head.headers,
+            })
+          ).status,
+          200,
         )
       },
     )

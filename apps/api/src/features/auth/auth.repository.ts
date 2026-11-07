@@ -1,5 +1,6 @@
 import { Role, type User } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
+import { readDatabase } from "../../lib/database-read.js"
 
 export interface CreateUserData {
   email: string
@@ -10,12 +11,20 @@ export interface CreateUserData {
 }
 
 export interface CreateSessionData {
+  approximateLocation?: string | null
+  userAgent?: string
   tokenHash: string
   userId: string
   expiresAt: Date
 }
 
 export const authRepository = {
+  async touchSession(id: string) {
+    await getPrisma()!.session.updateMany({
+      where: { id },
+      data: { lastActiveAt: new Date() },
+    })
+  },
   isDatabaseAvailable(): boolean {
     return Boolean(getPrisma())
   },
@@ -52,6 +61,9 @@ export const authRepository = {
     const prisma = getPrisma()!
     return prisma.session.create({
       data: {
+        userAgent: data.userAgent,
+        approximateLocation: data.approximateLocation,
+        lastActiveAt: new Date(),
         tokenHash: data.tokenHash,
         userId: data.userId,
         expiresAt: data.expiresAt,
@@ -63,20 +75,22 @@ export const authRepository = {
   async findSessionById(id: string) {
     const prisma = getPrisma()
     if (!prisma) return null
-    return prisma.session.findUnique({
-      where: { id },
-      include: {
-        user: {
-          include: {
-            department: {
-              select: { id: true, name: true, code: true, color: true },
+    return readDatabase(() =>
+      prisma.session.findUnique({
+        where: { id },
+        include: {
+          user: {
+            include: {
+              department: {
+                select: { id: true, name: true, code: true, color: true },
+              },
+              team: { select: { id: true, name: true } },
+              headOf: { select: { id: true, name: true } },
             },
-            team: { select: { id: true, name: true } },
-            headOf: { select: { id: true, name: true } },
           },
         },
-      },
-    })
+      }),
+    )
   },
 
   async rotateRefreshToken(currentHash: string, nextHash: string) {
@@ -127,14 +141,10 @@ export const authRepository = {
     return prisma.session.deleteMany({ where: { id: sessionId } })
   },
 
-  async updatePasswordAndRevokeSessions(userId: string, passwordHash: string) {
-    const prisma = getPrisma()!
-    return prisma.$transaction([
-      prisma.user.update({
-        where: { id: userId },
-        data: { passwordHash },
-      }),
-      prisma.session.deleteMany({ where: { userId } }),
-    ])
+  async updatePassword(userId: string, passwordHash: string) {
+    return getPrisma()!.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    })
   },
 }

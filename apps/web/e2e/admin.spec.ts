@@ -46,7 +46,7 @@ test.describe("Admin access and permissions", () => {
       await page.goto(feature.path)
       await expect(
         page.getByText(
-          "We couldn't load your account. Please refresh to try again.",
+          "We couldn’t load your account. Please refresh to try again.",
         ),
       ).toBeVisible()
       await expect(

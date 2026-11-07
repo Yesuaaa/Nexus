@@ -1,5 +1,8 @@
 "use client"
 
+import { Form } from "@/components/ui/form"
+import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
+
 import { useEffect, useRef, useState, type FormEvent } from "react"
 import Link from "next/link"
 import { ArrowLeft, LoaderCircle, Send } from "lucide-react"
@@ -54,11 +57,17 @@ function InternalConversationPanel({
   onLatestMessage,
   onConversationRead,
 }: InternalConversationProps) {
+  const { formatDate, formatTime } = useDatePreferences()
+
   const account = usePortalAccount()
   const [history, setHistory] = useState<InternalConversationHistory | null>(
     null,
   )
   const [error, setError] = useState("")
+  useEffect(() => {
+    if (error)
+      sileo.error({ title: "Couldn't load messages", description: error })
+  }, [error])
   const [draft, setDraft] = useState("")
   const [sending, setSending] = useState(false)
   const [olderLoading, setOlderLoading] = useState(false)
@@ -247,11 +256,6 @@ function InternalConversationPanel({
               </p>
             </div>
           </header>
-          {error && (
-            <p role="alert" className="m-3 text-xs text-red-700">
-              {error}
-            </p>
-          )}
           {!history ? (
             <p className="p-4 text-xs text-[#52627a]">
               {error
@@ -292,6 +296,7 @@ function InternalConversationPanel({
                 {timeline.map((message, index) => {
                   const own = message.sender.id === account.id
                   const previous = timeline[index - 1]
+                  const next = timeline[index + 1]
                   const date = new Date(message.createdAt)
                   const newDay =
                     !previous ||
@@ -299,15 +304,17 @@ function InternalConversationPanel({
                       new Date(previous.createdAt).toDateString()
                   const grouped =
                     !newDay && previous?.sender.id === message.sender.id
+                  const groupedWithNext = Boolean(
+                    next &&
+                    date.toDateString() ===
+                      new Date(next.createdAt).toDateString() &&
+                    next.sender.id === message.sender.id,
+                  )
                   return (
                     <div key={message.id}>
                       {newDay && (
                         <p className="mt-0 mb-5 text-center text-[11px] text-[#8791a2]">
-                          {date.toLocaleDateString("en-PH", {
-                            weekday: "short",
-                            month: "short",
-                            day: "numeric",
-                          })}
+                          {formatDate(date)}
                         </p>
                       )}
                       <article
@@ -317,19 +324,16 @@ function InternalConversationPanel({
                           own ? "ml-auto flex-row-reverse" : "mr-auto",
                         )}
                       >
-                        <ConversationAvatar
-                          name={
-                            own
-                              ? account.fullName || "You"
-                              : message.sender.fullName || "Participant"
-                          }
-                          imageUrl={
-                            own
-                              ? account.imageUrl
-                              : history.conversation.imageUrl
-                          }
-                          className={cn("size-7", grouped && "invisible")}
-                        />
+                        {!own && (
+                          <ConversationAvatar
+                            name={message.sender.fullName || "Participant"}
+                            imageUrl={history.conversation.imageUrl}
+                            className={cn(
+                              "size-7",
+                              groupedWithNext && "invisible",
+                            )}
+                          />
+                        )}
                         <div className="min-w-0">
                           <p className="sr-only">
                             {own
@@ -342,17 +346,12 @@ function InternalConversationPanel({
                                 "m-0 rounded-2xl px-3.5 py-2.5 text-[13px] leading-5 whitespace-pre-wrap [overflow-wrap:anywhere]",
                                 own
                                   ? "rounded-br-md bg-[#203f8c] text-white"
-                                  : "rounded-bl-md bg-[#f1f1ee] text-[#182235]",
+                                  : "rounded-bl-md bg-[#dfe4eb] text-[#182235]",
                               )}
                             >
                               {message.body}
                             </p>
-                            <HoverTooltip>
-                              {date.toLocaleTimeString("en-PH", {
-                                hour: "numeric",
-                                minute: "2-digit",
-                              })}
-                            </HoverTooltip>
+                            <HoverTooltip>{formatTime(date)}</HoverTooltip>
                           </div>
                         </div>
                       </article>
@@ -361,7 +360,7 @@ function InternalConversationPanel({
                 })}
               </div>
               {history.canSend ? (
-                <form
+                <Form
                   className="flex shrink-0 items-end gap-2 border-t border-[#efefee] bg-white px-5 py-4 max-[767px]:px-3"
                   onSubmit={(event) => void submit(event)}
                 >
@@ -403,15 +402,18 @@ function InternalConversationPanel({
                       <Send size={16} aria-hidden="true" />
                     )}
                   </Button>
-                </form>
+                </Form>
               ) : (
                 <p className="m-0 shrink-0 border-t border-[#efefee] px-5 py-4 text-xs text-[#52627a]">
                   Messaging is unavailable for this account.
                 </p>
               )}
               {sendError && (
-                <p role="alert" className="m-0 px-5 pb-3 text-xs text-red-700">
-                  {sendError}
+                <p
+                  role="status"
+                  className="m-0 px-5 pb-3 text-xs text-[#52627a]"
+                >
+                  Your text is saved here so you can retry.
                 </p>
               )}
             </>

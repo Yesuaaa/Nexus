@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test"
 import type { InternalParticipant } from "../src/features/request-conversations/api/internal-conversations-api"
 import type { RequestMessage } from "../src/features/request-conversations/api/request-conversations-api"
 import { configureRegressionTest, restoreSession } from "./regression-support"
+import { defaultPreferences } from "../src/features/settings/api/settings-api"
 
 configureRegressionTest()
 
@@ -10,6 +11,9 @@ async function internalChat(
   role: "STAFF" | "ADMIN" | "SUPERADMIN",
 ) {
   await restoreSession(page, role, { account: { id: "sender-1" } })
+  await page.route("**/api/auth/settings", (route) =>
+    route.fulfill({ json: { preferences: defaultPreferences, sessions: [] } }),
+  )
   const participant: InternalParticipant = {
     id: "recipient-1",
     fullName: "Dani Colleague",
@@ -127,6 +131,11 @@ async function internalChat(
       `Unexpected internal chat request: ${request.method()} ${path}`,
     )
   })
+  await page.route("**/api/request-conversations", (route) =>
+    route.fulfill({
+      json: { conversations: [], nextCursor: null, unreadCount: 0 },
+    }),
+  )
   return state
 }
 
@@ -159,9 +168,12 @@ for (const role of ["STAFF", "ADMIN", "SUPERADMIN"] as const) {
       await input.fill(body)
       state.failAfterSave = true
       await send.click()
-      await expect(chat.getByRole("alert")).toHaveText(
-        "Connection interrupted. Retry your message.",
-      )
+      await expect(
+        page.getByText("Connection interrupted. Retry your message.", {
+          exact: true,
+        }),
+      ).toBeVisible()
+      await expect(chat.getByRole("alert")).toHaveCount(0)
       await expect(input).toHaveValue(body)
       await send.click()
       await expect(input).toHaveValue("")
@@ -196,6 +208,44 @@ for (const role of ["STAFF", "ADMIN", "SUPERADMIN"] as const) {
         }),
       ).toHaveCount(0)
       expect(state.creates).toEqual(["recipient-1"])
+      if (role === "STAFF" && width === 1440) {
+        await navigation
+          .getByRole("button", { name: "Collapse conversations", exact: true })
+          .click()
+        await expect(
+          navigation.getByRole("button", {
+            name: "Expand conversations",
+            exact: true,
+          }),
+        ).toBeVisible()
+      }
+      const clientChats = navigation.getByRole("link", {
+        name: "Back to client chats",
+        exact: true,
+      })
+      await expect(clientChats).toBeVisible()
+      await expect(
+        navigation.getByRole("button", {
+          name: "Open internal conversations",
+          exact: true,
+        }),
+      ).toHaveCount(0)
+      await clientChats.click()
+      await expect(page).toHaveURL(/\/messages$/)
+      await expect(
+        navigation.getByText("Internal chats", { exact: true }),
+      ).toHaveCount(0)
+      await navigation
+        .getByRole("button", {
+          name: "Open internal conversations",
+          exact: true,
+        })
+        .click()
+      await expect(page).toHaveURL(/\/messages\?mode=internal$/)
+      await expect(clientChats).toBeVisible()
+      await expect(
+        navigation.getByRole("link", { name: "Dani Colleague", exact: true }),
+      ).toBeVisible()
       expect(
         await page.evaluate(
           () => document.documentElement.scrollWidth <= innerWidth,
@@ -217,10 +267,13 @@ test("internal chat creation failure can be retried without navigating to an abs
   })
   await contact.click()
   await expect(
+    page.getByText("Chat unavailable. Try again.", { exact: true }),
+  ).toBeVisible()
+  await expect(
     page
       .getByRole("navigation", { name: "Conversations", exact: true })
       .getByRole("alert"),
-  ).toContainText("Chat unavailable. Try again.")
+  ).toHaveCount(0)
   await expect(page).toHaveURL(/\/messages\?mode=internal$/)
   expect(state.created).toBe(false)
   state.failCreate = false
@@ -275,4 +328,118 @@ test("internal chat polling receives replies, clears unread state and disables u
     "Incoming colleague reply",
   )
   expect(state.sends).toEqual([])
+})
+
+test("collapsed internal rail keeps chats and contacts within its width", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const state = await internalChat(page, "STAFF")
+  state.created = true
+  state.unread = 3
+  await page.route("**/api/internal-conversations/contacts", (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: "recipient-2",
+          fullName: "Alex Department Colleague With A Long Name",
+          email: "alex@example.com",
+          role: "STAFF",
+          position: "Senior Designer",
+          isActive: true,
+          accountDeletedAt: null,
+          department: { id: "design", name: "Design" },
+        },
+        ...Array.from({ length: 20 }, (_, index) => ({
+          id: `extra-contact-${index}`,
+          fullName: `Department colleague ${index}`,
+          email: `colleague${index}@example.com`,
+          role: "STAFF",
+          position: "Staff",
+          isActive: true,
+          accountDeletedAt: null,
+          department: { id: "design", name: "Design" },
+        })),
+      ],
+    }),
+  )
+  await page.goto("/messages?mode=internal")
+  const nav = page.getByRole("navigation", {
+    name: "Conversations",
+    exact: true,
+  })
+  await nav
+    .getByRole("button", { name: "Collapse conversations", exact: true })
+    .click()
+  const chat = nav.getByRole("link", {
+    name: "Dani Colleague, 3 unread messages",
+    exact: true,
+  })
+  const contact = nav.getByRole("button", {
+    name: "Alex Department Colleague With A Long Name Senior Designer",
+    exact: true,
+  })
+  await expect(chat).toBeVisible()
+  await expect(contact).toBeVisible()
+  await expect(nav.getByText("Internal chats", { exact: true })).toBeHidden()
+  await expect(nav.getByText("Start a chat", { exact: true })).toBeHidden()
+  await expect(nav.getByText("Senior Designer", { exact: true })).toBeHidden()
+  const list = nav.locator("#conversation-list")
+  await expect
+    .poll(() =>
+      list.evaluate((element) => element.scrollHeight > element.clientHeight),
+    )
+    .toBe(true)
+  await expect
+    .poll(() =>
+      list.evaluate((element) => element.scrollWidth <= element.clientWidth),
+    )
+    .toBe(true)
+  const railBox = await nav.boundingBox()
+  for (const row of [chat, contact]) {
+    const box = await row.boundingBox()
+    expect(box!.x).toBeGreaterThanOrEqual(railBox!.x)
+    expect(box!.x + box!.width).toBeLessThanOrEqual(railBox!.x + railBox!.width)
+  }
+  await page.screenshot({ path: "test-results/internal-rail-collapsed.png" })
+  await nav
+    .getByRole("button", { name: "Expand conversations", exact: true })
+    .click()
+  await expect(nav.getByText("Internal chats", { exact: true })).toBeVisible()
+  await expect(nav.getByText("Start a chat", { exact: true })).toBeVisible()
+  await expect(nav.getByText("Senior Designer", { exact: true })).toBeVisible()
+})
+
+test("reading an internal chat clears its topbar badge immediately", async ({
+  page,
+}) => {
+  const state = await internalChat(page, "STAFF")
+  state.created = true
+  state.unread = 3
+  state.messages.push({
+    id: "unread-reply",
+    clientMessageId: "unread-reply",
+    body: "Please review this update",
+    sender: { id: "recipient-1", fullName: "Dani Colleague" },
+    createdAt: new Date().toISOString(),
+    editedAt: null,
+    deletedAt: null,
+    purgeAt: null,
+  })
+  await page.goto("/messages?mode=internal")
+  const topbar = page.getByRole("banner")
+  await expect(
+    topbar.getByRole("link", { name: "Messages, 3 unread", exact: true }),
+  ).toHaveText("3")
+  await page
+    .getByRole("navigation", { name: "Conversations", exact: true })
+    .getByRole("link", {
+      name: "Dani Colleague, 3 unread messages",
+      exact: true,
+    })
+    .click()
+  const link = topbar.getByRole("link", { name: "Messages", exact: true })
+  await expect(link).toBeVisible()
+  await expect(link.locator("span")).toHaveCount(0)
+  expect(state.unread).toBe(0)
 })

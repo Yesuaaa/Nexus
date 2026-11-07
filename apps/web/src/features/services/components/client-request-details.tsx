@@ -1,3 +1,4 @@
+import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 import { useRef } from "react"
 import {
   Sheet,
@@ -7,10 +8,7 @@ import {
 } from "@/components/ui/sheet"
 import { useAnimatedPanelClose } from "@/components/ui/use-animated-panel-close"
 import type { ServiceRequestSummary } from "../api/client-services-api"
-import {
-  requestDate,
-  serviceRequestStatuses,
-} from "../model/service-request-status"
+import { serviceRequestStatuses } from "../model/service-request-status"
 import { RequestStatus } from "./client-requests-table"
 import { RequestMessagesLink } from "@/features/request-conversations/components/request-messages-link"
 
@@ -21,6 +19,7 @@ export function ClientRequestDetails({
   request: ServiceRequestSummary
   onClose: () => void
 }) {
+  const { formatDate } = useDatePreferences()
   const { open, handleOpenChange } = useAnimatedPanelClose(onClose)
   const opener = useRef(
     typeof document === "undefined" ? null : document.activeElement,
@@ -50,8 +49,8 @@ export function ClientRequestDetails({
       "Pricing at submission",
       `${request.pricingModel === "STARTING" && request.quotedPrice !== null ? "Starting at " : ""}${price}${request.quotedPrice !== null ? suffix : ""}`,
     ],
-    ["Submitted", requestDate(request.createdAt)],
-    ["Last updated", requestDate(request.updatedAt)],
+    ["Submitted", formatDate(request.createdAt)],
+    ["Last updated", formatDate(request.updatedAt)],
     ["Expected timeline", request.expectedTimeline || "Not provided"],
     [
       "Preferred specialist",

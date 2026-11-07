@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto"
 import { getPrisma } from "../../lib/db.js"
+import { readTransaction } from "../../lib/database-read.js"
 import { appendEvent, lockRequest, workflowAccess } from "./workflow.access.js"
 import { fileSelect } from "./workflow.snapshot.js"
 import { fail, object, textField, uuid } from "./workflow.validation.js"
@@ -98,6 +99,10 @@ export async function uploadWorkflowFile(
   input: unknown,
 ) {
   const parsed = parseFile(input)
+  const body = object(input)
+  if (body.contextual !== undefined && typeof body.contextual !== "boolean")
+    fail("Invalid attachment context")
+  const contextual = body.contextual === true
   return getPrisma()!.$transaction(
     async (tx) => {
       await lockRequest(tx, requestId)
@@ -175,17 +180,18 @@ export async function uploadWorkflowFile(
         data: { version: { increment: 1 } },
       })
       // An approver's unlinked financial document is not a client-facing upload.
-      await appendEvent(
-        tx,
-        requestId,
-        userId,
-        permissions.isClient || permissions.manage
-          ? "FILE_SUBMITTED"
-          : "PAYMENT_DOCUMENT_UPLOADED",
-        `File submitted: ${file.name}`,
-        file.id,
-        !permissions.isClient && !permissions.manage,
-      )
+      if (!contextual)
+        await appendEvent(
+          tx,
+          requestId,
+          userId,
+          permissions.isClient || permissions.manage
+            ? "FILE_SUBMITTED"
+            : "PAYMENT_DOCUMENT_UPLOADED",
+          `File submitted: ${file.name}`,
+          file.id,
+          !permissions.isClient && !permissions.manage,
+        )
       await tx.serviceRequest.update({
         where: { id: requestId },
         data: { updatedAt: new Date() },
@@ -201,33 +207,30 @@ export async function downloadWorkflowFile(
   requestId: string,
   fileId: string,
 ) {
-  return getPrisma()!.$transaction(
-    async (tx) => {
-      const { permissions } = await workflowAccess(tx, userId, requestId)
-      const file = await tx.workflowFile.findFirst({
-        where: {
-          id: fileId,
-          requestId,
-          ...(permissions.isClient ? { clientVisible: true } : {}),
-          ...(!permissions.isClient && !permissions.manage
-            ? {
-                OR: [
-                  ...(permissions.verifyPayment
-                    ? [
-                        { agreements: { some: { requestId } } },
-                        { signatures: { some: { requestId } } },
-                        { payments: { some: { requestId } } },
-                      ]
-                    : []),
-                  { uploaderId: userId },
-                ],
-              }
-            : {}),
-        },
-      })
-      if (!file) fail("File not found", 404)
-      return file
-    },
-    { isolationLevel: "RepeatableRead" },
-  )
+  return readTransaction(async (tx) => {
+    const { permissions } = await workflowAccess(tx, userId, requestId)
+    const file = await tx.workflowFile.findFirst({
+      where: {
+        id: fileId,
+        requestId,
+        ...(permissions.isClient ? { clientVisible: true } : {}),
+        ...(!permissions.isClient && !permissions.manage
+          ? {
+              OR: [
+                ...(permissions.verifyPayment
+                  ? [
+                      { agreements: { some: { requestId } } },
+                      { signatures: { some: { requestId } } },
+                      { payments: { some: { requestId } } },
+                    ]
+                  : []),
+                { uploaderId: userId },
+              ],
+            }
+          : {}),
+      },
+    })
+    if (!file) fail("File not found", 404)
+    return file
+  })
 }

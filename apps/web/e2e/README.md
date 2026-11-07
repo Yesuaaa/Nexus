@@ -6,9 +6,11 @@ For the messaging-only run order, test cases, expected results and deployment
 checks, see [Messaging regression workflow](MESSAGING-REGRESSION.md).
 Run `pnpm --filter @nexus/web test:e2e:messages --workers=2` for its browser suite.
 
-Run the complete folder when reviewing a release; `regression.spec.ts` contains
-the shared authentication checks, while feature behavior is split across the
-other specs. Playwright builds and starts a production server by default.
+Run the complete folder when reviewing a release. This includes
+`login-validation.spec.ts`, which covers login field validation, language
+selection and duplicate submission behavior. `regression.spec.ts` contains the
+shared session checks, while feature behavior is split across the other specs.
+Playwright builds and starts a production server by default.
 When setting `NEXUS_E2E_BASE_URL`, point it at a fresh production build:
 development mode can repeat effects and invalidate request-count assertions.
 
@@ -29,7 +31,7 @@ The November 2, 2026 review covers changes after
 | Messaging                  | `request-conversations.spec.ts`: internal messaging access, staff message edit retry, delete confirmation and client synchronization, archived conversations                     |
 | Workflow                   | `request-workflow.spec.ts`: quotation approval, consultation reschedule retry with the same action ID, payment evidence preview/removal and upload retry with the same upload ID |
 | Services                   | `services.spec.ts`, `pricing-templates.spec.ts`: package removal payload and reopening, pricing templates and current dialog controls                                            |
-| Profiles and notifications | `profile.spec.ts`, `workflow-approvals.spec.ts`: all-role profile editing/images, notification read-all persistence and failure recovery                                         |
+| Profiles and notifications | `profile.spec.ts`: all-role profile editing/images, notification read-all persistence and failure recovery                                                                       |
 
 ### Known backend gap
 
@@ -54,9 +56,11 @@ stacking/accessibility interaction is redesigned.
 
 From the repository root, `pnpm test:e2e -- --ui` runs the complete offline backend
 suite and every Playwright spec under `apps/web/e2e/` in the interactive UI
-at the same time. Backend test results remain in the terminal. The browser
-specs use mocked API responses, so the backend test validates the API
-independently rather than serving requests to the browser.
+at the same time. This includes the login input validation regression in
+`login-validation.spec.ts` and its PGlite API boundary coverage in
+`apps/api/src/login-validation.test.ts`. Backend test results remain in the
+terminal. The browser specs use mocked API responses, so the backend test
+validates the API independently rather than serving requests to the browser.
 
 To run the main regression file alone, use
 `pnpm --filter @nexus/web test:e2e regression.spec.ts --workers=2` after building.

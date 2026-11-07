@@ -7,14 +7,17 @@ import { test } from "node:test"
 import { PGlite } from "@electric-sql/pglite"
 import { PGLiteSocketServer } from "@electric-sql/pglite-socket"
 import { createApp } from "./app.js"
-import { getPrisma } from "./lib/db.js"
 import { issueSession } from "./features/auth/auth.service.js"
+import { getPrisma } from "./lib/db.js"
 import type { Role } from "./generated/prisma/client.js"
-import type { ConversationRealtime } from "./features/request-conversations/request-conversations.realtime.js"
-import { ServiceRequestsError } from "./features/service-requests/service-requests.service.js"
+import { Prisma } from "./generated/prisma/client.js"
+import { authRepository } from "./features/auth/auth.repository.js"
+
+const sharedConversationMigration =
+  "20261102000000_shared_request_conversations"
 
 test(
-  "accepted request conversations preserve privacy, history and live delivery",
+  "request conversations share chronology while booking workflows stay independent",
   { timeout: 120_000 },
   async (t) => {
     const original = {
@@ -25,17 +28,19 @@ test(
     }
     process.env.JWT_SECRET = randomBytes(32).toString("base64url")
     const db = new PGlite()
-    let socket: PGLiteSocketServer | undefined = undefined
-    let server: Server | undefined = undefined
-    let prisma: ReturnType<typeof getPrisma> | undefined = undefined
-    const controllers: AbortController[] = []
+    const resources: {
+      socket?: PGLiteSocketServer
+      server?: Server
+      prisma?: ReturnType<typeof getPrisma>
+    } = {}
     t.after(async () => {
-      controllers.forEach((controller) => controller.abort())
-      server?.closeAllConnections()
-      if (server)
-        await new Promise<void>((resolve) => server!.close(() => resolve()))
-      await prisma?.$disconnect()
-      await socket?.stop()
+      resources.server?.closeAllConnections()
+      if (resources.server)
+        await new Promise<void>((resolve) =>
+          resources.server!.close(() => resolve()),
+        )
+      await resources.prisma?.$disconnect()
+      await resources.socket?.stop()
       await db.close()
       for (const [key, value] of Object.entries(original)) {
         if (value === undefined) delete process.env[key]
@@ -43,29 +48,88 @@ test(
       }
     })
     await db.waitReady
-    // Emulate Supabase's database function, recording the actual trigger payload.
     await db.exec(`CREATE SCHEMA realtime;
-    CREATE TABLE realtime.test_broadcasts (payload jsonb, event text, topic text, private boolean);
-    CREATE FUNCTION realtime.send(payload jsonb, event text, topic text, private boolean) RETURNS void LANGUAGE sql AS $$
-      INSERT INTO realtime.test_broadcasts VALUES (payload, event, topic, private);
-    $$;`)
+      CREATE TABLE realtime.test_broadcasts (payload jsonb, event text, topic text, private boolean);
+      CREATE FUNCTION realtime.send(payload jsonb, event text, topic text, private boolean) RETURNS void LANGUAGE sql AS $$
+        INSERT INTO realtime.test_broadcasts VALUES (payload, event, topic, private);
+      $$;`)
+
     const migrations = new URL("../prisma/migrations/", import.meta.url)
-    for (const name of (await readdir(migrations))
+    const names = (await readdir(migrations))
       .filter((name) => /^\d/.test(name))
-      .sort())
+      .sort()
+    for (const name of names) {
+      if (name >= sharedConversationMigration) continue
       await db.exec(
         await readFile(new URL(`${name}/migration.sql`, migrations), "utf8"),
       )
-    socket = new PGLiteSocketServer({ db, port: 0, host: "127.0.0.1" })
+    }
+
+    // Seed the pre-migration shape to verify that multiple historical request
+    // threads consolidate without losing messages or booking associations.
+    await db.exec(`
+      INSERT INTO "User" ("id", "email", "fullName", "passwordHash", "role", "updatedAt") VALUES
+        ('legacy-client', 'legacy-client@example.com', 'Legacy client', 'private', 'USER', CURRENT_TIMESTAMP),
+        ('legacy-head', 'legacy-head@example.com', 'Legacy head', 'private', 'STAFF', CURRENT_TIMESTAMP);
+      INSERT INTO "Department" ("id", "name", "headId", "updatedAt")
+        VALUES ('legacy-department', 'Legacy design', 'legacy-head', CURRENT_TIMESTAMP);
+      INSERT INTO "Service" ("id", "name", "description", "updatedAt")
+        VALUES ('legacy-service', 'Legacy service', 'Historical service', CURRENT_TIMESTAMP);
+      INSERT INTO "ServiceRequest" (
+        "id", "clientId", "serviceId", "title", "status",
+        "acceptedDepartmentId", "acceptedById", "acceptedAt", "updatedAt"
+      ) VALUES
+        ('legacy-booking-a', 'legacy-client', 'legacy-service', 'Legacy A', 'UNDER_REVIEW', 'legacy-department', 'legacy-head', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+        ('legacy-booking-b', 'legacy-client', 'legacy-service', 'Legacy B', 'UNDER_REVIEW', 'legacy-department', 'legacy-head', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+      INSERT INTO "ServiceRequestMessage" (
+        "id", "requestId", "senderId", "clientMessageId", "body"
+      ) VALUES (
+        'legacy-message', 'legacy-booking-b', 'legacy-client',
+        '00000000-0000-4000-8000-000000000001', 'Historical message'
+      );
+    `)
+    await db.exec(
+      await readFile(
+        new URL(`${sharedConversationMigration}/migration.sql`, migrations),
+        "utf8",
+      ),
+    )
+
+    for (const name of names.filter(
+      (name) => name > sharedConversationMigration,
+    ))
+      await db.exec(
+        await readFile(new URL(`${name}/migration.sql`, migrations), "utf8"),
+      )
+
+    const socket = new PGLiteSocketServer({ db, port: 0, host: "127.0.0.1" })
+    resources.socket = socket
     await socket.start()
     process.env.DATABASE_URL = `postgresql://postgres:postgres@${socket.getServerConn()}/postgres?sslmode=disable`
     process.env.DATABASE_POOL_MAX = "1"
     delete process.env.DIRECT_URL
-    prisma = getPrisma()!
+    const prisma = getPrisma()!
+    resources.prisma = prisma
+
+    const legacyConversation = await prisma.requestConversation.findUnique({
+      where: {
+        clientId_departmentId: {
+          clientId: "legacy-client",
+          departmentId: "legacy-department",
+        },
+      },
+      include: { bookings: true, messages: true },
+    })
+    assert.ok(legacyConversation)
+    assert.equal(legacyConversation.bookings.length, 2)
+    assert.equal(legacyConversation.messages.length, 1)
+    assert.equal(legacyConversation.messages[0]!.id, "legacy-message")
+    assert.equal(legacyConversation.messages[0]!.requestId, "legacy-booking-b")
+
     async function user(name: string, role: Role) {
       const record = await prisma!.user.create({
         data: {
-          email: `${name}@example.com`,
+          email: `${name.toLowerCase()}@example.com`,
           fullName: name,
           passwordHash: "private",
           role,
@@ -74,863 +138,736 @@ test(
       const session = await issueSession(record)
       return {
         ...record,
-        session,
         headers: { authorization: `Bearer ${session.token}` },
       }
     }
+
     const client = await user("Client", "USER")
-    const foreignClient = await user("OtherClient", "USER")
+    const foreignClient = await user("ForeignClient", "USER")
     const head = await user("Head", "STAFF")
     const otherHead = await user("OtherHead", "STAFF")
     const staff = await user("Staff", "STAFF")
     const admin = await user("Admin", "ADMIN")
-    const superadmin = await user("Superadmin", "SUPERADMIN")
-    const department = await prisma.department.create({
+    const design = await prisma.department.create({
       data: { name: "Design", headId: head.id },
     })
-    const headEmployee = await prisma.employee.create({
-      data: {
-        userId: head.id,
-        employeeId: "EXP-CONVERSATION-HEAD",
-        fullName: "Head specialist",
-        profileImageUrl: "https://profile-test.supabase.co/avatar.png",
-        departmentId: department.id,
-      },
-    })
-    const otherDepartment = await prisma.department.create({
+    const marketing = await prisma.department.create({
       data: { name: "Marketing", headId: otherHead.id },
     })
     const service = await prisma.service.create({
       data: {
-        name: "Shared website",
-        description: "Website",
-        departments: {
-          connect: [{ id: department.id }, { id: otherDepartment.id }],
+        name: "Growth services",
+        description: "Design and marketing",
+        requiresAgreement: false,
+        requiresPayment: false,
+        departments: { connect: [{ id: design.id }, { id: marketing.id }] },
+      },
+    })
+    const [bookingA, bookingB, bookingC] = await Promise.all(
+      ["Website development", "SEO optimization", "Campaign strategy"].map(
+        (title) =>
+          prisma!.serviceRequest.create({
+            data: { clientId: client.id, serviceId: service.id, title },
+          }),
+      ),
+    )
+
+    let notify: (() => void) | undefined
+    let released = 0
+    const server = createApp({
+      conversationRealtime: {
+        async subscribe(_id, onChange, onStatus) {
+          notify = onChange
+          onStatus(true)
+          return async () => {
+            released++
+          }
         },
       },
-    })
-    const booking = await prisma.serviceRequest.create({
-      data: {
-        clientId: client.id,
-        serviceId: service.id,
-        title: "Website booking",
-      },
-    })
-    type Listener = { change: () => void; status: (connected: boolean) => void }
-    const listeners = new Map<string, Set<Listener>>()
-    let offline = false
-    const realtime: ConversationRealtime = {
-      async subscribe(id, change, status) {
-        if (offline)
-          throw new ServiceRequestsError(
-            503,
-            "Live messaging could not connect. Try again.",
-          )
-        const room = listeners.get(id) ?? new Set<Listener>()
-        listeners.set(id, room)
-        const listener = { change, status }
-        room.add(listener)
-        status(true)
-        return async () => {
-          room.delete(listener)
-        }
-      },
-    }
-    const notify = (id = booking.id) => {
-      for (const listener of listeners.get(id) ?? []) listener.change()
-    }
-    server = createApp({ conversationRealtime: realtime }).listen(
-      0,
-      "127.0.0.1",
-    )
+    }).listen(0, "127.0.0.1")
+    resources.server = server
     await new Promise<void>((resolve) => server!.once("listening", resolve))
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`
-    const path = (id = booking.id) => `/request-conversations/${id}`
-    const list = (actor = client, suffix = "") =>
-      fetch(`${base}/request-conversations${suffix}`, {
-        headers: actor.headers,
-      })
-    const get = (actor = client, suffix = "", id = booking.id) =>
-      fetch(`${base}${path(id)}${suffix}`, { headers: actor.headers })
-    const post = (
-      actor = client,
-      body: unknown = { body: "Hello", clientMessageId: randomUUID() },
-      id = booking.id,
-    ) =>
-      fetch(`${base}${path(id)}/messages`, {
-        method: "POST",
-        headers: { ...actor.headers, "content-type": "application/json" },
-        body: JSON.stringify(body),
-      })
-    const accept = (actor = head, id = booking.id) =>
+    const accept = (id: string, actor = head) =>
       fetch(`${base}/request-inbox/${id}/accept`, {
         method: "POST",
         headers: actor.headers,
       })
+    const list = (actor = client, suffix = "") =>
+      fetch(`${base}/request-conversations${suffix}`, {
+        headers: actor.headers,
+      })
+    const history = (id: string, actor = client, suffix = "") =>
+      fetch(`${base}/request-conversations/${id}${suffix}`, {
+        headers: actor.headers,
+      })
+    const send = (
+      id: string,
+      actor: typeof client | typeof head,
+      body: string,
+      bookingId?: string,
+      clientMessageId = randomUUID(),
+    ) =>
+      fetch(`${base}/request-conversations/${id}/messages`, {
+        method: "POST",
+        headers: { ...actor.headers, "content-type": "application/json" },
+        body: JSON.stringify({
+          body,
+          bookingId: bookingId ?? null,
+          clientMessageId,
+        }),
+      })
 
     await t.test(
-      "acceptance records one department and gates all message operations",
+      "concurrent acceptance reuses one client-department conversation",
       async () => {
-        assert.equal((await fetch(`${base}${path()}`)).status, 401)
-        assert.equal((await fetch(`${base}/request-conversations`)).status, 401)
-        assert.deepEqual(await (await list()).json(), {
-          conversations: [],
-          nextCursor: null,
-        })
-        const waiting = (await (await get()).json()) as {
-          conversation: unknown
-          canSend: boolean
-          messages: unknown[]
-        }
-        assert.equal(waiting.conversation, null)
-        assert.equal(waiting.canSend, false)
-        assert.deepEqual(waiting.messages, [])
-        assert.equal((await post()).status, 409)
-        assert.equal((await get(head)).status, 404)
-        assert.equal((await accept()).status, 200)
-        const stored = await prisma!.serviceRequest.findUniqueOrThrow({
-          where: { id: booking.id },
-        })
-        assert.equal(stored.acceptedDepartmentId, department.id)
-        assert.equal(stored.acceptedById, head.id)
-        assert.ok(stored.acceptedAt)
-        assert.equal((await accept(otherHead)).status, 409)
-        for (const actor of [
-          foreignClient,
-          otherHead,
-          staff,
-          admin,
-          superadmin,
-        ]) {
-          assert.equal((await get(actor)).status, 404)
-          assert.equal((await get(actor, "/events")).status, 404)
-          assert.equal((await post(actor)).status, 404)
-        }
-        assert.equal((await get(head)).status, 200)
-        const clientHistory = (await (await get(client)).json()) as {
-          conversation: {
-            head: { specialistId: string; imageUrl: string | null }
-          }
-        }
-        assert.equal(
-          clientHistory.conversation.head.specialistId,
-          headEmployee.id,
-        )
-        assert.equal(
-          clientHistory.conversation.head.imageUrl,
-          "https://profile-test.supabase.co/avatar.png",
-        )
-        for (const actor of [client, head]) {
-          const inbox = (await (await list(actor)).json()) as {
-            conversations: { id: string; title: string; lastMessage: unknown }[]
-            nextCursor: string | null
-          }
-          assert.equal(inbox.conversations.length, 1)
-          assert.equal(inbox.conversations[0]!.id, booking.id)
-          assert.equal(inbox.conversations[0]!.title, booking.title)
-          assert.equal(inbox.conversations[0]!.lastMessage, null)
-          assert.equal(inbox.nextCursor, null)
-        }
-        for (const actor of [
-          foreignClient,
-          otherHead,
-          staff,
-          admin,
-          superadmin,
+        const [acceptedA, acceptedB] = await Promise.all([
+          accept(bookingA.id),
+          accept(bookingB.id),
         ])
-          assert.deepEqual(await (await list(actor)).json(), {
-            conversations: [],
-            nextCursor: null,
-          })
+        assert.equal(acceptedA.status, 200)
+        assert.equal(acceptedB.status, 200)
+        assert.equal((await accept(bookingC.id, otherHead)).status, 200)
+
+        const designConversations = await prisma!.requestConversation.findMany({
+          where: { clientId: client.id, departmentId: design.id },
+          include: { bookings: true },
+        })
+        assert.equal(designConversations.length, 1)
+        assert.deepEqual(
+          new Set(designConversations[0]!.bookings.map((row) => row.id)),
+          new Set([bookingA.id, bookingB.id]),
+        )
+        assert.equal(
+          await prisma!.requestConversation.count({
+            where: { clientId: client.id },
+          }),
+          2,
+        )
+
+        const inbox = (await (await list()).json()) as {
+          conversations: { id: string; bookings: { id: string }[] }[]
+        }
+        assert.equal(inbox.conversations.length, 2)
+        assert.equal(
+          inbox.conversations.find((row) => row.bookings.length === 2)?.bookings
+            .length,
+          2,
+        )
       },
     )
 
-    let messageId = ""
+    const designConversation =
+      await prisma.requestConversation.findUniqueOrThrow({
+        where: {
+          clientId_departmentId: {
+            clientId: client.id,
+            departmentId: design.id,
+          },
+        },
+      })
+
     await t.test(
-      "messages are persisted, validated and idempotent, with server-derived senders",
+      "temporary database failures return 503 without discarding the session",
+      async (subtest) => {
+        const failure = new Prisma.PrismaClientKnownRequestError(
+          "Connection closed",
+          {
+            code: "P1017",
+            clientVersion: Prisma.prismaVersion.client,
+          },
+        )
+        subtest.mock.method(authRepository, "findSessionById", async () => {
+          throw failure
+        })
+        const logs = subtest.mock.method(console, "error", () => {})
+        const response = await fetch(`${base}/auth/me`, {
+          headers: client.headers,
+        })
+        assert.equal(response.status, 503)
+        assert.equal(response.headers.get("retry-after"), "2")
+        assert.match(
+          ((await response.json()) as { error: string }).error,
+          /temporarily/,
+        )
+        assert.ok(
+          logs.mock.calls.some(
+            (call) =>
+              call.arguments[1] === "GET" &&
+              call.arguments[2] === "/api/auth/me",
+          ),
+        )
+      },
+    )
+
+    await t.test(
+      "streams stay alive during slow validation, queue changes, and still revoke access",
+      { timeout: 25_000 },
+      async (subtest) => {
+        const controller = new AbortController()
+        subtest.after(() => controller.abort())
+        const response = await fetch(
+          `${base}/request-conversations/${designConversation.id}/events`,
+          {
+            headers: head.headers,
+            signal: controller.signal,
+          },
+        )
+        assert.equal(response.status, 200)
+        const reader = response.body!.getReader()
+        let received = ""
+        const readUntil = async (ready: () => boolean) => {
+          while (!ready()) {
+            const next = await reader.read()
+            assert.equal(next.done, false)
+            received += new TextDecoder().decode(next.value)
+          }
+        }
+        await readUntil(() => received.includes("event: messages-changed"))
+        received = ""
+        let unblock = () => {}
+        const blocked = new Promise<void>((resolve) => {
+          unblock = resolve
+        })
+        subtest.after(unblock)
+        const originalMethod = prisma.session.findFirst
+        const originalFind = originalMethod.bind(prisma.session)
+        let checks = 0
+        const restore = () => {
+          Reflect.set(prisma.session, "findFirst", originalMethod)
+        }
+        subtest.after(restore)
+        Reflect.set(
+          prisma.session,
+          "findFirst",
+          async (...args: Parameters<typeof originalFind>) => {
+            checks++
+            await blocked
+            return originalFind(...args)
+          },
+        )
+        notify!()
+        notify!()
+        await readUntil(() => received.includes(": keep-alive"))
+        assert.equal(checks, 1)
+        assert.equal(received.includes("event: messages-changed"), false)
+        unblock()
+        await readUntil(
+          () => (received.match(/event: messages-changed/g) ?? []).length === 2,
+        )
+        assert.equal(checks, 2)
+        restore()
+
+        await prisma.department.update({
+          where: { id: design.id },
+          data: { headId: null },
+        })
+        try {
+          notify!()
+          await readUntil(() => received.includes("event: access-revoked"))
+          assert.equal((await reader.read()).done, true)
+          assert.equal(released, 1)
+        } finally {
+          await prisma.department.update({
+            where: { id: design.id },
+            data: { headId: head.id },
+          })
+          await reader.cancel()
+        }
+      },
+    )
+
+    await t.test(
+      "a temporary stream failure ends cleanly and asks the client to reconnect",
+      async (subtest) => {
+        const controller = new AbortController()
+        subtest.after(() => controller.abort())
+        const response = await fetch(
+          `${base}/request-conversations/${designConversation.id}/events`,
+          {
+            headers: head.headers,
+            signal: controller.signal,
+          },
+        )
+        assert.equal(response.status, 200)
+        const original = prisma.session.findFirst
+        subtest.after(() => {
+          Reflect.set(prisma.session, "findFirst", original)
+        })
+        subtest.mock.method(console, "error", () => {})
+        Reflect.set(prisma.session, "findFirst", async () => {
+          throw new Prisma.PrismaClientKnownRequestError("Connection closed", {
+            code: "P1017",
+            clientVersion: Prisma.prismaVersion.client,
+          })
+        })
+        notify!()
+        const events = await response.text()
+        assert.match(events, /event: reconnecting/)
+        assert.doesNotMatch(events, /event: access-revoked/)
+        assert.equal(released, 2)
+      },
+    )
+
+    await t.test(
+      "general and booking-specific messages share one chronological history",
       async () => {
-        const clientMessageId = randomUUID()
-        const input = {
-          body: "  Hello department\nPlease review the brief.  ",
-          clientMessageId,
-          senderId: admin.id,
-          requestId: "forged",
-        }
-        const [a, b] = await Promise.all([
-          post(client, input),
-          post(client, input),
-        ])
-        assert.equal(a.status, 201)
-        assert.equal(b.status, 201)
-        const first = (await a.json()) as {
-          message: { id: string; body: string; sender: { id: string } }
-        }
-        const second = (await b.json()) as typeof first
-        assert.equal(first.message.id, second.message.id)
-        assert.equal(first.message.sender.id, client.id)
-        assert.equal(first.message.body, input.body.trim())
-        messageId = first.message.id
+        const generalMessageId = randomUUID()
         assert.equal(
-          (await post(client, { ...input, body: "Different text" })).status,
+          (
+            await send(
+              designConversation.id,
+              head,
+              "General update",
+              undefined,
+              generalMessageId,
+            )
+          ).status,
+          201,
+        )
+        const retry = await send(
+          bookingB.id,
+          head,
+          "General update",
+          undefined,
+          generalMessageId,
+        )
+        assert.equal(retry.status, 201)
+        assert.equal(
+          ((await retry.json()) as { message: { booking: unknown } }).message
+            .booking,
+          null,
+        )
+        assert.equal(
+          (
+            await send(
+              designConversation.id,
+              client,
+              "SEO requirements attached",
+              bookingB.id,
+            )
+          ).status,
+          201,
+        )
+        const response = await history(bookingB.id)
+        assert.equal(response.status, 200)
+        const payload = (await response.json()) as {
+          selectedBookingId: string
+          conversation: { id: string; bookingCount: number }
+          messages: {
+            body: string
+            booking: { id: string; serviceName: string } | null
+          }[]
+        }
+        assert.equal(payload.conversation.id, designConversation.id)
+        assert.equal(payload.conversation.bookingCount, 2)
+        assert.equal(payload.selectedBookingId, bookingB.id)
+        assert.deepEqual(
+          payload.messages.map((message) => message.body),
+          ["General update", "SEO requirements attached"],
+        )
+        assert.equal(payload.messages[0]!.booking, null)
+        assert.equal(payload.messages[1]!.booking?.id, bookingB.id)
+        assert.equal(
+          (
+            await send(
+              designConversation.id,
+              client,
+              "Forged association",
+              bookingC.id,
+            )
+          ).status,
+          400,
+        )
+      },
+    )
+
+    await t.test(
+      "a workflow action changes only its selected booking",
+      async () => {
+        const workflowA = await prisma!.requestWorkflow.findUniqueOrThrow({
+          where: { requestId: bookingA.id },
+        })
+        const workflowB = await prisma!.requestWorkflow.findUniqueOrThrow({
+          where: { requestId: bookingB.id },
+        })
+        assert.equal(workflowA.state, "CONSULTATION")
+        assert.equal(workflowB.state, "CONSULTATION")
+        const action = await fetch(
+          `${base}/request-workflows/${bookingB.id}/actions`,
+          {
+            method: "POST",
+            headers: { ...head.headers, "content-type": "application/json" },
+            body: JSON.stringify({
+              type: "PREPARE_QUOTATION",
+              actionId: randomUUID(),
+              expectedVersion: workflowB.version,
+            }),
+          },
+        )
+        assert.equal(action.status, 200)
+        const [afterA, afterB] = await Promise.all([
+          prisma!.requestWorkflow.findUniqueOrThrow({
+            where: { requestId: bookingA.id },
+          }),
+          prisma!.requestWorkflow.findUniqueOrThrow({
+            where: { requestId: bookingB.id },
+          }),
+        ])
+        assert.equal(afterA.state, "CONSULTATION")
+        assert.equal(afterA.version, workflowA.version)
+        assert.equal(afterB.state, "QUOTATION_PENDING")
+        assert.equal(afterB.version, workflowB.version + 1)
+      },
+    )
+
+    await t.test(
+      "access and unread state belong to the shared conversation",
+      async () => {
+        for (const actor of [foreignClient, otherHead, staff, admin]) {
+          assert.equal(
+            (await history(designConversation.id, actor)).status,
+            404,
+          )
+        }
+        const beforeRead = (await (await list(client)).json()) as {
+          conversations: { id: string; unreadCount: number }[]
+        }
+        assert.equal(
+          beforeRead.conversations.find(
+            (row) => row.id === designConversation.id,
+          )?.unreadCount,
+          1,
+        )
+        const read = await fetch(
+          `${base}/request-conversations/${bookingA.id}/read`,
+          { method: "PATCH", headers: client.headers },
+        )
+        assert.equal(read.status, 200)
+        const readPayload = (await read.json()) as {
+          conversationId: string
+          conversationUnreadCount: number
+        }
+        assert.equal(readPayload.conversationId, designConversation.id)
+        assert.equal(readPayload.conversationUnreadCount, 0)
+      },
+    )
+
+    await t.test(
+      "meetings belong to the conversation with optional multiple services and strict participant access",
+      async () => {
+        const input = {
+          startsAt: new Date(Date.now() + 86_400_000).toISOString(),
+          endsAt: new Date(Date.now() + 88_200_000).toISOString(),
+          location: "https://meet.example.com/shared",
+          notes: "General catch-up",
+          bookingIds: [] as string[],
+          clientActionId: randomUUID(),
+        }
+        const invite = (data: typeof input, actor = head) =>
+          fetch(
+            `${base}/request-conversations/${designConversation.id}/meetings`,
+            {
+              method: "POST",
+              headers: { ...actor.headers, "content-type": "application/json" },
+              body: JSON.stringify(data),
+            },
+          )
+        const action = (meetingId: string, data: object, actor = head) =>
+          fetch(
+            `${base}/request-conversations/${designConversation.id}/meetings/${meetingId}`,
+            {
+              method: "PATCH",
+              headers: { ...actor.headers, "content-type": "application/json" },
+              body: JSON.stringify(data),
+            },
+          )
+        const workflowsBefore = await prisma.requestWorkflow.findMany({
+          where: { requestId: { in: [bookingA.id, bookingB.id] } },
+          orderBy: { requestId: "asc" },
+        })
+        const created = await invite(input)
+        assert.equal(created.status, 201)
+        const { meeting } = (await created.json()) as {
+          meeting: { id: string; bookings: unknown[]; version: number }
+        }
+        assert.deepEqual(meeting.bookings, [])
+        assert.equal((await invite(input)).status, 201)
+        assert.equal(await prisma.conversationMeeting.count(), 1)
+        assert.equal(
+          (await invite({ ...input, bookingIds: [bookingA.id] })).status,
+          409,
+        )
+        assert.equal(
+          (await invite({ ...input, clientActionId: randomUUID() }, client))
+            .status,
+          403,
+        )
+        for (const actor of [staff, admin, foreignClient, otherHead])
+          assert.equal(
+            (await invite({ ...input, clientActionId: randomUUID() }, actor))
+              .status,
+            404,
+          )
+        assert.equal(
+          (
+            await invite({
+              ...input,
+              clientActionId: randomUUID(),
+              bookingIds: [bookingC.id],
+            })
+          ).status,
+          400,
+        )
+        assert.equal(
+          (
+            await invite({
+              ...input,
+              clientActionId: randomUUID(),
+              startsAt: "not-a-date",
+            })
+          ).status,
+          400,
+        )
+        assert.equal(
+          (await action(meeting.id, { type: "COMPLETE", expectedVersion: 0 }))
+            .status,
           409,
         )
         assert.equal(
           (
-            await post(head, {
-              body: "Thanks, I can help.",
-              clientMessageId: randomUUID(),
-            })
+            await action(
+              meeting.id,
+              { type: "CANCEL", expectedVersion: 0 },
+              client,
+            )
           ).status,
-          201,
+          403,
         )
         assert.equal(
-          await prisma!.serviceRequestMessage.count({
-            where: { requestId: booking.id },
-          }),
-          2,
+          (
+            await action(
+              meeting.id,
+              { type: "CANCEL", expectedVersion: 0 },
+              staff,
+            )
+          ).status,
+          404,
         )
-        for (const input of [
-          null,
-          {},
-          { body: " " },
-          { body: "x", clientMessageId: "invalid" },
-          { body: "x".repeat(4001), clientMessageId: randomUUID() },
-          { body: "bad\u0000text", clientMessageId: randomUUID() },
-        ])
-          assert.equal((await post(client, input)).status, 400)
-        const broadcasts = await db.query<{
-          payload: unknown
-          event: string
-          topic: string
-          private: boolean
-        }>("SELECT * FROM realtime.test_broadcasts")
-        assert.equal(broadcasts.rows.length, 4) // acceptance, consultation event, two unique messages
-        for (const broadcast of broadcasts.rows)
-          assert.deepEqual(broadcast, {
-            payload: {},
-            event: "messages-changed",
-            topic: `request-conversation:${booking.id}`,
-            private: true,
-          })
-        const history = (await (await get(head)).json()) as {
-          messages: Record<string, unknown>[]
-          conversation: object
-          canSend: boolean
+        assert.equal(
+          (await action("unknown", { type: "CANCEL", expectedVersion: 0 }))
+            .status,
+          404,
+        )
+        assert.equal(
+          (
+            await action(
+              meeting.id,
+              {
+                type: "REQUEST_RESCHEDULE",
+                expectedVersion: 0,
+                startsAt: input.startsAt,
+                note: "Can we meet later?",
+              },
+              client,
+            )
+          ).status,
+          200,
+        )
+        assert.equal(
+          (
+            await action(meeting.id, {
+              type: "KEEP_SCHEDULE",
+              expectedVersion: 0,
+            })
+          ).status,
+          409,
+        )
+        assert.equal(
+          (
+            await action(meeting.id, {
+              type: "KEEP_SCHEDULE",
+              expectedVersion: 1,
+            })
+          ).status,
+          200,
+        )
+        assert.equal(
+          (
+            await action(meeting.id, {
+              type: "RESCHEDULE",
+              expectedVersion: 2,
+              startsAt: input.startsAt,
+              endsAt: input.endsAt,
+              location: "Office",
+            })
+          ).status,
+          200,
+        )
+        assert.equal(
+          (await action(meeting.id, { type: "CANCEL", expectedVersion: 3 }))
+            .status,
+          200,
+        )
+        const after = await prisma.requestWorkflow.findMany({
+          where: { requestId: { in: [bookingA.id, bookingB.id] } },
+          orderBy: { requestId: "asc" },
+        })
+        assert.deepEqual(after, workflowsBefore)
+        const sharedHistory = (await (await history(bookingB.id)).json()) as {
+          meetings: { id: string; status: string }[]
         }
-        assert.equal(history.messages.length, 2)
-        assert.equal(history.canSend, true)
-        assert.deepEqual(Object.keys(history.messages[0]!).sort(), [
-          "body",
-          "clientMessageId",
-          "createdAt",
-          "deletedAt",
-          "editedAt",
-          "id",
-          "purgeAt",
-          "sender",
-        ])
-        const rls = await db.query<{ enabled: boolean }>(
-          `SELECT relrowsecurity AS enabled FROM pg_class WHERE relname = 'ServiceRequestMessage'`,
+        assert.deepEqual(
+          sharedHistory.meetings.map((item) => [item.id, item.status]),
+          [[meeting.id, "CANCELLED"]],
         )
-        assert.equal(rls.rows[0]!.enabled, true)
+        const broadcasts = await db.query<{ count: number }>(
+          `SELECT count(*)::int AS count FROM realtime.test_broadcasts WHERE topic = 'request-conversation:${designConversation.id}'`,
+        )
+        assert.ok(broadcasts.rows[0]!.count >= 5)
       },
     )
 
     await t.test(
-      "history pagination is stable and rejects cursors from another request",
+      "one completed meeting satisfies consultation only for its explicitly related services",
       async () => {
-        const paged = await prisma!.serviceRequest.create({
+        await prisma.requestWorkflow.updateMany({
+          where: { requestId: { in: [bookingA.id, bookingB.id] } },
+          data: { consultationRequired: true },
+        })
+        const invite = await fetch(
+          `${base}/request-conversations/${designConversation.id}/meetings`,
+          {
+            method: "POST",
+            headers: { ...head.headers, "content-type": "application/json" },
+            body: JSON.stringify({
+              clientActionId: randomUUID(),
+              startsAt: new Date(Date.now() + 86_400_000).toISOString(),
+              endsAt: new Date(Date.now() + 88_200_000).toISOString(),
+              location: "Office",
+              notes: "Website and SEO",
+              bookingIds: [bookingA.id, bookingB.id],
+            }),
+          },
+        )
+        assert.equal(invite.status, 201)
+        const { meeting } = (await invite.json()) as {
+          meeting: { id: string; bookings: { booking: { id: string } }[] }
+        }
+        assert.deepEqual(
+          new Set(meeting.bookings.map((link) => link.booking.id)),
+          new Set([bookingA.id, bookingB.id]),
+        )
+        const before = await prisma.requestWorkflow.findMany({
+          where: { requestId: { in: [bookingA.id, bookingB.id] } },
+        })
+        await prisma.conversationMeeting.update({
+          where: { id: meeting.id },
           data: {
-            clientId: client.id,
-            serviceId: service.id,
-            title: "History",
-            status: "UNDER_REVIEW",
-            acceptedDepartmentId: department.id,
-            acceptedById: head.id,
-            acceptedAt: new Date(),
+            startsAt: new Date(Date.now() - 3_600_000),
+            endsAt: new Date(Date.now() - 1_800_000),
           },
         })
-        await prisma!.serviceRequestMessage.createMany({
-          data: Array.from({ length: 57 }, (_, index) => ({
-            id: `history-${String(index).padStart(3, "0")}`,
-            requestId: paged.id,
-            senderId: client.id,
-            clientMessageId: randomUUID(),
-            body: `Message ${index}`,
-            createdAt: new Date("2026-10-30T00:00:00Z"),
-          })),
-        })
-        const first = (await (await get(client, "", paged.id)).json()) as {
-          messages: { id: string }[]
-          nextCursor: string
+        const complete = await fetch(
+          `${base}/request-conversations/${designConversation.id}/meetings/${meeting.id}`,
+          {
+            method: "PATCH",
+            headers: { ...head.headers, "content-type": "application/json" },
+            body: JSON.stringify({ type: "COMPLETE", expectedVersion: 0 }),
+          },
+        )
+        assert.equal(complete.status, 200)
+        for (const originalWorkflow of before) {
+          const workflow = await prisma.requestWorkflow.findUniqueOrThrow({
+            where: { requestId: originalWorkflow.requestId },
+          })
+          assert.equal(workflow.state, originalWorkflow.state)
+          assert.equal(workflow.version, originalWorkflow.version)
+          const snapshot = await fetch(
+            `${base}/request-workflows/${originalWorkflow.requestId}`,
+            { headers: client.headers },
+          )
+          assert.equal(
+            ((await snapshot.json()) as { consultationComplete: boolean })
+              .consultationComplete,
+            true,
+          )
         }
-        assert.equal(first.messages.length, 50)
-        assert.equal(first.messages[0]!.id, "history-007")
-        const second = (await (
-          await get(client, `?before=${first.nextCursor}`, paged.id)
-        ).json()) as typeof first
-        assert.equal(second.messages.length, 7)
-        assert.equal(second.nextCursor, null)
+        const unrelated = await fetch(
+          `${base}/request-workflows/${bookingC.id}`,
+          { headers: client.headers },
+        )
         assert.equal(
-          new Set([...first.messages, ...second.messages].map((row) => row.id))
-            .size,
-          57,
+          ((await unrelated.json()) as { consultationComplete: boolean })
+            .consultationComplete,
+          false,
         )
-        assert.equal(
-          (await get(client, `?before=${messageId}`, paged.id)).status,
-          400,
-        )
-        assert.equal((await get(client, "?before=x&before=y")).status, 400)
-        assert.equal((await get(client, "", "bad.id")).status, 400)
-      },
-    )
-
-    async function stream(actor = client) {
-      const controller = new AbortController()
-      controllers.push(controller)
-      const response = await fetch(`${base}${path()}/events`, {
-        headers: actor.headers,
-        signal: controller.signal,
-      })
-      assert.equal(response.status, 200)
-      assert.match(response.headers.get("content-type")!, /text\/event-stream/)
-      const reader = response.body!.getReader()
-      let buffer = ""
-      const decoder = new TextDecoder()
-      async function until(name: string) {
-        while (!buffer.includes(`event: ${name}\n`)) {
-          const result = await reader.read()
-          assert.equal(result.done, false)
-          buffer += decoder.decode(result.value, { stream: true })
-        }
-        buffer = buffer.slice(
-          buffer.indexOf(`event: ${name}\n`) + `event: ${name}\n`.length,
-        )
-      }
-      await until("messages-changed") // initial history sync after subscription
-      return { controller, until, reader }
-    }
-
-    await t.test(
-      "Supabase events reach both participants and reconnect restores missed messages",
-      async () => {
-        const clientStream = await stream()
-        const headStream = await stream(head)
-        assert.equal(listeners.get(booking.id)!.size, 2)
-        assert.equal(
-          (
-            await post(head, {
-              body: "A live reply",
-              clientMessageId: randomUUID(),
-            })
-          ).status,
-          201,
-        )
-        notify()
-        await Promise.all([
-          clientStream.until("messages-changed"),
-          headStream.until("messages-changed"),
-        ])
-        clientStream.controller.abort()
-        assert.equal(
-          (
-            await post(head, {
-              body: "Sent while disconnected",
-              clientMessageId: randomUUID(),
-            })
-          ).status,
-          201,
-        )
-        const reconnected = await stream()
-        const history = (await (await get()).json()) as {
-          messages: { body: string }[]
-        }
-        assert.ok(
-          history.messages.some(
-            (row) => row.body === "Sent while disconnected",
-          ),
-        )
-        reconnected.controller.abort()
-        headStream.controller.abort()
-      },
-    )
-
-    await t.test(
-      "conversation inbox paginates without exposing other participants",
-      async () => {
-        const ids = Array.from({ length: 31 }, (_, index) => `inbox-${index}`)
-        await prisma!.serviceRequest.createMany({
-          data: ids.map((id) => ({
-            id,
-            clientId: client.id,
-            serviceId: service.id,
-            title: `Conversation ${id}`,
-            acceptedAt: new Date(),
-            acceptedDepartmentId: department.id,
-            status: "UNDER_REVIEW" as const,
-            updatedAt: new Date(0),
-          })),
+        const workflowA = await prisma.requestWorkflow.findUniqueOrThrow({
+          where: { requestId: bookingA.id },
         })
-        try {
-          type Inbox = {
-            conversations: {
-              id: string
-              lastMessage: { body: string } | null
-            }[]
-            nextCursor: string | null
-          }
-          const first = (await (await list()).json()) as Inbox
-          assert.equal(first.conversations.length, 30)
-          assert.equal(first.conversations[0]!.id, booking.id)
-          assert.ok(first.conversations[0]!.lastMessage?.body)
-          assert.ok(first.nextCursor)
-          const next = (await (
-            await list(client, `?before=${first.nextCursor}`)
-          ).json()) as Inbox
-          assert.equal(next.conversations.length, 3)
-          assert.equal(next.nextCursor, null)
-          assert.equal(
-            new Set(
-              [...first.conversations, ...next.conversations].map(
-                (row) => row.id,
-              ),
-            ).size,
-            33,
-          )
-          assert.deepEqual(await (await list(foreignClient)).json(), {
-            conversations: [],
-            nextCursor: null,
-          })
-          assert.equal(
-            (await list(foreignClient, `?before=${first.nextCursor}`)).status,
-            400,
-          )
-          assert.equal((await list(client, "?before=missing")).status, 400)
-          assert.equal((await list(client, "?before=x&before=y")).status, 400)
-        } finally {
-          await prisma!.serviceRequest.deleteMany({
-            where: { id: { in: ids } },
-          })
-        }
-      },
-    )
-
-    await t.test(
-      "closed and cancelled conversations archive automatically and deletion is private to each participant",
-      async () => {
-        const ids = ["archived-closed", "archived-cancelled"]
-        const remove = (actor = client, id = ids[0]!) =>
-          fetch(`${base}${path(id)}`, {
-            method: "DELETE",
-            headers: actor.headers,
-          })
-        type Inbox = {
-          conversations: { id: string; status: string; unreadCount: number }[]
-          unreadCount?: number
-        }
-        await prisma!.serviceRequest.createMany({
-          data: ids.map((id, index) => ({
-            id,
-            clientId: client.id,
-            serviceId: service.id,
-            title: id,
-            acceptedAt: new Date(),
-            acceptedDepartmentId: department.id,
-            status: index ? ("CANCELLED" as const) : ("CLOSED" as const),
-          })),
-        })
-        await prisma!.serviceRequestMessage.createMany({
-          data: [client, head].map((actor) => ({
-            requestId: ids[0]!,
-            senderId: actor.id,
-            body: "Retained booking history",
-            clientMessageId: randomUUID(),
-          })),
-        })
-        try {
-          assert.equal(
-            (await fetch(`${base}${path(ids[0])}`, { method: "DELETE" }))
-              .status,
-            401,
-          )
-          assert.equal((await list(client, "?view=unknown")).status, 400)
-          assert.equal(
-            (await list(client, "?view=active&view=archived")).status,
-            400,
-          )
-          assert.equal((await remove(client, booking.id)).status, 409)
-          for (const actor of [
-            foreignClient,
-            otherHead,
-            staff,
-            admin,
-            superadmin,
-          ]) {
-            assert.equal((await remove(actor)).status, 404)
-            assert.equal(
-              ((await (await list(actor, "?view=archived")).json()) as Inbox)
-                .conversations.length,
-              0,
-            )
-          }
-          for (const actor of [client, head]) {
-            const active = (await (await list(actor)).json()) as Inbox
-            assert.ok(
-              active.conversations.every((row) => !ids.includes(row.id)),
-            )
-            const archive = (await (
-              await list(actor, "?view=archived")
-            ).json()) as Inbox
-            assert.deepEqual(
-              new Set(archive.conversations.map((row) => row.status)),
-              new Set(["CLOSED", "CANCELLED"]),
-            )
-            assert.equal(
-              archive.conversations.find((row) => row.id === ids[0])!
-                .unreadCount,
-              1,
-            )
-            assert.equal(archive.unreadCount, active.unreadCount)
-            const history = (await (await get(actor, "", ids[0])).json()) as {
-              archived: boolean
-              canSend: boolean
-              messages: unknown[]
-            }
-            assert.equal(history.archived, true)
-            assert.equal(history.canSend, false)
-            assert.equal(history.messages.length, 2)
-          }
-          const before = await prisma!.serviceRequest.findUniqueOrThrow({
-            where: { id: ids[0] },
-          })
-          const deleted = await Promise.all([remove(), remove()])
-          assert.deepEqual(
-            deleted.map((response) => response.status),
-            [200, 200],
-          )
-          assert.equal((await get(client, "", ids[0])).status, 404)
-          assert.equal((await get(client, "/events", ids[0])).status, 404)
-          assert.equal(
-            (
-              await fetch(`${base}${path(ids[0])}/read`, {
-                method: "PATCH",
-                headers: client.headers,
-              })
-            ).status,
-            404,
-          )
-          assert.equal(
-            ((await (await list(client, "?view=archived")).json()) as Inbox)
-              .conversations.length,
-            1,
-          )
-          assert.equal(
-            ((await (await list(head, "?view=archived")).json()) as Inbox)
-              .conversations.length,
-            2,
-          )
-          assert.equal((await get(head, "", ids[0])).status, 200)
-          assert.equal((await remove(head, ids[1])).status, 200)
-          assert.equal((await get(client, "", ids[1])).status, 200)
-          assert.equal((await get(head, "", ids[1])).status, 404)
-          const after = await prisma!.serviceRequest.findUniqueOrThrow({
-            where: { id: ids[0] },
-          })
-          assert.equal(after.updatedAt.getTime(), before.updatedAt.getTime())
-          assert.equal(
-            await prisma!.serviceRequestMessage.count({
-              where: { requestId: ids[0] },
+        const quote = await fetch(
+          `${base}/request-workflows/${bookingA.id}/actions`,
+          {
+            method: "POST",
+            headers: { ...head.headers, "content-type": "application/json" },
+            body: JSON.stringify({
+              type: "PREPARE_QUOTATION",
+              expectedVersion: workflowA.version,
+              actionId: randomUUID(),
             }),
-            2,
-          )
-          // A replacement head inherits the archive, not the previous head's deletion preference.
-          await prisma!.department.update({
-            where: { id: department.id },
-            data: { headId: staff.id },
-          })
-          assert.equal((await get(staff, "", ids[1])).status, 200)
-          assert.equal((await remove(head, ids[1])).status, 404)
-          await prisma!.department.update({
-            where: { id: department.id },
-            data: { headId: head.id },
-          })
-          // Reactivating a service makes its conversation available again.
-          await prisma!.serviceRequest.update({
-            where: { id: ids[0] },
-            data: { status: "UNDER_REVIEW" },
-          })
-          assert.equal((await get(client, "", ids[0])).status, 200)
-          assert.ok(
-            ((await (await list()).json()) as Inbox).conversations.some(
-              (row) => row.id === ids[0],
-            ),
-          )
-        } finally {
-          await prisma!.department.update({
-            where: { id: department.id },
-            data: { headId: head.id },
-          })
-          await prisma!.serviceRequest.deleteMany({
-            where: { id: { in: ids } },
-          })
-        }
-      },
-    )
-
-    await t.test(
-      "archive pagination keeps deleted conversations hidden on later pages",
-      async () => {
-        const ids = Array.from(
-          { length: 33 },
-          (_, index) => `archive-page-${index}`,
+          },
         )
-        await prisma!.serviceRequest.createMany({
-          data: ids.map((id) => ({
-            id,
-            clientId: client.id,
-            serviceId: service.id,
-            title: id,
-            acceptedAt: new Date(),
-            acceptedDepartmentId: department.id,
-            status: "CLOSED" as const,
-            updatedAt: new Date(0),
-          })),
-        })
-        await prisma!.serviceRequestConversationDeletion.create({
-          data: { requestId: ids[0]!, userId: client.id },
-        })
-        try {
-          type Inbox = {
-            conversations: { id: string }[]
-            nextCursor: string | null
-          }
-          const first = (await (
-            await list(client, "?view=archived")
-          ).json()) as Inbox
-          assert.equal(first.conversations.length, 30)
-          const next = (await (
-            await list(client, `?view=archived&before=${first.nextCursor}`)
-          ).json()) as Inbox
-          assert.equal(next.conversations.length, 2)
-          assert.equal(next.nextCursor, null)
-          assert.equal(
-            new Set(
-              [...first.conversations, ...next.conversations].map(
-                (row) => row.id,
-              ),
-            ).size,
-            32,
-          )
-          assert.ok(
-            [...first.conversations, ...next.conversations].every(
-              (row) => row.id !== ids[0],
-            ),
-          )
-          assert.equal(
-            (await list(client, `?view=active&before=${first.nextCursor}`))
-              .status,
-            400,
-          )
-        } finally {
-          await prisma!.serviceRequest.deleteMany({
-            where: { id: { in: ids } },
-          })
-        }
+        assert.equal(quote.status, 200)
       },
     )
 
     await t.test(
-      "head handoff revokes open streams and moves conversation access to the replacement",
+      "the conversation remains available after every attached booking ends",
       async () => {
-        const oldStream = await stream(head)
-        await prisma!.department.update({
-          where: { id: department.id },
-          data: { headId: staff.id },
+        await prisma!.serviceRequest.update({
+          where: { id: bookingA.id },
+          data: { status: "CLOSED" },
         })
-        notify()
-        await oldStream.until("access-revoked")
-        assert.equal((await get(head)).status, 404)
-        assert.equal((await post(head)).status, 404)
-        assert.deepEqual(await (await list(head)).json(), {
-          conversations: [],
-          nextCursor: null,
-        })
-        const replacementInbox = (await (await list(staff)).json()) as {
+        const activeWithOne = (await (await list()).json()) as {
           conversations: { id: string }[]
         }
         assert.ok(
-          replacementInbox.conversations.some((row) => row.id === booking.id),
+          activeWithOne.conversations.some(
+            (row) => row.id === designConversation.id,
+          ),
         )
-        assert.equal((await get(staff)).status, 200)
-        assert.equal((await post(staff)).status, 201)
-        // Accepted department retains access even when catalog routing changes later.
-        await prisma!.service.update({
-          where: { id: service.id },
-          data: { departments: { set: { id: otherDepartment.id } } },
-        })
-        assert.equal((await get(staff)).status, 200)
-        assert.equal(
-          (
-            await fetch(`${base}/request-inbox/${booking.id}`, {
-              headers: staff.headers,
-            })
-          ).status,
-          200,
-        )
-        const activeStream = await stream(staff)
-        await prisma!.user.update({
-          where: { id: staff.id },
-          data: { isActive: false },
-        })
-        notify()
-        await activeStream.until("access-revoked")
-        assert.equal((await get(staff)).status, 401)
-        assert.equal((await post()).status, 409)
-        const paused = (await (await get()).json()) as {
-          canSend: boolean
-          conversation: { head: unknown }
-        }
-        assert.equal(paused.canSend, false)
-        assert.equal(paused.conversation.head, null)
-        await prisma!.user.update({
-          where: { id: staff.id },
-          data: { isActive: true, role: "ADMIN" },
-        })
-        assert.equal((await get(staff)).status, 404)
-        await prisma!.user.update({
-          where: { id: staff.id },
-          data: { role: "STAFF" },
-        })
-      },
-    )
-
-    await t.test(
-      "staff and administrators can create private internal conversations",
-      async () => {
-        const internalList = (actor = admin, suffix = "") =>
-          fetch(`${base}/internal-conversations${suffix}`, {
-            headers: actor.headers,
-          })
-        const createInternal = (actor = admin, recipientId = staff.id) =>
-          fetch(`${base}/internal-conversations`, {
-            method: "POST",
-            headers: { ...actor.headers, "content-type": "application/json" },
-            body: JSON.stringify({ recipientId }),
-          })
-        assert.equal((await internalList(client)).status, 403)
-        const contacts = (await (
-          await internalList(admin, "/contacts")
-        ).json()) as {
-          id: string
-          role: string
-        }[]
-        assert.ok(contacts.some((contact) => contact.id === staff.id))
-        const created = (await (await createInternal()).json()) as {
-          id: string
-          canSend: boolean
-        }
-        assert.ok(created.id)
-        assert.equal(created.canSend, true)
-        const messageResponse = await fetch(
-          `${base}/internal-conversations/${created.id}/messages`,
-          {
-            method: "POST",
-            headers: { ...admin.headers, "content-type": "application/json" },
-            body: JSON.stringify({
-              body: "Internal handoff",
-              clientMessageId: randomUUID(),
-            }),
-          },
-        )
-        assert.equal(messageResponse.status, 201)
-        const history = (await (
-          await internalList(staff, `/${created.id}`)
-        ).json()) as {
-          messages: { body: string | null }[]
-          conversation: { id: string }
-        }
-        assert.equal(history.conversation.id, admin.id)
-        assert.equal(history.messages[0]?.body, "Internal handoff")
-        assert.equal(
-          (
-            await fetch(`${base}/internal-conversations/${created.id}/read`, {
-              method: "PATCH",
-              headers: staff.headers,
-            })
-          ).status,
-          200,
-        )
-      },
-    )
-
-    await t.test(
-      "closed requests keep history but reject new messages; logout revokes streams",
-      async () => {
         await prisma!.serviceRequest.update({
-          where: { id: booking.id },
-          data: { status: "CLOSED" },
-        })
-        assert.equal((await get()).status, 200)
-        assert.equal((await post()).status, 409)
-        assert.equal((await post(staff)).status, 409)
-        await prisma!.serviceRequest.update({
-          where: { id: booking.id },
+          where: { id: bookingB.id },
           data: { status: "CANCELLED" },
         })
-        assert.equal((await post()).status, 409)
-        const activeStream = await stream()
-        await fetch(`${base}/auth/logout`, {
-          method: "POST",
-          headers: client.headers,
-        })
-        notify()
-        await activeStream.until("access-revoked")
-        assert.equal((await get()).status, 401)
+        const active = (await (await list()).json()) as {
+          conversations: { id: string; status: string }[]
+        }
+        assert.equal(
+          active.conversations.find((row) => row.id === designConversation.id)
+            ?.status,
+          "ACTIVE",
+        )
+        const sharedHistory = (await (
+          await history(designConversation.id, head)
+        ).json()) as {
+          archived: boolean
+          canSend: boolean
+          messages: unknown[]
+        }
+        assert.equal(sharedHistory.archived, false)
+        assert.equal(sharedHistory.canSend, true)
+        assert.equal(sharedHistory.messages.length, 2)
       },
     )
 
-    await t.test(
-      "historical acceptance is claimed explicitly and atomically without guessing its department",
-      async () => {
-        await prisma!.service.update({
-          where: { id: service.id },
-          data: { departments: { connect: { id: department.id } } },
-        })
-        const legacy = await prisma!.serviceRequest.create({
-          data: {
-            clientId: foreignClient.id,
-            serviceId: service.id,
-            title: "Historical request",
-            status: "UNDER_REVIEW",
-          },
-        })
-        const results = await Promise.all([
-          accept(staff, legacy.id),
-          accept(otherHead, legacy.id),
-        ])
-        assert.deepEqual(
-          results.map((result) => result.status).sort(),
-          [200, 409],
-        )
-        const winner = results[0]!.status === 200 ? staff : otherHead
-        assert.equal((await get(winner, "", legacy.id)).status, 200)
-        offline = true
-        const response = await get(winner, "/events", legacy.id)
-        assert.equal(response.status, 503)
-        assert.equal(
-          (
-            await post(
-              winner,
-              {
-                body: "Saved during provider outage",
-                clientMessageId: randomUUID(),
-              },
-              legacy.id,
-            )
-          ).status,
-          201,
-        )
-      },
-    )
+    const rls = await db.query<{ table: string; enabled: boolean }>(`
+      SELECT relname AS table, relrowsecurity AS enabled
+      FROM pg_class
+      WHERE relname IN ('RequestConversation', 'RequestConversationDeletion', 'ServiceRequestMessage', 'ConversationMeeting', 'ConversationMeetingBooking')
+      ORDER BY relname
+    `)
+    assert.equal(rls.rows.length, 5)
+    assert.ok(rls.rows.every((row) => row.enabled))
   },
 )

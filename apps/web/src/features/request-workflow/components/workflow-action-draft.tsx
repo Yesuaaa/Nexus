@@ -1,7 +1,8 @@
 "use client"
 
+import { Form } from "@/components/ui/form"
+
 import type { ReactNode } from "react"
-import { X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { WorkflowControls } from "../hooks/use-request-workflow"
 import type { Workflow, WorkflowAction } from "../model/workflow"
@@ -10,77 +11,22 @@ import {
   workflowButton,
   workflowInput,
 } from "./workflow-primitives"
-import { QuotationForm } from "./workflow-context-panel"
+import { WorkflowDraftFrame } from "./workflow-draft-frame"
+import { QuotationForm } from "./quotation-form"
+import {
+  WorkflowDraftFooter,
+  draftSecondaryButton,
+  draftPrimaryButton,
+} from "./workflow-draft-footer"
 
 export type WorkflowDraftAction =
-  | "request-information"
-  | "schedule-consultation"
-  | "quotation"
-  | "approver-assignments"
-  | "internal-note"
+  "request-information" | "quotation" | "approver-assignments" | "internal-note"
 
 type WorkflowActionDraftProps = {
   action: WorkflowDraftAction
   workflow: Workflow
   controls: WorkflowControls
   onClose: () => void
-}
-
-function DraftFrame({
-  title,
-  status,
-  internal = false,
-  description,
-  onClose,
-  children,
-}: {
-  title: string
-  status?: string
-  internal?: boolean
-  description?: string
-  onClose: () => void
-  children: ReactNode
-}) {
-  return (
-    <section
-      aria-label={title}
-      className="mx-5 mb-2 max-h-[min(45dvh,400px)] overflow-y-auto overscroll-contain rounded-xl border border-[#d8e1ef] bg-white px-4 py-3 shadow-[0_2px_8px_rgb(18_36_73_/_4%)] max-[767px]:mx-3"
-    >
-      <header className="mb-3 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <h2 className="m-0 text-sm font-semibold text-[#182235]">
-              {title}
-            </h2>
-            {internal ? (
-              <span className="rounded-full bg-[#fff3e0] px-2.5 py-1 text-[9px] font-semibold tracking-wide text-[#9a4f00]">
-                INTERNAL · STAFF ONLY
-              </span>
-            ) : (
-              status && (
-                <span className="text-[10px] text-[#8791a2]">{status}</span>
-              )
-            )}
-          </div>
-          {description && (
-            <p className="mt-1 mb-0 text-[11px] leading-5 text-[#52627a]">
-              {description}
-            </p>
-          )}
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          aria-label={`Close ${title.toLowerCase()} draft`}
-          className="size-8 shrink-0 border-0 bg-transparent p-0 text-[#52627a] hover:bg-[#f1f4fa]"
-          onClick={onClose}
-        >
-          <X size={16} aria-hidden="true" />
-        </Button>
-      </header>
-      {children}
-    </section>
-  )
 }
 
 function DraftForm({
@@ -97,7 +43,7 @@ function DraftForm({
   children: ReactNode
 }) {
   return (
-    <form
+    <Form
       className="space-y-3"
       onSubmit={async (event) => {
         event.preventDefault()
@@ -106,30 +52,21 @@ function DraftForm({
       }}
     >
       {children}
-      <div className="flex flex-wrap justify-end gap-2 border-t border-[#e8ebef] pt-3">
+      <WorkflowDraftFooter>
         <Button
           type="button"
           variant="outline"
-          className="h-9 min-w-[92px] text-[11px]"
+          className={draftSecondaryButton}
           onClick={onClose}
         >
           Cancel
         </Button>
-        <Button
-          className={`${workflowButton} min-w-[130px] bg-[#203f8c] text-white hover:bg-[#172f70]`}
-          disabled={controls.busy}
-        >
+        <Button className={draftPrimaryButton} disabled={controls.busy}>
           {controls.busy ? "Saving…" : label}
         </Button>
-      </div>
-    </form>
+      </WorkflowDraftFooter>
+    </Form>
   )
-}
-
-function localDateInputValue(date: Date) {
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
-    .toISOString()
-    .slice(0, 10)
 }
 
 export function WorkflowActionDraft({
@@ -140,7 +77,8 @@ export function WorkflowActionDraft({
 }: WorkflowActionDraftProps) {
   if (action === "request-information") {
     return (
-      <DraftFrame
+      <WorkflowDraftFrame
+        booking={workflow.request}
         title="Request information"
         status="Draft · Not sent"
         description="What information do you need from the client?"
@@ -166,9 +104,17 @@ export function WorkflowActionDraft({
               className={workflowInput}
             />
           </WorkflowField>
-          <WorkflowField label="Instructions for the client">
+          <WorkflowField label="Request detail information (required)">
             <textarea
               name="details"
+              required
+              onChange={(event) =>
+                event.currentTarget.setCustomValidity(
+                  event.currentTarget.value.trim()
+                    ? ""
+                    : "Enter request detail information.",
+                )
+              }
               rows={3}
               maxLength={4000}
               placeholder="e.g. Please provide site address, access instructions, and any induction requirements."
@@ -185,92 +131,7 @@ export function WorkflowActionDraft({
             Required before activation
           </label>
         </DraftForm>
-      </DraftFrame>
-    )
-  }
-
-  if (action === "schedule-consultation") {
-    const today = localDateInputValue(new Date())
-    return (
-      <DraftFrame
-        title="Schedule consultation"
-        status="Draft · Not sent"
-        onClose={onClose}
-      >
-        <DraftForm
-          controls={controls}
-          label="Send invitation"
-          onClose={onClose}
-          action={(data) => {
-            const startsAt = new Date(
-              `${String(data.get("date"))}T${String(data.get("time"))}`,
-            )
-            const endsAt = new Date(
-              startsAt.getTime() + Number(data.get("duration")) * 60_000,
-            )
-            return {
-              type: "SCHEDULE_CONSULTATION",
-              startsAt: startsAt.toISOString(),
-              endsAt: endsAt.toISOString(),
-              location: String(data.get("location")),
-              notes: String(data.get("topic") || ""),
-            }
-          }}
-        >
-          <WorkflowField label="Consultation topic">
-            <input
-              name="topic"
-              maxLength={500}
-              placeholder="e.g. Project overview or technical discussion"
-              className={workflowInput}
-            />
-          </WorkflowField>
-          <div className="grid grid-cols-2 gap-3 max-[520px]:grid-cols-1">
-            <WorkflowField label="Preferred date">
-              <input
-                name="date"
-                type="date"
-                min={today}
-                required
-                className={workflowInput}
-              />
-            </WorkflowField>
-            <WorkflowField label="Preferred time">
-              <input
-                name="time"
-                type="time"
-                required
-                className={workflowInput}
-              />
-            </WorkflowField>
-          </div>
-          <div className="grid grid-cols-2 gap-3 max-[520px]:grid-cols-1">
-            <WorkflowField label="Duration">
-              <select
-                name="duration"
-                defaultValue="30"
-                className={workflowInput}
-              >
-                <option value="15">15 minutes</option>
-                <option value="30">30 minutes</option>
-                <option value="45">45 minutes</option>
-                <option value="60">1 hour</option>
-                <option value="90">1 hour 30 minutes</option>
-                <option value="120">2 hours</option>
-              </select>
-            </WorkflowField>
-            <WorkflowField label="Meeting link or location">
-              <input
-                name="location"
-                required
-                maxLength={1000}
-                placeholder="Teams link or office address"
-                className={workflowInput}
-              />
-            </WorkflowField>
-          </div>
-        </DraftForm>
-      </DraftFrame>
+      </WorkflowDraftFrame>
     )
   }
 
@@ -282,13 +143,17 @@ export function WorkflowActionDraft({
       ).length
       const consultationIncomplete =
         workflow.consultationRequired &&
-        !workflow.consultations.some(
-          (consultation) => consultation.status === "COMPLETED",
+        !(
+          workflow.consultationComplete ??
+          workflow.consultations.some(
+            (consultation) => consultation.status === "COMPLETED",
+          )
         )
       const canPrepare = pendingRequirements === 0 && !consultationIncomplete
 
       return (
-        <DraftFrame
+        <WorkflowDraftFrame
+          booking={workflow.request}
           title="Prepare quotation"
           status="Draft · Not sent"
           description="Review the request requirements before moving to quotation."
@@ -324,25 +189,25 @@ export function WorkflowActionDraft({
               </Button>
             </div>
           </div>
-        </DraftFrame>
+        </WorkflowDraftFrame>
       )
     }
 
     return (
-      <DraftFrame
+      <WorkflowDraftFrame
+        booking={workflow.request}
         title="Prepare quotation"
         status="Draft · Not sent"
-        description="Add scope and pricing details for the client’s review."
+        description="Add scope and pricing details, then review before sending."
         onClose={onClose}
       >
         <QuotationForm
           workflow={workflow}
           controls={controls}
-          inline
           onComplete={onClose}
           onCancel={onClose}
         />
-      </DraftFrame>
+      </WorkflowDraftFrame>
     )
   }
 
@@ -350,7 +215,8 @@ export function WorkflowActionDraft({
     const internal = workflow.internal
     if (!internal) return null
     return (
-      <DraftFrame
+      <WorkflowDraftFrame
+        booking={workflow.request}
         title="Approver assignments"
         internal
         description="Assign staff to review the financial steps for this request."
@@ -403,7 +269,7 @@ export function WorkflowActionDraft({
             their role.
           </p>
         </DraftForm>
-      </DraftFrame>
+      </WorkflowDraftFrame>
     )
   }
 
@@ -411,7 +277,8 @@ export function WorkflowActionDraft({
     workflow.state,
   )
   return (
-    <DraftFrame
+    <WorkflowDraftFrame
+      booking={workflow.request}
       title="Internal note"
       internal
       description="Add a private note for your team about this request."
@@ -446,6 +313,6 @@ export function WorkflowActionDraft({
           Notes can’t be added after this request is closed.
         </p>
       )}
-    </DraftFrame>
+    </WorkflowDraftFrame>
   )
 }

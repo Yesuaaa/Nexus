@@ -1,8 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { Plus } from "lucide-react"
-import { useEffect, useState } from "react"
+import { Plus, RefreshCw } from "lucide-react"
+import { useCallback, useEffect, useState } from "react"
 import { contentClass } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
@@ -16,6 +16,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { ApiError } from "@/features/auth/api/auth-api"
+import { watchVisibleRefresh } from "@/lib/visible-refresh"
 import { listBookedServices, type BookingList } from "../api/bookings-api"
 import { BookedServicesTable } from "../components/booked-services-table"
 import { BookingDetailsDrawer } from "../components/booking-details-drawer"
@@ -31,6 +33,7 @@ export function BookedServicesPage({
   const [status, setStatus] = useState("")
   const [page, setPage] = useState(1)
   const [revision, setRevision] = useState(0)
+  const [detailsRefreshKey, setDetailsRefreshKey] = useState(0)
   const [selectedId, setSelectedId] = useState(initialBookingId)
   const [result, setResult] = useState<BookingList>({
     serviceRequests: [],
@@ -38,6 +41,17 @@ export function BookedServicesPage({
     page: 1,
     pageSize: 10,
   })
+  const syncBooking = useCallback(
+    (booking: import("../api/bookings-api").BookingDetails) => {
+      setResult((current) => ({
+        ...current,
+        serviceRequests: current.serviceRequests.map((item) =>
+          item.id === booking.id ? { ...item, ...booking } : item,
+        ),
+      }))
+    },
+    [],
+  )
   const [error, setError] = useState("")
   const [resolvedKey, setResolvedKey] = useState("")
   const [resolvedViewKey, setResolvedViewKey] = useState("")
@@ -54,30 +68,49 @@ export function BookedServicesPage({
 
   useEffect(() => {
     let active = true
-    listBookedServices({ search: debouncedSearch, status, page })
-      .then((value) => {
-        if (!active) return
-        const lastPage = Math.max(1, Math.ceil(value.total / value.pageSize))
-        if (page > lastPage) {
-          setPage(lastPage)
-          return
-        }
-        setResult(value)
-        setError("")
-        setResolvedKey(requestKey)
-        setResolvedViewKey(viewKey)
-      })
-      .catch((reason: unknown) => {
-        if (!active) return
-        setError(
-          reason instanceof Error
-            ? reason.message
-            : "Couldn't load booked services.",
-        )
-        setResolvedKey(requestKey)
-      })
+    let inFlight = false
+    let hasLoaded = false
+    const load = () => {
+      if (inFlight) return
+      inFlight = true
+      void listBookedServices({ search: debouncedSearch, status, page })
+        .then((value) => {
+          if (!active) return
+          const lastPage = Math.max(1, Math.ceil(value.total / value.pageSize))
+          if (page > lastPage) {
+            setPage(lastPage)
+            return
+          }
+          hasLoaded = true
+          setResult(value)
+          setDetailsRefreshKey((key) => key + 1)
+          setError("")
+          setResolvedKey(requestKey)
+          setResolvedViewKey(viewKey)
+        })
+        .catch((reason: unknown) => {
+          if (!active) return
+          if (
+            hasLoaded &&
+            (!(reason instanceof ApiError) || reason.status >= 500)
+          )
+            return
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "Couldn't load booked services.",
+          )
+          setResolvedKey(requestKey)
+        })
+        .finally(() => {
+          inFlight = false
+        })
+    }
+    load()
+    const stopRefresh = watchVisibleRefresh(load, { poll: false })
     return () => {
       active = false
+      stopRefresh()
     }
   }, [debouncedSearch, status, page, revision, requestKey, viewKey])
 
@@ -110,15 +143,27 @@ export function BookedServicesPage({
             booking details.
           </p>
         </div>
-        <Button
-          asChild
-          className="h-[34px] bg-[#203f8c] text-xs text-white hover:bg-[#172f70] max-[560px]:h-11"
-        >
-          <Link href="/services">
-            <Plus size={16} aria-hidden="true" />
-            Browse Services
-          </Link>
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-[34px] gap-2 text-xs"
+            disabled={loading}
+            onClick={() => setRevision((value) => value + 1)}
+          >
+            <RefreshCw size={14} aria-hidden="true" />
+            Refresh
+          </Button>
+          <Button
+            asChild
+            className="h-[34px] bg-[#203f8c] text-xs text-white hover:bg-[#172f70] max-[560px]:h-11"
+          >
+            <Link href="/services">
+              <Plus size={16} aria-hidden="true" />
+              Browse Services
+            </Link>
+          </Button>
+        </div>
       </header>
       <section aria-label="Your booked services" className="mt-[18px] min-w-0">
         <div className="flex flex-wrap items-center gap-2.5 pb-4 max-[560px]:flex-col max-[560px]:items-stretch">
@@ -200,6 +245,8 @@ export function BookedServicesPage({
       </section>
       {selectedId && (
         <BookingDetailsDrawer
+          onLoaded={syncBooking}
+          refreshKey={detailsRefreshKey}
           key={selectedId}
           id={selectedId}
           onClose={() => setSelectedId(null)}

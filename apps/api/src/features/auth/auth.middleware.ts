@@ -47,6 +47,12 @@ export const requireAuth: RequestHandler = async (request, response, next) => {
       response.status(401).json({ error: "Invalid or expired session" })
       return
     }
+    if (
+      !session.lastActiveAt ||
+      Date.now() - session.lastActiveAt.getTime() > 300000
+    ) {
+      await authRepository.touchSession(session.id)
+    }
     request.auth = { user: session.user, sessionId: session.id }
     next()
   } catch (error) {

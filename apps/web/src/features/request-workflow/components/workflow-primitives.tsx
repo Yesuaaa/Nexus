@@ -1,5 +1,11 @@
 import type { ReactNode } from "react"
-import { Check, Circle, LoaderCircle } from "lucide-react"
+import {
+  Check,
+  Circle,
+  ClipboardList,
+  LoaderCircle,
+  type LucideIcon,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Workflow, WorkflowState } from "../model/workflow"
 
@@ -14,10 +20,41 @@ export function statusText(value: string) {
     .replace(/^./, (letter) => letter.toUpperCase())
 }
 
-export function WorkflowBadge({ value }: { value: string }) {
+export function WorkflowBadge({
+  value,
+  checklist = false,
+}: {
+  value: string
+  checklist?: boolean
+}) {
+  const complete = [
+    "COMPLETED",
+    "APPROVED",
+    "VERIFIED",
+    "NOT_REQUIRED",
+  ].includes(value)
   return (
-    <span className="inline-flex rounded-full bg-[#eaf0fb] px-2.5 py-1 text-[10px] font-medium text-[#203f8c]">
-      {statusText(value)}
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-medium",
+        checklist
+          ? complete
+            ? "bg-[#ecfdf3] text-[#067647]"
+            : "bg-[#fef3f2] text-[#b42318]"
+          : "bg-[#eaf0fb] text-[#203f8c]",
+      )}
+    >
+      {checklist &&
+        (complete ? (
+          <Check size={12} aria-hidden="true" />
+        ) : (
+          <Circle size={12} aria-hidden="true" />
+        ))}
+      {checklist && value === "SUBMITTED"
+        ? "Pending review"
+        : checklist && value === "REQUESTED"
+          ? "Incomplete"
+          : statusText(value)}
     </span>
   )
 }
@@ -25,15 +62,18 @@ export function WorkflowBadge({ value }: { value: string }) {
 export function WorkflowField({
   label,
   children,
+  asGroup = false,
 }: {
-  label: string
+  label: ReactNode
   children: ReactNode
+  asGroup?: boolean
 }) {
+  const Container = asGroup ? "div" : "label"
   return (
-    <label className="grid min-w-0 gap-1.5 text-[11px] font-medium text-[#52627a]">
+    <Container className="grid min-w-0 gap-1.5 text-[11px] font-medium text-[#52627a]">
       {label}
       {children}
-    </label>
+    </Container>
   )
 }
 
@@ -41,18 +81,41 @@ export function WorkflowCard({
   title,
   status,
   children,
+  className,
+  icon: Icon = ClipboardList,
 }: {
   title: string
   status?: string
   children: ReactNode
+  className?: string
+  icon?: LucideIcon
 }) {
   return (
-    <section className="my-3 w-full rounded-2xl border border-[#e1e6ee] bg-background p-4 text-xs shadow-[0_2px_8px_rgb(18_36_73_/_3%)]">
-      <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="m-0 text-xs font-semibold text-[#182235]">{title}</h3>
-        {status && <WorkflowBadge value={status} />}
+    <section
+      className={cn(
+        "my-3 w-full min-w-0 overflow-hidden rounded-2xl border-0 bg-[#294c96] bg-[linear-gradient(145deg,transparent_40%,rgb(20_54_129_/_42%))] p-2 text-xs shadow-[0_8px_24px_rgb(26_58_128_/_10%)]",
+        className,
+      )}
+    >
+      <header className="flex flex-wrap items-center justify-between gap-3 p-4 text-white max-[560px]:p-3">
+        <div className="flex min-w-0 flex-[1_1_180px] items-center gap-3">
+          <span
+            className="grid size-11 shrink-0 place-items-center rounded-2xl border-2 border-white/80 bg-[rgb(22_48_105_/_10%)]"
+            aria-hidden="true"
+          >
+            <Icon size={23} strokeWidth={1.8} />
+          </span>
+          <h3 className="m-0 min-w-0 flex-1 text-[15px] leading-snug font-bold tracking-[-0.025em] [overflow-wrap:anywhere]">
+            {title}
+          </h3>
+        </div>
+        {status && (
+          <span className="inline-flex max-w-full items-center rounded-full border border-white/25 bg-white/15 px-3 py-1 text-[10px] font-medium text-white">
+            {statusText(status)}
+          </span>
+        )}
       </header>
-      <div className="flex flex-col gap-4 leading-5 text-[#52627a]">
+      <div className="flex min-w-0 flex-col gap-4 rounded-xl bg-white p-5 leading-5 text-[#52627a] [overflow-wrap:anywhere] max-[560px]:p-4">
         {children}
       </div>
     </section>

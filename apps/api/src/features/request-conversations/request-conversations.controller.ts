@@ -9,6 +9,7 @@ import {
 } from "./request-conversations.realtime.js"
 import {
   getConversationAccess,
+  getConversationStreamAccess,
   listConversations,
   listConversationMessages,
   markConversationRead,
@@ -16,6 +17,8 @@ import {
   editConversationMessage,
   deleteConversationMessage,
   deleteArchivedConversation,
+  scheduleConversationMeeting,
+  updateConversationMeeting,
 } from "./request-conversations.service.js"
 
 export function createRequestConversationsRouter(
@@ -48,18 +51,48 @@ export function createRequestConversationsRouter(
   router.get("/:id", async (request, response) => {
     const id = String(request.params.id)
     const before = request.query.before
+    const booking = request.query.booking
     if (
       before !== undefined &&
       (typeof before !== "string" || !/^[A-Za-z0-9_-]{1,80}$/.test(before))
     )
       return response.status(400).json({ error: "Invalid message cursor" })
-    const access = await getConversationAccess(request.auth!.user.id, id)
+    if (
+      booking !== undefined &&
+      (typeof booking !== "string" || !/^[A-Za-z0-9_-]{1,80}$/.test(booking))
+    )
+      return response.status(400).json({ error: "Invalid booking id" })
+    const access = await getConversationAccess(
+      request.auth!.user.id,
+      id,
+      booking,
+    )
     const history = await listConversationMessages(
       request.auth!.user.id,
       id,
       before,
     )
     response.json({ ...access, ...history })
+  })
+  router.post("/:id/meetings", async (request, response) => {
+    const meeting = await scheduleConversationMeeting(
+      request.auth!.user.id,
+      String(request.params.id),
+      request.body,
+    )
+    response.status(201).json({ meeting })
+  })
+  router.patch("/:id/meetings/:meetingId", async (request, response) => {
+    const meetingId = String(request.params.meetingId)
+    if (!/^[A-Za-z0-9_-]{1,80}$/.test(meetingId))
+      return response.status(400).json({ error: "Invalid meeting id" })
+    const meeting = await updateConversationMeeting(
+      request.auth!.user.id,
+      String(request.params.id),
+      meetingId,
+      request.body,
+    )
+    response.json({ meeting })
   })
   router.patch("/:id/read", async (request, response) => {
     response.json(
@@ -92,7 +125,11 @@ export function createRequestConversationsRouter(
       typeof input.clientMessageId !== "string" ||
       !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
         input.clientMessageId,
-      )
+      ) ||
+      ("bookingId" in input &&
+        input.bookingId !== null &&
+        (typeof input.bookingId !== "string" ||
+          !/^[A-Za-z0-9_-]{1,80}$/.test(input.bookingId)))
     )
       return response.status(400).json({
         error: "Enter a message of 1–4000 characters and a valid message ID",
@@ -102,6 +139,9 @@ export function createRequestConversationsRouter(
       String(request.params.id),
       input.body.trim(),
       input.clientMessageId,
+      "bookingId" in input && typeof input.bookingId === "string"
+        ? input.bookingId
+        : null,
     )
     response.status(201).json({ message })
   })
@@ -146,16 +186,21 @@ export function createRequestConversationsRouter(
   router.get("/:id/events", async (request, response) => {
     const id = String(request.params.id)
     const { user, sessionId } = request.auth!
-    await getConversationAccess(user.id, id)
+    const { id: conversationId } = await getConversationStreamAccess(
+      user.id,
+      id,
+    )
     let closed = false
     let headersReady = false
     let release: (() => Promise<void>) | undefined
     let heartbeat: ReturnType<typeof setInterval> | undefined
+    let keepAlive: ReturnType<typeof setInterval> | undefined
     let expiry: ReturnType<typeof setTimeout> | undefined
     function close() {
       if (closed) return
       closed = true
       clearInterval(heartbeat)
+      clearInterval(keepAlive)
       clearTimeout(expiry)
       void release?.().catch(() => {})
       response.end()
@@ -165,8 +210,13 @@ export function createRequestConversationsRouter(
       if (!response.write(`event: ${name}\ndata: {}\n\n`)) close()
     }
     let checking = false
+    let pendingChange = false
     async function validateAndNotify(name: string) {
-      if (closed || checking) return
+      if (closed) return
+      if (checking) {
+        if (name === "messages-changed") pendingChange = true
+        return
+      }
       checking = true
       try {
         await verifyAccessToken(request.header("authorization")!.slice(7))
@@ -184,19 +234,35 @@ export function createRequestConversationsRouter(
           close()
           return
         }
-        await getConversationAccess(user.id, id)
+        await getConversationStreamAccess(user.id, id)
         event(name)
       } catch (error) {
-        if (error instanceof ServiceRequestsError) event("access-revoked")
+        if (
+          error instanceof ServiceRequestsError &&
+          [403, 404].includes(error.status)
+        )
+          event("access-revoked")
+        else {
+          event("reconnecting")
+          console.error(
+            "Conversation stream check failed:",
+            conversationId,
+            error,
+          )
+        }
         close()
       } finally {
         checking = false
+        if (pendingChange && !closed) {
+          pendingChange = false
+          void validateAndNotify("messages-changed")
+        }
       }
     }
     response.once("close", close)
     try {
       release = await realtime.subscribe(
-        id,
+        conversationId,
         () => {
           void validateAndNotify("messages-changed")
         },
@@ -212,7 +278,7 @@ export function createRequestConversationsRouter(
         return
       }
       // Recheck access after waiting for Supabase before opening the stream.
-      await getConversationAccess(user.id, id)
+      await getConversationStreamAccess(user.id, id)
       if (closed) {
         await release()
         return
@@ -225,6 +291,11 @@ export function createRequestConversationsRouter(
       })
       response.flushHeaders()
       headersReady = true
+      // Keep the proxy socket active even while a database access check is slow.
+      // Comments carry no private data and do not replace authorization checks.
+      keepAlive = setInterval(() => {
+        if (!closed && !response.write(": keep-alive\n\n")) close()
+      }, 10_000)
       event("connected")
       // Resync after subscribing to cover messages written during the handshake.
       event("messages-changed")

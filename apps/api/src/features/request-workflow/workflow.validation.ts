@@ -28,6 +28,7 @@ export type WorkflowCommand =
       requirementId: string
       submission: string
       fileId?: string
+      fileIds?: string[]
     }
   | {
       type: "REVIEW_REQUIREMENT"
@@ -74,6 +75,7 @@ export type WorkflowCommand =
       note: string
     }
   | { type: "SUBMIT_PAYMENT"; fileId: string; reference: string }
+  | { type: "COMPLETE_SANDBOX_PAYMENT" }
   | {
       type: "ASSIGN_APPROVERS"
       quotationApproverId: string | null
@@ -174,19 +176,35 @@ export function parseAction(input: unknown) {
       command = {
         type: body.type,
         title: textField(body.title, "title", 300),
-        details: textField(body.details, "details", 4000, true),
+        details: textField(body.details, "details", 4000),
         mandatory: bool(body.mandatory),
       }
       break
-    case "SUBMIT_REQUIREMENT":
+    case "SUBMIT_REQUIREMENT": {
+      let fileIds: string[] | undefined
+      if (body.fileIds !== undefined) {
+        if (
+          body.fileId !== undefined ||
+          !Array.isArray(body.fileIds) ||
+          body.fileIds.length < 1 ||
+          body.fileIds.length > 5
+        )
+          fail("Attach between 1 and 5 files")
+        fileIds = body.fileIds.map((value) => idField(value, "file ID"))
+        if (new Set(fileIds).size !== fileIds.length)
+          fail("Choose distinct attachments")
+      }
       command = {
         type: body.type,
         requirementId: id("requirementId"),
         submission: textField(body.submission, "submission", 4000, true),
         ...(body.fileId ? { fileId: id("fileId") } : {}),
+        ...(fileIds ? { fileIds } : {}),
       }
-      if (!command.submission && !command.fileId) fail("Submit text or a file")
+      if (!command.submission && !command.fileId && !command.fileIds?.length)
+        fail("Submit text or a file")
       break
+    }
     case "REVIEW_REQUIREMENT":
       command = {
         type: body.type,
@@ -236,6 +254,7 @@ export function parseAction(input: unknown) {
     case "PREPARE_QUOTATION":
     case "FIXED_QUOTATION":
     case "ACTIVATE_PROJECT":
+    case "COMPLETE_SANDBOX_PAYMENT":
       command = { type: body.type }
       break
     case "CREATE_QUOTATION": {

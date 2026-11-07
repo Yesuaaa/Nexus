@@ -12,6 +12,8 @@ import {
 } from "./auth.schema.js"
 import { signAccessToken, jwtKey } from "./auth.jwt.js"
 
+import { approximateSessionLocation } from "./session-location.js"
+
 export const SESSION_DAYS = 7
 
 export class AuthError extends Error {
@@ -28,11 +30,17 @@ export function tokenHash(token: string): string {
   return createHash("sha256").update(token).digest("hex")
 }
 
-export async function issueSession(user: User) {
+export async function issueSession(
+  user: User,
+  userAgent?: string,
+  ip?: string,
+) {
   jwtKey()
   const refreshToken = randomBytes(32).toString("base64url")
   const session = await authRepository.createSession({
     tokenHash: tokenHash(refreshToken),
+    userAgent: userAgent?.slice(0, 512),
+    approximateLocation: await approximateSessionLocation(ip),
     userId: user.id,
     expiresAt: new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000),
   })
@@ -65,6 +73,8 @@ export const authService = {
     }
   },
   async register(input: {
+    userAgent?: string
+    ip?: string
     email?: unknown
     password?: unknown
     fullName?: unknown
@@ -105,7 +115,7 @@ export const authService = {
         passwordHash: await hashPassword(password as string),
         role: Role.USER,
       })
-      return await issueSession(user)
+      return await issueSession(user, input.userAgent, input.ip)
     } catch (error) {
       if (isUniqueConflict(error)) {
         throw new AuthError(409, "Email is already registered")
@@ -114,7 +124,12 @@ export const authService = {
     }
   },
 
-  async login(input: { email?: unknown; password?: unknown; ip?: string }) {
+  async login(input: {
+    email?: unknown
+    password?: unknown
+    ip?: string
+    userAgent?: string
+  }) {
     if (!authRepository.isDatabaseAvailable()) {
       throw new AuthError(503, "Database unavailable")
     }
@@ -123,6 +138,7 @@ export const authService = {
     if (
       !cleanEmail ||
       typeof password !== "string" ||
+      password.length === 0 ||
       Buffer.byteLength(password) > 1024
     ) {
       throw new AuthError(400, "Provide a valid email and password")
@@ -142,7 +158,7 @@ export const authService = {
       throw new AuthError(401, "Invalid email or password")
     }
     clearFailures(attemptKey)
-    return await issueSession(user)
+    return await issueSession(user, input.userAgent, input.ip)
   },
 
   async logout(sessionId: string) {
@@ -171,9 +187,6 @@ export const authService = {
       throw new AuthError(400, "Current password is incorrect")
     }
     const newPasswordHash = await hashPassword(newPassword)
-    await authRepository.updatePasswordAndRevokeSessions(
-      input.userId,
-      newPasswordHash,
-    )
+    await authRepository.updatePassword(input.userId, newPasswordHash)
   },
 }

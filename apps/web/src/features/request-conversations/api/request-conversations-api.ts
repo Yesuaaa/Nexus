@@ -1,7 +1,7 @@
 import { apiRequest, apiStreamRequest } from "@/features/auth/api/auth-api"
 import type { ServiceRequestStatus } from "@/features/services/api/services-api"
-
-export type ConversationView = "active" | "archived"
+import type { WorkflowState } from "@/features/request-workflow/model/workflow"
+import { withUnreadCount } from "../model/unread-messages"
 
 export type RequestMessage = {
   id: string
@@ -12,15 +12,42 @@ export type RequestMessage = {
   deletedAt: string | null
   purgeAt: string | null
   sender: { id: string; fullName: string | null }
+  booking?: {
+    id: string
+    title: string
+    referenceNumber: string | null
+    serviceName: string
+  } | null
+}
+
+export type ConversationBooking = {
+  id: string
+  title: string
+  referenceNumber: string | null
+  status: ServiceRequestStatus
+  packageName: string | null
+  serviceName: string
+  workflowState: WorkflowState
+  previousWorkflowState: WorkflowState | null
+  createdAt: string
+  updatedAt: string
+}
+
+export function visibleConversationBookings(
+  bookings: readonly ConversationBooking[] | undefined,
+) {
+  return (bookings ?? []).filter(
+    (booking) => booking.status !== "CLOSED" && booking.status !== "CANCELLED",
+  )
 }
 
 export type ConversationSummary = {
   id: string
-  status: ServiceRequestStatus
+  status: ServiceRequestStatus | "ACTIVE" | "ARCHIVED"
   title: string
   referenceNumber: string | null
   updatedAt: string
-  service: { name: string }
+  service: { id?: string; name: string }
   client: { id: string; fullName: string | null; imageUrl?: string | null }
   acceptedDepartment: {
     id: string
@@ -31,6 +58,7 @@ export type ConversationSummary = {
       imageUrl?: string | null
     } | null
   } | null
+  bookings?: ConversationBooking[]
   lastMessage: RequestMessage | null
   unreadCount?: number
 }
@@ -41,33 +69,38 @@ export type ConversationList = {
   unreadCount?: number
 }
 
-export function listConversations(
-  before?: string,
-  signal?: AbortSignal,
-  view: ConversationView = "active",
-) {
+export function listConversations(before?: string, signal?: AbortSignal) {
   const query = new URLSearchParams()
   if (before) query.set("before", before)
-  if (view === "archived") query.set("view", view)
-  return apiRequest<ConversationList>(
-    `/api/request-conversations${query.size ? `?${query}` : ""}`,
-    { signal },
+  return withUnreadCount(
+    "requests",
+    () =>
+      apiRequest<ConversationList>(
+        `/api/request-conversations${query.size ? `?${query}` : ""}`,
+        { signal },
+      ),
+    signal,
   )
 }
 
 export function markConversationRead(id: string) {
-  return apiRequest<{
-    ok: true
-    unreadCount: number
-    conversationUnreadCount: number
-  }>(`/api/request-conversations/${encodeURIComponent(id)}/read`, {
-    method: "PATCH",
-  })
+  return withUnreadCount("requests", () =>
+    apiRequest<{
+      ok: true
+      unreadCount: number
+      conversationUnreadCount: number
+    }>(`/api/request-conversations/${encodeURIComponent(id)}/read`, {
+      method: "PATCH",
+    }),
+  )
 }
 
 export type ConversationHistory = {
-  archived: boolean
+  meetings?: ConversationMeeting[]
+  selectedBookingId: string | null
   conversation: {
+    id: string
+    status: "ACTIVE"
     department: { id: string; name: string }
     head: {
       id: string
@@ -82,6 +115,8 @@ export type ConversationHistory = {
       contactNumber: string | null
       imageUrl?: string | null
     }
+    bookings: ConversationBooking[]
+    bookingCount: number
   } | null
   canSend: boolean
   messages: RequestMessage[]
@@ -91,19 +126,77 @@ export type ConversationHistory = {
 const path = (id: string) =>
   `/api/request-conversations/${encodeURIComponent(id)}`
 
-export function deleteArchivedConversation(id: string) {
-  return apiRequest<{ ok: true }>(path(id), { method: "DELETE" })
+export type ConversationMeeting = {
+  id: string
+  conversationId: string
+  startsAt: string
+  endsAt: string
+  location: string
+  notes: string
+  status: "SCHEDULED" | "COMPLETED" | "CANCELLED"
+  version: number
+  proposedStartsAt: string | null
+  rescheduleNote: string | null
+  createdAt: string
+  updatedAt: string
+  bookings: {
+    booking: {
+      id: string
+      referenceNumber: string | null
+      service: { name: string }
+    }
+  }[]
+}
+
+export type MeetingSchedule = {
+  startsAt: string
+  endsAt: string
+  location: string
+}
+export type MeetingAction =
+  | { type: "REQUEST_RESCHEDULE"; startsAt: string; note: string }
+  | ({ type: "RESCHEDULE" } & MeetingSchedule)
+  | { type: "COMPLETE" | "CANCEL" | "KEEP_SCHEDULE" }
+
+export function scheduleMeeting(
+  id: string,
+  input: MeetingSchedule & {
+    notes: string
+    bookingIds: string[]
+    clientActionId: string
+  },
+) {
+  return apiRequest<{ meeting: ConversationMeeting }>(`${path(id)}/meetings`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
+}
+
+export function updateMeeting(
+  id: string,
+  meetingId: string,
+  expectedVersion: number,
+  action: MeetingAction,
+) {
+  return apiRequest<{ meeting: ConversationMeeting }>(
+    `${path(id)}/meetings/${encodeURIComponent(meetingId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ ...action, expectedVersion }),
+    },
+  )
 }
 
 export function getConversation(
   id: string,
   before?: string,
   signal?: AbortSignal,
+  bookingId?: string,
 ): Promise<ConversationHistory> {
-  return apiRequest(
-    `${path(id)}${before ? `?before=${encodeURIComponent(before)}` : ""}`,
-    { signal },
-  )
+  const query = new URLSearchParams()
+  if (before) query.set("before", before)
+  if (bookingId) query.set("booking", bookingId)
+  return apiRequest(`${path(id)}${query.size ? `?${query}` : ""}`, { signal })
 }
 
 export async function sendMessage(

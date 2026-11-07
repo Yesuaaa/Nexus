@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
-  Archive,
   ChevronDown,
   LoaderCircle,
   MessageSquare,
@@ -18,56 +17,38 @@ import {
 } from "@/components/layout/styles"
 import { PanelIcon } from "@/components/layout/icons"
 import { Button } from "@/components/ui/button"
-import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { cn } from "@/lib/utils"
 import {
   listConversations,
-  deleteArchivedConversation,
   type ConversationList,
-  type ConversationView,
-  type ConversationSummary,
   type RequestMessage,
 } from "../api/request-conversations-api"
 import { RequestConversation } from "../components/request-conversation"
 import { InternalConversation } from "../components/internal-conversation"
 import { ConversationAvatar } from "../components/conversation-avatar"
-import { ConversationGroupItem } from "../components/conversation-group"
+import { ConversationListItem } from "../components/conversation-list-item"
 import {
   createInternalConversation,
   listInternalContacts,
   listInternalConversations,
   type InternalConversationList,
 } from "../api/internal-conversations-api"
-import {
-  groupConversations,
-  orderConversations,
-} from "../model/conversation-groups"
+import { orderConversations } from "../model/conversation-groups"
 
 const conversationRailStorageKey = "nexus.messages.conversation-rail-collapsed"
 
 type MessagesPageProps = {
   requestId: string | null
   internalId: string | null
-  view: ConversationView
   mode: "requests" | "internal"
 }
-type DeletionTarget = Pick<
-  ConversationSummary,
-  "id" | "title" | "referenceNumber"
->
-
 export function MessagesPage(props: MessagesPageProps) {
-  return <ConversationInbox key={`${props.mode}:${props.view}`} {...props} />
+  return <ConversationInbox key={props.mode} {...props} />
 }
 
-function ConversationInbox({
-  requestId,
-  internalId,
-  view,
-  mode,
-}: MessagesPageProps) {
+function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
   const router = useRouter()
   const account = usePortalAccount()
   const [result, setResult] = useState<ConversationList | null>(null)
@@ -78,16 +59,22 @@ function ConversationInbox({
   >([])
   const [error, setError] = useState("")
   const [internalError, setInternalError] = useState("")
+  useEffect(() => {
+    if (error)
+      sileo.error({ title: "Couldn't load conversations", description: error })
+  }, [error])
+  useEffect(() => {
+    if (internalError)
+      sileo.error({
+        title: "Couldn't load internal chats",
+        description: internalError,
+      })
+  }, [internalError])
   const [loadingMore, setLoadingMore] = useState(false)
   const [internalLoading, setInternalLoading] = useState(false)
   const [internalLoadingMore, setInternalLoadingMore] = useState(false)
   const [creatingInternal, setCreatingInternal] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [deletionTarget, setDeletionTarget] = useState<DeletionTarget | null>(
-    null,
-  )
-  const [deleting, setDeleting] = useState(false)
-  const [deletionError, setDeletionError] = useState("")
   const loadedPages = useRef(1)
   const listVersion = useRef(0)
   const [conversationRailCollapsed, setConversationRailCollapsed] = useState(
@@ -181,62 +168,58 @@ function ConversationInbox({
     [],
   )
 
-  const refreshConversations = useCallback(
-    async (signal?: AbortSignal) => {
-      const version = ++listVersion.current
-      try {
-        const value = await listConversations(undefined, signal, view)
-        let nextCursor = value.nextCursor
-        for (let page = 1; page < loadedPages.current && nextCursor; page++) {
-          const next = await listConversations(nextCursor, signal, view)
-          value.conversations.push(...next.conversations)
-          nextCursor = next.nextCursor
-        }
-        value.nextCursor = nextCursor
-        value.conversations = [
-          ...new Map(value.conversations.map((row) => [row.id, row])).values(),
-        ]
-        if (signal?.aborted || version !== listVersion.current) return
-        setResult((previous) => {
-          if (!previous) return value
-          return {
-            ...value,
-            conversations: orderConversations([
-              ...value.conversations.map((row) => {
-                const old = previous.conversations.find(
-                  (item) => item.id === row.id,
-                )
-                return old && old.updatedAt > row.updatedAt
-                  ? {
-                      ...row,
-                      updatedAt: old.updatedAt,
-                      lastMessage: old.lastMessage,
-                    }
-                  : row
-              }),
-            ]),
-            unreadCount:
-              value.unreadCount ??
-              (value.conversations.length === 0
-                ? 0
-                : (previous.unreadCount ?? 0)),
-          }
-        })
-        setError("")
-      } catch (reason: unknown) {
-        if (signal?.aborted || version !== listVersion.current) return
-        setError(
-          reason instanceof Error
-            ? reason.message
-            : "Couldn't load conversations.",
-        )
-      } finally {
-        if (!signal?.aborted && version === listVersion.current)
-          setLoading(false)
+  const refreshConversations = useCallback(async (signal?: AbortSignal) => {
+    const version = ++listVersion.current
+    try {
+      const value = await listConversations(undefined, signal)
+      let nextCursor = value.nextCursor
+      for (let page = 1; page < loadedPages.current && nextCursor; page++) {
+        const next = await listConversations(nextCursor, signal)
+        value.conversations.push(...next.conversations)
+        nextCursor = next.nextCursor
       }
-    },
-    [view],
-  )
+      value.nextCursor = nextCursor
+      value.conversations = [
+        ...new Map(value.conversations.map((row) => [row.id, row])).values(),
+      ]
+      if (signal?.aborted || version !== listVersion.current) return
+      setResult((previous) => {
+        if (!previous) return value
+        return {
+          ...value,
+          conversations: orderConversations([
+            ...value.conversations.map((row) => {
+              const old = previous.conversations.find(
+                (item) => item.id === row.id,
+              )
+              return old && old.updatedAt > row.updatedAt
+                ? {
+                    ...row,
+                    updatedAt: old.updatedAt,
+                    lastMessage: old.lastMessage,
+                  }
+                : row
+            }),
+          ]),
+          unreadCount:
+            value.unreadCount ??
+            (value.conversations.length === 0
+              ? 0
+              : (previous.unreadCount ?? 0)),
+        }
+      })
+      setError("")
+    } catch (reason: unknown) {
+      if (signal?.aborted || version !== listVersion.current) return
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Couldn't load conversations.",
+      )
+    } finally {
+      if (!signal?.aborted && version === listVersion.current) setLoading(false)
+    }
+  }, [])
 
   const refreshInternalConversations = useCallback(
     async (signal?: AbortSignal) => {
@@ -340,7 +323,7 @@ function ConversationInbox({
     const version = ++listVersion.current
     setLoadingMore(true)
     try {
-      const next = await listConversations(result.nextCursor, undefined, view)
+      const next = await listConversations(result.nextCursor)
       if (version !== listVersion.current) return
       loadedPages.current++
       setResult((previous) =>
@@ -443,59 +426,14 @@ function ConversationInbox({
     }
   }
 
-  const updateArchivedView = useCallback(
-    (archived: boolean) => {
-      if (archived !== (view === "archived") && requestId)
-        router.replace(
-          `/messages?request=${encodeURIComponent(requestId)}${archived ? "&view=archived" : ""}`,
-          { scroll: false },
-        )
-    },
-    [requestId, router, view],
+  const selected = result?.conversations.find(
+    (row) =>
+      row.id === requestId ||
+      row.bookings?.some((booking) => booking.id === requestId),
   )
-
-  async function confirmDeletion() {
-    if (!deletionTarget || deleting) return
-    setDeleting(true)
-    setDeletionError("")
-    try {
-      await deleteArchivedConversation(deletionTarget.id)
-      listVersion.current++
-      setResult((previous) =>
-        previous
-          ? {
-              ...previous,
-              conversations: previous.conversations.filter(
-                (row) => row.id !== deletionTarget.id,
-              ),
-            }
-          : previous,
-      )
-      if (requestId === deletionTarget.id)
-        router.replace("/messages?view=archived", { scroll: false })
-      setDeletionTarget(null)
-      sileo.success({ title: "Conversation deleted for you" })
-    } catch (reason) {
-      setDeletionError(
-        reason instanceof Error
-          ? reason.message
-          : "Couldn't delete this conversation.",
-      )
-    } finally {
-      setDeleting(false)
-    }
-  }
-
-  function requestDeletion(target: DeletionTarget) {
-    setDeletionError("")
-    setDeletionTarget(target)
-  }
-
-  const selected = result?.conversations.find((row) => row.id === requestId)
   const selectedInternal = internalResult?.conversations.find(
     (row) => row.id === internalId,
   )
-  const groups = groupConversations(result?.conversations ?? [], isClient)
   const hasSelection =
     mode === "internal" ? Boolean(internalId) : Boolean(requestId)
   const unreadCount =
@@ -510,7 +448,7 @@ function ConversationInbox({
         "grid h-[calc(100dvh-116px)] min-h-[480px] overflow-hidden rounded-[20px] transition-[grid-template-columns] duration-[240ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none max-[767px]:h-[calc(100dvh-98px)] max-[767px]:min-h-[420px] max-[767px]:grid-cols-1",
         railCollapsed
           ? "grid-cols-[76px_minmax(0,1fr)]"
-          : "grid-cols-[360px_minmax(0,1fr)]",
+          : "grid-cols-[clamp(220px,20vw,360px)_minmax(0,1fr)]",
       )}
     >
       <nav
@@ -523,7 +461,7 @@ function ConversationInbox({
         <header
           className={cn(
             "flex h-[68px] shrink-0 items-center gap-2 transition-[padding] duration-[240ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
-            railCollapsed ? "justify-end px-4" : "px-5",
+            railCollapsed ? "justify-center px-3" : "px-5",
             "max-[767px]:justify-between max-[767px]:px-5",
           )}
         >
@@ -531,13 +469,13 @@ function ConversationInbox({
             className={cn(
               "m-0 mr-auto min-w-0 flex-none overflow-hidden text-sm font-semibold whitespace-nowrap transition-[max-width,opacity,transform] duration-[160ms] ease-out motion-reduce:transition-none",
               railCollapsed
-                ? "max-w-0 translate-x-1 opacity-0 max-[767px]:max-w-24 max-[767px]:translate-x-0 max-[767px]:opacity-100"
+                ? "hidden max-[767px]:block max-[767px]:max-w-24"
                 : "max-w-24 opacity-100",
             )}
           >
             Messages
           </h1>
-          {mode === "requests" && view === "active" && Boolean(unreadCount) && (
+          {mode === "requests" && Boolean(unreadCount) && (
             <span
               role="status"
               aria-live="polite"
@@ -545,8 +483,7 @@ function ConversationInbox({
               aria-label={`${unreadCount} unread messages`}
               className={cn(
                 "grid max-w-10 min-w-5 place-items-center overflow-hidden rounded-full bg-[#294a9b] px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap text-white transition-[max-width,min-width,opacity,transform,padding] duration-[160ms] ease-out motion-reduce:transition-none",
-                railCollapsed &&
-                  "max-w-0 min-w-0 scale-95 px-0 py-0 opacity-0 max-[767px]:max-w-10 max-[767px]:min-w-5 max-[767px]:scale-100 max-[767px]:px-1.5 max-[767px]:py-0.5 max-[767px]:opacity-100",
+                railCollapsed && "hidden max-[767px]:grid",
               )}
             >
               {unreadCount! > 99 ? "99+" : unreadCount}
@@ -575,50 +512,44 @@ function ConversationInbox({
           )}
         </header>
         <div
-          role="group"
-          aria-label="Conversation views"
           className={cn(
             "mb-3 flex gap-1 px-3",
-            railCollapsed && "flex-col max-[767px]:flex-row",
+            railCollapsed &&
+              "flex-col items-center max-[767px]:flex-row max-[767px]:items-start",
           )}
         >
-          {(["active", "archived"] as const).map((value) => {
-            const Icon = value === "active" ? MessageSquare : Archive
-            const label = value === "active" ? "Active" : "Archived"
-            const selected = mode === "requests" && view === value
-            return (
-              <Button
-                key={value}
-                variant="outline"
-                aria-label={`${label} conversations`}
-                aria-pressed={selected}
-                className={cn(
-                  "size-11 shrink-0 cursor-pointer border-transparent p-0",
-                  selected && "bg-[#edf1f8] text-[#203f8c]",
-                )}
-                onClick={() =>
-                  router.push(
-                    value === "archived"
-                      ? "/messages?view=archived"
-                      : "/messages",
-                    { scroll: false },
-                  )
-                }
+          {canUseInternalChat && mode === "internal" && (
+            <Button
+              asChild
+              variant="outline"
+              className={cn(
+                "h-11 shrink-0 border-transparent text-xs text-[#203f8c]",
+                railCollapsed &&
+                  "size-11 p-0 max-[767px]:w-auto max-[767px]:px-4",
+              )}
+            >
+              <Link
+                href="/messages"
+                scroll={false}
+                aria-label="Back to client chats"
               >
-                <Icon size={16} aria-hidden="true" />
-                <HoverTooltip>{label}</HoverTooltip>
-              </Button>
-            )
-          })}
-          {canUseInternalChat && (
+                <MessageSquare size={16} aria-hidden="true" />
+                <span
+                  className={cn(
+                    railCollapsed && "sr-only max-[767px]:not-sr-only",
+                  )}
+                >
+                  Client chats
+                </span>
+                <HoverTooltip>Back to client chats</HoverTooltip>
+              </Link>
+            </Button>
+          )}
+          {canUseInternalChat && mode === "requests" && (
             <Button
               variant="outline"
               aria-label="Open internal conversations"
-              aria-pressed={mode === "internal"}
-              className={cn(
-                "size-11 shrink-0 cursor-pointer border-transparent p-0",
-                mode === "internal" && "bg-[#edf1f8] text-[#203f8c]",
-              )}
+              className="size-11 shrink-0 cursor-pointer border-transparent p-0"
               onClick={() =>
                 router.push("/messages?mode=internal", { scroll: false })
               }
@@ -630,7 +561,7 @@ function ConversationInbox({
         </div>
         <div
           id="conversation-list"
-          className="min-h-0 flex-1 overflow-y-auto px-2 pb-3"
+          className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2 pb-3"
         >
           {mode === "requests" && loading && (
             <p
@@ -657,32 +588,6 @@ function ConversationInbox({
               )}
             </p>
           )}
-          {mode === "requests" && error && (
-            <p
-              role="alert"
-              className={cn(
-                "px-5 text-xs text-red-700",
-                railCollapsed && "px-1 text-center",
-                "max-[767px]:px-5 max-[767px]:text-left",
-              )}
-            >
-              {railCollapsed ? (
-                <>
-                  <span aria-hidden="true" className="text-base font-bold">
-                    !
-                    {railCollapsed && (
-                      <HoverTooltip side="right">{error}</HoverTooltip>
-                    )}
-                  </span>
-                  <span className="sr-only max-[767px]:not-sr-only">
-                    {error}
-                  </span>
-                </>
-              ) : (
-                error
-              )}
-            </p>
-          )}
           {mode === "internal" && internalLoading && (
             <p
               role="status"
@@ -693,11 +598,6 @@ function ConversationInbox({
               )}
             >
               Loading internal chats…
-            </p>
-          )}
-          {mode === "internal" && internalError && (
-            <p role="alert" className="px-5 text-xs text-red-700">
-              {internalError}
             </p>
           )}
           {mode === "requests" &&
@@ -722,9 +622,7 @@ function ConversationInbox({
                     railCollapsed && "hidden max-[767px]:block",
                   )}
                 >
-                  {view === "archived"
-                    ? "No archived conversations"
-                    : "No conversations yet"}
+                  No conversations yet
                 </h2>
                 <p
                   className={cn(
@@ -732,26 +630,24 @@ function ConversationInbox({
                     railCollapsed && "hidden max-[767px]:block",
                   )}
                 >
-                  {view === "archived"
-                    ? "Closed and cancelled service conversations appear here."
-                    : "Conversations appear here when a department head accepts a service request."}
+                  Conversations appear here when a department head accepts a
+                  service request.
                 </p>
               </div>
             )}
           {mode === "requests" &&
             !loading &&
-            groups.map((group, index) => (
-              <ConversationGroupItem
-                key={group.id}
-                group={group}
-                requestId={requestId}
-                railCollapsed={railCollapsed}
-                defaultExpanded={!requestId && index === 0}
-                onExpandRail={() => setConversationRail(false)}
-                view={view}
-                onDelete={requestDeletion}
-              />
-            ))}
+            orderConversations(result?.conversations ?? []).map(
+              (conversation) => (
+                <ConversationListItem
+                  key={conversation.id}
+                  conversation={conversation}
+                  isClient={isClient}
+                  requestId={requestId}
+                  railCollapsed={railCollapsed}
+                />
+              ),
+            )}
           {mode === "requests" && !loading && result?.nextCursor && (
             <Button
               variant="outline"
@@ -791,8 +687,18 @@ function ConversationInbox({
           )}
           {mode === "internal" && !internalLoading && !internalError && (
             <>
-              <div className="px-2 pb-2">
-                <p className="px-3 pt-2 pb-1 text-[11px] font-semibold tracking-[0.08em] text-[#8791a2] uppercase">
+              <div
+                className={cn(
+                  "px-2 pb-2",
+                  railCollapsed && "px-0 max-[767px]:px-2",
+                )}
+              >
+                <p
+                  className={cn(
+                    "px-3 pt-2 pb-1 text-[11px] font-semibold tracking-[0.08em] text-[#8791a2] uppercase",
+                    railCollapsed && "hidden max-[767px]:block",
+                  )}
+                >
                   Internal chats
                 </p>
                 {internalResult?.conversations.map((conversation) => {
@@ -813,6 +719,8 @@ function ConversationInbox({
                         selected
                           ? "bg-[#203f8c] text-white"
                           : "text-[#182235] hover:bg-[#e9eef5] hover:text-[#203a78]",
+                        railCollapsed &&
+                          "relative mx-auto h-14 w-full max-w-14 justify-center gap-0 px-0 max-[767px]:h-auto max-[767px]:w-full max-[767px]:justify-start max-[767px]:gap-3 max-[767px]:px-3",
                       )}
                     >
                       <ConversationAvatar
@@ -820,7 +728,22 @@ function ConversationInbox({
                         imageUrl={conversation.participant.imageUrl}
                         className="size-9 shrink-0"
                       />
-                      <span className="min-w-0 flex-1">
+                      {railCollapsed && Boolean(conversation.unreadCount) && (
+                        <span
+                          aria-hidden="true"
+                          className="absolute top-1 right-1 grid size-4 place-items-center rounded-full bg-[#203f8c] text-[10px] leading-none text-white max-[767px]:hidden"
+                        >
+                          {conversation.unreadCount > 99
+                            ? "99+"
+                            : conversation.unreadCount}
+                        </span>
+                      )}
+                      <span
+                        className={cn(
+                          "min-w-0 flex-1",
+                          railCollapsed && "hidden max-[767px]:block",
+                        )}
+                      >
                         <span className="flex items-center gap-1.5">
                           <span className="min-w-0 flex-1 truncate text-xs font-semibold">
                             {name}
@@ -828,7 +751,7 @@ function ConversationInbox({
                           {Boolean(conversation.unreadCount) && (
                             <span
                               className={cn(
-                                "grid min-w-4 shrink-0 place-items-center rounded-full px-1 text-[11px] leading-4",
+                                "grid h-4 min-w-4 shrink-0 place-items-center rounded-full px-1 text-[10px] leading-none",
                                 selected
                                   ? "bg-white text-[#203f8c]"
                                   : "bg-[#203f8c] text-white",
@@ -851,12 +774,25 @@ function ConversationInbox({
                             "Staff and admin chat"}
                         </span>
                       </span>
+                      {railCollapsed && (
+                        <HoverTooltip side="right">{name}</HoverTooltip>
+                      )}
                     </Link>
                   )
                 })}
               </div>
-              <div className="border-t border-[#efefee] px-2 pt-2">
-                <p className="px-3 pt-2 pb-1 text-[11px] font-semibold tracking-[0.08em] text-[#8791a2] uppercase">
+              <div
+                className={cn(
+                  "border-t border-[#efefee] px-2 pt-2",
+                  railCollapsed && "px-0 max-[767px]:px-2",
+                )}
+              >
+                <p
+                  className={cn(
+                    "px-3 pt-2 pb-1 text-[11px] font-semibold tracking-[0.08em] text-[#8791a2] uppercase",
+                    railCollapsed && "hidden max-[767px]:block",
+                  )}
+                >
                   Start a chat
                 </p>
                 {internalContacts.map((contact) => {
@@ -866,11 +802,23 @@ function ConversationInbox({
                   )
                   if (existing) return null
                   const name = contact.fullName?.trim() || contact.email
+                  const description =
+                    creatingInternal === contact.id
+                      ? "Opening chat…"
+                      : contact.position ||
+                        contact.department?.name ||
+                        "Staff and admin"
                   return (
                     <button
                       key={contact.id}
                       type="button"
-                      className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-[#e9eef5]"
+                      aria-label={`${name} ${description}`}
+                      className={cn(
+                        "flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-[#e9eef5]",
+                        focusRing,
+                        railCollapsed &&
+                          "mx-auto h-14 w-full max-w-14 justify-center gap-0 px-0 max-[767px]:h-auto max-[767px]:w-full max-[767px]:justify-start max-[767px]:gap-3 max-[767px]:px-3",
+                      )}
                       disabled={creatingInternal === contact.id}
                       onClick={() => void openInternalChat(contact.id)}
                     >
@@ -879,18 +827,24 @@ function ConversationInbox({
                         imageUrl={contact.imageUrl}
                         className="size-9 shrink-0"
                       />
-                      <span className="min-w-0 flex-1">
+                      <span
+                        className={cn(
+                          "min-w-0 flex-1",
+                          railCollapsed && "hidden max-[767px]:block",
+                        )}
+                      >
                         <span className="block truncate text-xs font-semibold text-[#182235]">
                           {name}
                         </span>
                         <span className="block truncate text-[11px] text-[#8791a2]">
-                          {creatingInternal === contact.id
-                            ? "Opening chat…"
-                            : contact.position ||
-                              contact.department?.name ||
-                              "Staff and admin"}
+                          {description}
                         </span>
                       </span>
+                      {railCollapsed && (
+                        <HoverTooltip side="right">
+                          {name} · {description}
+                        </HoverTooltip>
+                      )}
                     </button>
                   )
                 })}
@@ -898,11 +852,33 @@ function ConversationInbox({
               {internalResult?.nextCursor && (
                 <Button
                   variant="outline"
-                  className="m-4 text-xs"
+                  aria-label={
+                    internalLoadingMore
+                      ? "Loading more chats"
+                      : "Load more chats"
+                  }
+                  className={cn(
+                    "m-4 text-xs",
+                    railCollapsed &&
+                      "mx-auto flex size-11 items-center p-0 max-[767px]:m-4 max-[767px]:h-9 max-[767px]:w-auto max-[767px]:px-4",
+                  )}
                   disabled={internalLoadingMore}
                   onClick={() => void loadMoreInternal()}
                 >
-                  {internalLoadingMore ? "Loading…" : "Load more chats"}
+                  {railCollapsed && (
+                    <ChevronDown
+                      size={16}
+                      aria-hidden="true"
+                      className="max-[767px]:hidden"
+                    />
+                  )}
+                  <span
+                    className={cn(
+                      railCollapsed && "sr-only max-[767px]:not-sr-only",
+                    )}
+                  >
+                    {internalLoadingMore ? "Loading…" : "Load more chats"}
+                  </span>
                 </Button>
               )}
             </>
@@ -922,17 +898,7 @@ function ConversationInbox({
             requestTitle={selected?.title}
             onLatestMessage={updatePreview}
             onConversationRead={updateUnreadCounts}
-            onArchivedChange={updateArchivedView}
-            onDelete={() =>
-              requestDeletion({
-                id: requestId,
-                title: selected?.title || "Service conversation",
-                referenceNumber: selected?.referenceNumber ?? null,
-              })
-            }
-            listHref={
-              view === "archived" ? "/messages?view=archived" : "/messages"
-            }
+            listHref="/messages"
           />
         ) : mode === "internal" && internalId ? (
           <InternalConversation
@@ -958,27 +924,12 @@ function ConversationInbox({
               {mode === "internal"
                 ? "Choose a staff member or administrator to start a private chat."
                 : isClient
-                  ? "Choose a department head, then open a service thread."
-                  : "Choose a client, then open a service thread."}
+                  ? "Choose a department to discuss all your bookings in one conversation."
+                  : "Choose a client to discuss all their department bookings in one conversation."}
             </p>
           </div>
         )}
       </div>
-      {deletionTarget && (
-        <ConfirmationDialog
-          title="Delete conversation for you?"
-          subject={[deletionTarget.title, deletionTarget.referenceNumber]
-            .filter(Boolean)
-            .join(" · ")}
-          description="This removes the conversation from your archive. The booking and the other participant's history are kept."
-          confirmLabel="Delete for me"
-          pendingLabel="Deleting…"
-          pending={deleting}
-          error={deletionError}
-          onClose={() => setDeletionTarget(null)}
-          onConfirm={() => void confirmDeletion()}
-        />
-      )}
     </main>
   )
 }

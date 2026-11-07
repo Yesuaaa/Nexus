@@ -55,13 +55,35 @@ for (const role of ["USER", "STAFF", "ADMIN", "SUPERADMIN"] as const) {
     await page.route("https://profile-test.supabase.co/**", (route) =>
       route.fulfill({ contentType: "image/png", body: imageBuffer }),
     )
+    const imageWrites: string[] = []
+    let failBannerOnce = role === "USER"
     await page.route("**/api/**", async (route) => {
       const request = route.request()
       const path = new URL(request.url()).pathname
+      if (path === "/api/auth/settings")
+        return route.fulfill({
+          json: {
+            preferences: {
+              timeZone: "Asia/Manila",
+              dateFormat: "MM/DD/YYYY",
+              timeFormat: "12h",
+              workflowNotifications: true,
+            },
+            sessions: [],
+          },
+        })
       if (path === "/api/auth/me")
         return route.fulfill({ json: { user: profile.user } })
       if (path === "/api/auth/profile/images") {
         const { kind, dataUrl } = request.postDataJSON()
+        imageWrites.push(kind)
+        if (kind === "banner" && failBannerOnce) {
+          failBannerOnce = false
+          return route.fulfill({
+            status: 500,
+            json: { error: "Temporary upload failure." },
+          })
+        }
         expect(dataUrl).toMatch(/^data:image\/png;base64,/)
         const url = `https://profile-test.supabase.co/${kind}.png`
         if (kind === "avatar") {
@@ -110,19 +132,30 @@ for (const role of ["USER", "STAFF", "ADMIN", "SUPERADMIN"] as const) {
     await page
       .getByLabel("Choose profile picture", { exact: true })
       .setInputFiles({
-        name: "avatar.png",
+        name: "discarded.png",
         mimeType: "image/png",
         buffer: imageBuffer,
       })
     await expect(
       page.getByRole("img", { name: "Profile picture preview", exact: true }),
     ).toBeVisible()
+    expect(imageWrites).toEqual([])
+    await page.getByRole("button", { name: "Cancel", exact: true }).click()
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    expect(imageWrites).toEqual([])
     await page
-      .getByRole("button", { name: "Upload image", exact: true })
+      .getByRole("button", { name: "Change profile picture", exact: true })
       .click()
-    await expect
-      .poll(() => profile.imageUrl)
-      .toBe("https://profile-test.supabase.co/avatar.png")
+    await expect(
+      page.getByRole("button", { name: "Save changes", exact: true }),
+    ).toBeDisabled()
+    await page
+      .getByLabel("Choose profile picture", { exact: true })
+      .setInputFiles({
+        name: "avatar.png",
+        mimeType: "image/png",
+        buffer: imageBuffer,
+      })
     await page
       .getByLabel("Choose cover banner", { exact: true })
       .setInputFiles({
@@ -131,15 +164,70 @@ for (const role of ["USER", "STAFF", "ADMIN", "SUPERADMIN"] as const) {
         buffer: imageBuffer,
       })
     await expect(
+      page.getByRole("img", { name: "Profile picture preview", exact: true }),
+    ).toBeVisible()
+    await expect(
       page.getByRole("img", { name: "Cover banner preview", exact: true }),
     ).toBeVisible()
-    await page
-      .getByRole("button", { name: "Upload image", exact: true })
-      .click()
+    await expect(
+      page.getByRole("button", { name: "Save changes", exact: true }),
+    ).toBeEnabled()
+    await expect(
+      page.getByRole("button", { name: "Remove selected image", exact: true }),
+    ).toHaveCount(0)
+    await expect(
+      page.getByText("Not uploaded yet", { exact: false }),
+    ).toHaveCount(0)
+    expect(imageWrites).toEqual([])
+    await page.setViewportSize({ width: 1280, height: 1000 })
     await expect
-      .poll(() => profile.bannerUrl)
-      .toBe("https://profile-test.supabase.co/banner.png")
-    await page.getByRole("button", { name: "Done", exact: true }).click()
+      .poll(async () => {
+        const box = await page.getByRole("dialog").boundingBox()
+        return !!box && box.x >= 16 && box.x + box.width <= 1264
+      })
+      .toBe(true)
+    await page.screenshot({
+      path: testInfo.outputPath("image-editor-desktop.png"),
+      fullPage: true,
+    })
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect
+      .poll(async () => {
+        const box = await page.getByRole("dialog").boundingBox()
+        return !!box && box.x >= 12 && box.width <= 366
+      })
+      .toBe(true)
+    await page
+      .getByRole("button", { name: "Save changes", exact: true })
+      .scrollIntoViewIfNeeded()
+    await page.screenshot({
+      path: testInfo.outputPath("image-editor-mobile.png"),
+      fullPage: true,
+    })
+    await page.setViewportSize({ width: 1280, height: 720 })
+    await page
+      .getByRole("button", { name: "Save changes", exact: true })
+      .click()
+    if (role === "USER") {
+      await expect(
+        page
+          .getByRole("alert")
+          .filter({ hasText: "Cover banner was not saved." }),
+      ).toContainText("Profile picture saved.")
+      expect(imageWrites).toEqual(["avatar", "banner"])
+      await expect(page.getByRole("dialog")).toBeVisible()
+      await page
+        .getByRole("button", { name: "Save changes", exact: true })
+        .click()
+      await expect
+        .poll(() => imageWrites)
+        .toEqual(["avatar", "banner", "banner"])
+    } else await expect.poll(() => imageWrites).toEqual(["avatar", "banner"])
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    expect(profile.imageUrl).toBe("https://profile-test.supabase.co/avatar.png")
+    expect(profile.bannerUrl).toBe(
+      "https://profile-test.supabase.co/banner.png",
+    )
     await expect(
       page.getByRole("img", { name: "Profile banner", exact: true }),
     ).toBeVisible()
@@ -228,6 +316,10 @@ for (const role of ["USER", "STAFF", "ADMIN", "SUPERADMIN"] as const) {
       path: testInfo.outputPath("mobile.png"),
       fullPage: true,
     })
+    await page
+      .getByRole("button", { name: "Change password", exact: true })
+      .click()
+    await expect(page).toHaveURL(/\/settings/)
     await page
       .getByRole("button", { name: "Change password", exact: true })
       .click()

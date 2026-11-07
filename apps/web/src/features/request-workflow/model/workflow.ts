@@ -28,6 +28,7 @@ export type WorkflowRequirement = {
   status: "REQUESTED" | "SUBMITTED" | "COMPLETED"
   submission: string | null
   fileId: string | null
+  fileIds: string[]
   reviewNote: string | null
   createdAt: string
 }
@@ -83,7 +84,9 @@ export type Workflow = {
   version: number
   nextAction: string
   consultationRequired: boolean
+  consultationComplete?: boolean
   quotationApprovalRequired: boolean
+  paymentRequired?: boolean
   permissions: {
     manage: boolean
     isClient: boolean
@@ -171,6 +174,7 @@ export type WorkflowAction =
       requirementId: string
       submission: string
       fileId?: string
+      fileIds?: string[]
     }
   | {
       type: "REVIEW_REQUIREMENT"
@@ -211,6 +215,7 @@ export type WorkflowAction =
   | { type: "SIGN_AGREEMENT"; fileId: string }
   | { type: "REVIEW_AGREEMENT"; approve: boolean; note: string }
   | { type: "SUBMIT_PAYMENT"; fileId: string; reference: string }
+  | { type: "COMPLETE_SANDBOX_PAYMENT" }
   | { type: "VERIFY_PAYMENT"; approve: boolean; note: string }
   | {
       type: "ASSIGN_APPROVERS"

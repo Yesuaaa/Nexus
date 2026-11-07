@@ -1,5 +1,7 @@
 "use client"
 
+import { Form } from "@/components/ui/form"
+
 import {
   useEffect,
   useId,
@@ -8,10 +10,9 @@ import {
   type ReactNode,
 } from "react"
 import { useRouter } from "next/navigation"
-import { Eye, EyeOff, Plus, Trash2 } from "lucide-react"
+import { Plus, Trash2 } from "lucide-react"
 import { sileo } from "sileo"
 import { Button } from "@/components/ui/button"
-import { focusRing } from "@/components/layout/styles"
 import {
   Dialog,
   DialogContent,
@@ -19,11 +20,10 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import { ProfileOverview } from "../components/profile-overview"
+import { ProfileImagesEditor } from "../components/profile-images-editor"
 import { ProfileImageUpload } from "../components/profile-image-upload"
-import { clearToken } from "@/features/auth/api/auth-api"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import {
-  changeProfilePassword,
   getProfile,
   savePersonalProfile,
   saveSpecialistProfile,
@@ -137,7 +137,7 @@ function PersonalDetails({
       title="Personal details"
       description="Keep your name and contact information up to date."
     >
-      <form onSubmit={save} className="grid gap-5">
+      <Form onSubmit={save} className="grid gap-5">
         <fieldset
           disabled={busy}
           className="m-0 grid min-w-0 gap-5 border-0 p-0 sm:grid-cols-2"
@@ -188,119 +188,7 @@ function PersonalDetails({
             {busy ? "Saving…" : "Save personal details"}
           </Button>
         </div>
-      </form>
-    </Section>
-  )
-}
-
-function PasswordField({
-  label,
-  name,
-  autoComplete,
-  minLength,
-}: {
-  label: string
-  name: string
-  autoComplete: string
-  minLength?: number
-}) {
-  const [visible, setVisible] = useState(false)
-  return (
-    <Field label={label}>
-      <div className="relative">
-        <input
-          name={name}
-          type={visible ? "text" : "password"}
-          autoComplete={autoComplete}
-          minLength={minLength}
-          maxLength={1024}
-          required
-          className={`${inputClass} pr-12`}
-        />
-        <button
-          type="button"
-          aria-label={`${visible ? "Hide" : "Show"} ${label.toLowerCase()}`}
-          aria-pressed={visible}
-          onClick={() => setVisible(!visible)}
-          className={`absolute top-0 right-0 grid size-11 cursor-pointer place-items-center rounded-lg text-[#667b9e] ${focusRing}`}
-        >
-          {visible ? (
-            <EyeOff size={17} aria-hidden="true" />
-          ) : (
-            <Eye size={17} aria-hidden="true" />
-          )}
-        </button>
-      </div>
-    </Field>
-  )
-}
-function SecurityDetails() {
-  const router = useRouter()
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState("")
-  async function save(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const data = new FormData(event.currentTarget)
-    if (data.get("newPassword") !== data.get("confirmPassword")) {
-      setError("The new passwords do not match.")
-      return
-    }
-    setBusy(true)
-    setError("")
-    try {
-      await changeProfilePassword(
-        String(data.get("currentPassword")),
-        String(data.get("newPassword")),
-      )
-      clearToken()
-      sileo.success({
-        title: "Password changed",
-        description: "Sign in with your new password.",
-      })
-      router.replace("/login")
-    } catch (reason) {
-      setError(errorText(reason))
-      setBusy(false)
-    }
-  }
-  return (
-    <Section
-      id="security"
-      title="Password & security"
-      description="Use at least 12 characters. Changing your password signs out all active sessions."
-    >
-      <form onSubmit={save} className="grid gap-5">
-        <fieldset
-          disabled={busy}
-          className="m-0 grid min-w-0 gap-5 border-0 p-0"
-        >
-          <PasswordField
-            label="Current password"
-            name="currentPassword"
-            autoComplete="current-password"
-          />
-          <div className="grid gap-5 sm:grid-cols-2">
-            <PasswordField
-              label="New password"
-              name="newPassword"
-              autoComplete="new-password"
-              minLength={12}
-            />
-            <PasswordField
-              label="Confirm new password"
-              name="confirmPassword"
-              autoComplete="new-password"
-              minLength={12}
-            />
-          </div>
-        </fieldset>
-        <ErrorMessage message={error} />
-        <div className="flex justify-end border-t border-[#eceef1] pt-4">
-          <Button className={primaryClass} disabled={busy}>
-            {busy ? "Updating…" : "Update password"}
-          </Button>
-        </div>
-      </form>
+      </Form>
     </Section>
   )
 }
@@ -367,7 +255,7 @@ function SpecialistEditor({
       title="Specialist profile"
       description="Introduce yourself to clients. Published projects, specialties, and social links appear on your specialist profile."
     >
-      <form onSubmit={save} className="grid gap-6">
+      <Form onSubmit={save} className="grid gap-6">
         <fieldset
           disabled={busy || uploadingImage}
           className="m-0 grid min-w-0 gap-6 border-0 p-0"
@@ -641,19 +529,20 @@ function SpecialistEditor({
                 : "Save specialist profile"}
           </Button>
         </div>
-      </form>
+      </Form>
     </Section>
   )
 }
 
 export function ProfilePage() {
+  const router = useRouter()
   const account = usePortalAccount()
   const [profile, setProfile] = useState<Profile | null>(null)
   const [error, setError] = useState("")
   const [revision, setRevision] = useState(0)
   const [uploadingImage, setUploadingImage] = useState(false)
   const [editor, setEditor] = useState<
-    "personal" | "specialist" | "security" | "images" | null
+    "personal" | "specialist" | "images" | null
   >(null)
   useEffect(() => {
     const controller = new AbortController()
@@ -683,7 +572,7 @@ export function ProfilePage() {
         onRetry={() => setRevision((value) => value + 1)}
         onEditPersonal={() => setEditor("personal")}
         onEditSpecialist={() => setEditor("specialist")}
-        onEditSecurity={() => setEditor("security")}
+        onEditSecurity={() => router.push("/settings")}
         onEditImages={() => setEditor("images")}
       />
       <Dialog
@@ -706,54 +595,19 @@ export function ProfilePage() {
               ? "Profile photo & banner"
               : editor === "specialist"
                 ? "Edit specialist profile"
-                : editor === "security"
-                  ? "Change password"
-                  : "Edit personal details"}
+                : "Edit personal details"}
           </DialogTitle>
           <DialogDescription className="sr-only">
             Update your profile information and save your changes.
           </DialogDescription>
           <div className="[&>section]:rounded-none [&>section]:border-0">
             {editor === "images" && profile && (
-              <Section
-                id="profile-images"
-                title="Profile photo & banner"
-                description="Choose an image, review the preview, then upload it to your profile."
-              >
-                <fieldset
-                  disabled={uploadingImage}
-                  className="m-0 grid min-w-0 gap-5 border-0 p-0"
-                >
-                  <ProfileImageUpload
-                    kind="avatar"
-                    value={profile.imageUrl}
-                    label="Profile picture"
-                    onUploadingChange={setUploadingImage}
-                    onUploaded={(_url, data) => {
-                      if (data) setProfile(data)
-                    }}
-                  />
-                  <ProfileImageUpload
-                    kind="banner"
-                    value={profile.bannerUrl}
-                    label="Cover banner"
-                    onUploadingChange={setUploadingImage}
-                    onUploaded={(_url, data) => {
-                      if (data) setProfile(data)
-                    }}
-                  />
-                  <div className="flex justify-end">
-                    <Button
-                      type="button"
-                      className={primaryClass}
-                      disabled={uploadingImage}
-                      onClick={() => setEditor(null)}
-                    >
-                      Done
-                    </Button>
-                  </div>
-                </fieldset>
-              </Section>
+              <ProfileImagesEditor
+                profile={profile}
+                onApplied={setProfile}
+                onClose={() => setEditor(null)}
+                onUploadingChange={setUploadingImage}
+              />
             )}
             {editor === "personal" && profile && (
               <PersonalDetails profile={profile} onSaved={saved} />
@@ -765,7 +619,6 @@ export function ProfilePage() {
                 onUploadingChange={setUploadingImage}
               />
             )}
-            {editor === "security" && <SecurityDetails />}
           </div>
         </DialogContent>
       </Dialog>

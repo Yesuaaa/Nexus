@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import type { RequestWorkflowState } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import {
@@ -39,6 +39,9 @@ async function requireConsultationComplete(
     consultationRequired &&
     !(await tx.workflowConsultation.count({
       where: { requestId, status: "COMPLETED" },
+    })) &&
+    !(await tx.conversationMeetingBooking.count({
+      where: { bookingId: requestId, meeting: { status: "COMPLETED" } },
     }))
   )
     fail("Complete the required consultation before sending a quotation", 409)
@@ -51,7 +54,7 @@ async function refreshReadiness(
 ) {
   const workflow = await tx.requestWorkflow.findUniqueOrThrow({
     where: { requestId },
-    include: { approval: true, agreement: true, payment: true },
+    include: { approval: true, payment: true },
   })
   if (
     !workflow.approval ||
@@ -64,8 +67,6 @@ async function refreshReadiness(
   })
   const ready =
     !outstanding &&
-    (!workflow.agreementRequired ||
-      workflow.agreement?.status === "APPROVED") &&
     (!workflow.paymentRequired || workflow.payment?.status === "VERIFIED")
   const nextState = ready ? "READY_FOR_ACTIVATION" : "AGREEMENT_PAYMENT_PENDING"
   if (workflow.state !== nextState) {
@@ -129,7 +130,10 @@ async function runAction(
       )
     return record.id
   }
-  if (terminal.some((value) => value === state))
+  if (
+    terminal.some((value) => value === state) &&
+    !(state === "ACTIVE_PROJECT" && command.type === "STAFF_PROJECT")
+  )
     fail(
       "This workflow has ended or the project has already been activated",
       409,
@@ -290,11 +294,15 @@ async function runAction(
         fail("This requirement is already complete", 409)
       if (requirement.status === "SUBMITTED")
         fail("This response is awaiting department review", 409)
+      const fileIds =
+        command.fileIds ?? (command.fileId ? [command.fileId] : [])
+      for (const fileId of fileIds) await file(fileId, true)
       await tx.workflowRequirement.update({
         where: { id: requirement.id },
         data: {
           submission: command.submission || null,
-          fileId: command.fileId ? await file(command.fileId, true) : null,
+          fileId: fileIds[0] ?? null,
+          attachments: { set: fileIds.map((id) => ({ id })) },
           status: "SUBMITTED",
           reviewNote: null,
         },
@@ -596,7 +604,13 @@ async function runAction(
         },
       })
       const agreement = await tx.workflowAgreement.create({
-        data: { requestId, mandatory: workflow.agreementRequired },
+        data: {
+          requestId,
+          mandatory: workflow.agreementRequired,
+          status: "APPROVED",
+          reviewedById: userId,
+          reviewedAt: approval.approvedAt,
+        },
       })
       const payment = await tx.workflowPayment.create({
         data: {
@@ -633,20 +647,18 @@ async function runAction(
       await setState("AGREEMENT_PAYMENT_PENDING")
       await event(
         "APPROVAL_CONFIRMED",
-        `The client formally accepted quotation v${quote.version} for ${quote.currency} ${quote.total.toFixed(2)}. Agreement and payment requirements are now available.`,
+        `The client formally accepted quotation v${quote.version} for ${quote.currency} ${quote.total.toFixed(2)}. This acceptance confirms the service agreement. Complete any required payment before activation.`,
         approval.id,
       )
       await event(
-        "AGREEMENT_CREATED",
-        workflow.agreementRequired
-          ? "A signed agreement is required before commencement."
-          : "An optional agreement checklist is available.",
+        "AGREEMENT_CONFIRMED",
+        "The service agreement is confirmed by the client's formal quotation acceptance. No separate signed agreement is required.",
         agreement.id,
       )
       await event(
         "PAYMENT_CREATED",
         workflow.paymentRequired
-          ? "Submit payment evidence for manual verification before commencement."
+          ? "Complete the commencement payment through checkout or payment evidence before activation."
           : "No mandatory commencement payment is required.",
         payment.id,
       )
@@ -725,6 +737,63 @@ async function runAction(
       )
       break
     }
+    case "COMPLETE_SANDBOX_PAYMENT": {
+      requireClient()
+      requireStage("AGREEMENT_PAYMENT_PENDING", "READY_FOR_ACTIVATION")
+      const payment = await tx.workflowPayment.findUnique({
+        where: { requestId },
+      })
+      if (!payment || payment.status !== "PENDING" || payment.amount.lte(0))
+        fail("No outstanding payment is available for sandbox checkout", 409)
+      const transactionId = randomUUID()
+      const reference = `XENDIT-SANDBOX-${transactionId.toUpperCase()}`
+      const verifiedAt = new Date()
+      const data = Buffer.from(
+        [
+          "Nexus sandbox checkout receipt",
+          "Provider: Xendit prototype (simulated)",
+          "Status: Automatically verified",
+          `Reference: ${reference}`,
+          `Booking: ${request.referenceNumber || requestId}`,
+          `Amount: ${payment.currency} ${payment.amount.toFixed(2)}`,
+          "Card: **** 0002",
+          `Verified at: ${verifiedAt.toISOString()}`,
+          "Test payment only. No money was charged.",
+        ].join("\n"),
+      )
+      const receipt = await tx.workflowFile.create({
+        data: {
+          requestId,
+          uploaderId: userId,
+          uploadId: transactionId,
+          name: `${reference.toLowerCase()}.txt`,
+          mimeType: "text/plain",
+          size: data.length,
+          sha256: createHash("sha256").update(data).digest("hex"),
+          clientVisible: true,
+          data,
+        },
+      })
+      await tx.workflowPayment.update({
+        where: { requestId },
+        data: {
+          proofFileId: receipt.id,
+          reference,
+          status: "VERIFIED",
+          verifiedById: null,
+          verifiedAt,
+        },
+      })
+      await appendEvent(
+        tx,
+        requestId,
+        null,
+        "PAYMENT_VERIFIED",
+        "Sandbox card payment succeeded and was automatically verified. No money was charged.",
+        payment.id,
+      )
+      break
+    }
     case "SUBMIT_PAYMENT": {
       requireClient()
       requireStage("AGREEMENT_PAYMENT_PENDING", "READY_FOR_ACTIVATION")
@@ -754,12 +823,14 @@ async function runAction(
       break
     }
     case "VERIFY_PAYMENT": {
-      if (!permissions.verifyPayment)
+      if (!permissions.verifyPayment && !permissions.manage)
         fail(
-          "Only the explicitly assigned payment verifier can verify payment",
+          "Only the department head or assigned payment verifier can review payment",
           403,
         )
       requireStage("AGREEMENT_PAYMENT_PENDING", "READY_FOR_ACTIVATION")
+      if (!command.approve && !command.note.trim())
+        fail("A reason is required when rejecting payment")
       const payment = await tx.workflowPayment.findUnique({
         where: { requestId },
       })
@@ -777,7 +848,7 @@ async function runAction(
         "PAYMENT_VERIFIED",
         command.approve
           ? "Payment was manually verified by the assigned approver."
-          : "Payment evidence needs to be resubmitted.",
+          : `Payment rejected: ${command.note}. Please submit corrected payment proof.`,
         payment.id,
       )
       if (command.note)
@@ -828,10 +899,14 @@ async function runAction(
     }
     case "STAFF_PROJECT": {
       requireManager()
-      requireStage("AGREEMENT_PAYMENT_PENDING", "READY_FOR_ACTIVATION")
+      requireStage(
+        "AGREEMENT_PAYMENT_PENDING",
+        "READY_FOR_ACTIVATION",
+        "ACTIVE_PROJECT",
+      )
       const project = await tx.project.findUnique({ where: { requestId } })
-      if (!project || project.status !== "PLANNED")
-        fail("No project draft is available", 409)
+      if (!project || !["PLANNED", "IN_PROGRESS"].includes(project.status))
+        fail("No planned or active project is available", 409)
       const eligible = await tx.employee.findMany({
         where: {
           id: { in: command.employeeIds },
@@ -843,8 +918,14 @@ async function runAction(
       })
       if (eligible.length !== command.employeeIds.length)
         fail("Select active staff from the responsible department", 409)
-      await tx.projectStaff.deleteMany({ where: { projectId: project.id } })
+      await tx.projectStaff.deleteMany({
+        where: {
+          projectId: project.id,
+          employeeId: { notIn: eligible.map((employee) => employee.id) },
+        },
+      })
       await tx.projectStaff.createMany({
+        skipDuplicates: true,
         data: eligible.map((employee) => ({
           projectId: project.id,
           employeeId: employee.id,
@@ -867,9 +948,8 @@ async function runAction(
         requestId,
         workflow.consultationRequired,
       )
-      const [approval, agreement, payment, project] = await Promise.all([
+      const [approval, payment, project] = await Promise.all([
         tx.workflowApproval.findUnique({ where: { requestId } }),
-        tx.workflowAgreement.findUnique({ where: { requestId } }),
         tx.workflowPayment.findUnique({ where: { requestId } }),
         tx.project.findUnique({
           where: { requestId },
@@ -883,14 +963,8 @@ async function runAction(
           "A formally accepted quotation and matching draft project are required",
           409,
         )
-      if (
-        (workflow.agreementRequired && agreement?.status !== "APPROVED") ||
-        (workflow.paymentRequired && payment?.status !== "VERIFIED")
-      )
-        fail(
-          "All mandatory agreement and payment requirements must be completed",
-          409,
-        )
+      if (workflow.paymentRequired && payment?.status !== "VERIFIED")
+        fail("The required commencement payment must be verified", 409)
       if (
         !project.staff.length ||
         project.staff.some(

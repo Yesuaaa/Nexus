@@ -1,14 +1,15 @@
 "use client"
 
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import { Form } from "@/components/ui/form"
+import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
+
+import { useEffect, useRef, type ReactNode } from "react"
 import {
   CalendarDays,
   ChevronDown,
   Clock3,
   ExternalLink,
   MapPin,
-  Plus,
-  Trash2,
   Video,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -87,7 +88,7 @@ function ActionForm({
       "border border-[#b42318] bg-background text-[#b42318] hover:bg-[#fef3f2] hover:text-[#912018] disabled:opacity-50",
   )
   return (
-    <form
+    <Form
       className="space-y-3"
       onSubmit={async (event) => {
         event.preventDefault()
@@ -120,316 +121,85 @@ function ActionForm({
           {controls.busy ? "Saving…" : label}
         </Button>
       )}
-    </form>
-  )
-}
-
-export function QuotationForm({
-  controls,
-  workflow,
-  onComplete,
-  onCancel,
-  inline = false,
-}: {
-  controls: WorkflowControls
-  workflow: Workflow
-  onComplete?: () => void
-  onCancel?: () => void
-  inline?: boolean
-}) {
-  const [rows, setRows] = useState([{ key: 0 }])
-  const [nextKey, setNextKey] = useState(1)
-  const latest = workflow.quotations.at(-1)
-  return (
-    <ActionForm
-      controls={controls}
-      label={latest ? "Send revised quotation" : "Send quotation"}
-      onComplete={onComplete}
-      onCancel={onCancel}
-      inline={inline}
-      action={(data) => ({
-        type: "CREATE_QUOTATION",
-        scope: String(data.get("scope")),
-        deliverables: String(data.get("deliverables"))
-          .split("\n")
-          .map((item) => item.trim())
-          .filter(Boolean),
-        lineItems: rows.map(({ key }) => ({
-          description: String(data.get(`description-${key}`)),
-          quantity: Number(data.get(`quantity-${key}`)),
-          unitPrice: String(data.get(`price-${key}`)),
-        })),
-        currency: String(data.get("currency")),
-        timeline: String(data.get("timeline")),
-        paymentTerms: String(data.get("paymentTerms")),
-        paymentDue: String(data.get("paymentDue")),
-        validUntil: new Date(String(data.get("validUntil"))).toISOString(),
-      })}
-    >
-      <WorkflowField label="Service scope">
-        <textarea
-          name="scope"
-          required
-          rows={3}
-          maxLength={6000}
-          defaultValue={latest?.scope || workflow.request.goals}
-          className={workflowInput}
-        />
-      </WorkflowField>
-      <WorkflowField label="Deliverables (one per line)">
-        <textarea
-          name="deliverables"
-          required
-          rows={3}
-          maxLength={8000}
-          defaultValue={latest?.deliverables.join("\n") || ""}
-          className={workflowInput}
-        />
-      </WorkflowField>
-      <fieldset className="m-0 min-w-0 space-y-2 border-0 p-0">
-        <legend className="mb-2 text-[11px] font-medium">
-          Pricing breakdown
-        </legend>
-        {rows.map(({ key }, index) => (
-          <div
-            key={key}
-            className="space-y-2 rounded-lg border border-[#e1e6ee] p-2"
-          >
-            <WorkflowField label={`Item ${index + 1}`}>
-              <input
-                name={`description-${key}`}
-                required
-                maxLength={300}
-                className={workflowInput}
-              />
-            </WorkflowField>
-            <div className="grid grid-cols-2 gap-2">
-              <WorkflowField label="Quantity">
-                <input
-                  name={`quantity-${key}`}
-                  type="number"
-                  required
-                  min="1"
-                  max="10000"
-                  step="1"
-                  defaultValue="1"
-                  className={workflowInput}
-                />
-              </WorkflowField>
-              <WorkflowField label="Unit price">
-                <input
-                  name={`price-${key}`}
-                  type="number"
-                  required
-                  min="0"
-                  max="999999999"
-                  step="0.01"
-                  className={workflowInput}
-                />
-              </WorkflowField>
-            </div>
-            {rows.length > 1 && (
-              <Button
-                type="button"
-                variant="outline"
-                aria-label={`Remove item ${index + 1}`}
-                className="h-7 text-[10px]"
-                onClick={() =>
-                  setRows((items) => items.filter((item) => item.key !== key))
-                }
-              >
-                <Trash2 size={12} aria-hidden="true" />
-                Remove
-              </Button>
-            )}
-          </div>
-        ))}
-        <Button
-          type="button"
-          variant="outline"
-          className={workflowButton}
-          disabled={rows.length >= 30}
-          onClick={() => {
-            setRows((items) => [...items, { key: nextKey }])
-            setNextKey((value) => value + 1)
-          }}
-        >
-          <Plus size={12} aria-hidden="true" />
-          Add item
-        </Button>
-      </fieldset>
-      <WorkflowField label="Currency">
-        <select
-          name="currency"
-          defaultValue={latest?.currency || "PHP"}
-          className={workflowInput}
-        >
-          <option value="PHP">PHP</option>
-          <option value="USD">USD</option>
-          <option value="EUR">EUR</option>
-          <option value="GBP">GBP</option>
-        </select>
-      </WorkflowField>
-      <WorkflowField label="Estimated timeline">
-        <textarea
-          name="timeline"
-          required
-          maxLength={1000}
-          rows={2}
-          defaultValue={latest?.timeline || workflow.request.expectedTimeline}
-          className={workflowInput}
-        />
-      </WorkflowField>
-      <WorkflowField label="Payment terms">
-        <textarea
-          name="paymentTerms"
-          required
-          maxLength={2000}
-          rows={2}
-          defaultValue={latest?.paymentTerms || ""}
-          className={workflowInput}
-        />
-      </WorkflowField>
-      <WorkflowField label="Amount due before commencement">
-        <input
-          name="paymentDue"
-          required
-          type="number"
-          min="0"
-          max="999999999"
-          step="0.01"
-          defaultValue={latest?.paymentDue}
-          className={workflowInput}
-        />
-      </WorkflowField>
-      <WorkflowField label="Valid until">
-        <input
-          name="validUntil"
-          required
-          type="datetime-local"
-          className={workflowInput}
-        />
-      </WorkflowField>
-      {workflow.quotationApprovalRequired && (
-        <p className="m-0 text-[11px]">
-          The assigned quotation approver must authorize this version before the
-          client can accept it.
-        </p>
-      )}
-    </ActionForm>
+    </Form>
   )
 }
 
 function InternalWorkspace({
   workflow,
-  controls,
+  onManageStaff,
 }: {
   workflow: Workflow
-  controls: WorkflowControls
+  onManageStaff?: () => void
 }) {
-  const internal = workflow.internal
-  if (!workflow.permissions.manage || !internal || !workflow.approval)
+  if (!workflow.permissions.manage || !workflow.internal || !workflow.approval)
     return null
-  const mutable = !["ACTIVE_PROJECT", "DECLINED", "CANCELLED"].includes(
-    workflow.state,
-  )
+  const assigned = workflow.internal.staff.filter((person) => person.assigned)
+  const mutable = [
+    "AGREEMENT_PAYMENT_PENDING",
+    "READY_FOR_ACTIVATION",
+    "ACTIVE_PROJECT",
+  ].includes(workflow.state)
   return (
-    <div className="mt-3 rounded-xl border border-[#d8e1ef] bg-[#f6f8fc] px-3 pt-3 pb-1">
-      <p className="mb-1 text-[10px] font-semibold tracking-wide text-[#52627a] uppercase">
-        Internal · Department head only
-      </p>
-      {workflow.approval && (
-        <WorkflowDisclosure title="Staffing and workload">
-          <p className="m-0 text-[11px]">
-            Review department assignments, specialties, availability, and active
-            project counts. Personnel selection requires your approval.
-          </p>
-          <ActionForm
-            controls={controls}
-            label="Approve staffing"
-            readOnly={!mutable || workflow.state === "ON_HOLD"}
-            action={(data) => ({
-              type: "STAFF_PROJECT",
-              employeeIds: data.getAll("employeeIds").map(String),
-            })}
-          >
-            <fieldset className="m-0 space-y-2 border-0 p-0">
-              <legend className="sr-only">Department employees</legend>
-              {internal.staff.length ? (
-                internal.staff.map((person) => (
-                  <label
-                    key={person.id}
-                    className="flex items-start gap-2 rounded-lg border border-[#e1e6ee] bg-background p-2"
-                  >
-                    <input
-                      type="checkbox"
-                      name="employeeIds"
-                      value={person.id}
-                      defaultChecked={person.assigned}
-                      disabled={
-                        person.status !== "ACTIVE" ||
-                        !mutable ||
-                        workflow.state === "ON_HOLD"
-                      }
-                      className="mt-1 accent-[#203f8c]"
-                    />
-                    <span className="min-w-0">
-                      <strong className="block text-[11px] text-[#182235]">
-                        {person.fullName}
-                      </strong>
-                      <span className="block text-[10px]">
-                        {person.position || "Staff"} ·{" "}
-                        {person.status.toLowerCase().replaceAll("_", " ")}
-                      </span>
-                      <span className="block text-[10px]">
-                        {person.activeProjectCount} active{" "}
-                        {person.activeProjectCount === 1
-                          ? "project"
-                          : "projects"}
-                      </span>
-                      {!!person.skills.length && (
-                        <span className="block text-[10px]">
-                          {person.skills.join(", ")}
-                        </span>
-                      )}
-                    </span>
-                  </label>
-                ))
-              ) : (
-                <p className="m-0 text-[11px]">
-                  No eligible employees are assigned to this department.
-                </p>
-              )}
-            </fieldset>
-          </ActionForm>
-        </WorkflowDisclosure>
-      )}
-      {/* Internal notes are opened from the + menu.
-              <p className="mt-1 mb-0 text-[9px] text-[#8791a2]">
-                {event.actor?.fullName || "System"} ·{" "}
-                {new Date(event.createdAt).toLocaleString("en-PH")}
+    <WorkflowDisclosure title="Assigned staff" open>
+      {assigned.length ? (
+        <ul className="m-0 list-none space-y-2 p-0">
+          {assigned.map((person) => (
+            <li
+              key={person.id}
+              className="rounded-lg border border-[#e1e6ee] bg-white px-3 py-2"
+            >
+              <p className="m-0 text-[11px] font-semibold text-[#182235]">
+                {person.fullName}
               </p>
-            </div>
+              <p className="mt-1 mb-0 text-[10px] text-[#738096]">
+                {person.position || "Staff"}
+                {person.status !== "ACTIVE" &&
+                  ` · ${person.status.toLowerCase().replaceAll("_", " ")}`}
+              </p>
+            </li>
           ))}
-        </div>
-      */}
-    </div>
+        </ul>
+      ) : (
+        <p className="m-0 text-[11px] text-[#738096]">No staff assigned yet.</p>
+      )}
+      {onManageStaff && (
+        <Button
+          type="button"
+          variant="outline"
+          disabled={!mutable}
+          onClick={onManageStaff}
+          className={`${workflowButton} w-full text-[#203f8c]`}
+        >
+          {assigned.length ? "Manage staff" : "Assign staff"}
+        </Button>
+      )}
+    </WorkflowDisclosure>
   )
 }
-
 export function WorkflowContextPanel({
   workflow,
   controls,
   id,
   hidden = false,
   onViewEvent,
+  conversationOverview,
+  hasSelectedBooking,
+  onDraft,
+  onProjectSetup,
 }: {
-  workflow: Workflow
+  workflow: Workflow | null
   controls: WorkflowControls
   id?: string
   hidden?: boolean
   onViewEvent?: (entityId: string) => void
+  conversationOverview?: ReactNode
+  hasSelectedBooking: boolean
+  onDraft?: (action: "approver-assignments" | "internal-note") => void
+  onProjectSetup?: (mode: "activation" | "staffing") => void
 }) {
+  const { formatDate, formatTime } = useDatePreferences()
+
   const detailsRef = useRef<HTMLDetailsElement>(null)
   useEffect(() => {
     const screen = window.matchMedia("(min-width: 1024px)")
@@ -440,10 +210,16 @@ export function WorkflowContextPanel({
     screen.addEventListener("change", update)
     return () => screen.removeEventListener("change", update)
   }, [])
-  const terminal = ["ACTIVE_PROJECT", "DECLINED", "CANCELLED"].includes(
-    workflow.state,
+  const terminal = Boolean(
+    workflow &&
+    ["ACTIVE_PROJECT", "DECLINED", "CANCELLED"].includes(workflow.state),
   )
   const sectionId = (name: string) => `${id ?? "request-context"}-${name}`
+  const assignedStaff =
+    workflow?.internal?.staff.filter((person) => person.assigned) || []
+  const staffingApproved =
+    assignedStaff.length > 0 &&
+    assignedStaff.every((person) => person.status === "ACTIVE")
   return (
     <aside
       onClickCapture={(event) => {
@@ -479,62 +255,76 @@ export function WorkflowContextPanel({
           />
         </summary>
         <div className="max-[1023px]:max-h-[50dvh] max-[1023px]:overflow-y-auto">
-          <WorkflowDisclosure title="Service details" open>
-            <dl className="m-0 space-y-3">
-              {[
-                ["Service", workflow.request.serviceName],
-                ["Package", workflow.request.packageName || "Standard service"],
-                [
-                  "Request reference",
-                  workflow.request.referenceNumber || workflow.request.id,
-                ],
-                ["Project goals", workflow.request.goals || "Not provided"],
-                [
-                  "Submitted requirements",
-                  workflow.request.requirements || "Not provided",
-                ],
-                [
-                  "Expected timeline",
-                  workflow.request.expectedTimeline || "Not specified",
-                ],
-              ].map(([label, value]) => (
-                <div key={label}>
-                  <dt className="text-[10px] text-[#8791a2]">{label}</dt>
-                  <dd className="mt-1 ml-0 text-[11px] whitespace-pre-wrap [overflow-wrap:anywhere]">
-                    {value}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </WorkflowDisclosure>
-          <WorkflowDisclosure
-            title={`Requirements · ${workflow.requirements.filter((item) => item.status === "COMPLETED").length}/${workflow.requirements.length}`}
-            open
-          >
-            <ul className="m-0 list-none space-y-2 p-0">
-              {workflow.requirements.map((item) => (
-                <li
-                  key={item.id}
-                  className="flex items-start justify-between gap-2"
-                >
-                  <a
-                    href={`#workflow-${item.id}`}
-                    className="text-[11px] text-[#203f8c] underline-offset-2 hover:underline"
-                  >
-                    {item.title}
-                    {item.mandatory ? " *" : ""}
-                  </a>
-                  <WorkflowBadge value={item.status} />
-                </li>
-              ))}
-            </ul>
-            {!workflow.requirements.length && (
-              <p className="m-0 text-[11px]">
-                No additional requirements requested.
-              </p>
-            )}
-          </WorkflowDisclosure>
-          {/* Latest quotation is available in the conversation timeline.
+          {conversationOverview}
+          {hasSelectedBooking && (
+            <WorkflowDisclosure title="Service details" open>
+              {workflow ? (
+                <dl className="m-0 space-y-3">
+                  {[
+                    ["Service", workflow.request.serviceName],
+                    [
+                      "Package",
+                      workflow.request.packageName || "Standard service",
+                    ],
+                    [
+                      "Request reference",
+                      workflow.request.referenceNumber || workflow.request.id,
+                    ],
+                    ["Project goals", workflow.request.goals || "Not provided"],
+                    [
+                      "Submitted requirements",
+                      workflow.request.requirements || "Not provided",
+                    ],
+                    [
+                      "Expected timeline",
+                      workflow.request.expectedTimeline || "Not specified",
+                    ],
+                  ].map(([label, value]) => (
+                    <div key={label}>
+                      <dt className="text-[10px] text-[#8791a2]">{label}</dt>
+                      <dd className="mt-1 ml-0 text-[11px] whitespace-pre-wrap [overflow-wrap:anywhere]">
+                        {value}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : (
+                <p role="status" className="m-0 text-[11px] text-[#52627a]">
+                  {controls.error || "Loading service details…"}
+                </p>
+              )}
+            </WorkflowDisclosure>
+          )}
+          {workflow && (
+            <>
+              <WorkflowDisclosure
+                title={`Requirements · ${workflow.requirements.filter((item) => item.status === "COMPLETED").length}/${workflow.requirements.length}`}
+                open
+              >
+                <ul className="m-0 list-none space-y-2 p-0">
+                  {workflow.requirements.map((item) => (
+                    <li
+                      key={item.id}
+                      className="flex items-start justify-between gap-2"
+                    >
+                      <a
+                        href={`#workflow-${item.id}`}
+                        className="text-[11px] text-[#203f8c] underline-offset-2 hover:underline"
+                      >
+                        {item.title}
+                        {item.mandatory ? " *" : ""}
+                      </a>
+                      <WorkflowBadge value={item.status} checklist />
+                    </li>
+                  ))}
+                </ul>
+                {!workflow.requirements.length && (
+                  <p className="m-0 text-[11px]">
+                    No additional requirements requested.
+                  </p>
+                )}
+              </WorkflowDisclosure>
+              {/* Latest quotation is available in the conversation timeline.
             <WorkflowDisclosure title="Latest quotation">
               <p className="m-0 text-sm font-semibold text-[#182235]">
                 {workflowMoney(latest.total, latest.currency)}
@@ -560,152 +350,181 @@ export function WorkflowContextPanel({
             </WorkflowDisclosure>
           )}
           */}
-          {workflow.approval && (
-            <WorkflowDisclosure title="Commencement checklist" open>
-              <ul className="m-0 list-none space-y-2 p-0">
-                <li className="flex justify-between gap-2 text-[11px]">
-                  <span>Client approval</span>
-                  <WorkflowBadge value="COMPLETED" />
-                </li>
-                {workflow.agreement && (
-                  <li className="flex justify-between gap-2 text-[11px]">
-                    <a
-                      href={`#workflow-${workflow.agreement.id}`}
-                      className="text-[#203f8c]"
+              {workflow.approval && (
+                <WorkflowDisclosure
+                  id={sectionId("commencement")}
+                  title="Commencement checklist"
+                  open
+                >
+                  <ul className="m-0 list-none space-y-2 p-0">
+                    <li className="flex justify-between gap-2 text-[11px]">
+                      <span>Client approval</span>
+                      <WorkflowBadge value="COMPLETED" checklist />
+                    </li>
+                    {workflow.payment && (
+                      <li className="flex justify-between gap-2 text-[11px]">
+                        <a
+                          href={`#workflow-${workflow.payment.id}`}
+                          className="text-[#203f8c]"
+                        >
+                          Payment{workflow.payment.mandatory ? " *" : ""}
+                        </a>
+                        <WorkflowBadge
+                          value={
+                            !workflow.payment.mandatory &&
+                            workflow.payment.amount === "0.00"
+                              ? "NOT_REQUIRED"
+                              : workflow.payment.status
+                          }
+                          checklist
+                        />
+                      </li>
+                    )}
+                    {workflow.requirements
+                      .filter((item) => item.mandatory)
+                      .map((item) => (
+                        <li
+                          key={item.id}
+                          className="flex items-start justify-between gap-2 border-t border-[#e8ebef] pt-2 text-[11px]"
+                        >
+                          <a
+                            href={`#workflow-${item.id}`}
+                            className="min-w-0 break-words text-[#203f8c]"
+                          >
+                            {item.title} (required)
+                          </a>
+                          <WorkflowBadge value={item.status} checklist />
+                        </li>
+                      ))}
+                  </ul>
+                </WorkflowDisclosure>
+              )}
+              {workflow.permissions.manage &&
+                workflow.state === "READY_FOR_ACTIVATION" && (
+                  <WorkflowDisclosure
+                    id={sectionId("activation")}
+                    title="Project activation"
+                    open
+                  >
+                    <p className="m-0 text-xs text-[#52627a]">
+                      {staffingApproved
+                        ? "Staffing is approved. Review and activate the project to open its workspace."
+                        : "Assign your project team and approve staffing in project setup before activating."}
+                    </p>
+                    <Button
+                      type="button"
+                      disabled={controls.busy || !onProjectSetup}
+                      className={`${workflowButton} w-full bg-[#203f8c] text-white hover:bg-[#172f70]`}
+                      onClick={() => onProjectSetup?.("activation")}
                     >
-                      Agreement{workflow.agreement.mandatory ? " *" : ""}
-                    </a>
-                    <WorkflowBadge value={workflow.agreement.status} />
-                  </li>
+                      Review and activate
+                    </Button>
+                  </WorkflowDisclosure>
                 )}
-                {workflow.payment && (
-                  <li className="flex justify-between gap-2 text-[11px]">
-                    <a
-                      href={`#workflow-${workflow.payment.id}`}
-                      className="text-[#203f8c]"
-                    >
-                      Payment{workflow.payment.mandatory ? " *" : ""}
-                    </a>
-                    <WorkflowBadge value={workflow.payment.status} />
-                  </li>
+              {(workflow.permissions.manage || workflow.permissions.isClient) &&
+                workflow.consultations.some(
+                  (item) => item.status === "SCHEDULED",
+                ) && (
+                  <WorkflowDisclosure
+                    id={sectionId("scheduled-consultation")}
+                    title="Scheduled consultation"
+                  >
+                    {workflow.consultations
+                      .filter((item) => item.status === "SCHEDULED")
+                      .map((consultation) => {
+                        const startsAt = new Date(consultation.startsAt)
+                        const endsAt = new Date(consultation.endsAt)
+                        const meetingUrl = getConsultationMeetingUrl(
+                          consultation.location,
+                        )
+                        return (
+                          <div
+                            key={consultation.id}
+                            className="overflow-hidden rounded-xl border border-[#1b367a] bg-[linear-gradient(145deg,#2b5bbb,#203f8c)] text-white shadow-[0_8px_20px_rgb(32_63_140_/_20%)]"
+                          >
+                            <div className="flex items-start justify-between gap-3 border-b border-white/15 px-3.5 py-3">
+                              <div className="flex min-w-0 items-center gap-2.5">
+                                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white/15 text-white shadow-[0_4px_10px_rgb(12_35_93_/_20%)]">
+                                  <CalendarDays size={15} aria-hidden="true" />
+                                </span>
+                                <div className="min-w-0">
+                                  <p className="m-0 truncate text-[11px] font-semibold text-white">
+                                    Consultation appointment
+                                  </p>
+                                  <p className="m-0 text-[10px] text-blue-100">
+                                    Confirmed schedule
+                                  </p>
+                                </div>
+                              </div>
+                              <span className="shrink-0 rounded-full border border-white/20 bg-white/15 px-2 py-1 text-[9px] font-semibold tracking-[0.04em] text-white uppercase">
+                                Scheduled
+                              </span>
+                            </div>
+                            <div className="space-y-3 px-3.5 py-3 text-[11px] text-blue-50">
+                              <div className="flex items-start gap-2.5">
+                                <CalendarDays
+                                  size={14}
+                                  aria-hidden="true"
+                                  className="mt-0.5 shrink-0 text-blue-100"
+                                />
+                                <div>
+                                  <p className="m-0 font-medium text-white">
+                                    {formatDate(startsAt)}
+                                  </p>
+                                  <p className="m-0 flex items-center gap-1 text-[10px] text-blue-100">
+                                    <Clock3 size={11} aria-hidden="true" />
+                                    {formatTime(startsAt)} –{" "}
+                                    {formatTime(endsAt)}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-start gap-2.5">
+                                <MapPin
+                                  size={14}
+                                  aria-hidden="true"
+                                  className="mt-0.5 shrink-0 text-blue-100"
+                                />
+                                <div className="min-w-0 break-words">
+                                  <p className="m-0 text-[10px] text-blue-100">
+                                    Location
+                                  </p>
+                                  <ConsultationLocation
+                                    location={consultation.location}
+                                    className="text-white"
+                                    showJoinButton={false}
+                                  />
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {meetingUrl && (
+                                  <a
+                                    href={meetingUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    aria-label="Join consultation"
+                                    className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white p-0 text-[#203f8c] transition-colors hover:bg-blue-50"
+                                  >
+                                    <Video size={12} aria-hidden="true" />
+                                    <HoverTooltip>
+                                      Join consultation
+                                    </HoverTooltip>
+                                  </a>
+                                )}
+                                <a
+                                  href={`#workflow-${consultation.id}`}
+                                  className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg border border-white/35 bg-white/10 px-2.5 py-2 text-center text-[9px] leading-4 font-semibold text-white transition-colors hover:bg-white/20"
+                                >
+                                  View details and reschedule
+                                  <ExternalLink size={12} aria-hidden="true" />
+                                </a>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                  </WorkflowDisclosure>
                 )}
-              </ul>
-            </WorkflowDisclosure>
-          )}
-          {(workflow.permissions.manage || workflow.permissions.isClient) &&
-            workflow.consultations.some(
-              (item) => item.status === "SCHEDULED",
-            ) && (
-              <WorkflowDisclosure
-                id={sectionId("scheduled-consultation")}
-                title="Scheduled consultation"
-              >
-                {workflow.consultations
-                  .filter((item) => item.status === "SCHEDULED")
-                  .map((consultation) => {
-                    const startsAt = new Date(consultation.startsAt)
-                    const endsAt = new Date(consultation.endsAt)
-                    const meetingUrl = getConsultationMeetingUrl(
-                      consultation.location,
-                    )
-                    return (
-                      <div
-                        key={consultation.id}
-                        className="overflow-hidden rounded-xl border border-[#1b367a] bg-[linear-gradient(145deg,#2b5bbb,#203f8c)] text-white shadow-[0_8px_20px_rgb(32_63_140_/_20%)]"
-                      >
-                        <div className="flex items-start justify-between gap-3 border-b border-white/15 px-3.5 py-3">
-                          <div className="flex min-w-0 items-center gap-2.5">
-                            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white/15 text-white shadow-[0_4px_10px_rgb(12_35_93_/_20%)]">
-                              <CalendarDays size={15} aria-hidden="true" />
-                            </span>
-                            <div className="min-w-0">
-                              <p className="m-0 truncate text-[11px] font-semibold text-white">
-                                Consultation appointment
-                              </p>
-                              <p className="m-0 text-[10px] text-blue-100">
-                                Confirmed schedule
-                              </p>
-                            </div>
-                          </div>
-                          <span className="shrink-0 rounded-full border border-white/20 bg-white/15 px-2 py-1 text-[9px] font-semibold tracking-[0.04em] text-white uppercase">
-                            Scheduled
-                          </span>
-                        </div>
-                        <div className="space-y-3 px-3.5 py-3 text-[11px] text-blue-50">
-                          <div className="flex items-start gap-2.5">
-                            <CalendarDays
-                              size={14}
-                              aria-hidden="true"
-                              className="mt-0.5 shrink-0 text-blue-100"
-                            />
-                            <div>
-                              <p className="m-0 font-medium text-white">
-                                {startsAt.toLocaleDateString("en-PH", {
-                                  weekday: "short",
-                                  month: "short",
-                                  day: "numeric",
-                                  year: "numeric",
-                                })}
-                              </p>
-                              <p className="m-0 flex items-center gap-1 text-[10px] text-blue-100">
-                                <Clock3 size={11} aria-hidden="true" />
-                                {startsAt.toLocaleTimeString("en-PH", {
-                                  hour: "numeric",
-                                  minute: "2-digit",
-                                })}{" "}
-                                –{" "}
-                                {endsAt.toLocaleTimeString("en-PH", {
-                                  hour: "numeric",
-                                  minute: "2-digit",
-                                })}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-start gap-2.5">
-                            <MapPin
-                              size={14}
-                              aria-hidden="true"
-                              className="mt-0.5 shrink-0 text-blue-100"
-                            />
-                            <div className="min-w-0 break-words">
-                              <p className="m-0 text-[10px] text-blue-100">
-                                Location
-                              </p>
-                              <ConsultationLocation
-                                location={consultation.location}
-                                className="text-white"
-                                showJoinButton={false}
-                              />
-                            </div>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {meetingUrl && (
-                              <a
-                                href={meetingUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                aria-label="Join consultation"
-                                className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white p-0 text-[#203f8c] transition-colors hover:bg-blue-50"
-                              >
-                                <Video size={12} aria-hidden="true" />
-                                <HoverTooltip>Join consultation</HoverTooltip>
-                              </a>
-                            )}
-                            <a
-                              href={`#workflow-${consultation.id}`}
-                              className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg border border-white/35 bg-white/10 px-2.5 py-2 text-center text-[9px] leading-4 font-semibold text-white transition-colors hover:bg-white/20"
-                            >
-                              View details and reschedule
-                              <ExternalLink size={12} aria-hidden="true" />
-                            </a>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-              </WorkflowDisclosure>
-            )}
-          {/* Workflow action forms are opened from the + menu.
+              {/* Workflow action forms are opened from the + menu.
           {workflow.permissions.manage &&
             (beforeApproval ||
               ["AGREEMENT_PAYMENT_PENDING", "READY_FOR_ACTIVATION"].includes(
@@ -829,7 +648,7 @@ export function WorkflowContextPanel({
               </>
             )}
           */}
-          {/* Quotation forms are opened from the + menu.
+              {/* Quotation forms are opened from the + menu.
           {canQuote && (
             <WorkflowDisclosure title="Create quotation">
               <QuotationForm workflow={workflow} controls={controls} />
@@ -854,99 +673,120 @@ export function WorkflowContextPanel({
             </WorkflowDisclosure>
           )}
           */}
-          {workflow.permissions.manage &&
-            workflow.state === "READY_FOR_ACTIVATION" && (
-              <div className="py-4">
-                <Button
-                  disabled={controls.busy}
-                  className={`${workflowButton} w-full`}
-                  onClick={() =>
-                    void controls.act({ type: "ACTIVATE_PROJECT" })
-                  }
-                >
-                  Activate project
-                </Button>
-                <p className="mt-2 mb-0 text-[10px] leading-5 text-[#8791a2]">
-                  Activation validates mandatory documents, payment, and
-                  approved staffing.
-                </p>
-              </div>
-            )}
-          <InternalWorkspace workflow={workflow} controls={controls} />
-          {(workflow.permissions.manage || workflow.permissions.isClient) &&
-            !terminal &&
-            workflow.state !== "PENDING_REVIEW" && (
-              <WorkflowDisclosure
-                id={sectionId("workflow-controls")}
-                title="Workflow controls"
-              >
-                {workflow.permissions.manage &&
-                  (workflow.state === "ON_HOLD" ? (
+              <InternalWorkspace
+                workflow={workflow}
+                onManageStaff={
+                  onProjectSetup ? () => onProjectSetup("staffing") : undefined
+                }
+              />
+              {workflow.permissions.manage &&
+                workflow.internal &&
+                !terminal &&
+                onDraft && (
+                  <WorkflowDisclosure title="Internal tools">
+                    <p className="m-0 text-[11px]">
+                      Manage review assignments and private notes for this
+                      booking.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className={workflowButton}
+                        disabled={controls.busy}
+                        onClick={() => onDraft("approver-assignments")}
+                      >
+                        Approver assignments
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className={workflowButton}
+                        disabled={controls.busy}
+                        onClick={() => onDraft("internal-note")}
+                      >
+                        Internal notes
+                      </Button>
+                    </div>
+                  </WorkflowDisclosure>
+                )}
+              {(workflow.permissions.manage || workflow.permissions.isClient) &&
+                !terminal &&
+                workflow.state !== "PENDING_REVIEW" && (
+                  <WorkflowDisclosure
+                    id={sectionId("workflow-controls")}
+                    title="Workflow controls"
+                  >
+                    {workflow.permissions.manage &&
+                      (workflow.state === "ON_HOLD" ? (
+                        <ActionForm
+                          controls={controls}
+                          label="Resume workflow"
+                          action={(data) => ({
+                            type: "RESUME",
+                            note: String(data.get("note")),
+                          })}
+                        >
+                          <WorkflowField label="Resume note">
+                            <input
+                              name="note"
+                              required
+                              maxLength={2000}
+                              className={workflowInput}
+                            />
+                          </WorkflowField>
+                        </ActionForm>
+                      ) : (
+                        <ActionForm
+                          controls={controls}
+                          label="Put on hold"
+                          action={(data) => ({
+                            type: "HOLD",
+                            note: String(data.get("note")),
+                          })}
+                        >
+                          <WorkflowField label="Reason for hold">
+                            <input
+                              name="note"
+                              required
+                              maxLength={2000}
+                              className={workflowInput}
+                            />
+                          </WorkflowField>
+                        </ActionForm>
+                      ))}
                     <ActionForm
                       controls={controls}
-                      label="Resume workflow"
+                      label="Cancel request"
+                      destructive
                       action={(data) => ({
-                        type: "RESUME",
+                        type: "CANCEL",
                         note: String(data.get("note")),
                       })}
                     >
-                      <WorkflowField label="Resume note">
-                        <input
+                      <WorkflowField label="Cancellation reason">
+                        <textarea
                           name="note"
                           required
                           maxLength={2000}
+                          rows={2}
                           className={workflowInput}
                         />
                       </WorkflowField>
-                    </ActionForm>
-                  ) : (
-                    <ActionForm
-                      controls={controls}
-                      label="Put on hold"
-                      action={(data) => ({
-                        type: "HOLD",
-                        note: String(data.get("note")),
-                      })}
-                    >
-                      <WorkflowField label="Reason for hold">
+                      <label className="flex items-start gap-2 text-[10px]">
                         <input
-                          name="note"
+                          type="checkbox"
                           required
-                          maxLength={2000}
-                          className={workflowInput}
+                          className="mt-1 accent-[#203f8c]"
                         />
-                      </WorkflowField>
+                        I confirm this cancellation will end the request
+                        workflow.
+                      </label>
                     </ActionForm>
-                  ))}
-                <ActionForm
-                  controls={controls}
-                  label="Cancel request"
-                  destructive
-                  action={(data) => ({
-                    type: "CANCEL",
-                    note: String(data.get("note")),
-                  })}
-                >
-                  <WorkflowField label="Cancellation reason">
-                    <textarea
-                      name="note"
-                      required
-                      maxLength={2000}
-                      rows={2}
-                      className={workflowInput}
-                    />
-                  </WorkflowField>
-                  <label className="flex items-start gap-2 text-[10px]">
-                    <input
-                      type="checkbox"
-                      required
-                      className="mt-1 accent-[#203f8c]"
-                    />
-                    I confirm this cancellation will end the request workflow.
-                  </label>
-                </ActionForm>
-              </WorkflowDisclosure>
-            )}
+                  </WorkflowDisclosure>
+                )}
+            </>
+          )}
         </div>
       </details>
     </aside>
