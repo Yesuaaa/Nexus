@@ -30,6 +30,7 @@ import com.nexus.app.features.conversations.viewmodel.ConversationsViewModel
 import com.nexus.app.features.notifications.viewmodel.NotificationsViewModel
 import org.koin.compose.viewmodel.koinViewModel
 import com.nexus.app.features.conversations.model.ConversationBooking
+import com.nexus.app.features.conversations.model.conversationTimeline
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import kotlinx.datetime.toLocalDateTime
@@ -116,7 +117,9 @@ fun ChatScreen(
     val files = com.nexus.app.core.files.LocalPlatformFiles.current
     var draft by rememberSaveable(id) { mutableStateOf("") }
     var tools by remember(id) { mutableStateOf(false) }
+    var attachmentChooser by remember(id) { mutableStateOf(false) }
     var chooser by remember(id) { mutableStateOf(false) }
+    val timeline = remember(state.messages, state.attachments) { conversationTimeline(state.messages, state.attachments) }
     val list = rememberLazyListState()
     val conversation = state.history?.conversation
     fun openDetails() { state.history?.selectedBookingId?.let(onDetails) }
@@ -125,11 +128,14 @@ fun ChatScreen(
     LaunchedEffect(state.history?.selectedBookingId) {
         state.history?.selectedBookingId?.let { workflowViewModel.open(it) }
     }
+    LaunchedEffect(workflowState.selectedFileId) {
+        if (workflowState.selectedFileId != null) viewModel.refreshAttachments()
+    }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.foreground(true) }
     LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { viewModel.foreground(false) }
     DisposableEffect(id) { onDispose { viewModel.foreground(false) } }
-    LaunchedEffect(state.messages.lastOrNull()?.id, state.pending.size) {
-        if (state.messages.isNotEmpty() || state.pending.isNotEmpty()) {
+    LaunchedEffect(timeline.lastOrNull()?.id, state.pending.size) {
+        if (timeline.isNotEmpty() || state.pending.isNotEmpty()) {
             snapshotFlow { list.layoutInfo.totalItemsCount }.first { it > 0 }
             list.scrollToItem(list.layoutInfo.totalItemsCount - 1)
         }
@@ -169,7 +175,18 @@ fun ChatScreen(
                 }
             }
             if (state.history?.nextCursor != null) item { TextButton(onClick = viewModel::older) { Text("Load earlier messages", fontSize = 12.sp) } }
-            items(state.messages, key = { it.id }) { message ->
+            state.attachmentError?.let { error -> item {
+                Text(error, color = NexusColors.ErrorRed, fontSize = 12.sp)
+                TextButton(onClick = viewModel::refreshAttachments) { Text("Retry attachments") }
+            } }
+            items(timeline, key = { it.id }) { entry ->
+                val attachment = entry.attachment
+                if (attachment != null) {
+                    ConversationAttachmentCard(attachment, attachment.file.uploaderId == userId,
+                        load = { viewModel.attachmentContent(attachment) })
+                    return@items
+                }
+                val message = entry.message ?: return@items
                 val own = message.sender.id == userId
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = if (own) Alignment.End else Alignment.Start) {
                     Surface(shape = RoundedCornerShape(8.dp), color = if (own) ConversationStyle.Navy else Color.White,
@@ -197,9 +214,10 @@ fun ChatScreen(
                 shape = RoundedCornerShape(8.dp), border = androidx.compose.foundation.BorderStroke(1.dp, ConversationStyle.Border)) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Conversation tools", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = ConversationStyle.Muted)
-                    ConversationTool(Icons.Outlined.AttachFile, "Attach file") {
+                    ConversationTool(Icons.Outlined.AttachFile, "Attach file", enabled = !workflowState.busy && state.history?.canSend == true) {
                         tools = false
-                        if (files != null) workflowViewModel.upload(files)
+                        attachmentChooser = true
+                        workflowViewModel.loadAttachmentOptions(conversation?.bookings.orEmpty().filter { it.status !in listOf("CLOSED", "CANCELLED") }.map { it.id })
                     }
                     ConversationTool(Icons.Outlined.AssignmentTurnedIn, "Agreement and payment") { tools = false; chooser = true }
                 }
@@ -220,13 +238,28 @@ fun ChatScreen(
             } else Text(if (state.history?.archived == true) "This conversation is read only." else "Messaging is unavailable.", fontSize = 12.sp, color = ConversationStyle.Muted)
         }
     }
-    if (chooser) AgreementBookingSheet(conversation?.bookings.orEmpty(), onDismiss = { chooser = false }, onContinue = { chooser = false; onBooking(it) })
+    if (attachmentChooser) ConversationBookingSheet(
+        workflowState.attachmentOptions.map { option -> ConversationBooking(
+            id = option.request.id, title = option.request.title, serviceName = option.request.serviceName,
+            referenceNumber = option.request.referenceNumber, workflowState = option.state,
+        ) },
+        onDismiss = { attachmentChooser = false },
+        onContinue = { bookingId ->
+            attachmentChooser = false
+            if (files != null) workflowViewModel.upload(files, bookingId)
+        },
+        attachment = true,
+        loading = workflowState.busy,
+        error = workflowState.error,
+        onRetry = { workflowViewModel.loadAttachmentOptions(conversation?.bookings.orEmpty().filter { it.status !in listOf("CLOSED", "CANCELLED") }.map { it.id }) },
+    )
+    if (chooser) ConversationBookingSheet(conversation?.bookings.orEmpty(), onDismiss = { chooser = false }, onContinue = { chooser = false; onBooking(it) })
     state.profile?.let { profile -> SpecialistProfileSheet(profile, conversation?.department?.name.orEmpty(), viewModel::closeProfile, state.profileLoading, state.profileError, viewModel::profile) }
 }
 
 @Composable
-private fun ConversationTool(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().height(44.dp).clickable(onClick = onClick), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+private fun ConversationTool(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, enabled: Boolean = true, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().height(44.dp).clickable(enabled = enabled, onClick = onClick), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Icon(icon, null, Modifier.size(18.dp), tint = ConversationStyle.Navy)
         Text(title, fontSize = 14.sp, color = ConversationStyle.Ink)
     }
@@ -234,27 +267,34 @@ private fun ConversationTool(icon: androidx.compose.ui.graphics.vector.ImageVect
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AgreementBookingSheet(bookings: List<ConversationBooking>, onDismiss: () -> Unit, onContinue: (String) -> Unit) {
+internal fun ConversationBookingSheet(bookings: List<ConversationBooking>, onDismiss: () -> Unit, onContinue: (String) -> Unit, attachment: Boolean = false, loading: Boolean = false, error: String? = null, onRetry: () -> Unit = {}) {
     var selected by remember { mutableStateOf<String?>(null) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = Color.White, scrimColor = ConversationStyle.Ink.copy(alpha = .4f), shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp), dragHandle = null) {
         Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment = Alignment.Top) {
-                    Text("Agreement and payment:\nchoose a booking", Modifier.weight(1f), fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold, color = ConversationStyle.Ink)
+                    Text(if (attachment) "Attach file:\nchoose a booking" else "Agreement and payment:\nchoose a booking", Modifier.weight(1f), fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold, color = ConversationStyle.Ink)
                     IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) { Icon(Icons.Outlined.Close, "Close booking chooser", Modifier.size(20.dp), tint = ConversationStyle.Muted) }
                 }
-                Text("Review a booking's agreement, signed documents, and payment requirements before work begins.", fontSize = 14.sp, lineHeight = 21.sp, color = ConversationStyle.Muted)
+                Text(if (attachment) "Share a brief, reference, or document for an eligible booking." else "Review a booking's agreement, signed documents, and payment requirements before work begins.", fontSize = 14.sp, lineHeight = 21.sp, color = ConversationStyle.Muted)
             }
             Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Choose the service this tool applies to.", fontSize = 14.sp, color = ConversationStyle.Ink)
+                if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                if (error != null) {
+                    Text(error, color = NexusColors.ErrorRed, fontSize = 12.sp)
+                    TextButton(onClick = onRetry, enabled = !loading) { Text("Retry booking options") }
+                } else if (attachment && !loading && bookings.isEmpty()) {
+                    Text("No eligible bookings for attachments at the current stage.", fontSize = 14.sp, color = ConversationStyle.Muted)
+                }
                 bookings.forEach { booking -> BookingOption(booking, selected == booking.id, { selected = booking.id }) }
             }
         }
         HorizontalDivider(color = ConversationStyle.Divider)
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(8.dp), border = androidx.compose.foundation.BorderStroke(1.dp, ConversationStyle.Border)) { Text("Cancel", color = ConversationStyle.Navy, fontSize = 14.sp) }
-            Button(onClick = { selected?.let(onContinue) }, enabled = selected != null, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(8.dp),
+            Button(onClick = { selected?.let(onContinue) }, enabled = !loading && error == null && bookings.any { it.id == selected }, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = ConversationStyle.Navy, disabledContainerColor = Color(0xFFE5E8EE), disabledContentColor = Color(0xFF9AA4B4))) { Text("Continue", fontSize = 14.sp) }
         }
     }

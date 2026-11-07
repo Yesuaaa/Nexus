@@ -32,3 +32,11 @@ fun reconcilePending(pending: List<PendingMessage>, messages: List<ChatMessage>)
     val confirmed = messages.mapNotNull { it.clientMessageId }.toSet()
     return pending.filterNot { it.clientMessageId in confirmed }
 }
+
+
+data class ConversationAttachment(val requestId: String, val serviceName: String, val file: com.nexus.app.features.workflow.model.WorkflowFile)
+data class ConversationEntry(val id: String, val createdAt: String, val message: ChatMessage? = null, val attachment: ConversationAttachment? = null)
+fun conversationTimeline(messages: List<ChatMessage>, attachments: List<ConversationAttachment>): List<ConversationEntry> =
+    (messages.map { ConversationEntry("message-${it.id}", it.createdAt, message = it) } +
+        attachments.distinctBy { it.requestId to it.file.id }.map { ConversationEntry("file-${it.requestId}-${it.file.id}", it.file.createdAt, attachment = it) })
+        .sortedWith(compareBy<ConversationEntry> { it.createdAt }.thenBy { it.id })

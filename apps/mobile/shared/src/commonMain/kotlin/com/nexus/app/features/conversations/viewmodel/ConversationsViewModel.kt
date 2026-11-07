@@ -1,5 +1,7 @@
 package com.nexus.app.features.conversations.viewmodel
 
+import com.nexus.app.features.workflow.api.WorkflowRepository
+import com.nexus.app.core.files.SelectedFile
 import com.nexus.app.features.booking.api.BookingGateway
 import com.nexus.app.features.booking.model.SpecialistProfile
 import androidx.lifecycle.ViewModel
@@ -15,10 +17,11 @@ import kotlinx.coroutines.sync.withLock
 data class ConversationsState(
     val archived: Boolean = false, val page: ConversationPage = ConversationPage(),
     val loading: Boolean = false, val error: String? = null, val id: String? = null,
+    val attachments: List<ConversationAttachment> = emptyList(), val attachmentError: String? = null,
     val history: History? = null, val messages: List<ChatMessage> = emptyList(),
     val pending: List<PendingMessage> = emptyList(), val reconnecting: Boolean = false, val profile: SpecialistProfile? = null, val profileLoading: Boolean = false, val profileError: String? = null
 )
-class ConversationsViewModel(private val repository: ClientCommunicationRepository, private val booking: BookingGateway? = null) : ViewModel() {
+class ConversationsViewModel(private val repository: ClientCommunicationRepository, private val booking: BookingGateway? = null, private val workflows: WorkflowRepository? = null) : ViewModel() {
     private val mutable = MutableStateFlow(ConversationsState())
     val state = mutable.asStateFlow()
     private var listJob: Job? = null
@@ -62,7 +65,7 @@ class ConversationsViewModel(private val repository: ClientCommunicationReposito
     }
     fun open(id: String) {
         streamJob?.cancel()
-        mutable.update { if (it.id == id) it else it.copy(id = id, history = null, messages = emptyList(), pending = emptyList(), error = null) }
+        mutable.update { if (it.id == id) it else it.copy(id = id, history = null, attachments = emptyList(), attachmentError = null, messages = emptyList(), pending = emptyList(), error = null) }
         if (foreground) connect()
     }
     fun foreground(active: Boolean) {
@@ -71,7 +74,7 @@ class ConversationsViewModel(private val repository: ClientCommunicationReposito
         if (active && state.value.id != null) connect()
         else if (active) refresh()
     }
-    fun close() { streamJob?.cancel(); mutable.update { it.copy(id = null, history = null, messages = emptyList(), pending = emptyList()) }; refresh() }
+    fun close() { streamJob?.cancel(); mutable.update { it.copy(id = null, history = null, attachments = emptyList(), attachmentError = null, messages = emptyList(), pending = emptyList()) }; refresh() }
     private fun connect() {
         val id = state.value.id ?: return
         streamJob = viewModelScope.launch {
@@ -87,7 +90,7 @@ class ConversationsViewModel(private val repository: ClientCommunicationReposito
                 } catch (e: CancellationException) { throw e }
                 catch (e: Exception) {
                     if (e is CommunicationException && e.status in setOf(401, 403, 404)) {
-                        mutable.update { it.copy(history = null, messages = emptyList(), pending = emptyList(), error = e.message) }
+                        mutable.update { it.copy(history = null, attachments = emptyList(), attachmentError = null, messages = emptyList(), pending = emptyList(), error = e.message) }
                         return@launch
                     }
                     mutable.update { it.copy(error = "Connection interrupted. Retrying...") }
@@ -116,8 +119,32 @@ class ConversationsViewModel(private val repository: ClientCommunicationReposito
             it.copy(history = history.copy(nextCursor = if (older) history.nextCursor else cursor),
                 messages = messages, pending = reconcilePending(it.pending, messages), error = null)
         }
+        refreshAttachments(id, history)
         repository.read(id)
     }
+    private suspend fun refreshAttachments(conversationId: String, history: History) {
+        val gateway = workflows ?: return
+        val ids = history.conversation?.bookings?.map { it.id }.orEmpty().ifEmpty { listOfNotNull(history.selectedBookingId) }
+        val attachments = mutableListOf<ConversationAttachment>()
+        var failed = false
+        for (requestId in ids.distinct()) {
+            try {
+                val workflow = gateway.get(requestId)
+                attachments += workflow.files.map { ConversationAttachment(requestId, workflow.request.serviceName, it) }
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { failed = true }
+        }
+        if (state.value.id == conversationId) mutable.update { it.copy(attachments = attachments,
+            attachmentError = if (failed) "Some attachments couldn't be loaded. Please retry." else null) }
+    }
+    fun refreshAttachments() {
+        val current = state.value
+        val conversationId = current.id ?: return
+        val history = current.history ?: return
+        viewModelScope.launch { historyMutex.withLock { refreshAttachments(conversationId, history) } }
+    }
+    suspend fun attachmentContent(attachment: ConversationAttachment): SelectedFile =
+        requireNotNull(workflows).download(attachment.requestId, attachment.file)
     fun older() { val id = state.value.id ?: return; viewModelScope.launch { attempt { reconcile(id, true) } } }
     fun send(body: String) {
         if (body.isBlank() || body.length > 4000 || '\u0000' in body || state.value.history?.canSend != true) return

@@ -54,6 +54,43 @@ class CommunicationRecoveryTest {
             assertTrue(vm.state.value.pending.isEmpty())
         } finally { vm.foreground(false); vm.viewModelScope.cancel(); client.close() }
     }
+    @Test fun attachmentsLoadAcrossBookingsRefreshAndDownloadFromTheirOwnBooking() = runTest {
+        var received = false
+        var downloadPath = ""
+        val client = client { request ->
+            val path = request.url.encodedPath
+            when {
+                path.endsWith("/events") -> awaitCancellation()
+                path.endsWith("/read") -> respond("{}", headers = jsonHeaders)
+                path.contains("/files/") -> {
+                    downloadPath = path
+                    respond("document", headers = headersOf(HttpHeaders.ContentType, "text/plain"))
+                }
+                path.startsWith("/api/request-workflows/") -> {
+                    val id = path.substringAfterLast('/')
+                    val files = if (id == "second" && !received) "[]" else """[{"id":"file-$id","name":"brief.txt","mimeType":"text/plain","size":8,"uploaderId":"${if (id == "first") "client" else "head"}","createdAt":"2026-11-07T00:00:00Z"}]"""
+                    respond("""{"request":{"id":"$id","serviceName":"Design"},"state":"CONSULTATION","version":1,"nextAction":"","permissions":{"isClient":true},"files":$files}""", headers = jsonHeaders)
+                }
+                else -> respond("""{"selectedBookingId":"first","conversation":{"bookings":[{"id":"first"},{"id":"second"}]},"messages":[]}""", headers = jsonHeaders)
+            }
+        }
+        val vm = ConversationsViewModel(ClientCommunicationRepository(client), workflows = WorkflowRepository(client))
+        try {
+            vm.open("conversation"); vm.foreground(true)
+            vm.state.first { it.attachments.size == 1 }
+            assertEquals("client", vm.state.value.attachments.single().file.uploaderId)
+            received = true
+            vm.refreshAttachments()
+            vm.state.first { it.attachments.size == 2 }
+            val attachment = vm.state.value.attachments.first { it.requestId == "second" }
+            assertEquals("head", attachment.file.uploaderId)
+            assertEquals("document", vm.attachmentContent(attachment).bytes.decodeToString())
+            assertEquals("/api/request-workflows/second/files/file-second", downloadPath)
+            vm.open("other")
+            assertTrue(vm.state.value.attachments.isEmpty())
+        } finally { vm.foreground(false); vm.viewModelScope.cancel(); client.close() }
+    }
+
     @Test fun accessDeniedNotificationNeverNavigates() = runTest {
         val client = client { respond("""{"error":"Not found"}""", HttpStatusCode.NotFound, jsonHeaders) }
         val vm = NotificationsViewModel(ClientCommunicationRepository(client))

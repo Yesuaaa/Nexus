@@ -10,7 +10,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class Quotation(val id: String, val version: Int, val status: String, val scope: String, val deliverables: List<String> = emptyList(), val total: String, val currency: String, val timeline: String = "", val paymentTerms: String = "", val validUntil: String)
 @Serializable data class Agreement(val status: String, val documentFileId: String? = null, val signedFileId: String? = null)
 @Serializable data class Payment(val status: String, val amount: String, val currency: String, val reference: String? = null, val proofFileId: String? = null)
-@Serializable data class WorkflowFile(val id: String, val name: String, val mimeType: String, val size: Int)
+@Serializable data class WorkflowFile(val id: String, val name: String, val mimeType: String, val size: Int, val uploaderId: String = "", val createdAt: String = "")
 @Serializable data class WorkflowProject(val id: String, val name: String, val status: String)
 @Serializable data class WorkflowEvent(val id: String, val summary: String, val createdAt: String)
 /** Explicit client projection: internal assignments, approvers and verification notes are never decoded. */
@@ -21,3 +21,8 @@ import kotlinx.serialization.Serializable
 @Serializable data class Milestone(val id: String, val title: String, val completedAt: String? = null)
 @Serializable data class ProjectWorkspace(val id: String, val name: String, val status: String, val description: String? = null,
     val canManage: Boolean = false, val milestones: List<Milestone> = emptyList())
+
+fun ClientWorkflow.canAttachFile(): Boolean = permissions.isClient && state in setOf(
+    "CONSULTATION", "QUOTATION_PENDING", "CLIENT_APPROVAL", "REVISION_REQUESTED",
+    "AGREEMENT_PAYMENT_PENDING", "READY_FOR_ACTIVATION", "ACTIVE_PROJECT",
+)
