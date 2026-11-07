@@ -37,16 +37,16 @@ fun ConversationAttachmentCard(
             catch (_: Exception) { error = "Couldn't load image preview." }
         }
     }
-    fun open(save: Boolean) {
+    fun download() {
         if (busy || platform == null) return
         busy = true
         scope.launch {
             try {
                 val content = image ?: load()
-                if (save) platform.save(content) else platform.preview(content)
+                platform.save(content)
                 error = null
             } catch (e: CancellationException) { throw e }
-            catch (_: Exception) { error = "Couldn't open this file. Please try again." }
+            catch (_: Exception) { error = "Couldn't download this file. Please try again." }
             finally { busy = false }
         }
     }
@@ -62,8 +62,7 @@ fun ConversationAttachmentCard(
                     LinearProgressIndicator(Modifier.fillMaxWidth())
                 } else Unit
             }
-            FileAttachmentCard(file, { open(true) })
-            TextButton(onClick = { open(false) }, enabled = !busy && platform != null) { Text(if (busy) "Opening?" else "Open file") }
+            FileAttachmentCard(file, ::download)
             error?.let {
                 Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                 if (isImage) TextButton(onClick = { retry++ }) { Text("Retry preview") }

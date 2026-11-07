@@ -53,7 +53,12 @@ class MobileUiRegressionTest {
     }
 
     @Test fun sentAndReceivedAttachmentsShowFileCardsAndImagePreview() {
-        val png = kotlin.io.encoding.Base64.decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aC8sAAAAASUVORK5CYII=")
+        val png = java.io.ByteArrayOutputStream().use { output ->
+            val bitmap = android.graphics.Bitmap.createBitmap(2, 2, android.graphics.Bitmap.Config.ARGB_8888)
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output)
+            bitmap.recycle()
+            output.toByteArray()
+        }
         compose.setContent { MaterialTheme {
             androidx.compose.foundation.layout.Column {
                 com.nexus.app.features.conversations.components.ConversationAttachmentCard(
