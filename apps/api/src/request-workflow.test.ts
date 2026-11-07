@@ -555,6 +555,149 @@ test(
     })
 
     await t.test(
+      "mobile cancellation uses owned versioned actions with replay protection",
+      async () => {
+        const booking = await prisma!.serviceRequest.create({
+          data: {
+            clientId: client.id,
+            serviceId: service.id,
+            title: "Mobile cancellation contract",
+          },
+        })
+        assert.equal((await accept(booking.id)).status, 200)
+        const direct = () =>
+          fetch(`${base}/client/service-requests/${booking.id}/cancel`, {
+            method: "POST",
+            headers: client.headers,
+          })
+        assert.equal((await direct()).status, 409)
+        const current = await read(client, booking.id)
+        const command = { type: "CANCEL", note: "Client cancellation" }
+        assert.equal(
+          (
+            await send(
+              otherClient,
+              command,
+              current.version,
+              randomUUID(),
+              booking.id,
+            )
+          ).status,
+          404,
+        )
+        assert.equal(
+          (
+            await send(
+              client,
+              command,
+              current.version + 1,
+              randomUUID(),
+              booking.id,
+            )
+          ).status,
+          409,
+        )
+        for (const invalid of [
+          { ...command, expectedVersion: current.version },
+          { ...command, actionId: randomUUID() },
+        ]) {
+          const response = await fetch(`${path(booking.id)}/actions`, {
+            method: "POST",
+            headers: { ...client.headers, "content-type": "application/json" },
+            body: JSON.stringify(invalid),
+          })
+          assert.equal(response.status, 400)
+        }
+        const actionId = randomUUID()
+        const responses = await Promise.all([
+          send(client, command, current.version, actionId, booking.id),
+          send(client, command, current.version, actionId, booking.id),
+        ])
+        assert.deepEqual(
+          responses.map((r) => r.status),
+          [200, 200],
+        )
+        assert.deepEqual(await responses[0].json(), await responses[1].json())
+        assert.equal(
+          (
+            await send(
+              client,
+              { ...command, note: "Changed" },
+              current.version,
+              actionId,
+              booking.id,
+            )
+          ).status,
+          409,
+        )
+        assert.equal(
+          (
+            await send(
+              client,
+              command,
+              current.version,
+              randomUUID(),
+              booking.id,
+            )
+          ).status,
+          409,
+        )
+        assert.equal(
+          await prisma!.workflowEvent.count({
+            where: { requestId: booking.id, type: "WORKFLOW_CANCELLED" },
+          }),
+          1,
+        )
+        assert.equal(
+          await prisma!.workflowActionReceipt.count({
+            where: { requestId: booking.id },
+          }),
+          1,
+        )
+        assert.equal(
+          (
+            await prisma!.serviceRequest.findUniqueOrThrow({
+              where: { id: booking.id },
+            })
+          ).status,
+          "CANCELLED",
+        )
+      },
+    )
+
+    await t.test(
+      "acceptance racing direct cancellation has one winner",
+      async () => {
+        const booking = await prisma!.serviceRequest.create({
+          data: {
+            clientId: client.id,
+            serviceId: service.id,
+            title: "Cancellation race",
+          },
+        })
+        const responses = await Promise.all([
+          accept(booking.id),
+          fetch(`${base}/client/service-requests/${booking.id}/cancel`, {
+            method: "POST",
+            headers: client.headers,
+          }),
+        ])
+        assert.deepEqual(responses.map((r) => r.status).sort(), [200, 409])
+        const saved = await prisma!.serviceRequest.findUniqueOrThrow({
+          where: { id: booking.id },
+          include: { workflow: true },
+        })
+        if (saved.acceptedDepartmentId) {
+          assert.equal(saved.status, "UNDER_REVIEW")
+          assert.ok(saved.workflow)
+        } else {
+          assert.equal(saved.status, "CANCELLED")
+          assert.equal(saved.workflow, null)
+        }
+      },
+    )
+
+    await t.test(
       "acceptance initializes consultation without delivering a service or approving a quotation",
       async () => {
         assert.equal((await fetch(path())).status, 401)

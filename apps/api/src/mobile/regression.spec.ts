@@ -339,6 +339,191 @@ test(
       },
     )
     await t.test(
+      "query shapes are validated at the HTTP boundary",
+      async () => {
+        for (const query of [
+          "page=1&page=2",
+          "search=a&search=b",
+          "status=SUBMITTED&status=CLOSED",
+          "sortOrder=asc&sortOrder=desc",
+          "page[foo]=1",
+          "search[foo]=x",
+          "status[]=SUBMITTED",
+          "sortOrder[foo]=asc",
+          "page=",
+          "page=0",
+          "page=-1",
+          "page=1.5",
+          "page=1e2",
+          "page=1000001",
+          "page=9007199254740992",
+          "status=UNKNOWN",
+          "sortOrder=sideways",
+          `search=${"x".repeat(101)}`,
+        ]) {
+          assert.equal(
+            (await request(`/client/service-requests?${query}`, client.token))
+              .status,
+            400,
+            query,
+          )
+        }
+        for (const query of [
+          "page[x]=1",
+          "search[]=x",
+          "status[x]=SUBMITTED",
+          "page=1&page=2",
+          "page=100001",
+        ]) {
+          assert.equal(
+            (await request(`/service-requests?${query}`, client.token)).status,
+            400,
+            query,
+          )
+        }
+        for (const query of ["search=&status=&sortOrder=", "page=1000000"]) {
+          const response = await request(
+            `/client/service-requests?${query}`,
+            client.token,
+          )
+          assert.equal(response.status, 200, query)
+        }
+      },
+    )
+
+    await t.test(
+      "concurrent booking retries and client keys are isolated",
+      async () => {
+        const payload = { ...draft, submissionKey: randomUUID() }
+        const responses = await Promise.all([
+          request("/client/service-requests", client.token, payload),
+          request("/client/service-requests", client.token, payload),
+        ])
+        assert.deepEqual(
+          responses.map((r) => r.status),
+          [201, 201],
+        )
+        assert.deepEqual(await responses[0].json(), await responses[1].json())
+        assert.equal(
+          await prisma.serviceRequest.count({
+            where: {
+              clientId: client.user.id,
+              submissionKey: payload.submissionKey,
+            },
+          }),
+          1,
+        )
+        assert.equal(
+          (await request("/client/service-requests", other.token, payload))
+            .status,
+          201,
+        )
+        assert.equal(
+          (
+            await request("/client/service-requests", client.token, {
+              ...payload,
+              goals: "Changed goals",
+            })
+          ).status,
+          409,
+        )
+        const competing = { ...draft, submissionKey: randomUUID() }
+        const conflicts = await Promise.all([
+          request("/client/service-requests", client.token, competing),
+          request("/client/service-requests", client.token, {
+            ...competing,
+            goals: "Different concurrent goals",
+          }),
+        ])
+        assert.deepEqual(conflicts.map((r) => r.status).sort(), [201, 409])
+        await prisma.service.update({
+          where: { id: service.id },
+          data: { isActive: false },
+        })
+        assert.equal(
+          (await request("/client/service-requests", client.token, payload))
+            .status,
+          201,
+        )
+        await prisma.service.update({
+          where: { id: service.id },
+          data: { isActive: true },
+        })
+      },
+    )
+
+    await t.test(
+      "safe projections exclude credentials, storage paths and booking secrets",
+      async () => {
+        const forbidden = new Set([
+          "passwordHash",
+          "tokenHash",
+          "refreshTokens",
+          "sessions",
+          "submissionKey",
+          "agreedPrice",
+          "profileImagePath",
+          "profileBannerPath",
+          "clientId",
+        ])
+        function inspect(value: unknown): void {
+          if (!value || typeof value !== "object") return
+          for (const [key, child] of Object.entries(value)) {
+            assert.equal(forbidden.has(key), false, key)
+            inspect(child)
+          }
+        }
+        for (const path of [
+          "/auth/me",
+          "/auth/profile",
+          "/client/service-requests",
+          `/service-requests/${requestId}`,
+        ]) {
+          const response = await request(path, client.token)
+          assert.equal(response.status, 200)
+          inspect(await response.json())
+        }
+      },
+    )
+
+    await t.test(
+      "current role and account status override existing bearer credentials",
+      async () => {
+        for (const data of [
+          { role: "STAFF" as const },
+          { isActive: false },
+          { accountDeletedAt: new Date() },
+        ]) {
+          await prisma.user.update({ where: { id: other.user.id }, data })
+          assert.equal(
+            (await request("/client/services", other.token)).status,
+            "role" in data ? 403 : 401,
+          )
+          await prisma.user.update({
+            where: { id: other.user.id },
+            data: { role: "USER", isActive: true, accountDeletedAt: null },
+          })
+        }
+      },
+    )
+
+    await t.test(
+      "duplicate direct cancellation cannot repeat a transition",
+      async () => {
+        assert.equal(
+          (
+            await request(
+              `/client/service-requests/${requestId}/cancel`,
+              client.token,
+              {},
+            )
+          ).status,
+          409,
+        )
+      },
+    )
+
+    await t.test(
       "refresh and logout revoke the mobile credentials",
       async () => {
         const response = await request("/auth/refresh", undefined, {

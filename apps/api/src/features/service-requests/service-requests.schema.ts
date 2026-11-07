@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto"
 import type { ServiceRequestStatus } from "../../generated/prisma/client.js"
-import { parsePage, parseQueryString } from "../../shared/query-helpers.js"
+import {
+  hasStructuredFilters,
+  parsePage,
+  parseQueryString,
+} from "../../shared/query-helpers.js"
 
 export type ServiceRequestFilters = {
   page: number
@@ -20,6 +24,7 @@ const statuses: ServiceRequestStatus[] = [
 export function parseServiceRequestFilters(
   query: Record<string, unknown>,
 ): ServiceRequestFilters | null {
+  if (hasStructuredFilters(query, ["page", "search", "status"])) return null
   const page = parsePage(query.page)
   const search = parseQueryString(query.search)
   const status = parseQueryString(query.status)
