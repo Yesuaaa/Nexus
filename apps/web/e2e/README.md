@@ -14,7 +14,40 @@ Playwright builds and starts a production server by default.
 When setting `NEXUS_E2E_BASE_URL`, point it at a fresh production build:
 development mode can repeat effects and invalidate request-count assertions.
 
-## Review from 42789dd to 636c020
+## Review from 32d17b6 through 45e7f87
+
+The current review compares `32d17b646add4da670456e442e453b03fcb8c0e6`
+with branch HEAD `45e7f87`. Regressions are segmented by responsibility:
+
+| Area                          | Coverage                                                                                                                                                                                                                |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shared authentication         | `regression.spec.ts`: token storage, refresh coordination, redirects, login errors and recovery after a temporary database failure                                                                                      |
+| Opt-in live accounts          | `regression-live.spec.ts`: real login and role access; run using `test:e2e:live`                                                                                                                                        |
+| Portal access                 | `portal-regression.spec.ts`: settings across all four roles, reload persistence, head-only workload access and Monday week selection                                                                                    |
+| Settings and revoked sessions | `settings.spec.ts`, `session-revocation.spec.ts`                                                                                                                                                                        |
+| Workload and staffing         | `staff-workload.spec.ts`, `request-workflow.spec.ts`, `project-workspace.spec.ts`                                                                                                                                       |
+| Messaging and meetings        | `request-conversations.spec.ts`, `internal-conversations.spec.ts`, `messages-topbar.spec.ts`                                                                                                                            |
+| Bookings and profiles         | `request-inbox.spec.ts`, `client-service-requests.spec.ts`, `booked-services.spec.ts`, `profile.spec.ts`                                                                                                                |
+| Backend/API only              | `api-system-regression.test.ts`: new route authentication, settings persistence and validation, session isolation/revocation, workload scope, validation, replay, weekly isolation and immediate head-access revocation |
+
+Run the new backend suite together with the existing system smoke coverage:
+
+```sh
+pnpm --filter @nexus/api test:api-regression
+```
+
+This command uses real HTTP against Express and migrated, isolated PGlite
+databases. It never needs a browser or live database. For all backend feature
+regressions (including messaging, meetings, workflow, projects and migrations),
+run `pnpm --filter @nexus/api test:regression`. The new file is included in that
+command and in the default API test command.
+
+Run `pnpm --filter @nexus/web test:e2e --workers=2` for all browser specs, or
+append `regression.spec.ts portal-regression.spec.ts` for shared authentication
+and portal checks only. Browser fixtures verify UI behavior; the API tests
+verify actual authorization and persistence separately.
+
+## Historical review from 42789dd to 636c020
 
 For the follow-up backend review through `61a24a8`, the expanded regression
 command, and remaining architecture gaps, see
@@ -69,7 +102,7 @@ concurrent refresh coordination, a single mutation retry, revoked sessions,
 and recoverable refresh failures. Mock tokens exercise browser behavior;
 they do not verify JWT signatures or server authorization.
 
-The main file also checks desktop and mobile service-request retries: a failed
+`client.spec.ts` checks desktop and mobile service-request retries: a failed
 submission keeps the form open, reuses the same UUID and payload on retry, and
 only shows confirmation after a successful response.
 
@@ -100,7 +133,7 @@ offline PGlite databases. No live database is used by that suite.
 
 `pnpm --filter @nexus/web test:e2e:live` signs in to the real backend using
 the Superadmin, Admin, Staff, User, and deactivated test accounts configured in
-`regression.spec.ts`. It checks login, page access, direct API read permissions,
+`regression-support.ts`, with cases in `regression-live.spec.ts`. It checks login, page access, direct API read permissions,
 the available service catalog, and logout. It does not modify business records.
 Mutation and injected-error scenarios remain in the mocked suite.
 
