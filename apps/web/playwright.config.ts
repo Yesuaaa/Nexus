@@ -34,7 +34,11 @@ export default defineConfig({
     : {
         command: "pnpm build && node scripts/start.mjs",
         url: "http://127.0.0.1:5273",
-        env: { PORT: "5273", HOSTNAME: "127.0.0.1" },
+        env: {
+          NODE_ENV: "production",
+          PORT: "5273",
+          HOSTNAME: "127.0.0.1",
+        },
         reuseExistingServer: false,
         timeout: 120_000,
       },
