@@ -88,7 +88,6 @@ export async function snapshot(
     consultationComplete,
     consultationRequired:
       workflow?.consultationRequired ?? request.service.requiresConsultation,
-    consultationComplete,
     quotationApprovalRequired:
       workflow?.quotationApprovalRequired ??
       request.service.requiresQuotationApproval,
