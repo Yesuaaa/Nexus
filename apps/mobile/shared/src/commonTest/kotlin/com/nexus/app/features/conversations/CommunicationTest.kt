@@ -24,6 +24,15 @@ class CommunicationTest {
         assertEquals("now", merged.single().editedAt)
         assertTrue(reconcilePending(listOf(pending), merged).isEmpty())
     }
+    @Test fun attachmentTimelineInterleavesMessagesAndDeduplicatesFiles() {
+        val file = com.nexus.app.features.workflow.model.WorkflowFile("file", "brief.pdf", "application/pdf", 100, "head", "2026-11-07T00:01:00Z")
+        val attachment = ConversationAttachment("booking", "Design", file)
+        val entries = conversationTimeline(listOf(
+            ChatMessage("after", createdAt = "2026-11-07T00:02:00Z"),
+            ChatMessage("before", createdAt = "2026-11-07T00:00:00Z"),
+        ), listOf(attachment, attachment))
+        assertEquals(listOf("message-before", "file-booking-file", "message-after"), entries.map { it.id })
+    }
     @Test fun historyPagesSortAndDeduplicate() {
         val older = ChatMessage("a", "Earlier", createdAt = "2026-11-05")
         val newer = ChatMessage("b", "Later", createdAt = "2026-11-06")

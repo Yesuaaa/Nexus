@@ -14,7 +14,7 @@ val appModule = module {
     viewModel { com.nexus.app.features.workflow.viewmodel.WorkflowViewModel(get()) }
 
     single { com.nexus.app.features.conversations.api.ClientCommunicationRepository(get()) }
-    viewModel { com.nexus.app.features.conversations.viewmodel.ConversationsViewModel(get(), get()) }
+    viewModel { com.nexus.app.features.conversations.viewmodel.ConversationsViewModel(get(), get(), get()) }
     viewModel { com.nexus.app.features.notifications.viewmodel.NotificationsViewModel(get()) }
 
     single { com.nexus.app.features.services.api.ServicesRepository(get()) }

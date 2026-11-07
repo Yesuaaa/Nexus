@@ -27,6 +27,56 @@ class MobileUiRegressionTest {
     @get:Rule val compose = createComposeRule()
     private val user = AuthUser("client", "mobile@example.com", role = "USER", isActive = true)
 
+    @Test fun attachmentChooserRequiresAnEligibleBooking() {
+        var chosen: String? = null
+        compose.setContent { MaterialTheme {
+            com.nexus.app.features.conversations.screens.ConversationBookingSheet(
+                bookings = listOf(com.nexus.app.features.conversations.model.ConversationBooking(
+                    id = "eligible", serviceName = "Design", workflowState = "CONSULTATION")),
+                onDismiss = {}, onContinue = { chosen = it }, attachment = true,
+            )
+        } }
+        compose.onNodeWithText("Continue").assertIsNotEnabled()
+        compose.onNodeWithText("Design").performClick()
+        compose.onNodeWithText("Continue").assertIsEnabled().performClick()
+        compose.runOnIdle { assertEquals("eligible", chosen) }
+    }
+
+    @Test fun attachmentChooserExplainsWhenNoBookingsAreEligible() {
+        compose.setContent { MaterialTheme {
+            com.nexus.app.features.conversations.screens.ConversationBookingSheet(
+                bookings = emptyList(), onDismiss = {}, onContinue = {}, attachment = true,
+            )
+        } }
+        compose.onNodeWithText("No eligible bookings for attachments at the current stage.").assertIsDisplayed()
+        compose.onNodeWithText("Continue").assertIsNotEnabled()
+    }
+
+    @Test fun sentAndReceivedAttachmentsShowFileCardsAndImagePreview() {
+        val png = java.io.ByteArrayOutputStream().use { output ->
+            val bitmap = android.graphics.Bitmap.createBitmap(2, 2, android.graphics.Bitmap.Config.ARGB_8888)
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output)
+            bitmap.recycle()
+            output.toByteArray()
+        }
+        compose.setContent { MaterialTheme {
+            androidx.compose.foundation.layout.Column {
+                com.nexus.app.features.conversations.components.ConversationAttachmentCard(
+                    com.nexus.app.features.conversations.model.ConversationAttachment("booking", "Design",
+                        com.nexus.app.features.workflow.model.WorkflowFile("image", "photo.png", "image/png", png.size)), own = true,
+                    load = { com.nexus.app.core.files.SelectedFile("photo.png", "image/png", png) })
+                com.nexus.app.features.conversations.components.ConversationAttachmentCard(
+                    com.nexus.app.features.conversations.model.ConversationAttachment("other", "Consultation",
+                        com.nexus.app.features.workflow.model.WorkflowFile("document", "proposal.pdf", "application/pdf", 2048)), own = false,
+                    load = { error("Non-image documents should not be automatically downloaded") })
+            }
+        } }
+        compose.onNodeWithText("photo.png").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Preview of photo.png").assertExists()
+        compose.onNodeWithText("proposal.pdf").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Download proposal.pdf").assertExists()
+    }
+
     @Test fun headerExposesChatBetweenNotificationAndProfile() {
         var chats = 0
         compose.setContent { MaterialTheme { NexusTopAppBar(onChatClick = { chats++ }, notificationUnread = 6) } }

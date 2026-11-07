@@ -11,6 +11,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
 data class WorkflowState(val workflow: ClientWorkflow? = null, val project: ProjectWorkspace? = null,
+    val attachmentOptions: List<ClientWorkflow> = emptyList(),
     val busy: Boolean = false, val pendingAction: Boolean = false, val uploadProgress: Float? = null, val selectedFileId: String? = null, val error: String? = null)
 class WorkflowViewModel(private val repository: WorkflowRepository) : ViewModel() {
     private val mutable = MutableStateFlow(WorkflowState())
@@ -30,13 +31,29 @@ class WorkflowViewModel(private val repository: WorkflowRepository) : ViewModel(
             workflow.project?.let { project -> val workspace = repository.project(project.id); mutable.update { it.copy(project = workspace) } }
         } }
     }
-    fun retryAction() { uncertain?.let { action(it.first, it.second) } }
-    fun upload(platform: PlatformFiles) {
-        if (uncertain != null) { mutable.update { it.copy(error = "Confirm the previous action before uploading another file.") }; return }
-        val requestId = id ?: return
+    fun loadAttachmentOptions(requestIds: List<String>) {
         if (state.value.busy) return
+        mutable.update { it.copy(attachmentOptions = emptyList(), busy = true) }
+        job = viewModelScope.launch {
+            execute {
+                val options = requestIds.distinct().map { repository.get(it) }.filter { it.canAttachFile() }
+                mutable.update { it.copy(attachmentOptions = options) }
+            }
+        }
+    }
+    fun retryAction() { uncertain?.let { action(it.first, it.second) } }
+    fun upload(platform: PlatformFiles, targetRequestId: String? = id) {
+        if (uncertain != null) { mutable.update { it.copy(error = "Confirm the previous action before uploading another file.") }; return }
+        val requestId = targetRequestId ?: return
+        if (state.value.busy) return
+        if (id != requestId) { upload = null; id = requestId }
         mutable.update { it.copy(busy = true) }
         job = viewModelScope.launch { execute {
+            val current = repository.get(requestId)
+            mutable.update { it.copy(workflow = current, project = null) }
+            if (!current.canAttachFile()) {
+                throw IllegalStateException("Attachments are unavailable for this booking. Choose another eligible booking.")
+            }
             val pending = upload ?: platform.select()?.let { it to newSubmissionKey() } ?: return@execute
             upload = pending
             val file = repository.upload(requestId, pending.first, pending.second) { value -> mutable.update { it.copy(uploadProgress = value) } }
