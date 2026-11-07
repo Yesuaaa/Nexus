@@ -1,4 +1,4 @@
-import { Prisma, Role } from "../../generated/prisma/client.js"
+import { EmployeeStatus, Prisma, Role } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { isUniqueConflict } from "../../lib/errors.js"
 import { publicUser } from "../users/users.dto.js"
@@ -86,20 +86,110 @@ export const departmentsService = {
       throw new DepartmentError(400, "Invalid employee filters")
     }
 
-    const where: Prisma.EmployeeWhereInput = search
-      ? {
+    const where: Prisma.UserWhereInput = {
+      role: Role.STAFF,
+      isActive: true,
+      accountDeletedAt: null,
+      departmentId: null,
+      teamId: null,
+      AND: [
+        {
           OR: [
-            { employeeId: { contains: search, mode: "insensitive" } },
-            { fullName: { contains: search, mode: "insensitive" } },
-            { email: { contains: search, mode: "insensitive" } },
-            { contactNumber: { contains: search, mode: "insensitive" } },
+            { employee: { is: null } },
+            {
+              employee: {
+                is: {
+                  status: EmployeeStatus.ACTIVE,
+                  departmentId: null,
+                  teamId: null,
+                },
+              },
+            },
           ],
-        }
-      : {}
+        },
+        ...(search
+          ? [
+              {
+                OR: [
+                  {
+                    fullName: {
+                      contains: search,
+                      mode: "insensitive" as const,
+                    },
+                  },
+                  {
+                    email: {
+                      contains: search,
+                      mode: "insensitive" as const,
+                    },
+                  },
+                  {
+                    contactNumber: {
+                      contains: search,
+                      mode: "insensitive" as const,
+                    },
+                  },
+                  {
+                    employee: {
+                      is: {
+                        OR: [
+                          {
+                            employeeId: {
+                              contains: search,
+                              mode: "insensitive" as const,
+                            },
+                          },
+                          {
+                            fullName: {
+                              contains: search,
+                              mode: "insensitive" as const,
+                            },
+                          },
+                          {
+                            email: {
+                              contains: search,
+                              mode: "insensitive" as const,
+                            },
+                          },
+                          {
+                            contactNumber: {
+                              contains: search,
+                              mode: "insensitive" as const,
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  },
+                ],
+              },
+            ]
+          : []),
+      ],
+    }
     const pageSize = 10
     const [employees, total] =
-      await departmentsRepository.searchEmployeeOptions(where, page, pageSize)
-    return { employees, total, page, pageSize }
+      await departmentsRepository.searchAssignableStaff(where, page, pageSize)
+    return {
+      employees: employees.map((user) => ({
+        id: user.id,
+        fullName: user.fullName?.trim() || user.email,
+        email: user.email,
+        contactNumber: user.contactNumber,
+        position: user.employee?.position ?? user.position,
+        departmentId: user.departmentId,
+        user: {
+          id: user.id,
+          email: user.email,
+          fullName: user.fullName,
+          role: user.role,
+          isActive: user.isActive,
+        },
+      })),
+      total,
+      page,
+      pageSize,
+    }
   },
 
   async getDepartmentById(id: string) {
@@ -244,25 +334,6 @@ export const departmentsService = {
 
     const { employeeIds, userIds } = parsed.value
 
-    if (userIds !== undefined) {
-      const prisma = getPrisma()!
-      const eligibleUsers = await prisma.user.findMany({
-        where: {
-          id: { in: userIds },
-          role: Role.STAFF,
-          isActive: true,
-          accountDeletedAt: null,
-        },
-        select: { id: true },
-      })
-      if (eligibleUsers.length !== userIds.length) {
-        throw new DepartmentError(
-          400,
-          "Only active staff accounts can be assigned to a department",
-        )
-      }
-    }
-
     try {
       const updatedMembers = await departmentsRepository.assignMembers(
         id,
@@ -361,7 +432,18 @@ export const departmentsService = {
     const prisma = getPrisma()!
     const employee = await prisma.employee.findFirst({
       where: { id: memberId, departmentId },
-      select: { id: true, userId: true },
+      select: {
+        id: true,
+        userId: true,
+        status: true,
+        user: {
+          select: {
+            role: true,
+            isActive: true,
+            accountDeletedAt: true,
+          },
+        },
+      },
     })
     const dept = await prisma.department.findUnique({
       where: { id: departmentId },
@@ -382,10 +464,29 @@ export const departmentsService = {
     if (!employee && !user) {
       throw new DepartmentError(404, "Member not found in this department")
     }
-    if (user && teamId && user.role !== Role.STAFF) {
+    if (
+      teamId &&
+      employee &&
+      (employee.status !== EmployeeStatus.ACTIVE ||
+        employee.user?.role !== Role.STAFF ||
+        !employee.user.isActive ||
+        employee.user.accountDeletedAt !== null)
+    ) {
       throw new DepartmentError(
         400,
-        "Only staff accounts can be assigned to a team",
+        "Only active staff accounts can be assigned to a team",
+      )
+    }
+    if (
+      teamId &&
+      user &&
+      (user.role !== Role.STAFF ||
+        !user.isActive ||
+        user.accountDeletedAt !== null)
+    ) {
+      throw new DepartmentError(
+        400,
+        "Only active staff accounts can be assigned to a team",
       )
     }
     if (user && dept?.headId && dept.headId === user.id && teamId) {
