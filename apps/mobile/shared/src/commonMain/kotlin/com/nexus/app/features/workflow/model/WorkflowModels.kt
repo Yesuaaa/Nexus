@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class WorkflowRequest(val id: String = "", val title: String = "", val referenceNumber: String? = null, val serviceName: String = "", val goals: String = "", val requirements: String = "", val packageName: String? = null, val pricingModel: String? = null, val expectedTimeline: String = "", val department: WorkflowDepartment? = null)
 @Serializable data class WorkflowDepartment(val id: String = "", val name: String = "")
 @Serializable data class ClientPermissions(val isClient: Boolean = false)
-@Serializable data class Requirement(val id: String, val title: String, val details: String = "", val status: String = "", val submission: String? = null)
+@Serializable data class Requirement(val id: String, val title: String, val details: String? = null, val status: String = "", val submission: String? = null)
 @Serializable data class Consultation(val id: String, val startsAt: String, val endsAt: String, val location: String, val status: String, val notes: String = "")
 @Serializable data class Quotation(val id: String, val version: Int, val status: String, val scope: String, val deliverables: List<String> = emptyList(), val total: String, val currency: String, val timeline: String = "", val paymentTerms: String = "", val validUntil: String)
 @Serializable data class Agreement(val status: String, val documentFileId: String? = null, val signedFileId: String? = null)

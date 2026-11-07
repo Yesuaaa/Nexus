@@ -183,7 +183,10 @@ fun ChatScreen(
             items(state.pending, key = { it.clientMessageId }) { pending ->
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
                     Surface(shape = RoundedCornerShape(8.dp), color = ConversationStyle.Notice) { Text(pending.body, Modifier.padding(12.dp), fontSize = 14.sp) }
-                    if (pending.failed) TextButton(onClick = { viewModel.retry(pending) }) { Text("Send failed - Retry", fontSize = 12.sp) }
+                    if (pending.failed) {
+                        pending.failureReason?.let { Text(it, color = NexusColors.ErrorRed, fontSize = 12.sp) }
+                        TextButton(onClick = { viewModel.retry(pending) }) { Text("Send failed - Retry", fontSize = 12.sp) }
+                    }
                     else Text("Sending...", fontSize = 11.sp, color = ConversationStyle.Muted)
                 }
             }

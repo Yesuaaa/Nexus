@@ -116,7 +116,7 @@ fun WorkflowScreen(id: String, onBack: () -> Unit, conversationId: String? = nul
                 workflow.requirements.forEach { requirement ->
                     var submission by remember(requirement.id, requirement.submission) { mutableStateOf(requirement.submission.orEmpty()) }
                     Text(requirement.title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = ConversationStyle.Ink)
-                    if (requirement.details.isNotBlank()) Text(requirement.details, fontSize = 12.sp, lineHeight = 18.sp, color = ConversationStyle.Muted)
+                    if (!requirement.details.isNullOrBlank()) Text(requirement.details.orEmpty(), fontSize = 12.sp, lineHeight = 18.sp, color = ConversationStyle.Muted)
                     WorkflowPill(humanStatus(requirement.status), requirement.status == "COMPLETED")
                     if (workflow.state !in setOf("PENDING_REVIEW", "CANCELLED", "DECLINED", "ACTIVE_PROJECT", "ON_HOLD") && requirement.status !in setOf("COMPLETED", "SUBMITTED")) {
                         OutlinedTextField(submission, { submission = it.take(4000) }, Modifier.fillMaxWidth(), placeholder = { Text("Your response", fontSize = 14.sp) }, shape = RoundedCornerShape(6.dp))

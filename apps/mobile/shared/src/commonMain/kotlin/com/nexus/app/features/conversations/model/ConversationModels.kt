@@ -20,9 +20,9 @@ import kotlinx.serialization.Serializable
 @Serializable data class ConversationInfo(val head: Person? = null, val department: Department? = null, val bookings: List<ConversationBooking> = emptyList())
 @Serializable data class History(val messages: List<ChatMessage> = emptyList(), val nextCursor: String? = null,
     val selectedBookingId: String? = null, val archived: Boolean = true, val canSend: Boolean = false, val conversation: ConversationInfo? = null)
-@Serializable data class SendMessage(val body: String, val clientMessageId: String, val bookingId: String? = null)
+@Serializable data class SendMessage(val body: String, val clientMessageId: String)
 @Serializable data class MessageResponse(val message: ChatMessage)
-data class PendingMessage(val clientMessageId: String, val body: String, val failed: Boolean = false, val bookingId: String? = null)
+data class PendingMessage(val clientMessageId: String, val body: String, val failed: Boolean = false, val failureReason: String? = null)
 
 /** Server identities replace optimistic entries even after an ambiguous send timeout. */
 fun mergeMessages(existing: List<ChatMessage>, incoming: List<ChatMessage>): List<ChatMessage> =

@@ -121,24 +121,28 @@ class ConversationsViewModel(private val repository: ClientCommunicationReposito
     fun older() { val id = state.value.id ?: return; viewModelScope.launch { attempt { reconcile(id, true) } } }
     fun send(body: String) {
         if (body.isBlank() || body.length > 4000 || '\u0000' in body || state.value.history?.canSend != true) return
-        val pending = PendingMessage(newSubmissionKey(), body.trim(), bookingId = state.value.history?.selectedBookingId)
+        val pending = PendingMessage(newSubmissionKey(), body.trim())
         mutable.update { it.copy(pending = it.pending + pending) }
         deliver(pending)
     }
     fun retry(pending: PendingMessage) { if (pending.failed && state.value.history?.canSend == true) deliver(pending) }
     private fun deliver(pending: PendingMessage) {
         val id = state.value.id ?: return
-        mutable.update { it.copy(pending = it.pending.map { row -> if (row.clientMessageId == pending.clientMessageId) row.copy(failed = false) else row }) }
+        mutable.update { it.copy(pending = it.pending.map { row -> if (row.clientMessageId == pending.clientMessageId) row.copy(failed = false, failureReason = null) else row }) }
         viewModelScope.launch {
             try {
-                val message = repository.send(id, SendMessage(pending.body, pending.clientMessageId, pending.bookingId))
+                val message = repository.send(id, SendMessage(pending.body, pending.clientMessageId))
                 if (state.value.id == id) mutable.update {
                     val messages = mergeMessages(it.messages, listOf(message))
                     it.copy(messages = messages, pending = reconcilePending(it.pending, messages))
                 }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { if (state.value.id == id) mutable.update { it.copy(pending = it.pending.map { row ->
-                if (row.clientMessageId == pending.clientMessageId) row.copy(failed = true) else row }) } }
+                if (row.clientMessageId == pending.clientMessageId) row.copy(
+                    failed = true,
+                    failureReason = (e as? CommunicationException)?.message
+                        ?: "Couldn't reach the server. Check your connection and retry.",
+                ) else row }) } }
         }
     }
     private suspend fun attempt(block: suspend () -> Unit) {
