@@ -23,7 +23,8 @@ data class AuthUser(
     val fullName: String? = null,
     val contactNumber: String? = null,
     val role: String,
-    val isActive: Boolean
+    val isActive: Boolean,
+    val createdAt: String? = null
 )
 
 @Serializable

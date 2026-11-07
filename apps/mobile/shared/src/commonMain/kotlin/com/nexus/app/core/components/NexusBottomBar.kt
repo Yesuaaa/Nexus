@@ -27,7 +27,7 @@ import com.nexus.app.navigation.BottomTab
 
 @Composable
 fun NexusBottomBar(
-    currentTab: BottomTab,
+    currentTab: BottomTab?,
     onTabSelected: (BottomTab) -> Unit,
     modifier: Modifier = Modifier,
     conversationStyle: Boolean = false
@@ -76,7 +76,7 @@ fun NexusBottomBar(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Icon(tab.icon, contentDescription = null, tint = NexusColors.PrimaryBlue, modifier = Modifier.size(20.dp))
+                        Icon(tab.icon, contentDescription = null, tint = if (isSelected) NexusColors.ServiceCardNavy else NexusColors.TextSecondary, modifier = Modifier.size(20.dp))
                         Text(
                             tab.label, fontSize = 11.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
@@ -106,4 +106,3 @@ fun NexusBottomBar(
         }
     }
 }
-

@@ -10,6 +10,8 @@ import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
 val appModule = module {
+    single { com.nexus.app.features.profile.api.ProfileRepository(get()) }
+    viewModel { com.nexus.app.features.profile.viewmodel.ProfileViewModel(get(), get()) }
     single { com.nexus.app.features.workflow.api.WorkflowRepository(get()) }
     viewModel { com.nexus.app.features.workflow.viewmodel.WorkflowViewModel(get()) }
 
