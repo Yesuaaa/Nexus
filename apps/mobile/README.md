@@ -55,78 +55,86 @@ Make sure na tama yung path based sa actual location ng Android SDK mo.
 
 ---
 
-## 📱 Paano Patakbuhin yung App
+## 📱 Paano Patakbuhin yung App (Quick Start)
 
-### 1. Buksan yung Android Emulator
+Ang pinakamabilis at pinakamadaling paraan ay gamit ang dalawang monorepo `pnpm` commands mula sa repository root:
 
-Open **Android Studio → Device Manager**, then click yung **Play (Launch)** button sa emulator na gagamitin mo.
+### Step 1: Simulan ang Backend API (Terminal 1)
 
-Pwede rin naman i-launch through terminal:
-
-```powershell
-emulator -avd <Pangalan_ng_AVD_mo>
-```
-
-Example:
+Sa repository root:
 
 ```powershell
-Start-Process emulator -ArgumentList "-avd", "Pixel_8"
-```
-
-Wait for the Android home screen before installing. `adb devices` must show the
-emulator with status `device`. You can also check readiness with
-`adb -e shell getprop sys.boot_completed`; continue when it prints `1`.
-
-### Start the backend (separate PowerShell terminal)
-
-From the repository root, with the existing API environment configured:
-
-```powershell
-$env:NODE_ENV = "development"
 pnpm dev:mobile
 ```
 
-Keep this terminal running. This runs `adb reverse tcp:3001 tcp:3001` and starts
-the API in watch mode. Put Android SDK `platform-tools` on PATH first (Windows:
-`%LOCALAPPDATA%\Android\Sdk\platform-tools`). The app defaults to
-`http://localhost:3001`, which reaches the computer through ADB reverse.
-The web server is optional for mobile authentication.
+- Pinapatakbo nito ang Express backend sa `0.0.0.0:3001` na may watch mode.
+- Awtomatiko nitong ina-apply ang `adb reverse tcp:3001 tcp:3001` para ma-access ng emulator o USB device ang backend sa `http://localhost:3001`.
+- *Note:* Kahit hindi pa bukas ang emulator mo, magsisimula pa rin nang maayos ang backend nang hindi nagka-crash.
 
-### 2. I-install and Run yung App
+### Step 2: Buksan ang Emulator at Patakbuhin ang App (Terminal 2)
 
-Once na running na yung emulator, navigate ka sa `apps/mobile` directory:
+1. **Buksan ang Emulator**:
+   - Sa **Android Studio → Device Manager** → i-click ang **Play (▶)** sa `Pixel_8`, **o**
+   - Sa terminal:
+     ```powershell
+     emulator -avd Pixel_8
+     ```
+   *(Kung physical Android phone ang gamit mo, isaksak lang via USB na may enabled na USB Debugging).*
+
+2. **I-launch ang App gamit ang pnpm**:
+   Sa repository root:
+
+   ```powershell
+   pnpm run:mobile
+   ```
+
+   **Ano ang ginagawa ng `pnpm run:mobile`?**
+   - Sine-check kung may active na Android device o emulator. Kung wala, magbibigay ito ng malinaw na paalala.
+   - Awtomatikong nag-e-execute ng ADB reverse port forwarding.
+   - Nagbi-build at nag-i-install ng debug APK (`:androidApp:installDebug`).
+   - Awtomatikong binubuksan ang app (`MainActivity`) sa screen ng emulator o device.
+
+---
+
+### Manual Gradle Commands (Alternative)
+
+Kung nais mong patakbuhin ang Gradle commands nang manual nang hindi ginagamit ang `pnpm run:mobile`:
 
 ```powershell
 cd apps/mobile
-```
-
-Then run:
-
-```powershell
 .\gradlew.bat :androidApp:installDebug
-adb -e shell am start -n com.nexus.app/.MainActivity
+adb shell am start -n com.nexus.app/.MainActivity
 ```
 
-This will build the debug version of the app and install it sa running Android emulator.
+*(Sa macOS o Linux: `./gradlew :androidApp:installDebug && adb shell am start -n com.nexus.app/.MainActivity`)*
 
-`No connected devices` means the emulator is not running or ADB has not connected
-yet. If installation fails while Android is booting, wait for boot completion and
-retry the same install command. You do not need to open Android Studio to start
-an already configured emulator.
+---
 
-**Note:** If macOS or Linux yung gamit mo, use:
+### 🔧 Troubleshooting & Common Issues
 
-```bash
-./gradlew :androidApp:installDebug
-```
+#### 1. "❌ No Android emulator or connected device found!"
+- Siguraduhing tapos nang mag-boot ang emulator bago i-run ang `pnpm run:mobile`.
+- I-verify sa terminal gamit ang `adb devices` kung nakikita ang `device`.
+
+#### 2. "adb.exe: device offline" o Nag-freeze ang Emulator
+Kung na-stuck o nag-offline ang emulator:
+1. I-terminate ang frozen process at i-reset ang ADB:
+   ```powershell
+   Stop-Process -Name qemu-system-x86_64, emulator -Force
+   adb kill-server
+   adb start-server
+   ```
+2. Sa Android Studio Device Manager, i-right click ang virtual device → piliin ang **Cold Boot Now** (o sa terminal: `emulator -avd Pixel_8 -no-snapshot-load`).
+
+---
 
 ### 3. iOS (For Mac Users)
 
-If may access ka sa Mac and Xcode, ganito naman yung process:
+Kung may access ka sa Mac at Xcode, ganito naman ang process:
 
-1. Open yung `apps/mobile/iosApp` folder sa Xcode.
-2. Piliin yung target iPhone Simulator or physical device.
-3. Click **Run** or press `Cmd + R`.
+1. Buksan ang `apps/mobile/iosApp` folder sa Xcode.
+2. Piliin ang target iPhone Simulator o physical device.
+3. I-click ang **Run** o pindutin ang `Cmd + R`.
 
 ---
 
