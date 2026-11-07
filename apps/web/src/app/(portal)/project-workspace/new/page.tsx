@@ -1,5 +1,5 @@
-import { NewWorkspacePage } from "@/features/project-workspace/pages/new-workspace-page"
+import { redirect } from "next/navigation"
 
 export default function Page() {
-  return <NewWorkspacePage />
+  redirect("/project-workspace")
 }

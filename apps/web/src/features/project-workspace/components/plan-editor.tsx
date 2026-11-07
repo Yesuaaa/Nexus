@@ -26,12 +26,12 @@ export function PlanEditor({
           key={phase.id}
           className="rounded-lg border border-[#dfe4ec] p-4"
         >
-          <div className="flex gap-2">
+          <div className="grid items-center gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
             <input
               aria-label={`Phase ${index + 1} name`}
               maxLength={120}
               value={phase.title}
-              className={`${inputClass} flex-1 font-semibold`}
+              className={`${inputClass} w-full font-semibold`}
               onChange={(event) =>
                 onChange({
                   phases: plan.phases.map((item) =>
@@ -42,9 +42,10 @@ export function PlanEditor({
                 })
               }
             />
+            <span aria-hidden="true" className="hidden sm:block" />
             <Button
               variant="outline"
-              className="text-xs"
+              className="justify-self-start border-[#d64557] text-xs text-[#b3343b] hover:bg-[#fff0f1] hover:text-[#9f2638] focus-visible:ring-[#b3343b] sm:justify-self-end"
               disabled={plan.phases.length === 1}
               onClick={() =>
                 onChange({
@@ -61,7 +62,7 @@ export function PlanEditor({
                 aria-label="Task name"
                 maxLength={180}
                 value={task.title}
-                className={`${inputClass} flex-[2]`}
+                className={`${inputClass} flex-1`}
                 placeholder="Task name"
                 onChange={(event) =>
                   onChange({
@@ -105,7 +106,7 @@ export function PlanEditor({
               />
               <Button
                 variant="outline"
-                className="text-xs"
+                className="border-[#d64557] text-xs text-[#b3343b] hover:bg-[#fff0f1] hover:text-[#9f2638] focus-visible:ring-[#b3343b]"
                 onClick={() =>
                   onChange({
                     phases: plan.phases.map((item) =>

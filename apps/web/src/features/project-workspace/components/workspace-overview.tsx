@@ -1,38 +1,19 @@
 "use client"
+import { TaskRowActions } from "./task-row-actions"
 
-import {
-  CheckCircle2,
-  ChevronRight,
-  Circle,
-  Flag,
-  Layers3,
-  UsersRound,
-} from "lucide-react"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import type {
-  ProjectTaskStatus,
-  ProjectWorkspaceDetail,
-} from "../api/project-workspace-api"
+import { CheckCircle2, ChevronRight, Circle, Flag, Layers3 } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import type { ProjectWorkspaceDetail } from "../api/project-workspace-api"
 
 export function WorkspaceOverview({
   workspace,
-  onStatus,
-  onViewTeam,
+  onUpdated,
+  onEditPlan,
   busy,
 }: {
   workspace: ProjectWorkspaceDetail
-  onStatus: (
-    projectId: string,
-    taskId: string,
-    status: ProjectTaskStatus,
-  ) => void
-  onViewTeam: () => void
+  onUpdated: (workspace: ProjectWorkspaceDetail) => void
+  onEditPlan: (stream: ProjectWorkspaceDetail["workstreams"][number]) => void
   busy: boolean
 }) {
   const phases = workspace.workstreams.flatMap(
@@ -47,17 +28,7 @@ export function WorkspaceOverview({
   ).length
   const milestone = workspace.workstreams
     .flatMap((stream) => stream.milestones ?? [])
-    .find((item) => !item.completedAt)
-  const people = new Map(
-    workspace.workstreams.flatMap((stream) =>
-      (stream.staff ?? []).map((person) => [person.id, person] as const),
-    ),
-  )
-  const roles = new Map<string, number>()
-  for (const person of people.values()) {
-    const role = person.position || "Staff"
-    roles.set(role, (roles.get(role) ?? 0) + 1)
-  }
+    .find((item) => item.deliveryStatus !== "SENT_TO_CLIENT")
   return (
     <>
       <div className="mb-5 grid gap-4 md:grid-cols-3">
@@ -73,7 +44,7 @@ export function WorkspaceOverview({
             icon: Layers3,
           },
           {
-            label: "Next milestone",
+            label: "Next deliverable",
             value: milestone?.title || "No pending milestone",
             icon: Flag,
           },
@@ -92,14 +63,14 @@ export function WorkspaceOverview({
           </article>
         ))}
       </div>
-      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
+      <div className="min-w-0">
         <div className="min-w-0 space-y-5">
           {workspace.workstreams.map((stream) => (
             <section
               key={stream.id}
               className="overflow-hidden rounded-xl border border-[#dfe5ec]"
             >
-              <header className="flex flex-wrap items-center justify-between gap-2 bg-[#edf1f5] px-5 py-4">
+              <header className="flex flex-wrap items-center justify-between gap-3 bg-[#edf1f5] px-5 py-4">
                 <h2 className="m-0 text-sm font-semibold">
                   {workspace.workstreams.length > 1
                     ? stream.serviceName
@@ -108,11 +79,28 @@ export function WorkspaceOverview({
                     ({stream.plan?.phases.length ?? 0} phases)
                   </span>
                 </h2>
-                <span className="text-[11px] text-[#60718c]">
-                  Completed tasks · Progress
-                </span>
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  className="h-8 text-xs"
+                  onClick={() => onEditPlan(stream)}
+                >
+                  {workspace.workstreams.length > 1
+                    ? `Edit ${stream.serviceName}`
+                    : "Edit project plan"}
+                </Button>
               </header>
               <div className="space-y-3 p-3">
+                {stream.plan && (
+                  <div
+                    className="grid grid-cols-[16px_minmax(0,1fr)_100px_96px_36px] items-center gap-3 px-[17px] py-1 text-[11px] font-semibold text-[#60718c]"
+                    aria-hidden="true"
+                  >
+                    <span className="col-span-2">Phase</span>
+                    <span className="text-center">Tasks complete</span>
+                    <span className="col-span-2 text-center">Progress</span>
+                  </div>
+                )}
                 {!stream.plan && (
                   <p className="p-3 text-xs text-[#738096]">
                     A delivery template has not been selected yet.
@@ -131,7 +119,7 @@ export function WorkspaceOverview({
                       open={index === 0}
                       className="group overflow-hidden rounded-lg border border-[#dfe5ec]"
                     >
-                      <summary className="flex cursor-pointer list-none flex-wrap items-center gap-3 bg-[#f7f9fc] px-4 py-4 text-xs marker:hidden focus-visible:outline-2 focus-visible:outline-[#294a9b] [&::-webkit-details-marker]:hidden">
+                      <summary className="grid cursor-pointer list-none grid-cols-[16px_minmax(0,1fr)_100px_96px_36px] items-center gap-3 bg-[#f7f9fc] px-4 py-4 text-xs marker:hidden focus-visible:outline-2 focus-visible:outline-[#294a9b] [&::-webkit-details-marker]:hidden">
                         <ChevronRight
                           size={16}
                           className="shrink-0 transition-transform group-open:rotate-90"
@@ -139,7 +127,10 @@ export function WorkspaceOverview({
                         <strong className="min-w-0 flex-1">
                           {phase.title}
                         </strong>
-                        <span className="w-12 text-center tabular-nums">
+                        <span
+                          className="text-center tabular-nums"
+                          aria-label={`${count} of ${phase.tasks.length} tasks complete`}
+                        >
                           {count} / {phase.tasks.length}
                         </span>
                         <div
@@ -160,12 +151,46 @@ export function WorkspaceOverview({
                         </span>
                       </summary>
                       <div className="overflow-x-auto px-4 pb-3">
-                        <table className="w-full min-w-[460px] text-left text-xs">
-                          <thead className="text-[10px] text-[#60718c]">
+                        <table className="w-full min-w-[900px] table-fixed text-left text-xs">
+                          <colgroup>
+                            <col />
+                            <col className="w-[22%]" />
+                            <col className="w-[15%]" />
+                            <col className="w-[14%]" />
+                            <col className="w-[96px]" />
+                          </colgroup>
+                          <thead className="bg-[#e8edf2] text-[11px] text-[#182235]">
                             <tr>
-                              <th className="py-3 font-medium">Task</th>
-                              <th className="px-3 py-3 font-medium">Status</th>
-                              <th className="py-3 font-medium">Due</th>
+                              <th
+                                scope="col"
+                                className="px-4 py-3 font-semibold"
+                              >
+                                Task
+                              </th>
+                              <th
+                                scope="col"
+                                className="px-3 py-3 text-center font-semibold"
+                              >
+                                Assigned staff
+                              </th>
+                              <th
+                                scope="col"
+                                className="px-3 py-3 text-center font-semibold"
+                              >
+                                Status
+                              </th>
+                              <th
+                                scope="col"
+                                className="px-3 py-3 text-center font-semibold"
+                              >
+                                Due
+                              </th>
+                              <th
+                                scope="col"
+                                className="px-3 py-3 text-center font-semibold"
+                              >
+                                Actions
+                              </th>
                             </tr>
                           </thead>
                           <tbody>
@@ -174,7 +199,7 @@ export function WorkspaceOverview({
                                 key={task.id}
                                 className="border-t border-[#edf0f4]"
                               >
-                                <td className="py-3">
+                                <td className="px-4 py-3">
                                   <div className="flex items-start gap-2">
                                     {task.status === "DONE" ? (
                                       <CheckCircle2
@@ -195,40 +220,37 @@ export function WorkspaceOverview({
                                     </div>
                                   </div>
                                 </td>
-                                <td className="px-3 py-3">
-                                  <Select
-                                    value={task.status}
-                                    disabled={busy}
-                                    onValueChange={(value) => {
-                                      if (
-                                        value === "DONE" ||
-                                        value === "IN_PROGRESS" ||
-                                        value === "NOT_STARTED"
-                                      )
-                                        onStatus(stream.id, task.id, value)
-                                    }}
-                                  >
-                                    <SelectTrigger
-                                      aria-label={`Status for ${task.title}`}
-                                      className={`h-8 w-[130px] text-[11px] ${task.status === "DONE" ? "bg-[#e3f5e9] text-[#13743b]" : task.status === "IN_PROGRESS" ? "bg-[#e8efff] text-[#294c96]" : "bg-[#edf1f6] text-[#60718c]"}`}
-                                    >
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="NOT_STARTED">
-                                        Not started
-                                      </SelectItem>
-                                      <SelectItem value="IN_PROGRESS">
-                                        In progress
-                                      </SelectItem>
-                                      <SelectItem value="DONE">
-                                        Complete
-                                      </SelectItem>
-                                    </SelectContent>
-                                  </Select>
+                                <td className="px-3 py-3 text-center align-middle text-[#60718c]">
+                                  {stream.staff?.find(
+                                    (person) => person.id === task.employeeId,
+                                  )?.fullName || "Unassigned"}
                                 </td>
-                                <td className="whitespace-nowrap py-3 text-[#738096]">
-                                  Not set
+                                <td className="px-3 py-3 text-center align-middle">
+                                  <span
+                                    className={`inline-flex rounded-md px-2 py-1 text-[10px] ${task.status === "DONE" ? "bg-[#e3f5e9] text-[#13743b]" : task.status === "IN_PROGRESS" ? "bg-[#fff1d4] text-[#946000]" : "bg-[#edf1f6] text-[#60718c]"}`}
+                                  >
+                                    {task.status === "DONE"
+                                      ? "Complete"
+                                      : task.status === "IN_PROGRESS"
+                                        ? "In progress"
+                                        : "Not started"}
+                                  </span>
+                                </td>
+                                <td className="whitespace-nowrap px-3 py-3 text-center align-middle text-[#738096]">
+                                  {task.dueDate
+                                    ? new Date(
+                                        `${task.dueDate}T00:00:00`,
+                                      ).toLocaleDateString()
+                                    : "Not set"}
+                                </td>
+                                <td className="px-3 py-3 text-center align-middle">
+                                  <TaskRowActions
+                                    workspaceId={workspace.id}
+                                    stream={stream}
+                                    task={task}
+                                    onUpdated={onUpdated}
+                                    disabled={busy}
+                                  />
                                 </td>
                               </tr>
                             ))}
@@ -247,32 +269,6 @@ export function WorkspaceOverview({
             </section>
           ))}
         </div>
-        <aside className="rounded-xl border border-[#dfe5ec] p-5 shadow-[0_2px_8px_rgb(24_41_68_/_4%)]">
-          <h2 className="mt-0 text-sm font-semibold">Team</h2>
-          {[...roles.entries()].map(([role, count]) => (
-            <div
-              key={role}
-              className="flex items-center gap-3 border-b border-[#edf0f4] py-3 text-xs"
-            >
-              <UsersRound size={17} className="text-[#60718c]" />
-              <span className="flex-1">{role}</span>
-              <span className="rounded-md border border-[#dfe5ec] px-2 py-1">
-                {count}
-              </span>
-            </div>
-          ))}
-          {!people.size && (
-            <p className="text-xs leading-5 text-[#738096]">
-              No staff assigned yet.
-            </p>
-          )}
-          <button
-            onClick={onViewTeam}
-            className="mt-5 text-xs font-semibold text-[#294c96] hover:underline"
-          >
-            View team
-          </button>
-        </aside>
       </div>
     </>
   )

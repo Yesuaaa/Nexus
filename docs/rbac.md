@@ -49,6 +49,7 @@ Superadmins can select **Change password** from another account's Actions menu, 
 
 ### Project Workspace
 
-- All active STAFF accounts can view projects and update work-plan tasks in their department.
-- Only the current Department Head can set up workspaces from accepted bookings and approve staff assignments. Assignment continues through the existing STAFF_PROJECT workflow action.
+- All active STAFF accounts can view active and archived projects and update work-plan tasks in their department.
+- Only the current Department Head for a project's department can set up or rename its workspace, cancel active projects, and approve staff assignments. Cancelled and completed projects appear in the Archive view and are excluded from active workload totals. Assignment continues through the existing STAFF_PROJECT workflow action.
 - Clients retain their existing project view; the internal workspace is unavailable to USER, ADMIN, and SUPERADMIN accounts.
+- Only active staff assigned to a workstream can upload or remove its deliverable attachment. The Department Head can edit deliverable requirements, approve or reject submissions (a rejection reason is required), and send approved files to the client. Submitted files remain staff-only until sent; clients can access files after that action.

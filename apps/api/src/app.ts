@@ -51,6 +51,24 @@ export function createApp(
     requireAuth,
     express.json({ limit: "128kb" }),
   )
+  app.use((request, response, next) => {
+    const path = request.originalUrl
+    const isDeliverableUpload =
+      request.method === "POST" &&
+      /^\/api\/project-workspace\/[^/]+\/projects\/[^/]+\/deliverables\/[^/]+\/attachment(?:\?.*)?$/.test(
+        path,
+      )
+    const isDeliverableRejection =
+      request.method === "POST" &&
+      /^\/api\/project-workspace\/[^/]+\/projects\/[^/]+\/deliverables\/[^/]+\/reject(?:\?.*)?$/.test(
+        path,
+      )
+    if (isDeliverableUpload)
+      return express.json({ limit: "7mb" })(request, response, next)
+    if (isDeliverableRejection)
+      return express.json({ limit: "8kb" })(request, response, next)
+    next()
+  })
   app.use(express.json({ limit: "16kb" }))
   app.use("/api/auth", authRouter)
   app.use("/api/users", usersRouter)

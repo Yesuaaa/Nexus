@@ -11,6 +11,8 @@ export type ProjectWorkPlan = {
       title: string
       role: string
       status: ProjectTaskStatus
+      employeeId?: string | null
+      dueDate?: string | null
     }[]
   }[]
 }

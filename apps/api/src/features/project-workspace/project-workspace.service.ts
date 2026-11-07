@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import type { Prisma, ProjectStatus } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
+import { parseWorkflowUpload } from "../request-workflow/workflow.files.js"
 import {
   makeWorkPlan,
   projectTemplates,
@@ -39,6 +40,22 @@ function validateEditablePlan(input: unknown): ProjectWorkPlan {
     phase.id,
     ...phase.tasks.map((task) => task.id),
   ])
+  for (const task of plan.phases.flatMap((phase) => phase.tasks)) {
+    if (
+      task.employeeId != null &&
+      (typeof task.employeeId !== "string" ||
+        !/^[A-Za-z0-9_-]{1,80}$/.test(task.employeeId))
+    )
+      throw new ServiceRequestsError(400, "Choose a valid assigned employee")
+    if (
+      task.dueDate != null &&
+      (typeof task.dueDate !== "string" ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(task.dueDate) ||
+        !Number.isFinite(Date.parse(task.dueDate)) ||
+        new Date(task.dueDate).toISOString().slice(0, 10) !== task.dueDate)
+    )
+      throw new ServiceRequestsError(400, "Enter a valid due date")
+  }
   if (
     new Set(ids).size !== ids.length ||
     ids.some((id) => !/^[A-Za-z0-9_-]{1,80}$/.test(id))
@@ -70,6 +87,67 @@ export async function saveProjectPlan(
       workspaceId,
       projectId,
     )
+    await tx.$queryRaw`SELECT "id" FROM "ServiceRequest" WHERE "id" = ${project.requestId} FOR UPDATE`
+    const request = await tx.serviceRequest.findUniqueOrThrow({
+      where: { id: project.requestId! },
+      select: { acceptedDepartmentId: true },
+    })
+    if (request.acceptedDepartmentId)
+      await tx.$queryRaw`SELECT "id" FROM "Department" WHERE "id" = ${request.acceptedDepartmentId} FOR SHARE`
+    const head = await tx.department.findFirst({
+      where: { id: request.acceptedDepartmentId ?? "", headId: userId },
+      select: { id: true },
+    })
+    const previousTasks = new Map(
+      (
+        readWorkPlan(project.workPlan)?.phases.flatMap(
+          (phase) => phase.tasks,
+        ) ?? []
+      ).map((task) => [task.id, task]),
+    )
+    const assignedIds: string[] = []
+    const nextTaskIds = new Set(
+      plan.phases.flatMap((phase) => phase.tasks.map((task) => task.id)),
+    )
+    if (
+      !head &&
+      [...previousTasks.values()].some(
+        (task) => task.employeeId && !nextTaskIds.has(task.id),
+      )
+    )
+      throw new ServiceRequestsError(
+        403,
+        "Only the department head can remove assigned tasks",
+      )
+    for (const task of plan.phases.flatMap((phase) => phase.tasks)) {
+      const previous = previousTasks.get(task.id)
+      if ((previous?.employeeId ?? null) !== (task.employeeId ?? null)) {
+        if (!head)
+          throw new ServiceRequestsError(
+            403,
+            "Only the department head can change task assignments",
+          )
+        if (task.employeeId) assignedIds.push(task.employeeId)
+      }
+    }
+    for (const employeeId of new Set(assignedIds)) {
+      const approved = await tx.projectStaff.count({
+        where: {
+          projectId,
+          employeeId,
+          employee: {
+            departmentId: request.acceptedDepartmentId,
+            status: "ACTIVE",
+            user: { role: "STAFF", ...activeAccount },
+          },
+        },
+      })
+      if (!approved)
+        throw new ServiceRequestsError(
+          409,
+          "Select an active employee already approved for this project",
+        )
+    }
     const changed = await tx.project.updateMany({
       where: {
         id: project.id,
@@ -98,8 +176,19 @@ const activityTypes = [
   "PROJECT_MILESTONE_UPDATED",
   "STAFFING_APPROVED",
   "WORKSPACE_CREATED",
+  "WORKSPACE_RENAMED",
+  "WORKSPACE_CANCELLED",
+  "WORKSPACE_ON_HOLD",
+  "WORKSPACE_RESUMED",
+  "WORKSPACE_COMPLETED",
   "WORKSPACE_TASK_ADDED",
   "WORKSPACE_TASK_UPDATED",
+  "PROJECT_DELIVERABLE_UPDATED",
+  "PROJECT_DELIVERABLE_UPLOADED",
+  "PROJECT_DELIVERABLE_REMOVED",
+  "PROJECT_DELIVERABLE_APPROVED",
+  "PROJECT_DELIVERABLE_REJECTED",
+  "PROJECT_DELIVERABLE_SENT_TO_CLIENT",
 ] as const
 
 type StaffContext = {
@@ -158,7 +247,30 @@ const projectInclude = {
     },
   },
   milestones: {
-    select: { id: true, title: true, completedAt: true },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      expectedFileType: true,
+      deliveryStatus: true,
+      rejectionReason: true,
+      reviewedAt: true,
+      sentToClientAt: true,
+      workflowFileId: true,
+      updatedAt: true,
+      workflowFile: {
+        select: {
+          id: true,
+          name: true,
+          mimeType: true,
+          size: true,
+          uploaderId: true,
+          createdAt: true,
+          clientVisible: true,
+        },
+      },
+      completedAt: true,
+    },
     orderBy: [{ displayOrder: "asc" as const }, { id: "asc" as const }],
   },
   staff: {
@@ -168,6 +280,7 @@ const projectInclude = {
         select: {
           id: true,
           fullName: true,
+          userId: true,
           position: true,
           status: true,
           profileSpecialties: true,
@@ -189,11 +302,15 @@ function summarizeStatus(projects: WorkspaceProject[]): ProjectStatus {
     return "IN_PROGRESS"
   if (projects.some(({ status }) => status === "ON_HOLD")) return "ON_HOLD"
   if (projects.some(({ status }) => status === "PLANNED")) return "PLANNED"
-  if (projects.every(({ status }) => status === "CANCELLED")) return "CANCELLED"
+  if (projects.some(({ status }) => status === "CANCELLED")) return "CANCELLED"
   return "COMPLETED"
 }
 
-function projectWorkstream(project: WorkspaceProject, includePlan: boolean) {
+function projectWorkstream(
+  project: WorkspaceProject,
+  includePlan: boolean,
+  userId: string,
+) {
   const plan = readWorkPlan(project.workPlan)
   const tasks =
     plan?.phases.flatMap(({ tasks: phaseTasks }) => phaseTasks) ?? []
@@ -214,10 +331,15 @@ function projectWorkstream(project: WorkspaceProject, includePlan: boolean) {
     completedTaskCount: tasks.filter(({ status }) => status === "DONE").length,
     plan: includePlan ? plan : undefined,
     milestones: project.milestones,
-    staff: project.staff.map(({ employee, approvedAt }) => ({
-      ...employee,
-      approvedAt,
-    })),
+    staff: project.staff.map(({ employee, approvedAt }) => {
+      const { userId: _userId, ...safeEmployee } = employee
+      void _userId
+      return { ...safeEmployee, approvedAt }
+    }),
+    canUploadDeliverables: project.staff.some(
+      ({ employee }) =>
+        employee.userId === userId && employee.status === "ACTIVE",
+    ),
   }
 }
 
@@ -276,8 +398,14 @@ function workspaceRows(
       updatedAt,
       activityCount,
       canCreate: context.canCreate,
+      canManage: groupProjects.every(({ request }) =>
+        Boolean(
+          request?.acceptedDepartmentId &&
+          context.headDepartmentIds.includes(request.acceptedDepartmentId),
+        ),
+      ),
       workstreams: groupProjects.map((project) => ({
-        ...projectWorkstream(project, includePlan),
+        ...projectWorkstream(project, includePlan, context.id),
         canAssign: Boolean(
           project.request?.acceptedDepartmentId &&
           context.headDepartmentIds.includes(
@@ -523,6 +651,15 @@ export async function createProjectWorkspaces(userId: string, input: unknown) {
         const templateKey = command.templateKeys[requestId]
         const workPlan =
           command.customPlans[requestId] ?? makeWorkPlan(templateKey)
+        if (
+          workPlan.phases.some((phase) =>
+            phase.tasks.some((task) => task.employeeId),
+          )
+        )
+          throw new ServiceRequestsError(
+            400,
+            "Create the workspace and approve project staff before assigning tasks",
+          )
         const changed = await tx.project.updateMany({
           where: { id: project.id, workspaceGroupId: null, templateKey: null },
           data: {
@@ -614,6 +751,332 @@ export async function getProjectWorkspace(userId: string, id: string) {
   })
 }
 
+type MutableWorkspaceProject = {
+  id: string
+  status: ProjectStatus
+  requestId: string | null
+  request: { acceptedDepartmentId: string | null } | null
+}
+
+async function getMutableWorkspace(
+  tx: Prisma.TransactionClient,
+  context: StaffContext,
+  workspaceId: string,
+) {
+  const scope = scopedProjectWhere(context)
+  const group = await tx.projectWorkspaceGroup.findFirst({
+    where: { id: workspaceId, projects: { some: scope } },
+    select: {
+      id: true,
+      projects: {
+        where: scope,
+        select: {
+          id: true,
+          status: true,
+          requestId: true,
+          request: { select: { acceptedDepartmentId: true } },
+        },
+      },
+    },
+  })
+  if (group?.projects.length)
+    return { groupId: group.id, projects: group.projects }
+
+  const project = await tx.project.findFirst({
+    where: { id: workspaceId, ...scope },
+    select: {
+      id: true,
+      status: true,
+      requestId: true,
+      request: { select: { acceptedDepartmentId: true } },
+    },
+  })
+  if (!project)
+    throw new ServiceRequestsError(404, "Project workspace not found")
+  return { groupId: null, projects: [project] }
+}
+
+function requireWorkspaceManager(
+  context: StaffContext,
+  projects: MutableWorkspaceProject[],
+) {
+  if (
+    !projects.length ||
+    projects.some(
+      ({ request }) =>
+        !request?.acceptedDepartmentId ||
+        !context.headDepartmentIds.includes(request.acceptedDepartmentId),
+    )
+  )
+    throw new ServiceRequestsError(
+      403,
+      "Only the department head can manage this project workspace",
+    )
+}
+
+async function lockWorkspaceProjects(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  groupId: string | null,
+  projects: MutableWorkspaceProject[],
+) {
+  if (groupId)
+    await tx.$queryRaw`SELECT "id" FROM "ProjectWorkspaceGroup" WHERE "id" = ${groupId} FOR UPDATE`
+  for (const project of projects)
+    await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${project.id} FOR UPDATE`
+  if (!groupId && projects[0]?.id !== workspaceId)
+    throw new ServiceRequestsError(404, "Project workspace not found")
+}
+
+export async function renameProjectWorkspace(
+  userId: string,
+  workspaceId: string,
+  input: unknown,
+) {
+  const name =
+    input &&
+    typeof input === "object" &&
+    "name" in input &&
+    typeof input.name === "string"
+      ? input.name.trim()
+      : ""
+  if (name.length < 2 || name.length > 120)
+    throw new ServiceRequestsError(
+      400,
+      "Enter a project name between 2 and 120 characters",
+    )
+
+  await getPrisma()!.$transaction(async (tx) => {
+    const context = await getStaffContext(tx, userId)
+    const current = await getMutableWorkspace(tx, context, workspaceId)
+    requireWorkspaceManager(context, current.projects)
+    await lockWorkspaceProjects(
+      tx,
+      workspaceId,
+      current.groupId,
+      current.projects,
+    )
+    const workspace = await getMutableWorkspace(tx, context, workspaceId)
+    requireWorkspaceManager(context, workspace.projects)
+    if (
+      workspace.projects.every(({ status }) =>
+        ["COMPLETED", "CANCELLED"].includes(status),
+      )
+    )
+      throw new ServiceRequestsError(409, "Archived projects cannot be renamed")
+
+    if (workspace.groupId) {
+      await tx.projectWorkspaceGroup.update({
+        where: { id: workspace.groupId },
+        data: { name },
+      })
+    } else {
+      await tx.project.update({
+        where: { id: workspace.projects[0].id },
+        data: { name },
+      })
+    }
+    for (const project of workspace.projects) {
+      if (project.requestId)
+        await writeWorkspaceEvent(
+          tx,
+          project.requestId,
+          project.id,
+          userId,
+          "WORKSPACE_RENAMED",
+          `Renamed the project workspace to “${name}”.`,
+        )
+    }
+  })
+  return { saved: true }
+}
+
+export async function cancelProjectWorkspace(
+  userId: string,
+  workspaceId: string,
+) {
+  await getPrisma()!.$transaction(async (tx) => {
+    const context = await getStaffContext(tx, userId)
+    const current = await getMutableWorkspace(tx, context, workspaceId)
+    requireWorkspaceManager(context, current.projects)
+    await lockWorkspaceProjects(
+      tx,
+      workspaceId,
+      current.groupId,
+      current.projects,
+    )
+    const workspace = await getMutableWorkspace(tx, context, workspaceId)
+    requireWorkspaceManager(context, workspace.projects)
+    const cancellable = workspace.projects.filter(({ status }) =>
+      ["PLANNED", "IN_PROGRESS", "ON_HOLD"].includes(status),
+    )
+    if (!cancellable.length)
+      throw new ServiceRequestsError(409, "This project is already archived")
+
+    const updated = await tx.project.updateMany({
+      where: {
+        id: { in: cancellable.map(({ id }) => id) },
+        status: { in: ["PLANNED", "IN_PROGRESS", "ON_HOLD"] },
+      },
+      data: { status: "CANCELLED", updatedAt: new Date() },
+    })
+    if (updated.count !== cancellable.length)
+      throw new ServiceRequestsError(
+        409,
+        "The project changed while you were cancelling it. Refresh and try again.",
+      )
+    for (const project of cancellable) {
+      if (project.requestId)
+        await writeWorkspaceEvent(
+          tx,
+          project.requestId,
+          project.id,
+          userId,
+          "WORKSPACE_CANCELLED",
+          "Cancelled the project workspace.",
+        )
+    }
+  })
+  return { saved: true }
+}
+
+export async function updateProjectWorkspaceStatus(
+  userId: string,
+  workspaceId: string,
+  action: "ON_HOLD" | "RESUME" | "COMPLETE",
+) {
+  await getPrisma()!.$transaction(async (tx) => {
+    const context = await getStaffContext(tx, userId)
+    const current = await getMutableWorkspace(tx, context, workspaceId)
+    requireWorkspaceManager(context, current.projects)
+    await lockWorkspaceProjects(
+      tx,
+      workspaceId,
+      current.groupId,
+      current.projects,
+    )
+    const workspace = await getMutableWorkspace(tx, context, workspaceId)
+    requireWorkspaceManager(context, workspace.projects)
+
+    let affected: MutableWorkspaceProject[]
+    let status: ProjectStatus
+    let eventType: string
+    let summary: string
+
+    if (action === "ON_HOLD") {
+      affected = workspace.projects.filter(
+        ({ status: currentStatus }) => currentStatus === "IN_PROGRESS",
+      )
+      status = "ON_HOLD"
+      eventType = "WORKSPACE_ON_HOLD"
+      summary = "Put the project workspace on hold."
+      if (!affected.length)
+        throw new ServiceRequestsError(
+          409,
+          "Only projects in progress can be put on hold",
+        )
+    } else if (action === "RESUME") {
+      affected = workspace.projects.filter(
+        ({ status: currentStatus }) => currentStatus === "ON_HOLD",
+      )
+      status = "IN_PROGRESS"
+      eventType = "WORKSPACE_RESUMED"
+      summary = "Resumed the project workspace."
+      if (!affected.length)
+        throw new ServiceRequestsError(409, "This project is not on hold")
+    } else {
+      if (
+        workspace.projects.some(
+          ({ status: currentStatus }) =>
+            !["IN_PROGRESS", "ON_HOLD", "COMPLETED"].includes(currentStatus),
+        )
+      )
+        throw new ServiceRequestsError(
+          409,
+          "Start every service and resolve cancelled services before completing the workspace",
+        )
+
+      const projects = await tx.project.findMany({
+        where: { id: { in: workspace.projects.map(({ id }) => id) } },
+        select: {
+          id: true,
+          workPlan: true,
+          milestones: { select: { deliveryStatus: true } },
+        },
+      })
+      const hasUnfinishedTasks = projects.some((project) => {
+        const plan = readWorkPlan(project.workPlan)
+        return (
+          !plan ||
+          plan.phases.some((phase) =>
+            phase.tasks.some((task) => task.status !== "DONE"),
+          )
+        )
+      })
+      if (hasUnfinishedTasks)
+        throw new ServiceRequestsError(
+          409,
+          "Finish every project task before completing the workspace",
+        )
+      if (
+        projects.some((project) =>
+          project.milestones.some(
+            ({ deliveryStatus }) => deliveryStatus !== "SENT_TO_CLIENT",
+          ),
+        )
+      )
+        throw new ServiceRequestsError(
+          409,
+          "Send every deliverable to the client before completing the workspace",
+        )
+
+      affected = workspace.projects.filter(
+        ({ status: currentStatus }) =>
+          currentStatus === "IN_PROGRESS" || currentStatus === "ON_HOLD",
+      )
+      if (!affected.length)
+        throw new ServiceRequestsError(
+          409,
+          "This workspace is already complete",
+        )
+      status = "COMPLETED"
+      eventType = "WORKSPACE_COMPLETED"
+      summary = "Completed the project workspace."
+    }
+
+    const updated = await tx.project.updateMany({
+      where: {
+        id: { in: affected.map(({ id }) => id) },
+        status:
+          action === "ON_HOLD"
+            ? "IN_PROGRESS"
+            : action === "RESUME"
+              ? "ON_HOLD"
+              : { in: ["IN_PROGRESS", "ON_HOLD"] },
+      },
+      data: { status, updatedAt: new Date() },
+    })
+    if (updated.count !== affected.length)
+      throw new ServiceRequestsError(
+        409,
+        "The project changed while you were updating its status. Reload and try again.",
+      )
+
+    for (const project of affected) {
+      if (project.requestId)
+        await writeWorkspaceEvent(
+          tx,
+          project.requestId,
+          project.id,
+          userId,
+          eventType,
+          summary,
+        )
+    }
+  })
+  return getProjectWorkspace(userId, workspaceId)
+}
+
 async function scopedProjectForEdit(
   tx: Prisma.TransactionClient,
   context: StaffContext,
@@ -652,6 +1115,500 @@ async function writeWorkspaceEvent(
       summary,
       internal: true,
     },
+  })
+}
+
+const projectDeliverableSelect = {
+  id: true,
+  title: true,
+  description: true,
+  expectedFileType: true,
+  deliveryStatus: true,
+  rejectionReason: true,
+  reviewedAt: true,
+  sentToClientAt: true,
+  workflowFileId: true,
+  updatedAt: true,
+  completedAt: true,
+  workflowFile: {
+    select: {
+      id: true,
+      name: true,
+      mimeType: true,
+      size: true,
+      uploaderId: true,
+      createdAt: true,
+      clientVisible: true,
+    },
+  },
+} satisfies Prisma.ProjectMilestoneSelect
+
+async function getDeliverableAccess(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  workspaceId: string,
+  projectId: string,
+  deliverableId: string,
+  headOnly = false,
+) {
+  const context = await getStaffContext(tx, userId)
+  const project = await scopedProjectForEdit(
+    tx,
+    context,
+    workspaceId,
+    projectId,
+  )
+  const request = await tx.serviceRequest.findUnique({
+    where: { id: project.requestId! },
+    select: {
+      acceptedDepartmentId: true,
+      workflow: { select: { state: true } },
+    },
+  })
+  const isHead = Boolean(
+    request?.acceptedDepartmentId &&
+    context.headDepartmentIds.includes(request.acceptedDepartmentId),
+  )
+  if (headOnly && !isHead)
+    throw new ServiceRequestsError(
+      403,
+      "Only the department head can manage deliverables",
+    )
+  const isAssignedStaff = isHead
+    ? true
+    : Boolean(
+        await tx.projectStaff.findFirst({
+          where: {
+            projectId: project.id,
+            employee: {
+              userId,
+              status: "ACTIVE",
+              user: { role: "STAFF", ...activeAccount },
+            },
+          },
+          select: { id: true },
+        }),
+      )
+  if (!isHead && !isAssignedStaff)
+    throw new ServiceRequestsError(
+      403,
+      "Only assigned project staff can manage deliverable attachments",
+    )
+  const milestone = await tx.projectMilestone.findFirst({
+    where: { id: deliverableId, projectId: project.id },
+    select: projectDeliverableSelect,
+  })
+  if (!milestone)
+    throw new ServiceRequestsError(404, "Project deliverable not found")
+  return { context, project, milestone, isHead, request }
+}
+
+function recordDeliverableEvent(
+  tx: Prisma.TransactionClient,
+  requestId: string,
+  deliverableId: string,
+  userId: string,
+  type: string,
+  summary: string,
+  internal = true,
+) {
+  return tx.workflowEvent.create({
+    data: {
+      requestId,
+      entityId: deliverableId,
+      actorId: userId,
+      type,
+      summary,
+      internal,
+    },
+  })
+}
+
+function deliverableInput(input: unknown) {
+  if (!input || typeof input !== "object" || Array.isArray(input))
+    throw new ServiceRequestsError(400, "Enter deliverable details")
+  return input as Record<string, unknown>
+}
+
+export async function updateProjectDeliverable(
+  userId: string,
+  workspaceId: string,
+  projectId: string,
+  deliverableId: string,
+  input: unknown,
+) {
+  const body = deliverableInput(input)
+  const update: Prisma.ProjectMilestoneUpdateInput = {}
+  if (body.title !== undefined) {
+    if (
+      typeof body.title !== "string" ||
+      !body.title.trim() ||
+      body.title.trim().length > 300
+    )
+      throw new ServiceRequestsError(
+        400,
+        "Use a deliverable name up to 300 characters",
+      )
+    update.title = body.title.trim()
+  }
+  if (body.description !== undefined) {
+    if (typeof body.description !== "string" || body.description.length > 4000)
+      throw new ServiceRequestsError(
+        400,
+        "Keep the description under 4,000 characters",
+      )
+    update.description = body.description.trim() || null
+  }
+  if (body.expectedFileType !== undefined) {
+    if (
+      typeof body.expectedFileType !== "string" ||
+      body.expectedFileType.length > 50
+    )
+      throw new ServiceRequestsError(400, "Choose a valid attachment type")
+    update.expectedFileType = body.expectedFileType.trim() || null
+  }
+  if (!Object.keys(update).length)
+    throw new ServiceRequestsError(400, "Change at least one deliverable field")
+
+  await getPrisma()!.$transaction(async (tx) => {
+    const { project, isHead } = await getDeliverableAccess(
+      tx,
+      userId,
+      workspaceId,
+      projectId,
+      deliverableId,
+      true,
+    )
+    if (!isHead)
+      throw new ServiceRequestsError(
+        403,
+        "Only the department head can edit deliverables",
+      )
+    await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${project.id} FOR UPDATE`
+    await tx.$queryRaw`SELECT "id" FROM "ProjectMilestone" WHERE "id" = ${deliverableId} FOR UPDATE`
+    const current = await tx.projectMilestone.findUniqueOrThrow({
+      where: { id: deliverableId },
+      select: { deliveryStatus: true, title: true },
+    })
+    if (current.deliveryStatus === "SENT_TO_CLIENT")
+      throw new ServiceRequestsError(409, "Sent deliverables cannot be edited")
+    await tx.projectMilestone.update({
+      where: { id: deliverableId },
+      data: update,
+    })
+    await tx.project.update({
+      where: { id: project.id },
+      data: { updatedAt: new Date() },
+    })
+    await recordDeliverableEvent(
+      tx,
+      project.requestId!,
+      deliverableId,
+      userId,
+      "PROJECT_DELIVERABLE_UPDATED",
+      `Updated the details for deliverable “${body.title ?? current.title}”.`,
+    )
+  })
+  return getProjectWorkspace(userId, workspaceId)
+}
+
+export async function uploadProjectDeliverable(
+  userId: string,
+  workspaceId: string,
+  projectId: string,
+  deliverableId: string,
+  input: unknown,
+) {
+  const parsed = parseWorkflowUpload(input)
+  await getPrisma()!.$transaction(async (tx) => {
+    const { project, milestone, isHead, request } = await getDeliverableAccess(
+      tx,
+      userId,
+      workspaceId,
+      projectId,
+      deliverableId,
+    )
+    if (isHead)
+      throw new ServiceRequestsError(
+        403,
+        "Department Heads review deliverables; assigned staff upload them",
+      )
+    if (!request?.workflow || project.status === "CANCELLED")
+      throw new ServiceRequestsError(409, "Deliverable uploads are unavailable")
+    await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${project.id} FOR UPDATE`
+    await tx.$queryRaw`SELECT "id" FROM "ProjectMilestone" WHERE "id" = ${deliverableId} FOR UPDATE`
+    const current = await tx.projectMilestone.findUniqueOrThrow({
+      where: { id: deliverableId },
+      select: { deliveryStatus: true, workflowFileId: true, title: true },
+    })
+    if (!["NOT_SUBMITTED", "REJECTED"].includes(current.deliveryStatus))
+      throw new ServiceRequestsError(
+        409,
+        "This deliverable is locked while it is being reviewed or after approval",
+      )
+    if (current.workflowFileId)
+      await tx.workflowFile.delete({ where: { id: current.workflowFileId } })
+    const file = await tx.workflowFile.create({
+      data: {
+        requestId: project.requestId!,
+        uploaderId: userId,
+        uploadId: parsed.uploadId,
+        name: parsed.name,
+        mimeType: parsed.mimeType,
+        size: parsed.size,
+        sha256: parsed.sha256,
+        data: parsed.data,
+        clientVisible: false,
+      },
+      select: { id: true },
+    })
+    await tx.projectMilestone.update({
+      where: { id: deliverableId },
+      data: {
+        workflowFileId: file.id,
+        deliveryStatus: "IN_REVIEW",
+        rejectionReason: null,
+        reviewedAt: null,
+        reviewedById: null,
+      },
+    })
+    await tx.project.update({
+      where: { id: project.id },
+      data: { updatedAt: new Date() },
+    })
+    await recordDeliverableEvent(
+      tx,
+      project.requestId!,
+      deliverableId,
+      userId,
+      "PROJECT_DELIVERABLE_UPLOADED",
+      `Submitted “${milestone.title}” for review.`,
+    )
+  })
+  return getProjectWorkspace(userId, workspaceId)
+}
+
+export async function removeProjectDeliverableAttachment(
+  userId: string,
+  workspaceId: string,
+  projectId: string,
+  deliverableId: string,
+) {
+  await getPrisma()!.$transaction(async (tx) => {
+    const { project, milestone, isHead } = await getDeliverableAccess(
+      tx,
+      userId,
+      workspaceId,
+      projectId,
+      deliverableId,
+    )
+    if (isHead)
+      throw new ServiceRequestsError(
+        403,
+        "Department Heads review deliverables; assigned staff manage uploads",
+      )
+    if (!milestone.workflowFileId)
+      throw new ServiceRequestsError(409, "This deliverable has no attachment")
+    await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${project.id} FOR UPDATE`
+    await tx.$queryRaw`SELECT "id" FROM "ProjectMilestone" WHERE "id" = ${deliverableId} FOR UPDATE`
+    const current = await tx.projectMilestone.findUniqueOrThrow({
+      where: { id: deliverableId },
+      select: { deliveryStatus: true, workflowFileId: true, title: true },
+    })
+    if (
+      !["IN_REVIEW", "REJECTED", "NOT_SUBMITTED"].includes(
+        current.deliveryStatus,
+      )
+    )
+      throw new ServiceRequestsError(
+        409,
+        "Approved deliverables can no longer be removed",
+      )
+    if (!current.workflowFileId)
+      throw new ServiceRequestsError(409, "This deliverable has no attachment")
+    await tx.workflowFile.delete({ where: { id: current.workflowFileId } })
+    await tx.projectMilestone.update({
+      where: { id: deliverableId },
+      data: {
+        workflowFileId: null,
+        deliveryStatus:
+          current.deliveryStatus === "REJECTED" ? "REJECTED" : "NOT_SUBMITTED",
+      },
+    })
+    await tx.project.update({
+      where: { id: project.id },
+      data: { updatedAt: new Date() },
+    })
+    await recordDeliverableEvent(
+      tx,
+      project.requestId!,
+      deliverableId,
+      userId,
+      "PROJECT_DELIVERABLE_REMOVED",
+      `Removed the attachment for “${current.title}”.`,
+    )
+  })
+  return getProjectWorkspace(userId, workspaceId)
+}
+
+export async function reviewProjectDeliverable(
+  userId: string,
+  workspaceId: string,
+  projectId: string,
+  deliverableId: string,
+  decision: "approve" | "reject",
+  input?: unknown,
+) {
+  const reasonValue = input ? deliverableInput(input).reason : undefined
+  const reason =
+    decision === "reject" && typeof reasonValue === "string"
+      ? reasonValue.trim()
+      : ""
+  if (decision === "reject" && (reason.length < 3 || reason.length > 2000))
+    throw new ServiceRequestsError(
+      400,
+      "Enter a rejection reason between 3 and 2,000 characters",
+    )
+
+  await getPrisma()!.$transaction(async (tx) => {
+    const { project, request } = await getDeliverableAccess(
+      tx,
+      userId,
+      workspaceId,
+      projectId,
+      deliverableId,
+      true,
+    )
+    await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${project.id} FOR UPDATE`
+    await tx.$queryRaw`SELECT "id" FROM "ProjectMilestone" WHERE "id" = ${deliverableId} FOR UPDATE`
+    const current = await tx.projectMilestone.findUniqueOrThrow({
+      where: { id: deliverableId },
+      select: { title: true, deliveryStatus: true, workflowFileId: true },
+    })
+    if (current.deliveryStatus !== "IN_REVIEW" || !current.workflowFileId)
+      throw new ServiceRequestsError(
+        409,
+        "Only submitted deliverables can be reviewed",
+      )
+    const approved = decision === "approve"
+    await tx.projectMilestone.update({
+      where: { id: deliverableId },
+      data: {
+        deliveryStatus: approved ? "APPROVED" : "REJECTED",
+        rejectionReason: approved ? null : reason,
+        reviewedById: userId,
+        reviewedAt: new Date(),
+      },
+    })
+    await tx.project.update({
+      where: { id: project.id },
+      data: { updatedAt: new Date() },
+    })
+    await recordDeliverableEvent(
+      tx,
+      project.requestId!,
+      deliverableId,
+      userId,
+      approved
+        ? "PROJECT_DELIVERABLE_APPROVED"
+        : "PROJECT_DELIVERABLE_REJECTED",
+      approved
+        ? `Approved “${current.title}”.`
+        : `Rejected “${current.title}”: ${reason}`,
+    )
+    if (!request?.workflow)
+      throw new ServiceRequestsError(409, "This project has no client workflow")
+  })
+  return getProjectWorkspace(userId, workspaceId)
+}
+
+export async function sendProjectDeliverableToClient(
+  userId: string,
+  workspaceId: string,
+  projectId: string,
+  deliverableId: string,
+) {
+  await getPrisma()!.$transaction(async (tx) => {
+    const { project, request } = await getDeliverableAccess(
+      tx,
+      userId,
+      workspaceId,
+      projectId,
+      deliverableId,
+      true,
+    )
+    if (!request?.workflow)
+      throw new ServiceRequestsError(409, "This project has no client workflow")
+    await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${project.id} FOR UPDATE`
+    await tx.$queryRaw`SELECT "id" FROM "ProjectMilestone" WHERE "id" = ${deliverableId} FOR UPDATE`
+    const current = await tx.projectMilestone.findUniqueOrThrow({
+      where: { id: deliverableId },
+      select: { title: true, deliveryStatus: true, workflowFileId: true },
+    })
+    if (current.deliveryStatus !== "APPROVED" || !current.workflowFileId)
+      throw new ServiceRequestsError(
+        409,
+        "Approve the deliverable before sending it to the client",
+      )
+    await tx.workflowFile.update({
+      where: { id: current.workflowFileId },
+      data: { clientVisible: true },
+    })
+    await tx.projectMilestone.update({
+      where: { id: deliverableId },
+      data: {
+        deliveryStatus: "SENT_TO_CLIENT",
+        sentToClientById: userId,
+        sentToClientAt: new Date(),
+      },
+    })
+    await tx.project.update({
+      where: { id: project.id },
+      data: { updatedAt: new Date() },
+    })
+    await recordDeliverableEvent(
+      tx,
+      project.requestId!,
+      current.workflowFileId,
+      userId,
+      "PROJECT_DELIVERABLE_SENT_TO_CLIENT",
+      `A project deliverable was shared with you: “${current.title}”.`,
+      false,
+    )
+    await tx.requestWorkflow.update({
+      where: { requestId: project.requestId! },
+      data: { version: { increment: 1 } },
+    })
+    await tx.serviceRequest.update({
+      where: { id: project.requestId! },
+      data: { updatedAt: new Date() },
+    })
+  })
+  return getProjectWorkspace(userId, workspaceId)
+}
+
+export async function downloadProjectDeliverable(
+  userId: string,
+  workspaceId: string,
+  projectId: string,
+  deliverableId: string,
+) {
+  return getPrisma()!.$transaction(async (tx) => {
+    const { milestone } = await getDeliverableAccess(
+      tx,
+      userId,
+      workspaceId,
+      projectId,
+      deliverableId,
+    )
+    if (!milestone.workflowFileId)
+      throw new ServiceRequestsError(404, "No attachment is available")
+    const file = await tx.workflowFile.findUnique({
+      where: { id: milestone.workflowFileId },
+      select: { name: true, mimeType: true, size: true, data: true },
+    })
+    if (!file) throw new ServiceRequestsError(404, "No attachment is available")
+    return file
   })
 }
 
