@@ -307,7 +307,9 @@ export function ProjectWorkspacePage() {
                   <th className="px-4 py-3 text-center align-middle">
                     Last updated
                   </th>
-                  <th className="px-4 py-3 text-right align-middle">Actions</th>
+                  <th className="px-4 py-3 text-center align-middle">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#e9edf1] text-xs">
