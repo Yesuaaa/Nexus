@@ -29,8 +29,24 @@ import com.nexus.app.navigation.BottomTab
 fun NexusBottomBar(
     currentTab: BottomTab,
     onTabSelected: (BottomTab) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    conversationStyle: Boolean = false
 ) {
+    if (conversationStyle) {
+        Column(modifier.fillMaxWidth().background(NexusColors.Background).navigationBarsPadding()) {
+            androidx.compose.material3.HorizontalDivider(color = NexusColors.Border)
+            Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.SpaceAround) {
+                BottomTab.entries.forEach { tab ->
+                    Column(Modifier.weight(1f).heightIn(min = 44.dp).clickable { onTabSelected(tab) },
+                        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Icon(tab.icon, null, Modifier.size(20.dp), tint = NexusColors.TextSecondary)
+                        Text(tab.label, fontSize = 11.sp, fontWeight = FontWeight.Normal, color = NexusColors.TextSecondary)
+                    }
+                }
+            }
+        }
+        return
+    }
     val layout = LocalNexusLayout.current
     Row(
         modifier = modifier

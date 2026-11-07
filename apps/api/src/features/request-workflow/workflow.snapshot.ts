@@ -85,6 +85,7 @@ export async function snapshot(
     previousState: workflow?.previousState ?? null,
     version: workflow?.version ?? 0,
     nextAction: nextAction(state),
+    consultationComplete,
     consultationRequired:
       workflow?.consultationRequired ?? request.service.requiresConsultation,
     consultationComplete,

@@ -28,7 +28,7 @@ object ApiEndpoints {
     fun conversationMessages(id: String) = "/api/request-conversations/$id"
     fun sendConversationMessage(id: String) = "/api/request-conversations/$id/messages"
     fun markConversationRead(id: String) = "/api/request-conversations/$id/read"
-    fun conversationStream(id: String) = "/api/request-conversations/$id/stream"
+    fun conversationStream(id: String) = "/api/request-conversations/$id/events"
 
     // Projects
     fun projectWorkspace(id: String) = "/api/projects/$id"

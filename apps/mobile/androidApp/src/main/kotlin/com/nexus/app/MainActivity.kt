@@ -18,7 +18,9 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) DeepLinks.offer(intent?.dataString)
 
         setContent {
-            App()
+            androidx.compose.runtime.CompositionLocalProvider(
+                com.nexus.app.core.files.LocalPlatformFiles provides rememberAndroidFiles()
+            ) { App() }
         }
     }
 

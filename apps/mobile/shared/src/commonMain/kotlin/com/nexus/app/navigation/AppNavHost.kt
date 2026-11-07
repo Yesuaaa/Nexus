@@ -23,6 +23,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -45,6 +47,15 @@ import com.nexus.app.features.services.screens.ServicesScreen
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
+import com.nexus.app.features.conversations.screens.*
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import org.koin.compose.viewmodel.koinViewModel
+import com.nexus.app.features.notifications.viewmodel.NotificationsViewModel
+
 object Routes {
     const val CHECKING = "checking"
     const val LOGIN = "login"
@@ -52,10 +63,14 @@ object Routes {
     const val DASHBOARD = "dashboard"
     const val SERVICES = "services"
     const val BOOKED_REQUESTS = "booked_requests"
+    const val NOTIFICATIONS = "notifications"
+    const val MESSAGES = "messages"
+    const val CHAT = "chat/{conversationId}"
+    const val WORKFLOW = "workflow/{requestId}?conversationId={conversationId}&documents={documents}"
     const val PROFILE = "profile"
     const val REQUEST_DETAIL = "request/{requestId}"
 
-    val main = setOf(DASHBOARD, SERVICES, BOOKED_REQUESTS, PROFILE, REQUEST_DETAIL)
+    val main = setOf(NOTIFICATIONS, MESSAGES, CHAT, WORKFLOW, DASHBOARD, SERVICES, BOOKED_REQUESTS, PROFILE, REQUEST_DETAIL)
 }
 
 private fun BottomTab.route() = when (this) {
@@ -108,7 +123,16 @@ fun AppNavHost(modifier: Modifier = Modifier) {
     val coroutineScope = rememberCoroutineScope()
     val toast = LocalNexusToast.current
 
+    val notificationViewModel: NotificationsViewModel = koinViewModel()
+    val notificationState by notificationViewModel.state.collectAsState()
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
     val user by session.user.collectAsState()
+    LaunchedEffect(user?.id, lifecycle) {
+        notificationViewModel.reset()
+        if (user != null) lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (isActive) { notificationViewModel.refresh(); delay(30_000) }
+        }
+    }
     val notice by session.notice.collectAsState()
     val pendingLink by DeepLinks.pending.collectAsState()
     var restorationAttempt by rememberSaveable { mutableStateOf(0) }
@@ -194,20 +218,23 @@ fun AppNavHost(modifier: Modifier = Modifier) {
 
     Scaffold(
         topBar = {
-            if (showBars) {
+            if (showBars && route != Routes.CHAT) {
                 NexusTopAppBar(
-                    onNotificationClick = { /* Handle notification tap */ },
+                    onNotificationClick = { navController.navigate(Routes.NOTIFICATIONS) { launchSingleTop = true } },
+                    onChatClick = { navController.navigate(Routes.MESSAGES) { launchSingleTop = true } },
                     onProfileClick = {
                         if (route != Routes.PROFILE) navController.navigate(Routes.PROFILE) { launchSingleTop = true }
                     },
+                    notificationUnread = if (user != null) notificationState.feed.unreadCount else 0,
                     accountActionsEnabled = !loggingOut
                 )
             }
         },
         bottomBar = {
-            if (showBars) {
+            if (showBars && route !in setOf(Routes.CHAT, Routes.WORKFLOW)) {
                 NexusBottomBar(
                     currentTab = lastTab,
+                    conversationStyle = route in setOf(Routes.MESSAGES, Routes.CHAT, Routes.WORKFLOW),
                     onTabSelected = { tab ->
                         if (!loggingOut) navController.switchTab(tab.route())
                     }
@@ -265,6 +292,18 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                             },
                             onNavigateToLogin = { navController.popBackStack() }
                         )
+                    }
+                    composable(Routes.NOTIFICATIONS) { NotificationsScreen(onRequest = { navController.navigate("workflow/$it") }, viewModel = notificationViewModel) }
+                    composable(Routes.MESSAGES) { MessagesScreen(onConversation = { navController.navigate("chat/$it") }) }
+                    composable(Routes.CHAT) { entry ->
+                        val id = entry.arguments?.getString("conversationId") ?: return@composable
+                        ChatScreen(id, user?.id ?: "", onBack = { navController.popBackStack() },
+                            onDetails = { bookingId -> navController.navigate("workflow/$bookingId?conversationId=$id") },
+                            onBooking = { navController.navigate("workflow/$it?conversationId=$id&documents=true") })
+                    }
+                    composable(Routes.WORKFLOW, arguments = listOf(navArgument("conversationId") { nullable = true; defaultValue = null }, navArgument("documents") { type = NavType.BoolType; defaultValue = false })) { entry ->
+                        val id = entry.arguments?.getString("requestId") ?: return@composable
+                        com.nexus.app.features.workflow.screens.WorkflowScreen(id, onBack = { navController.popBackStack() }, conversationId = entry.arguments?.getString("conversationId"), initialDocuments = entry.arguments?.getBoolean("documents") ?: false)
                     }
                     composable(Routes.DASHBOARD) { DashboardScreen() }
                     composable(Routes.SERVICES) {

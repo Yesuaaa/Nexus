@@ -515,6 +515,29 @@ async function lockWritableConversation(
   return conversation.id
 }
 
+async function lockWritableConversation(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  id: string,
+) {
+  const conversation = await resolveConversation(tx, userId, id)
+  await tx.$queryRaw`SELECT "id" FROM "RequestConversation" WHERE "id" = ${conversation.id} FOR UPDATE`
+  const writable = await tx.requestConversation.findFirst({
+    where: {
+      id: conversation.id,
+      ...participantScope(userId),
+      department: { head: { ...activeUser, role: "STAFF" } },
+    },
+    select: { id: true },
+  })
+  if (!writable)
+    throw new ServiceRequestsError(
+      409,
+      "Messaging is unavailable without an active department manager.",
+    )
+  return conversation.id
+}
+
 const meetingInclude = {
   bookings: {
     select: {

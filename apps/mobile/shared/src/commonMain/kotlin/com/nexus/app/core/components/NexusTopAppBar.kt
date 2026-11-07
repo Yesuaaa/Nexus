@@ -18,8 +18,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -36,7 +39,9 @@ import com.nexus.app.core.theme.NexusColors
 fun NexusTopAppBar(
     modifier: Modifier = Modifier,
     onNotificationClick: () -> Unit = {},
+    onChatClick: () -> Unit = {},
     onProfileClick: () -> Unit = {},
+    notificationUnread: Int = 0,
     accountActionsEnabled: Boolean = true
 ) {
     val layout = LocalNexusLayout.current
@@ -53,7 +58,7 @@ fun NexusTopAppBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Box(Modifier.width(80.dp).height(42.dp).clipToBounds()) {
+            Box(Modifier.width(56.dp).height(42.dp).clipToBounds()) {
                 Image(
                     painterResource(Res.drawable.exp_logo),
                     contentDescription = "EXP Digital Solutions",
@@ -88,11 +93,12 @@ fun NexusTopAppBar(
                 onClick = onNotificationClick,
                 modifier = Modifier.size(48.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.Notifications,
-                    contentDescription = "Notifications",
-                    tint = NexusColors.PrimaryBlue
-                )
+                BadgedBox(badge = { if (notificationUnread > 0) Badge { Text(if (notificationUnread > 99) "99+" else notificationUnread.toString()) } }) {
+                    Icon(Icons.Outlined.Notifications, contentDescription = "Notifications", tint = NexusColors.PrimaryBlue)
+                }
+            }
+            IconButton(onClick = onChatClick, enabled = accountActionsEnabled, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = "Messages", tint = NexusColors.PrimaryBlue)
             }
             IconButton(
                 onClick = onProfileClick,

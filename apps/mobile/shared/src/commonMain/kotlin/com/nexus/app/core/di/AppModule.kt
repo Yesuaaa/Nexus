@@ -10,6 +10,13 @@ import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
 val appModule = module {
+    single { com.nexus.app.features.workflow.api.WorkflowRepository(get()) }
+    viewModel { com.nexus.app.features.workflow.viewmodel.WorkflowViewModel(get()) }
+
+    single { com.nexus.app.features.conversations.api.ClientCommunicationRepository(get()) }
+    viewModel { com.nexus.app.features.conversations.viewmodel.ConversationsViewModel(get(), get()) }
+    viewModel { com.nexus.app.features.notifications.viewmodel.NotificationsViewModel(get()) }
+
     single { com.nexus.app.features.services.api.ServicesRepository(get()) }
     single { com.nexus.app.features.booked_requests.api.BookedRequestsRepository(get()) }
     single { com.nexus.app.features.booking.api.BookingRepository(get()) }

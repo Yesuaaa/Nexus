@@ -40,8 +40,12 @@ typealias Specialist = com.nexus.app.features.services.model.SpecialistDto
 data class SpecialistProfile(
     val id: String, val fullName: String, val position: String? = null,
     val imageUrl: String? = null, val bio: String? = null,
-    val specialties: List<String> = emptyList()
+    val specialties: List<String> = emptyList(), val department: ServiceDepartment? = null,
+    val projects: List<SpecialistProject> = emptyList(), val bannerUrl: String? = null
 )
+@Serializable
+data class SpecialistProject(val id: String, val title: String, val summary: String = "", val thumbnailUrl: String? = null)
+
 typealias RequestReceipt = com.nexus.app.features.services.model.BookingReceiptDto
 
 @Serializable

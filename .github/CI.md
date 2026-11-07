@@ -66,11 +66,13 @@ These settings live on GitHub; committing this file does not enable them.
 
 ## Mobile and deployment
 
-There is no mobile project yet. Secret scanning covers future mobile source.
-JavaScript/TypeScript mobile code can use the shared formatter and baseline
-linter. Add framework rules, mobile builds, and native dependency scans when the
-mobile framework is chosen. Flutter, Kotlin, and Swift need their own tooling.
+The main CI workflow exposes the five checks listed above. The separate Mobile CI
+workflow runs shared Kotlin tests and the Android debug build for mobile changes
+on both pushes and pull requests. A pull request can therefore show seven check
+entries: five main CI checks plus Mobile CI for push and pull_request.
 
-This setup excludes tests, CodeQL, Dependabot, deployment, and database migrations.
+iOS builds require macOS and Xcode.
+
+The main CI workflow excludes tests, CodeQL, Dependabot, deployment, and database migrations.
 Vercel will be configured separately. CI needs no production credentials or live
 Supabase connection.
