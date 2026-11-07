@@ -88,8 +88,14 @@ emulator registration uses a uniquely named development smoke-test account.
 
 ## Follow-up scope
 
-Automatic mobile refresh-token rotation, password recovery, editable mobile
-profiles, and distributed rate limiting remain follow-up work. A valid saved
-session is verified on startup; an expired session returns to sign-in. Logout
+The #149 notes above are historical. Mobile refresh/session handling has since
+been implemented; see the #155 contract below for current backend behavior.
+Password recovery and distributed rate limiting remain follow-up work. A saved
+session is verified on startup; refresh failure returns the client to sign-in. Logout
 clears both local tokens even if the server cannot be reached and displays a
 notice when revocation could not be confirmed.
+
+## Backend contract readiness (#155)
+
+See the [mobile client contract and audit](mobile-client-contract.md) for the endpoint inventory,
+security behavior, cancellation/retry rules, errors and platform base URLs.
