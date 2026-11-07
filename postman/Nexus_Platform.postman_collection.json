@@ -1,0 +1,589 @@
+{
+  "info": {
+    "_postman_id": "nexus-api-collection-v2",
+    "name": "Nexus Platform API (Web & Mobile)",
+    "description": "Complete Postman collection for the Nexus Capstone Platform. Covers Authentication, Mobile Client Journey, Administrative Operations, Messaging, and Workflows. Automatically handles JWT token assignment upon login.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "1. Health & System",
+      "item": [
+        {
+          "name": "API Health Check",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Verifies that the Express API is running and responding."
+          }
+        },
+        {
+          "name": "Database Connection Check",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/db-check",
+              "host": ["{{baseUrl}}"],
+              "path": ["db-check"]
+            },
+            "description": "Executes SELECT 1 on PostgreSQL via Prisma."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Authentication & Session",
+      "item": [
+        {
+          "name": "Login (Auto-saves token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.token) {",
+                  "    pm.environment.set(\"token\", res.token);",
+                  "    if (res.refreshToken) {",
+                  "        pm.environment.set(\"refreshToken\", res.refreshToken);",
+                  "    }",
+                  "    console.log(\"✔ Auth token saved to environment variable 'token'!\");",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{user_email}}\",\n  \"password\": \"{{user_password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Signs in user and writes 'token' and 'refreshToken' into Postman Environment."
+          }
+        },
+        {
+          "name": "Register Client Account",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Jane Doe\",\n  \"email\": \"jane.doe@example.com\",\n  \"contactNumber\": \"09123456789\",\n  \"password\": \"SecurePass123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "register"]
+            },
+            "description": "Self-registration for Client role (USER)."
+          }
+        },
+        {
+          "name": "Refresh Token Rotation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.token) {",
+                  "    pm.environment.set(\"token\", res.token);",
+                  "    if (res.refreshToken) {",
+                  "        pm.environment.set(\"refreshToken\", res.refreshToken);",
+                  "    }",
+                  "    console.log(\"✔ Token rotated and refreshed successfully!\");",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "Rotates refresh token and returns a fresh access JWT."
+          }
+        },
+        {
+          "name": "Get Authenticated User (Me)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "me"]
+            }
+          }
+        },
+        {
+          "name": "Get Full Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "profile"]
+            }
+          }
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Jane Doe Updated\",\n  \"contactNumber\": \"09987654321\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "profile"]
+            }
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"CurrentPassword123!\",\n  \"newPassword\": \"NewSecurePass123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/change-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "change-password"]
+            }
+          }
+        },
+        {
+          "name": "Logout Session",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "logout"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Mobile & Client Journey",
+      "item": [
+        {
+          "name": "Get Active Services Catalog",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/client/services",
+              "host": ["{{baseUrl}}"],
+              "path": ["client", "services"]
+            },
+            "description": "Returns unpaginated list of active services for client booking."
+          }
+        },
+        {
+          "name": "Get Service Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/client/services/{{service_id}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["client", "services", "{{service_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Get Service Specialists",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/client/services/{{service_id}}/specialists",
+              "host": ["{{baseUrl}}"],
+              "path": ["client", "services", "{{service_id}}", "specialists"]
+            }
+          }
+        },
+        {
+          "name": "Create Service Booking Request",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"serviceId\": \"{{service_id}}\",\n  \"title\": \"Brand Identity Project\",\n  \"description\": \"Comprehensive logo and brand identity package requested.\",\n  \"budget\": \"15000\",\n  \"deadline\": \"2026-12-31T00:00:00.000Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/client/service-requests",
+              "host": ["{{baseUrl}}"],
+              "path": ["client", "service-requests"]
+            }
+          }
+        },
+        {
+          "name": "List Client Booking Requests",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/client/service-requests?page=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["client", "service-requests"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "pageSize", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Booking Request Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/service-requests/{{request_id}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["service-requests", "{{request_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Cancel Booking Request",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/client/service-requests/{{request_id}}/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["client", "service-requests", "{{request_id}}", "cancel"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Departments & Teams",
+      "item": [
+        {
+          "name": "List Departments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/departments",
+              "host": ["{{baseUrl}}"],
+              "path": ["departments"]
+            }
+          }
+        },
+        {
+          "name": "Eligible Department Heads",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/departments/eligible-heads",
+              "host": ["{{baseUrl}}"],
+              "path": ["departments", "eligible-heads"]
+            }
+          }
+        },
+        {
+          "name": "Employee Assignment Options",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/departments/employee-options",
+              "host": ["{{baseUrl}}"],
+              "path": ["departments", "employee-options"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Employees & Staff",
+      "item": [
+        {
+          "name": "List Employees Directory",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/employees?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["employees"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Employee Record",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employeeId\": \"EMP-2026-099\",\n  \"fullName\": \"Alex Rivera\",\n  \"email\": \"alex.rivera@example.com\",\n  \"position\": \"Senior UI/UX Specialist\",\n  \"departmentId\": \"{{department_id}}\",\n  \"employmentType\": \"FULL_TIME\",\n  \"createAccount\": true,\n  \"password\": \"SecurePass123!\",\n  \"role\": \"STAFF\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/employees",
+              "host": ["{{baseUrl}}"],
+              "path": ["employees"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. User Accounts & RBAC (Superadmin)",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["users"]
+            }
+          }
+        },
+        {
+          "name": "Toggle User Active Status",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{target_user_id}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{target_user_id}}", "status"]
+            }
+          }
+        },
+        {
+          "name": "Superadmin Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newPassword\": \"ResetPassword123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{target_user_id}}/password",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{target_user_id}}", "password"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Services & Pricing Management",
+      "item": [
+        {
+          "name": "All Services (Admin/Staff)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/services",
+              "host": ["{{baseUrl}}"],
+              "path": ["services"]
+            }
+          }
+        },
+        {
+          "name": "Pricing Templates",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/services/pricing-templates",
+              "host": ["{{baseUrl}}"],
+              "path": ["services", "pricing-templates"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Requests & Workflows (Staff)",
+      "item": [
+        {
+          "name": "Department Request Inbox",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/request-inbox",
+              "host": ["{{baseUrl}}"],
+              "path": ["request-inbox"]
+            }
+          }
+        },
+        {
+          "name": "Get Workflow Snapshot",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/request-workflows/{{request_id}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["request-workflows", "{{request_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Execute Workflow Action",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"ACCEPT\",\n  \"comments\": \"Request accepted by department specialist.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/request-workflows/{{request_id}}/actions",
+              "host": ["{{baseUrl}}"],
+              "path": ["request-workflows", "{{request_id}}", "actions"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "9. Projects & Workload",
+      "item": [
+        {
+          "name": "List Projects",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/projects",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects"]
+            }
+          }
+        },
+        {
+          "name": "Workload Overview",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/workload",
+              "host": ["{{baseUrl}}"],
+              "path": ["workload"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. Messaging & Conversations",
+      "item": [
+        {
+          "name": "Get Request Conversation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/request-conversations/{{request_id}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["request-conversations", "{{request_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Send Message to Request Conversation",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Hello, here is the update regarding your project!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/request-conversations/{{request_id}}/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["request-conversations", "{{request_id}}", "messages"]
+            }
+          }
+        },
+        {
+          "name": "Internal Staff Conversations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/internal-conversations",
+              "host": ["{{baseUrl}}"],
+              "path": ["internal-conversations"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
