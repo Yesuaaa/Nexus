@@ -69,6 +69,8 @@ export async function getProject(userId: string, id: string) {
           status: true,
           startDate: true,
           createdAt: true,
+          templateKey: true,
+          workspaceGroupId: true,
           request: {
             select: {
               id: true,
@@ -77,7 +79,13 @@ export async function getProject(userId: string, id: string) {
             },
           },
           milestones: {
-            select: { id: true, title: true, completedAt: true },
+            select: {
+              id: true,
+              title: true,
+              completedAt: true,
+              deliveryStatus: true,
+              sentToClientAt: true,
+            },
             orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
           },
         },
@@ -88,9 +96,21 @@ export async function getProject(userId: string, id: string) {
           where: { id, ...contributorScope(userId, id) },
         }),
       )
+      const isWorkspaceManaged = Boolean(
+        project.templateKey || project.workspaceGroupId,
+      )
+      const {
+        templateKey: _templateKey,
+        workspaceGroupId: _groupId,
+        ...details
+      } = project
+      void _templateKey
+      void _groupId
       return {
-        ...project,
-        canManage: canManage && project.status === "IN_PROGRESS",
+        ...details,
+        workspaceManaged: isWorkspaceManaged,
+        canManage:
+          !isWorkspaceManaged && canManage && project.status === "IN_PROGRESS",
       }
     },
     { isolationLevel: "RepeatableRead" },
@@ -109,6 +129,8 @@ export async function setMilestoneCompletion(
       where: {
         id: projectId,
         status: "IN_PROGRESS",
+        templateKey: null,
+        workspaceGroupId: null,
         ...contributorScope(userId, projectId),
       },
       data: { updatedAt: new Date() },

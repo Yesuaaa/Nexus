@@ -90,6 +90,14 @@ export function canAccessProjects(account: Account): boolean {
   return account.role === "USER" || account.role === "STAFF"
 }
 
+export function canAccessProjectWorkspace(account: Account): boolean {
+  return account.role === "STAFF"
+}
+
+export function canCreateProjectWorkspace(account: Account): boolean {
+  return account.role === "STAFF" && Boolean(account.headOf)
+}
+
 export function canAccessClientManagement(account: Account): boolean {
   return (
     account.role === "ADMIN" && hasPermission(account, Permissions.CLIENTS_READ)

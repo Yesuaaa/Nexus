@@ -16,7 +16,7 @@ const mimeExtensions: Record<string, string> = {
     ".docx",
 }
 
-function parseFile(input: unknown) {
+export function parseWorkflowUpload(input: unknown) {
   const body = object(input)
   const uploadId = uuid(body.uploadId)
   const name = textField(body.name, "file name", 160)
@@ -98,7 +98,7 @@ export async function uploadWorkflowFile(
   requestId: string,
   input: unknown,
 ) {
-  const parsed = parseFile(input)
+  const parsed = parseWorkflowUpload(input)
   const body = object(input)
   if (body.contextual !== undefined && typeof body.contextual !== "boolean")
     fail("Invalid attachment context")
