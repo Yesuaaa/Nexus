@@ -18,8 +18,10 @@ class IosFiles : PlatformFiles {
         while (controller.presentedViewController != null) controller = controller.presentedViewController!!
         return controller
     }
-    override suspend fun select(): SelectedFile? = suspendCancellableCoroutine { continuation ->
-        val picker = UIDocumentPickerViewController(documentTypes = listOf("com.adobe.pdf", "public.png", "public.jpeg", "public.plain-text", "com.microsoft.word.doc", "org.openxmlformats.wordprocessingml.document"), inMode = UIDocumentPickerMode.UIDocumentPickerModeImport)
+    override suspend fun select(): SelectedFile? = selectFile(listOf("com.adobe.pdf", "public.png", "public.jpeg", "public.plain-text", "com.microsoft.word.doc", "org.openxmlformats.wordprocessingml.document"), true)
+    override suspend fun selectImage(): SelectedFile? = selectFile(listOf("public.png", "public.jpeg", "org.webmproject.webp"), false)
+    private suspend fun selectFile(types: List<String>, document: Boolean): SelectedFile? = suspendCancellableCoroutine { continuation ->
+        val picker = UIDocumentPickerViewController(documentTypes = types, inMode = UIDocumentPickerMode.UIDocumentPickerModeImport)
         val handler = object : NSObject(), UIDocumentPickerDelegateProtocol {
             override fun documentPicker(controller: UIDocumentPickerViewController, didPickDocumentsAtURLs: List<*>) {
                 try {
@@ -30,10 +32,10 @@ class IosFiles : PlatformFiles {
                     val data = NSData.dataWithContentsOfURL(url) ?: error("Unable to read selected file")
                     val name = url.lastPathComponent ?: "attachment"
                     val extension = name.substringAfterLast('.', "").lowercase()
-                    val mime = supportedFileTypes.entries.firstOrNull { extension in it.value }?.key ?: error("Unsupported file type")
+                    val mime = (supportedFileTypes + ("image/webp" to listOf("webp"))).entries.firstOrNull { extension in it.value }?.key ?: error("Unsupported file type")
                     val bytes = ByteArray(data.length.toInt())
                     bytes.usePinned { memcpy(it.addressOf(0), data.bytes, data.length) }
-                    val file = SelectedFile(name, mime, bytes).also(::validateFile)
+                    val file = SelectedFile(name, mime, bytes).also { if (document) validateFile(it) }
                     if (continuation.isActive) continuation.resume(file)
                 } catch (error: Exception) { if (continuation.isActive) continuation.resumeWithException(error) }
                 delegate = null

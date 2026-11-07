@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -81,13 +82,20 @@ fun ServicesScreen(
             item { BookingProgress(1) }
             item { OutlinedTextField(
                 state.search, viewModel::search, modifier = Modifier.fillMaxWidth(), singleLine = true,
-                placeholder = { Text("Search services") }, shape = RoundedCornerShape(10.dp)
+                placeholder = { Text("Search services", color = NexusColors.TextSecondary) },
+                leadingIcon = { Icon(Icons.Outlined.Search, "Search services", tint = NexusColors.TextSecondary, modifier = Modifier.size(20.dp)) },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                    disabledContainerColor = Color.White
+                ),
+                shape = RoundedCornerShape(10.dp)
             ) }
             item {
                 val departments = state.services.flatMap { it.departments }.distinctBy { it.id }
                 FilterMenu(departments.find { it.id == state.department }?.name ?: "All services",
                     listOf("" to "All services") + departments.map { it.id to it.name },
-                    onSelect = viewModel::department)
+                    modifier = Modifier.width(208.dp), onSelect = viewModel::department)
             }
             if (state.loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
             state.error?.let { item { RetryNotice(it, viewModel::loadCatalog) } }

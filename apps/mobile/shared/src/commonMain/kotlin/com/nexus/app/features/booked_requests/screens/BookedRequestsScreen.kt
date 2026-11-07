@@ -5,6 +5,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
@@ -116,15 +118,23 @@ fun BookedRequestsScreen(
                     }
                 }
                 item { OutlinedTextField(state.filters.search, viewModel::search,
-                    modifier = Modifier.fillMaxWidth(), placeholder = { Text("Search reference, service, or package") },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Search reference, service, or package", color = NexusColors.TextSecondary) },
+                    leadingIcon = { Icon(Icons.Outlined.Search, "Search booked requests", tint = NexusColors.TextSecondary, modifier = Modifier.size(20.dp)) },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White,
+                        disabledContainerColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(10.dp),
                     singleLine = true) }
                 item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterMenu(if (state.filters.status.isEmpty()) "All statuses" else statusLabel(state.filters.status),
                         listOf("" to "All statuses") + listOf("SUBMITTED", "UNDER_REVIEW", "AWAITING_CLIENT_INFO",
                             "READY_FOR_QUOTATION", "CLOSED", "CANCELLED").map { it to statusLabel(it) },
-                        onSelect = viewModel::status)
+                        modifier = Modifier.weight(1f), onSelect = viewModel::status)
                     FilterMenu(if (state.filters.sortOrder == "desc") "Newest first" else "Oldest first",
-                        listOf("desc" to "Newest first", "asc" to "Oldest first"), onSelect = viewModel::sort)
+                        listOf("desc" to "Newest first", "asc" to "Oldest first"), modifier = Modifier.weight(1f), onSelect = viewModel::sort)
                 } }
                 state.error?.let { item { RetryNotice(it) { viewModel.refresh() } } }
                 if (!state.loading && state.error == null && state.result.requests.isEmpty()) item {

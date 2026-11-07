@@ -5,6 +5,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 data class SelectedFile(val name: String, val mimeType: String, val bytes: ByteArray)
 interface PlatformFiles {
     suspend fun select(): SelectedFile?
+    suspend fun selectImage(): SelectedFile? = select()
     suspend fun save(file: SelectedFile)
     suspend fun preview(file: SelectedFile)
 }

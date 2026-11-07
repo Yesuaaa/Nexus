@@ -39,8 +39,7 @@ val NexusTypography = Typography(
         fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Normal,
         fontSize = 15.sp,
-        lineHeight = 22.sp,
-        color = NexusColors.TextPrimary
+        lineHeight = 22.sp
     ),
     bodyMedium = TextStyle(
         fontFamily = FontFamily.Default,
@@ -61,8 +60,7 @@ val NexusTypography = Typography(
         fontWeight = FontWeight.Bold,
         fontSize = 13.sp,
         lineHeight = 18.sp,
-        letterSpacing = 0.5.sp,
-        color = NexusColors.TextPrimary
+        letterSpacing = 0.5.sp
     ),
     labelMedium = TextStyle(
         fontFamily = FontFamily.Default,
@@ -73,4 +71,3 @@ val NexusTypography = Typography(
         color = NexusColors.TextSecondary
     )
 )
-

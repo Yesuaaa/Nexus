@@ -68,9 +68,10 @@ object Routes {
     const val CHAT = "chat/{conversationId}"
     const val WORKFLOW = "workflow/{requestId}?conversationId={conversationId}&documents={documents}"
     const val PROFILE = "profile"
+    const val SETTINGS = "settings"
     const val REQUEST_DETAIL = "request/{requestId}"
 
-    val main = setOf(NOTIFICATIONS, MESSAGES, CHAT, WORKFLOW, DASHBOARD, SERVICES, BOOKED_REQUESTS, PROFILE, REQUEST_DETAIL)
+    val main = setOf(NOTIFICATIONS, MESSAGES, CHAT, WORKFLOW, DASHBOARD, SERVICES, BOOKED_REQUESTS, PROFILE, SETTINGS, REQUEST_DETAIL)
 }
 
 private fun BottomTab.route() = when (this) {
@@ -138,6 +139,8 @@ fun AppNavHost(modifier: Modifier = Modifier) {
     var restorationAttempt by rememberSaveable { mutableStateOf(0) }
     var restorationError by remember { mutableStateOf<String?>(null) }
     var loggingOut by rememberSaveable { mutableStateOf(false) }
+    var editingAccount by remember { mutableStateOf(false) }
+    var accountMenuOpen by remember { mutableStateOf(false) }
     var lastTab by remember { mutableStateOf(BottomTab.DASHBOARD) }
 
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -214,29 +217,50 @@ fun AppNavHost(modifier: Modifier = Modifier) {
         }
     }
 
+    fun closeHeaderPage() {
+        if (!navController.popBackStack()) navController.switchTab(lastTab.route())
+    }
+
+    fun toggleHeaderPage(target: String) {
+        if (route == target) closeHeaderPage()
+        else navController.navigate(target) { launchSingleTop = true }
+    }
+
     val showBars = route in Routes.main
 
     Scaffold(
         topBar = {
             if (showBars && route != Routes.CHAT) {
                 NexusTopAppBar(
-                    onNotificationClick = { navController.navigate(Routes.NOTIFICATIONS) { launchSingleTop = true } },
-                    onChatClick = { navController.navigate(Routes.MESSAGES) { launchSingleTop = true } },
+                    onNotificationClick = { toggleHeaderPage(Routes.NOTIFICATIONS) },
+                    onChatClick = { toggleHeaderPage(Routes.MESSAGES) },
                     onProfileClick = {
                         if (route != Routes.PROFILE) navController.navigate(Routes.PROFILE) { launchSingleTop = true }
                     },
+                    onSettingsClick = { if (route != Routes.SETTINGS) navController.navigate(Routes.SETTINGS) { launchSingleTop = true } },
+                    onLogoutClick = { logout() },
+                    accountName = user?.fullName ?: "Your account",
+                    accountEmail = user?.email ?: "",
+                    accountPageOpen = route in setOf(Routes.PROFILE, Routes.SETTINGS),
+                    onCloseAccountPage = { closeHeaderPage() },
+                    onAccountMenuChange = { accountMenuOpen = it },
                     notificationUnread = if (user != null) notificationState.feed.unreadCount else 0,
                     accountActionsEnabled = !loggingOut
                 )
             }
         },
         bottomBar = {
-            if (showBars && route !in setOf(Routes.CHAT, Routes.WORKFLOW)) {
+            if (showBars && !editingAccount && route !in setOf(Routes.CHAT, Routes.WORKFLOW)) {
                 NexusBottomBar(
-                    currentTab = lastTab,
-                    conversationStyle = route in setOf(Routes.MESSAGES, Routes.CHAT, Routes.WORKFLOW),
+                    currentTab = if (accountMenuOpen) null else routeToTab(route),
                     onTabSelected = { tab ->
-                        if (!loggingOut) navController.switchTab(tab.route())
+                        if (!loggingOut) {
+                            // An explicit tab tap opens that page, without restoring a header screen above it.
+                            navController.navigate(tab.route()) {
+                                popUpTo(Routes.DASHBOARD)
+                                launchSingleTop = true
+                            }
+                        }
                     }
                 )
             }
@@ -322,6 +346,9 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                             onBackFromDetails = { navController.popBackStack() }
                         )
                     }
+                    composable(Routes.SETTINGS) {
+                        user?.let { current -> ProfileScreen(current, initialSettings = true, onEditingChange = { editingAccount = it }) }
+                    }
                     composable(Routes.PROFILE) {
                         val current = user
                         if (current == null) {
@@ -331,9 +358,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                         } else {
                             ProfileScreen(
                                 user = current,
-                                onBack = { navController.popBackStack() },
-                                onLogout = { logout() },
-                                loggingOut = loggingOut
+                                onEditingChange = { editingAccount = it }
                             )
                         }
                     }
