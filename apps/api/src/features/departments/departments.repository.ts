@@ -1,4 +1,4 @@
-import { Prisma, Role } from "../../generated/prisma/client.js"
+import { EmployeeStatus, Prisma, Role } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import {
   employeeInclude,
@@ -15,6 +15,7 @@ export const departmentMemberSelect = {
   email: true,
   contactNumber: true,
   position: true,
+  status: true,
   teamId: true,
   team: { select: { id: true, name: true } },
   createdAt: true,
@@ -25,6 +26,7 @@ export const departmentMemberSelect = {
       fullName: true,
       role: true,
       isActive: true,
+      accountDeletedAt: true,
     },
   },
 } satisfies Prisma.EmployeeSelect
@@ -81,21 +83,33 @@ export const departmentsRepository = {
     })
   },
 
-  async searchEmployeeOptions(
-    where: Prisma.EmployeeWhereInput,
+  async searchAssignableStaff(
+    where: Prisma.UserWhereInput,
     page: number,
     pageSize: number,
   ) {
     const prisma = getPrisma()!
     return prisma.$transaction([
-      prisma.employee.findMany({
+      prisma.user.findMany({
         where,
-        include: employeeInclude,
-        orderBy: [{ fullName: "asc" }, { employeeId: "asc" }, { id: "asc" }],
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          contactNumber: true,
+          position: true,
+          departmentId: true,
+          isActive: true,
+          role: true,
+          employee: {
+            select: { position: true },
+          },
+        },
+        orderBy: [{ fullName: "asc" }, { email: "asc" }, { id: "asc" }],
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
-      prisma.employee.count({ where }),
+      prisma.user.count({ where }),
     ])
   },
 
@@ -348,7 +362,89 @@ export const departmentsRepository = {
   ) {
     const prisma = getPrisma()!
     return prisma.$transaction(async (tx) => {
-      for (const employeeId of employeeIds ?? []) {
+      const requestedEmployeeIds = [...new Set(employeeIds ?? [])]
+      if (requestedEmployeeIds.length > 0) {
+        const eligibleEmployees = await tx.employee.findMany({
+          where: {
+            id: { in: requestedEmployeeIds },
+            status: EmployeeStatus.ACTIVE,
+            OR: [{ departmentId: null }, { departmentId }],
+            user: {
+              is: {
+                role: Role.STAFF,
+                isActive: true,
+                accountDeletedAt: null,
+                OR: [{ departmentId: null }, { departmentId }],
+                AND: [
+                  {
+                    OR: [{ teamId: null }, { team: { is: { departmentId } } }],
+                  },
+                ],
+              },
+            },
+            AND: [
+              {
+                OR: [{ teamId: null }, { team: { is: { departmentId } } }],
+              },
+            ],
+          },
+          select: { id: true },
+        })
+        if (eligibleEmployees.length !== requestedEmployeeIds.length) {
+          throw new EmployeeError(
+            400,
+            "Only active staff accounts that are not assigned to another department can be assigned",
+          )
+        }
+      }
+
+      const requestedUserIds = [...new Set(userIds ?? [])]
+      if (requestedUserIds.length > 0) {
+        const eligibleUsers = await tx.user.findMany({
+          where: {
+            id: { in: requestedUserIds },
+            role: Role.STAFF,
+            isActive: true,
+            accountDeletedAt: null,
+            OR: [{ departmentId: null }, { departmentId }],
+            AND: [
+              {
+                OR: [
+                  { employee: { is: null } },
+                  {
+                    employee: {
+                      is: {
+                        status: EmployeeStatus.ACTIVE,
+                        OR: [{ departmentId: null }, { departmentId }],
+                        AND: [
+                          {
+                            OR: [
+                              { teamId: null },
+                              { team: { is: { departmentId } } },
+                            ],
+                          },
+                        ],
+                      },
+                    },
+                  },
+                ],
+              },
+              {
+                OR: [{ teamId: null }, { team: { is: { departmentId } } }],
+              },
+            ],
+          },
+          select: { id: true },
+        })
+        if (eligibleUsers.length !== requestedUserIds.length) {
+          throw new EmployeeError(
+            400,
+            "Only active staff accounts that are not assigned to another department can be assigned",
+          )
+        }
+      }
+
+      for (const employeeId of requestedEmployeeIds) {
         const employee = await tx.employee.findUnique({
           where: { id: employeeId },
           select: { id: true, departmentId: true, teamId: true },
@@ -370,7 +466,7 @@ export const departmentsRepository = {
         })
       }
 
-      for (const userId of userIds ?? []) {
+      for (const userId of requestedUserIds) {
         const user = await tx.user.findUnique({
           where: { id: userId },
           select: { id: true, teamId: true },

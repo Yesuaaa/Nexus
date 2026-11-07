@@ -69,6 +69,7 @@ export type DepartmentMember = {
   email: string | null
   contactNumber: string | null
   position: string | null
+  status: "ACTIVE" | "INACTIVE" | "ON_LEAVE"
   departmentId?: string | null
   teamId: string | null
   team: { id: string; name: string } | null
@@ -79,7 +80,24 @@ export type DepartmentMember = {
     fullName: string | null
     role: "SUPERADMIN" | "ADMIN" | "STAFF" | "USER"
     isActive: boolean
+    accountDeletedAt: string | null
   } | null
+}
+
+export type DepartmentStaffOption = {
+  id: string
+  fullName: string
+  email: string
+  contactNumber: string | null
+  position: string | null
+  departmentId: string | null
+  user: {
+    id: string
+    email: string
+    fullName: string | null
+    role: "STAFF"
+    isActive: true
+  }
 }
 
 export type DepartmentTeam = {
@@ -121,11 +139,11 @@ export async function getDepartment(id: string): Promise<DepartmentDetail> {
   return result.department
 }
 
-export async function listEmployees(
+export async function listAssignableStaff(
   search: string,
   page: number,
 ): Promise<{
-  employees: DepartmentMember[]
+  employees: DepartmentStaffOption[]
   total: number
   page: number
   pageSize: number
@@ -133,7 +151,7 @@ export async function listEmployees(
   const params = new URLSearchParams({ page: String(page) })
   if (search.trim()) params.set("search", search.trim())
   return apiRequest<{
-    employees: DepartmentMember[]
+    employees: DepartmentStaffOption[]
     total: number
     page: number
     pageSize: number
@@ -186,11 +204,11 @@ export async function updateDepartment(
 
 export async function assignDepartmentMembers(
   id: string,
-  employeeIds: string[],
+  userIds: string[],
 ): Promise<void> {
   await apiRequest(`/api/departments/${encodeURIComponent(id)}/members`, {
     method: "POST",
-    body: JSON.stringify({ employeeIds }),
+    body: JSON.stringify({ userIds }),
   })
 }
 
