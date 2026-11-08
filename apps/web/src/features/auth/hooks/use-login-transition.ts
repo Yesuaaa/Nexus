@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react"
 import { useRouter } from "next/navigation"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import { getAuthCopy, getStoredAuthLanguage } from "../content/auth-copy"
 import type { AuthMode } from "../model/types"
 

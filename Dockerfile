@@ -47,6 +47,7 @@ FROM base AS api
 ENV NODE_ENV=production
 ENV NODE_EXTRA_CA_CERTS=/workspace/certs/supabase-root-2021.crt
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches patches
 COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
 RUN pnpm --filter @nexus/api install --prod --frozen-lockfile

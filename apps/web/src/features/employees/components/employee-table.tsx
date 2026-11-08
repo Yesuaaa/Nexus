@@ -2,9 +2,18 @@ import { useState, type ReactNode } from "react"
 import { focusRing } from "@/components/layout/styles"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { Button } from "@/components/ui/button"
+import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
 import { DepartmentPill } from "@/components/ui/department-pill.tsx"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Pill } from "@/components/ui/pill"
+import {
+  ResponsiveDataTable,
+  ResponsiveDataTableBody,
+  ResponsiveDataTableCell,
+  ResponsiveDataTableColumnHeader,
+  ResponsiveDataTableHeader,
+  ResponsiveDataTableRow,
+} from "@/components/ui/responsive-data-table"
 import { cn } from "@/lib/utils"
 import type {
   Employee,
@@ -75,7 +84,6 @@ export function EmployeeTable({
   onRetry,
   onView,
   onEdit,
-  onChangeStatus,
   onManageLogin,
   onManageDepartment,
   onRowsSettled,
@@ -91,7 +99,6 @@ export function EmployeeTable({
   onRetry: () => void
   onView: (employee: Employee) => void
   onEdit: (employee: Employee) => void
-  onChangeStatus: (employee: Employee) => void
   onManageLogin: (
     employee: Employee,
     action: "create" | "deactivate" | "reactivate" | "delete" | "permanent",
@@ -100,47 +107,77 @@ export function EmployeeTable({
   onRowsSettled?: () => void
 }) {
   const [openMenuKey, setOpenMenuKey] = useState<string | null>(null)
-  const initialLoading = loading && employees.length === 0
+  const initialLoading = loading && viewKey === ""
 
   return (
-    <div
-      className="@container min-w-0 overflow-x-clip rounded-lg border border-[#e8ebef] bg-background"
-      role="table"
-      aria-label="Employees"
-      aria-busy={loading}
-    >
-      <div role="rowgroup" className="@max-[1000px]:sr-only">
-        <div
-          role="row"
-          className={cn(
-            employeeGrid,
-            "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground",
-          )}
-        >
-          <span role="columnheader">Employee ID</span>
-          <span role="columnheader">Employee</span>
-          <span role="columnheader">Department</span>
-          <span role="columnheader">Position / Team</span>
-          <span role="columnheader">Type</span>
-          <span role="columnheader">
-            {archiveView ? "Date Archived" : "Start Date"}
-          </span>
-          <span role="columnheader">Status</span>
-          <span role="columnheader">Actions</span>
-        </div>
-      </div>
+    <ResponsiveDataTable label="Employees" aria-busy={loading}>
+      <ResponsiveDataTableHeader
+        className="@max-[1000px]:sr-only"
+        rowClassName={cn(
+          employeeGrid,
+          "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground",
+        )}
+      >
+        <ResponsiveDataTableColumnHeader>
+          Employee ID
+        </ResponsiveDataTableColumnHeader>
+        <ResponsiveDataTableColumnHeader>
+          Employee
+        </ResponsiveDataTableColumnHeader>
+        <ResponsiveDataTableColumnHeader>
+          Department
+        </ResponsiveDataTableColumnHeader>
+        <ResponsiveDataTableColumnHeader>
+          Position / Team
+        </ResponsiveDataTableColumnHeader>
+        <ResponsiveDataTableColumnHeader>Type</ResponsiveDataTableColumnHeader>
+        <ResponsiveDataTableColumnHeader>
+          {archiveView ? "Date Archived" : "Start Date"}
+        </ResponsiveDataTableColumnHeader>
+        <ResponsiveDataTableColumnHeader>
+          Status
+        </ResponsiveDataTableColumnHeader>
+        <ResponsiveDataTableColumnHeader>
+          Actions
+        </ResponsiveDataTableColumnHeader>
+      </ResponsiveDataTableHeader>
 
       {initialLoading || error ? (
-        <div role="rowgroup">
-          <div role="row">
-            <div
-              role="cell"
-              aria-colspan={8}
-              className="grid min-h-[150px] place-content-center gap-3 p-6 text-center text-xs text-[#7183a2]"
-            >
-              {initialLoading ? (
-                <span role="status">Loading employees…</span>
-              ) : (
+        <ResponsiveDataTableBody>
+          {initialLoading ? (
+            <DataTableSkeletonRows
+              label="employees"
+              rowClassName={cn(
+                employeeGrid,
+                "h-[58px] px-4 py-[7px] @max-[1000px]:h-[188px] @max-[1000px]:gap-x-4 @max-[1000px]:gap-y-2 @max-[1000px]:py-[14px]",
+              )}
+              cellClassNames={[
+                "@max-[1000px]:col-start-1 @max-[1000px]:row-start-1",
+                "@max-[1000px]:col-span-2 @max-[1000px]:row-start-2",
+                "@max-[1000px]:col-span-2 @max-[1000px]:row-start-3",
+                "@max-[1000px]:col-start-1 @max-[1000px]:row-start-4",
+                "@max-[1000px]:col-start-1 @max-[1000px]:row-start-5",
+                "@max-[1000px]:col-start-2 @max-[1000px]:row-start-5 @max-[1000px]:justify-self-end",
+                "@max-[1000px]:col-start-2 @max-[1000px]:row-start-1 @max-[1000px]:justify-self-end",
+                "@max-[1000px]:col-start-2 @max-[1000px]:row-start-4 @max-[1000px]:justify-self-end",
+              ]}
+              cellSkeletonClassNames={[
+                "h-3 w-16",
+                "h-8 w-4/5",
+                "h-3 w-3/5",
+                "h-3 w-4/5",
+                "h-3 w-16",
+                "h-3 w-20",
+                "h-5 w-16 rounded",
+                "h-8 w-24",
+              ]}
+            />
+          ) : (
+            <ResponsiveDataTableRow>
+              <ResponsiveDataTableCell
+                aria-colspan={8}
+                className="grid min-h-[150px] place-content-center gap-3 p-6 text-center text-xs text-[#7183a2]"
+              >
                 <div role="alert" className="grid justify-items-center gap-3">
                   <p className="m-0">{error}</p>
                   <Button
@@ -152,10 +189,10 @@ export function EmployeeTable({
                     Try again
                   </Button>
                 </div>
-              )}
-            </div>
-          </div>
-        </div>
+              </ResponsiveDataTableCell>
+            </ResponsiveDataTableRow>
+          )}
+        </ResponsiveDataTableBody>
       ) : (
         <AnimatedSlotGridBody
           onRowsSettled={onRowsSettled}
@@ -306,7 +343,6 @@ export function EmployeeTable({
                   disabled={false}
                   onView={() => onView(employee)}
                   onEdit={() => onEdit(employee)}
-                  onChangeStatus={() => onChangeStatus(employee)}
                   onManageLogin={(action) => onManageLogin(employee, action)}
                 />
               </div>
@@ -314,6 +350,6 @@ export function EmployeeTable({
           )}
         />
       )}
-    </div>
+    </ResponsiveDataTable>
   )
 }

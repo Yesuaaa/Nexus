@@ -320,6 +320,27 @@ export async function mockApi(
       return
     }
 
+    if (pathname === "/api/project-workspace" && method === "GET") {
+      await route.fulfill({
+        json: {
+          workspaces: [],
+          canCreate: role === "STAFF" && Boolean(currentUser.headOf),
+        },
+      })
+      return
+    }
+
+    if (
+      method === "GET" &&
+      (pathname === "/api/request-conversations" ||
+        pathname === "/api/internal-conversations")
+    ) {
+      await route.fulfill({
+        json: { conversations: [], nextCursor: null, unreadCount: 0 },
+      })
+      return
+    }
+
     if (pathname === "/api/auth/settings" && method === "GET") {
       await route.fulfill({
         json: { preferences: defaultPreferences, sessions: [] },

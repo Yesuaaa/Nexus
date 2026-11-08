@@ -9,7 +9,7 @@ import {
   SlidersHorizontal,
   KeyRound,
 } from "lucide-react"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"

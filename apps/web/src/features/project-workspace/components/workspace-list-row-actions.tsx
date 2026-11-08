@@ -15,6 +15,7 @@ import {
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Input } from "@/components/ui/input"
 import { rowActionButton } from "@/components/ui/row-action-styles"
+import { cn } from "@/lib/utils"
 import {
   cancelProjectWorkspace,
   notifyProjectWorkspaceListChanged,
@@ -80,10 +81,10 @@ export function WorkspaceListRowActions({
 
   return (
     <>
-      <div className="flex items-center justify-end gap-1.5">
+      <div className="flex items-center justify-start gap-2">
         <Link
           href={`/project-workspace/${encodeURIComponent(workspace.id)}`}
-          className={rowActionButton}
+          className={cn(rowActionButton, "max-[560px]:size-11")}
           aria-label={`View ${workspace.name}`}
         >
           <Eye size={16} strokeWidth={1.7} aria-hidden="true" />
@@ -93,7 +94,10 @@ export function WorkspaceListRowActions({
           <>
             <button
               type="button"
-              className={`${rowActionButton} border-transparent! bg-[#203f8c]! text-white! hover:bg-[#172f70]!`}
+              className={cn(
+                rowActionButton,
+                "border-[#203f8c] bg-[#203f8c] text-white hover:enabled:bg-[#172f70] hover:enabled:text-white max-[560px]:size-11",
+              )}
               aria-label={`Edit ${workspace.name}`}
               onClick={() => openDialog("edit")}
             >
@@ -102,7 +106,10 @@ export function WorkspaceListRowActions({
             </button>
             <button
               type="button"
-              className={`${rowActionButton} text-[#b3343b] hover:enabled:bg-[#ffeaeb] hover:enabled:text-[#b3343b]`}
+              className={cn(
+                rowActionButton,
+                "text-[#b42318] max-[560px]:size-11",
+              )}
               aria-label={`Cancel ${workspace.name}`}
               onClick={() => openDialog("cancel")}
             >
@@ -161,11 +168,7 @@ export function WorkspaceListRowActions({
               >
                 Close
               </Button>
-              <Button
-                type="submit"
-                disabled={busy || name.trim().length < 2}
-                className="bg-[#203f8c] text-white hover:bg-[#172f70]"
-              >
+              <Button type="submit" disabled={busy || name.trim().length < 2}>
                 {busy ? "Saving…" : "Save name"}
               </Button>
             </DialogFooter>

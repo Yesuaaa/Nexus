@@ -57,7 +57,7 @@ const buttonClass = `inline-flex min-h-[38px] cursor-pointer items-center justif
 // Shared popup style: no border/ring, soft navy-tinted shadow
 const menuContentClass =
   "z-[130] border-0 bg-white p-1 ring-0 shadow-[0_8px_24px_rgb(18_36_73_/_14%)]"
-const imageTypes = ["image/jpeg", "image/png", "image/webp"]
+const imageTypes = ["image/webp"]
 const maxImageBytes = 2 * 1024 * 1024
 const initialFormSteps = [
   { label: "Details", description: "Basic information and service image" },
@@ -253,7 +253,7 @@ export function ServiceFormDialog({
   function handleImage(file: File | undefined) {
     if (!file) return
     if (!imageTypes.includes(file.type) || file.size > maxImageBytes) {
-      setError("Choose a JPG, PNG, or WebP image up to 2 MB")
+      setError("Choose a WebP image up to 2 MB")
       if (imageInputRef.current) imageInputRef.current.value = ""
       return
     }
@@ -603,7 +603,7 @@ export function ServiceFormDialog({
                         ref={imageInputRef}
                         id="service-image"
                         type="file"
-                        accept="image/jpeg,image/png,image/webp"
+                        accept="image/webp"
                         className="sr-only"
                         onChange={(event) =>
                           handleImage(event.target.files?.[0])
@@ -635,7 +635,7 @@ export function ServiceFormDialog({
                         </button>
                       )}
                       <p className="m-0 text-[10px] leading-relaxed text-[#8290a5]">
-                        JPG, PNG, or WebP. Maximum 2 MB.
+                        WebP only. Maximum 2 MB.
                       </p>
                     </div>
                     <div className="grid content-start gap-4">

@@ -179,10 +179,20 @@ export const AnimatedSlotRow = forwardRef<
     phase: AccountRowMotionPhase
     reduceMotion: boolean
     quick: boolean
+    role?: AriaRole
     onExitComplete?: () => void
   }
 >(function AnimatedSlotRow(
-  { children, className, delayMs, phase, reduceMotion, quick, onExitComplete },
+  {
+    children,
+    className,
+    delayMs,
+    phase,
+    reduceMotion,
+    quick,
+    onExitComplete,
+    role = "row",
+  },
   ref,
 ) {
   const values = accountRowMotion({
@@ -195,7 +205,7 @@ export const AnimatedSlotRow = forwardRef<
   return (
     <motion.div
       ref={ref}
-      role="row"
+      role={role}
       className={className}
       data-animated-slot-row
       initial={values.initial}
@@ -239,6 +249,8 @@ type AnimatedSlotGridBodyProps<T> = {
   defaultRowHeight?: number
   className?: string
   ariaBusy?: boolean
+  bodyRole?: AriaRole
+  rowRole?: AriaRole
   onRowsSettled?: () => void
 }
 
@@ -256,12 +268,15 @@ export function AnimatedSlotGridBody<T>({
   className,
   ariaBusy = false,
   onRowsSettled,
+  bodyRole = "rowgroup",
+  rowRole = "row",
 }: AnimatedSlotGridBodyProps<T>) {
   const reduceMotion = useReducedMotion() ?? false
   const [rowSlots, setRowSlots] = useState<AnimatedRowSlot<T>[]>(() =>
     settledAnimatedRows(items),
   )
   const rowSlotsRef = useRef(rowSlots)
+  const latestItemsRef = useRef(items)
   const [rowHeight, setRowHeight] = useState(defaultRowHeight)
   const [isAnimating, setIsAnimating] = useState(false)
   const [animateBodyHeight, setAnimateBodyHeight] = useState(false)
@@ -321,9 +336,10 @@ export function AnimatedSlotGridBody<T>({
   }, [rowSlots])
 
   useEffect(() => {
+    latestItemsRef.current = items
     const settle = () => {
       animationGenerationRef.current += 1
-      const nextSlots = settledAnimatedRows(items)
+      const nextSlots = settledAnimatedRows(latestItemsRef.current)
       rowSlotsRef.current = nextSlots
       setRowSlots(nextSlots)
       setIsAnimating(false)
@@ -344,6 +360,18 @@ export function AnimatedSlotGridBody<T>({
     if (viewKey !== "") {
       lastViewKeyRef.current = viewKey
       lastQuickKeyRef.current = quickKey
+    }
+
+    if (
+      animationTimerRef.current !== null &&
+      rowSlotsRef.current.filter((slot) => slot.entering).length ===
+        items.length &&
+      items.every((item, index) => {
+        const row = rowSlotsRef.current[index]?.entering
+        return row && getKey(row.item) === getKey(item)
+      })
+    ) {
+      return
     }
 
     if (animationTimerRef.current !== null) {
@@ -386,7 +414,7 @@ export function AnimatedSlotGridBody<T>({
     setIsAnimating(true)
     setAnimateBodyHeight(true)
     animationTimerRef.current = window.setTimeout(() => {
-      const finalSlots = settledAnimatedRows(items)
+      const finalSlots = settledAnimatedRows(latestItemsRef.current)
       rowSlotsRef.current = finalSlots
       setRowSlots(finalSlots)
       setIsAnimating(false)
@@ -405,7 +433,7 @@ export function AnimatedSlotGridBody<T>({
   return (
     <div
       ref={bodyRef}
-      role="rowgroup"
+      role={bodyRole}
       aria-live="polite"
       aria-busy={ariaBusy || isAnimating}
       className={className}
@@ -419,7 +447,7 @@ export function AnimatedSlotGridBody<T>({
           role="row"
           className="grid h-full place-content-center p-6 text-center text-xs text-[#7183a2]"
         >
-          <div role="cell">{emptyContent}</div>
+          <div role="cell">{ariaBusy ? "Searching…" : emptyContent}</div>
         </div>
       )}
       {rowSlots.map((slot) => {
@@ -434,6 +462,7 @@ export function AnimatedSlotGridBody<T>({
         ) => (
           <AnimatedSlotRow
             key={`${getKey(row.item)}:${phase}`}
+            role={rowRole}
             className={rowClassName(
               row.item,
               slot.index,
