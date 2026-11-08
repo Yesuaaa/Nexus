@@ -17,12 +17,302 @@
   },
   "item": [
     {
+      "name": "0. Authentication Diagnostics",
+      "description": "Run only this folder, in order, with a disposable development account. Creates and revokes its own login session. Stops on assertion failure.",
+      "item": [
+        {
+          "name": "01 Login",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"token\", \"\");",
+                  "pm.environment.set(\"refreshToken\", \"\");",
+                  "pm.environment.set(\"diagnosticAccessToken\", \"\");",
+                  "pm.environment.set(\"diagnosticRefreshToken\", \"\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"token\", \"\");",
+                  "pm.environment.set(\"refreshToken\", \"\");",
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "let resData;",
+                  "try { resData = pm.response.json(); } catch { resData = null; }",
+                  "const valid = resData && typeof resData.token === \"string\" && /^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$/.test(resData.token) && typeof resData.refreshToken === \"string\" && /^[A-Za-z0-9_-]{43}$/.test(resData.refreshToken) && Number.isInteger(resData.expiresIn) && resData.expiresIn > 0;",
+                  "pm.test(\"Response contains a valid token pair and lifetime\", () => pm.expect(Boolean(valid)).to.equal(true));",
+                  "if (pm.response.code === 200 && valid) {",
+                  "  pm.environment.set(\"token\", resData.token);",
+                  "  pm.environment.set(\"refreshToken\", resData.refreshToken);",
+                  "}",
+                  "if (pm.test.index() > 0) {",
+                  "  if (pm.response.code !== 200 || !valid) pm.execution.setNextRequest(null);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{user_email}}\",\n  \"password\": \"{{user_password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Signs in user and writes 'token' and 'refreshToken' into Postman Environment."
+          }
+        },
+        {
+          "name": "02 Me before refresh",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "me"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if (pm.test.index() > 0) {",
+                  "  if (pm.response.code !== 200) pm.execution.setNextRequest(null);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03 Rotate refresh token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const previousRefreshToken = pm.environment.get(\"refreshToken\");",
+                  "pm.environment.set(\"token\", \"\");",
+                  "pm.environment.set(\"refreshToken\", \"\");",
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "let resData;",
+                  "try { resData = pm.response.json(); } catch { resData = null; }",
+                  "const valid = resData && typeof resData.token === \"string\" && /^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$/.test(resData.token) && typeof resData.refreshToken === \"string\" && /^[A-Za-z0-9_-]{43}$/.test(resData.refreshToken) && Number.isInteger(resData.expiresIn) && resData.expiresIn > 0;",
+                  "pm.test(\"Response contains a valid token pair and lifetime\", () => pm.expect(Boolean(valid)).to.equal(true));",
+                  "const rotated = valid && resData.refreshToken !== previousRefreshToken;",
+                  "pm.test(\"Refresh token rotates\", () => pm.expect(Boolean(rotated)).to.equal(true));",
+                  "if (pm.response.code === 200 && valid && rotated) {",
+                  "  pm.environment.set(\"token\", resData.token);",
+                  "  pm.environment.set(\"refreshToken\", resData.refreshToken);",
+                  "}",
+                  "if (pm.test.index() > 0) {",
+                  "  if (pm.response.code !== 200 || !valid || !rotated) pm.execution.setNextRequest(null);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "Rotates refresh token and returns a fresh access JWT."
+          }
+        },
+        {
+          "name": "04 Me after refresh",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "me"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if (pm.test.index() > 0) {",
+                  "  if (pm.response.code !== 200) pm.execution.setNextRequest(null);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "05 Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "logout"]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"diagnosticAccessToken\", pm.environment.get(\"token\"));",
+                  "pm.environment.set(\"diagnosticRefreshToken\", pm.environment.get(\"refreshToken\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", () => pm.response.to.have.status(204));",
+                  "if (pm.response.code === 204) {",
+                  "pm.environment.set(\"token\", \"\");",
+                  "pm.environment.set(\"refreshToken\", \"\");",
+                  "}",
+                  "if (pm.test.index() > 0) {",
+                  "  if (pm.response.code !== 204) pm.execution.setNextRequest(null);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "06 Revoked access rejected",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "me"]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{diagnosticAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Revoked access returns 401\", () => pm.response.to.have.status(401));",
+                  "if (pm.test.index() > 0) {",
+                  "  if (pm.response.code !== 401) pm.execution.setNextRequest(null);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "07 Revoked refresh rejected",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Revoked refresh returns 401\", () => pm.response.to.have.status(401));",
+                  "pm.environment.set(\"diagnosticAccessToken\", \"\");",
+                  "pm.environment.set(\"diagnosticRefreshToken\", \"\");",
+                  "if (pm.test.index() > 0) {",
+                  "  if (pm.response.code !== 401) pm.execution.setNextRequest(null);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{diagnosticRefreshToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "Rotates refresh token and returns a fresh access JWT."
+          }
+        }
+      ]
+    },
+    {
       "name": "1. Health & System",
       "item": [
         {
           "name": "API Health Check",
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "GET",
             "header": [],
             "url": {
@@ -36,7 +326,9 @@
         {
           "name": "Database Connection Check",
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "GET",
             "header": [],
             "url": {
@@ -56,26 +348,46 @@
           "name": "Login (Auto-saves token)",
           "event": [
             {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"token\", \"\");",
+                  "pm.environment.set(\"refreshToken\", \"\");"
+                ]
+              }
+            },
+            {
               "listen": "test",
               "script": {
+                "type": "text/javascript",
                 "exec": [
-                  "const res = pm.response.json();",
-                  "if (res && res.token) {",
-                  "    pm.environment.set(\"token\", res.token);",
-                  "    if (res.refreshToken) {",
-                  "        pm.environment.set(\"refreshToken\", res.refreshToken);",
-                  "    }",
-                  "    console.log(\"✔ Auth token saved to environment variable 'token'!\");",
+                  "pm.environment.set(\"token\", \"\");",
+                  "pm.environment.set(\"refreshToken\", \"\");",
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "let resData;",
+                  "try { resData = pm.response.json(); } catch { resData = null; }",
+                  "const valid = resData && typeof resData.token === \"string\" && /^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$/.test(resData.token) && typeof resData.refreshToken === \"string\" && /^[A-Za-z0-9_-]{43}$/.test(resData.refreshToken) && Number.isInteger(resData.expiresIn) && resData.expiresIn > 0;",
+                  "pm.test(\"Response contains a valid token pair and lifetime\", () => pm.expect(Boolean(valid)).to.equal(true));",
+                  "if (pm.response.code === 200 && valid) {",
+                  "  pm.environment.set(\"token\", resData.token);",
+                  "  pm.environment.set(\"refreshToken\", resData.refreshToken);",
                   "}"
-                ],
-                "type": "text/javascript"
+                ]
               }
             }
           ],
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"{{user_email}}\",\n  \"password\": \"{{user_password}}\"\n}"
@@ -91,9 +403,16 @@
         {
           "name": "Register Client Account",
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"fullName\": \"Jane Doe\",\n  \"email\": \"jane.doe@example.com\",\n  \"contactNumber\": \"09123456789\",\n  \"password\": \"SecurePass123!\"\n}"
@@ -103,8 +422,19 @@
               "host": ["{{baseUrl}}"],
               "path": ["auth", "register"]
             },
-            "description": "Self-registration for Client role (USER)."
-          }
+            "description": "Run separately with a disposable account. Registration does not replace the selected login session."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Refresh Token Rotation",
@@ -112,24 +442,37 @@
             {
               "listen": "test",
               "script": {
+                "type": "text/javascript",
                 "exec": [
-                  "const res = pm.response.json();",
-                  "if (res && res.token) {",
-                  "    pm.environment.set(\"token\", res.token);",
-                  "    if (res.refreshToken) {",
-                  "        pm.environment.set(\"refreshToken\", res.refreshToken);",
-                  "    }",
-                  "    console.log(\"✔ Token rotated and refreshed successfully!\");",
+                  "const previousRefreshToken = pm.environment.get(\"refreshToken\");",
+                  "pm.environment.set(\"token\", \"\");",
+                  "pm.environment.set(\"refreshToken\", \"\");",
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "let resData;",
+                  "try { resData = pm.response.json(); } catch { resData = null; }",
+                  "const valid = resData && typeof resData.token === \"string\" && /^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$/.test(resData.token) && typeof resData.refreshToken === \"string\" && /^[A-Za-z0-9_-]{43}$/.test(resData.refreshToken) && Number.isInteger(resData.expiresIn) && resData.expiresIn > 0;",
+                  "pm.test(\"Response contains a valid token pair and lifetime\", () => pm.expect(Boolean(valid)).to.equal(true));",
+                  "const rotated = valid && resData.refreshToken !== previousRefreshToken;",
+                  "pm.test(\"Refresh token rotates\", () => pm.expect(Boolean(rotated)).to.equal(true));",
+                  "if (pm.response.code === 200 && valid && rotated) {",
+                  "  pm.environment.set(\"token\", resData.token);",
+                  "  pm.environment.set(\"refreshToken\", resData.refreshToken);",
                   "}"
-                ],
-                "type": "text/javascript"
+                ]
               }
             }
           ],
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
@@ -152,7 +495,18 @@
               "host": ["{{baseUrl}}"],
               "path": ["auth", "me"]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Get Full Profile",
@@ -164,13 +518,29 @@
               "host": ["{{baseUrl}}"],
               "path": ["auth", "profile"]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Update Profile",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"fullName\": \"Jane Doe Updated\",\n  \"contactNumber\": \"09987654321\"\n}"
@@ -180,13 +550,29 @@
               "host": ["{{baseUrl}}"],
               "path": ["auth", "profile"]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Change Password",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"currentPassword\": \"CurrentPassword123!\",\n  \"newPassword\": \"NewSecurePass123!\"\n}"
@@ -196,7 +582,18 @@
               "host": ["{{baseUrl}}"],
               "path": ["auth", "change-password"]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Logout Session",
@@ -208,7 +605,22 @@
               "host": ["{{baseUrl}}"],
               "path": ["auth", "logout"]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", () => pm.response.to.have.status(204));",
+                  "if (pm.response.code === 204) {",
+                  "pm.environment.set(\"token\", \"\");",
+                  "pm.environment.set(\"refreshToken\", \"\");",
+                  "}"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -256,7 +668,12 @@
           "name": "Create Service Booking Request",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"serviceId\": \"{{service_id}}\",\n  \"title\": \"Brand Identity Project\",\n  \"description\": \"Comprehensive logo and brand identity package requested.\",\n  \"budget\": \"15000\",\n  \"deadline\": \"2026-12-31T00:00:00.000Z\"\n}"
@@ -278,8 +695,14 @@
               "host": ["{{baseUrl}}"],
               "path": ["client", "service-requests"],
               "query": [
-                { "key": "page", "value": "1" },
-                { "key": "pageSize", "value": "10" }
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                }
               ]
             }
           }
@@ -364,8 +787,14 @@
               "host": ["{{baseUrl}}"],
               "path": ["employees"],
               "query": [
-                { "key": "page", "value": "1" },
-                { "key": "limit", "value": "10" }
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
               ]
             }
           }
@@ -374,7 +803,12 @@
           "name": "Create Employee Record",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"employeeId\": \"EMP-2026-099\",\n  \"fullName\": \"Alex Rivera\",\n  \"email\": \"alex.rivera@example.com\",\n  \"position\": \"Senior UI/UX Specialist\",\n  \"departmentId\": \"{{department_id}}\",\n  \"employmentType\": \"FULL_TIME\",\n  \"createAccount\": true,\n  \"password\": \"SecurePass123!\",\n  \"role\": \"STAFF\"\n}"
@@ -407,7 +841,12 @@
           "name": "Toggle User Active Status",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"isActive\": false\n}"
@@ -423,7 +862,12 @@
           "name": "Superadmin Reset Password",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"newPassword\": \"ResetPassword123!\"\n}"
@@ -497,7 +941,12 @@
           "name": "Execute Workflow Action",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"action\": \"ACCEPT\",\n  \"comments\": \"Request accepted by department specialist.\"\n}"
@@ -559,7 +1008,12 @@
           "name": "Send Message to Request Conversation",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"content\": \"Hello, here is the update regarding your project!\"\n}"

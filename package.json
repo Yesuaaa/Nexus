@@ -11,6 +11,8 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test:e2e": "node scripts/run-e2e.mjs",
+    "test:postman": "node scripts/run-postman.mjs",
+    "test:api": "node scripts/verify-all-apis.mjs",
     "start:api": "pnpm --filter @nexus/api start",
     "start:web": "pnpm --filter @nexus/web start",
     "preview:web": "pnpm --filter @nexus/web preview",
@@ -24,6 +26,7 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^16.5.0",
+    "newman": "^6.2.3",
     "prettier": "^3.9.10",
     "typescript-eslint": "^8.72.0"
   },
