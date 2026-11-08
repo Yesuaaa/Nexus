@@ -111,7 +111,6 @@ export function ServiceShowcaseDialog({
               src={service.imageUrl}
               alt={service.imageAltText ?? service.name}
               fill
-              unoptimized
               sizes="(max-width: 700px) calc(100vw - 28px), 360px"
               className="object-cover"
               priority

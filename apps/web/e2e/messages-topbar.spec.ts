@@ -11,8 +11,10 @@ for (const role of ["USER", "STAFF", "ADMIN", "SUPERADMIN"] as const) {
     let internal = 3
     let unavailable = false
     let internalReads = 0
-    await page.route("**/api/request-conversations", (route) =>
-      route.fulfill(
+    let requestReads = 0
+    await page.route("**/api/request-conversations", (route) => {
+      requestReads++
+      return route.fulfill(
         unavailable
           ? { status: 503, json: { error: "Temporarily unavailable" } }
           : {
@@ -22,8 +24,8 @@ for (const role of ["USER", "STAFF", "ADMIN", "SUPERADMIN"] as const) {
                 unreadCount: requests,
               },
             },
-      ),
-    )
+      )
+    })
     await page.route("**/api/internal-conversations", (route) => {
       internalReads++
       return route.fulfill({
@@ -40,6 +42,7 @@ for (const role of ["USER", "STAFF", "ADMIN", "SUPERADMIN"] as const) {
       }),
     ).toHaveText(String(initialCount))
     if (role === "USER") expect(internalReads).toBe(0)
+    expect(requestReads).toBe(1)
 
     requests = 101
     await page.clock.fastForward(30_000)

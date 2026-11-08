@@ -30,6 +30,7 @@ export type InboxSort =
   "createdAt" | "reference" | "service" | "client" | "status"
 
 export function listInbox(filters: {
+  signal?: AbortSignal
   search: string
   view: InboxView
   page: number
@@ -43,7 +44,7 @@ export function listInbox(filters: {
     sortBy: filters.sortBy,
     sortDir: filters.sortDir,
   })
-  return apiRequest(`/api/request-inbox?${query}`)
+  return apiRequest(`/api/request-inbox?${query}`, { signal: filters.signal })
 }
 export async function getInboxRequest(id: string): Promise<BookingDetails> {
   const result = await apiRequest<{ serviceRequest: BookingDetails }>(

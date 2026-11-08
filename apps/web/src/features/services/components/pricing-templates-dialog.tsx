@@ -3,7 +3,7 @@
 import { Form } from "@/components/ui/form"
 
 import { useRef, useState, type FormEvent } from "react"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import { CloseIcon } from "@/components/layout/icons"
 import { focusRing } from "@/components/layout/styles"
 import {

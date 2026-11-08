@@ -132,7 +132,7 @@ for (const width of [1440, 390]) {
     await expect(page.getByText("Showing 1–1 of 1")).toBeVisible()
     await page
       .getByRole("button", {
-        name: "View request: Website redesign 11",
+        name: "View request: Web Development",
         exact: true,
       })
       .filter({ visible: true })
@@ -159,11 +159,13 @@ for (const width of [1440, 390]) {
     await expect.poll(() => calls.at(-1)).toContain("sortOrder=asc")
     await expect(
       page
+        .getByRole("row")
+        .or(page.getByRole("listitem"))
+        .filter({ hasText: "SR-20261030-12" })
         .getByRole("button", {
-          name: "View request: Website redesign 12",
+          name: "View request: Web Development",
           exact: true,
-        })
-        .filter({ visible: true }),
+        }),
     ).toBeVisible()
     await page.screenshot({
       path: testInfo.outputPath(`request-history-${width}.png`),
@@ -324,7 +326,7 @@ test("request history refreshes explicitly and keeps details status aligned with
   current = { ...current, status: "UNDER_REVIEW" }
   await page
     .getByRole("button", {
-      name: "View request: Website redesign 1",
+      name: "View request: Web Development",
       exact: true,
     })
     .filter({ visible: true })
@@ -343,7 +345,7 @@ test("request history refreshes explicitly and keeps details status aligned with
   ).toBeVisible()
   await expect(page.getByRole("dialog")).toHaveCount(0)
   current = { ...current, status: "CLOSED" }
-  await page.getByRole("button", { name: "Refresh", exact: true }).click()
+  await page.evaluate(() => window.dispatchEvent(new Event("online")))
   await expect(
     page.getByText("Closed", { exact: true }).filter({ visible: true }).last(),
   ).toBeVisible()

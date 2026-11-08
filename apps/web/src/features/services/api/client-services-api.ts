@@ -110,6 +110,7 @@ export async function submitClientServiceRequest(
   return result.serviceRequest
 }
 export async function listMyServiceRequests(filters: {
+  signal?: AbortSignal
   page: number
   search?: string
   status?: ServiceRequestStatus | ""
@@ -121,5 +122,6 @@ export async function listMyServiceRequests(filters: {
   if (filters.sortOrder) params.set("sortOrder", filters.sortOrder)
   return apiRequest<ClientRequestsResponse>(
     `/api/client/service-requests?${params}`,
+    { signal: filters.signal },
   )
 }

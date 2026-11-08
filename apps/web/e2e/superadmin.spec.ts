@@ -11,6 +11,64 @@ configureRegressionTest()
 test.describe("Superadmin account management", () => {
   test.skip(live, "Live mode uses the supplied accounts against the real API")
 
+  test("search previews loaded accounts before the server responds", async ({
+    page,
+  }) => {
+    await restoreSession(page, "SUPERADMIN")
+    await page.goto("/accounts")
+    const table = page.getByRole("table", { name: "Accounts", exact: true })
+    await expect(table.getByText("Your account", { exact: true })).toBeVisible()
+    await expect(table.getByText("Target User", { exact: true })).toBeVisible()
+
+    let releaseSearch: () => void = () => {}
+    const pendingSearch = new Promise<void>((resolve) => {
+      releaseSearch = resolve
+    })
+    const remoteAccount = {
+      ...accountFor("USER"),
+      id: "remote-account",
+      fullName: "Remote Client",
+      email: "remote@example.com",
+    }
+    await page.route("**/api/users?**", async (route) => {
+      const query = new URL(route.request().url()).searchParams.get("search")
+      if (!query) return route.fallback()
+      await pendingSearch
+      if (query !== "Remote") return route.fallback()
+      await route.fulfill({
+        json: { users: [remoteAccount], total: 1, page: 1, pageSize: 10 },
+      })
+    })
+
+    const search = page.getByPlaceholder("Search name or email")
+    // No search response can arrive during these edits. Visible rows must
+    // therefore react to the input itself, including clearing/backspacing.
+    await search.fill("Tar")
+    await expect(table.getByText("Your account", { exact: true })).toHaveCount(
+      0,
+    )
+    await expect(table.getByText("Target User", { exact: true })).toBeVisible()
+    await search.pressSequentially("get")
+    await expect(table.getByText("Target User", { exact: true })).toBeVisible()
+    await search.fill("")
+    await expect(table.getByText("Your account", { exact: true })).toBeVisible()
+    await search.fill("Remote")
+    await expect(table.getByText("Target User", { exact: true })).toHaveCount(0)
+    await expect(page.getByRole("status")).toContainText(
+      "Searching all accounts",
+    )
+    await expect(
+      table.getByText("No accounts match your search.", { exact: true }),
+    ).toHaveCount(0)
+    releaseSearch()
+    await expect(
+      table.getByText("Remote Client", { exact: true }),
+    ).toBeVisible()
+    await expect(
+      page.getByText("Searching all accounts…", { exact: true }),
+    ).toHaveCount(0)
+  })
+
   for (const width of [390, 1280]) {
     test(`superadmin changes a listed account password at ${width}px`, async ({
       page,
@@ -172,7 +230,9 @@ test.describe("Superadmin account management", () => {
     // 1. Search accounts
     const searchInput = page.getByPlaceholder("Search name or email")
     await searchInput.fill("Target")
-    await expect(page.getByText("Target User")).toBeVisible()
+    await expect(
+      page.getByRole("row").filter({ hasText: "target@example.com" }),
+    ).toBeVisible()
 
     // 2. Modify Role
     const roleDropdown = page.getByRole("button", {

@@ -60,23 +60,35 @@ export function ProjectWorkspaceSidebarLinks({
           <FolderKanban size={20} strokeWidth={1.7} className="flex-none" />
         </Link>
       ) : (
-        <button
-          type="button"
-          aria-expanded={expanded}
-          aria-controls="project-workspace-sidebar-subnav"
-          onClick={() => setExpanded((value) => !value)}
-          className={`flex min-h-10 w-full min-w-0 items-center gap-[13px] rounded-md px-[13px] font-semibold text-foreground transition-colors hover:bg-[#e1e3e5] ${active ? "bg-[#e1e3e5]" : ""} ${focusRing}`}
+        <div
+          className={`flex min-h-10 w-full min-w-0 items-center rounded-md font-semibold text-foreground ${active ? "bg-[#e1e3e5]" : ""}`}
         >
-          <FolderKanban size={20} strokeWidth={1.7} className="flex-none" />
-          <span className="min-w-0 flex-1 truncate text-left">
-            Project Workspace
-          </span>
-          <ChevronDown
-            size={16}
-            strokeWidth={1.8}
-            className={`transition-transform ${expanded ? "rotate-180" : "rotate-0"}`}
-          />
-        </button>
+          <Link
+            href="/project-workspace"
+            aria-current={active ? "page" : undefined}
+            onClick={onNavigate}
+            className={`flex min-h-10 min-w-0 flex-1 items-center gap-[13px] rounded-md pl-[13px] text-foreground no-underline transition-colors hover:bg-[#e1e3e5] ${focusRing}`}
+          >
+            <FolderKanban size={20} strokeWidth={1.7} className="flex-none" />
+            <span className="min-w-0 flex-1 truncate text-left">
+              Project Workspace
+            </span>
+          </Link>
+          <button
+            type="button"
+            aria-label="Toggle project workspace submenu"
+            aria-expanded={expanded}
+            aria-controls="project-workspace-sidebar-subnav"
+            onClick={() => setExpanded((value) => !value)}
+            className={`grid min-h-10 w-10 flex-none place-items-center rounded-md transition-colors hover:bg-[#e1e3e5] ${focusRing}`}
+          >
+            <ChevronDown
+              size={16}
+              strokeWidth={1.8}
+              className={`transition-transform ${expanded ? "rotate-180" : "rotate-0"}`}
+            />
+          </button>
+        </div>
       )}
       {!collapsed && (
         <div

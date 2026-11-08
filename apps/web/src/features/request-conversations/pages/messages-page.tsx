@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
+import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
@@ -9,7 +10,7 @@ import {
   MessageSquare,
   UsersRound,
 } from "lucide-react"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import {
   contentClass,
   focusRing,
@@ -25,8 +26,6 @@ import {
   type ConversationList,
   type RequestMessage,
 } from "../api/request-conversations-api"
-import { RequestConversation } from "../components/request-conversation"
-import { InternalConversation } from "../components/internal-conversation"
 import { ConversationAvatar } from "../components/conversation-avatar"
 import { ConversationListItem } from "../components/conversation-list-item"
 import {
@@ -38,6 +37,33 @@ import {
 import { orderConversations } from "../model/conversation-groups"
 
 const conversationRailStorageKey = "nexus.messages.conversation-rail-collapsed"
+
+const RequestConversation = dynamic(
+  () =>
+    import("../components/request-conversation").then(
+      (module) => module.RequestConversation,
+    ),
+  {
+    loading: () => (
+      <p role="status" className="p-6 text-sm text-muted-foreground">
+        Loading conversation…
+      </p>
+    ),
+  },
+)
+const InternalConversation = dynamic(
+  () =>
+    import("../components/internal-conversation").then(
+      (module) => module.InternalConversation,
+    ),
+  {
+    loading: () => (
+      <p role="status" className="p-6 text-sm text-muted-foreground">
+        Loading conversation…
+      </p>
+    ),
+  },
+)
 
 type MessagesPageProps = {
   requestId: string | null
@@ -250,33 +276,25 @@ function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
 
   useEffect(() => {
     const controller = new AbortController()
-    if (mode === "internal") {
-      const initialRefresh = window.setTimeout(
-        () => void refreshInternalConversations(controller.signal),
-        0,
-      )
-      const timer = setInterval(() => {
-        if (document.visibilityState === "visible")
-          void refreshInternalConversations(controller.signal)
-      }, 30_000)
-      return () => {
-        clearTimeout(initialRefresh)
-        controller.abort()
-        clearInterval(timer)
-      }
+    const refreshVisible = () => {
+      if (document.visibilityState !== "visible" || controller.signal.aborted)
+        return
+      if (mode === "internal")
+        void refreshInternalConversations(controller.signal)
+      else void refreshConversations(controller.signal)
     }
-    const initialRefresh = window.setTimeout(
-      () => void refreshConversations(controller.signal),
-      0,
-    )
-    const timer = setInterval(() => {
-      if (document.visibilityState === "visible")
-        void refreshConversations(controller.signal)
-    }, 30_000)
+    const initialRefresh = window.setTimeout(refreshVisible, 0)
+    const timer = setInterval(refreshVisible, 30_000)
+    window.addEventListener("focus", refreshVisible)
+    window.addEventListener("online", refreshVisible)
+    document.addEventListener("visibilitychange", refreshVisible)
     return () => {
       clearTimeout(initialRefresh)
       controller.abort()
       clearInterval(timer)
+      window.removeEventListener("focus", refreshVisible)
+      window.removeEventListener("online", refreshVisible)
+      document.removeEventListener("visibilitychange", refreshVisible)
     }
   }, [mode, refreshConversations, refreshInternalConversations])
 

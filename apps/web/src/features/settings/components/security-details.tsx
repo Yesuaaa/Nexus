@@ -3,7 +3,7 @@
 import { Form } from "@/components/ui/form"
 import { useState, type FormEvent, type ReactNode } from "react"
 import { Eye, EyeOff } from "lucide-react"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import { Button } from "@/components/ui/button"
 import { focusRing } from "@/components/layout/styles"
 import { changeProfilePassword } from "@/features/profile/api/profile-api"

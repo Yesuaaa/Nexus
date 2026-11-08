@@ -1,7 +1,17 @@
-@import "tailwindcss";
+@import "tailwindcss" source(none);
+@import "./theme.css";
+
+/* Public routes and persistent UI only; portal utilities load with its layout. */
+@source "./app";
+@source not "./app/(portal)";
+@source "./components/ui";
+@source "./features/auth";
+@source "./features/not-found";
+@source "./lib";
 
 :root {
-  font-family: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  font-family:
+    var(--font-inter), "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   color-scheme: light;
   --background: #f3f7f9;
   --portal-canvas: #eaeff1;
@@ -18,22 +28,6 @@
   --ring: oklch(0.6 0.06 250);
 }
 
-@theme inline {
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-ring: var(--ring);
-}
-
 * {
   box-sizing: border-box;
 }
@@ -41,6 +35,67 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--foreground);
+}
+
+/* Keep auth entry effects independent of JavaScript/hydration. */
+.auth-form-enter {
+  animation: auth-form-in 450ms ease-out;
+}
+.auth-hero-enter {
+  animation: auth-hero-in 450ms ease-out;
+}
+.auth-photo-enter {
+  animation: auth-photo-in 1s ease-in-out;
+}
+.service-icon-float {
+  animation: service-icon-float 1.6s cubic-bezier(0.37, 0, 0.63, 1) infinite
+    alternate;
+}
+@keyframes service-icon-float {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-6px);
+  }
+}
+@keyframes auth-form-in {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes auth-hero-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes auth-photo-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-form-enter,
+  .auth-hero-enter,
+  .auth-photo-enter {
+    animation: none;
+  }
+  .service-icon-float {
+    animation: none;
+  }
 }
 
 /* Non-auto standard values override WebKit scrollbar parts, including buttons. */
@@ -78,7 +133,8 @@ body {
 }
 
 [data-sileo-viewport] {
-  font-family: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  font-family:
+    var(--font-inter), "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   --sileo-state-success: #86efac;
   --sileo-state-loading: #cbd5e1;
   --sileo-state-error: #fda4af;
