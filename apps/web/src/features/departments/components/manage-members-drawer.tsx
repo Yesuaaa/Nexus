@@ -46,17 +46,22 @@ import {
   createTeam,
   deleteTeam,
   getDepartment,
-  listEmployees,
+  listAssignableStaff,
   removeDepartmentMember,
   updateDepartmentMember,
   type DepartmentDetail,
   type DepartmentMember,
+  type DepartmentStaffOption,
 } from "../api/departments-api"
 
 function MemberIdentity({
   member,
 }: {
-  member: Pick<DepartmentMember, "fullName" | "email" | "user">
+  member: {
+    fullName: string | null
+    email: string | null
+    user: { fullName: string | null; email: string } | null
+  }
 }) {
   const email = member.email || member.user?.email || null
   return (
@@ -101,12 +106,12 @@ export function ManageMembersDrawer({
   const [loadError, setLoadError] = useState("")
   const [actionError, setActionError] = useState("")
 
-  // Available employees (for dropdown assignment)
-  const [quickAssignEmployeeId, setQuickAssignEmployeeId] = useState("")
+  // Eligible staff accounts (for assignment)
+  const [quickAssignStaffId, setQuickAssignStaffId] = useState("")
   const [quickAssignRetry, setQuickAssignRetry] = useState(0)
   const [quickAssignResult, setQuickAssignResult] = useState<{
     key: string
-    employees: DepartmentMember[]
+    employees: DepartmentStaffOption[]
     error: string
   } | null>(null)
 
@@ -117,7 +122,7 @@ export function ManageMembersDrawer({
   const [candidateRetry, setCandidateRetry] = useState(0)
   const [candidateResult, setCandidateResult] = useState<{
     key: string
-    candidates: DepartmentMember[]
+    candidates: DepartmentStaffOption[]
     total: number
     pageSize: number
     error: string
@@ -155,7 +160,7 @@ export function ManageMembersDrawer({
   const quickAssignResultIsCurrent =
     quickAssignResult?.key === quickAssignRequestKey
   const candidateResultIsCurrent = candidateResult?.key === candidateRequestKey
-  const allEmployees = quickAssignResultIsCurrent
+  const assignableStaff = quickAssignResultIsCurrent
     ? quickAssignResult.employees
     : []
   const quickAssignLoading = canManage && !quickAssignResultIsCurrent
@@ -207,7 +212,7 @@ export function ManageMembersDrawer({
   useEffect(() => {
     if (!canManage) return
     let active = true
-    listEmployees("", 1)
+    listAssignableStaff("", 1)
       .then((res) => {
         if (active) {
           setQuickAssignResult({
@@ -246,14 +251,12 @@ export function ManageMembersDrawer({
   useEffect(() => {
     if (!canManage || !debouncedAssignSearch) return
     let active = true
-    listEmployees(debouncedAssignSearch, candidatePage)
+    listAssignableStaff(debouncedAssignSearch, candidatePage)
       .then((res) => {
         if (active) {
           setCandidateResult({
             key: candidateRequestKey,
-            candidates: res.employees.filter(
-              (employee) => employee.departmentId !== departmentId,
-            ),
+            candidates: res.employees,
             total: res.total,
             pageSize: res.pageSize,
             error: "",
@@ -297,30 +300,30 @@ export function ManageMembersDrawer({
       ? searchCandidates
       : []
 
-  const currentMemberIds = new Set(detail?.members.map((m) => m.id) || [])
-  const departmentHeadId = detail?.headId ?? null
-  const availableEmployeesForQuickAssign = allEmployees.filter(
-    (employee) =>
-      employee.departmentId !== departmentId &&
-      !currentMemberIds.has(employee.id),
+  const currentMemberAccountIds = new Set(
+    detail?.members.flatMap((member) =>
+      member.userId ? [member.userId] : [],
+    ) || [],
   )
-  const selectedQuickAssignEmployee = availableEmployeesForQuickAssign.find(
-    (employee) => employee.id === quickAssignEmployeeId,
+  const departmentHeadId = detail?.headId ?? null
+  const availableStaffForQuickAssign = assignableStaff.filter(
+    (employee) => !currentMemberAccountIds.has(employee.id),
+  )
+  const selectedQuickAssignStaff = availableStaffForQuickAssign.find(
+    (employee) => employee.id === quickAssignStaffId,
   )
 
-  async function handleAddMember(employeeId: string) {
-    if (
-      !availableEmployeesForQuickAssign.some(
-        (employee) => employee.id === employeeId,
-      )
-    )
-      return
+  async function handleAddMember(userId: string) {
+    const isAvailable =
+      availableStaffForQuickAssign.some((employee) => employee.id === userId) ||
+      displayedCandidates.some((employee) => employee.id === userId)
+    if (!isAvailable || submitting) return
     try {
       setActionError("")
       setSubmitting(true)
-      await assignDepartmentMembers(departmentId, [employeeId])
+      await assignDepartmentMembers(departmentId, [userId])
       setAssignSearch("")
-      setQuickAssignEmployeeId("")
+      setQuickAssignStaffId("")
       setCandidatePage(1)
       setRevision((r) => r + 1)
       onChanged()
@@ -617,8 +620,8 @@ export function ManageMembersDrawer({
                       </div>
                       <div className="flex min-w-0 items-start gap-2">
                         <Select
-                          value={selectedQuickAssignEmployee?.id ?? ""}
-                          onValueChange={setQuickAssignEmployeeId}
+                          value={selectedQuickAssignStaff?.id ?? ""}
+                          onValueChange={setQuickAssignStaffId}
                           disabled={
                             submitting ||
                             quickAssignLoading ||
@@ -646,27 +649,22 @@ export function ManageMembersDrawer({
                               >
                                 Employee list unavailable.
                               </p>
-                            ) : availableEmployeesForQuickAssign.length ===
-                              0 ? (
+                            ) : availableStaffForQuickAssign.length === 0 ? (
                               <p className="m-0 p-3 text-xs text-muted-foreground">
                                 No employees available to assign.
                               </p>
                             ) : (
-                              availableEmployeesForQuickAssign.map(
-                                (employee) => (
-                                  <SelectItem
-                                    key={employee.id}
-                                    value={employee.id}
-                                  >
-                                    {employee.fullName ||
-                                      employee.email ||
-                                      "Employee"}
-                                    {employee.user?.role
-                                      ? ` (${employee.user.role})`
-                                      : " (No account)"}
-                                  </SelectItem>
-                                ),
-                              )
+                              availableStaffForQuickAssign.map((employee) => (
+                                <SelectItem
+                                  key={employee.id}
+                                  value={employee.id}
+                                >
+                                  {employee.fullName ||
+                                    employee.email ||
+                                    "Employee"}
+                                  {` (${employee.user.role})`}
+                                </SelectItem>
+                              ))
                             )}
                           </SelectContent>
                         </Select>
@@ -674,13 +672,13 @@ export function ManageMembersDrawer({
                           type="button"
                           className={panelAssignButton}
                           disabled={
-                            !selectedQuickAssignEmployee ||
+                            !selectedQuickAssignStaff ||
                             submitting ||
                             quickAssignLoading ||
                             Boolean(quickAssignError)
                           }
                           onClick={() =>
-                            void handleAddMember(quickAssignEmployeeId)
+                            void handleAddMember(quickAssignStaffId)
                           }
                         >
                           <PlusIcon width="14" height="14" /> Assign
@@ -788,7 +786,7 @@ export function ManageMembersDrawer({
                         !candidateError &&
                         displayedCandidates.length === 0 && (
                           <p className={`${panelMuted} m-0`}>
-                            No unassigned employees match your search.
+                            No unassigned staff accounts match your search.
                           </p>
                         )}
                       {debouncedAssignSearch &&
@@ -1051,12 +1049,19 @@ export function ManageMembersDrawer({
                         const teamMembers = detail.members.filter(
                           (member) => member.teamId === team.id,
                         )
-                        const eligibleEmployees = detail.members.filter(
+                        const eligibleDepartmentStaff = detail.members.filter(
                           (member) =>
+                            member.status === "ACTIVE" &&
+                            member.user?.role === "STAFF" &&
+                            member.user.isActive &&
+                            member.user.accountDeletedAt === null &&
                             (departmentHeadId === null ||
-                              member.userId !== departmentHeadId) &&
-                            member.teamId !== team.id,
+                              member.userId !== departmentHeadId),
                         )
+                        const eligibleEmployees =
+                          eligibleDepartmentStaff.filter(
+                            (member) => member.teamId !== team.id,
+                          )
                         const selectedUserId = teamAddSelection[team.id] || ""
                         return (
                           <section
@@ -1207,13 +1212,9 @@ export function ManageMembersDrawer({
                                   </div>
                                 ) : (
                                   <p className={`${panelMuted} m-0`}>
-                                    {detail.members.filter(
-                                      (member) =>
-                                        departmentHeadId === null ||
-                                        member.userId !== departmentHeadId,
-                                    ).length === 0
-                                      ? "Assign employees in the Employees tab first to add them here."
-                                      : "All department employees are already in this team."}
+                                    {eligibleDepartmentStaff.length === 0
+                                      ? "Assign active staff in the Employees tab first to add them here."
+                                      : "All active department staff are already in this team."}
                                   </p>
                                 )}
                               </div>

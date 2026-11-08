@@ -1508,5 +1508,147 @@ test(
         )
       },
     )
+    await t.test(
+      "Team API accepts only eligible staff as Team Leads",
+      async () => {
+        const invalidCandidates = [
+          { id: "team-lead-user", role: "USER" as const },
+          {
+            id: "team-lead-inactive-account",
+            role: "STAFF" as const,
+            isActive: false,
+          },
+          {
+            id: "team-lead-deleted-account",
+            role: "STAFF" as const,
+            accountDeletedAt: new Date(),
+          },
+          {
+            id: "team-lead-inactive-employee",
+            role: "STAFF" as const,
+            employeeStatus: "INACTIVE" as const,
+          },
+          {
+            id: "team-lead-on-leave",
+            role: "STAFF" as const,
+            employeeStatus: "ON_LEAVE" as const,
+          },
+          {
+            id: "team-lead-other-department",
+            role: "STAFF" as const,
+            departmentId: "product",
+          },
+        ]
+
+        for (const candidate of invalidCandidates) {
+          await prisma.user.create({
+            data: {
+              id: candidate.id,
+              email: `${candidate.id}@example.com`,
+              fullName: candidate.id,
+              passwordHash: "test-only-hash",
+              role: candidate.role,
+              ...(candidate.isActive === false ? { isActive: false } : {}),
+              ...(candidate.accountDeletedAt
+                ? { accountDeletedAt: candidate.accountDeletedAt }
+                : {}),
+              ...(candidate.departmentId
+                ? { departmentId: candidate.departmentId }
+                : {}),
+              ...(candidate.employeeStatus
+                ? {
+                    employee: {
+                      create: {
+                        employeeId: `EXP-${candidate.id}`,
+                        fullName: candidate.id,
+                        status: candidate.employeeStatus,
+                      },
+                    },
+                  }
+                : {}),
+            },
+          })
+        }
+
+        const emptyTeam = await json(
+          "/departments/operations/teams",
+          "POST",
+          {
+            name: "Team Lead Eligibility Check",
+          },
+          201,
+        )
+        const teamId = (emptyTeam as Payload & { team: { id: string } }).team.id
+
+        for (const candidate of invalidCandidates) {
+          const response = await request(
+            "/departments/operations/teams",
+            "POST",
+            { name: `Rejected ${candidate.id}`, leadId: candidate.id },
+          )
+          assert.equal(response.status, 400, candidate.id)
+          const user = await prisma.user.findUniqueOrThrow({
+            where: { id: candidate.id },
+          })
+          assert.equal(user.departmentId, candidate.departmentId ?? null)
+          assert.equal(user.teamId, null)
+        }
+
+        assert.equal(
+          (
+            await request("/departments/operations/teams", "POST", {
+              name: "Unknown Team Lead",
+              leadId: "missing-team-lead",
+            })
+          ).status,
+          400,
+        )
+        assert.equal(
+          (
+            await request(`/departments/operations/teams/${teamId}`, "PUT", {
+              leadId: "team-lead-user",
+            })
+          ).status,
+          400,
+        )
+        assert.equal(
+          (await prisma.team.findUniqueOrThrow({ where: { id: teamId } }))
+            .leadId,
+          null,
+        )
+
+        await prisma.user.create({
+          data: {
+            id: "eligible-team-lead",
+            email: "eligible-team-lead@example.com",
+            fullName: "Eligible Team Lead",
+            passwordHash: "test-only-hash",
+            role: "STAFF",
+          },
+        })
+        const created = await json(
+          "/departments/operations/teams",
+          "POST",
+          {
+            name: "Eligible Lead Team",
+            leadId: "eligible-team-lead",
+          },
+          201,
+        )
+        const leadTeamId = (created as Payload & { team: { id: string } }).team
+          .id
+        const assignedUser = await prisma.user.findUniqueOrThrow({
+          where: { id: "eligible-team-lead" },
+        })
+        assert.equal(assignedUser.departmentId, "operations")
+        assert.equal(assignedUser.teamId, leadTeamId)
+        const employee = await prisma.employee.findUniqueOrThrow({
+          where: { userId: "eligible-team-lead" },
+        })
+        assert.equal(employee.status, "ACTIVE")
+        assert.equal(employee.departmentId, "operations")
+        assert.equal(employee.teamId, leadTeamId)
+      },
+    )
   },
 )

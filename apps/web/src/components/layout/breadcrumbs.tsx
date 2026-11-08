@@ -11,6 +11,7 @@ import {
   useState,
   type ReactNode,
 } from "react"
+import { getProjectWorkspace } from "@/features/project-workspace/api/project-workspace-api"
 import { ChevronRightIcon, HomeIcon } from "./icons"
 import { focusRing } from "./styles"
 
@@ -61,6 +62,7 @@ const routeLabels: Record<string, string> = {
   settings: "Settings",
   messages: "Messages",
   projects: "Projects",
+  "project-workspace": "Project Workspace",
   accounts: "Account Management",
   departments: "Department Management",
   employees: "Employee Management",
@@ -86,6 +88,28 @@ export function Breadcrumbs() {
   const pathname = usePathname()
   const { labels } = useContext(BreadcrumbLabelContext)
   const segments = pathname.split("/").filter(Boolean)
+  const projectId =
+    segments[0] === "project-workspace" && segments[1] !== "new"
+      ? segments[1]
+      : undefined
+  const [projectLabel, setProjectLabel] = useState<{
+    id: string
+    name: string
+  } | null>(null)
+
+  useEffect(() => {
+    if (!projectId) return
+    const controller = new AbortController()
+    getProjectWorkspace(projectId, controller.signal)
+      .then((project) => {
+        if (!controller.signal.aborted)
+          setProjectLabel({ id: projectId, name: project.name })
+      })
+      .catch(() => {
+        // Keep the breadcrumb readable when the page reports a load error.
+      })
+    return () => controller.abort()
+  }, [projectId])
 
   return (
     <nav className="min-w-0 overflow-hidden" aria-label="Breadcrumb">
@@ -102,9 +126,13 @@ export function Breadcrumbs() {
         {segments.map((segment, index) => {
           const label =
             labels[segment] ??
-            (index === 1 && segments[0] === "projects"
-              ? "Project"
-              : labelFor(segment))
+            (index === 1 && projectId
+              ? projectLabel?.id === projectId
+                ? projectLabel.name
+                : "Project"
+              : index === 1 && segments[0] === "projects"
+                ? "Project"
+                : labelFor(segment))
           const isCurrent = index === segments.length - 1
           return (
             <li

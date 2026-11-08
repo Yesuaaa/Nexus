@@ -4,6 +4,8 @@ Clients (`USER`) track their own requests in **Service Requests** at `/service-r
 
 The **Request Inbox** (`/request-inbox`, `/api/request-inbox`) is available only to active `STAFF` accounts currently assigned as `Department.headId`. It shows bookings for services linked to the head's department and permits acceptance from `SUBMITTED` into `UNDER_REVIEW`. Ordinary staff, team leads, clients, Admins, and Superadmins have no override. The API checks the current head assignment on every request, including temporary head handoffs. See [Department Head Request Inbox](features/department-request-inbox.md).
 
+**Staff Workload** (`/staff-workload`, `/api/workload`) is available only to an active `STAFF` account currently assigned as a department's `headId`. The API independently rechecks that assignment and scopes capacity and staffing operations to that department; ordinary staff, team leads, clients, Admins, and Superadmins have no override. The head can read weekly workload, save employee capacity through `PUT /api/workload/capacity`, and manage eligible project allocations through `PUT /api/workload/assignment` and `DELETE /api/workload/assignment/:id`. These allocation operations do not activate projects or bypass workflow gates. The frontend uses the department-head route gate, but API authorization remains authoritative. See [Staff Workload](features/staff-workload.md).
+
 Acceptance records the responsible department and opens [request messaging](features/request-messaging.md). Only the request's owning `USER` and that department's current active `STAFF` head can read or send service-request messages. Other routed heads and administrators have no conversation override. Staff, Admin and Superadmin accounts may use the separate internal direct-chat list to message one another. Head handoffs transfer service-request conversation access; closed or cancelled requests retain readable history but reject messages. Supabase credentials remain server-only, with authenticated same-origin streams delivering change notifications to browsers.
 
 Superadmins can restore soft-deleted accounts through **Account Management → Trash → Actions → Restore account**. `POST /api/users/:id/restore` uses the same `accounts:status-basic` / `accounts:status-privileged` permissions as account status changes. It returns `{ "user": ... }`, clears `accountDeletedAt`, and revokes stale sessions atomically. The account returns to the main list as **inactive**, keeping its existing password, role, details and department/team assignments. Reactivate it separately to allow sign-in. Self-targeting returns `403`, missing or permanently deleted accounts return `404`, and accounts outside Trash or changed concurrently return `409`.
@@ -19,6 +21,7 @@ The frontend's Department Management page (`/departments`) is available only to 
 | Permission                                                             | User | Staff | Admin | Superadmin |
 | ---------------------------------------------------------------------- | :--: | :---: | :---: | :--------: |
 | View Dashboard                                                         |  ✓   |   ✓   |   ✓   |     ✓      |
+| Open Staff Workload and manage department capacity/assignments         |      | Head  |       |            |
 | View own account and change own password                               |  ✓   |   ✓   |   ✓   |     ✓      |
 | View client directory, details, requests and projects (`clients:read`) |      |       |   ✓   |            |
 | View own activated projects and shared deliverables                    |  ✓   |       |       |            |
@@ -35,7 +38,7 @@ The frontend's Department Management page (`/departments`) is available only to 
 | Create User or Staff accounts (`accounts:create-basic`)                |      |       |       |     ✓      |
 | Change User or Staff roles (`accounts:assign-basic`)                   |      |       |       |     ✓      |
 | Create Admin or Superadmin accounts (`accounts:create-privileged`)     |      |       |       |     ✓      |
-| Change Admin or Superadmin roles (`accounts:assign-privileged`)        |      |       |       |     ✓      |
+| Change Admin or Superadmin roles (`accounts:assign-privileged`)         |      |       |       |     ✓      |
 | Change User or Staff status (`accounts:status-basic`)                  |      |       |       |     ✓      |
 | Change Admin or Superadmin status (`accounts:status-privileged`)       |      |       |       |     ✓      |
 | Delete inactive accounts                                               |      |       |       |     ✓      |
@@ -51,3 +54,10 @@ Account Management supports deactivation, reactivation and deletion of inactive 
 Superadmins can select **Change password** from another account's Actions menu, including inactive accounts. `POST /api/users/:id/password` requires `accounts:reset-password` and accepts `{ "newPassword": "..." }`. The new password must contain at least 12 characters, including uppercase, lowercase, a number and a special character, and be no more than 1,024 UTF-8 bytes. The current password is not required. A successful change returns `204`, hashes the new password and revokes all sessions for the selected account in one transaction. The Superadmin remains signed in; the target's role and active status are preserved. Self-targeted changes are rejected with `403`; missing or trashed accounts return `404`. The existing `POST /api/auth/change-password` endpoint remains the separate authenticated self-service operation requiring the current password.
 
 `PATCH /api/users/:id/status` accepts `{ "isActive": false }` to deactivate or `{ "isActive": true }` to reactivate and returns `{ "user": ... }`. Deactivation preserves the account and department/team assignments, revokes all its sessions, and blocks login and authenticated requests. Reactivated accounts must sign in again. Account responses include `isActive`; new and existing accounts default to active. Apply the `20261026090000_account_status` migration before deploying these changes with `pnpm --filter @nexus/api exec prisma migrate deploy`.
+
+### Project Workspace
+
+- All active STAFF accounts can view active and archived projects and update work-plan tasks in their department.
+- Only the current Department Head for a project's department can set up or rename its workspace, cancel active projects, and approve staff assignments. Cancelled and completed projects appear in the Archive view and are excluded from active workload totals. Assignment continues through the existing STAFF_PROJECT workflow action.
+- Clients retain their existing project view; the internal workspace is unavailable to USER, ADMIN, and SUPERADMIN accounts.
+- Only active staff assigned to a workstream can upload or remove its deliverable attachment. The Department Head can edit deliverable requirements, approve or reject submissions (a rejection reason is required), and send approved files to the client. Submitted files remain staff-only until sent; clients can access files after that action.

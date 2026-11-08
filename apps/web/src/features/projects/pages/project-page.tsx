@@ -9,6 +9,10 @@ import { Button } from "@/components/ui/button"
 import { contentClass } from "@/components/layout/styles"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import {
+  deliverableStatusClass,
+  deliverableStatusLabel,
+} from "@/features/project-workspace/components/deliverable-status"
+import {
   getProject,
   reviewProjectCancellationRequest,
   reviewProjectChangeRequest,
@@ -258,8 +262,14 @@ export function ProjectPage({ projectId }: { projectId: string }) {
                   Deliverables & milestones
                 </h2>
                 <span className="text-xs text-muted-foreground">
-                  {project.milestones.filter((item) => item.completedAt).length}
-                  /{project.milestones.length} completed
+                  {project.workspaceManaged
+                    ? project.milestones.filter(
+                        (item) => item.deliveryStatus === "SENT_TO_CLIENT",
+                      ).length
+                    : project.milestones.filter((item) => item.completedAt)
+                        .length}
+                  /{project.milestones.length}{" "}
+                  {project.workspaceManaged ? "sent" : "completed"}
                 </span>
               </div>
               {project.milestones.length ? (
@@ -269,7 +279,11 @@ export function ProjectPage({ projectId }: { projectId: string }) {
                       key={milestone.id}
                       className="flex items-center gap-3 py-4"
                     >
-                      {milestone.completedAt ? (
+                      {(
+                        project.workspaceManaged
+                          ? milestone.deliveryStatus === "SENT_TO_CLIENT"
+                          : Boolean(milestone.completedAt)
+                      ) ? (
                         <CheckCircle2
                           className="shrink-0 text-green-700"
                           size={19}
@@ -286,11 +300,17 @@ export function ProjectPage({ projectId }: { projectId: string }) {
                         <p className="m-0 text-sm [overflow-wrap:anywhere]">
                           {milestone.title}
                         </p>
-                        {milestone.completedAt && (
+                        {project.workspaceManaged ? (
+                          <span
+                            className={`mt-2 inline-flex rounded-md px-2 py-0.5 text-[10px] ${deliverableStatusClass(milestone.deliveryStatus)}`}
+                          >
+                            {deliverableStatusLabel(milestone.deliveryStatus)}
+                          </span>
+                        ) : milestone.completedAt ? (
                           <p className="mt-1 mb-0 text-[11px] text-muted-foreground">
                             Completed {formatDate(milestone.completedAt)}
                           </p>
-                        )}
+                        ) : null}
                       </div>
                       {project.canManage && (
                         <Button

@@ -99,6 +99,8 @@ export async function getProject(userId: string, id: string) {
           startDate: true,
           createdAt: true,
           workPlan: true,
+          templateKey: true,
+          workspaceGroupId: true,
           request: {
             select: {
               id: true,
@@ -107,7 +109,13 @@ export async function getProject(userId: string, id: string) {
             },
           },
           milestones: {
-            select: { id: true, title: true, completedAt: true },
+            select: {
+              id: true,
+              title: true,
+              completedAt: true,
+              deliveryStatus: true,
+              sentToClientAt: true,
+            },
             orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
           },
         },
@@ -186,14 +194,27 @@ export async function getProject(userId: string, id: string) {
               orderBy: { createdAt: "desc" },
             })
           : []
-      const { clientId: _clientId, workPlan, ...safeProject } = project
+      const isWorkspaceManaged = Boolean(
+        project.templateKey || project.workspaceGroupId,
+      )
+      const {
+        clientId: _clientId,
+        workPlan,
+        templateKey: _templateKey,
+        workspaceGroupId: _workspaceGroupId,
+        ...safeProject
+      } = project
       void _clientId
+      void _templateKey
+      void _workspaceGroupId
       const progress = projectTaskProgress(workPlan)
       return {
         ...safeProject,
+        workspaceManaged: isWorkspaceManaged,
         milestones: isClient ? [] : project.milestones,
         progress,
-        canManage: canManage && project.status === "IN_PROGRESS",
+        canManage:
+          !isWorkspaceManaged && canManage && project.status === "IN_PROGRESS",
         canReviewChanges,
         deliverables,
         changeRequests,
@@ -761,6 +782,8 @@ export async function setMilestoneCompletion(
       where: {
         id: projectId,
         status: "IN_PROGRESS",
+        templateKey: null,
+        workspaceGroupId: null,
         ...contributorScope(userId, projectId),
       },
       data: { updatedAt: new Date() },

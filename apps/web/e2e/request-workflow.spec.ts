@@ -1316,7 +1316,7 @@ for (const width of [1440, 390]) {
       expect(actions[2]).toMatchObject({ type: "ACTIVATE_PROJECT" })
       await expect(
         page.getByRole("link", { name: "View Project", exact: true }),
-      ).toHaveAttribute("href", "/projects/project-1")
+      ).toHaveAttribute("href", "/project-workspace/project-1")
       await expect(
         page.getByRole("checkbox", { name: /Dani Worker/ }),
       ).toHaveCount(0)

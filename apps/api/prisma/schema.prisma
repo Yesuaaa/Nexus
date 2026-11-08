@@ -640,7 +640,6 @@ model WorkflowFile {
   payments                 WorkflowPayment[]
   deliverableMilestone     ProjectMilestone?
   clientDeliverableReviews ProjectDeliverableClientReview[]
-
   @@unique([requestId, uploaderId, uploadId])
   @@index([requestId, createdAt])
 }

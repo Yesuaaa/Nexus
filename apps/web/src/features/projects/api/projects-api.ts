@@ -1,4 +1,5 @@
 import { apiRequest, apiStreamRequest } from "@/features/auth/api/auth-api"
+import type { ProjectDeliverableStatus } from "@/features/project-workspace/api/project-workspace-api"
 
 export type ProjectClientReviewStatus = "APPROVED" | "REVISION_REQUESTED"
 export type ProjectChangeRequestStatus = "PENDING" | "ACCEPTED" | "NOT_APPROVED"
@@ -43,13 +44,20 @@ export type ProjectWorkspace = {
   status: string
   startDate: string | null
   createdAt: string
+  workspaceManaged: boolean
   canManage: boolean
   request: {
     id: string
     referenceNumber: string | null
     service: { name: string }
   } | null
-  milestones: { id: string; title: string; completedAt: string | null }[]
+  milestones: {
+    id: string
+    title: string
+    completedAt: string | null
+    deliveryStatus: ProjectDeliverableStatus
+    sentToClientAt: string | null
+  }[]
   progress?: { completed: number; total: number }
   deliverables?: ProjectDeliverable[]
   changeRequests?: ProjectChangeRequest[]

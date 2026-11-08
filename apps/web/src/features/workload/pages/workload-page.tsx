@@ -50,7 +50,15 @@ type Project = {
   status: string
   requestId: string | null
   request: { referenceNumber: string | null; service: { name: string } } | null
-  staff: { employeeId: string }[]
+  staff: {
+    id: string
+    employeeId: string
+    employeeName: string
+    weeklyHours: number | null
+    allocationStart: string | null
+    allocationEnd: string | null
+    eligible: boolean
+  }[]
 }
 type Data = {
   department: { id: string; name: string }
@@ -85,6 +93,8 @@ export function WorkloadPage() {
     projectId: string
     employeeId: string
     previousEmployeeId?: string
+    weeklyHours?: number | null
+    allocationEnd?: string | null
   } | null>(null)
   const [projection, setProjection] = useState("")
   const [busy, setBusy] = useState(false)
@@ -148,15 +158,48 @@ export function WorkloadPage() {
   const selectedProject = data?.projects.find(
     (project) => project.id === allocation?.projectId,
   )
-  const pending = (data?.projects ?? []).filter((p) => p.staff.length === 0)
+  const staffingAttention = (data?.projects ?? []).filter(
+    (project) =>
+      project.staff.length === 0 ||
+      project.staff.some((assignment) => assignment.eligible === false),
+  )
   const openAssignment = (
     projectId = "",
     employeeId = "",
     previousEmployeeId?: string,
+    allocationDefaults?: {
+      weeklyHours: number | null
+      allocationEnd: string | null
+    },
   ) => {
     setActionError("")
     setProjection("")
-    setAllocation({ projectId, employeeId, previousEmployeeId })
+    setAllocation({
+      projectId,
+      employeeId,
+      previousEmployeeId,
+      ...allocationDefaults,
+    })
+  }
+  const removeProjectAllocation = (
+    project: Project,
+    assignment: Project["staff"][number],
+  ) => {
+    setRequestsOpen(false)
+    setActionError("")
+    setConfirmation({
+      id: assignment.id,
+      projectId: project.id,
+      employeeId: assignment.employeeId,
+      weeklyHours: assignment.weeklyHours,
+      allocationStart: assignment.allocationStart,
+      allocationEnd: assignment.allocationEnd,
+      project: {
+        id: project.id,
+        name: project.request?.service.name ?? project.name,
+        status: project.status,
+      },
+    })
   }
   function selectAssignment(person: Staff, action: "reassign" | "unassign") {
     if (person.assignments.length === 1)
@@ -284,7 +327,7 @@ export function WorkloadPage() {
           >
             Assign staff
             <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-white px-1 text-[9px] font-semibold tabular-nums text-[#203f8c]">
-              {pending.length}
+              {staffingAttention.length}
             </span>
           </Button>
         </div>
@@ -594,40 +637,95 @@ export function WorkloadPage() {
       )}
       <Dialog open={requestsOpen} onOpenChange={setRequestsOpen}>
         <WorkloadDialog
-          title="Assign staff"
-          description="Choose an authorized project awaiting its first staff assignment."
+          title="Staffing attention"
+          description="Assign staff to projects or resolve allocations that no longer match the active department roster."
           onClose={() => setRequestsOpen(false)}
         >
           <div className="grid gap-3 p-5 sm:p-6">
-            {pending.map((project) => (
+            {staffingAttention.map((project) => (
               <div
                 key={project.id}
-                className="flex items-center justify-between gap-3 rounded-lg border border-[#e8ebef] p-4 max-[420px]:flex-col max-[420px]:items-stretch"
+                className="grid gap-3 rounded-lg border border-[#e8ebef] p-4"
               >
-                <div className="min-w-0">
-                  <p className="m-0 break-words text-xs font-semibold">
-                    {project.request?.service.name ?? project.name}
-                  </p>
-                  <p className="mt-1 mb-0 break-all text-[11px] text-[#738096]">
-                    {project.request?.referenceNumber ??
-                      project.requestId ??
-                      project.id}
-                  </p>
+                <div className="flex items-start justify-between gap-3 max-[420px]:flex-col">
+                  <div className="min-w-0">
+                    <p className="m-0 break-words text-xs font-semibold">
+                      {project.request?.service.name ?? project.name}
+                    </p>
+                    <p className="mt-1 mb-0 break-all text-[11px] text-[#738096]">
+                      {project.request?.referenceNumber ??
+                        project.requestId ??
+                        project.id}
+                    </p>
+                  </div>
+                  {project.staff.length === 0 && (
+                    <Button
+                      className={panelAssignButton}
+                      onClick={() => {
+                        setRequestsOpen(false)
+                        openAssignment(project.id)
+                      }}
+                    >
+                      Assign staff
+                    </Button>
+                  )}
                 </div>
-                <Button
-                  className={panelAssignButton}
-                  onClick={() => {
-                    setRequestsOpen(false)
-                    openAssignment(project.id)
-                  }}
-                >
-                  Assign staff
-                </Button>
+                {project.staff
+                  .filter((assignment) => assignment.eligible === false)
+                  .map((assignment) => (
+                    <div
+                      key={assignment.id}
+                      className="flex flex-wrap items-center justify-between gap-3 border-t border-[#eceef1] pt-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="m-0 break-words text-xs font-medium">
+                          {assignment.employeeName}
+                        </p>
+                        <p className="mt-1 mb-0 text-[11px] text-[#738096]">
+                          {assignment.weeklyHours ?? "Unrecorded"} hrs/week · No
+                          longer eligible for new assignments
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 gap-2">
+                        <Button
+                          variant="outline"
+                          className={panelSecondaryButton}
+                          onClick={() => {
+                            setRequestsOpen(false)
+                            openAssignment(
+                              project.id,
+                              "",
+                              assignment.employeeId,
+                              {
+                                weeklyHours: assignment.weeklyHours,
+                                allocationEnd:
+                                  assignment.allocationEnd &&
+                                  assignment.allocationEnd.slice(0, 10) >= week
+                                    ? assignment.allocationEnd.slice(0, 10)
+                                    : week,
+                              },
+                            )
+                          }}
+                        >
+                          Reassign
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className={panelDangerButton}
+                          onClick={() =>
+                            removeProjectAllocation(project, assignment)
+                          }
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
               </div>
             ))}
-            {!pending.length && (
+            {!staffingAttention.length && (
               <p className="m-0 py-6 text-center text-xs text-[#738096]">
-                No authorized projects are awaiting staff.
+                No projects need staffing attention.
               </p>
             )}
           </div>
@@ -881,7 +979,9 @@ export function WorkloadPage() {
                       .find((s) => s.id === allocation.employeeId)
                       ?.assignments.find(
                         (a) => a.projectId === allocation.projectId,
-                      )?.weeklyHours ?? ""
+                      )?.weeklyHours ??
+                    allocation.weeklyHours ??
+                    ""
                   }
                 />
               </label>
@@ -898,7 +998,9 @@ export function WorkloadPage() {
                       ?.assignments.find(
                         (a) => a.projectId === allocation.projectId,
                       )
-                      ?.allocationEnd?.slice(0, 10) ?? week
+                      ?.allocationEnd?.slice(0, 10) ??
+                    allocation.allocationEnd?.slice(0, 10) ??
+                    week
                   }
                 />
               </label>

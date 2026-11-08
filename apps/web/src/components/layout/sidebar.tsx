@@ -15,7 +15,9 @@ import {
   canAccessServiceManagement,
   canAccessClientManagement,
   canAccessProjects,
+  canAccessProjectWorkspace,
 } from "@/features/auth/model/permissions"
+import { ProjectWorkspaceSidebarLinks } from "@/features/project-workspace/components/project-workspace-sidebar-links"
 import { focusRing, iconButtonClass } from "./styles"
 import {
   AccountsIcon,
@@ -307,6 +309,13 @@ export function Sidebar({
               <span className={collapsedLabelClass}>Request Inbox</span>
               {collapsed && <CollapsedTooltip>Request Inbox</CollapsedTooltip>}
             </Link>
+          )}
+          {canAccessProjectWorkspace(account) && (
+            <ProjectWorkspaceSidebarLinks
+              collapsed={collapsed}
+              active={pathname.startsWith("/project-workspace")}
+              onNavigate={onCloseDrawer}
+            />
           )}
           {canAccessClientManagement(account) && (
             <Link

@@ -241,7 +241,13 @@ export async function snapshot(
     participant
       ? tx.project.findUnique({
           where: { requestId },
-          select: { id: true, name: true, status: true, startDate: true },
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            startDate: true,
+            workspaceGroupId: true,
+          },
         })
       : null,
     tx.workflowEvent.findMany({
@@ -367,7 +373,12 @@ export async function snapshot(
     payment: payment ? { ...payment, amount: payment.amount.toFixed(2) } : null,
     project:
       project && (!permissions.isClient || project.startDate)
-        ? { id: project.id, name: project.name, status: project.status }
+        ? {
+            id: project.id,
+            workspaceId: project.workspaceGroupId ?? project.id,
+            name: project.name,
+            status: project.status,
+          }
         : null,
     events,
     ...(internal ? { internal } : {}),

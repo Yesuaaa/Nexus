@@ -257,17 +257,21 @@ test("department head manages capacity and reviews real allocation state", async
   await page
     .getByRole("button", { name: "Assign staff 1", exact: true })
     .click()
+  const staffingDialog = page.getByRole("dialog", {
+    name: "Staffing attention",
+    exact: true,
+  })
+  await expect(staffingDialog).toContainText("Website Design and Development")
+  await expect(staffingDialog).toContainText(
+    "SR-8F2ED60A-7A2B-4FD3-9D2C-39AEB23C6D01",
+  )
+  await staffingDialog
+    .getByRole("button", { name: "Assign staff", exact: true })
+    .click()
   const assignmentDialog = page.getByRole("dialog", {
     name: "Assign staff",
     exact: true,
   })
-  await expect(assignmentDialog).toContainText("Website Design and Development")
-  await expect(assignmentDialog).toContainText(
-    "SR-8F2ED60A-7A2B-4FD3-9D2C-39AEB23C6D01",
-  )
-  await assignmentDialog
-    .getByRole("button", { name: "Assign staff", exact: true })
-    .click()
   await expect(
     assignmentDialog.getByRole("combobox", { name: "Project", exact: true }),
   ).toContainText("Website Design and Development")
@@ -478,4 +482,133 @@ test("department head manages capacity and reviews real allocation state", async
   ).toBeVisible()
   await expect(overview).not.toContainText("NaN")
   await checkCardHeights()
+})
+
+test("department head can reassign or remove allocations for former staff", async ({
+  page,
+}) => {
+  await page.clock.setFixedTime(new Date("2026-11-06T08:00:00Z"))
+  const account = {
+    ...accountFor("STAFF"),
+    headOf: { id: "design", name: "Design" },
+  }
+  let removed = false
+  await page.addInitScript(() =>
+    sessionStorage.setItem("nexus.auth.token", "test-session"),
+  )
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url())
+    if (url.pathname === "/api/auth/me")
+      return route.fulfill({ json: { user: account } })
+    if (url.pathname === "/api/auth/settings")
+      return route.fulfill({
+        json: { preferences: defaultPreferences, sessions: [] },
+      })
+    if (url.pathname === "/api/workload/assignment/stale-allocation") {
+      expect(route.request().method()).toBe("DELETE")
+      removed = true
+      return route.fulfill({ json: { saved: true } })
+    }
+    if (url.pathname === "/api/workload")
+      return route.fulfill({
+        json: {
+          department: { id: "design", name: "Design" },
+          week: url.searchParams.get("week"),
+          projects: [
+            {
+              id: "project-1",
+              name: "Website Redesign",
+              status: "IN_PROGRESS",
+              requestId: "request-1",
+              request: null,
+              staff: removed
+                ? []
+                : [
+                    {
+                      id: "stale-allocation",
+                      employeeId: "former-staff",
+                      employeeName: "Former Staff",
+                      weeklyHours: 8,
+                      allocationStart: "2026-11-02T00:00:00.000Z",
+                      allocationEnd: "2026-11-09T00:00:00.000Z",
+                      eligible: false,
+                    },
+                  ],
+            },
+          ],
+          staff: [
+            {
+              id: "maria",
+              fullName: "Maria Santos",
+              position: "UI/UX Designer",
+              status: "ACTIVE",
+              profileSpecialties: [],
+              team: null,
+              capacity: { scheduledHours: 40, timeOffHours: 0 },
+              assignments: [],
+            },
+          ],
+        },
+      })
+    return route.fulfill({ json: { notifications: [], unreadCount: 0 } })
+  })
+
+  await page.goto("/staff-workload")
+  await page
+    .getByRole("button", { name: "Assign staff 1", exact: true })
+    .click()
+  const attention = page.getByRole("dialog", {
+    name: "Staffing attention",
+    exact: true,
+  })
+  await expect(attention).toContainText("Former Staff")
+  await expect(attention).toContainText("8 hrs/week")
+  await attention.getByRole("button", { name: "Reassign", exact: true }).click()
+  const reassign = page.getByRole("dialog", {
+    name: "Reassign / edit allocation",
+    exact: true,
+  })
+  await expect(reassign.getByLabel("Hours per week")).toHaveValue("8")
+  await expect(reassign.getByLabel("End date")).toHaveValue("2026-11-09")
+  await reassign.getByRole("combobox", { name: "Staff", exact: true }).click()
+  await expect(page.getByRole("option", { name: /Maria Santos/ })).toBeVisible()
+  await expect(page.getByRole("option", { name: /Former Staff/ })).toHaveCount(
+    0,
+  )
+  await page.keyboard.press("Escape")
+  await reassign.getByRole("button", { name: "Cancel", exact: true }).click()
+
+  await page
+    .getByRole("button", { name: "Assign staff 1", exact: true })
+    .click()
+  await page
+    .getByRole("dialog", { name: "Staffing attention", exact: true })
+    .getByRole("button", { name: "Remove", exact: true })
+    .click()
+  await expect(
+    page.getByRole("heading", { name: "Unassign staff?", exact: true }),
+  ).toBeVisible()
+  const workloadRefresh = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === "/api/workload" &&
+      response.request().method() === "GET",
+  )
+  await page
+    .getByRole("button", { name: "Unassign staff", exact: true })
+    .click()
+  expect(removed).toBe(true)
+  const refreshedWorkload = await workloadRefresh
+  const refreshedBody = await refreshedWorkload.json()
+  expect(refreshedBody.projects[0].staff).toEqual([])
+  await page
+    .getByRole("button", { name: "Assign staff 1", exact: true })
+    .click()
+  const cleanedUp = page.getByRole("dialog", {
+    name: "Staffing attention",
+    exact: true,
+  })
+  await expect(cleanedUp).not.toContainText("Former Staff")
+  await expect(
+    cleanedUp.getByRole("button", { name: "Assign staff", exact: true }),
+  ).toBeVisible()
 })
