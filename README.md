@@ -26,6 +26,14 @@ copy apps/api/.env.example apps/api/.env
 pnpm dev
 ```
 
+For mobile development (Android / Kotlin Multiplatform):
+
+```sh
+pnpm dev:mobile          # Starts backend API with mobile port forwarding
+pnpm dev:mobile:docker   # Starts backend API inside Docker with mobile port forwarding
+pnpm run:mobile          # Builds, installs, and starts mobile app on connected emulator/device
+```
+
 On macOS or Linux, use `cp` instead of `copy`. Open http://localhost:5173. Next.js forwards `/api` to the existing API on port 3001 in development and production. Port 5173 is retained to preserve the backend's existing default origin. The API health check works before database setup. Optional frontend settings are documented in `apps/web/.env.example`; use `apps/web/.env.local` for local overrides.
 
 In Supabase, open **Connect** and copy the **Transaction pooler** URL into `DATABASE_URL` and the **Direct connection** URL into `DIRECT_URL` in `apps/api/.env`. Add `pgbouncer=true` to the transaction pooler URL if it is absent. For migrations from an IPv4-only network, use the **Session pooler** URL for `DIRECT_URL`. Keep these URLs out of web environment variables.

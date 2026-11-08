@@ -39,3 +39,8 @@ Service list/detail routes share the catalog's pricing visibility rules. Private
 Department heads accept bookings through the [Request Inbox](department-request-inbox.md). Acceptance moves a submitted booking into **Under review**, visible in Service Requests and compatible legacy links. Existing pending, in-progress, and completed records are migrated to the shared submitted, under-review, and closed statuses.
 
 Both details panels include an **Open messages** link to the dedicated [Messages page](request-messaging.md), also available from the message icon in the top bar. After acceptance, the client and the accepting department's current head can exchange messages there with live updates, persisted history and retry protection. Before acceptance, the conversation page waits for the department and updates automatically when the conversation opens.
+
+## Backend contract readiness (#155)
+
+See the [mobile client contract and audit](mobile-client-contract.md) for the endpoint inventory,
+security behavior, cancellation/retry rules, errors and platform base URLs.

@@ -25,3 +25,10 @@ postman/collections/
 postman/environments/
 postman/globals/
 postman/auth-scripts.test.mjs
+
+# Local IDE state and machine-specific emulator shortcuts
+/.idea/
+/.vscode/tasks.json
+
+# This workspace uses pnpm; do not commit an npm-generated API lockfile.
+/apps/api/package-lock.json

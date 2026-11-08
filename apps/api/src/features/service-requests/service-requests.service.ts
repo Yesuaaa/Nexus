@@ -1,3 +1,4 @@
+import { clientRequestSelect } from "../client-services/client-services.repository.js"
 import type { Prisma } from "../../generated/prisma/client.js"
 import { randomUUID } from "node:crypto"
 import { getPrisma } from "../../lib/db.js"
@@ -98,12 +99,7 @@ export async function listClientBookings(
 export async function getClientBooking(clientId: string, id: string) {
   const serviceRequest = await getPrisma()!.serviceRequest.findFirst({
     where: { id, clientId },
-    select: {
-      ...bookingSelect,
-      projectGoals: true,
-      projectRequirements: true,
-      additionalDetails: true,
-    },
+    select: clientRequestSelect,
   })
   if (!serviceRequest)
     throw new ServiceRequestsError(404, "Booked service not found")
@@ -117,9 +113,15 @@ async function findExisting(clientId: string, input: ServiceRequestInput) {
     },
   })
   if (!existing) return null
+  const packageMatches = input.packageId
+    ? existing.packageId === input.packageId
+    : input.packageTier
+      ? existing.packageName?.toLowerCase() === input.packageTier.toLowerCase()
+      : existing.packageId === null
+
   if (
     existing.serviceId !== input.serviceId ||
-    existing.packageId !== input.packageId ||
+    !packageMatches ||
     existing.preferredSpecialistId !== input.preferredSpecialistId ||
     existing.projectGoals !== input.goals ||
     existing.projectRequirements !== input.requirements ||
@@ -162,10 +164,18 @@ export async function submitServiceRequest(clientId: string, body: unknown) {
           )
         const selectedPackage = input.packageId
           ? service.packages.find((item) => item.id === input.packageId)
-          : null
+          : input.packageTier
+            ? service.packages.find(
+                (item) =>
+                  item.name.toLowerCase() === input.packageTier!.toLowerCase(),
+              )
+            : null
         if (
           (input.packageId && !selectedPackage) ||
-          (!input.packageId && service.packages.length > 0)
+          (input.packageTier && !selectedPackage) ||
+          (!input.packageId &&
+            !input.packageTier &&
+            service.packages.length > 0)
         )
           throw new ServiceRequestsError(
             409,

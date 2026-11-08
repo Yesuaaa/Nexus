@@ -5,7 +5,11 @@ import { publicUser } from "../users/users.dto.js"
 import { clearFailures, loginAllowed, recordFailure } from "./auth.limiter.js"
 import { hashPassword, validPassword, verifyPassword } from "./auth.password.js"
 import { authRepository } from "./auth.repository.js"
-import { normalizedEmail, validRegistrationProfile } from "./auth.schema.js"
+import {
+  normalizedEmail,
+  validRegistrationEmail,
+  validSelfRegistrationProfile,
+} from "./auth.schema.js"
 import { signAccessToken, jwtKey } from "./auth.jwt.js"
 
 import { approximateSessionLocation } from "./session-location.js"
@@ -84,13 +88,17 @@ export const authService = {
     const fullName = input.fullName
     const contactNumber = input.contactNumber
 
-    if (!cleanEmail || !validPassword(password)) {
+    if (
+      !cleanEmail ||
+      !validRegistrationEmail(cleanEmail) ||
+      !validPassword(password)
+    ) {
       throw new AuthError(
         400,
-        "Provide a valid email and password of at least 12 characters",
+        "Provide a valid email and password meeting the password policy",
       )
     }
-    if (!validRegistrationProfile(fullName, contactNumber)) {
+    if (!validSelfRegistrationProfile(fullName, contactNumber)) {
       throw new AuthError(400, "Provide a valid name and contact number")
     }
 
@@ -172,7 +180,7 @@ export const authService = {
     ) {
       throw new AuthError(
         400,
-        "Provide the current password and a new password of at least 12 characters",
+        "Provide the current password and a new password meeting the password policy",
       )
     }
     if (!(await verifyPassword(currentPassword, input.currentPasswordHash))) {

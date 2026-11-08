@@ -8,6 +8,11 @@
     "lint": "eslint . --max-warnings 0",
     "audit:dependencies": "pnpm audit --audit-level high",
     "dev": "pnpm -r --parallel dev",
+    "dev:mobile": "node -e \"const { spawnSync } = require('node:child_process'); const result = spawnSync('adb', ['reverse', 'tcp:3001', 'tcp:3001'], { stdio: 'ignore' }); if (result.error || result.status !== 0) console.warn('ADB reverse skipped; install Android platform-tools and connect an emulator/device for mobile API access.');\" && pnpm --filter @nexus/api dev",
+    "dev:mobile:docker": "node scripts/run-mobile-docker.mjs",
+    "run:mobile": "node scripts/run-mobile-app.mjs",
+    "docker:mobile:test": "docker compose -f compose.yaml -f compose.mobile.yaml run --rm mobile-test",
+    "docker:mobile:build": "docker compose -f compose.yaml -f compose.mobile.yaml run --rm mobile-build",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test:e2e": "node scripts/run-e2e.mjs",
@@ -18,7 +23,8 @@
     "preview:web": "pnpm --filter @nexus/web preview",
     "db:generate": "pnpm --filter @nexus/api db:generate",
     "db:migrate": "pnpm --filter @nexus/api db:migrate",
-    "db:studio": "pnpm --filter @nexus/api db:studio"
+    "db:studio": "pnpm --filter @nexus/api db:studio",
+    "test:mobile": "node scripts/run-mobile-regression.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

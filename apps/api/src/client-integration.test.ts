@@ -420,7 +420,7 @@ test(
           email: "New.Client@example.com",
           contactNumber: "+63 917 123 4567",
           isActive: true,
-          password: "client initial password",
+          password: "ClientPassword1!",
         }
         for (const actor of ["STAFF", "USER", "SUPERADMIN"]) {
           assert.equal((await mutate("", "POST", input, actor)).status, 403)

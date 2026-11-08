@@ -44,3 +44,14 @@ If any check fails, resolve the issues immediately before concluding your respon
 - **Styling:** Use Tailwind CSS v4 and shadcn/Radix UI primitives. Maintain visual alignment with the EXP navy tokens and Inter typography. Do not introduce legacy Tailwind v3 config files.
 - **File Organization:** Adhere to feature-driven folder structures under `src/features/<feature>/` (`components/`, `api/`, `model/`, `hooks/`, `providers/`, `pages/`).
 - **Tests:** Backend tests must utilize `@electric-sql/pglite` for offline, in-memory PostgreSQL testing without touching live databases.
+
+---
+
+## 4. Test & Debug Cadence (No Premature Pushing)
+
+- **Do Not Rush to Push:** After creating a feature or fixing a bug, do **NOT** immediately push to GitHub (`git push`) or open a PR (`gh pr create`).
+- **Interactive Verification First:** Test and debug changes locally:
+  - Run automated tests (`pnpm --filter @nexus/api test` or `./gradlew :shared:testAndroidHostTest`).
+  - Verify runtime behavior on the emulator/browser.
+  - Review source control changes (`git status`, `git diff`) for unintended changes or stray files.
+- **User Confirmation Gate:** Always present the verification outcome and source control diff to the user for review and explicit approval before pushing to remote.
