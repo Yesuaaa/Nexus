@@ -44,6 +44,15 @@ async function scope(tx: Prisma.TransactionClient, userId: string) {
     return fail("Only the department head can manage workload", 403)
   return department
 }
+function staffAccountWhere(departmentId: string): Prisma.EmployeeWhereInput {
+  return {
+    departmentId,
+    user: { role: "STAFF", isActive: true, accountDeletedAt: null },
+  }
+}
+function eligibleStaffWhere(departmentId: string): Prisma.EmployeeWhereInput {
+  return { ...staffAccountWhere(departmentId), status: "ACTIVE" }
+}
 workloadRouter.get("/", async (req, res) => {
   const week = weekValue(req.query.week)
   const end = new Date(`${week}T00:00:00Z`)
@@ -52,7 +61,7 @@ workloadRouter.get("/", async (req, res) => {
     async (tx) => {
       const department = await scope(tx, req.auth!.user.id)
       const staff = await tx.employee.findMany({
-        where: { departmentId: department.id },
+        where: staffAccountWhere(department.id),
         select: {
           id: true,
           fullName: true,
@@ -73,6 +82,11 @@ workloadRouter.get("/", async (req, res) => {
         },
         orderBy: { fullName: "asc" },
       })
+      const eligibleEmployeeIds = new Set(
+        staff
+          .filter((employee) => employee.status === "ACTIVE")
+          .map((employee) => employee.id),
+      )
       const capacities = await tx.workloadCapacity.findMany({
         where: { week, employeeId: { in: staff.map((s) => s.id) } },
       })
@@ -97,14 +111,34 @@ workloadRouter.get("/", async (req, res) => {
               service: { select: { name: true } },
             },
           },
-          staff: { select: { employeeId: true } },
+          staff: {
+            select: {
+              id: true,
+              employeeId: true,
+              weeklyHours: true,
+              allocationStart: true,
+              allocationEnd: true,
+              employee: { select: { fullName: true } },
+            },
+          },
         },
         orderBy: { createdAt: "desc" },
       })
       return {
         department,
         week,
-        projects,
+        projects: projects.map((project) => ({
+          ...project,
+          staff: project.staff.map((allocation) => ({
+            id: allocation.id,
+            employeeId: allocation.employeeId,
+            employeeName: allocation.employee.fullName,
+            weeklyHours: allocation.weeklyHours,
+            allocationStart: allocation.allocationStart,
+            allocationEnd: allocation.allocationEnd,
+            eligible: eligibleEmployeeIds.has(allocation.employeeId),
+          })),
+        })),
         staff: staff.map((employee) => ({
           ...employee,
           capacity:
@@ -135,10 +169,11 @@ workloadRouter.put("/capacity", async (req, res) => {
   await getPrisma()!.$transaction(async (tx) => {
     const department = await scope(tx, req.auth!.user.id)
     const member = await tx.employee.updateMany({
-      where: { id: employeeId, departmentId: department.id },
+      where: { id: employeeId, ...staffAccountWhere(department.id) },
       data: { updatedAt: new Date() },
     })
-    if (!member.count) return fail("Employee not found in your department", 404)
+    if (!member.count)
+      return fail("Choose staff with an active account in your department", 404)
     await tx.workloadCapacity.upsert({
       where: { employeeId_week: { employeeId, week } },
       create: {
@@ -197,14 +232,23 @@ workloadRouter.put("/assignment", async (req, res) => {
     const member = await tx.employee.updateMany({
       where: {
         id: employeeId,
-        departmentId: department.id,
-        status: "ACTIVE",
-        user: { role: "STAFF", isActive: true, accountDeletedAt: null },
+        ...eligibleStaffWhere(department.id),
       },
       data: { updatedAt: new Date() },
     })
     if (!member.count)
       return fail("Choose active department staff with an active login", 409)
+    const previousEmployeeId =
+      typeof input.previousEmployeeId === "string"
+        ? input.previousEmployeeId
+        : null
+    if (previousEmployeeId && previousEmployeeId !== employeeId) {
+      const previous = await tx.projectStaff.findFirst({
+        where: { projectId, employeeId: previousEmployeeId },
+        select: { id: true },
+      })
+      if (!previous) return fail("Previous assignment was not found", 404)
+    }
     const data = {
       weeklyHours,
       allocationStart,
@@ -240,13 +284,10 @@ workloadRouter.put("/assignment", async (req, res) => {
           id: {
             in: [
               employeeId,
-              ...(typeof input.previousEmployeeId === "string"
-                ? [input.previousEmployeeId]
-                : []),
+              ...(previousEmployeeId ? [previousEmployeeId] : []),
             ],
           },
-          departmentId: department.id,
-          userId: { not: null },
+          ...staffAccountWhere(department.id),
         },
         select: { userId: true },
       })
@@ -265,17 +306,9 @@ workloadRouter.put("/assignment", async (req, res) => {
       })
     }
 
-    if (
-      typeof input.previousEmployeeId === "string" &&
-      input.previousEmployeeId !== employeeId
-    ) {
-      const previous = await tx.employee.findFirst({
-        where: { id: input.previousEmployeeId, departmentId: department.id },
-      })
-      if (!previous)
-        return fail("Previous employee is outside your department", 403)
+    if (previousEmployeeId && previousEmployeeId !== employeeId) {
       await tx.projectStaff.deleteMany({
-        where: { projectId, employeeId: previous.id },
+        where: { projectId, employeeId: previousEmployeeId },
       })
     }
   })
@@ -287,7 +320,6 @@ workloadRouter.delete("/assignment/:id", async (req, res) => {
     const removed = await tx.projectStaff.deleteMany({
       where: {
         id: String(req.params.id),
-        employee: { departmentId: department.id },
         project: { request: { acceptedDepartmentId: department.id } },
       },
     })
