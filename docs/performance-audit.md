@@ -108,6 +108,46 @@ The final build uses Next's normal minified, cacheable stylesheets. The experime
 
 Tailwind source detection is limited to `src`, excluding tests and tooling. The existing local Latin Inter font is preloaded with `next/font/local` and a metric-adjusted fallback. Fontsource's other Unicode subsets remain available for user-entered text.
 
+#### Follow-up: public route CSS (2026-11-09)
+
+The root Tailwind entry previously scanned every feature, making portal utilities render-blocking on login and registration too. It now explicitly scans public routes, auth, not-found, shared UI primitives, and library helpers. The protected layout imports the complete utility set separately, with the same extracted theme tokens. Preflight and global rules remain in the root stylesheet.
+
+With the same optimized PostCSS compiler, root application CSS fell from 132,401 to 52,325 bytes (60%); gzip fell from 23,542 to 10,956 bytes (53%). The resulting production `/login` HTML references one stylesheet totaling 55,251 bytes, or 11,879 bytes gzipped, including font CSS. These are resource-size measurements, not a new FCP/LCP comparison. Required CSS still blocks first paint; this change reduces its size without deferring styling or reintroducing experimental inlining.
+
+Browser checks cover the public stylesheet size budget, CSP, desktop/mobile layout before JavaScript, and styling across auth/portal navigation.
+
+Follow-up validation: formatting, lint, typechecking, and the web/API production build passed; all 11 targeted auth checks passed. The broader browser suite had 259 passed, five live-account skips, and six failures in existing client mutations, employee status, and department team/status scenarios. Replaying those scenarios with the original compiled application stylesheet reproduced all six failures (missing edit/status actions and a disabled team submit button); they were not caused by the CSS split. Their existing assertions and application behavior were retained.
+
+#### Follow-up: font dependency chain (2026-11-09)
+
+The subsequent screenshot uses development `/app/layout.css?v=...` assets and shows a CSS-discovered font. A fresh production Lighthouse run confirmed that the current local Inter font is already preloaded through the initial response's `Link` header. Its network record has `isLinkPreload: true`; the critical tree contains only `/login → CSS`, with no font child. The font-display audit passes and there are no additional preconnect candidates. The same-origin font does not need a new preconnect.
+
+The existing `next/font/local` preload default is now explicit (`preload: true`), without changing font display or typography. New login and registration browser checks hold stylesheet responses until a font request starts, verify the initial preload header, then release CSS and assert that the preloaded font is reused without a second font download. This guards the existing production behavior; it does not claim another latency improvement or eliminate the required HTML-to-CSS dependency. Audit deployment builds with `pnpm build` followed by `pnpm --filter @nexus/web start`, rather than the development server.
+
+#### Follow-up: unused JavaScript and the 404 boundary (2026-11-09)
+
+The supplied development coverage report includes `app/not-found.js`, `app/layout.js`, and browser-extension scripts. The custom 404 page imported the client Button and Next Link for a static home link. Its link now renders on the server using shared button variants, extracted into a module without a client directive. It retains button styling and keyboard access; following it performs a document navigation to `/` through the existing home redirect. Interactive Button callers retain their existing API and behavior.
+
+Fresh production browser contexts measured encoded JavaScript bodies of 173,089 → 167,969 bytes on login (5.0 KiB less) and 153,836 → 140,038 bytes on the 404 page (13.5 KiB less). These are single-run resource-size comparisons, not statistically established speed improvements. A subsequent production Lighthouse login audit reports 27,273 bytes of unused JavaScript in the shared Next runtime, unchanged from the preceding audit. No claim is made to eliminate framework code or the screenshot's full 224 KiB estimate. Browser-extension scripts are outside the application bundle; use an extension-free browser profile for application performance measurements.
+
+Validation: all 13 targeted auth browser checks and the existing server-HTML/404 regression passed. Additional browser verification covered the 404 status, styling and keyboard focus without JavaScript, and the home link's return to login. Formatting, lint, typechecking, and the production web/API build passed.
+
+#### Follow-up: total payload and duplicate font declarations (2026-11-09)
+
+The next screenshot totals 3,779 KiB and includes a 3,070.6 KiB `main-app.js?v=...` development bundle. Those development assets are not the deployable production payload. The screenshot also shows two Latin font URLs. The root previously imported Fontsource's complete weight stylesheet alongside `next/font/local`; `src/fonts.css` now retains only the six non-Latin subset declarations, with the preloaded Latin face supplied exclusively by Next. Fresh development and production browser contexts each downloaded one initial font. Explicit Greek, Cyrillic, Vietnamese, and extended Latin font loads passed in both modes. Production already reused its preload before this change, so no additional 47 KiB production saving is claimed.
+
+The user's WebP hero conversion is retained. The optimizer regression now requests `community-1.webp` and decodes the response to assert an actual 828 px output width; MIME type and byte limits alone could also pass for the smaller unmodified source file. All 13 targeted auth checks passed against the current WebP assets, including carousel image detail and hidden mobile image behavior. Formatting, lint, typechecking, and the complete production build passed.
+
+Fresh production Lighthouse observations (one run per profile, Chrome 156, Lighthouse 13.6): login transferred 297,200 bytes (290.2 KiB) on mobile and 365,547 bytes (357.0 KiB) on desktop. Both had one 48,714-byte font transfer; desktop image transfer was 95,557 bytes, while mobile image transfer was 27,207 bytes with no hidden hero request. Reports are in `.tmp/performance/payload-{mobile,desktop}/`. These are current production measurements, not a controlled before/after comparison with the development screenshot. Development runtime size is not changed by this fix; audit `pnpm build` followed by `pnpm --filter @nexus/web start` in an extension-free browser profile.
+
+Webpack compatibility correction: bare package URLs in `fonts.css` resolved in Turbopack but failed in Webpack development with `Module not found`. All six URLs now use explicit paths relative to the stylesheet (`../node_modules/@fontsource-variable/inter/files/...`). Webpack development browser verification passed for the rendered login form, one initial font request, four Unicode subset loads, and both login interaction tests. This fixes the compiler compatibility issue without restoring the duplicate Latin face.
+
+#### Follow-up: long main-thread task (2026-11-09)
+
+The supplied screenshot attributes a 592 ms task to development `main-app.js?v=...`. Six fresh production Lighthouse runs (three desktop, then three mobile, without concurrent builds/tests) did not reproduce that task. Desktop TBT was 0 ms in all three runs; the long-task diagnostic contained one unattributable 59 ms task before FCP in the first run and no long tasks in the other two. Throttled mobile TBT was 101, 62, and 65 ms (median 65 ms); the longest individual tasks were 151, 112, and 115 ms. Mobile framework startup/hydration work remains measurable and is not claimed to be eliminated.
+
+The longest attributed production tasks belonged to the shared Next runtime chunks, not a synchronous business-data loop in the auth components. No further application change was justified by this development screenshot. Login animations already use CSS, hidden mobile photos do not rotate, and loader/toast animation engines are loaded on demand. Reports are in `.tmp/performance/main-thread-{desktop,mobile}/`. These measurements describe the current production build and are not a controlled speed comparison with the supplied development run. Use the production server for performance audits; retain development mode for debugging and hot reload.
+
 ### Duplicate reads and repeated rendering work
 
 The Messages topbar and open inbox fetched and polled the same active conversation list. The inbox now owns that list and publishes its existing unread-count events; the topbar loads the other chat kind. Visibility/focus/online refreshes remain, as does the 30-second polling cadence. Tests assert a single initial request and verify all four roles' badge updates.

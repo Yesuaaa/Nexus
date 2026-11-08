@@ -127,11 +127,65 @@ for (const width of [1440, 390]) {
     await page.route("**/api/project-workspace/alpha", (route) =>
       route.fulfill({ json: alpha }),
     )
-    await page.goto("/project-workspace")
+    await page.goto("/dashboard")
+    if (width < 768)
+      await page.getByRole("button", { name: "Open navigation menu" }).click()
+    const submenuToggle = page.getByRole("button", {
+      name: "Toggle project workspace submenu",
+    })
+    await expect(submenuToggle).toHaveAttribute("aria-expanded", "true")
+    await submenuToggle.click()
+    await expect(submenuToggle).toHaveAttribute("aria-expanded", "false")
+    await expect(page).toHaveURL(/\/dashboard$/)
+    await page
+      .getByRole("link", { name: "Project Workspace", exact: true })
+      .click()
+    await expect(page).toHaveURL(/\/project-workspace$/)
+    await expect(
+      page.getByRole("region", { name: "Project list" }).getByRole("table"),
+    ).toBeVisible()
+    if (width < 768)
+      await expect(page.getByLabel("Primary navigation")).toHaveAttribute(
+        "data-drawer-open",
+        "false",
+      )
     const rows = page.locator(
       '[data-animated-slot-row][aria-hidden="false"]:visible',
     )
     await expect(rows).toHaveCount(2)
+    await page
+      .getByRole("button", { name: "Filter by project status:" })
+      .click()
+    await page
+      .getByRole("menuitemradio", { name: "Planned", exact: true })
+      .click()
+    await expect(rows).toHaveCount(0)
+    await page
+      .getByRole("button", { name: "Filter by project status:" })
+      .click()
+    await page
+      .getByRole("menuitemradio", { name: "In progress", exact: true })
+      .click()
+    await expect(rows).toHaveCount(2)
+    await page.getByRole("button", { name: "Archive", exact: true }).click()
+    await expect(rows).toHaveCount(0)
+    await expect(
+      page.getByRole("button", { name: "Filter by project status:" }),
+    ).toContainText("All archived")
+    await page
+      .getByRole("button", { name: "Back to Projects", exact: true })
+      .click()
+    await expect(rows).toHaveCount(2)
+    await page.getByRole("button", { name: "Sort projects:" }).click()
+    await page
+      .getByRole("menuitemradio", { name: "Most activity", exact: true })
+      .click()
+    await expect(rows).toHaveCount(2)
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true)
     const search = page.getByRole("searchbox")
     await search.fill("Beta")
     await expect(rows).toHaveCount(1)

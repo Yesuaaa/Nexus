@@ -1,5 +1,50 @@
 import { expect, test } from "@playwright/test"
 
+for (const route of ["/login", "/register"]) {
+  test(`${route} fetches its preloaded font without waiting for CSS`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    const fonts: string[] = []
+    page.on("request", (request) => {
+      if (request.resourceType() === "font") fonts.push(request.url())
+    })
+    let releaseStyles!: () => void
+    const stylesReleased = new Promise<void>((resolve) => {
+      releaseStyles = resolve
+    })
+    await page.route("**/_next/static/**/*.css", async (request) => {
+      await stylesReleased
+      await request.continue()
+    })
+
+    let preloadedFont: string
+    try {
+      // Holding CSS makes a font discovered through @font-face unable to load.
+      const fontRequest = page.waitForRequest(
+        (request) => request.resourceType() === "font",
+        { timeout: 5000 },
+      )
+      const response = await page.goto(route, { waitUntil: "commit" })
+      preloadedFont = (await fontRequest).url()
+      const link = await response?.headerValue("link")
+      expect(link).toContain(
+        `<${new URL(preloadedFont).pathname}>; rel=preload; as="font"; crossorigin=""`,
+      )
+    } finally {
+      releaseStyles()
+    }
+
+    await page.waitForLoadState("load")
+    await page.evaluate(() => document.fonts.ready.then(() => undefined))
+    await expect(
+      page.getByLabel("Email address", { exact: true }),
+    ).toBeVisible()
+    // The preloaded resource must be reused by CSS instead of downloading twice.
+    expect(fonts).toEqual([preloadedFont])
+  })
+}
+
 test("guest login form is visible before JavaScript hydrates", async ({
   browser,
   baseURL,
@@ -10,6 +55,10 @@ test("guest login form is visible before JavaScript hydrates", async ({
   expect(response?.status()).toBe(200)
   await expect(page.getByLabel("Email address", { exact: true })).toBeVisible()
   await expect(page.getByLabel("Password", { exact: true })).toBeVisible()
+  await expect(page.locator("main[lang]")).toHaveCSS("display", "grid")
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(page.locator("main[lang]")).toHaveCSS("display", "block")
+  await expect(page.locator("aside")).toBeHidden()
   await context.close()
 })
 
@@ -29,9 +78,10 @@ test("mobile auth does not download or rotate hidden community photos", async ({
 
 test("standalone image optimizer resizes and compresses community photos", async ({
   request,
+  page,
 }) => {
   const response = await request.get(
-    "/_next/image?url=%2Fauth%2Fcommunity-1.png&w=828&q=70",
+    "/_next/image?url=%2Fauth%2Fcommunity-1.webp&w=828&q=70",
     {
       headers: { Accept: "image/webp" },
     },
@@ -39,6 +89,19 @@ test("standalone image optimizer resizes and compresses community photos", async
   expect(response.status()).toBe(200)
   expect(response.headers()["content-type"]).toBe("image/webp")
   expect((await response.body()).length).toBeLessThan(100_000)
+  const width = await page.evaluate(
+    async (base64) => {
+      const blob = await fetch(`data:image/webp;base64,${base64}`).then(
+        (response) => response.blob(),
+      )
+      const image = await createImageBitmap(blob)
+      const width = image.width
+      image.close()
+      return width
+    },
+    (await response.body()).toString("base64"),
+  )
+  expect(width).toBe(828)
 })
 
 test("desktop carousel keeps keyboard controls and reduced-motion behavior", async ({

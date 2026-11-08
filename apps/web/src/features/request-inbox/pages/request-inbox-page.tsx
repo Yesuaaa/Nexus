@@ -385,11 +385,11 @@ export function RequestInboxPage() {
           <h1
             id="request-inbox-heading"
             tabIndex={-1}
-            className="m-0 text-[clamp(21px,2vw,25px)] leading-[1.25] font-[650] tracking-[-0.03em]"
+            className="m-0 text-[clamp(21px,2vw,25px)] leading-[1.25] font-[650] tracking-[-0.03em] text-foreground"
           >
             Request Inbox
           </h1>
-          <p className="mt-[5px] mb-0 text-xs leading-[1.45] text-[#52627a]">
+          <p className="mt-[5px] mb-0 text-xs leading-[1.45] text-[#738096]">
             Review and accept booked services for{" "}
             {result?.department.name ??
               account.headOf?.name ??

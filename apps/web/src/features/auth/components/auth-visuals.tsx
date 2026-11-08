@@ -5,9 +5,9 @@ import { focusOutline, heroTitleClass } from "../styles/auth-styles"
 import type { AuthLanguage, AuthMode } from "../model/types"
 
 const photos = [
-  { src: "/auth/community-1.png", width: 1672, height: 941 },
-  { src: "/auth/community-2.png", width: 1672, height: 941 },
-  { src: "/auth/community-3.png", width: 1983, height: 793 },
+  { src: "/auth/community-1.webp", width: 1672, height: 941 },
+  { src: "/auth/community-2.webp", width: 1672, height: 941 },
+  { src: "/auth/community-3.webp", width: 1983, height: 793 },
 ]
 
 const desktopMedia = "(min-width: 850px)"

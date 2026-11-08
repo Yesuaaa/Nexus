@@ -24,6 +24,7 @@ import {
   type WorkloadAssignment as Assignment,
 } from "../model/workload"
 import { AnimatedTableBody } from "@/components/ui/animated-table-body"
+import { TableSkeletonBody } from "@/components/ui/data-table-skeleton"
 import { useTableFooter } from "@/components/ui/use-table-search"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
 import { useEffect, useMemo, useState } from "react"
@@ -363,7 +364,10 @@ export function WorkloadPage() {
           role="region"
           aria-label="Staff workload table"
         >
-          <table className="w-full min-w-[850px] text-left text-xs">
+          <table
+            className="w-full min-w-[850px] text-left text-xs"
+            aria-busy={loading}
+          >
             <thead className="bg-[#e8eef2]">
               <tr>
                 {[
@@ -380,121 +384,123 @@ export function WorkloadPage() {
                 ))}
               </tr>
             </thead>
-            <AnimatedTableBody
-              items={visible}
-              viewKey={tableViewKey}
-              quickKey={search}
-              columns={6}
-              rowClassName="border-t border-[#eceef1]"
-              onRowsSettled={onRowsSettled}
-              emptyContent={
-                <>
-                  {" "}
-                  {error ? (
-                    <div role="alert">
-                      {error}
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setLoading(true)
-                          setRevision((v) => v + 1)
-                        }}
-                      >
-                        Retry
-                      </Button>
-                    </div>
-                  ) : loading ? (
-                    <span role="status">Loading staff workload…</span>
-                  ) : staff.length ? (
-                    "No staff match these filters."
-                  ) : (
-                    "No employees in this department yet."
-                  )}
-                </>
-              }
-              renderRow={(s) => {
-                const m = metrics(s)
-                return (
+            {loading && !data ? (
+              <TableSkeletonBody label="staff workload" columns={6} />
+            ) : (
+              <AnimatedTableBody
+                items={visible}
+                viewKey={tableViewKey}
+                quickKey={search}
+                columns={6}
+                rowClassName="border-t border-[#eceef1]"
+                onRowsSettled={onRowsSettled}
+                emptyContent={
                   <>
                     {" "}
-                    <td className="px-4 py-3">
-                      <span className="font-medium">{s.fullName}</span>
-                      <div className="mt-1 text-[11px] text-[#738096]">
-                        {s.position ?? "No position"}
-                        {s.team ? ` · ${s.team.name}` : ""}
+                    {error ? (
+                      <div role="alert">
+                        {error}
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setLoading(true)
+                            setRevision((v) => v + 1)
+                          }}
+                        >
+                          Retry
+                        </Button>
                       </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      {s.profileSpecialties.join(", ") || "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      {m.unknown ? "Unrecorded" : m.assigned} /{" "}
-                      {m.capacity ?? "—"} hrs
-                    </td>
-                    <td className="px-4 py-3">
-                      {m.unknown || m.capacity === null
-                        ? "—"
-                        : m.capacity === 0
-                          ? m.assigned
-                            ? "Over capacity"
-                            : "—"
-                          : `${m.utilization}%`}
-                      {m.utilization !== null && !m.unknown && (
-                        <div className="mt-2 h-1 w-24 overflow-hidden rounded bg-[#dce2ea]">
-                          <div
-                            className={cn(
-                              "h-full",
-                              m.utilization > 100
-                                ? "bg-red-500"
-                                : m.utilization >= 90
-                                  ? "bg-amber-500"
-                                  : "bg-[#244993]",
-                            )}
-                            style={{
-                              width: `${Math.min(m.utilization, 100)}%`,
-                            }}
-                          />
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Pill
-                        className={cn(
-                          m.availability === "Available"
-                            ? "bg-[#dcf5e5] text-[#19703a]"
-                            : m.availability === "Near capacity" ||
-                                m.availability === "On leave"
-                              ? "bg-[#fff3df] text-[#805316]"
-                              : m.availability === "Overloaded" ||
-                                  m.availability === "Inactive"
-                                ? "bg-[#fde4ea] text-[#b4234d]"
-                                : "bg-[#eef0f3] text-[#596579]",
-                        )}
-                      >
-                        {m.availability}
-                      </Pill>
-                    </td>
-                    <td className="px-4 py-3">
-                      <WorkloadRowActions
-                        name={s.fullName}
-                        canAssign={
-                          s.status === "ACTIVE" && !!data?.projects.length
-                        }
-                        hasAssignments={!!s.assignments.length}
-                        onView={() => setSelected(s.id)}
-                        onEdit={() => {
-                          setActionError("")
-                          setCapacityTarget(s)
-                        }}
-                        onAssign={() => openAssignment("", s.id)}
-                        onReassign={() => selectAssignment(s, "reassign")}
-                        onUnassign={() => selectAssignment(s, "unassign")}
-                      />
-                    </td>
+                    ) : staff.length ? (
+                      "No staff match these filters."
+                    ) : (
+                      "No employees in this department yet."
+                    )}
                   </>
-                )
-              }}
-            />
+                }
+                renderRow={(s) => {
+                  const m = metrics(s)
+                  return (
+                    <>
+                      {" "}
+                      <td className="px-4 py-3">
+                        <span className="font-medium">{s.fullName}</span>
+                        <div className="mt-1 text-[11px] text-[#738096]">
+                          {s.position ?? "No position"}
+                          {s.team ? ` · ${s.team.name}` : ""}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {s.profileSpecialties.join(", ") || "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        {m.unknown ? "Unrecorded" : m.assigned} /{" "}
+                        {m.capacity ?? "—"} hrs
+                      </td>
+                      <td className="px-4 py-3">
+                        {m.unknown || m.capacity === null
+                          ? "—"
+                          : m.capacity === 0
+                            ? m.assigned
+                              ? "Over capacity"
+                              : "—"
+                            : `${m.utilization}%`}
+                        {m.utilization !== null && !m.unknown && (
+                          <div className="mt-2 h-1 w-24 overflow-hidden rounded bg-[#dce2ea]">
+                            <div
+                              className={cn(
+                                "h-full",
+                                m.utilization > 100
+                                  ? "bg-red-500"
+                                  : m.utilization >= 90
+                                    ? "bg-amber-500"
+                                    : "bg-[#244993]",
+                              )}
+                              style={{
+                                width: `${Math.min(m.utilization, 100)}%`,
+                              }}
+                            />
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Pill
+                          className={cn(
+                            m.availability === "Available"
+                              ? "bg-[#dcf5e5] text-[#19703a]"
+                              : m.availability === "Near capacity" ||
+                                  m.availability === "On leave"
+                                ? "bg-[#fff3df] text-[#805316]"
+                                : m.availability === "Overloaded" ||
+                                    m.availability === "Inactive"
+                                  ? "bg-[#fde4ea] text-[#b4234d]"
+                                  : "bg-[#eef0f3] text-[#596579]",
+                          )}
+                        >
+                          {m.availability}
+                        </Pill>
+                      </td>
+                      <td className="px-4 py-3">
+                        <WorkloadRowActions
+                          name={s.fullName}
+                          canAssign={
+                            s.status === "ACTIVE" && !!data?.projects.length
+                          }
+                          hasAssignments={!!s.assignments.length}
+                          onView={() => setSelected(s.id)}
+                          onEdit={() => {
+                            setActionError("")
+                            setCapacityTarget(s)
+                          }}
+                          onAssign={() => openAssignment("", s.id)}
+                          onReassign={() => selectAssignment(s, "reassign")}
+                          onUnassign={() => selectAssignment(s, "unassign")}
+                        />
+                      </td>
+                    </>
+                  )
+                }}
+              />
+            )}
           </table>
         </div>
         {!loading && !error && footer.total > 0 && (

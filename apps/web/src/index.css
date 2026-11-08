@@ -1,4 +1,13 @@
-@import "tailwindcss" source("./");
+@import "tailwindcss" source(none);
+@import "./theme.css";
+
+/* Public routes and persistent UI only; portal utilities load with its layout. */
+@source "./app";
+@source not "./app/(portal)";
+@source "./components/ui";
+@source "./features/auth";
+@source "./features/not-found";
+@source "./lib";
 
 :root {
   font-family:
@@ -17,23 +26,6 @@
   --accent: oklch(0.94 0.01 250);
   --accent-foreground: var(--foreground);
   --ring: oklch(0.6 0.06 250);
-}
-
-@theme inline {
-  --font-sans:
-    var(--font-inter), "Inter Variable", ui-sans-serif, system-ui, sans-serif;
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-ring: var(--ring);
 }
 
 * {

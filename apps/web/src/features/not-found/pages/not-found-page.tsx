@@ -1,5 +1,4 @@
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button-variants"
 
 export function NotFoundPage() {
   return (
@@ -8,9 +7,9 @@ export function NotFoundPage() {
       <h1 className="mt-3 text-4xl font-semibold tracking-tight">
         Page not found
       </h1>
-      <Button asChild className="mt-8">
-        <Link href="/">Go home</Link>
-      </Button>
+      <a href="/" className={buttonVariants({ className: "mt-8" })}>
+        Go home
+      </a>
     </main>
   )
 }

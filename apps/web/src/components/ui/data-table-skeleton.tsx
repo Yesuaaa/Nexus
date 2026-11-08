@@ -1,5 +1,35 @@
 import { Skeleton } from "@/components/ui/skeleton"
+import { TableBody, TableCell, TableRow } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
+
+export function TableSkeletonBody({
+  label,
+  columns,
+  rows = 10,
+}: {
+  label: string
+  columns: number
+  rows?: number
+}) {
+  return (
+    <TableBody>
+      {Array.from({ length: rows }, (_, rowIndex) => (
+        <TableRow key={rowIndex}>
+          {Array.from({ length: columns }, (_, columnIndex) => (
+            <TableCell key={columnIndex} className="h-[58px] px-4 py-3">
+              {rowIndex === 0 && columnIndex === 0 && (
+                <span className="sr-only" role="status">
+                  Loading {label}…
+                </span>
+              )}
+              <Skeleton className="h-3 w-3/4" />
+            </TableCell>
+          ))}
+        </TableRow>
+      ))}
+    </TableBody>
+  )
+}
 
 export function DataTableSkeletonRows({
   label,

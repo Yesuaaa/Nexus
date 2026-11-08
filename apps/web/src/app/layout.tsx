@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import type { ReactNode } from "react"
 import localFont from "next/font/local"
 import { AuthProvider } from "@/features/auth/providers/auth-provider"
-import "@fontsource-variable/inter/wght.css"
+import "../fonts.css"
 import "../index.css"
 
 // Preload the existing local Latin font and use a metric-adjusted fallback.
@@ -12,6 +12,7 @@ const inter = localFont({
   weight: "100 900",
   style: "normal",
   display: "swap",
+  preload: true,
   variable: "--font-inter",
   fallback: ["Inter Variable", "Arial"],
 })
