@@ -1,10 +1,13 @@
-import { ProjectPage } from "@/features/projects/pages/project-page"
+import { ProjectAccessPage } from "@/features/projects/pages/project-access-page"
 
 export default async function Page({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ tab?: string }>
 }) {
-  const { id } = await params
-  return <ProjectPage key={id} projectId={id} />
+  const [{ id }, { tab }] = await Promise.all([params, searchParams])
+  const initialTab = tab === "deliverables" ? "deliverables" : "overview"
+  return <ProjectAccessPage key={id} projectId={id} initialTab={initialTab} />
 }

@@ -10,9 +10,13 @@ import { contentClass } from "@/components/layout/styles"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import {
   getProject,
+  reviewProjectCancellationRequest,
+  reviewProjectChangeRequest,
   updateMilestone,
+  type ProjectChangeRequest,
   type ProjectWorkspace,
 } from "../api/projects-api"
+import { ReviewProjectChangeDialog } from "../components/client-project-forms"
 
 export function ProjectPage({ projectId }: { projectId: string }) {
   const { formatDate } = useDatePreferences()
@@ -20,6 +24,14 @@ export function ProjectPage({ projectId }: { projectId: string }) {
   const [project, setProject] = useState<ProjectWorkspace | null>(null)
   const [error, setError] = useState("")
   const [pending, setPending] = useState<string | null>(null)
+  const [reviewItem, setReviewItem] = useState<ProjectChangeRequest | null>(
+    null,
+  )
+  const [reviewDecision, setReviewDecision] = useState<
+    "ACCEPTED" | "NOT_APPROVED"
+  >("ACCEPTED")
+  const [reviewBusy, setReviewBusy] = useState(false)
+  const [reviewOpen, setReviewOpen] = useState(false)
   useEffect(() => {
     const controller = new AbortController()
     getProject(projectId, controller.signal)
@@ -56,6 +68,48 @@ export function ProjectPage({ projectId }: { projectId: string }) {
     }
   }
 
+  async function submitChangeReview(responseNote: string) {
+    if (!reviewItem || reviewBusy) return
+    setReviewBusy(true)
+    try {
+      const updated =
+        reviewItem.kind === "CANCELLATION"
+          ? await reviewProjectCancellationRequest(
+              projectId,
+              reviewItem.id,
+              reviewDecision,
+              responseNote,
+            )
+          : await reviewProjectChangeRequest(
+              projectId,
+              reviewItem.id,
+              reviewDecision,
+              responseNote,
+            )
+      setProject(updated)
+      setReviewOpen(false)
+      setReviewItem(null)
+      sileo.success({
+        title:
+          reviewItem.kind === "CANCELLATION"
+            ? reviewDecision === "ACCEPTED"
+              ? "Project cancellation approved"
+              : "Cancellation request declined"
+            : reviewDecision === "ACCEPTED"
+              ? "Change request accepted"
+              : "Change request declined",
+      })
+    } catch (reason) {
+      sileo.error({
+        title: "Couldn't review the request",
+        description:
+          reason instanceof Error ? reason.message : "Please try again.",
+      })
+    } finally {
+      setReviewBusy(false)
+    }
+  }
+
   return (
     <main
       className={`${contentClass} p-6 max-[767px]:p-4`}
@@ -83,7 +137,9 @@ export function ProjectPage({ projectId }: { projectId: string }) {
                 <h1 className="mt-1 mb-2 text-xl font-semibold">
                   {project.name}
                 </h1>
-                <span className="inline-block rounded-full bg-[#eaf3ed] px-2.5 py-1 text-[11px] font-medium text-[#285c3c]">
+                <span
+                  className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-medium ${project.status === "CANCELLED" ? "bg-rose-100 text-rose-800" : project.status === "IN_PROGRESS" ? "bg-amber-100 text-amber-800" : project.status === "COMPLETED" ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-700"}`}
+                >
                   {project.status.replaceAll("_", " ")}
                 </span>
               </div>
@@ -99,6 +155,96 @@ export function ProjectPage({ projectId }: { projectId: string }) {
                 </Button>
               )}
           </header>
+          {project.canReviewChanges &&
+            Boolean(project.changeRequests?.length) && (
+              <section className="mt-5 rounded-xl border border-[#dce3eb] bg-white p-5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h2 className="m-0 text-sm font-semibold">
+                      Client project requests
+                    </h2>
+                    <p className="mt-1 mb-0 text-xs text-[#667894]">
+                      Review scope changes and cancellation requests sent by the
+                      client.
+                    </p>
+                  </div>
+                </div>
+                <ul className="mt-4 list-none divide-y divide-[#e8edf2] p-0">
+                  {project.changeRequests?.map((changeRequest) => (
+                    <li
+                      key={changeRequest.id}
+                      className="py-4 first:pt-0 last:pb-0"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-xs text-[#667894]">
+                          {changeRequest.kind === "CANCELLATION"
+                            ? "Cancellation request"
+                            : "Change request"}
+                          {" · "}
+                          Requested by{" "}
+                          {changeRequest.requestedBy.fullName || "Client"}
+                          {" · "}
+                          {formatDate(changeRequest.createdAt)}
+                        </div>
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[10px] font-medium ${changeRequest.kind === "CANCELLATION" && changeRequest.status === "ACCEPTED" ? "bg-rose-100 text-rose-800" : changeRequest.status === "ACCEPTED" ? "bg-emerald-100 text-emerald-800" : changeRequest.status === "NOT_APPROVED" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-800"}`}
+                        >
+                          {changeRequest.kind === "CANCELLATION" &&
+                          changeRequest.status === "ACCEPTED"
+                            ? "Cancelled"
+                            : changeRequest.status === "ACCEPTED"
+                              ? "Accepted"
+                              : changeRequest.status === "NOT_APPROVED"
+                                ? "Not approved"
+                                : "Under review"}
+                        </span>
+                      </div>
+                      <p className="mt-3 mb-0 whitespace-pre-wrap text-xs leading-5 text-[#26364e] [overflow-wrap:anywhere]">
+                        {changeRequest.details}
+                      </p>
+                      {changeRequest.responseNote && (
+                        <p className="mt-2 mb-0 text-xs leading-5 text-[#667894]">
+                          Response: {changeRequest.responseNote}
+                        </p>
+                      )}
+                      {changeRequest.status === "PENDING" &&
+                        (changeRequest.kind === "CANCELLATION" ||
+                          ["IN_PROGRESS", "ON_HOLD"].includes(
+                            project.status,
+                          )) && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              className={`h-8 px-3 text-xs ${changeRequest.kind === "CANCELLATION" ? "bg-[#b53244] hover:bg-[#982a3a]" : "bg-[#243f8f] hover:bg-[#1d367d]"}`}
+                              onClick={() => {
+                                setReviewItem(changeRequest)
+                                setReviewDecision("ACCEPTED")
+                                setReviewOpen(true)
+                              }}
+                            >
+                              {changeRequest.kind === "CANCELLATION"
+                                ? "Approve cancellation"
+                                : "Accept request"}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-8 px-3 text-xs text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                              onClick={() => {
+                                setReviewItem(changeRequest)
+                                setReviewDecision("NOT_APPROVED")
+                                setReviewOpen(true)
+                              }}
+                            >
+                              Not approve
+                            </Button>
+                          </div>
+                        )}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
           <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
             <section
               aria-labelledby="milestone-heading"
@@ -196,6 +342,18 @@ export function ProjectPage({ projectId }: { projectId: string }) {
             </aside>
           </div>
         </>
+      )}
+      {reviewItem && (
+        <ReviewProjectChangeDialog
+          key={`${reviewOpen}-${reviewDecision}-${reviewItem.id}`}
+          open={reviewOpen}
+          requestKind={reviewItem.kind}
+          decision={reviewDecision}
+          requestDetails={reviewItem.details}
+          busy={reviewBusy}
+          onOpenChange={setReviewOpen}
+          onSubmit={(responseNote) => void submitChangeReview(responseNote)}
+        />
       )}
     </main>
   )

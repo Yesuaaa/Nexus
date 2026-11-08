@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ClipboardList, Inbox, UsersRound } from "lucide-react"
+import { ClipboardList, FolderKanban, Inbox, UsersRound } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Account } from "@/features/auth/model/types"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
@@ -14,6 +14,7 @@ import {
   canAccessServiceCatalog,
   canAccessServiceManagement,
   canAccessClientManagement,
+  canAccessProjects,
 } from "@/features/auth/model/permissions"
 import { focusRing, iconButtonClass } from "./styles"
 import {
@@ -250,6 +251,25 @@ export function Sidebar({
               {collapsed && (
                 <CollapsedTooltip>Booked Requests</CollapsedTooltip>
               )}
+            </Link>
+          )}
+          {account.role === "USER" && canAccessProjects(account) && (
+            <Link
+              href="/projects"
+              aria-current={
+                pathname.startsWith("/projects") ? "page" : undefined
+              }
+              className={cn(
+                navLinkClass,
+                collapsed &&
+                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
+                pathname.startsWith("/projects") && "bg-[#e1e3e5]",
+              )}
+              onClick={onCloseDrawer}
+            >
+              <FolderKanban size={20} strokeWidth={1.7} className="flex-none" />
+              <span className={collapsedLabelClass}>My Projects</span>
+              {collapsed && <CollapsedTooltip>My Projects</CollapsedTooltip>}
             </Link>
           )}
           {canAccessRequestInbox(account) && (
