@@ -23,8 +23,10 @@ import {
   type WorkloadStaff as Staff,
   type WorkloadAssignment as Assignment,
 } from "../model/workload"
+import { AnimatedTableBody } from "@/components/ui/animated-table-body"
+import { useTableFooter } from "@/components/ui/use-table-search"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { apiRequest } from "@/features/auth/api/auth-api"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { contentClass } from "@/components/layout/styles"
@@ -140,20 +142,25 @@ export function WorkloadPage() {
       setBusy(false)
     }
   }
-  const staff = data?.staff ?? []
+  const staff = useMemo(() => data?.staff ?? [], [data])
   const current = staff.find((s) => s.id === selected)
   const teams = [
     ...new Map(
       staff.filter((s) => s.team).map((s) => [s.team!.id, s.team!]),
     ).values(),
   ]
-  const filtered = staff.filter(
-    (s) =>
-      (team === "all" || s.team?.id === team) &&
-      (availability === "all" || metrics(s).availability === availability) &&
-      `${s.fullName} ${s.position ?? ""} ${s.profileSpecialties.join(" ")}`
-        .toLowerCase()
-        .includes(search.toLowerCase()),
+  const filtered = useMemo(
+    () =>
+      staff.filter(
+        (s) =>
+          (team === "all" || s.team?.id === team) &&
+          (availability === "all" ||
+            metrics(s).availability === availability) &&
+          `${s.fullName} ${s.position ?? ""} ${s.profileSpecialties.join(" ")}`
+            .toLowerCase()
+            .includes(search.toLowerCase()),
+      ),
+    [staff, team, availability, search],
   )
   const selectedProject = data?.projects.find(
     (project) => project.id === allocation?.projectId,
@@ -220,7 +227,26 @@ export function WorkloadPage() {
   }
   const totalPages = Math.max(1, Math.ceil(filtered.length / 10))
   const resolvedPage = Math.min(page, totalPages)
-  const visible = filtered.slice((resolvedPage - 1) * 10, resolvedPage * 10)
+  const visible = useMemo(
+    () => filtered.slice((resolvedPage - 1) * 10, resolvedPage * 10),
+    [filtered, resolvedPage],
+  )
+  const tableResult = useMemo(
+    () => ({
+      page: resolvedPage,
+      total: filtered.length,
+      view: [search, team, availability, week],
+    }),
+    [resolvedPage, filtered.length, search, team, availability, week],
+  )
+  const { footer, onRowsSettled } = useTableFooter(tableResult, loading)
+  const tableViewKey = JSON.stringify([
+    search,
+    team,
+    availability,
+    resolvedPage,
+    week,
+  ])
   return (
     <main className={cn(contentClass, "p-[clamp(16px,2.1vw,32px)]")}>
       <header className="-mx-[clamp(16px,2.1vw,32px)] flex items-center justify-between gap-6 border-b border-[#eceef1] px-[clamp(16px,2.1vw,32px)] pt-0.5 pb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-4">
@@ -354,129 +380,133 @@ export function WorkloadPage() {
                 ))}
               </tr>
             </thead>
-            <tbody>
-              {!loading &&
-                !error &&
-                visible.map((s) => {
-                  const m = metrics(s)
-                  return (
-                    <tr key={s.id} className="border-t border-[#eceef1]">
-                      <td className="px-4 py-3">
-                        <span className="font-medium">{s.fullName}</span>
-                        <div className="mt-1 text-[11px] text-[#738096]">
-                          {s.position ?? "No position"}
-                          {s.team ? ` · ${s.team.name}` : ""}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        {s.profileSpecialties.join(", ") || "—"}
-                      </td>
-                      <td className="px-4 py-3">
-                        {m.unknown ? "Unrecorded" : m.assigned} /{" "}
-                        {m.capacity ?? "—"} hrs
-                      </td>
-                      <td className="px-4 py-3">
-                        {m.unknown || m.capacity === null
-                          ? "—"
-                          : m.capacity === 0
-                            ? m.assigned
-                              ? "Over capacity"
-                              : "—"
-                            : `${m.utilization}%`}
-                        {m.utilization !== null && !m.unknown && (
-                          <div className="mt-2 h-1 w-24 overflow-hidden rounded bg-[#dce2ea]">
-                            <div
-                              className={cn(
-                                "h-full",
-                                m.utilization > 100
-                                  ? "bg-red-500"
-                                  : m.utilization >= 90
-                                    ? "bg-amber-500"
-                                    : "bg-[#244993]",
-                              )}
-                              style={{
-                                width: `${Math.min(m.utilization, 100)}%`,
-                              }}
-                            />
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <Pill
-                          className={cn(
-                            m.availability === "Available"
-                              ? "bg-[#dcf5e5] text-[#19703a]"
-                              : m.availability === "Near capacity" ||
-                                  m.availability === "On leave"
-                                ? "bg-[#fff3df] text-[#805316]"
-                                : m.availability === "Overloaded" ||
-                                    m.availability === "Inactive"
-                                  ? "bg-[#fde4ea] text-[#b4234d]"
-                                  : "bg-[#eef0f3] text-[#596579]",
-                          )}
-                        >
-                          {m.availability}
-                        </Pill>
-                      </td>
-                      <td className="px-4 py-3">
-                        <WorkloadRowActions
-                          name={s.fullName}
-                          canAssign={
-                            s.status === "ACTIVE" && !!data?.projects.length
-                          }
-                          hasAssignments={!!s.assignments.length}
-                          onView={() => setSelected(s.id)}
-                          onEdit={() => {
-                            setActionError("")
-                            setCapacityTarget(s)
-                          }}
-                          onAssign={() => openAssignment("", s.id)}
-                          onReassign={() => selectAssignment(s, "reassign")}
-                          onUnassign={() => selectAssignment(s, "unassign")}
-                        />
-                      </td>
-                    </tr>
-                  )
-                })}
-              {(loading || error || !visible.length) && (
-                <tr>
-                  <td colSpan={6} className="p-8 text-center text-xs">
-                    {error ? (
-                      <div role="alert">
-                        {error}
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setLoading(true)
-                            setRevision((v) => v + 1)
-                          }}
-                        >
-                          Retry
-                        </Button>
+            <AnimatedTableBody
+              items={visible}
+              viewKey={tableViewKey}
+              quickKey={search}
+              columns={6}
+              rowClassName="border-t border-[#eceef1]"
+              onRowsSettled={onRowsSettled}
+              emptyContent={
+                <>
+                  {" "}
+                  {error ? (
+                    <div role="alert">
+                      {error}
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setLoading(true)
+                          setRevision((v) => v + 1)
+                        }}
+                      >
+                        Retry
+                      </Button>
+                    </div>
+                  ) : loading ? (
+                    <span role="status">Loading staff workload…</span>
+                  ) : staff.length ? (
+                    "No staff match these filters."
+                  ) : (
+                    "No employees in this department yet."
+                  )}
+                </>
+              }
+              renderRow={(s) => {
+                const m = metrics(s)
+                return (
+                  <>
+                    {" "}
+                    <td className="px-4 py-3">
+                      <span className="font-medium">{s.fullName}</span>
+                      <div className="mt-1 text-[11px] text-[#738096]">
+                        {s.position ?? "No position"}
+                        {s.team ? ` · ${s.team.name}` : ""}
                       </div>
-                    ) : loading ? (
-                      <span role="status">Loading staff workload…</span>
-                    ) : staff.length ? (
-                      "No staff match these filters."
-                    ) : (
-                      "No employees in this department yet."
-                    )}
-                  </td>
-                </tr>
-              )}
-            </tbody>
+                    </td>
+                    <td className="px-4 py-3">
+                      {s.profileSpecialties.join(", ") || "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      {m.unknown ? "Unrecorded" : m.assigned} /{" "}
+                      {m.capacity ?? "—"} hrs
+                    </td>
+                    <td className="px-4 py-3">
+                      {m.unknown || m.capacity === null
+                        ? "—"
+                        : m.capacity === 0
+                          ? m.assigned
+                            ? "Over capacity"
+                            : "—"
+                          : `${m.utilization}%`}
+                      {m.utilization !== null && !m.unknown && (
+                        <div className="mt-2 h-1 w-24 overflow-hidden rounded bg-[#dce2ea]">
+                          <div
+                            className={cn(
+                              "h-full",
+                              m.utilization > 100
+                                ? "bg-red-500"
+                                : m.utilization >= 90
+                                  ? "bg-amber-500"
+                                  : "bg-[#244993]",
+                            )}
+                            style={{
+                              width: `${Math.min(m.utilization, 100)}%`,
+                            }}
+                          />
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Pill
+                        className={cn(
+                          m.availability === "Available"
+                            ? "bg-[#dcf5e5] text-[#19703a]"
+                            : m.availability === "Near capacity" ||
+                                m.availability === "On leave"
+                              ? "bg-[#fff3df] text-[#805316]"
+                              : m.availability === "Overloaded" ||
+                                  m.availability === "Inactive"
+                                ? "bg-[#fde4ea] text-[#b4234d]"
+                                : "bg-[#eef0f3] text-[#596579]",
+                        )}
+                      >
+                        {m.availability}
+                      </Pill>
+                    </td>
+                    <td className="px-4 py-3">
+                      <WorkloadRowActions
+                        name={s.fullName}
+                        canAssign={
+                          s.status === "ACTIVE" && !!data?.projects.length
+                        }
+                        hasAssignments={!!s.assignments.length}
+                        onView={() => setSelected(s.id)}
+                        onEdit={() => {
+                          setActionError("")
+                          setCapacityTarget(s)
+                        }}
+                        onAssign={() => openAssignment("", s.id)}
+                        onReassign={() => selectAssignment(s, "reassign")}
+                        onUnassign={() => selectAssignment(s, "unassign")}
+                      />
+                    </td>
+                  </>
+                )
+              }}
+            />
           </table>
         </div>
-        {!loading && !error && filtered.length > 0 && (
+        {!loading && !error && footer.total > 0 && (
           <footer className="flex flex-wrap items-center justify-between gap-3 pt-4 text-[11px] text-[#65718a]">
             <span role="status">
-              Showing {(resolvedPage - 1) * 10 + 1}–
-              {Math.min(resolvedPage * 10, filtered.length)} of{" "}
-              {filtered.length}
+              Showing {(footer.page - 1) * 10 + 1}–
+              {Math.min(footer.page * 10, footer.total)} of {footer.total}
             </span>
             <NumberedPagination
-              page={resolvedPage}
-              totalPages={totalPages}
+              page={footer.page}
+              totalPages={Math.max(1, Math.ceil(footer.total / 10))}
+              disabled={loading || footer !== tableResult}
               label="Staff workload pages"
               onPageChange={setPage}
             />

@@ -5,6 +5,11 @@ import { Plus, RefreshCw } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { contentClass } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
+import {
+  useTableSearch,
+  useTableFooter,
+} from "@/components/ui/use-table-search"
+import { TableSearchStatus } from "@/components/ui/table-search-status"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
 import { SearchField } from "@/components/ui/search-field"
 import { SearchEmptyState } from "@/components/ui/search-empty-state"
@@ -23,13 +28,25 @@ import { BookedServicesTable } from "../components/booked-services-table"
 import { BookingDetailsDrawer } from "../components/booking-details-drawer"
 import { bookingStatuses } from "../model/booking-status"
 
+function matchesTableSearch(
+  item: import("../api/bookings-api").BookedService,
+  query: string,
+) {
+  return [
+    item.title,
+    item.referenceNumber,
+    item.service.name,
+    item.packageName,
+  ].some((value) => value?.toLowerCase().includes(query))
+}
+
 export function BookedServicesPage({
   initialBookingId,
 }: {
   initialBookingId: string | null
 }) {
   const [search, setSearch] = useState("")
-  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const query = search.trim()
   const [status, setStatus] = useState("")
   const [page, setPage] = useState(1)
   const [revision, setRevision] = useState(0)
@@ -50,30 +67,49 @@ export function BookedServicesPage({
         ),
       }))
     },
-    [],
+    [setResult],
   )
-  const [error, setError] = useState("")
+  const [errorMessage, setError] = useState("")
+  const [errorRequestKey, setErrorRequestKey] = useState("")
   const [resolvedKey, setResolvedKey] = useState("")
   const [resolvedViewKey, setResolvedViewKey] = useState("")
-  const viewKey = JSON.stringify({ search: debouncedSearch, status, page })
+  const viewKey = JSON.stringify({ search: query, status, page })
   const requestKey = JSON.stringify({ viewKey, revision })
-  const loading =
-    resolvedKey !== requestKey || search.trim() !== debouncedSearch
+  const error = errorRequestKey === requestKey ? errorMessage : ""
+  const loading = resolvedKey !== requestKey || search.trim() !== query
   const filtered = Boolean(search.trim() || status)
 
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 150)
-    return () => clearTimeout(timer)
-  }, [search])
+  const searchScope = JSON.stringify([status, revision])
+  const { acceptRows, preview, previewing } = useTableSearch<
+    import("../api/bookings-api").BookedService
+  >({
+    search: query,
+    scope: searchScope,
+    page,
+    matches: matchesTableSearch,
+  })
+  const { footer, onRowsSettled } = useTableFooter(
+    result,
+    loading || previewing,
+  )
+  const tableViewKey = previewing
+    ? JSON.stringify([searchScope, query, 1])
+    : resolvedViewKey
 
   useEffect(() => {
+    const controller = new AbortController()
     let active = true
     let inFlight = false
     let hasLoaded = false
     const load = () => {
       if (inFlight) return
       inFlight = true
-      void listBookedServices({ search: debouncedSearch, status, page })
+      void listBookedServices({
+        search: query,
+        status,
+        page,
+        signal: controller.signal,
+      })
         .then((value) => {
           if (!active) return
           const lastPage = Math.max(1, Math.ceil(value.total / value.pageSize))
@@ -82,6 +118,7 @@ export function BookedServicesPage({
             return
           }
           hasLoaded = true
+          acceptRows(value.serviceRequests)
           setResult(value)
           setDetailsRefreshKey((key) => key + 1)
           setError("")
@@ -95,6 +132,7 @@ export function BookedServicesPage({
             (!(reason instanceof ApiError) || reason.status >= 500)
           )
             return
+          setErrorRequestKey(requestKey)
           setError(
             reason instanceof Error
               ? reason.message
@@ -110,19 +148,19 @@ export function BookedServicesPage({
     const stopRefresh = watchVisibleRefresh(load, { poll: false })
     return () => {
       active = false
+      controller.abort()
       stopRefresh()
     }
-  }, [debouncedSearch, status, page, revision, requestKey, viewKey])
+  }, [query, status, page, revision, requestKey, viewKey, acceptRows])
 
   function clearFilters() {
     setSearch("")
-    setDebouncedSearch("")
     setStatus("")
     setPage(1)
   }
-  const pages = Math.max(1, Math.ceil(result.total / result.pageSize))
-  const from = result.total === 0 ? 0 : (result.page - 1) * result.pageSize + 1
-  const to = (result.page - 1) * result.pageSize + result.serviceRequests.length
+  const pages = Math.max(1, Math.ceil(footer.total / footer.pageSize))
+  const from = footer.total === 0 ? 0 : (footer.page - 1) * footer.pageSize + 1
+  const to = (footer.page - 1) * footer.pageSize + footer.serviceRequests.length
 
   return (
     <main
@@ -211,16 +249,17 @@ export function BookedServicesPage({
           )}
         </div>
         <BookedServicesTable
-          bookings={result.serviceRequests}
-          viewKey={resolvedViewKey}
-          quickKey={debouncedSearch}
+          bookings={preview ?? result.serviceRequests}
+          viewKey={tableViewKey}
+          onRowsSettled={onRowsSettled}
+          quickKey={query}
           loading={loading}
           error={error}
           onRetry={() => setRevision((value) => value + 1)}
           onView={(booking) => setSelectedId(booking.id)}
           emptyMessage={
-            debouncedSearch ? (
-              <SearchEmptyState query={debouncedSearch} />
+            query ? (
+              <SearchEmptyState query={query} />
             ) : filtered ? (
               "No booked services match the selected filters."
             ) : (
@@ -228,15 +267,19 @@ export function BookedServicesPage({
             )
           }
         />
-        {!error && result.total > 0 && (
+        <TableSearchStatus
+          active={loading && previewing}
+          label="booked services"
+        />
+        {!error && !previewing && footer.total > 0 && (
           <footer className="flex flex-wrap items-center justify-between gap-3 pt-4 text-[11px] text-[#52627a]">
             <span role="status" aria-live="polite" aria-atomic="true">
-              Showing {from}–{to} of {result.total}
+              Showing {from}–{to} of {footer.total}
             </span>
             <NumberedPagination
-              page={result.page}
+              page={footer.page}
               totalPages={pages}
-              disabled={loading}
+              disabled={loading || footer !== result}
               label="Booked service pages"
               onPageChange={setPage}
             />

@@ -119,7 +119,7 @@ export function RowActionsMenu<Action extends string>({
           <DropdownMenuItem
             key={item.action}
             disabled={item.disabled}
-            className={cn(dropdownItemClass, item.className)}
+            className={cn(dropdownItemClass, "text-xs", item.className)}
             onSelect={() => {
               pendingAction.current = item.action
             }}

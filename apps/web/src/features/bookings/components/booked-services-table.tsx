@@ -39,6 +39,7 @@ export function BookedServicesTable({
   bookings,
   viewKey,
   quickKey,
+  onRowsSettled,
   loading,
   error,
   emptyMessage,
@@ -48,6 +49,7 @@ export function BookedServicesTable({
   bookings: BookedService[]
   viewKey: string
   quickKey: string
+  onRowsSettled?: () => void
   loading: boolean
   error: string
   emptyMessage: ReactNode
@@ -55,7 +57,7 @@ export function BookedServicesTable({
   onView: (booking: BookedService) => void
 }) {
   const { formatDate } = useDatePreferences()
-  const initialLoading = loading && bookings.length === 0
+  const initialLoading = loading && viewKey === ""
   return (
     <ResponsiveDataTable label="Booked services" aria-busy={loading}>
       <ResponsiveDataTableHeader
@@ -107,6 +109,7 @@ export function BookedServicesTable({
           items={bookings}
           viewKey={viewKey}
           quickKey={quickKey}
+          onRowsSettled={onRowsSettled}
           animateRows
           getKey={bookingKey}
           rowClassName={bookingRowClass}

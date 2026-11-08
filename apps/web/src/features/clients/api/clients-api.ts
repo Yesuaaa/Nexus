@@ -23,12 +23,6 @@ export async function saveClient(
   return result.client
 }
 
-export function deleteClient(id: string): Promise<void> {
-  return apiRequest(`/api/clients/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-  })
-}
-
 export type Client = {
   id: string
   fullName: string | null
@@ -77,7 +71,9 @@ export type ClientFilters = {
   sortOrder: "asc" | "desc"
 }
 
-export function listClients(filters: ClientFilters): Promise<ClientList> {
+export function listClients(
+  filters: ClientFilters & { signal?: AbortSignal },
+): Promise<ClientList> {
   const params = new URLSearchParams({
     page: String(filters.page),
     sortBy: filters.sortBy,
@@ -85,7 +81,9 @@ export function listClients(filters: ClientFilters): Promise<ClientList> {
   })
   if (filters.search) params.set("search", filters.search)
   if (filters.status) params.set("status", filters.status)
-  return apiRequest<ClientList>(`/api/clients?${params}`)
+  return apiRequest<ClientList>(`/api/clients?${params}`, {
+    signal: filters.signal,
+  })
 }
 
 export async function getClientDetails(id: string): Promise<{

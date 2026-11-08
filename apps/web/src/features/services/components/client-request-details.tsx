@@ -76,7 +76,7 @@ export function ClientRequestDetails({
       >
         <header className="border-b border-[#e8ebef] px-6 py-5 pr-12">
           <SheetTitle className="break-words text-lg tracking-[-0.025em]">
-            {request.title}
+            {request.service.name}
           </SheetTitle>
           <SheetDescription className="mt-1 break-all text-xs text-[#738096]">
             {request.referenceNumber || request.id}

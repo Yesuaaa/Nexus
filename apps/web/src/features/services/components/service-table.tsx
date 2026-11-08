@@ -1,15 +1,16 @@
 import Image from "next/image"
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { Eye, Pencil } from "lucide-react"
-import { AnimatePresence } from "framer-motion"
 import { focusRing } from "@/components/layout/styles"
-import { AnimatedGridRow } from "@/components/ui/animated-data-row"
+import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
+import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
 import { DepartmentPill } from "@/components/ui/department-pill.tsx"
 import { SearchEmptyState } from "@/components/ui/search-empty-state"
 import { SearchField } from "@/components/ui/search-field"
 import { Dropdown } from "@/components/ui/dropdown"
 import { Pill } from "@/components/ui/pill"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
+import { useTableFooter } from "@/components/ui/use-table-search"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import { RowActionsMenu } from "@/components/ui/row-actions-menu"
@@ -28,6 +29,7 @@ import type { Service } from "../api/services-api"
 
 type SortKey = "name" | "status" | "createdAt"
 
+const tableRowKey = (item: Service) => item.id
 const pageSize = 10
 const serviceGrid =
   "grid grid-cols-[minmax(180px,1.25fr)_minmax(220px,1.6fr)_minmax(120px,.8fr)_90px_125px_112px] items-center gap-3.5 @max-[920px]:grid-cols-[minmax(0,1fr)_auto]"
@@ -167,31 +169,24 @@ export function ServiceTable({
   onRetry: () => void
 }) {
   const [search, setSearch] = useState("")
-  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const query = search
   const [departmentId, setDepartmentId] = useState("")
   const [status, setStatus] = useState("")
   const [sortKey, setSortKey] = useState<SortKey>("createdAt")
   const [direction, setDirection] = useState<SortDirection>("desc")
   const [page, setPage] = useState(1)
   const [animateRows, setAnimateRows] = useState(true)
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setDebouncedSearch(search)
-      setPage(1)
-    }, 150)
-    return () => window.clearTimeout(timer)
-  }, [search])
 
   const filtered = useMemo(() => {
-    const query = debouncedSearch.trim().toLocaleLowerCase()
+    const needle = query.trim().toLocaleLowerCase()
     return services
       .filter(
         (service) =>
-          (!query ||
-            service.name.toLocaleLowerCase().includes(query) ||
-            service.description.toLocaleLowerCase().includes(query) ||
+          (!needle ||
+            service.name.toLocaleLowerCase().includes(needle) ||
+            service.description.toLocaleLowerCase().includes(needle) ||
             service.departments.some((department) =>
-              department.name.toLocaleLowerCase().includes(query),
+              department.name.toLocaleLowerCase().includes(needle),
             )) &&
           (!departmentId ||
             service.departments.some(
@@ -213,16 +208,33 @@ export function ServiceTable({
             : String(a).localeCompare(String(b))
         return direction === "asc" ? compared : -compared
       })
-  }, [departmentId, debouncedSearch, direction, services, sortKey, status])
+  }, [departmentId, query, direction, services, sortKey, status])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const currentPage = Math.min(page, totalPages)
-  const visible = filtered.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize,
+  const visible = useMemo(
+    () => filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    [filtered, currentPage],
   )
+  const tableResult = useMemo(
+    () => ({
+      page: currentPage,
+      total: filtered.length,
+      view: [query, sortKey, direction, departmentId, status],
+    }),
+    [
+      currentPage,
+      filtered.length,
+      query,
+      sortKey,
+      direction,
+      departmentId,
+      status,
+    ],
+  )
+  const { footer, onRowsSettled } = useTableFooter(tableResult, loading)
   const viewKey = JSON.stringify([
-    debouncedSearch,
+    query,
     departmentId,
     status,
     sortKey,
@@ -240,7 +252,7 @@ export function ServiceTable({
     setPage(1)
   }
 
-  const filteredState = Boolean(debouncedSearch || departmentId || status)
+  const filteredState = Boolean(query || departmentId || status)
 
   return (
     <>
@@ -254,6 +266,7 @@ export function ServiceTable({
           onChange={(event) => {
             setAnimateRows(true)
             setSearch(event.target.value)
+            setPage(1)
           }}
         />
         <div className="flex min-w-0 flex-wrap gap-[10px] max-[560px]:w-full max-[560px]:flex-col">
@@ -327,20 +340,39 @@ export function ServiceTable({
           </span>
           <span role="columnheader">Actions</span>
         </ResponsiveDataTableHeader>
-        <ResponsiveDataTableBody
-          aria-live="polite"
-          className="relative overflow-x-clip"
-        >
-          {loading || error ? (
-            <div role="row">
-              <div
-                role="cell"
-                aria-colspan={6}
-                className="grid min-h-[170px] place-content-center gap-3 p-6 text-center text-xs text-[#7183a2]"
-              >
-                {loading ? (
-                  <span role="status">Loading services...</span>
-                ) : error ? (
+        {loading || error ? (
+          <ResponsiveDataTableBody className="relative overflow-x-clip">
+            {loading ? (
+              <DataTableSkeletonRows
+                label="services"
+                rowClassName={cn(
+                  serviceGrid,
+                  "min-h-[58px] px-4 py-[8px] @max-[920px]:gap-x-4 @max-[920px]:gap-y-2 @max-[920px]:py-3.5",
+                )}
+                cellClassNames={[
+                  "@max-[920px]:col-start-1 @max-[920px]:row-start-1",
+                  "@max-[920px]:col-span-2 @max-[920px]:row-start-2",
+                  "@max-[920px]:col-start-1 @max-[920px]:row-start-3",
+                  "@max-[920px]:col-start-2 @max-[920px]:row-start-3 @max-[920px]:justify-self-end",
+                  "@max-[920px]:col-start-1 @max-[920px]:row-start-4",
+                  "@max-[920px]:col-start-2 @max-[920px]:row-start-1 @max-[920px]:justify-self-end",
+                ]}
+                cellSkeletonClassNames={[
+                  "h-8 w-4/5",
+                  "h-3 w-4/5",
+                  "h-5 w-28 rounded",
+                  "h-5 w-14 rounded",
+                  "h-3 w-20",
+                  "h-8 w-24",
+                ]}
+              />
+            ) : (
+              <div role="row">
+                <div
+                  role="cell"
+                  aria-colspan={6}
+                  className="grid min-h-[170px] place-content-center gap-3 p-6 text-center text-xs text-[#7183a2]"
+                >
                   <div role="alert" className="grid justify-items-center gap-3">
                     <p className="m-0">{error}</p>
                     <button
@@ -354,136 +386,130 @@ export function ServiceTable({
                       Try again
                     </button>
                   </div>
-                ) : null}
+                </div>
               </div>
-            </div>
-          ) : (
-            <AnimatePresence
-              custom={animateRows}
-              initial={false}
-              mode={animateRows ? "popLayout" : "sync"}
-            >
-              {visible.length === 0 ? (
-                <AnimatedGridRow
-                  key={`empty-${viewKey}`}
-                  animateRows={animateRows}
-                  rowIndex={0}
-                  className="grid min-h-[170px] place-content-center gap-3 p-6 text-center text-xs text-[#7183a2]"
+            )}
+          </ResponsiveDataTableBody>
+        ) : (
+          <AnimatedSlotGridBody
+            items={visible}
+            viewKey={viewKey}
+            quickKey={query}
+            animateRows={animateRows}
+            getKey={tableRowKey}
+            rowClassName={(_item, _index, isLast) =>
+              cn(
+                serviceGrid,
+                "min-h-[58px] border-b border-[#eceef1] px-4 py-[8px] text-xs  hover:bg-[#f3f6f8] @max-[920px]:gap-x-4 @max-[920px]:gap-y-2 @max-[920px]:py-3.5",
+                isLast && "rounded-b-[7px] border-b-0",
+              )
+            }
+            emptyHeight={170}
+            emptyContent={
+              <>
+                {query.trim() ? (
+                  <SearchEmptyState query={query.trim()} />
+                ) : filteredState ? (
+                  "No services match the selected filters."
+                ) : (
+                  "No services have been created yet."
+                )}
+              </>
+            }
+            className="relative overflow-x-clip"
+            onRowsSettled={onRowsSettled}
+            renderRow={(service) => (
+              <>
+                <button
+                  type="button"
+                  role="rowheader"
+                  className={cn(
+                    "flex min-w-0 cursor-pointer items-center gap-2 rounded-sm border-0 bg-transparent p-0 text-left font-semibold hover:underline hover:underline-offset-4 @max-[920px]:col-start-1 @max-[920px]:row-start-1",
+                    focusRing,
+                  )}
+                  onClick={() => onView(service)}
                 >
-                  <div role="cell" aria-colspan={6}>
-                    {debouncedSearch.trim() ? (
-                      <SearchEmptyState query={debouncedSearch.trim()} />
-                    ) : filteredState ? (
-                      "No services match the selected filters."
-                    ) : (
-                      "No services have been created yet."
-                    )}
-                  </div>
-                </AnimatedGridRow>
-              ) : (
-                visible.map((service, index) => (
-                  <AnimatedGridRow
-                    key={`${viewKey}:${service.id}`}
-                    animateRows={animateRows}
-                    rowIndex={index}
-                    className={cn(
-                      serviceGrid,
-                      "min-h-[58px] border-b border-[#eceef1] px-4 py-[8px] text-xs last:rounded-b-[7px] last:border-b-0 hover:bg-[#f3f6f8] @max-[920px]:gap-x-4 @max-[920px]:gap-y-2 @max-[920px]:py-3.5",
-                    )}
-                  >
-                    <button
-                      type="button"
-                      role="rowheader"
-                      className={cn(
-                        "flex min-w-0 cursor-pointer items-center gap-2 rounded-sm border-0 bg-transparent p-0 text-left font-semibold hover:underline hover:underline-offset-4 @max-[920px]:col-start-1 @max-[920px]:row-start-1",
-                        focusRing,
-                      )}
-                      onClick={() => onView(service)}
-                    >
-                      <span className="relative size-8 flex-none overflow-hidden rounded-md bg-[#e8eef7]">
-                        {service.imageUrl ? (
-                          <Image
-                            src={service.imageUrl}
-                            alt=""
-                            fill
-                            className="object-cover"
-                          />
-                        ) : null}
-                      </span>
-                      <span className="truncate">{service.name}</span>
-                    </button>
-                    <div
-                      role="cell"
-                      className="min-w-0 truncate text-[#526686] @max-[920px]:col-span-2 @max-[920px]:row-start-2 @max-[920px]:whitespace-normal"
-                    >
-                      {service.description}
-                    </div>
-                    <div
-                      role="cell"
-                      className="min-w-0 @max-[920px]:col-start-1 @max-[920px]:row-start-3"
-                    >
-                      <span className="mr-1.5 hidden text-[#738096] @max-[920px]:inline">
-                        Departments
-                      </span>
-                      <DepartmentPills service={service} />
-                    </div>
-                    <div
-                      role="cell"
-                      className="@max-[920px]:col-start-2 @max-[920px]:row-start-3 @max-[920px]:justify-self-end"
-                    >
-                      <Pill
-                        className={
-                          service.isActive
-                            ? "bg-[#dcf5e5] text-[#19703a]"
-                            : "bg-[#fde4ea] text-[#b4234d]"
-                        }
-                      >
-                        {service.isActive ? "Active" : "Inactive"}
-                      </Pill>
-                    </div>
-                    <div
-                      role="cell"
-                      className="text-[#526686] tabular-nums @max-[920px]:col-start-1 @max-[920px]:row-start-4"
-                    >
-                      <span className="mr-1.5 hidden text-[#738096] @max-[920px]:inline">
-                        Created
-                      </span>
-                      {formatDate(service.createdAt)}
-                    </div>
-                    <div
-                      role="cell"
-                      className="@max-[920px]:col-start-2 @max-[920px]:row-start-1 @max-[920px]:justify-self-end"
-                    >
-                      <ServiceActions
-                        service={service}
-                        canManage={canManage}
-                        onView={onView}
-                        onEdit={onEdit}
-                        onStatus={onStatus}
-                        onDelete={onDelete}
+                  <span className="relative size-8 flex-none overflow-hidden rounded-md bg-[#e8eef7]">
+                    {service.imageUrl ? (
+                      <Image
+                        src={service.imageUrl}
+                        alt=""
+                        fill
+                        className="object-cover"
                       />
-                    </div>
-                  </AnimatedGridRow>
-                ))
-              )}
-            </AnimatePresence>
-          )}
-        </ResponsiveDataTableBody>
+                    ) : null}
+                  </span>
+                  <span className="truncate">{service.name}</span>
+                </button>
+                <div
+                  role="cell"
+                  className="min-w-0 truncate text-[#526686] @max-[920px]:col-span-2 @max-[920px]:row-start-2 @max-[920px]:whitespace-normal"
+                >
+                  {service.description}
+                </div>
+                <div
+                  role="cell"
+                  className="min-w-0 @max-[920px]:col-start-1 @max-[920px]:row-start-3"
+                >
+                  <span className="mr-1.5 hidden text-[#738096] @max-[920px]:inline">
+                    Departments
+                  </span>
+                  <DepartmentPills service={service} />
+                </div>
+                <div
+                  role="cell"
+                  className="@max-[920px]:col-start-2 @max-[920px]:row-start-3 @max-[920px]:justify-self-end"
+                >
+                  <Pill
+                    className={
+                      service.isActive
+                        ? "bg-[#dcf5e5] text-[#19703a]"
+                        : "bg-[#fde4ea] text-[#b4234d]"
+                    }
+                  >
+                    {service.isActive ? "Active" : "Inactive"}
+                  </Pill>
+                </div>
+                <div
+                  role="cell"
+                  className="text-[#526686] tabular-nums @max-[920px]:col-start-1 @max-[920px]:row-start-4"
+                >
+                  <span className="mr-1.5 hidden text-[#738096] @max-[920px]:inline">
+                    Created
+                  </span>
+                  {formatDate(service.createdAt)}
+                </div>
+                <div
+                  role="cell"
+                  className="@max-[920px]:col-start-2 @max-[920px]:row-start-1 @max-[920px]:justify-self-end"
+                >
+                  <ServiceActions
+                    service={service}
+                    canManage={canManage}
+                    onView={onView}
+                    onEdit={onEdit}
+                    onStatus={onStatus}
+                    onDelete={onDelete}
+                  />
+                </div>
+              </>
+            )}
+          />
+        )}
       </ResponsiveDataTable>
 
       {!loading && !error && (
         <footer className="flex items-center justify-between gap-3 pt-4 text-[11px] text-[#65718a] max-[560px]:flex-wrap">
           <span role="status" aria-live="polite">
-            Showing{" "}
-            {filtered.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}–
-            {Math.min(currentPage * pageSize, filtered.length)} of{" "}
-            {filtered.length} services
+            Showing {footer.total === 0 ? 0 : (footer.page - 1) * pageSize + 1}–
+            {Math.min(footer.page * pageSize, footer.total)} of {footer.total}{" "}
+            services
           </span>
-          {filtered.length > 0 && (
+          {footer.total > 0 && (
             <NumberedPagination
-              page={currentPage}
-              totalPages={totalPages}
-              disabled={loading}
+              page={footer.page}
+              totalPages={Math.max(1, Math.ceil(footer.total / pageSize))}
+              disabled={loading || footer !== tableResult}
               label="Service pages"
               onPageChange={(nextPage) => {
                 setAnimateRows(true)

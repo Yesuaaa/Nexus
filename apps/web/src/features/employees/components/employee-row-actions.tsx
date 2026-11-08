@@ -15,7 +15,6 @@ export function EmployeeRowActions({
   disabled,
   onView,
   onEdit,
-  onChangeStatus,
   onManageLogin,
 }: {
   employee: Employee
@@ -25,28 +24,14 @@ export function EmployeeRowActions({
   disabled: boolean
   onView: () => void
   onEdit: () => void
-  onChangeStatus: () => void
   onManageLogin: (
     action: "create" | "deactivate" | "reactivate" | "delete" | "permanent",
   ) => void
 }) {
   type EmployeeAction =
-    "status" | "create" | "deactivate" | "reactivate" | "delete" | "permanent"
+    "create" | "deactivate" | "reactivate" | "delete" | "permanent"
   const items: RowActionMenuItem<EmployeeAction>[] = []
   if (!archiveView) {
-    items.push({
-      action: "status",
-      disabled: employee.hasEmployeeRecord === false,
-      className: "text-sm focus:bg-[#eef1f8]",
-      label: (
-        <>
-          Change status
-          {employee.hasEmployeeRecord === false && (
-            <HoverTooltip>Complete employee details first</HoverTooltip>
-          )}
-        </>
-      ),
-    })
     items.push(
       !employee.hasAccount
         ? { action: "create", label: "Create login account" }
@@ -135,10 +120,7 @@ export function EmployeeRowActions({
         menuLabel={`Actions for ${employee.fullName}`}
         items={items}
         disabled={disabled}
-        onAction={(action) => {
-          if (action === "status") onChangeStatus()
-          else onManageLogin(action)
-        }}
+        onAction={onManageLogin}
       />
     </div>
   )

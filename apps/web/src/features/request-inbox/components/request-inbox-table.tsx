@@ -54,6 +54,7 @@ export function RequestInboxTable({
   error,
   viewKey,
   quickKey,
+  onRowsSettled,
   onRetry,
   onView,
   onGoToChat,
@@ -67,6 +68,7 @@ export function RequestInboxTable({
   error: string
   viewKey: string
   quickKey: string
+  onRowsSettled?: () => void
   onRetry: () => void
   onView: (request: InboxRequest) => void
   onGoToChat: (request: InboxRequest) => void
@@ -126,7 +128,7 @@ export function RequestInboxTable({
           Actions
         </ResponsiveDataTableColumnHeader>
       </ResponsiveDataTableHeader>
-      {(loading && requests.length === 0) || error ? (
+      {(loading && viewKey === "") || error ? (
         <ResponsiveDataTableBody>
           <ResponsiveDataTableRow>
             <ResponsiveDataTableCell
@@ -153,6 +155,7 @@ export function RequestInboxTable({
           rowClassName={rowClass}
           viewKey={viewKey}
           quickKey={quickKey}
+          onRowsSettled={onRowsSettled}
           animateRows
           ariaBusy={loading}
           defaultRowHeight={58}

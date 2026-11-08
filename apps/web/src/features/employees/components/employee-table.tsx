@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react"
 import { focusRing } from "@/components/layout/styles"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { Button } from "@/components/ui/button"
+import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
 import { DepartmentPill } from "@/components/ui/department-pill.tsx"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Pill } from "@/components/ui/pill"
@@ -83,7 +84,6 @@ export function EmployeeTable({
   onRetry,
   onView,
   onEdit,
-  onChangeStatus,
   onManageLogin,
   onManageDepartment,
   onRowsSettled,
@@ -99,7 +99,6 @@ export function EmployeeTable({
   onRetry: () => void
   onView: (employee: Employee) => void
   onEdit: (employee: Employee) => void
-  onChangeStatus: (employee: Employee) => void
   onManageLogin: (
     employee: Employee,
     action: "create" | "deactivate" | "reactivate" | "delete" | "permanent",
@@ -108,7 +107,7 @@ export function EmployeeTable({
   onRowsSettled?: () => void
 }) {
   const [openMenuKey, setOpenMenuKey] = useState<string | null>(null)
-  const initialLoading = loading && employees.length === 0
+  const initialLoading = loading && viewKey === ""
 
   return (
     <ResponsiveDataTable label="Employees" aria-busy={loading}>
@@ -145,14 +144,40 @@ export function EmployeeTable({
 
       {initialLoading || error ? (
         <ResponsiveDataTableBody>
-          <ResponsiveDataTableRow>
-            <ResponsiveDataTableCell
-              aria-colspan={8}
-              className="grid min-h-[150px] place-content-center gap-3 p-6 text-center text-xs text-[#7183a2]"
-            >
-              {initialLoading ? (
-                <span role="status">Loading employees…</span>
-              ) : (
+          {initialLoading ? (
+            <DataTableSkeletonRows
+              label="employees"
+              rowClassName={cn(
+                employeeGrid,
+                "h-[58px] px-4 py-[7px] @max-[1000px]:h-[188px] @max-[1000px]:gap-x-4 @max-[1000px]:gap-y-2 @max-[1000px]:py-[14px]",
+              )}
+              cellClassNames={[
+                "@max-[1000px]:col-start-1 @max-[1000px]:row-start-1",
+                "@max-[1000px]:col-span-2 @max-[1000px]:row-start-2",
+                "@max-[1000px]:col-span-2 @max-[1000px]:row-start-3",
+                "@max-[1000px]:col-start-1 @max-[1000px]:row-start-4",
+                "@max-[1000px]:col-start-1 @max-[1000px]:row-start-5",
+                "@max-[1000px]:col-start-2 @max-[1000px]:row-start-5 @max-[1000px]:justify-self-end",
+                "@max-[1000px]:col-start-2 @max-[1000px]:row-start-1 @max-[1000px]:justify-self-end",
+                "@max-[1000px]:col-start-2 @max-[1000px]:row-start-4 @max-[1000px]:justify-self-end",
+              ]}
+              cellSkeletonClassNames={[
+                "h-3 w-16",
+                "h-8 w-4/5",
+                "h-3 w-3/5",
+                "h-3 w-4/5",
+                "h-3 w-16",
+                "h-3 w-20",
+                "h-5 w-16 rounded",
+                "h-8 w-24",
+              ]}
+            />
+          ) : (
+            <ResponsiveDataTableRow>
+              <ResponsiveDataTableCell
+                aria-colspan={8}
+                className="grid min-h-[150px] place-content-center gap-3 p-6 text-center text-xs text-[#7183a2]"
+              >
                 <div role="alert" className="grid justify-items-center gap-3">
                   <p className="m-0">{error}</p>
                   <Button
@@ -164,9 +189,9 @@ export function EmployeeTable({
                     Try again
                   </Button>
                 </div>
-              )}
-            </ResponsiveDataTableCell>
-          </ResponsiveDataTableRow>
+              </ResponsiveDataTableCell>
+            </ResponsiveDataTableRow>
+          )}
         </ResponsiveDataTableBody>
       ) : (
         <AnimatedSlotGridBody
@@ -318,7 +343,6 @@ export function EmployeeTable({
                   disabled={false}
                   onView={() => onView(employee)}
                   onEdit={() => onEdit(employee)}
-                  onChangeStatus={() => onChangeStatus(employee)}
                   onManageLogin={(action) => onManageLogin(employee, action)}
                 />
               </div>

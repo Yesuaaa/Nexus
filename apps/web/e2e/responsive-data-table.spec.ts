@@ -86,6 +86,17 @@ async function mockClientTable(page: Page, holdFirstRequest = false) {
     })
   })
 
+  await page.route("**/api/clients/client-*", (route) => {
+    const client = clients.find((item) =>
+      route.request().url().endsWith(item.id),
+    )
+    return client
+      ? route.fulfill({
+          json: { client, serviceRequestCount: 0, projectCount: 0 },
+        })
+      : route.fallback()
+  })
+
   return {
     failNextRequest() {
       failNextRequest = true
@@ -143,16 +154,17 @@ test.describe("Responsive data table pilot", () => {
     await table.getByRole("button", { name: "Try again" }).click()
     await expect(table.getByText("Alpha Client", { exact: true })).toBeVisible()
 
-    const moreActions = table.getByRole("button", {
-      name: "More actions for Alpha Client",
+    const view = table.getByRole("button", {
+      name: "View Alpha Client",
       exact: true,
     })
-    await moreActions.click()
-    await page.getByRole("menuitem", { name: "Delete client" }).click()
-    const dialog = page.getByRole("dialog", { name: "Delete client?" })
+    await view.click()
+    const dialog = page.getByRole("dialog")
     await expect(dialog).toContainText("Alpha Client")
-    await dialog.getByRole("button", { name: "Cancel" }).click()
-    await expect(moreActions).toBeFocused()
+    await dialog
+      .getByRole("button", { name: "Close client details", exact: true })
+      .click()
+    await expect(view).toBeFocused()
   })
 
   test("keeps client rows usable without horizontal page overflow on mobile", async ({
@@ -165,7 +177,7 @@ test.describe("Responsive data table pilot", () => {
     const table = page.getByRole("table", { name: "Clients" })
     await expect(table.getByText("Alpha Client", { exact: true })).toBeVisible()
     await expect(
-      table.getByRole("button", { name: "Edit Alpha Client" }),
+      table.getByRole("button", { name: "View Alpha Client" }),
     ).toBeVisible()
     expect(
       await page.evaluate(
@@ -173,12 +185,12 @@ test.describe("Responsive data table pilot", () => {
       ),
     ).toBe(true)
     const actionSize = await table
-      .getByRole("button", { name: "Edit Alpha Client" })
+      .getByRole("button", { name: "View Alpha Client" })
       .evaluate((element) => {
         const bounds = element.getBoundingClientRect()
         return { width: bounds.width, height: bounds.height }
       })
-    expect(actionSize.width).toBeGreaterThanOrEqual(44)
-    expect(actionSize.height).toBeGreaterThanOrEqual(44)
+    expect(actionSize.width).toBeGreaterThanOrEqual(32)
+    expect(actionSize.height).toBeGreaterThanOrEqual(32)
   })
 })

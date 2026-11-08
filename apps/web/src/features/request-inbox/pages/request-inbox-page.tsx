@@ -5,6 +5,11 @@ import { useRouter } from "next/navigation"
 import { sileo } from "@/lib/toast"
 import { contentClass } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
+import {
+  useTableSearch,
+  useTableFooter,
+} from "@/components/ui/use-table-search"
+import { TableSearchStatus } from "@/components/ui/table-search-status"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
 import { SearchField } from "@/components/ui/search-field"
 import {
@@ -116,11 +121,21 @@ function ConfirmModal({
   )
 }
 
+function matchesTableSearch(item: InboxRequest, query: string) {
+  return [
+    item.title,
+    item.referenceNumber,
+    item.service.name,
+    item.client.fullName,
+    item.client.email,
+  ].some((value) => value?.toLowerCase().includes(query))
+}
+
 export function RequestInboxPage() {
   const router = useRouter()
   const account = usePortalAccount()
   const [search, setSearch] = useState("")
-  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const query = search.trim()
   const [view, setView] = useState<InboxView>("pending")
   const [page, setPage] = useState(1)
   const [sortBy, setSortBy] = useState<InboxSort>("createdAt")
@@ -135,32 +150,52 @@ export function RequestInboxPage() {
   const confirmingRef = useRef(false)
   const [detailsRevision, setDetailsRevision] = useState(0)
   const [result, setResult] = useState<InboxList | null>(null)
-  const [error, setError] = useState("")
+  const [errorMessage, setError] = useState("")
+  const [errorRequestKey, setErrorRequestKey] = useState("")
   const [resolvedKey, setResolvedKey] = useState("")
   const [resolvedViewKey, setResolvedViewKey] = useState("")
   const viewKey = JSON.stringify({
-    search: debouncedSearch,
+    search: query,
     view,
     page,
     sortBy,
     sortDir,
   })
   const requestKey = `${viewKey}:${revision}`
-  const loading =
-    resolvedKey !== requestKey || search.trim() !== debouncedSearch
+  const error = errorRequestKey === requestKey ? errorMessage : ""
+  const loading = resolvedKey !== requestKey || search.trim() !== query
+
+  const searchScope = JSON.stringify([view, sortBy, sortDir, revision])
+  const { acceptRows, preview, previewing } = useTableSearch<InboxRequest>({
+    search: query,
+    scope: searchScope,
+    page,
+    matches: matchesTableSearch,
+  })
+  const { footer, onRowsSettled } = useTableFooter(
+    result,
+    loading || previewing,
+  )
+  const tableViewKey = previewing
+    ? JSON.stringify([searchScope, query, 1])
+    : resolvedViewKey
 
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 150)
-    return () => clearTimeout(timer)
-  }, [search])
-  useEffect(() => {
+    const controller = new AbortController()
     let active = true
     let inFlight = false
     let hasLoaded = false
     const load = () => {
       if (inFlight) return
       inFlight = true
-      void listInbox({ search: debouncedSearch, view, page, sortBy, sortDir })
+      void listInbox({
+        search: query,
+        view,
+        page,
+        sortBy,
+        sortDir,
+        signal: controller.signal,
+      })
         .then((value) => {
           if (!active) return
           const lastPage = Math.max(1, Math.ceil(value.total / value.pageSize))
@@ -169,6 +204,7 @@ export function RequestInboxPage() {
             return
           }
           hasLoaded = true
+          acceptRows(value.serviceRequests)
           setResult(value)
           setError("")
           setResolvedKey(requestKey)
@@ -181,6 +217,7 @@ export function RequestInboxPage() {
             (!(reason instanceof ApiError) || reason.status >= 500)
           )
             return
+          setErrorRequestKey(requestKey)
           setError(
             reason instanceof Error
               ? reason.message
@@ -196,10 +233,11 @@ export function RequestInboxPage() {
     const stopRefresh = watchVisibleRefresh(load)
     return () => {
       active = false
+      controller.abort()
       stopRefresh()
     }
   }, [
-    debouncedSearch,
+    query,
     view,
     page,
     sortBy,
@@ -207,6 +245,7 @@ export function RequestInboxPage() {
     revision,
     requestKey,
     viewKey,
+    acceptRows,
   ])
 
   function refresh() {
@@ -331,9 +370,9 @@ export function RequestInboxPage() {
     }
   }
 
-  const from = !result?.total ? 0 : (result.page - 1) * result.pageSize + 1
-  const to = result
-    ? (result.page - 1) * result.pageSize + result.serviceRequests.length
+  const from = !footer?.total ? 0 : (footer.page - 1) * footer.pageSize + 1
+  const to = footer
+    ? (footer.page - 1) * footer.pageSize + footer.serviceRequests.length
     : 0
   const confirmService = confirm?.request.service.name ?? "this request"
   return (
@@ -405,7 +444,6 @@ export function RequestInboxPage() {
               className="h-[34px] text-xs max-[560px]:h-11"
               onClick={() => {
                 setSearch("")
-                setDebouncedSearch("")
                 setPage(1)
               }}
             >
@@ -414,11 +452,12 @@ export function RequestInboxPage() {
           )}
         </div>
         <RequestInboxTable
-          requests={result?.serviceRequests ?? []}
+          requests={preview ?? result?.serviceRequests ?? []}
           loading={loading}
           error={error}
-          viewKey={resolvedViewKey}
-          quickKey={debouncedSearch}
+          viewKey={tableViewKey}
+          onRowsSettled={onRowsSettled}
+          quickKey={query}
           sortBy={sortBy}
           sortDir={sortDir}
           onSort={(column) => {
@@ -434,18 +473,19 @@ export function RequestInboxPage() {
           onGoToChat={(request) => void goToChat(request)}
           onDelete={(request) => setConfirm({ kind: "delete", request })}
         />
-        {!error && !!result?.total && (
+        <TableSearchStatus active={loading && previewing} label="requests" />
+        {!error && !previewing && !!footer?.total && (
           <footer className="flex flex-wrap items-center justify-between gap-3 pt-4 text-[11px] text-[#52627a]">
             <span role="status" aria-live="polite" aria-atomic="true">
-              Showing {from}–{to} of {result.total}
+              Showing {from}–{to} of {footer.total}
             </span>
             <NumberedPagination
-              page={result.page}
+              page={footer.page}
               totalPages={Math.max(
                 1,
-                Math.ceil(result.total / result.pageSize),
+                Math.ceil(footer.total / footer.pageSize),
               )}
-              disabled={loading}
+              disabled={loading || footer !== result}
               label="Request inbox pages"
               onPageChange={setPage}
             />

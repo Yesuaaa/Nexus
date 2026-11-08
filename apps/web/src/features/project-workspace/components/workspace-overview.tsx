@@ -1,4 +1,5 @@
 "use client"
+import { AnimatedTableBody } from "@/components/ui/animated-table-body"
 import { TaskRowActions } from "./task-row-actions"
 
 import { CheckCircle2, ChevronRight, Circle, Flag, Layers3 } from "lucide-react"
@@ -193,12 +194,22 @@ export function WorkspaceOverview({
                               </th>
                             </tr>
                           </thead>
-                          <tbody>
-                            {phase.tasks.map((task) => (
-                              <tr
-                                key={task.id}
-                                className="border-t border-[#edf0f4]"
-                              >
+                          <AnimatedTableBody
+                            items={phase.tasks}
+                            viewKey={JSON.stringify(
+                              phase.tasks.map((task) => [
+                                task.id,
+                                task.status,
+                                task.employeeId,
+                                task.dueDate,
+                              ]),
+                            )}
+                            columns={5}
+                            rowClassName="border-t border-[#edf0f4]"
+                            emptyContent="No tasks in this phase yet."
+                            renderRow={(task) => (
+                              <>
+                                {" "}
                                 <td className="px-4 py-3">
                                   <div className="flex items-start gap-2">
                                     {task.status === "DONE" ? (
@@ -252,9 +263,9 @@ export function WorkspaceOverview({
                                     disabled={busy}
                                   />
                                 </td>
-                              </tr>
-                            ))}
-                          </tbody>
+                              </>
+                            )}
+                          />
                         </table>
                         {!phase.tasks.length && (
                           <p className="text-xs text-[#738096]">

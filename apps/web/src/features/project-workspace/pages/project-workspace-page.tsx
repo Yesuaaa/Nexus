@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 import { contentClass } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
+import { AnimatedTableBody } from "@/components/ui/animated-table-body"
 import { SearchField } from "@/components/ui/search-field"
 import {
   Select,
@@ -291,7 +292,7 @@ export function ProjectWorkspacePage() {
           >
             Loading projects…
           </p>
-        ) : filtered.length ? (
+        ) : workspaces.length ? (
           <div className="overflow-x-auto rounded-xl border border-[#e2e6ec] bg-background">
             <table className="w-full min-w-[960px] table-fixed border-collapse text-left">
               <colgroup>
@@ -318,12 +319,20 @@ export function ProjectWorkspacePage() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#e9edf1] text-xs">
-                {filtered.map((workspace) => (
-                  <tr
-                    key={workspace.id}
-                    className="transition-colors hover:bg-[#fafbfd]"
-                  >
+              <AnimatedTableBody
+                items={filtered}
+                viewKey={JSON.stringify([search, view, status, sort])}
+                quickKey={search}
+                columns={6}
+                rowClassName="border-t border-[#e9edf1] text-xs transition-colors hover:bg-[#fafbfd]"
+                emptyContent={
+                  view === "archive"
+                    ? "No archived projects match these filters."
+                    : "No projects match these filters."
+                }
+                renderRow={(workspace) => (
+                  <>
+                    {" "}
                     <td className="px-4 py-3.5 text-left align-middle">
                       <Link
                         href={`/project-workspace/${encodeURIComponent(workspace.id)}`}
@@ -366,9 +375,9 @@ export function ProjectWorkspacePage() {
                         onChanged={() => setRevision((value) => value + 1)}
                       />
                     </td>
-                  </tr>
-                ))}
-              </tbody>
+                  </>
+                )}
+              />
             </table>
           </div>
         ) : workspaces.length === 0 && view === "active" ? (

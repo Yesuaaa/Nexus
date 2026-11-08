@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import dynamic from "next/dynamic"
 import { PanelLoading } from "@/components/ui/panel-loading"
-import Link from "next/link"
 import { sileo } from "@/lib/toast"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import {
@@ -435,13 +434,6 @@ export function ClientServicesPage() {
                     : "Discover powerful digital services crafted to amplify your presence, connect with your audience, and turn ideas into real business impact."}
           </p>
         </div>
-        <Button
-          asChild
-          variant="outline"
-          className="h-[34px] text-xs max-[560px]:h-11"
-        >
-          <Link href="/service-requests">My booked requests</Link>
-        </Button>
       </header>
 
       {detailState && (

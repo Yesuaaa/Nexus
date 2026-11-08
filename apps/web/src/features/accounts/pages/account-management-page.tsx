@@ -1,6 +1,12 @@
 "use client"
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react"
 import { useRouter } from "next/navigation"
 import { LoaderCircle, Trash2 } from "lucide-react"
 import { ConversationAvatar } from "@/features/request-conversations/components/conversation-avatar"
@@ -16,7 +22,9 @@ import {
   type AnimatedRowItem,
   type AnimatedRowSlot,
 } from "@/components/ui/animated-data-row"
+import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
 import { DepartmentPill } from "@/components/ui/department-pill.tsx"
+import { Dropdown as AccessDropdown } from "@/components/ui/dropdown"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
 import { Pill } from "@/components/ui/pill"
 import { SearchField } from "@/components/ui/search-field"
@@ -172,7 +180,7 @@ function AccountRowContents({
         {trashView ? (
           <span className="text-[11px] text-[#738096]">Removed</span>
         ) : editable ? (
-          <AccountDropdown
+          <AccessDropdown
             className="w-full max-w-[112px]"
             triggerClassName="h-8 border-[#e1e4ea] text-xs"
             align="right"
@@ -231,8 +239,8 @@ export function AccountManagementPage() {
   const router = useRouter()
   const reduceMotion = useReducedMotion() ?? false
   const [search, setSearch] = useState("")
+  const [previewingSearch, setPreviewingSearch] = useState(false)
   const searchRef = useRef(search)
-  const [debouncedSearch, setDebouncedSearch] = useState("")
   const [roleFilter, setRoleFilter] = useState("")
   const [sortKey, setSortKey] = useState<AccountSortKey>("createdAt")
   const [sortDirection, setSortDirection] =
@@ -243,7 +251,10 @@ export function AccountManagementPage() {
   const [rowSlots, setRowSlots] = useState<AccountRowSlot[]>([])
   const rowSlotsRef = useRef<AccountRowSlot[]>([])
   const [footerResult, setFooterResult] = useState<AccountList | null>(null)
-  const pendingFooterResultRef = useRef<AccountList | null>(null)
+  const searchCacheRef = useRef({
+    scope: "",
+    results: new Map<string, AccountList>(),
+  })
   const [rowHeight, setRowHeight] = useState(58)
   const [isAnimatingRows, setIsAnimatingRows] = useState(false)
   const [animateBodyHeight, setAnimateBodyHeight] = useState(false)
@@ -272,8 +283,15 @@ export function AccountManagementPage() {
   const [deleteTarget, setDeleteTarget] = useState<Account | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState("")
+  const searchScope = JSON.stringify([
+    roleFilter,
+    sortKey,
+    sortDirection,
+    trashView,
+    revision,
+  ])
   const requestKey = JSON.stringify([
-    debouncedSearch,
+    search,
     roleFilter,
     sortKey,
     sortDirection,
@@ -282,25 +300,14 @@ export function AccountManagementPage() {
     revision,
   ])
   const viewKey = JSON.stringify([
-    debouncedSearch,
+    search,
     roleFilter,
     sortKey,
     sortDirection,
     page,
     trashView,
   ])
-  const error =
-    search === debouncedSearch && errorState?.requestKey === requestKey
-      ? errorState.message
-      : ""
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      setDebouncedSearch(search)
-      setPage(1)
-    }, 150)
-    return () => window.clearTimeout(timeout)
-  }, [search])
+  const error = errorState?.requestKey === requestKey ? errorState.message : ""
 
   useEffect(
     () => () => {
@@ -331,114 +338,105 @@ export function AccountManagementPage() {
     return () => observer.disconnect()
   }, [rowSlots])
 
-  function settleRowSlots(data: AccountList) {
-    animationGenerationRef.current += 1
-    const nextSlots = settledAnimatedRows(data.users)
-    rowSlotsRef.current = nextSlots
-    setRowSlots(nextSlots)
-    setFooterResult(data)
-    pendingFooterResultRef.current = null
-    setIsAnimatingRows(false)
-  }
+  const updateRows = useCallback(
+    (
+      users: Account[],
+      animate: boolean,
+      quick: boolean,
+      data?: AccountList,
+    ) => {
+      const runId = ++animationGenerationRef.current
+      if (animationTimerRef.current !== null) {
+        window.clearTimeout(animationTimerRef.current)
+        animationTimerRef.current = null
+      }
+      if (bodyHeightTimerRef.current !== null) {
+        window.clearTimeout(bodyHeightTimerRef.current)
+        bodyHeightTimerRef.current = null
+      }
+      const settle = () => {
+        const slots = settledAnimatedRows(users)
+        rowSlotsRef.current = slots
+        setRowSlots(slots)
+        if (data) setFooterResult(data)
+        setIsAnimatingRows(false)
+      }
+      const { slots, animationDuration } = swapAnimatedRows({
+        currentSlots: rowSlotsRef.current,
+        items: users,
+        getKey: (account) => account.id,
+        reduceMotion,
+        runId,
+        quick,
+      })
+      if (!animate || animationDuration === 0) {
+        settle()
+        setAnimateBodyHeight(false)
+        return
+      }
+      rowSlotsRef.current = slots
+      setRowSlots(slots)
+      setIsAnimatingRows(true)
+      setAnimateBodyHeight(true)
+      animationTimerRef.current = window.setTimeout(() => {
+        if (runId !== animationGenerationRef.current) return
+        settle()
+        animationTimerRef.current = null
+        bodyHeightTimerRef.current = window.setTimeout(() => {
+          setAnimateBodyHeight(false)
+          bodyHeightTimerRef.current = null
+        }, 250)
+      }, animationDuration)
+    },
+    [reduceMotion],
+  )
 
   useEffect(() => {
     let active = true
+    const controller = new AbortController()
     listAccounts(
-      debouncedSearch,
+      search,
       roleFilter,
       page,
       sortKey,
       sortDirection,
       trashView,
+      controller.signal,
     )
       .then((data) => {
         if (active) {
+          if (searchCacheRef.current.scope !== searchScope) {
+            searchCacheRef.current = { scope: searchScope, results: new Map() }
+          }
+          if (page === 1) {
+            const cache = searchCacheRef.current.results
+            cache.set(search.trim().toLowerCase(), data)
+            if (cache.size > 20) {
+              const oldestKey = cache.keys().next().value
+              if (oldestKey !== undefined) cache.delete(oldestKey)
+            }
+          }
           const previousViewKey = lastResolvedViewKey.current
           const searchChanged =
             lastResolvedSearch.current !== null &&
-            lastResolvedSearch.current !== debouncedSearch
+            lastResolvedSearch.current !== search
           const shouldAnimate =
             previousViewKey !== null &&
             previousViewKey !== viewKey &&
-            searchRef.current === debouncedSearch
+            searchRef.current === search
 
           setResult(data)
+          setPreviewingSearch(false)
           setErrorState(null)
           setResolvedKey(requestKey)
           lastResolvedViewKey.current = viewKey
-          lastResolvedSearch.current = debouncedSearch
+          lastResolvedSearch.current = search
 
-          if (shouldAnimate) {
-            const runId = animationGenerationRef.current + 1
-            const quick = searchChanged
-            const { slots: nextSlots, animationDuration } = swapAnimatedRows({
-              currentSlots: rowSlotsRef.current,
-              items: data.users,
-              getKey: (account) => account.id,
-              reduceMotion,
-              runId,
-              quick,
-            })
-            const hasRowSwap = nextSlots.some(
-              (slot) =>
-                slot.exiting !== null || slot.entering?.phase === "enter",
-            )
-
-            if (hasRowSwap && animationDuration > 0) {
-              animationGenerationRef.current = runId
-              if (animationTimerRef.current !== null) {
-                window.clearTimeout(animationTimerRef.current)
-              }
-              if (bodyHeightTimerRef.current !== null) {
-                window.clearTimeout(bodyHeightTimerRef.current)
-                bodyHeightTimerRef.current = null
-              }
-              rowSlotsRef.current = nextSlots
-              pendingFooterResultRef.current = data
-              setRowSlots(nextSlots)
-              setIsAnimatingRows(true)
-              setAnimateBodyHeight(true)
-              animationTimerRef.current = window.setTimeout(() => {
-                const finalResult = pendingFooterResultRef.current ?? data
-                const finalSlots = settledAnimatedRows(finalResult.users)
-                rowSlotsRef.current = finalSlots
-                setRowSlots(finalSlots)
-                setFooterResult(finalResult)
-                pendingFooterResultRef.current = null
-                setIsAnimatingRows(false)
-                animationTimerRef.current = null
-                bodyHeightTimerRef.current = window.setTimeout(() => {
-                  setAnimateBodyHeight(false)
-                  bodyHeightTimerRef.current = null
-                }, 250)
-              }, animationDuration)
-            } else if (pendingFooterResultRef.current !== null) {
-              if (animationTimerRef.current !== null) {
-                window.clearTimeout(animationTimerRef.current)
-                animationTimerRef.current = null
-              }
-              if (bodyHeightTimerRef.current !== null) {
-                window.clearTimeout(bodyHeightTimerRef.current)
-                bodyHeightTimerRef.current = null
-              }
-              settleRowSlots(data)
-              setAnimateBodyHeight(true)
-              bodyHeightTimerRef.current = window.setTimeout(() => {
-                setAnimateBodyHeight(false)
-                bodyHeightTimerRef.current = null
-              }, 250)
-            } else {
-              settleRowSlots(data)
-            }
-          } else if (pendingFooterResultRef.current !== null) {
-            pendingFooterResultRef.current = data
-          } else {
-            settleRowSlots(data)
-          }
+          updateRows(data.users, shouldAnimate, searchChanged, data)
         }
       })
       .catch((caught: unknown) => {
-        if (!active) return
+        if (!active || controller.signal.aborted) return
         if (caught instanceof ApiError && caught.status === 401) {
           clearToken()
           router.replace("/login")
@@ -457,9 +455,10 @@ export function AccountManagementPage() {
       })
     return () => {
       active = false
+      controller.abort()
     }
   }, [
-    debouncedSearch,
+    search,
     roleFilter,
     page,
     revision,
@@ -470,11 +469,33 @@ export function AccountManagementPage() {
     sortDirection,
     sortKey,
     trashView,
+    searchScope,
+    updateRows,
   ])
 
   function updateSearch(value: string) {
     searchRef.current = value
     setSearch(value)
+    setPage(1)
+    setPreviewingSearch(true)
+    // Preview known matches without waiting for the full server search.
+    if (!result || searchCacheRef.current.scope !== searchScope) return
+    const query = value.trim().toLowerCase()
+    const cache = searchCacheRef.current.results
+    let source = result
+    let bestQueryLength = -1
+    for (const [cachedQuery, cachedResult] of cache) {
+      if (query.includes(cachedQuery) && cachedQuery.length > bestQueryLength) {
+        source = cachedResult
+        bestQueryLength = cachedQuery.length
+      }
+    }
+    const users = source.users.filter(
+      (account) =>
+        account.email.toLowerCase().includes(query) ||
+        (account.fullName?.toLowerCase().includes(query) ?? false),
+    )
+    updateRows(users, true, true)
   }
 
   function updateRoleFilter(value: string) {
@@ -641,7 +662,9 @@ export function AccountManagementPage() {
     : 1
   const bodyHeight = rowSlots.length > 0 ? rowSlots.length * rowHeight : 150
   const creatableRoles = allRoles.filter((role) => canCreateRole(actor, role))
-  const busy = resolvedKey !== requestKey || search !== debouncedSearch
+  const busy = resolvedKey !== requestKey
+  const initialLoading = busy && !result
+  const searching = busy && result !== null && previewingSearch
   const accountRowClassName = cn(
     accountGrid,
     "h-[58px] border-b border-[#eceef1] bg-background px-4 py-[7px] text-xs text-foreground hover:bg-[#e8eef2] @max-[900px]:h-[188px] @max-[900px]:gap-x-4 @max-[900px]:gap-y-[10px] @max-[900px]:py-[14px] @max-[530px]:h-[258px] @max-[530px]:gap-[9px]",
@@ -685,7 +708,7 @@ export function AccountManagementPage() {
           user={user}
           actor={actor}
           selectedRole={draftRoles[user.id]?.role ?? user.role}
-          disabled={savingAccess || statusSaving || deleting}
+          disabled={busy || savingAccess || statusSaving || deleting}
           onRoleChange={(account, role) => {
             setAccessError("")
             setDraftRoles((current) => {
@@ -767,7 +790,7 @@ export function AccountManagementPage() {
             />
             <AccountDropdown
               className="max-[560px]:w-full"
-              triggerClassName="h-[34px] min-w-[132px] border-[#e1e4ea] max-[560px]:min-w-0"
+              triggerClassName="h-[34px] min-w-[132px] border-[#e1e4ea] text-xs font-normal max-[560px]:min-w-0"
               label="Filter by role"
               value={roleFilter}
               options={[{ value: "", label: "All roles" }, ...roleOptions]}
@@ -889,18 +912,43 @@ export function AccountManagementPage() {
             className="relative min-w-0"
             aria-live="polite"
             aria-busy={busy || isAnimatingRows}
-            style={{
-              height: bodyHeight,
-              transition: animateBodyHeight ? "height 220ms ease-out" : "none",
-            }}
+            style={
+              initialLoading
+                ? undefined
+                : {
+                    height: bodyHeight,
+                    transition: animateBodyHeight
+                      ? "height 220ms ease-out"
+                      : "none",
+                  }
+            }
           >
-            {busy && !result && (
-              <div
-                className="grid min-h-[150px] place-content-center gap-2 p-6 text-center text-[#7183a2]"
-                role="status"
-              >
-                Loading accounts…
-              </div>
+            {initialLoading && (
+              <DataTableSkeletonRows
+                label="accounts"
+                rowClassName={cn(
+                  accountGrid,
+                  "h-[58px] px-4 py-[7px] @max-[900px]:h-[188px] @max-[900px]:gap-x-4 @max-[900px]:gap-y-[10px] @max-[900px]:py-[14px] @max-[530px]:h-[258px] @max-[530px]:gap-[9px]",
+                )}
+                cellClassNames={[
+                  "@max-[900px]:col-start-1 @max-[900px]:row-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto",
+                  "@max-[900px]:col-start-2 @max-[900px]:row-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto",
+                  "@max-[900px]:col-start-2 @max-[900px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto",
+                  "@max-[900px]:col-start-1 @max-[900px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto",
+                  "@max-[900px]:col-start-1 @max-[900px]:row-start-3 @max-[530px]:col-start-1 @max-[530px]:row-auto",
+                  "@max-[900px]:col-start-2 @max-[900px]:row-start-3 @max-[530px]:col-start-1 @max-[530px]:row-auto",
+                  "@max-[900px]:col-start-2 @max-[900px]:row-start-4 @max-[530px]:col-start-1 @max-[530px]:row-auto",
+                ]}
+                cellSkeletonClassNames={[
+                  "h-8 w-4/5",
+                  "h-3 w-3/5",
+                  "h-5 w-16 rounded",
+                  "h-3 w-4/5",
+                  "h-3 w-20",
+                  "h-3 w-20",
+                  "h-8 w-24",
+                ]}
+              />
             )}
             {!busy && error && (
               <div
@@ -920,11 +968,13 @@ export function AccountManagementPage() {
                 </button>
               </div>
             )}
-            {!error && result?.users.length === 0 && !isAnimatingRows && (
+            {!error && result && rowSlots.length === 0 && !isAnimatingRows && (
               <div className="grid min-h-[150px] place-content-center gap-2 p-6 text-center text-[#7183a2]">
-                {trashView
-                  ? "No soft-deleted accounts match your search."
-                  : "No accounts match your search."}
+                {busy
+                  ? "Searching accounts…"
+                  : trashView
+                    ? "No soft-deleted accounts match your search."
+                    : "No accounts match your search."}
               </div>
             )}
             {result &&
@@ -964,7 +1014,12 @@ export function AccountManagementPage() {
               })}
           </ResponsiveDataTableBody>
         </ResponsiveDataTable>
-        {!error && footerResult && footerResult.total > 0 && (
+        {searching && !error && (
+          <p className="mt-3 text-[11px] text-[#65718a]" role="status">
+            Searching all accounts…
+          </p>
+        )}
+        {!error && !searching && footerResult && footerResult.total > 0 && (
           <div className="flex items-center justify-between gap-3 pt-4 text-[11px] text-[#65718a] max-[560px]:flex-wrap max-[560px]:pt-[14px]">
             <span>
               Showing {(footerResult.page - 1) * footerResult.pageSize + 1}–
@@ -1029,7 +1084,6 @@ export function AccountManagementPage() {
             description: "The new account is ready to use.",
           })
           setSearch("")
-          setDebouncedSearch("")
           setRoleFilter("")
           setPage(1)
           setRevision((current) => current + 1)

@@ -38,7 +38,7 @@ test(
     setServiceImageStorageForTests({
       async upload() {
         uploadedImageSequence += 1
-        const path = `services/test-${uploadedImageSequence}.png`
+        const path = `services/test-${uploadedImageSequence}.webp`
         storedServiceImages.add(path)
         return path
       },
@@ -258,7 +258,7 @@ test(
           description: "Offline integration fixture",
           departmentIds: ["product", "operations"],
           isActive: true,
-          imageDataUrl: `data:image/png;base64,${Buffer.from("service-image").toString("base64")}`,
+          imageDataUrl: `data:image/webp;base64,${Buffer.from("service-image").toString("base64")}`,
           imageAltText: "Security service illustration",
           removeImage: false,
           pricingTemplate: {
@@ -322,14 +322,14 @@ test(
         )
         assert.equal(
           service.imageUrl,
-          "https://storage.test/services/test-1.png",
+          "https://storage.test/services/test-1.webp",
         )
-        assert.equal(storedServiceImages.has("services/test-1.png"), true)
+        assert.equal(storedServiceImages.has("services/test-1.webp"), true)
         const storedService = await prisma.service.findUniqueOrThrow({
           where: { id: service.id },
           select: { imagePath: true },
         })
-        assert.equal(storedService.imagePath, "services/test-1.png")
+        assert.equal(storedService.imagePath, "services/test-1.webp")
         assert.equal(service.pricingTemplate?.pricingModel, "STARTING")
         assert.deepEqual(
           service.packages.map((item) => item.name),
@@ -355,10 +355,10 @@ test(
         }
         assert.equal(
           replacementService.service.imageUrl,
-          "https://storage.test/services/test-3.png",
+          "https://storage.test/services/test-3.webp",
         )
-        assert.equal(storedServiceImages.has("services/test-1.png"), false)
-        assert.equal(storedServiceImages.has("services/test-3.png"), true)
+        assert.equal(storedServiceImages.has("services/test-1.webp"), false)
+        assert.equal(storedServiceImages.has("services/test-3.webp"), true)
         const historicalRequest = await prisma.serviceRequest.create({
           data: {
             clientId: "user",
@@ -440,7 +440,7 @@ test(
           (await request(`/services/${service.id}`, "DELETE")).status,
           200,
         )
-        assert.equal(storedServiceImages.has("services/test-3.png"), false)
+        assert.equal(storedServiceImages.has("services/test-3.webp"), false)
         assert.equal(
           (await request(`/services/${service.id}`, "GET")).status,
           404,
