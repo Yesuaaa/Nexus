@@ -1,10 +1,11 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import dynamic from "next/dynamic"
+import { PanelLoading } from "@/components/ui/panel-loading"
 import { Plus } from "lucide-react"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
-import { ClientFormDialog } from "../components/client-form-dialog"
 import { contentClass } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
@@ -27,10 +28,22 @@ import {
   type Client,
 } from "../api/clients-api"
 import { ClientTable } from "../components/client-table"
-import {
-  ClientDetailsDrawer,
-  type ClientDetailsTab,
-} from "../components/client-details-drawer"
+import type { ClientDetailsTab } from "../components/client-details-drawer"
+
+const ClientFormDialog = dynamic(
+  () =>
+    import("../components/client-form-dialog").then(
+      (module) => module.ClientFormDialog,
+    ),
+  { loading: PanelLoading },
+)
+const ClientDetailsDrawer = dynamic(
+  () =>
+    import("../components/client-details-drawer").then(
+      (module) => module.ClientDetailsDrawer,
+    ),
+  { loading: PanelLoading },
+)
 
 const sortOptions: { value: string; label: string }[] = [
   { value: "createdAt:desc", label: "Newest registered" },

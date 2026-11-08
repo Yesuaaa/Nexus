@@ -11,6 +11,14 @@ import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { Button } from "@/components/ui/button"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { rowActionButton } from "@/components/ui/row-action-styles"
+import {
+  ResponsiveDataTable,
+  ResponsiveDataTableBody,
+  ResponsiveDataTableCell,
+  ResponsiveDataTableColumnHeader,
+  ResponsiveDataTableHeader,
+  ResponsiveDataTableRow,
+} from "@/components/ui/responsive-data-table"
 import { BookingStatusPill } from "@/features/bookings/components/booking-status-pill"
 import { cn } from "@/lib/utils"
 import type { InboxRequest, InboxSort } from "../api/request-inbox-api"
@@ -69,69 +77,59 @@ export function RequestInboxTable({
 }) {
   const { formatDate } = useDatePreferences()
   return (
-    <div
-      role="table"
-      aria-label="Department requests"
-      aria-busy={loading}
-      className="@container min-w-0 overflow-x-clip rounded-lg border border-[#e8ebef] bg-background"
-    >
-      <div role="rowgroup">
-        <div
-          role="row"
-          className={cn(
-            grid,
-            "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground @max-[800px]:flex @max-[800px]:flex-wrap @max-[800px]:gap-x-4 @max-[800px]:gap-y-0",
-          )}
-        >
-          {(
-            [
-              ["service", "Service"],
-              ["reference", "Reference"],
-              ["client", "Client"],
-              ["status", "Status"],
-              ["createdAt", "Date requested"],
-            ] as const
-          ).map(([column, label]) => (
-            <span
-              key={column}
-              role="columnheader"
-              aria-sort={
-                sortBy === column
-                  ? sortDir === "asc"
-                    ? "ascending"
-                    : "descending"
-                  : "none"
-              }
+    <ResponsiveDataTable label="Department requests" aria-busy={loading}>
+      <ResponsiveDataTableHeader
+        rowClassName={cn(
+          grid,
+          "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground @max-[800px]:flex @max-[800px]:flex-wrap @max-[800px]:gap-x-4 @max-[800px]:gap-y-0",
+        )}
+      >
+        {(
+          [
+            ["service", "Service"],
+            ["reference", "Reference"],
+            ["client", "Client"],
+            ["status", "Status"],
+            ["createdAt", "Date requested"],
+          ] as const
+        ).map(([column, label]) => (
+          <ResponsiveDataTableColumnHeader
+            key={column}
+            aria-sort={
+              sortBy === column
+                ? sortDir === "asc"
+                  ? "ascending"
+                  : "descending"
+                : "none"
+            }
+          >
+            <button
+              type="button"
+              className="inline-flex min-h-9 cursor-pointer items-center gap-1 rounded-sm text-xs font-semibold whitespace-nowrap text-[#203f8c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#203f8c] @max-[800px]:min-h-11"
+              onClick={() => onSort(column)}
+              aria-label={`Sort by ${label.toLowerCase()}${sortBy === column ? `, ${sortDir === "asc" ? "ascending" : "descending"}` : ""}`}
             >
-              <button
-                type="button"
-                className="inline-flex min-h-9 cursor-pointer items-center gap-1 rounded-sm text-xs font-semibold whitespace-nowrap text-[#203f8c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#203f8c] @max-[800px]:min-h-11"
-                onClick={() => onSort(column)}
-                aria-label={`Sort by ${label.toLowerCase()}${sortBy === column ? `, ${sortDir === "asc" ? "ascending" : "descending"}` : ""}`}
-              >
-                {label}
-                {sortBy === column ? (
-                  sortDir === "asc" ? (
-                    <ArrowUp size={12} aria-hidden="true" />
-                  ) : (
-                    <ArrowDown size={12} aria-hidden="true" />
-                  )
+              {label}
+              {sortBy === column ? (
+                sortDir === "asc" ? (
+                  <ArrowUp size={12} aria-hidden="true" />
                 ) : (
-                  <ArrowUpDown size={12} aria-hidden="true" />
-                )}
-              </button>
-            </span>
-          ))}
-          <span role="columnheader" className="@max-[800px]:hidden">
-            Actions
-          </span>
-        </div>
-      </div>
+                  <ArrowDown size={12} aria-hidden="true" />
+                )
+              ) : (
+                <ArrowUpDown size={12} aria-hidden="true" />
+              )}
+            </button>
+          </ResponsiveDataTableColumnHeader>
+        ))}
+        <ResponsiveDataTableColumnHeader className="@max-[800px]:hidden">
+          Actions
+        </ResponsiveDataTableColumnHeader>
+      </ResponsiveDataTableHeader>
       {(loading && requests.length === 0) || error ? (
-        <div role="rowgroup">
-          <div role="row">
-            <div
-              role="cell"
+        <ResponsiveDataTableBody>
+          <ResponsiveDataTableRow>
+            <ResponsiveDataTableCell
               aria-colspan={6}
               className="grid min-h-[150px] place-content-center gap-3 p-6 text-center text-xs text-[#52627a]"
             >
@@ -145,9 +143,9 @@ export function RequestInboxTable({
                   </Button>
                 </div>
               )}
-            </div>
-          </div>
-        </div>
+            </ResponsiveDataTableCell>
+          </ResponsiveDataTableRow>
+        </ResponsiveDataTableBody>
       ) : (
         <AnimatedSlotGridBody
           items={requests}
@@ -266,6 +264,6 @@ export function RequestInboxTable({
           )}
         />
       )}
-    </div>
+    </ResponsiveDataTable>
   )
 }

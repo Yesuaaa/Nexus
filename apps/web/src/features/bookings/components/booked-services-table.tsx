@@ -5,6 +5,14 @@ import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { Button } from "@/components/ui/button"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { rowActionButton } from "@/components/ui/row-action-styles"
+import {
+  ResponsiveDataTable,
+  ResponsiveDataTableBody,
+  ResponsiveDataTableCell,
+  ResponsiveDataTableColumnHeader,
+  ResponsiveDataTableHeader,
+  ResponsiveDataTableRow,
+} from "@/components/ui/responsive-data-table"
 import { cn } from "@/lib/utils"
 import type { BookedService } from "../api/bookings-api"
 import { BookingStatusPill } from "./booking-status-pill"
@@ -49,39 +57,31 @@ export function BookedServicesTable({
   const { formatDate } = useDatePreferences()
   const initialLoading = loading && bookings.length === 0
   return (
-    <div
-      role="table"
-      aria-label="Booked services"
-      aria-busy={loading}
-      className="@container min-w-0 overflow-x-clip rounded-lg border border-[#e8ebef] bg-background"
-    >
-      <div role="rowgroup" className="@max-[950px]:sr-only">
-        <div
-          role="row"
-          className={cn(
-            bookingGrid,
-            "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground",
-          )}
-        >
-          {[
-            "Service / Reference",
-            "Package",
-            "Status",
-            "Date requested",
-            "Expected timeline",
-            "Actions",
-          ].map((title) => (
-            <span role="columnheader" key={title}>
-              {title}
-            </span>
-          ))}
-        </div>
-      </div>
+    <ResponsiveDataTable label="Booked services" aria-busy={loading}>
+      <ResponsiveDataTableHeader
+        className="@max-[950px]:sr-only"
+        rowClassName={cn(
+          bookingGrid,
+          "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground",
+        )}
+      >
+        {[
+          "Service / Reference",
+          "Package",
+          "Status",
+          "Date requested",
+          "Expected timeline",
+          "Actions",
+        ].map((title) => (
+          <ResponsiveDataTableColumnHeader key={title}>
+            {title}
+          </ResponsiveDataTableColumnHeader>
+        ))}
+      </ResponsiveDataTableHeader>
       {initialLoading || error ? (
-        <div role="rowgroup">
-          <div role="row">
-            <div
-              role="cell"
+        <ResponsiveDataTableBody>
+          <ResponsiveDataTableRow>
+            <ResponsiveDataTableCell
               aria-colspan={6}
               className="grid min-h-[150px] place-content-center gap-3 p-6 text-center text-xs text-[#7183a2]"
             >
@@ -99,9 +99,9 @@ export function BookedServicesTable({
                   </Button>
                 </div>
               )}
-            </div>
-          </div>
-        </div>
+            </ResponsiveDataTableCell>
+          </ResponsiveDataTableRow>
+        </ResponsiveDataTableBody>
       ) : (
         <AnimatedSlotGridBody
           items={bookings}
@@ -194,6 +194,6 @@ export function BookedServicesTable({
           )}
         />
       )}
-    </div>
+    </ResponsiveDataTable>
   )
 }

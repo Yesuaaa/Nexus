@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import { ApiError } from "@/features/auth/api/auth-api"
 import {
   getWorkflow,

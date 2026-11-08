@@ -6,6 +6,11 @@ import { NumberedPagination } from "@/components/ui/numbered-pagination"
 import { SearchEmptyState } from "@/components/ui/search-empty-state"
 import { SearchField } from "@/components/ui/search-field"
 import {
+  ResponsiveDataTable,
+  ResponsiveDataTableBody,
+  ResponsiveDataTableHeader,
+} from "@/components/ui/responsive-data-table"
+import {
   TableSortButton,
   type SortDirection,
 } from "@/components/ui/table-sort-button"
@@ -114,53 +119,46 @@ export function DepartmentTable({
         </div>
       </div>
 
-      <div
-        className="@container min-w-0 overflow-x-clip rounded-lg border border-[#e8ebef] bg-background"
-        role="table"
-        aria-label="Departments and their staffing"
-      >
-        <div role="rowgroup" className="@max-[820px]:sr-only">
-          <div
-            role="row"
-            className={cn(
-              departmentGrid,
-              "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground",
-            )}
-          >
-            <span role="columnheader">
-              <TableSortButton
-                label="Department"
-                direction={sortKey === "name" ? direction : null}
-                onClick={() => sortBy("name")}
-              />
-            </span>
-            <span role="columnheader">Head</span>
-            <span role="columnheader">
-              <TableSortButton
-                label="Teams"
-                direction={sortKey === "teams" ? direction : null}
-                onClick={() => sortBy("teams")}
-              />
-            </span>
-            <span role="columnheader">
-              <TableSortButton
-                label="Employees"
-                direction={sortKey === "employees" ? direction : null}
-                onClick={() => sortBy("employees")}
-              />
-            </span>
-            <span role="columnheader">
-              <TableSortButton
-                label="Services"
-                direction={sortKey === "services" ? direction : null}
-                onClick={() => sortBy("services")}
-              />
-            </span>
-            <span role="columnheader">Actions</span>
-          </div>
-        </div>
-        <div
-          role="rowgroup"
+      <ResponsiveDataTable label="Departments and their staffing">
+        <ResponsiveDataTableHeader
+          className="@max-[820px]:sr-only"
+          rowClassName={cn(
+            departmentGrid,
+            "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground",
+          )}
+        >
+          <span role="columnheader">
+            <TableSortButton
+              label="Department"
+              direction={sortKey === "name" ? direction : null}
+              onClick={() => sortBy("name")}
+            />
+          </span>
+          <span role="columnheader">Head</span>
+          <span role="columnheader">
+            <TableSortButton
+              label="Teams"
+              direction={sortKey === "teams" ? direction : null}
+              onClick={() => sortBy("teams")}
+            />
+          </span>
+          <span role="columnheader">
+            <TableSortButton
+              label="Employees"
+              direction={sortKey === "employees" ? direction : null}
+              onClick={() => sortBy("employees")}
+            />
+          </span>
+          <span role="columnheader">
+            <TableSortButton
+              label="Services"
+              direction={sortKey === "services" ? direction : null}
+              onClick={() => sortBy("services")}
+            />
+          </span>
+          <span role="columnheader">Actions</span>
+        </ResponsiveDataTableHeader>
+        <ResponsiveDataTableBody
           aria-live="polite"
           className="relative overflow-x-clip"
         >
@@ -310,8 +308,8 @@ export function DepartmentTable({
               )}
             </AnimatePresence>
           )}
-        </div>
-      </div>
+        </ResponsiveDataTableBody>
+      </ResponsiveDataTable>
 
       {!loading && !error && (
         <footer className="flex items-center justify-between gap-3 pt-4 text-[11px] text-[#65718a] max-[560px]:flex-wrap max-[560px]:pt-[14px]">

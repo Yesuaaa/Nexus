@@ -1,17 +1,9 @@
-import { useRef } from "react"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
-  dropdownItemClass,
-  dropdownMenuClass,
-} from "@/components/ui/dropdown-styles"
-import { useExclusiveMenu } from "@/components/ui/dropdown"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { rowActionButton } from "@/components/ui/row-action-styles"
+import {
+  RowActionsMenu,
+  type RowActionMenuItem,
+} from "@/components/ui/row-actions-menu"
 import type { Employee } from "../api/employees-api"
 import { cn } from "@/lib/utils"
 
@@ -38,20 +30,47 @@ export function EmployeeRowActions({
     action: "create" | "deactivate" | "reactivate" | "delete" | "permanent",
   ) => void
 }) {
-  const triggerRef = useRef<HTMLButtonElement>(null)
-  const restoreFocus = useRef(false)
-  const nextAction = useRef<
-    | "status"
-    | "create"
-    | "deactivate"
-    | "reactivate"
-    | "delete"
-    | "permanent"
-    | null
-  >(null)
-
-  // Close this menu whenever any other menu opens.
-  useExclusiveMenu(open, () => onOpenChange(false))
+  type EmployeeAction =
+    "status" | "create" | "deactivate" | "reactivate" | "delete" | "permanent"
+  const items: RowActionMenuItem<EmployeeAction>[] = []
+  if (!archiveView) {
+    items.push({
+      action: "status",
+      disabled: employee.hasEmployeeRecord === false,
+      className: "text-sm focus:bg-[#eef1f8]",
+      label: (
+        <>
+          Change status
+          {employee.hasEmployeeRecord === false && (
+            <HoverTooltip>Complete employee details first</HoverTooltip>
+          )}
+        </>
+      ),
+    })
+    items.push(
+      !employee.hasAccount
+        ? { action: "create", label: "Create login account" }
+        : {
+            action: employee.accountIsActive ? "deactivate" : "reactivate",
+            label: employee.accountIsActive
+              ? "Deactivate account"
+              : "Reactivate account",
+            className: employee.accountIsActive
+              ? "text-[#c33945] focus:bg-[#fff0f1] focus:text-[#c33945]"
+              : "text-[#247044] focus:bg-[#edf8f1] focus:text-[#247044]",
+          },
+    )
+  }
+  items.push({
+    action: archiveView ? "permanent" : "delete",
+    label: archiveView ? "Delete permanently" : "Delete account",
+    disabled:
+      employee.accountRole === "ADMIN" ||
+      (!archiveView &&
+        (!employee.hasAccount || employee.accountIsActive !== false)),
+    className:
+      "text-[#c33945] focus:bg-[#fff0f1] focus:text-[#c33945] data-[disabled]:text-[#9aa8bb] data-[disabled]:opacity-60",
+  })
 
   return (
     <div className="flex items-center gap-2">
@@ -107,128 +126,20 @@ export function EmployeeRowActions({
           </button>
         </>
       )}
-      <DropdownMenu
+      <RowActionsMenu
         modal={false}
         open={open}
-        onOpenChange={(nextOpen) => {
-          if (nextOpen) {
-            nextAction.current = null
-            restoreFocus.current = false
-          }
-          onOpenChange(nextOpen)
+        onOpenChange={onOpenChange}
+        triggerId={`employee-actions-${employee.id}`}
+        triggerLabel={`More actions for ${employee.fullName}`}
+        menuLabel={`Actions for ${employee.fullName}`}
+        items={items}
+        disabled={disabled}
+        onAction={(action) => {
+          if (action === "status") onChangeStatus()
+          else onManageLogin(action)
         }}
-      >
-        <DropdownMenuTrigger asChild>
-          <button
-            ref={triggerRef}
-            type="button"
-            className={rowActionButton}
-            disabled={disabled}
-            aria-label={`More actions for ${employee.fullName}`}
-            id={`employee-actions-${employee.id}`}
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              aria-hidden="true"
-            >
-              <circle cx="5" cy="12" r="1.7" />
-              <circle cx="12" cy="12" r="1.7" />
-              <circle cx="19" cy="12" r="1.7" />
-            </svg>
-            <HoverTooltip>More actions</HoverTooltip>
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          onEscapeKeyDown={() => {
-            restoreFocus.current = true
-          }}
-          align="end"
-          sideOffset={6}
-          collisionPadding={24}
-          aria-label={`Actions for ${employee.fullName}`}
-          className={cn(
-            dropdownMenuClass,
-            "w-48 max-w-[min(280px,calc(100vw-40px))] text-xs text-foreground outline-none",
-          )}
-          onCloseAutoFocus={(event) => {
-            event.preventDefault()
-            const action = nextAction.current
-            if (!action && restoreFocus.current) triggerRef.current?.focus()
-            if (action) {
-              nextAction.current = null
-              triggerRef.current?.focus()
-              if (action === "status") onChangeStatus()
-              else onManageLogin(action)
-            }
-          }}
-        >
-          {!archiveView && (
-            <>
-              <DropdownMenuItem
-                disabled={employee.hasEmployeeRecord === false}
-                className={cn(dropdownItemClass, "text-sm focus:bg-[#eef1f8]")}
-                onSelect={() => {
-                  nextAction.current = "status"
-                }}
-              >
-                Change status
-                {employee.hasEmployeeRecord === false && (
-                  <HoverTooltip>Complete employee details first</HoverTooltip>
-                )}
-              </DropdownMenuItem>
-              {!employee.hasAccount ? (
-                <DropdownMenuItem
-                  className={dropdownItemClass}
-                  onSelect={() => {
-                    nextAction.current = "create"
-                  }}
-                >
-                  Create login account
-                </DropdownMenuItem>
-              ) : (
-                <>
-                  <DropdownMenuItem
-                    className={cn(
-                      dropdownItemClass,
-                      employee.accountIsActive
-                        ? "text-[#c33945] focus:bg-[#fff0f1] focus:text-[#c33945]"
-                        : "text-[#247044] focus:bg-[#edf8f1] focus:text-[#247044]",
-                    )}
-                    onSelect={() => {
-                      nextAction.current = employee.accountIsActive
-                        ? "deactivate"
-                        : "reactivate"
-                    }}
-                  >
-                    {employee.accountIsActive
-                      ? "Deactivate account"
-                      : "Reactivate account"}
-                  </DropdownMenuItem>
-                </>
-              )}
-            </>
-          )}
-          <DropdownMenuItem
-            disabled={
-              employee.accountRole === "ADMIN" ||
-              (!archiveView &&
-                (!employee.hasAccount || employee.accountIsActive !== false))
-            }
-            className={cn(
-              dropdownItemClass,
-              "text-[#c33945] focus:bg-[#fff0f1] focus:text-[#c33945] data-[disabled]:text-[#9aa8bb] data-[disabled]:opacity-60",
-            )}
-            onSelect={() => {
-              nextAction.current = archiveView ? "permanent" : "delete"
-            }}
-          >
-            {archiveView ? "Delete permanently" : "Delete account"}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      />
     </div>
   )
 }

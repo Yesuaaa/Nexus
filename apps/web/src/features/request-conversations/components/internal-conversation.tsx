@@ -6,7 +6,7 @@ import { useDatePreferences } from "@/features/settings/providers/preferences-pr
 import { useEffect, useRef, useState, type FormEvent } from "react"
 import Link from "next/link"
 import { ArrowLeft, LoaderCircle, Send } from "lucide-react"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import { Button } from "@/components/ui/button"
 import { ApiError } from "@/features/auth/api/auth-api"
 import { usePortalAccount } from "@/features/auth/providers/account-context"

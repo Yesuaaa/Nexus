@@ -1,6 +1,8 @@
 "use client"
 
 import Link from "next/link"
+import dynamic from "next/dynamic"
+import { PanelLoading } from "@/components/ui/panel-loading"
 import { useEffect, useMemo, useState } from "react"
 import {
   Archive,
@@ -29,7 +31,11 @@ import {
   type ProjectWorkspaceSummary,
 } from "../api/project-workspace-api"
 import { WorkspaceListRowActions } from "../components/workspace-list-row-actions"
-import { NewWorkspaceDialog } from "./new-workspace-page"
+const NewWorkspaceDialog = dynamic(
+  () =>
+    import("./new-workspace-page").then((module) => module.NewWorkspaceDialog),
+  { loading: PanelLoading },
+)
 
 function statusStyle(status: string) {
   if (status === "IN_PROGRESS") return "bg-[#fff1d4] text-[#946000]"

@@ -1,27 +1,23 @@
 import Image from "next/image"
-import { useEffect, useMemo, useRef, useState } from "react"
-import { Eye, MoreHorizontal, Pencil } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { Eye, Pencil } from "lucide-react"
 import { AnimatePresence } from "framer-motion"
 import { focusRing } from "@/components/layout/styles"
 import { AnimatedGridRow } from "@/components/ui/animated-data-row"
 import { DepartmentPill } from "@/components/ui/department-pill.tsx"
 import { SearchEmptyState } from "@/components/ui/search-empty-state"
 import { SearchField } from "@/components/ui/search-field"
-import { Dropdown, useExclusiveMenu } from "@/components/ui/dropdown"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
-  dropdownItemClass,
-  dropdownMenuClass,
-} from "@/components/ui/dropdown-styles"
+import { Dropdown } from "@/components/ui/dropdown"
 import { Pill } from "@/components/ui/pill"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
 import { rowActionButton } from "@/components/ui/row-action-styles"
+import { RowActionsMenu } from "@/components/ui/row-actions-menu"
+import {
+  ResponsiveDataTable,
+  ResponsiveDataTableBody,
+  ResponsiveDataTableHeader,
+} from "@/components/ui/responsive-data-table"
 import {
   TableSortButton,
   type SortDirection,
@@ -88,17 +84,6 @@ function ServiceActions({
   onStatus: (service: Service) => void
   onDelete: (service: Service) => void
 }) {
-  const [open, setOpen] = useState(false)
-  const triggerRef = useRef<HTMLButtonElement>(null)
-  const pendingAction = useRef<"status" | "delete" | null>(null)
-  const closedByOther = useRef(false)
-
-  // Close this menu whenever any other menu opens.
-  useExclusiveMenu(open, () => {
-    closedByOther.current = true
-    setOpen(false)
-  })
-
   return (
     <div className="flex items-center gap-2">
       <button
@@ -125,76 +110,34 @@ function ServiceActions({
         </button>
       )}
       {canManage && (
-        <DropdownMenu
-          open={open}
-          onOpenChange={(next) => {
-            if (next) {
-              pendingAction.current = null
-              closedByOther.current = false
-            }
-            setOpen(next)
+        <RowActionsMenu
+          triggerLabel={`More actions for ${service.name}`}
+          items={[
+            {
+              action: "status",
+              label: service.isActive
+                ? "Deactivate Service"
+                : "Activate Service",
+              className: service.isActive
+                ? "text-[#c33945] focus:bg-[#fff0f1] focus:text-[#c33945]"
+                : "text-[#247044] focus:bg-[#edf8f1] focus:text-[#247044]",
+            },
+            ...(!service.isActive
+              ? [
+                  {
+                    action: "delete" as const,
+                    label: "Delete service",
+                    className:
+                      "text-[#c33945] focus:bg-[#fff0f1] focus:text-[#c33945]",
+                  },
+                ]
+              : []),
+          ]}
+          onAction={(action) => {
+            if (action === "status") onStatus(service)
+            else onDelete(service)
           }}
-        >
-          <DropdownMenuTrigger asChild>
-            <button
-              ref={triggerRef}
-              type="button"
-              className={rowActionButton}
-              aria-label={`More actions for ${service.name}`}
-            >
-              <MoreHorizontal size={16} aria-hidden="true" />
-              <HoverTooltip>More actions</HoverTooltip>
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            sideOffset={6}
-            collisionPadding={24}
-            className={cn(dropdownMenuClass, "w-48 text-xs")}
-            onCloseAutoFocus={(event) => {
-              // Another menu took over: don't pull focus back to this trigger.
-              if (closedByOther.current) {
-                closedByOther.current = false
-                event.preventDefault()
-                return
-              }
-              const action = pendingAction.current
-              if (!action) return
-              event.preventDefault()
-              pendingAction.current = null
-              triggerRef.current?.focus()
-              if (action === "status") onStatus(service)
-              else onDelete(service)
-            }}
-          >
-            <DropdownMenuItem
-              className={cn(
-                dropdownItemClass,
-                service.isActive
-                  ? "text-[#c33945] focus:bg-[#fff0f1] focus:text-[#c33945]"
-                  : "text-[#247044] focus:bg-[#edf8f1] focus:text-[#247044]",
-              )}
-              onSelect={() => {
-                pendingAction.current = "status"
-              }}
-            >
-              {service.isActive ? "Deactivate Service" : "Activate Service"}
-            </DropdownMenuItem>
-            {!service.isActive && (
-              <DropdownMenuItem
-                className={cn(
-                  dropdownItemClass,
-                  "text-[#c33945] focus:bg-[#fff0f1] focus:text-[#c33945]",
-                )}
-                onSelect={() => {
-                  pendingAction.current = "delete"
-                }}
-              >
-                Delete service
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        />
       )}
     </div>
   )
@@ -351,47 +294,40 @@ export function ServiceTable({
         </div>
       </div>
 
-      <div
-        className="@container min-w-0 overflow-x-clip rounded-lg border border-[#e8ebef] bg-background"
-        role="table"
-        aria-label="Services"
-      >
-        <div role="rowgroup" className="@max-[920px]:sr-only">
-          <div
-            role="row"
-            className={cn(
-              serviceGrid,
-              "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold",
-            )}
-          >
-            <span role="columnheader">
-              <TableSortButton
-                label="Service Name"
-                direction={sortKey === "name" ? direction : null}
-                onClick={() => sortBy("name")}
-              />
-            </span>
-            <span role="columnheader">Description</span>
-            <span role="columnheader">Departments</span>
-            <span role="columnheader">
-              <TableSortButton
-                label="Status"
-                direction={sortKey === "status" ? direction : null}
-                onClick={() => sortBy("status")}
-              />
-            </span>
-            <span role="columnheader">
-              <TableSortButton
-                label="Date Created"
-                direction={sortKey === "createdAt" ? direction : null}
-                onClick={() => sortBy("createdAt")}
-              />
-            </span>
-            <span role="columnheader">Actions</span>
-          </div>
-        </div>
-        <div
-          role="rowgroup"
+      <ResponsiveDataTable label="Services">
+        <ResponsiveDataTableHeader
+          className="@max-[920px]:sr-only"
+          rowClassName={cn(
+            serviceGrid,
+            "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold",
+          )}
+        >
+          <span role="columnheader">
+            <TableSortButton
+              label="Service Name"
+              direction={sortKey === "name" ? direction : null}
+              onClick={() => sortBy("name")}
+            />
+          </span>
+          <span role="columnheader">Description</span>
+          <span role="columnheader">Departments</span>
+          <span role="columnheader">
+            <TableSortButton
+              label="Status"
+              direction={sortKey === "status" ? direction : null}
+              onClick={() => sortBy("status")}
+            />
+          </span>
+          <span role="columnheader">
+            <TableSortButton
+              label="Date Created"
+              direction={sortKey === "createdAt" ? direction : null}
+              onClick={() => sortBy("createdAt")}
+            />
+          </span>
+          <span role="columnheader">Actions</span>
+        </ResponsiveDataTableHeader>
+        <ResponsiveDataTableBody
           aria-live="polite"
           className="relative overflow-x-clip"
         >
@@ -470,7 +406,6 @@ export function ServiceTable({
                             src={service.imageUrl}
                             alt=""
                             fill
-                            unoptimized
                             className="object-cover"
                           />
                         ) : null}
@@ -533,8 +468,8 @@ export function ServiceTable({
               )}
             </AnimatePresence>
           )}
-        </div>
-      </div>
+        </ResponsiveDataTableBody>
+      </ResponsiveDataTable>
 
       {!loading && !error && (
         <footer className="flex items-center justify-between gap-3 pt-4 text-[11px] text-[#65718a] max-[560px]:flex-wrap">

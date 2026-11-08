@@ -166,7 +166,6 @@ export function ServiceDetailsDialog({
                 src={service.imageUrl}
                 alt={service.imageAltText ?? service.name}
                 fill
-                unoptimized
                 className="object-cover"
               />
             ) : (

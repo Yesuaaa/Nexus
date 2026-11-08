@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import { contentClass } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"

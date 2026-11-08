@@ -5,8 +5,9 @@ import { useDatePreferences } from "@/features/settings/providers/preferences-pr
 
 import { useEffect, useRef, useState, type FormEvent } from "react"
 import { CalendarDays } from "lucide-react"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import { Button } from "@/components/ui/button"
+import { DateInput } from "@/components/ui/date-input"
 import { WorkflowDraftFrame } from "@/features/request-workflow/components/workflow-draft-frame"
 import {
   WorkflowDraftFooter,
@@ -57,7 +58,7 @@ function ScheduleFields({ meeting }: { meeting?: ConversationMeeting }) {
     <>
       <div className="grid grid-cols-1 gap-3 @[360px]:grid-cols-2">
         <WorkflowField label="Date and time">
-          <input
+          <DateInput
             name="startsAt"
             type="datetime-local"
             required
@@ -426,7 +427,7 @@ export function ConversationMeetingCard({
                 ) : (
                   <>
                     <WorkflowField label="Requested date and time">
-                      <input
+                      <DateInput
                         type="datetime-local"
                         name="startsAt"
                         required

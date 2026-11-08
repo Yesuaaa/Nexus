@@ -1,9 +1,11 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
+import dynamic from "next/dynamic"
+import { PanelLoading } from "@/components/ui/panel-loading"
 import Link from "next/link"
-import { sileo } from "sileo"
-import { ChevronLeft, ChevronRight, Search } from "lucide-react"
+import { sileo } from "@/lib/toast"
+import { ChevronLeft, ChevronRight } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -32,12 +34,8 @@ import {
   submitClientServiceRequest,
 } from "../api/client-services-api"
 import { Button } from "@/components/ui/button"
+import { SearchField } from "@/components/ui/search-field"
 import { ServiceCard } from "../components/service-card"
-import { ServiceShowcaseDialog } from "../components/service-showcase-dialog"
-import { ServicePackagesStep } from "../components/service-packages-step"
-import { ServiceRequirementsStep } from "../components/service-requirements-step"
-import { ServiceSpecialistStep } from "../components/service-specialist-step"
-import { ServiceRequestConfirmation } from "../components/service-request-confirmation"
 import {
   createProjectRequirementsDraft,
   validateProjectRequirements,
@@ -50,6 +48,34 @@ import {
 } from "../model/service-draft"
 
 const pageSize = 8
+
+const ServiceShowcaseDialog = dynamic(
+  () =>
+    import("../components/service-showcase-dialog").then(
+      (module) => module.ServiceShowcaseDialog,
+    ),
+  { loading: PanelLoading },
+)
+const ServicePackagesStep = dynamic(() =>
+  import("../components/service-packages-step").then(
+    (module) => module.ServicePackagesStep,
+  ),
+)
+const ServiceRequirementsStep = dynamic(() =>
+  import("../components/service-requirements-step").then(
+    (module) => module.ServiceRequirementsStep,
+  ),
+)
+const ServiceSpecialistStep = dynamic(() =>
+  import("../components/service-specialist-step").then(
+    (module) => module.ServiceSpecialistStep,
+  ),
+)
+const ServiceRequestConfirmation = dynamic(() =>
+  import("../components/service-request-confirmation").then(
+    (module) => module.ServiceRequestConfirmation,
+  ),
+)
 
 function ServiceCardSkeleton() {
   return (
@@ -366,7 +392,7 @@ export function ClientServicesPage() {
           ? error.message
           : "We couldn’t submit your request. Please try again."
       setSubmissionError(message)
-      submissionErrorToast.current = sileo.error({
+      submissionErrorToast.current = await sileo.error({
         title: "Request not submitted",
         description: message,
       })
@@ -577,25 +603,14 @@ export function ClientServicesPage() {
       ) : (
         <section className="mt-5" aria-label="Browse services">
           <div className="grid grid-cols-[minmax(0,1fr)_224px] gap-3 max-[700px]:grid-cols-1">
-            <label className="relative block">
-              <span className="sr-only">Search services</span>
-              <Search
-                size={19}
-                strokeWidth={1.8}
-                className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-[#7890b4]"
-                aria-hidden="true"
-              />
-              <input
-                type="search"
-                value={search}
-                onChange={(event) => updateSearch(event.target.value)}
-                placeholder="Search services..."
-                className={cn(
-                  "h-12 w-full rounded-xl border border-[#dce3ee] bg-background pr-4 pl-11 text-sm text-[#17233a] shadow-[0_1px_2px_rgb(31_55_94_/_4%)] placeholder:text-[#8da0bd]",
-                  focusRing,
-                )}
-              />
-            </label>
+            <SearchField
+              size="large"
+              label="Search services"
+              value={search}
+              onChange={(event) => updateSearch(event.target.value)}
+              placeholder="Search services..."
+              containerClassName="focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[#294a9b]"
+            />
             <Select value={departmentId} onValueChange={updateDepartment}>
               <SelectTrigger
                 className={cn(

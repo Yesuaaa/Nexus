@@ -4,7 +4,7 @@ import { Form } from "@/components/ui/form"
 
 import { useRef, useState } from "react"
 import { Upload } from "lucide-react"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import { Button } from "@/components/ui/button"
 import type { WorkflowControls } from "../hooks/use-request-workflow"
 import type { WorkflowRequirement } from "../model/workflow"

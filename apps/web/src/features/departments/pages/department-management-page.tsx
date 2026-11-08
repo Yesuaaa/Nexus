@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import { hasPermission, Permissions } from "@/features/auth/model/permissions"
 import { PlusIcon } from "@/components/layout/icons"
 import { contentClass, focusRing } from "@/components/layout/styles"

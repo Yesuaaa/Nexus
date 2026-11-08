@@ -2,6 +2,8 @@
 
 import { Trash2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
+import dynamic from "next/dynamic"
+import { PanelLoading } from "@/components/ui/panel-loading"
 import { PlusIcon } from "@/components/layout/icons"
 import { contentClass, focusRing } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
@@ -21,14 +23,9 @@ import {
   listDepartments,
   type Department,
 } from "@/features/departments/api/departments-api"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { hasPermission, Permissions } from "@/features/auth/model/permissions"
-import { ManageMembersDrawer } from "@/features/departments/components/manage-members-drawer"
-import { EmployeeDetailsDrawer } from "../components/employee-details-drawer"
-import { EmployeeLoginDialog } from "../components/employee-login-dialog"
-import { EmployeeFormDialog } from "../components/employee-form-dialog"
-import { EmployeeStatusDialog } from "../components/employee-status-dialog"
 import { EmployeeTable } from "../components/employee-table"
 import {
   setEmployeeLoginStatus,
@@ -40,6 +37,42 @@ import {
   type EmploymentStatus,
   type EmploymentType,
 } from "../api/employees-api"
+
+const ManageMembersDrawer = dynamic(
+  () =>
+    import("@/features/departments/components/manage-members-drawer").then(
+      (module) => module.ManageMembersDrawer,
+    ),
+  { loading: PanelLoading },
+)
+const EmployeeDetailsDrawer = dynamic(
+  () =>
+    import("../components/employee-details-drawer").then(
+      (module) => module.EmployeeDetailsDrawer,
+    ),
+  { loading: PanelLoading },
+)
+const EmployeeLoginDialog = dynamic(
+  () =>
+    import("../components/employee-login-dialog").then(
+      (module) => module.EmployeeLoginDialog,
+    ),
+  { loading: PanelLoading },
+)
+const EmployeeFormDialog = dynamic(
+  () =>
+    import("../components/employee-form-dialog").then(
+      (module) => module.EmployeeFormDialog,
+    ),
+  { loading: PanelLoading },
+)
+const EmployeeStatusDialog = dynamic(
+  () =>
+    import("../components/employee-status-dialog").then(
+      (module) => module.EmployeeStatusDialog,
+    ),
+  { loading: PanelLoading },
+)
 
 const employmentTypes: { value: EmploymentType | ""; label: string }[] = [
   { value: "", label: "All Types" },

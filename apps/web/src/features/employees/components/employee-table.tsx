@@ -5,6 +5,14 @@ import { Button } from "@/components/ui/button"
 import { DepartmentPill } from "@/components/ui/department-pill.tsx"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Pill } from "@/components/ui/pill"
+import {
+  ResponsiveDataTable,
+  ResponsiveDataTableBody,
+  ResponsiveDataTableCell,
+  ResponsiveDataTableColumnHeader,
+  ResponsiveDataTableHeader,
+  ResponsiveDataTableRow,
+} from "@/components/ui/responsive-data-table"
 import { cn } from "@/lib/utils"
 import type {
   Employee,
@@ -103,38 +111,42 @@ export function EmployeeTable({
   const initialLoading = loading && employees.length === 0
 
   return (
-    <div
-      className="@container min-w-0 overflow-x-clip rounded-lg border border-[#e8ebef] bg-background"
-      role="table"
-      aria-label="Employees"
-      aria-busy={loading}
-    >
-      <div role="rowgroup" className="@max-[1000px]:sr-only">
-        <div
-          role="row"
-          className={cn(
-            employeeGrid,
-            "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground",
-          )}
-        >
-          <span role="columnheader">Employee ID</span>
-          <span role="columnheader">Employee</span>
-          <span role="columnheader">Department</span>
-          <span role="columnheader">Position / Team</span>
-          <span role="columnheader">Type</span>
-          <span role="columnheader">
-            {archiveView ? "Date Archived" : "Start Date"}
-          </span>
-          <span role="columnheader">Status</span>
-          <span role="columnheader">Actions</span>
-        </div>
-      </div>
+    <ResponsiveDataTable label="Employees" aria-busy={loading}>
+      <ResponsiveDataTableHeader
+        className="@max-[1000px]:sr-only"
+        rowClassName={cn(
+          employeeGrid,
+          "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground",
+        )}
+      >
+        <ResponsiveDataTableColumnHeader>
+          Employee ID
+        </ResponsiveDataTableColumnHeader>
+        <ResponsiveDataTableColumnHeader>
+          Employee
+        </ResponsiveDataTableColumnHeader>
+        <ResponsiveDataTableColumnHeader>
+          Department
+        </ResponsiveDataTableColumnHeader>
+        <ResponsiveDataTableColumnHeader>
+          Position / Team
+        </ResponsiveDataTableColumnHeader>
+        <ResponsiveDataTableColumnHeader>Type</ResponsiveDataTableColumnHeader>
+        <ResponsiveDataTableColumnHeader>
+          {archiveView ? "Date Archived" : "Start Date"}
+        </ResponsiveDataTableColumnHeader>
+        <ResponsiveDataTableColumnHeader>
+          Status
+        </ResponsiveDataTableColumnHeader>
+        <ResponsiveDataTableColumnHeader>
+          Actions
+        </ResponsiveDataTableColumnHeader>
+      </ResponsiveDataTableHeader>
 
       {initialLoading || error ? (
-        <div role="rowgroup">
-          <div role="row">
-            <div
-              role="cell"
+        <ResponsiveDataTableBody>
+          <ResponsiveDataTableRow>
+            <ResponsiveDataTableCell
               aria-colspan={8}
               className="grid min-h-[150px] place-content-center gap-3 p-6 text-center text-xs text-[#7183a2]"
             >
@@ -153,9 +165,9 @@ export function EmployeeTable({
                   </Button>
                 </div>
               )}
-            </div>
-          </div>
-        </div>
+            </ResponsiveDataTableCell>
+          </ResponsiveDataTableRow>
+        </ResponsiveDataTableBody>
       ) : (
         <AnimatedSlotGridBody
           onRowsSettled={onRowsSettled}
@@ -314,6 +326,6 @@ export function EmployeeTable({
           )}
         />
       )}
-    </div>
+    </ResponsiveDataTable>
   )
 }

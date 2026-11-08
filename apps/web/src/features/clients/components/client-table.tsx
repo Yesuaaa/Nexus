@@ -1,21 +1,19 @@
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
-  dropdownItemClass,
-  dropdownMenuClass,
-} from "@/components/ui/dropdown-styles"
-import { useExclusiveMenu } from "@/components/ui/dropdown"
-import { Eye, MoreHorizontal, Pencil } from "lucide-react"
-import { useRef, useState, type ReactNode } from "react"
+import { Eye, Pencil } from "lucide-react"
+import type { ReactNode } from "react"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { Button } from "@/components/ui/button"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Pill } from "@/components/ui/pill"
 import { rowActionButton } from "@/components/ui/row-action-styles"
+import { RowActionsMenu } from "@/components/ui/row-actions-menu"
+import {
+  ResponsiveDataTable,
+  ResponsiveDataTableBody,
+  ResponsiveDataTableCell,
+  ResponsiveDataTableColumnHeader,
+  ResponsiveDataTableHeader,
+  ResponsiveDataTableRow,
+} from "@/components/ui/responsive-data-table"
 import { TableSortButton } from "@/components/ui/table-sort-button"
 import { cn } from "@/lib/utils"
 import type { Client, ClientSort } from "../api/clients-api"
@@ -50,18 +48,8 @@ function ClientRowActions({
   client: Client
   onView: (client: Client) => void
 }) {
-  const [open, setOpen] = useState(false)
-  const triggerRef = useRef<HTMLButtonElement>(null)
-  const pendingDelete = useRef(false)
-  const closedByOther = useRef(false)
   const label = client.fullName?.trim() || client.email
   const actionLabel = `View details for ${label}`
-
-  // Close this menu whenever any other menu opens.
-  useExclusiveMenu(open, () => {
-    closedByOther.current = true
-    setOpen(false)
-  })
 
   return (
     <div className="flex items-center gap-1">
@@ -90,59 +78,18 @@ function ClientRowActions({
         <Pencil size={16} aria-hidden="true" />
         <HoverTooltip>Edit client</HoverTooltip>
       </button>
-      <DropdownMenu
-        open={open}
-        onOpenChange={(next) => {
-          if (next) {
-            pendingDelete.current = false
-            closedByOther.current = false
-          }
-          setOpen(next)
-        }}
-      >
-        <DropdownMenuTrigger asChild>
-          <button
-            ref={triggerRef}
-            type="button"
-            className={cn(rowActionButton, "max-[560px]:size-11")}
-            aria-label={`More actions for ${label}`}
-          >
-            <MoreHorizontal size={16} aria-hidden="true" />
-            <HoverTooltip>More actions</HoverTooltip>
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="end"
-          sideOffset={6}
-          collisionPadding={24}
-          className={cn(dropdownMenuClass, "w-48 text-xs")}
-          onCloseAutoFocus={(event) => {
-            // Another menu took over: don't pull focus back to this trigger.
-            if (closedByOther.current) {
-              closedByOther.current = false
-              event.preventDefault()
-              return
-            }
-            if (!pendingDelete.current) return
-            event.preventDefault()
-            pendingDelete.current = false
-            triggerRef.current?.focus()
-            onDelete(client)
-          }}
-        >
-          <DropdownMenuItem
-            className={cn(
-              dropdownItemClass,
-              "text-[#c33945] focus:bg-[#fff0f1] focus:text-[#c33945]",
-            )}
-            onSelect={() => {
-              pendingDelete.current = true
-            }}
-          >
-            Delete client
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <RowActionsMenu
+        triggerLabel={`More actions for ${label}`}
+        triggerClassName="max-[560px]:size-11"
+        items={[
+          {
+            action: "delete",
+            label: "Delete client",
+            className: "text-[#c33945] focus:bg-[#fff0f1] focus:text-[#c33945]",
+          },
+        ]}
+        onAction={() => onDelete(client)}
+      />
     </div>
   )
 }
@@ -194,8 +141,7 @@ export function ClientTable({
 
   function heading(key: ClientSort) {
     return (
-      <span
-        role="columnheader"
+      <ResponsiveDataTableColumnHeader
         aria-sort={
           sortBy === key
             ? sortOrder === "asc"
@@ -209,39 +155,35 @@ export function ClientTable({
           direction={sortBy === key ? sortOrder : null}
           onClick={() => onSort(key)}
         />
-      </span>
+      </ResponsiveDataTableColumnHeader>
     )
   }
 
   return (
-    <div
-      className="@container min-w-0 overflow-x-clip rounded-lg border border-[#e8ebef] bg-background"
-      role="table"
-      aria-label="Clients"
-      aria-busy={loading}
-    >
-      <div role="rowgroup" className="@max-[1000px]:sr-only">
-        <div
-          role="row"
-          className={cn(
-            clientGrid,
-            "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground",
-          )}
-        >
-          {heading("fullName")}
-          {heading("email")}
-          <span role="columnheader">Contact number</span>
-          {heading("isActive")}
-          {heading("createdAt")}
-          <span role="columnheader">Actions</span>
-        </div>
-      </div>
+    <ResponsiveDataTable label="Clients" aria-busy={loading}>
+      <ResponsiveDataTableHeader
+        className="@max-[1000px]:sr-only"
+        rowClassName={cn(
+          clientGrid,
+          "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground",
+        )}
+      >
+        {heading("fullName")}
+        {heading("email")}
+        <ResponsiveDataTableColumnHeader>
+          Contact number
+        </ResponsiveDataTableColumnHeader>
+        {heading("isActive")}
+        {heading("createdAt")}
+        <ResponsiveDataTableColumnHeader>
+          Actions
+        </ResponsiveDataTableColumnHeader>
+      </ResponsiveDataTableHeader>
 
       {initialLoading || error ? (
-        <div role="rowgroup">
-          <div role="row">
-            <div
-              role="cell"
+        <ResponsiveDataTableBody>
+          <ResponsiveDataTableRow>
+            <ResponsiveDataTableCell
               aria-colspan={6}
               className="grid min-h-[150px] place-content-center gap-3 p-6 text-center text-xs text-[#7183a2]"
             >
@@ -260,9 +202,9 @@ export function ClientTable({
                   </Button>
                 </div>
               )}
-            </div>
-          </div>
-        </div>
+            </ResponsiveDataTableCell>
+          </ResponsiveDataTableRow>
+        </ResponsiveDataTableBody>
       ) : (
         <AnimatedSlotGridBody
           items={clients}
@@ -276,10 +218,7 @@ export function ClientTable({
           className="relative min-w-0 overflow-x-clip"
           renderRow={(client) => (
             <>
-              <div
-                role="cell"
-                className="min-w-0 @max-[1000px]:col-start-1 @max-[1000px]:row-start-1"
-              >
+              <ResponsiveDataTableCell className="min-w-0 @max-[1000px]:col-start-1 @max-[1000px]:row-start-1">
                 <div className="flex min-w-0 items-center gap-2.5">
                   <span
                     aria-hidden="true"
@@ -291,26 +230,17 @@ export function ClientTable({
                     {client.fullName?.trim() || "Name not provided"}
                   </span>
                 </div>
-              </div>
-              <div
-                role="cell"
-                className="min-w-0 truncate text-[#52627a] @max-[1000px]:col-span-2 @max-[1000px]:row-start-2 @max-[1000px]:break-all @max-[1000px]:whitespace-normal"
-              >
+              </ResponsiveDataTableCell>
+              <ResponsiveDataTableCell className="min-w-0 truncate text-[#52627a] @max-[1000px]:col-span-2 @max-[1000px]:row-start-2 @max-[1000px]:break-all @max-[1000px]:whitespace-normal">
                 {client.email}
-              </div>
-              <div
-                role="cell"
-                className="min-w-0 truncate text-[#52627a] @max-[1000px]:col-span-2 @max-[1000px]:row-start-3 @max-[1000px]:whitespace-normal"
-              >
+              </ResponsiveDataTableCell>
+              <ResponsiveDataTableCell className="min-w-0 truncate text-[#52627a] @max-[1000px]:col-span-2 @max-[1000px]:row-start-3 @max-[1000px]:whitespace-normal">
                 <span className="hidden @max-[1000px]:inline">Contact: </span>
                 <span className="break-all">
                   {client.contactNumber?.trim() || "Not provided"}
                 </span>
-              </div>
-              <div
-                role="cell"
-                className="@max-[1000px]:col-start-2 @max-[1000px]:row-start-4 @max-[1000px]:justify-self-end"
-              >
+              </ResponsiveDataTableCell>
+              <ResponsiveDataTableCell className="@max-[1000px]:col-start-2 @max-[1000px]:row-start-4 @max-[1000px]:justify-self-end">
                 <Pill
                   className={
                     client.isActive
@@ -320,33 +250,27 @@ export function ClientTable({
                 >
                   {client.isActive ? "Active" : "Inactive"}
                 </Pill>
-              </div>
-              <div
-                role="cell"
-                className="min-w-0 truncate text-[#52627a] @max-[1000px]:col-start-1 @max-[1000px]:row-start-4 @max-[1000px]:whitespace-normal"
-              >
+              </ResponsiveDataTableCell>
+              <ResponsiveDataTableCell className="min-w-0 truncate text-[#52627a] @max-[1000px]:col-start-1 @max-[1000px]:row-start-4 @max-[1000px]:whitespace-normal">
                 <span className="hidden @max-[1000px]:inline">
                   Registered:{" "}
                 </span>
                 <time dateTime={client.createdAt}>
                   {registeredDate(client.createdAt)}
                 </time>
-              </div>
-              <div
-                role="cell"
-                className="@max-[1000px]:col-start-2 @max-[1000px]:row-start-1 @max-[1000px]:justify-self-end"
-              >
+              </ResponsiveDataTableCell>
+              <ResponsiveDataTableCell className="@max-[1000px]:col-start-2 @max-[1000px]:row-start-1 @max-[1000px]:justify-self-end">
                 <ClientRowActions
                   client={client}
                   onView={onView}
                   onEdit={onEdit}
                   onDelete={onDelete}
                 />
-              </div>
+              </ResponsiveDataTableCell>
             </>
           )}
         />
       )}
-    </div>
+    </ResponsiveDataTable>
   )
 }

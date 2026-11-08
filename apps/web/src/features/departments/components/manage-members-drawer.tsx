@@ -1,11 +1,6 @@
 import { Form } from "@/components/ui/form"
 import { useEffect, useRef, useState } from "react"
-import {
-  CloseIcon,
-  PlusIcon,
-  SearchIcon,
-  TrashIcon,
-} from "@/components/layout/icons"
+import { CloseIcon, PlusIcon, TrashIcon } from "@/components/layout/icons"
 import { focusRing } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
 import {
@@ -27,6 +22,7 @@ import { Input } from "@/components/ui/input"
 import { Pill } from "@/components/ui/pill"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
+import { SearchField } from "@/components/ui/search-field"
 import { useAnimatedPanelClose } from "@/components/ui/use-animated-panel-close"
 import { cn } from "@/lib/utils"
 import { EditMemberDialog } from "./edit-member-dialog"
@@ -706,26 +702,17 @@ export function ManageMembersDrawer({
                         </div>
                       )}
                       <div className="border-t border-[#eceef1] pt-3">
-                        <label className="flex h-[34px] min-w-0 items-center gap-2 rounded-lg border border-[#e1e4ea] px-[11px] text-[#7b8ca7] focus-within:bg-[#f8fafd]">
-                          <SearchIcon
-                            width="16"
-                            height="16"
-                            className="flex-none"
-                          />
-                          <span className="sr-only">
-                            Search employees to assign
-                          </span>
-                          <input
-                            id="member-assign-search"
-                            className="w-full min-w-0 border-0 bg-transparent text-xs text-foreground outline-none placeholder:text-[#8a9ab1]"
-                            placeholder="Search name or email"
-                            value={assignSearch}
-                            onChange={(event) =>
-                              setAssignSearch(event.target.value)
-                            }
-                            disabled={submitting}
-                          />
-                        </label>
+                        <SearchField
+                          id="member-assign-search"
+                          label="Search employees to assign"
+                          placeholder="Search name or email"
+                          value={assignSearch}
+                          onChange={(event) =>
+                            setAssignSearch(event.target.value)
+                          }
+                          disabled={submitting}
+                          containerClassName="w-full max-[1050px]:w-full max-[1050px]:flex-none"
+                        />
                       </div>
                       {isSearching && (
                         <p className={`${panelMuted} m-0`} role="status">

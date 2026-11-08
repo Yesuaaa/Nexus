@@ -6,7 +6,7 @@ import { LoaderCircle, Trash2 } from "lucide-react"
 import { ConversationAvatar } from "@/features/request-conversations/components/conversation-avatar"
 import { useReducedMotion } from "framer-motion"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import { cn } from "@/lib/utils"
 import { contentClass } from "@/components/layout/styles"
 import {
@@ -20,6 +20,11 @@ import { DepartmentPill } from "@/components/ui/department-pill.tsx"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
 import { Pill } from "@/components/ui/pill"
 import { SearchField } from "@/components/ui/search-field"
+import {
+  ResponsiveDataTable,
+  ResponsiveDataTableBody,
+  ResponsiveDataTableHeader,
+} from "@/components/ui/responsive-data-table"
 import { TableSortButton } from "@/components/ui/table-sort-button"
 import { ApiError, clearToken } from "@/features/auth/api/auth-api"
 import type { Account } from "@/features/auth/model/types"
@@ -829,11 +834,12 @@ export function AccountManagementPage() {
           </p>
         )}
 
-        <div className="@container min-w-0 overflow-x-clip rounded-lg border border-[#e8ebef] bg-background">
-          <div
-            className={cn(
+        <ResponsiveDataTable label="Accounts" aria-busy={busy}>
+          <ResponsiveDataTableHeader
+            className="@max-[900px]:hidden"
+            rowClassName={cn(
               accountGrid,
-              "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground @max-[900px]:hidden",
+              "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground",
             )}
           >
             <span>
@@ -877,8 +883,8 @@ export function AccountManagementPage() {
             </span>
             <span>Access</span>
             <span>Actions</span>
-          </div>
-          <div
+          </ResponsiveDataTableHeader>
+          <ResponsiveDataTableBody
             ref={rowsBodyRef}
             className="relative min-w-0"
             aria-live="polite"
@@ -956,8 +962,8 @@ export function AccountManagementPage() {
                   </div>
                 )
               })}
-          </div>
-        </div>
+          </ResponsiveDataTableBody>
+        </ResponsiveDataTable>
         {!error && footerResult && footerResult.total > 0 && (
           <div className="flex items-center justify-between gap-3 pt-4 text-[11px] text-[#65718a] max-[560px]:flex-wrap max-[560px]:pt-[14px]">
             <span>

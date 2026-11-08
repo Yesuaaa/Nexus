@@ -20,7 +20,7 @@ import {
   Upload,
   X,
 } from "lucide-react"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -31,6 +31,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
+import { SearchField } from "@/components/ui/search-field"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import {
   Select,
@@ -864,26 +865,14 @@ export function WorkspaceDeliverables({
       </header>
       {rows.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
-          <label className="relative flex h-[34px] w-full max-w-[300px] items-center gap-2 rounded-lg border border-[#dfe4ec] bg-transparent px-3 text-[#738096] focus-within:ring-2 focus-within:ring-[#294c96]">
-            <span className="sr-only">Search deliverables</span>
-            <svg
-              viewBox="0 0 24 24"
-              className="size-4 shrink-0"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              aria-hidden="true"
-            >
-              <circle cx="11" cy="11" r="7" />
-              <path d="m20 20-4-4" />
-            </svg>
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.currentTarget.value)}
-              placeholder="Search deliverables..."
-              className="min-w-0 flex-1 bg-transparent text-xs text-[#182235] outline-none placeholder:text-[#8090a8]"
-            />
-          </label>
+          <SearchField
+            label="Search deliverables"
+            value={query}
+            onChange={(event) => setQuery(event.currentTarget.value)}
+            placeholder="Search deliverables..."
+            containerClassName="w-full max-w-[300px] border-[#dfe4ec] bg-transparent px-3 text-[#738096] focus-within:ring-2 focus-within:ring-[#294c96] max-[1050px]:w-full max-[1050px]:max-w-[300px] max-[1050px]:flex-none"
+            className="text-[#182235] placeholder:text-[#8090a8]"
+          />
           <Select value={serviceFilter} onValueChange={setServiceFilter}>
             <SelectTrigger className="h-[34px] w-[190px] bg-transparent text-xs">
               <SelectValue placeholder="All services" />

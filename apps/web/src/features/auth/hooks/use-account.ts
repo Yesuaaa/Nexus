@@ -35,7 +35,11 @@ export function useAccount(onReady?: (succeeded: boolean) => void) {
       try {
         const { user } = await getCurrentAccount()
         if (active && !revoked) {
-          setAccount(user)
+          // Polling must still observe every account/permission change, without
+          // replacing the context value when the server payload is unchanged.
+          setAccount((previous) =>
+            JSON.stringify(previous) === JSON.stringify(user) ? previous : user,
+          )
           setError("")
           if (!loaded) {
             loaded = true
