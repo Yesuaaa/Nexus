@@ -127,7 +127,12 @@ export type Workflow = {
     proofFileId: string | null
     reference: string | null
   } | null
-  project: { id: string; name: string; status: string } | null
+  project: {
+    id: string
+    workspaceId?: string
+    name: string
+    status: string
+  } | null
   events: WorkflowEvent[]
   internal?: {
     staff: {

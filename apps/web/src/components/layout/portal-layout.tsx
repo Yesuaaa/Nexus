@@ -16,6 +16,7 @@ import {
   canAccessClientManagement,
   canAccessMessages,
   canAccessProjects,
+  canAccessProjectWorkspace,
 } from "@/features/auth/model/permissions"
 import { AccountContext } from "@/features/auth/providers/account-context"
 import { useAuthTransition } from "@/features/auth/providers/auth-provider"
@@ -36,6 +37,8 @@ export function PortalLayout({ children }: { children: ReactNode }) {
       !canAccessAccountManagement(account)) ||
       (pathname.startsWith("/messages") && !canAccessMessages(account)) ||
       (pathname.startsWith("/projects") && !canAccessProjects(account)) ||
+      (pathname.startsWith("/project-workspace") &&
+        !canAccessProjectWorkspace(account)) ||
       (pathname === "/departments" &&
         !canAccessDepartmentManagement(account)) ||
       (pathname.startsWith("/employees") &&

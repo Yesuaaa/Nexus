@@ -1606,6 +1606,11 @@ export function PaymentVerificationCard({ workflow, controls }: CardProps) {
 
 export function ProjectActivationCard({ workflow }: { workflow: Workflow }) {
   if (!workflow.project || workflow.state !== "ACTIVE_PROJECT") return null
+  const projectHref = workflow.permissions.isClient
+    ? `/projects/${encodeURIComponent(workflow.project.id)}`
+    : `/project-workspace/${encodeURIComponent(
+        workflow.project.workspaceId ?? workflow.project.id,
+      )}`
   return (
     <WorkflowCard
       title="Your project is active"
@@ -1618,9 +1623,7 @@ export function ProjectActivationCard({ workflow }: { workflow: Workflow }) {
         this conversation.
       </p>
       <Button asChild className={workflowPrimaryButton}>
-        <Link href={`/projects/${encodeURIComponent(workflow.project.id)}`}>
-          View Project
-        </Link>
+        <Link href={projectHref}>View Project</Link>
       </Button>
     </WorkflowCard>
   )
