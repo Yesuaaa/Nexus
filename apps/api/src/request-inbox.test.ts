@@ -602,6 +602,67 @@ test(
             departmentId: marketing.id,
           },
         })
+        const onLeaveUser = await user("WorkloadOnLeave", "STAFF")
+        const onLeaveEmployee = await prisma.employee.create({
+          data: {
+            employeeId: "WL-4",
+            fullName: "On Leave Staff",
+            departmentId: design.id,
+            userId: onLeaveUser.id,
+            status: "ON_LEAVE",
+          },
+        })
+        const inactiveUser = await user("WorkloadInactive", "STAFF")
+        const inactiveEmployee = await prisma.employee.create({
+          data: {
+            employeeId: "WL-5",
+            fullName: "Inactive Staff",
+            departmentId: design.id,
+            userId: inactiveUser.id,
+            status: "INACTIVE",
+          },
+        })
+        const noAccountEmployee = await prisma.employee.create({
+          data: {
+            employeeId: "WL-6",
+            fullName: "Staff Without Account",
+            departmentId: design.id,
+          },
+        })
+        const nonStaffEmployee = await prisma.employee.create({
+          data: {
+            employeeId: "WL-7",
+            fullName: "Non-staff Account",
+            departmentId: design.id,
+            userId: client.id,
+          },
+        })
+        const deletedUser = await user("WorkloadDeleted", "STAFF")
+        await prisma.user.update({
+          where: { id: deletedUser.id },
+          data: { accountDeletedAt: new Date(), isActive: false },
+        })
+        const deletedAccountEmployee = await prisma.employee.create({
+          data: {
+            employeeId: "WL-8",
+            fullName: "Deleted Account Staff",
+            departmentId: design.id,
+            userId: deletedUser.id,
+          },
+        })
+        const inactiveAccountUser = await user("WorkloadDisabled", "STAFF")
+        await prisma.user.update({
+          where: { id: inactiveAccountUser.id },
+          data: { isActive: false },
+        })
+        const inactiveAccountEmployee = await prisma.employee.create({
+          data: {
+            employeeId: "WL-9",
+            fullName: "Disabled Account Staff",
+            departmentId: design.id,
+            userId: inactiveAccountUser.id,
+          },
+        })
         const save = (body: unknown, actor = head) =>
           fetch(base + "/workload/capacity", {
             method: "PUT",
@@ -616,9 +677,23 @@ test(
         }
         assert.equal((await save(input)).status, 200)
         assert.equal(
+          (await save({ ...input, employeeId: onLeaveEmployee.id })).status,
+          200,
+        )
+        assert.equal(
           (await save({ ...input, employeeId: foreignEmployee.id })).status,
           404,
         )
+        for (const employee of [
+          noAccountEmployee,
+          nonStaffEmployee,
+          deletedAccountEmployee,
+          inactiveAccountEmployee,
+        ])
+          assert.equal(
+            (await save({ ...input, employeeId: employee.id })).status,
+            404,
+          )
         assert.equal((await save(input, admin)).status, 403)
         assert.equal((await save(input, superadmin)).status, 403)
         assert.equal((await save({ ...input, timeOffHours: 41 })).status, 400)
@@ -629,12 +704,18 @@ test(
         const body = (await result.json()) as {
           staff: {
             id: string
-            capacity: { scheduledHours: number; timeOffHours: number }
+            capacity: { scheduledHours: number; timeOffHours: number } | null
           }[]
         }
-        assert.equal(body.staff.length, 1)
-        assert.equal(body.staff[0]!.id, employee.id)
-        assert.equal(body.staff[0]!.capacity.timeOffHours, 8)
+        assert.deepEqual(
+          body.staff.map((member) => member.id).sort(),
+          [employee.id, onLeaveEmployee.id, inactiveEmployee.id].sort(),
+        )
+        assert.equal(
+          body.staff.find((member) => member.id === employee.id)?.capacity
+            ?.timeOffHours,
+          8,
+        )
         assert.equal(
           (await get("/workload?week=2026-11-02", staff)).status,
           403,
@@ -696,6 +777,26 @@ test(
           week: input.week,
           endDate: "2026-11-08",
         }
+        assert.equal(
+          (await assign({ ...allocation, employeeId: onLeaveEmployee.id }))
+            .status,
+          409,
+        )
+        assert.equal(
+          (await assign({ ...allocation, employeeId: inactiveEmployee.id }))
+            .status,
+          409,
+        )
+        for (const employee of [
+          noAccountEmployee,
+          nonStaffEmployee,
+          deletedAccountEmployee,
+          inactiveAccountEmployee,
+        ])
+          assert.equal(
+            (await assign({ ...allocation, employeeId: employee.id })).status,
+            409,
+          )
         assert.equal((await assign(allocation)).status, 200)
         assert.equal(
           (await assign({ ...allocation, employeeId: foreignEmployee.id }))
@@ -707,6 +808,50 @@ test(
           where: { projectId: project.id },
         })
         assert.equal(assignment.weeklyHours, 26)
+        const deletedAccountAssignment = await prisma.projectStaff.create({
+          data: {
+            projectId: project.id,
+            employeeId: deletedAccountEmployee.id,
+            weeklyHours: 12,
+            allocationStart: new Date("2026-11-02T00:00:00Z"),
+            allocationEnd: new Date("2026-11-08T00:00:00Z"),
+            approvedById: head.id,
+          },
+        })
+        const staleProjectResponse = await get("/workload?week=2026-11-02")
+        const staleProjects = (await staleProjectResponse.json()) as {
+          projects: {
+            id: string
+            staff: {
+              id: string
+              employeeId: string
+              employeeName: string
+              weeklyHours: number | null
+              eligible: boolean
+            }[]
+          }[]
+        }
+        const staleAllocation = staleProjects.projects
+          .find((entry) => entry.id === project.id)
+          ?.staff.find((member) => member.id === deletedAccountAssignment.id)
+        assert.deepEqual(staleAllocation, {
+          id: deletedAccountAssignment.id,
+          employeeId: deletedAccountEmployee.id,
+          employeeName: deletedAccountEmployee.fullName,
+          weeklyHours: 12,
+          allocationStart: "2026-11-02T00:00:00.000Z",
+          allocationEnd: "2026-11-08T00:00:00.000Z",
+          eligible: false,
+        })
+        assert.equal(
+          (
+            await fetch(
+              base + "/workload/assignment/" + deletedAccountAssignment.id,
+              { method: "DELETE", headers: head.headers },
+            )
+          ).status,
+          200,
+        )
         const nextWeek = await get("/workload?week=2026-11-09")
         const nextBody = (await nextWeek.json()) as {
           staff: { assignments: unknown[] }[]
@@ -721,6 +866,45 @@ test(
             departmentId: design.id,
           },
         })
+        await prisma.employee.update({
+          where: { id: employee.id },
+          data: { departmentId: marketing.id },
+        })
+        const transferredProjectResponse = await get(
+          "/workload?week=2026-11-02",
+        )
+        const transferredProjects =
+          (await transferredProjectResponse.json()) as {
+            projects: {
+              id: string
+              staff: {
+                id: string
+                employeeId: string
+                employeeName: string
+                weeklyHours: number | null
+                allocationStart: string | null
+                allocationEnd: string | null
+                eligible: boolean
+              }[]
+            }[]
+            staff: { id: string }[]
+          }
+        const transferredAllocation = transferredProjects.projects
+          .find((entry) => entry.id === project.id)
+          ?.staff.find((member) => member.employeeId === employee.id)
+        assert.deepEqual(transferredAllocation, {
+          id: assignment.id,
+          employeeId: employee.id,
+          employeeName: employee.fullName,
+          weeklyHours: 26,
+          allocationStart: "2026-11-02T00:00:00.000Z",
+          allocationEnd: "2026-11-08T00:00:00.000Z",
+          eligible: false,
+        })
+        assert.equal(
+          transferredProjects.staff.some((member) => member.id === employee.id),
+          false,
+        )
         assert.equal(
           (
             await assign({
