@@ -273,9 +273,7 @@ export function ClientDeliverablePage({
                   </dd>
                 </div>
                 <div className="py-3">
-                  <dt className="text-[11px] text-[#71839d]">
-                    File extension
-                  </dt>
+                  <dt className="text-[11px] text-[#71839d]">File extension</dt>
                   <dd className="mt-1.5 ml-0 text-[#1c2a3e]">
                     {fileExtension}
                   </dd>

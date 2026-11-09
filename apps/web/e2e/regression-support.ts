@@ -348,6 +348,19 @@ export async function mockApi(
       return
     }
 
+    // The portal topbar now reads both inboxes to calculate unread messages.
+    // Feature specs can override these exact list routes with populated fixtures.
+    if (
+      (pathname === "/api/request-conversations" ||
+        pathname === "/api/internal-conversations") &&
+      method === "GET"
+    ) {
+      await route.fulfill({
+        json: { conversations: [], nextCursor: null, unreadCount: 0 },
+      })
+      return
+    }
+
     if (
       pathname === "/api/request-workflows/notifications" &&
       method === "GET"

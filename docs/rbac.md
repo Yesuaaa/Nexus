@@ -38,7 +38,7 @@ The frontend's Department Management page (`/departments`) is available only to 
 | Create User or Staff accounts (`accounts:create-basic`)                |      |       |       |     ✓      |
 | Change User or Staff roles (`accounts:assign-basic`)                   |      |       |       |     ✓      |
 | Create Admin or Superadmin accounts (`accounts:create-privileged`)     |      |       |       |     ✓      |
-| Change Admin or Superadmin roles (`accounts:assign-privileged`)         |      |       |       |     ✓      |
+| Change Admin or Superadmin roles (`accounts:assign-privileged`)        |      |       |       |     ✓      |
 | Change User or Staff status (`accounts:status-basic`)                  |      |       |       |     ✓      |
 | Change Admin or Superadmin status (`accounts:status-privileged`)       |      |       |       |     ✓      |
 | Delete inactive accounts                                               |      |       |       |     ✓      |
