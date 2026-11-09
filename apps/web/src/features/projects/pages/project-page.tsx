@@ -4,7 +4,7 @@ import { useDatePreferences } from "@/features/settings/providers/preferences-pr
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import { CheckCircle2, Circle, FolderKanban } from "lucide-react"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import { Button } from "@/components/ui/button"
 import { contentClass } from "@/components/layout/styles"
 import { usePortalAccount } from "@/features/auth/providers/account-context"

@@ -14,6 +14,7 @@ apps/api/src/generated/
 .pnpm-store/
 .ci-tools/
 .localappdata/
+.tmp/performance/
 *.tsbuildinfo
 *.log
 .DS_Store

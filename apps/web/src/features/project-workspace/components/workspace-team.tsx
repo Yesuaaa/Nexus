@@ -1,7 +1,8 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { Eye, Plus, UsersRound } from "lucide-react"
+import { AnimatedTableBody } from "@/components/ui/animated-table-body"
 import { Button } from "@/components/ui/button"
 import { SearchField } from "@/components/ui/search-field"
 import {
@@ -86,15 +87,27 @@ export function WorkspaceTeam({
     skills: string[]
     service: string
   } | null>(null)
-  const rows = workspace.workstreams.flatMap((stream) =>
-    (stream.staff ?? []).map((person) => ({ person, stream })),
+  const rows = useMemo(
+    () =>
+      workspace.workstreams.flatMap((stream) =>
+        (stream.staff ?? []).map((person) => ({
+          id: `${stream.id}-${person.id}`,
+          person,
+          stream,
+        })),
+      ),
+    [workspace.workstreams],
   )
-  const visible = rows.filter(
-    ({ person, stream }) =>
-      (streamId === "all" || stream.id === streamId) &&
-      `${person.fullName} ${person.position ?? ""} ${person.profileSpecialties.join(" ")}`
-        .toLowerCase()
-        .includes(search.trim().toLowerCase()),
+  const visible = useMemo(
+    () =>
+      rows.filter(
+        ({ person, stream }) =>
+          (streamId === "all" || stream.id === streamId) &&
+          `${person.fullName} ${person.position ?? ""} ${person.profileSpecialties.join(" ")}`
+            .toLowerCase()
+            .includes(search.trim().toLowerCase()),
+      ),
+    [rows, streamId, search],
   )
   const manageable = workspace.workstreams.filter(
     (stream) =>
@@ -151,7 +164,7 @@ export function WorkspaceTeam({
           </SelectContent>
         </Select>
       </div>
-      {visible.length ? (
+      {rows.length ? (
         <div className="overflow-x-auto rounded-xl border border-[#dfe5ec]">
           <table className="w-full min-w-[640px] text-left text-xs">
             <thead className="bg-[#edf1f5]">
@@ -165,12 +178,16 @@ export function WorkspaceTeam({
                 )}
               </tr>
             </thead>
-            <tbody>
-              {visible.map(({ person, stream }) => (
-                <tr
-                  key={`${stream.id}-${person.id}`}
-                  className="border-t border-[#edf0f4]"
-                >
+            <AnimatedTableBody
+              items={visible}
+              viewKey={JSON.stringify([search, streamId])}
+              quickKey={search}
+              columns={5}
+              rowClassName="border-t border-[#edf0f4]"
+              emptyContent="No staff match these filters."
+              renderRow={({ person, stream }) => (
+                <>
+                  {" "}
                   <td className="px-4 py-4">
                     <div className="flex items-center gap-3">
                       <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[#e9eef8] text-[#294c96]">
@@ -210,9 +227,9 @@ export function WorkspaceTeam({
                       <Eye size={16} />
                     </button>
                   </td>
-                </tr>
-              ))}
-            </tbody>
+                </>
+              )}
+            />
           </table>
           <p className="m-0 border-t border-[#edf0f4] px-4 py-3 text-[11px] text-[#738096]">
             Showing {visible.length} of {rows.length} assignments

@@ -31,6 +31,7 @@ export function listAccounts(
   sort: AccountSortKey = "createdAt",
   direction: AccountSortDirection = "desc",
   deleted = false,
+  signal?: AbortSignal,
 ) {
   const params = new URLSearchParams({ page: String(page) })
   if (search) params.set("search", search)
@@ -38,7 +39,10 @@ export function listAccounts(
   if (sort !== "createdAt") params.set("sort", sort)
   if (direction !== "desc") params.set("direction", direction)
   if (deleted) params.set("deleted", "true")
-  return apiRequest<AccountList>(`/api/users?${params}`)
+  return apiRequest<AccountList>(
+    `/api/users?${params}`,
+    signal ? { signal } : {},
+  )
 }
 
 export function createAccount(data: NewAccount) {

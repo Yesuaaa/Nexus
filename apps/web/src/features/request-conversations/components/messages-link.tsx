@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
 import { MessageSquare } from "lucide-react"
 import { iconButtonClass } from "@/components/layout/styles"
@@ -15,6 +15,14 @@ import {
 
 function AccountMessagesLink({ internal }: { internal: boolean }) {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
+  // The open inbox already refreshes its active list and publishes its count.
+  const inboxKind =
+    pathname === "/messages"
+      ? searchParams.get("mode") === "internal"
+        ? "internal"
+        : "requests"
+      : null
   const [counts, setCounts] = useState({ requests: 0, internal: 0 })
 
   useEffect(() => {
@@ -31,8 +39,10 @@ function AccountMessagesLink({ internal }: { internal: boolean }) {
       loading = true
       // Keep the last known count when one source is temporarily unavailable.
       await Promise.allSettled([
-        listConversations(undefined, controller.signal),
-        ...(internal
+        ...(inboxKind !== "requests"
+          ? [listConversations(undefined, controller.signal)]
+          : []),
+        ...(internal && inboxKind !== "internal"
           ? [listInternalConversations(undefined, controller.signal)]
           : []),
       ])
@@ -53,7 +63,7 @@ function AccountMessagesLink({ internal }: { internal: boolean }) {
       document.removeEventListener("visibilitychange", refreshVisible)
       window.removeEventListener("focus", refreshVisible)
     }
-  }, [internal])
+  }, [internal, inboxKind])
 
   const unreadCount = counts.requests + (internal ? counts.internal : 0)
   return (

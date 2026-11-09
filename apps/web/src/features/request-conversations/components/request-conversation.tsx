@@ -22,7 +22,7 @@ import {
   Trash2,
   UserRound,
 } from "lucide-react"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import { Button } from "@/components/ui/button"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"

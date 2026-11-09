@@ -29,6 +29,7 @@ export type BookingList = {
 }
 
 export function listBookedServices(filters: {
+  signal?: AbortSignal
   search: string
   status: string
   page: number
@@ -38,7 +39,9 @@ export function listBookedServices(filters: {
     status: filters.status,
     page: String(filters.page),
   })
-  return apiRequest(`/api/service-requests?${query}`)
+  return apiRequest(`/api/service-requests?${query}`, {
+    signal: filters.signal,
+  })
 }
 
 export async function getBooking(id: string): Promise<BookingDetails> {

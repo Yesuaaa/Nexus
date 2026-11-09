@@ -8,11 +8,15 @@ import {
   Clock3,
   LoaderCircle,
   Plus,
-  RefreshCw,
 } from "lucide-react"
 import { contentClass } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
 import { KpiCards } from "@/components/ui/kpi-cards"
+import {
+  useTableSearch,
+  useTableFooter,
+} from "@/components/ui/use-table-search"
+import { TableSearchStatus } from "@/components/ui/table-search-status"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
 import { SearchField } from "@/components/ui/search-field"
 import {
@@ -43,16 +47,27 @@ const initial: ClientRequestsResponse = {
   summary: { total: 0, pending: 0, inProgress: 0, completed: 0, cancelled: 0 },
 }
 
+function matchesTableSearch(item: ServiceRequestSummary, query: string) {
+  return [
+    item.title,
+    item.referenceNumber,
+    item.service.name,
+    item.packageName,
+    item.package?.name,
+  ].some((value) => value?.toLowerCase().includes(query))
+}
+
 export function ClientServiceRequestsPage() {
   const [search, setSearch] = useState("")
-  const [query, setQuery] = useState("")
+  const query = search.trim()
   const [status, setStatus] = useState<ServiceRequestStatus | "">("")
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
   const [page, setPage] = useState(1)
   const [revision, setRevision] = useState(0)
   const [result, setResult] = useState(initial)
   const [resolvedKey, setResolvedKey] = useState("")
-  const [error, setError] = useState("")
+  const [errorMessage, setError] = useState("")
+  const [errorRequestKey, setErrorRequestKey] = useState("")
   const [selected, setSelected] = useState<ServiceRequestSummary | null>(null)
   const requestKey = JSON.stringify({
     page,
@@ -61,20 +76,37 @@ export function ClientServiceRequestsPage() {
     sortOrder,
     revision,
   })
+  const error = errorRequestKey === requestKey ? errorMessage : ""
   const loading = requestKey !== resolvedKey || search.trim() !== query
   const filtered = Boolean(query || status)
+  const searchScope = JSON.stringify([status, sortOrder, revision])
+  const { acceptRows, preview, previewing } =
+    useTableSearch<ServiceRequestSummary>({
+      search: query,
+      scope: searchScope,
+      page,
+      matches: matchesTableSearch,
+    })
+  const { footer, onRowsSettled } = useTableFooter(
+    result,
+    loading || previewing,
+  )
+  const tableViewKey = JSON.stringify([searchScope, query, page])
   useEffect(() => {
-    const timer = setTimeout(() => setQuery(search.trim()), 150)
-    return () => clearTimeout(timer)
-  }, [search])
-  useEffect(() => {
+    const controller = new AbortController()
     let active = true
     let inFlight = false
     let hasLoaded = false
     const load = () => {
       if (inFlight) return
       inFlight = true
-      void listMyServiceRequests({ page, search: query, status, sortOrder })
+      void listMyServiceRequests({
+        page,
+        search: query,
+        status,
+        sortOrder,
+        signal: controller.signal,
+      })
         .then((data) => {
           if (!active) return
           const lastPage = Math.max(1, Math.ceil(data.total / data.pageSize))
@@ -83,6 +115,7 @@ export function ClientServiceRequestsPage() {
             return
           }
           hasLoaded = true
+          acceptRows(data.requests)
           setResult(data)
           setSelected((current) =>
             current
@@ -99,6 +132,7 @@ export function ClientServiceRequestsPage() {
             (!(reason instanceof ApiError) || reason.status >= 500)
           )
             return
+          setErrorRequestKey(requestKey)
           setError(
             reason instanceof Error
               ? reason.message
@@ -114,12 +148,12 @@ export function ClientServiceRequestsPage() {
     const stopRefresh = watchVisibleRefresh(load, { poll: false })
     return () => {
       active = false
+      controller.abort()
       stopRefresh()
     }
-  }, [page, query, status, sortOrder, revision, requestKey])
+  }, [page, query, status, sortOrder, revision, requestKey, acceptRows])
   function clearFilters() {
     setSearch("")
-    setQuery("")
     setStatus("")
     setPage(1)
   }
@@ -169,16 +203,6 @@ export function ClientServiceRequestsPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            className="h-[34px] gap-2 text-xs"
-            disabled={loading}
-            onClick={() => setRevision((value) => value + 1)}
-          >
-            <RefreshCw size={14} aria-hidden="true" />
-            Refresh
-          </Button>
           <Button
             asChild
             className="h-[34px] bg-[#203f8c] text-xs text-white hover:bg-[#172f70] max-[560px]:h-11"
@@ -262,7 +286,7 @@ export function ClientServiceRequestsPage() {
             </Button>
           )}
         </div>
-        {loading ? (
+        {loading && !resolvedKey ? (
           <div
             role="status"
             className="grid min-h-64 place-items-center rounded-lg border border-[#e1e4ea] text-xs text-[#52627a]"
@@ -282,9 +306,38 @@ export function ClientServiceRequestsPage() {
               Try again
             </Button>
           </div>
-        ) : result.requests.length ? (
+        ) : resolvedKey ? (
           <ClientRequestsTable
-            requests={result.requests}
+            requests={preview ?? result.requests}
+            viewKey={tableViewKey}
+            quickKey={query}
+            onRowsSettled={onRowsSettled}
+            emptyMessage={
+              loading ? (
+                "Searching requests…"
+              ) : (
+                <div>
+                  <ClipboardList
+                    size={28}
+                    className="mx-auto mb-3 text-[#8a9ab3]"
+                    aria-hidden="true"
+                  />
+                  <h2 className="m-0 text-sm font-semibold">
+                    {filtered
+                      ? "No matching requests"
+                      : "No service requests yet"}
+                  </h2>
+                  <p className="mt-2 text-xs text-[#52627a]">
+                    {filtered
+                      ? "Try a different search or status filter."
+                      : "Explore our services and tell us what you need."}
+                  </p>
+                  <Button asChild variant="outline" className="mt-2 text-xs">
+                    <Link href="/services">Browse services</Link>
+                  </Button>
+                </div>
+              )
+            }
             onView={(request) => {
               setSelected(request)
               setRevision((value) => value + 1)
@@ -313,19 +366,21 @@ export function ClientServiceRequestsPage() {
             </div>
           </div>
         )}
-        {!loading && !error && result.total > 0 && (
+        <TableSearchStatus active={loading && previewing} label="requests" />
+        {!error && !previewing && footer.total > 0 && (
           <footer className="flex flex-wrap items-center justify-between gap-3 pt-4 text-[11px] text-[#52627a]">
             <span role="status">
-              Showing {(result.page - 1) * result.pageSize + 1}–
-              {(result.page - 1) * result.pageSize + result.requests.length} of{" "}
-              {result.total}
+              Showing {(footer.page - 1) * footer.pageSize + 1}–
+              {(footer.page - 1) * footer.pageSize + footer.requests.length} of{" "}
+              {footer.total}
             </span>
             <NumberedPagination
-              page={result.page}
+              page={footer.page}
               totalPages={Math.max(
                 1,
-                Math.ceil(result.total / result.pageSize),
+                Math.ceil(footer.total / footer.pageSize),
               )}
+              disabled={loading || footer !== result}
               label="Service request pages"
               onPageChange={setPage}
             />

@@ -1,7 +1,11 @@
-import { Prisma } from "../../generated/prisma/client.js"
+import { EmployeeStatus, Prisma, Role } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { isUniqueConflict } from "../../lib/errors.js"
-import { syncEmployeeForUser } from "../employees/employees.service.js"
+import {
+  EmployeeError,
+  syncEmployeeForUser,
+  updateEmployee,
+} from "../employees/employees.service.js"
 import {
   validateTeamCreateInput,
   validateTeamUpdateInput,
@@ -103,12 +107,47 @@ export const teamsService = {
       throw new TeamError(404, "Department not found")
     }
 
-    const { name, description, leadId } = parsed.value
+    const { name, description, leadId, memberIds } = parsed.value
 
     try {
       const team = await prisma.$transaction(async (tx) => {
         if (leadId) {
           await validateTeamLead(tx, departmentId, leadId, undefined, 400)
+        }
+
+        if (memberIds) {
+          const members = await tx.employee.findMany({
+            where: {
+              id: { in: memberIds },
+              departmentId,
+              status: EmployeeStatus.ACTIVE,
+              user: {
+                is: {
+                  role: Role.STAFF,
+                  isActive: true,
+                  accountDeletedAt: null,
+                },
+              },
+            },
+            select: { id: true, userId: true },
+          })
+
+          if (members.length !== memberIds.length) {
+            throw new TeamError(
+              400,
+              "Team members must be active staff in this department.",
+            )
+          }
+
+          if (
+            dept.headId !== null &&
+            members.some((member) => member.userId === dept.headId)
+          ) {
+            throw new TeamError(
+              400,
+              "The Department Head cannot be assigned to a sub-team.",
+            )
+          }
         }
 
         const created = await tx.team.create({
@@ -126,6 +165,12 @@ export const teamsService = {
             data: { departmentId, teamId: created.id },
           })
           await syncEmployeeForUser(tx, leadId)
+        }
+
+        if (memberIds) {
+          for (const memberId of memberIds) {
+            await updateEmployee(tx, memberId, { teamId: created.id })
+          }
         }
 
         return tx.team.findUniqueOrThrow({
@@ -152,6 +197,9 @@ export const teamsService = {
         },
       }
     } catch (error) {
+      if (error instanceof EmployeeError) {
+        throw new TeamError(error.status, error.message)
+      }
       if (isUniqueConflict(error)) {
         throw new TeamError(
           409,

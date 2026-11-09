@@ -5,7 +5,7 @@ import { Form } from "@/components/ui/form"
 import { useRef, useState, type FormEvent } from "react"
 import { useRouter } from "next/navigation"
 import { Eye, EyeOff, LoaderCircle } from "lucide-react"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import {
   Dialog,
   DialogContent,
@@ -110,7 +110,7 @@ export function ChangePasswordDialog({
           ? caught.message
           : "Couldn't change the account password. Please try again."
       setError(message)
-      errorToast.current = sileo.error({
+      errorToast.current = await sileo.error({
         title: "Couldn't change password",
         description: message,
       })

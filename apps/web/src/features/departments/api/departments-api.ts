@@ -236,6 +236,7 @@ export async function createTeam(
     name: string
     description?: string
     leadId?: string | null
+    memberIds?: string[]
   },
 ): Promise<DepartmentTeam> {
   const result = await apiRequest<{ team: DepartmentTeam }>(

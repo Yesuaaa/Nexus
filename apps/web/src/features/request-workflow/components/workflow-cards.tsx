@@ -18,10 +18,11 @@ import {
   Upload,
   X,
 } from "lucide-react"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import { AttachmentPreview, attachmentAccept } from "./attachment-preview"
 import { RequirementResponseForm } from "./requirement-response-form"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
+import { DateInput } from "@/components/ui/date-input"
 
 export function getConsultationMeetingUrl(location: string) {
   try {
@@ -595,7 +596,7 @@ export function ConsultationSchedulingCard({
               >
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <WorkflowField label="Replacement start">
-                    <input
+                    <DateInput
                       type="datetime-local"
                       name="startsAt"
                       required
@@ -606,7 +607,7 @@ export function ConsultationSchedulingCard({
                     />
                   </WorkflowField>
                   <WorkflowField label="Replacement end">
-                    <input
+                    <DateInput
                       type="datetime-local"
                       name="endsAt"
                       required
@@ -687,7 +688,7 @@ export function ConsultationSchedulingCard({
             }}
           >
             <WorkflowField label="Preferred date and time">
-              <input
+              <DateInput
                 type="datetime-local"
                 name="startsAt"
                 required
