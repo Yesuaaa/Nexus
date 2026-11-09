@@ -40,12 +40,16 @@ export function Calendar({
   min,
   max,
   week = false,
+  today: currentDate = calendarToday(),
+  markers,
   onSelect,
 }: {
   value: string
   min?: string
   max?: string
   week?: boolean
+  today?: string
+  markers?: Record<string, { label: string; color: string }[]>
   onSelect: (date: string) => void
 }) {
   const [view, setView] = useState(() => calendarDate(value))
@@ -60,7 +64,21 @@ export function Calendar({
   monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7))
   const sunday = new Date(monday)
   sunday.setUTCDate(sunday.getUTCDate() + 6)
-  const today = calendarToday()
+  const today = currentDate
+  const todayButton = (
+    <button
+      type="button"
+      disabled={disabled(today)}
+      onClick={() => {
+        setView(calendarDate(today))
+        setFocused(today)
+        onSelect(today)
+      }}
+      className="rounded-md px-2 py-1 text-xs font-semibold text-[#203f8c] hover:bg-[#eaf0fb] focus-visible:outline-2 focus-visible:outline-[#294a9b] disabled:opacity-30"
+    >
+      Today
+    </button>
+  )
   function disabled(date: string) {
     return (
       date < (min?.slice(0, 10) || "0001-01-01") ||
@@ -170,7 +188,12 @@ export function Calendar({
             <span
               key={day}
               role="columnheader"
-              className="py-2 text-center text-[10px] font-medium text-[#738096]"
+              className={cn(
+                "py-2 text-center font-medium",
+                markers
+                  ? "text-xs text-slate-600"
+                  : "text-[10px] text-[#738096]",
+              )}
             >
               {day}
             </span>
@@ -183,6 +206,8 @@ export function Calendar({
               date.setUTCDate(start.getUTCDate() + row * 7 + column)
               const key = calendarKey(date)
               const active = key === selected
+              const markedToday = Boolean(markers) && key === today
+              const dots = markers?.[key]?.slice(0, 3) ?? []
               const inWeek =
                 week && !!selected && date >= monday && date <= sunday
               return (
@@ -200,17 +225,23 @@ export function Calendar({
                     type="button"
                     data-date={key}
                     data-calendar-focus={key === focused ? "true" : undefined}
-                    aria-label={dayLabel.format(date)}
+                    aria-label={[
+                      dayLabel.format(date),
+                      ...dots.map(({ label }) => label),
+                    ].join(", ")}
                     aria-current={key === today ? "date" : undefined}
                     disabled={disabled(key)}
                     tabIndex={key === focused ? 0 : -1}
                     className={cn(
                       buttonClass,
                       "text-xs",
+                      markers &&
+                        "flex h-11 w-full max-w-14 flex-col items-center justify-center gap-1 text-base text-slate-800",
                       date.getUTCMonth() !== view.getUTCMonth() &&
-                        "text-[#9aa8bb]",
+                        (markers ? "text-slate-500" : "text-[#9aa8bb]"),
                       key === today &&
                         !active &&
+                        !markedToday &&
                         "ring-1 ring-inset ring-[#a7b9df]",
                       active &&
                         "bg-[#203f8c] font-semibold text-white hover:bg-[#172f70] hover:text-white",
@@ -219,6 +250,32 @@ export function Calendar({
                     onClick={() => onSelect(key)}
                   >
                     {date.getUTCDate()}
+                    {markers && (
+                      <span
+                        className={cn(
+                          "flex h-2 items-center gap-1",
+                          markedToday && "gap-0.5",
+                          key < today && "opacity-55",
+                        )}
+                        aria-hidden="true"
+                      >
+                        {markedToday && (
+                          <span className="text-[8px] leading-none font-medium">
+                            Today
+                          </span>
+                        )}
+                        {dots.map(({ color }, index) => (
+                          <span
+                            key={index}
+                            className={cn(
+                              "size-2 rounded-full",
+                              markedToday && "size-1",
+                            )}
+                            style={{ backgroundColor: color }}
+                          />
+                        ))}
+                      </span>
+                    )}
                   </button>
                 </div>
               )
@@ -226,22 +283,14 @@ export function Calendar({
           </div>
         ))}
       </div>
-      <div className="mt-3 flex items-center justify-between border-t border-[#e8ebef] pt-3">
-        <span className="text-[10px] text-[#738096]">
-          {week ? "Select a Monday-starting week" : "Select a date"}
-        </span>
-        <button
-          type="button"
-          disabled={disabled(today)}
-          onClick={() => {
-            setView(calendarDate(today))
-            onSelect(today)
-          }}
-          className="rounded-md px-2 py-1 text-xs font-semibold text-[#203f8c] hover:bg-[#eaf0fb] focus-visible:outline-2 focus-visible:outline-[#294a9b] disabled:opacity-30"
-        >
-          Today
-        </button>
-      </div>
+      {!markers && (
+        <div className="mt-3 flex items-center justify-between border-t border-[#e8ebef] pt-3">
+          <span className="text-[10px] text-[#738096]">
+            {week ? "Select a Monday-starting week" : "Select a date"}
+          </span>
+          {todayButton}
+        </div>
+      )}
     </div>
   )
 }

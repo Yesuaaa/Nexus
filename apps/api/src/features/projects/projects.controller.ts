@@ -2,6 +2,7 @@ import { Router, type ErrorRequestHandler } from "express"
 import { requireAuth } from "../auth/auth.middleware.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 import { getProject, setMilestoneCompletion } from "./projects.service.js"
+import { listClientCalendar } from "./client-calendar.service.js"
 
 export const projectsRouter = Router()
 projectsRouter.use(requireAuth)
@@ -14,6 +15,13 @@ for (const parameter of ["id", "milestoneId"]) {
     next()
   })
 }
+projectsRouter.get("/calendar", async (request, response) => {
+  if (request.auth!.user.role !== "USER")
+    return response
+      .status(403)
+      .json({ error: "Calendar is available to clients" })
+  response.json(await listClientCalendar(request.auth!.user.id))
+})
 projectsRouter.get("/:id", async (request, response) => {
   response.json(
     await getProject(request.auth!.user.id, String(request.params.id)),
