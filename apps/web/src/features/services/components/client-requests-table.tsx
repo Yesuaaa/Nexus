@@ -12,6 +12,61 @@ import { Pill } from "@/components/ui/pill"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import type { ServiceRequestSummary } from "../api/client-services-api"
 import { serviceRequestStatuses } from "../model/service-request-status"
+import { ServiceIcon } from "./service-icon"
+import type { ServiceIconKey } from "../api/services-api"
+
+type RequestRowVisual = {
+  iconClassName: string
+  iconKey: ServiceIconKey
+}
+
+function requestRowVisual(serviceName: string): RequestRowVisual {
+  const normalizedName = serviceName.toLocaleLowerCase()
+
+  if (
+    normalizedName.includes("community") ||
+    normalizedName.includes("social")
+  ) {
+    return {
+      iconClassName: "text-[#19864a]",
+      iconKey: "social",
+    }
+  }
+
+  if (
+    normalizedName.includes("marketing") ||
+    normalizedName.includes("advertising") ||
+    normalizedName.includes("campaign")
+  ) {
+    return {
+      iconClassName: "text-[#6547d7]",
+      iconKey: "advertising",
+    }
+  }
+
+  if (normalizedName.includes("search") || normalizedName.includes("seo")) {
+    return {
+      iconClassName: "text-[#245bc4]",
+      iconKey: "search",
+    }
+  }
+
+  if (
+    normalizedName.includes("web") ||
+    normalizedName.includes("development") ||
+    normalizedName.includes("code")
+  ) {
+    return {
+      iconClassName: "text-[#245bc4]",
+      iconKey: "code",
+    }
+  }
+
+  return {
+    iconClassName: "text-[#6547d7]",
+    iconKey: "business",
+  }
+}
 
 function RequestActions({
   request,
@@ -162,82 +217,86 @@ export function ClientRequestsTable({
   const { formatDate } = useDatePreferences()
   return (
     <>
-      <div className="overflow-hidden rounded-lg border border-[#e8ebef] bg-background @max-[900px]:hidden">
-        <table className="w-full table-fixed border-collapse text-left text-xs text-foreground">
+      <div className="overflow-x-auto rounded-xl bg-[#e7edf3] p-1.5 @max-[900px]:hidden">
+        <table className="w-full min-w-[920px] table-fixed border-separate border-spacing-y-2 text-left text-xs text-foreground">
           <caption className="sr-only">Your service requests</caption>
-          <thead className="bg-[#e8eef2] text-foreground">
+          <colgroup>
+            <col className="w-[76px]" />
+            <col className="w-[31%]" />
+            <col className="w-[28%]" />
+            <col className="w-[14%]" />
+            <col className="w-[18%]" />
+            <col className="w-[140px]" />
+          </colgroup>
+          <thead className="sr-only">
             <tr>
-              {[
-                "Request",
-                "Service & package",
-                "Status",
-                "Submitted",
-                "Actions",
-              ].map((label, index) => (
-                <th
-                  key={index}
-                  scope="col"
-                  className={
-                    index === 4
-                      ? "h-[39px] w-40 border-b border-[#dfe6eb] px-3 text-left align-middle text-xs font-semibold"
-                      : "h-[39px] border-b border-[#dfe6eb] px-4 text-left align-middle text-xs font-semibold"
-                  }
-                >
-                  {label || <span className="sr-only">Actions</span>}
-                </th>
-              ))}
+              <th scope="col">Service icon</th>
+              <th scope="col">Request</th>
+              <th scope="col">Service and package</th>
+              <th scope="col">Status</th>
+              <th scope="col">Submitted</th>
+              <th scope="col">Actions</th>
             </tr>
           </thead>
           <AnimatedTableBody
             items={requests}
             viewKey={viewKey}
             quickKey={quickKey}
-            columns={5}
-            rowClassName="h-[58px] border-b border-[#eceef1] align-middle transition-colors last:border-b-0 hover:bg-[#e8eef2]"
+            columns={6}
+            rowClassName="h-[66px] align-middle"
             emptyContent={emptyMessage}
             onRowsSettled={onRowsSettled}
-            renderRow={(request) => (
-              <>
-                {" "}
-                <td className="px-4 py-[7px] align-middle">
-                  <button
-                    onClick={() => onView(request)}
-                    className="cursor-pointer rounded text-left font-semibold text-[#244993] hover:underline focus-visible:outline-2 focus-visible:outline-[#294c96]"
-                  >
-                    {request.service.name}
-                  </button>
-                  <p className="mt-1 mb-0 break-all text-[10px] text-[#738096]">
-                    {request.referenceNumber || request.id}
-                  </p>
-                </td>
-                <td className="px-4 py-[7px] align-middle">
-                  <span className="block break-words font-medium">
-                    {request.service.name}
-                  </span>
-                  <span className="mt-1 block text-[11px] text-[#738096]">
-                    {request.packageName ||
-                      request.package?.name ||
-                      "Standard service"}
-                  </span>
-                </td>
-                <td className="px-4 py-[7px] align-middle">
-                  <RequestStatus status={request.status} />
-                </td>
-                <td className="px-4 py-[7px] align-middle text-[#52627a]">
-                  <time dateTime={request.createdAt}>
-                    {formatDate(request.createdAt)}
-                  </time>
-                </td>
-                <td className="px-3 py-[7px] align-middle">
-                  <RequestActions
-                    request={request}
-                    onView={onView}
-                    onCancelled={onCancelled}
-                    compact
-                  />
-                </td>
-              </>
-            )}
+            renderRow={(request) => {
+              const visual = requestRowVisual(request.service.name)
+              return (
+                <>
+                  <td className="rounded-l-xl border-y border-l border-[#e1e7ef] bg-[#f4f7fb] px-3 py-2 align-middle">
+                    <span
+                      className={`request-icon-float mx-auto grid size-11 place-items-center rounded-2xl border-2 border-current ${visual.iconClassName}`}
+                    >
+                      <ServiceIcon iconKey={visual.iconKey} size={22} />
+                    </span>
+                  </td>
+                  <td className="border-y border-[#e1e7ef] bg-[#f4f7fb] px-4 py-2 align-middle">
+                    <button
+                      onClick={() => onView(request)}
+                      className="cursor-pointer rounded text-left font-semibold text-[#17243b] hover:underline focus-visible:outline-2 focus-visible:outline-[#294c96]"
+                    >
+                      {request.title || request.service.name}
+                    </button>
+                    <p className="mt-1 mb-0 break-all text-[10px] text-[#738096]">
+                      {request.referenceNumber || request.id}
+                    </p>
+                  </td>
+                  <td className="border-y border-l border-[#e7ebf1] bg-[#f4f7fb] px-4 py-2 align-middle">
+                    <span className="block break-words font-medium">
+                      {request.service.name}
+                    </span>
+                    <span className="mt-1 block text-[11px] text-[#738096]">
+                      {request.packageName ||
+                        request.package?.name ||
+                        "Standard service"}
+                    </span>
+                  </td>
+                  <td className="border-y border-[#e1e7ef] bg-[#f4f7fb] px-4 py-2 align-middle">
+                    <RequestStatus status={request.status} />
+                  </td>
+                  <td className="border-y border-[#e1e7ef] bg-[#f4f7fb] px-4 py-2 align-middle text-[#52627a]">
+                    <time dateTime={request.createdAt}>
+                      {formatDate(request.createdAt)}
+                    </time>
+                  </td>
+                  <td className="rounded-r-xl border-y border-r border-[#e1e7ef] bg-[#f4f7fb] px-3 py-2 align-middle">
+                    <RequestActions
+                      request={request}
+                      onView={onView}
+                      onCancelled={onCancelled}
+                      compact
+                    />
+                  </td>
+                </>
+              )
+            }}
           />
         </table>
       </div>
