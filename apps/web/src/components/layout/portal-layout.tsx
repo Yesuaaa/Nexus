@@ -49,7 +49,7 @@ export function PortalLayout({ children }: { children: ReactNode }) {
         !canAccessServiceCatalog(account) &&
         !canAccessServiceManagement(account)) ||
       (pathname === "/calendar" && !canAccessCalendar(account)) ||
-      (pathname.startsWith("/service-requests") &&
+      ((pathname.startsWith("/service-requests") || pathname === "/help") &&
         !canAccessServiceCatalog(account)) ||
       (pathname.startsWith("/clients") &&
         !canAccessClientManagement(account)) ||

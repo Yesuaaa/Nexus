@@ -71,6 +71,7 @@ const routeLabels: Record<string, string> = {
   "staff-workload": "Staff Workload",
   "request-inbox": "Request Inbox",
   "service-requests": "Booked Requests",
+  help: "Help & Support",
   clients: "Client Management",
 }
 

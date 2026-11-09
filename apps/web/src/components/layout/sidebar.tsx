@@ -4,6 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   CalendarDays,
+  CircleHelp,
   ClipboardList,
   FolderKanban,
   Inbox,
@@ -358,6 +359,31 @@ export function Sidebar({
             </Link>
           )}
         </nav>
+
+        {account.role === "USER" && (
+          <div
+            className={cn(
+              "mt-auto border-t border-[#e2e5e9] px-6 pt-4 pb-[19px] max-[767px]:px-[22px]",
+              collapsed && "px-3",
+            )}
+          >
+            <Link
+              href="/help"
+              aria-current={pathname === "/help" ? "page" : undefined}
+              className={cn(
+                navLinkClass,
+                collapsed && "justify-center gap-0 p-0",
+              )}
+              onClick={onCloseDrawer}
+            >
+              <CircleHelp size={20} strokeWidth={1.7} className="flex-none" />
+              <span className={collapsedLabelClass}>Help &amp; Support</span>
+              {collapsed && (
+                <CollapsedTooltip>Help &amp; Support</CollapsedTooltip>
+              )}
+            </Link>
+          </div>
+        )}
       </div>
     </aside>
   )
