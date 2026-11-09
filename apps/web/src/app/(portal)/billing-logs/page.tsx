@@ -47,9 +47,9 @@ type BillingPayment = {
   proofFile: { id: string; name: string; mimeType: string } | null
 }
 
-const billingActionColor = "bg-[#203f8c] text-white hover:bg-[#172f70]"
+const billingActionColor = "text-xs bg-[#203f8c] text-white hover:bg-[#172f70]"
 const paymentRowClass =
-  "grid grid-cols-2 items-center gap-x-4 gap-y-2 px-4 py-3 @min-[640px]:grid-cols-[minmax(0,2fr)_minmax(8rem,1fr)_minmax(9rem,1fr)_9.5rem]"
+  "grid grid-cols-2 items-center gap-x-4 gap-y-2 px-4 py-3 text-xs text-foreground @min-[640px]:grid-cols-[minmax(0,2fr)_minmax(8rem,1fr)_minmax(9rem,1fr)_9.5rem]"
 const conversationHref = (id: string) =>
   `/messages?request=${encodeURIComponent(id)}`
 
@@ -219,19 +219,19 @@ export default function BillingLogsPage() {
                   return (
                     <li key={payment.id} className={paymentRowClass}>
                       <div className="col-span-2 min-w-0 @min-[640px]:col-span-1">
-                        <p className="break-words text-sm font-semibold">
+                        <p className="break-words font-semibold">
                           {isDemo ? "Website Development" : payment.serviceName}
                         </p>
-                        <p className="mt-1 break-words text-xs text-[#52627a]">
+                        <p className="mt-1 break-words text-[11px] text-[#52627a]">
                           {isDemo
                             ? "INV-003 · BK-2026-0142"
                             : payment.bookingReference || "Booked service"}
                         </p>
                       </div>
-                      <p className="min-w-0 break-words text-lg leading-6 font-bold text-slate-900 tabular-nums @min-[640px]:text-center">
+                      <p className="min-w-0 break-words text-sm leading-5 font-semibold text-slate-900 tabular-nums @min-[640px]:text-center">
                         {formatAmount(payment)}
                       </p>
-                      <p className="text-[13px] leading-[18px] text-[#475569] @min-[640px]:text-center">
+                      <p className="text-xs leading-5 text-[#475569] @min-[640px]:text-center">
                         {isDemo ? "Due Nov 20, 2026" : "Payment due"}
                       </p>
                       <Button
@@ -249,7 +249,7 @@ export default function BillingLogsPage() {
                 })}
               </ul>
             ) : (
-              <p className="rounded-lg border border-[#e2e8f0] px-4 py-3 text-sm text-[#52627a]">
+              <p className="rounded-lg border border-[#e2e8f0] px-4 py-3 text-xs text-[#52627a]">
                 No payments due.
               </p>
             )}
@@ -271,10 +271,10 @@ export default function BillingLogsPage() {
                   return (
                     <li key={payment.id} className={paymentRowClass}>
                       <div className="col-span-2 min-w-0 @min-[640px]:col-span-1">
-                        <p className="break-words text-sm font-semibold">
+                        <p className="break-words font-semibold">
                           {payment.serviceName}
                         </p>
-                        <p className="mt-1 break-words text-xs text-[#52627a]">
+                        <p className="mt-1 break-words text-[11px] text-[#52627a]">
                           {payment.status === "VERIFIED" && payment.verifiedAt
                             ? formatDate(payment.verifiedAt)
                             : payment.bookingReference || "Booked service"}
@@ -305,7 +305,7 @@ export default function BillingLogsPage() {
                 })}
               </ul>
             ) : (
-              <p className="rounded-lg border border-[#e2e8f0] px-4 py-3 text-sm text-[#52627a]">
+              <p className="rounded-lg border border-[#e2e8f0] px-4 py-3 text-xs text-[#52627a]">
                 No payment history yet.
               </p>
             )}
@@ -365,7 +365,7 @@ export default function BillingLogsPage() {
                 {formatAmount(selected)}
               </p>
               {selected.status === "SUBMITTED" && (
-                <p className="mt-2 text-[13px] text-[#475569]">
+                <p className="mt-2 text-xs leading-5 text-[#475569]">
                   The team will verify your payment within 1 business day.
                 </p>
               )}
@@ -521,7 +521,7 @@ export default function BillingLogsPage() {
               </p>
             )}
             <DialogFooter className="flex-row flex-wrap justify-between gap-2 sm:justify-between sm:space-x-0 [&>*:nth-child(2)]:ml-auto">
-              <Button asChild variant="outline">
+              <Button asChild variant="outline" className="text-xs">
                 <Link href={conversationHref(selected.requestId)}>
                   Go to chats
                 </Link>

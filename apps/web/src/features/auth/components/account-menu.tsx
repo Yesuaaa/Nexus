@@ -54,7 +54,7 @@ export function AccountMenu({ onSignOut }: { onSignOut: () => void }) {
         {account.role === "USER" && (
           <DropdownMenuItem
             asChild
-            className="min-h-10 cursor-pointer rounded-md px-3"
+            className="min-h-[38px] cursor-pointer rounded-md px-3 text-xs"
           >
             <Link href="/billing-logs">
               <Receipt aria-hidden="true" />
