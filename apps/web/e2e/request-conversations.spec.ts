@@ -75,6 +75,10 @@ async function mock(
     const request = route.request()
     const url = new URL(request.url())
     expect(request.headers().authorization).toBe("Bearer conversation-session")
+    if (url.pathname === "/api/project-conversations")
+      return route.fulfill({
+        json: { conversations: [], nextCursor: null, unreadCount: 0 },
+      })
     const booking = {
       id: "booking-1",
       title: "Website request",
@@ -2303,9 +2307,22 @@ for (const role of ["USER", "STAFF"] as const) {
     await expect(
       chat.getByRole("textbox", { name: "Message", exact: true }),
     ).toBeVisible()
+    await page
+      .getByRole("button", { name: "Archived conversations", exact: true })
+      .click()
+    const nav = page.getByRole("navigation", {
+      name: "Conversations",
+      exact: true,
+    })
     await expect(
-      page.getByRole("button", { name: "Archived conversations", exact: true }),
+      nav.locator('[data-conversation-id="shared-design"]'),
     ).toHaveCount(0)
+    await page
+      .getByRole("button", { name: "Active conversations", exact: true })
+      .click()
+    await expect(
+      nav.locator('[data-conversation-id="shared-design"]'),
+    ).toBeVisible()
   })
 }
 

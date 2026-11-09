@@ -4,6 +4,8 @@ import { WorkspaceActivity } from "../components/workspace-activity"
 import { WorkspaceDeliverables } from "../components/workspace-deliverables"
 
 import { useEffect, useState } from "react"
+import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { CheckCircle2, ChevronDown, Pause, Play } from "lucide-react"
 import { contentClass } from "@/components/layout/styles"
 import { ProjectSummary } from "../components/project-summary"
@@ -31,11 +33,14 @@ import {
 } from "../api/project-workspace-api"
 
 export function WorkspaceDetailPage({ id }: { id: string }) {
+  const searchParams = useSearchParams()
   const [workspace, setWorkspace] = useState<ProjectWorkspaceDetail | null>(
     null,
   )
   const [error, setError] = useState("")
-  const [tab, setTab] = useState("Overview")
+  const [tab, setTab] = useState(
+    searchParams.get("tab") === "deliverables" ? "Deliverables" : "Overview",
+  )
   const [busy, setBusy] = useState(false)
   const [statusBusy, setStatusBusy] = useState(false)
   const [editing, setEditing] = useState<{
@@ -223,6 +228,33 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
               </div>
             </div>
           </header>
+          {workstreams.some(
+            (stream) => stream.canUploadDeliverables && stream.startDate,
+          ) && (
+            <div
+              className="mt-4 flex flex-wrap gap-2"
+              aria-label="Project chats"
+            >
+              {workstreams
+                .filter(
+                  (stream) => stream.canUploadDeliverables && stream.startDate,
+                )
+                .map((stream) => (
+                  <Button
+                    key={stream.id}
+                    asChild
+                    variant="outline"
+                    className="text-xs"
+                  >
+                    <Link
+                      href={`/messages?project=${encodeURIComponent(stream.id)}`}
+                    >
+                      Chat with client · {stream.name}
+                    </Link>
+                  </Button>
+                ))}
+            </div>
+          )}
           <nav
             aria-label="Project sections"
             className="my-6 flex gap-6 border-b border-[#e1e4ea]"
@@ -307,6 +339,7 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
           ) : (
             <WorkspaceTeam
               workspace={workspace}
+              onUpdated={setWorkspace}
               onChanged={() => {
                 getProjectWorkspace(id)
                   .then(setWorkspace)
