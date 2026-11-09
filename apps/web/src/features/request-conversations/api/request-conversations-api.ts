@@ -12,6 +12,13 @@ export type RequestMessage = {
   deletedAt: string | null
   purgeAt: string | null
   sender: { id: string; fullName: string | null }
+  deliverable?: {
+    id: string
+    title: string
+    fileName: string
+    fileId: string
+    kind: "submission" | "delivery"
+  } | null
   booking?: {
     id: string
     title: string

@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 import { sileo } from "sileo"
 import { Button } from "@/components/ui/button"
+import { rowActionButton } from "@/components/ui/row-action-styles"
 import { contentClass } from "@/components/layout/styles"
 import { useBreadcrumbLabel } from "@/components/layout/breadcrumbs"
 import {
@@ -223,32 +224,23 @@ export function ClientProjectPage({
   return (
     <main className={`${contentClass} p-6 max-[767px]:p-4`}>
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#e5e9ee] px-7 pt-6 pb-0 max-[767px]:px-4">
-        <div className="flex min-w-0 flex-1 items-start gap-3">
-          <Link
-            href="/projects"
-            aria-label="Back to My Projects"
-            className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#60718c] no-underline transition-colors hover:bg-[#edf2fa] hover:text-[#243f8f] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#31518f]"
-          >
-            <ArrowLeft size={16} aria-hidden="true" />
-          </Link>
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-              <h1 className="m-0 text-[24px] leading-tight font-semibold tracking-[-0.025em]">
-                {project.name}
-              </h1>
-              <span
-                className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-medium ${statusClass(project.status)}`}
-              >
-                {project.status.replaceAll("_", " ")}
-              </span>
-            </div>
-            <p className="mt-2 mb-0 text-xs text-[#60718c]">
-              {project.request?.service.name || "Project"}
-              {project.request?.referenceNumber && (
-                <span> · {project.request.referenceNumber}</span>
-              )}
-            </p>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <h1 className="m-0 text-[24px] leading-tight font-semibold tracking-[-0.025em]">
+              {project.name}
+            </h1>
+            <span
+              className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-medium ${statusClass(project.status)}`}
+            >
+              {project.status.replaceAll("_", " ")}
+            </span>
           </div>
+          <p className="mt-2 mb-0 text-xs text-[#60718c]">
+            {project.request?.service.name || "Project"}
+            {project.request?.referenceNumber && (
+              <span> · {project.request.referenceNumber}</span>
+            )}
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 pt-4 max-[767px]:pt-0">
           {editable && !pendingCancellation && (
@@ -273,20 +265,15 @@ export function ClientProjectPage({
                 : "Request under review"}
             </Button>
           )}
-          {project.request && (
-            <Button
-              type="button"
-              variant="outline"
-              className="size-10 text-[#31518f]"
-              asChild
+          {project.startDate && (
+            <Link
+              href={`/messages?project=${encodeURIComponent(project.id)}`}
+              className={`${rowActionButton} size-9 hover:bg-[#f1f5fc] hover:text-foreground`}
+              aria-label="Open project conversation"
+              title="Chat with project team"
             >
-              <Link
-                href={`/messages?request=${encodeURIComponent(project.request.id)}`}
-                aria-label="Open project conversation"
-              >
-                <MessageSquare size={17} aria-hidden="true" />
-              </Link>
-            </Button>
+              <MessageSquare size={16} aria-hidden="true" />
+            </Link>
           )}
         </div>
         <div className="w-full border-t border-[#e5e9ee]">
@@ -467,10 +454,10 @@ export function ClientProjectPage({
           </div>
           {deliverables.length ? (
             <div className="overflow-hidden rounded-xl border border-[#dce3eb] bg-white">
-              <div className="grid grid-cols-[minmax(0,1fr)_150px_170px_100px] gap-4 bg-[#e9eef3] px-4 py-3 text-[11px] font-semibold text-[#1c2b40] max-[800px]:grid-cols-[minmax(0,1fr)_130px_88px]">
+              <div className="grid grid-cols-[minmax(0,1fr)_150px_170px_100px] gap-4 bg-[#e9eef3] px-4 py-3 text-[11px] font-semibold text-[#1c2b40] max-[800px]:grid-cols-[minmax(0,1fr)_130px_88px] max-[560px]:grid-cols-[minmax(0,1fr)_36px] max-[560px]:gap-3">
                 <span>Deliverable</span>
                 <span className="max-[800px]:hidden">Shared on</span>
-                <span>Status</span>
+                <span className="max-[560px]:hidden">Status</span>
                 <span className="text-center">Open</span>
               </div>
               <ul className="m-0 list-none divide-y divide-[#e8edf2] p-0">
@@ -487,7 +474,7 @@ export function ClientProjectPage({
                   return (
                     <li
                       key={deliverable.id}
-                      className="grid grid-cols-[minmax(0,1fr)_150px_170px_100px] items-center gap-4 px-4 py-4 hover:bg-[#f9fbfd] max-[800px]:grid-cols-[minmax(0,1fr)_130px_88px]"
+                      className="grid grid-cols-[minmax(0,1fr)_150px_170px_100px] items-center gap-4 px-4 py-4 hover:bg-[#f9fbfd] max-[800px]:grid-cols-[minmax(0,1fr)_130px_88px] max-[560px]:grid-cols-[minmax(0,1fr)_36px] max-[560px]:gap-3"
                     >
                       <div className="flex min-w-0 items-start gap-3">
                         <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-[#edf2fa] text-[#31518f]">
@@ -509,13 +496,13 @@ export function ClientProjectPage({
                           : formatDate(deliverable.workflowFile.createdAt)}
                       </span>
                       <span
-                        className={`justify-self-start rounded-full px-2.5 py-1 text-[10px] font-medium ${review?.status === "APPROVED" ? "bg-emerald-100 text-emerald-800" : review?.status === "REVISION_REQUESTED" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-800"}`}
+                        className={`justify-self-start rounded-full px-2.5 py-1 text-[10px] font-medium max-[560px]:col-start-1 max-[560px]:row-start-2 ${review?.status === "APPROVED" ? "bg-emerald-100 text-emerald-800" : review?.status === "REVISION_REQUESTED" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-800"}`}
                       >
                         {reviewLabel}
                       </span>
                       <Button
                         variant="outline"
-                        className="size-9 shrink-0 justify-self-center p-0 text-[#586d8a]"
+                        className="size-9 shrink-0 justify-self-center p-0 text-[#586d8a] max-[560px]:col-start-2 max-[560px]:row-span-2 max-[560px]:row-start-1"
                         asChild
                       >
                         <Link

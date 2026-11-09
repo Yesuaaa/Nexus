@@ -1,8 +1,7 @@
-import { AnimatedTableBody } from "@/components/ui/animated-table-body"
-import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
+import { ClientRowTable } from "@/components/ui/client-row-table"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 import Link from "next/link"
-import { Eye, MessageSquare, X } from "lucide-react"
+import { Eye, MessageSquare } from "lucide-react"
 import { useState, type ReactNode } from "react"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { cancelClientServiceRequest } from "../api/client-services-api"
@@ -10,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Pill } from "@/components/ui/pill"
 import { rowActionButton } from "@/components/ui/row-action-styles"
+import { RowActionsMenu } from "@/components/ui/row-actions-menu"
 import type { ServiceRequestSummary } from "../api/client-services-api"
 import { serviceRequestStatuses } from "../model/service-request-status"
 import { ServiceIcon } from "./service-icon"
@@ -155,19 +155,26 @@ function RequestActions({
         </span>
       )}
       {!["CLOSED", "CANCELLED"].includes(request.status) && (
-        <Button
-          variant="outline"
-          className={`${buttonClass} ${compact ? "" : "col-span-2"} text-[#bc3649] hover:text-[#a42f40]`}
-          aria-label={`Cancel request: ${requestName}`}
-          onClick={() => {
-            setError("")
-            setConfirming(true)
+        <RowActionsMenu
+          triggerLabel={`More actions for ${requestName}`}
+          triggerClassName={
+            !compact ? "justify-self-start max-[560px]:size-11" : undefined
+          }
+          items={[
+            {
+              action: "cancel" as const,
+              label: "Cancel request",
+              className:
+                "text-[#c33945] focus:bg-[#fff0f1] focus:text-[#c33945]",
+            },
+          ]}
+          onAction={(action) => {
+            if (action === "cancel") {
+              setError("")
+              setConfirming(true)
+            }
           }}
-        >
-          <X size={15} aria-hidden="true" />
-          {!compact && "Cancel request"}
-          {compact && <HoverTooltip>Cancel request</HoverTooltip>}
-        </Button>
+        />
       )}
       {confirming && (
         <ConfirmationDialog
@@ -216,150 +223,116 @@ export function ClientRequestsTable({
 }) {
   const { formatDate } = useDatePreferences()
   return (
-    <>
-      <div className="overflow-x-auto rounded-xl bg-[#e7edf3] p-1.5 @max-[900px]:hidden">
-        <table className="w-full min-w-[920px] table-fixed border-separate border-spacing-y-2 text-left text-xs text-foreground">
-          <caption className="sr-only">Your service requests</caption>
-          <colgroup>
-            <col className="w-[76px]" />
-            <col className="w-[31%]" />
-            <col className="w-[28%]" />
-            <col className="w-[14%]" />
-            <col className="w-[18%]" />
-            <col className="w-[140px]" />
-          </colgroup>
-          <thead className="sr-only">
-            <tr>
-              <th scope="col">Service icon</th>
-              <th scope="col">Request</th>
-              <th scope="col">Service and package</th>
-              <th scope="col">Status</th>
-              <th scope="col">Submitted</th>
-              <th scope="col">Actions</th>
-            </tr>
-          </thead>
-          <AnimatedTableBody
-            items={requests}
-            viewKey={viewKey}
-            quickKey={quickKey}
-            columns={6}
-            rowClassName="h-[66px] align-middle"
-            emptyContent={emptyMessage}
-            onRowsSettled={onRowsSettled}
-            renderRow={(request) => {
-              const visual = requestRowVisual(request.service.name)
-              return (
-                <>
-                  <td className="rounded-l-xl border-y border-l border-[#e1e7ef] bg-[#f4f7fb] px-3 py-2 align-middle">
-                    <span
-                      className={`request-icon-float mx-auto grid size-11 place-items-center rounded-2xl border-2 border-current ${visual.iconClassName}`}
-                    >
-                      <ServiceIcon iconKey={visual.iconKey} size={22} />
-                    </span>
-                  </td>
-                  <td className="border-y border-[#e1e7ef] bg-[#f4f7fb] px-4 py-2 align-middle">
-                    <button
-                      onClick={() => onView(request)}
-                      className="cursor-pointer rounded text-left font-semibold text-[#17243b] hover:underline focus-visible:outline-2 focus-visible:outline-[#294c96]"
-                    >
-                      {request.title || request.service.name}
-                    </button>
-                    <p className="mt-1 mb-0 break-all text-[10px] text-[#738096]">
-                      {request.referenceNumber || request.id}
-                    </p>
-                  </td>
-                  <td className="border-y border-l border-[#e7ebf1] bg-[#f4f7fb] px-4 py-2 align-middle">
-                    <span className="block break-words font-medium">
-                      {request.service.name}
-                    </span>
-                    <span className="mt-1 block text-[11px] text-[#738096]">
-                      {request.packageName ||
-                        request.package?.name ||
-                        "Standard service"}
-                    </span>
-                  </td>
-                  <td className="border-y border-[#e1e7ef] bg-[#f4f7fb] px-4 py-2 align-middle">
-                    <RequestStatus status={request.status} />
-                  </td>
-                  <td className="border-y border-[#e1e7ef] bg-[#f4f7fb] px-4 py-2 align-middle text-[#52627a]">
-                    <time dateTime={request.createdAt}>
-                      {formatDate(request.createdAt)}
-                    </time>
-                  </td>
-                  <td className="rounded-r-xl border-y border-r border-[#e1e7ef] bg-[#f4f7fb] px-3 py-2 align-middle">
-                    <RequestActions
-                      request={request}
-                      onView={onView}
-                      onCancelled={onCancelled}
-                      compact
-                    />
-                  </td>
-                </>
-              )
-            }}
-          />
-        </table>
-      </div>
-      <div
-        className="hidden gap-3 @max-[900px]:grid"
-        role="list"
-        aria-label="Your service requests"
-      >
-        <AnimatedSlotGridBody
-          items={requests}
-          viewKey={viewKey}
-          quickKey={quickKey}
-          animateRows
-          getKey={requestKey}
-          bodyRole="presentation"
-          rowRole="listitem"
-          rowClassName={() => "pb-3"}
-          emptyContent={emptyMessage}
-          onRowsSettled={onRowsSettled}
-          renderRow={(request) => (
-            <article className="min-w-0 rounded-lg border border-[#e8ebef] bg-background p-4">
-              <div className="flex items-start justify-between gap-3">
-                <h2 className="m-0 min-w-0 break-words text-sm font-semibold">
-                  {request.service.name}
-                </h2>
-                <RequestStatus status={request.status} />
-              </div>
-              <p className="mt-1 mb-3 break-all text-[10px] text-[#738096]">
+    <ClientRowTable
+      items={requests}
+      viewKey={viewKey}
+      quickKey={quickKey}
+      getKey={requestKey}
+      caption="Your service requests"
+      ariaLabel="Your service requests"
+      columns={[
+        { className: "w-[76px]", label: "Service icon" },
+        { className: "w-[31%]", label: "Request" },
+        { className: "w-[28%]", label: "Service and package" },
+        { className: "w-[14%]", label: "Status" },
+        { className: "w-[18%]", label: "Submitted" },
+        { className: "w-[140px]", label: "Actions" },
+      ]}
+      emptyContent={emptyMessage}
+      onRowsSettled={onRowsSettled}
+      renderRow={(request) => {
+        const visual = requestRowVisual(request.service.name)
+        return (
+          <>
+            <td className="rounded-l-xl border-y border-l border-[#e1e7ef] bg-[#f4f7fb] px-3 py-2 align-middle">
+              <span
+                className={`request-icon-float mx-auto grid size-11 place-items-center rounded-2xl border-2 border-current ${visual.iconClassName}`}
+              >
+                <ServiceIcon iconKey={visual.iconKey} size={22} />
+              </span>
+            </td>
+            <td className="border-y border-[#e1e7ef] bg-[#f4f7fb] px-4 py-2 align-middle">
+              <button
+                onClick={() => onView(request)}
+                className="cursor-pointer rounded text-left font-semibold text-[#17243b] hover:underline focus-visible:outline-2 focus-visible:outline-[#294c96]"
+              >
+                {request.title || request.service.name}
+              </button>
+              <p className="mt-1 mb-0 break-all text-[10px] text-[#738096]">
                 {request.referenceNumber || request.id}
               </p>
-              <dl className="grid grid-cols-2 gap-3 text-xs">
-                <div>
-                  <dt className="text-[#738096]">Service</dt>
-                  <dd className="mt-1 ml-0 break-words font-medium">
-                    {request.service.name}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-[#738096]">Package</dt>
-                  <dd className="mt-1 ml-0 break-words font-medium">
-                    {request.packageName ||
-                      request.package?.name ||
-                      "Standard service"}
-                  </dd>
-                </div>
-              </dl>
-              <div className="mt-4 space-y-3 border-t border-[#eceef1] pt-3">
-                <time
-                  className="block text-[11px] whitespace-nowrap text-[#52627a]"
-                  dateTime={request.createdAt}
-                >
-                  {formatDate(request.createdAt)}
-                </time>
-                <RequestActions
-                  request={request}
-                  onView={onView}
-                  onCancelled={onCancelled}
-                />
-              </div>
-            </article>
-          )}
-        />
-      </div>
-    </>
+            </td>
+            <td className="border-y border-l border-[#e7ebf1] bg-[#f4f7fb] px-4 py-2 align-middle">
+              <span className="block break-words font-medium">
+                {request.service.name}
+              </span>
+              <span className="mt-1 block text-[11px] text-[#738096]">
+                {request.packageName ||
+                  request.package?.name ||
+                  "Standard service"}
+              </span>
+            </td>
+            <td className="border-y border-[#e1e7ef] bg-[#f4f7fb] px-4 py-2 align-middle">
+              <RequestStatus status={request.status} />
+            </td>
+            <td className="border-y border-[#e1e7ef] bg-[#f4f7fb] px-4 py-2 align-middle text-[#52627a]">
+              <time dateTime={request.createdAt}>
+                {formatDate(request.createdAt)}
+              </time>
+            </td>
+            <td className="rounded-r-xl border-y border-r border-[#e1e7ef] bg-[#f4f7fb] px-3 py-2 align-middle">
+              <RequestActions
+                request={request}
+                onView={onView}
+                onCancelled={onCancelled}
+                compact
+              />
+            </td>
+          </>
+        )
+      }}
+      renderMobileRow={(request) => (
+        <article className="min-w-0 rounded-lg border border-[#e8ebef] bg-background p-4">
+          <div className="flex items-start justify-between gap-3">
+            <h2 className="m-0 min-w-0 break-words text-sm font-semibold">
+              {request.service.name}
+            </h2>
+            <RequestStatus status={request.status} />
+          </div>
+          <p className="mt-1 mb-3 break-all text-[10px] text-[#738096]">
+            {request.referenceNumber || request.id}
+          </p>
+          <dl className="grid grid-cols-2 gap-3 text-xs">
+            <div>
+              <dt className="text-[#738096]">Service</dt>
+              <dd className="mt-1 ml-0 break-words font-medium">
+                {request.service.name}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[#738096]">Package</dt>
+              <dd className="mt-1 ml-0 break-words font-medium">
+                {request.packageName ||
+                  request.package?.name ||
+                  "Standard service"}
+              </dd>
+            </div>
+          </dl>
+          <div className="mt-4 space-y-3 border-t border-[#eceef1] pt-3">
+            <time
+              className="block text-[11px] whitespace-nowrap text-[#52627a]"
+              dateTime={request.createdAt}
+            >
+              {formatDate(request.createdAt)}
+            </time>
+            <RequestActions
+              request={request}
+              onView={onView}
+              onCancelled={onCancelled}
+            />
+          </div>
+        </article>
+      )}
+    />
   )
 }

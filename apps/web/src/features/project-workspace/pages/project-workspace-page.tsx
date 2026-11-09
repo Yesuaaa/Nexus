@@ -1,7 +1,5 @@
 "use client"
 
-import dynamic from "next/dynamic"
-import { PanelLoading } from "@/components/ui/panel-loading"
 import { useEffect, useMemo, useState } from "react"
 import {
   Archive,
@@ -10,7 +8,6 @@ import {
   CheckCircle2,
   FolderKanban,
   Layers3,
-  Plus,
 } from "lucide-react"
 import { contentClass } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
@@ -26,23 +23,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { canCreateProjectWorkspace } from "@/features/auth/model/permissions"
-import { usePortalAccount } from "@/features/auth/providers/account-context"
 import {
   listProjectWorkspaces,
   type ProjectWorkspaceSummary,
 } from "../api/project-workspace-api"
 import { WorkspaceListTable } from "../components/workspace-list-table"
-const NewWorkspaceDialog = dynamic(
-  () =>
-    import("./new-workspace-page").then((module) => module.NewWorkspaceDialog),
-  { loading: PanelLoading },
-)
 
 export function ProjectWorkspacePage() {
-  const account = usePortalAccount()
   const [workspaces, setWorkspaces] = useState<ProjectWorkspaceSummary[]>([])
-  const [canCreate, setCanCreate] = useState(false)
   const [sort, setSort] = useState<"recent" | "most-active">("recent")
   const [view, setView] = useState<"active" | "archive">("active")
   const [status, setStatus] = useState("all")
@@ -50,7 +38,6 @@ export function ProjectWorkspacePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [revision, setRevision] = useState(0)
-  const [createOpen, setCreateOpen] = useState(false)
 
   function refresh() {
     setLoading(true)
@@ -64,7 +51,6 @@ export function ProjectWorkspacePage() {
       .then((result) => {
         if (!controller.signal.aborted) {
           setWorkspaces(result.workspaces)
-          setCanCreate(result.canCreate)
           setError("")
         }
       })
@@ -224,16 +210,6 @@ export function ProjectWorkspacePage() {
             your department.
           </p>
         </div>
-        {canCreateProjectWorkspace(account) && canCreate && (
-          <Button
-            type="button"
-            onClick={() => setCreateOpen(true)}
-            className="h-[34px] text-xs max-[560px]:h-11"
-          >
-            <Plus size={15} />
-            New project
-          </Button>
-        )}
       </header>
 
       <KpiCards
@@ -409,20 +385,9 @@ export function ProjectWorkspacePage() {
                 No project workspaces yet
               </h3>
               <p className="m-0 max-w-md text-xs leading-5 text-[#738096]">
-                {canCreate
-                  ? "Start with a client-accepted booking, then choose a delivery plan for each service."
-                  : "Your department head can set up a workspace after a booking is approved."}
+                Workspaces will appear here once approved bookings are set up
+                for delivery.
               </p>
-              {canCreateProjectWorkspace(account) && canCreate && (
-                <Button
-                  type="button"
-                  onClick={() => setCreateOpen(true)}
-                  className="mt-4 text-xs"
-                >
-                  <Plus size={14} />
-                  New project
-                </Button>
-              )}
             </div>
           </div>
         ) : view === "archive" &&
@@ -462,11 +427,6 @@ export function ProjectWorkspacePage() {
           </p>
         )}
       </section>
-      <NewWorkspaceDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        onCreated={refresh}
-      />
     </main>
   )
 }

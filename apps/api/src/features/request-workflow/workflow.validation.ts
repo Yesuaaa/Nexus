@@ -49,7 +49,7 @@ export type WorkflowCommand =
     }
   | { type: "PREPARE_QUOTATION" }
   | { type: "FIXED_QUOTATION" }
-  | { type: "ACTIVATE_PROJECT" }
+  | { type: "ACTIVATE_PROJECT"; projectName?: string }
   | {
       type: "CREATE_QUOTATION"
       scope: string
@@ -253,10 +253,22 @@ export function parseAction(input: unknown) {
       break
     case "PREPARE_QUOTATION":
     case "FIXED_QUOTATION":
-    case "ACTIVATE_PROJECT":
     case "COMPLETE_SANDBOX_PAYMENT":
       command = { type: body.type }
       break
+    case "ACTIVATE_PROJECT": {
+      const projectName =
+        body.projectName === undefined
+          ? undefined
+          : textField(body.projectName, "project name", 120)
+      if (projectName !== undefined && projectName.length < 2)
+        fail("Enter a project name between 2 and 120 characters")
+      command = {
+        type: body.type,
+        ...(projectName === undefined ? {} : { projectName }),
+      }
+      break
+    }
     case "CREATE_QUOTATION": {
       if (
         !Array.isArray(body.deliverables) ||

@@ -12,6 +12,7 @@ import {
 import { contentClass } from "@/components/layout/styles"
 import { ClientPageHeader } from "@/components/layout/client-page-header"
 import { Button } from "@/components/ui/button"
+import { ClientTableSkeleton } from "@/components/ui/client-table-skeleton"
 import { KpiCards } from "@/components/ui/kpi-cards"
 import {
   useTableSearch,
@@ -283,12 +284,11 @@ export function ClientServiceRequestsPage() {
           )}
         </div>
         {loading && !resolvedKey ? (
-          <div
-            role="status"
-            className="grid min-h-64 place-items-center rounded-lg border border-[#e1e4ea] text-xs text-[#52627a]"
-          >
-            Loading your service requests…
-          </div>
+          <ClientTableSkeleton
+            label="your service requests"
+            columns={6}
+            gridClassName="grid grid-cols-[76px_minmax(180px,1.25fr)_minmax(180px,1.25fr)_minmax(120px,.8fr)_minmax(130px,.9fr)_140px] items-center gap-3.5"
+          />
         ) : error ? (
           <div
             role="alert"

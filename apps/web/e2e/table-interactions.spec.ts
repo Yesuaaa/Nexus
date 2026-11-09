@@ -77,6 +77,7 @@ function workspaceFixture(name: string, id: string): ProjectWorkspaceDetail {
           status: "ACTIVE",
           profileSpecialties: [],
           approvedAt: timestamp,
+          isTeamLead: false,
         })),
         plan: {
           phases: [

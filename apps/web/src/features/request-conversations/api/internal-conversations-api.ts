@@ -1,5 +1,7 @@
 import { apiRequest } from "@/features/auth/api/auth-api"
 import type { RequestMessage } from "./request-conversations-api"
+import type { ProjectConversationDetails } from "../model/project-conversation"
+import type { ProjectDeliverable } from "@/features/project-workspace/api/project-workspace-api"
 import { withUnreadCount } from "../model/unread-messages"
 
 export type InternalParticipant = {
@@ -29,7 +31,18 @@ export type InternalConversationList = {
 }
 
 export type InternalConversationHistory = {
-  conversation: InternalParticipant
+  conversation: Pick<
+    InternalParticipant,
+    "fullName" | "imageUrl" | "position" | "department"
+  >
+  participants?: { id: string; fullName: string | null }[]
+  project?: ProjectConversationDetails
+  canSubmitDeliverables?: boolean
+  deliverables?: Pick<
+    ProjectDeliverable,
+    "id" | "title" | "description" | "expectedFileType" | "deliveryStatus"
+  >[]
+  archived?: boolean
   canSend: boolean
   messages: RequestMessage[]
   nextCursor: string | null
@@ -64,13 +77,15 @@ export function listInternalConversations(
 }
 
 export function createInternalConversation(recipientId: string) {
-  return apiRequest<InternalConversationHistory & { id: string }>(
-    "/api/internal-conversations",
-    {
-      method: "POST",
-      body: JSON.stringify({ recipientId }),
-    },
-  )
+  return apiRequest<
+    InternalConversationHistory & {
+      id: string
+      conversation: InternalParticipant
+    }
+  >("/api/internal-conversations", {
+    method: "POST",
+    body: JSON.stringify({ recipientId }),
+  })
 }
 
 export function getInternalConversation(

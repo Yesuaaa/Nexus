@@ -175,6 +175,8 @@ model User {
   internalConversationsAsSecond     InternalConversation[]            @relation("InternalConversationSecondParticipant")
   internalConversationParticipants  InternalConversationParticipant[]
   internalMessages                  InternalMessage[]                 @relation("InternalMessageSender")
+  projectMessages                   ProjectMessage[]
+  projectConversationReads          ProjectConversationRead[]
   projects                          Project[]
   createdProjectWorkspaces          ProjectWorkspaceGroup[]           @relation("ProjectWorkspaceCreator")
   clientProjectWorkspaces           ProjectWorkspaceGroup[]           @relation("ProjectWorkspaceClient")
@@ -498,9 +500,38 @@ model Project {
   staff            ProjectStaff[]
   milestones       ProjectMilestone[]
   changeRequests   ProjectChangeRequest[]
+  messages         ProjectMessage[]
+  conversationReads ProjectConversationRead[]
 
   @@index([clientId, createdAt, id])
   @@index([workspaceGroupId])
+}
+
+model ProjectMessage {
+  id              String   @id @default(cuid())
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  senderId        String
+  sender          User     @relation(fields: [senderId], references: [id], onDelete: Restrict)
+  clientMessageId String   @db.VarChar(36)
+  body            String   @db.VarChar(4000)
+  clientVisible   Boolean  @default(true)
+  deliverable     Json?
+  createdAt       DateTime @default(now())
+
+  @@unique([projectId, senderId, clientMessageId])
+  @@index([projectId, createdAt, id])
+}
+
+model ProjectConversationRead {
+  projectId String
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt    DateTime
+
+  @@id([projectId, userId])
+  @@index([userId])
 }
 
 model ProjectWorkspaceGroup {
@@ -783,6 +814,7 @@ model WorkloadCapacity {
 }
 
 model ProjectStaff {
+  isTeamLead      Boolean   @default(false)
   weeklyHours     Float?
   allocationStart DateTime?
   allocationEnd   DateTime?

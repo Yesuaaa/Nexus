@@ -57,7 +57,16 @@ Superadmins can select **Change password** from another account's Actions menu, 
 
 ### Project Workspace
 
-- All active STAFF accounts can view active and archived projects and update work-plan tasks in their department.
+- The current Department Head can view active and archived projects for their department. Other active STAFF accounts can view and update work-plan tasks only in project workspaces where they are assigned through the project team.
 - Only the current Department Head for a project's department can set up or rename its workspace, cancel active projects, and approve staff assignments. Cancelled and completed projects appear in the Archive view and are excluded from active workload totals. Assignment continues through the existing STAFF_PROJECT workflow action.
 - Clients retain their existing project view; the internal workspace is unavailable to USER, ADMIN, and SUPERADMIN accounts.
 - Only active staff assigned to a workstream can upload or remove its deliverable attachment. The Department Head can edit deliverable requirements, approve or reject submissions (a rejection reason is required), and send approved files to the client. Submitted files remain staff-only until sent; clients can access files after that action.
+
+### Project conversations
+
+- Started projects automatically provide a chat for the owning client and currently assigned active staff. A single assigned staff member shares a chat with the client; multiple assigned staff members share a group chat with the client. Project staffing determines membership, including when members belong to an assigned team. Membership changes take effect immediately; being a Department Head or administrator alone does not grant access to these chats.
+- Project chats share the Messages conversation list with client booking chats, ordered by recent activity, and link from client project details and assigned staff workspaces. They use the existing message panel and conversation row design, support paginated history, message retry IDs, participant names, and per-account unread counts. Completed project chats appear in the list's Archive view.
+- Completing or cancelling a project automatically moves its conversation to **Archive** and prevents sending while retaining readable history for authorized participants. An on-hold project retains its chat. Archiving follows the project status rather than an individual task checkbox, so completing one task does not close the team's project conversation.
+- `/api/project-conversations` checks the owning client or current staff assignment for every list, history, read, and send request. Booking conversations between clients and Department Heads remain separate.
+- Assigned staff can submit a file and optional note to an existing deliverable from project chat, using the workspace upload endpoint and the same file validation. The workspace submission and staff-only chat card commit atomically. Retry upload IDs do not create duplicate files or cards. Private submission cards are excluded from client history, previews, cursors, and unread counts.
+- Department Heads retain deliverable review and client-sharing permissions. Sharing an approved deliverable publishes a separate client-visible card linking to the existing deliverable. Clients cannot submit work through the staff tool. Archived projects reject new submissions; existing delivery cards remain readable.
