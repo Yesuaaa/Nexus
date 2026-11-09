@@ -19,6 +19,12 @@ apps/api/src/generated/
 .DS_Store
 Thumbs.db
 
+# Postman local app workspace cache & metadata
+.postman/
+postman/collections/
+postman/environments/
+postman/globals/
+postman/auth-scripts.test.mjs
 
 # Local IDE state and machine-specific emulator shortcuts
 /.idea/
