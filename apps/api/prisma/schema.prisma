@@ -73,6 +73,22 @@ enum ProjectDeliverableStatus {
   SENT_TO_CLIENT
 }
 
+enum ProjectClientReviewStatus {
+  APPROVED
+  REVISION_REQUESTED
+}
+
+enum ProjectChangeRequestStatus {
+  PENDING
+  ACCEPTED
+  NOT_APPROVED
+}
+
+enum ProjectChangeRequestKind {
+  CHANGE
+  CANCELLATION
+}
+
 enum ProjectWorkspaceStructure {
   SEPARATE
   MULTI_WORKSTREAM
@@ -159,9 +175,14 @@ model User {
   internalConversationsAsSecond     InternalConversation[]            @relation("InternalConversationSecondParticipant")
   internalConversationParticipants  InternalConversationParticipant[]
   internalMessages                  InternalMessage[]                 @relation("InternalMessageSender")
+  projectMessages                   ProjectMessage[]
+  projectConversationReads          ProjectConversationRead[]
   projects                          Project[]
   createdProjectWorkspaces          ProjectWorkspaceGroup[]           @relation("ProjectWorkspaceCreator")
   clientProjectWorkspaces           ProjectWorkspaceGroup[]           @relation("ProjectWorkspaceClient")
+  projectChangeRequests             ProjectChangeRequest[]            @relation("ProjectChangeRequester")
+  reviewedProjectChangeRequests     ProjectChangeRequest[]            @relation("ProjectChangeReviewer")
+  projectDeliverableReviews         ProjectDeliverableClientReview[]  @relation("ProjectDeliverableReviewClient")
   workflowEvents                    WorkflowEvent[]
   workflowFiles                     WorkflowFile[]
   workflowApprovals                 WorkflowApproval[]
@@ -478,9 +499,39 @@ model Project {
   workspaceGroup   ProjectWorkspaceGroup? @relation(fields: [workspaceGroupId], references: [id], onDelete: SetNull)
   staff            ProjectStaff[]
   milestones       ProjectMilestone[]
+  changeRequests   ProjectChangeRequest[]
+  messages         ProjectMessage[]
+  conversationReads ProjectConversationRead[]
 
   @@index([clientId, createdAt, id])
   @@index([workspaceGroupId])
+}
+
+model ProjectMessage {
+  id              String   @id @default(cuid())
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  senderId        String
+  sender          User     @relation(fields: [senderId], references: [id], onDelete: Restrict)
+  clientMessageId String   @db.VarChar(36)
+  body            String   @db.VarChar(4000)
+  clientVisible   Boolean  @default(true)
+  deliverable     Json?
+  createdAt       DateTime @default(now())
+
+  @@unique([projectId, senderId, clientMessageId])
+  @@index([projectId, createdAt, id])
+}
+
+model ProjectConversationRead {
+  projectId String
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt    DateTime
+
+  @@id([projectId, userId])
+  @@index([userId])
 }
 
 model ProjectWorkspaceGroup {
@@ -600,26 +651,26 @@ model WorkflowRequirement {
 }
 
 model WorkflowFile {
-  id                     String                @id @default(cuid())
-  requestId              String
-  workflow               RequestWorkflow       @relation(fields: [requestId], references: [requestId], onDelete: Restrict)
-  uploaderId             String
-  uploader               User                  @relation(fields: [uploaderId], references: [id], onDelete: Restrict)
-  uploadId               String                @db.VarChar(36)
-  name                   String                @db.VarChar(160)
-  mimeType               String                @db.VarChar(100)
-  size                   Int
-  sha256                 String                @db.VarChar(64)
-  clientVisible          Boolean               @default(true)
-  data                   Bytes
-  createdAt              DateTime              @default(now())
-  requirements           WorkflowRequirement[]
-  requirementAttachments WorkflowRequirement[] @relation("RequirementAttachments")
-  agreements             WorkflowAgreement[]   @relation("AgreementDocument")
-  signatures             WorkflowAgreement[]   @relation("AgreementSignature")
-  payments               WorkflowPayment[]
-  deliverableMilestone   ProjectMilestone?
-
+  id                       String                           @id @default(cuid())
+  requestId                String
+  workflow                 RequestWorkflow                  @relation(fields: [requestId], references: [requestId], onDelete: Restrict)
+  uploaderId               String
+  uploader                 User                             @relation(fields: [uploaderId], references: [id], onDelete: Restrict)
+  uploadId                 String                           @db.VarChar(36)
+  name                     String                           @db.VarChar(160)
+  mimeType                 String                           @db.VarChar(100)
+  size                     Int
+  sha256                   String                           @db.VarChar(64)
+  clientVisible            Boolean                          @default(true)
+  data                     Bytes
+  createdAt                DateTime                         @default(now())
+  requirements             WorkflowRequirement[]
+  requirementAttachments   WorkflowRequirement[]            @relation("RequirementAttachments")
+  agreements               WorkflowAgreement[]              @relation("AgreementDocument")
+  signatures               WorkflowAgreement[]              @relation("AgreementSignature")
+  payments                 WorkflowPayment[]
+  deliverableMilestone     ProjectMilestone?
+  clientDeliverableReviews ProjectDeliverableClientReview[]
   @@unique([requestId, uploaderId, uploadId])
   @@index([requestId, createdAt])
 }
@@ -763,6 +814,7 @@ model WorkloadCapacity {
 }
 
 model ProjectStaff {
+  isTeamLead      Boolean   @default(false)
   weeklyHours     Float?
   allocationStart DateTime?
   allocationEnd   DateTime?
@@ -779,25 +831,63 @@ model ProjectStaff {
 }
 
 model ProjectMilestone {
-  id               String                   @id @default(cuid())
+  id               String                           @id @default(cuid())
   projectId        String
-  project          Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  title            String                   @db.VarChar(300)
-  description      String?                  @db.VarChar(4000)
-  expectedFileType String?                  @db.VarChar(50)
-  deliveryStatus   ProjectDeliverableStatus @default(NOT_SUBMITTED)
-  rejectionReason  String?                  @db.VarChar(2000)
+  project          Project                          @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  title            String                           @db.VarChar(300)
+  description      String?                          @db.VarChar(4000)
+  expectedFileType String?                          @db.VarChar(50)
+  deliveryStatus   ProjectDeliverableStatus         @default(NOT_SUBMITTED)
+  rejectionReason  String?                          @db.VarChar(2000)
   reviewedById     String?
   reviewedAt       DateTime?
   sentToClientById String?
   sentToClientAt   DateTime?
-  workflowFileId   String?                  @unique
-  workflowFile     WorkflowFile?            @relation(fields: [workflowFileId], references: [id], onDelete: SetNull)
+  workflowFileId   String?                          @unique
+  workflowFile     WorkflowFile?                    @relation(fields: [workflowFileId], references: [id], onDelete: SetNull)
   completedAt      DateTime?
-  displayOrder     Int                      @default(0)
-  updatedAt        DateTime                 @default(now()) @updatedAt
+  displayOrder     Int                              @default(0)
+  updatedAt        DateTime                         @default(now()) @updatedAt
+  clientReviews    ProjectDeliverableClientReview[]
 
   @@index([projectId, displayOrder])
+}
+
+model ProjectDeliverableClientReview {
+  id             String                    @id @default(cuid())
+  milestoneId    String
+  milestone      ProjectMilestone          @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  workflowFileId String?
+  workflowFile   WorkflowFile?             @relation(fields: [workflowFileId], references: [id], onDelete: SetNull)
+  clientId       String
+  client         User                      @relation("ProjectDeliverableReviewClient", fields: [clientId], references: [id], onDelete: Restrict)
+  status         ProjectClientReviewStatus
+  note           String?                   @db.VarChar(2000)
+  createdAt      DateTime                  @default(now())
+
+  @@unique([workflowFileId, clientId])
+  @@index([milestoneId, createdAt])
+  @@index([workflowFileId])
+}
+
+model ProjectChangeRequest {
+  id            String                     @id @default(cuid())
+  projectId     String
+  project       Project                    @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  requestedById String
+  requestedBy   User                       @relation("ProjectChangeRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+  kind          ProjectChangeRequestKind   @default(CHANGE)
+  details       String                     @db.VarChar(4000)
+  status        ProjectChangeRequestStatus @default(PENDING)
+  responseNote  String?                    @db.VarChar(2000)
+  reviewedById  String?
+  reviewedBy    User?                      @relation("ProjectChangeReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt    DateTime?
+  createdAt     DateTime                   @default(now())
+  updatedAt     DateTime                   @updatedAt
+
+  @@index([projectId, status, createdAt])
+  @@index([projectId, kind, status, createdAt], map: "project_change_request_pending_lookup_idx")
 }
 
 model SpecialistPortfolioProject {

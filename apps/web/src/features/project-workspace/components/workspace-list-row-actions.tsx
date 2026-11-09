@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useState } from "react"
-import { Eye, Pencil, X } from "lucide-react"
+import { Eye, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -15,6 +15,7 @@ import {
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Input } from "@/components/ui/input"
 import { rowActionButton } from "@/components/ui/row-action-styles"
+import { RowActionsMenu } from "@/components/ui/row-actions-menu"
 import { cn } from "@/lib/utils"
 import {
   cancelProjectWorkspace,
@@ -104,18 +105,22 @@ export function WorkspaceListRowActions({
               <Pencil size={15} strokeWidth={1.8} aria-hidden="true" />
               <HoverTooltip>Edit project</HoverTooltip>
             </button>
-            <button
-              type="button"
-              className={cn(
-                rowActionButton,
-                "text-[#b42318] max-[560px]:size-11",
-              )}
-              aria-label={`Cancel ${workspace.name}`}
-              onClick={() => openDialog("cancel")}
-            >
-              <X size={16} strokeWidth={1.8} aria-hidden="true" />
-              <HoverTooltip>Cancel project</HoverTooltip>
-            </button>
+            <RowActionsMenu
+              triggerLabel={`More actions for ${workspace.name}`}
+              triggerClassName="max-[560px]:size-11"
+              items={[
+                {
+                  action: "cancel" as const,
+                  label: "Cancel project",
+                  className:
+                    "text-[#c33945] focus:bg-[#fff0f1] focus:text-[#c33945]",
+                },
+              ]}
+              disabled={busy}
+              onAction={(action) => {
+                if (action === "cancel") openDialog("cancel")
+              }}
+            />
           </>
         )}
       </div>

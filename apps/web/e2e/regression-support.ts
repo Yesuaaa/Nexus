@@ -333,6 +333,7 @@ export async function mockApi(
     if (
       method === "GET" &&
       (pathname === "/api/request-conversations" ||
+        pathname === "/api/project-conversations" ||
         pathname === "/api/internal-conversations")
     ) {
       await route.fulfill({
@@ -348,10 +349,11 @@ export async function mockApi(
       return
     }
 
-    // The portal topbar now reads both inboxes to calculate unread messages.
+    // The portal topbar reads each inbox to calculate unread messages.
     // Feature specs can override these exact list routes with populated fixtures.
     if (
       (pathname === "/api/request-conversations" ||
+        pathname === "/api/project-conversations" ||
         pathname === "/api/internal-conversations") &&
       method === "GET"
     ) {

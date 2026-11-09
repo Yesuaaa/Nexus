@@ -19,6 +19,7 @@ import type { ConversationRealtime } from "./features/request-conversations/requ
 import { requestWorkflowRouter } from "./features/request-workflow/workflow.controller.js"
 import { projectsRouter } from "./features/projects/projects.controller.js"
 import { projectWorkspaceRouter } from "./features/project-workspace/project-workspace.controller.js"
+import { projectConversationsRouter } from "./features/project-conversations/project-conversations.controller.js"
 import { devErrorInterceptor, handleError } from "./shared/error-handler.js"
 
 import { workloadRouter } from "./features/workload/workload.controller.js"
@@ -79,6 +80,7 @@ export function createApp(
   app.use("/api/request-inbox", requestInboxRouter)
   app.use("/api/projects", projectsRouter)
   app.use("/api/project-workspace", projectWorkspaceRouter)
+  app.use("/api/project-conversations", projectConversationsRouter)
   app.use("/api/workload", workloadRouter)
   app.use(
     "/api/request-conversations",

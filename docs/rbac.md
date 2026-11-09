@@ -10,30 +10,38 @@ Acceptance records the responsible department and opens [request messaging](feat
 
 Superadmins can restore soft-deleted accounts through **Account Management → Trash → Actions → Restore account**. `POST /api/users/:id/restore` uses the same `accounts:status-basic` / `accounts:status-privileged` permissions as account status changes. It returns `{ "user": ... }`, clears `accountDeletedAt`, and revokes stale sessions atomically. The account returns to the main list as **inactive**, keeping its existing password, role, details and department/team assignments. Reactivate it separately to allow sign-in. Self-targeting returns `403`, missing or permanently deleted accounts return `404`, and accounts outside Trash or changed concurrently return `409`.
 
-Client Management (`/clients`) and all `/api/clients/:id` details, service-request and project reads require `clients:read` and are available to Admin only. Superadmin, Staff and User cannot access it. The module is read-only; it exposes no client creation, editing or deletion operations. See [Client Management](features/client-management.md) for the read contracts and database relationships.
+Client Management (`/clients`) and `/api/clients/:id` directory details require `clients:read` and are available to Admin only. Superadmin, Staff and User cannot access that directory. Admin's directory view remains read-only and exposes no client creation, editing or deletion operations. A client (`USER`) separately sees **My Projects** at `/projects` after a project is activated for their own account. `GET /api/projects` and project detail access are owner-scoped; clients see aggregate progress and only deliverables explicitly sent to them. They can edit the project brief and request a project change while the project is in progress or on hold. They can also submit a cancellation request with a reason; the project remains active until its Department Head approves it. Approval marks the project and its service request cancelled, while declining requires a response note. On each shared deliverable, the client may approve or request a revision with a reason. These client project operations do not grant access to the Admin client directory or other clients' records. See [Client Management](features/client-management.md) for directory contracts and database relationships.
+
+Project contributors retain staff access to their project workspace. Only the active Department Head assigned to the project's accepted department can accept or decline a client's project change or cancellation request; a decline requires a response note. Approving a cancellation ends the project and service request. Clients can read the resulting decision and note on their own project. Staff milestone details remain hidden from client project responses; clients receive only aggregate progress, project brief information and explicitly shared deliverables. Preview and download endpoints enforce the same project ownership and sharing checks as the deliverable list.
 
 Roles are fixed in the Prisma `Role` enum. Permissions are assigned by the API in `apps/api/src/features/auth/auth.permissions.ts`; there is no per-account permission table or permission editor. The API returns each account's effective permissions in authentication and user responses. Portal navigation and controls use those values, while the API enforces every protected operation.
 
 The frontend's Department Management page (`/departments`) is available only to Admin accounts with the `departments:read` permission. Superadmin, Staff, and Client accounts have no Departments navigation link and are redirected to the dashboard if they open that URL. This page restriction does not change the backend's department API permissions.
 
-| Permission                                                             | User |        Staff         | Admin | Superadmin |
-| ---------------------------------------------------------------------- | :--: | :------------------: | :---: | :--------: |
-| View Dashboard                                                         |  ✓   |          ✓           |   ✓   |     ✓      |
-| Open Staff Workload and manage department capacity/assignments         |      | Department head only |       |            |
-| View own account and change own password                               |  ✓   |          ✓           |   ✓   |     ✓      |
-| View client directory, details, requests and projects (`clients:read`) |      |                      |   ✓   |            |
-| Open Department Management page                                        |      |                      |   ✓   |            |
-| Use Employee Management and Service Management pages and APIs          |      |                      |   ✓   |            |
-| Use Account Management and its account APIs                            |      |                      |       |     ✓      |
-| View accounts (`accounts:read`)                                        |      |                      |       |     ✓      |
-| Change other accounts' passwords (`accounts:reset-password`)           |      |                      |       |     ✓      |
-| Create User or Staff accounts (`accounts:create-basic`)                |      |                      |       |     ✓      |
-| Change User or Staff roles (`accounts:assign-basic`)                   |      |                      |       |     ✓      |
-| Create Admin or Superadmin accounts (`accounts:create-privileged`)     |      |                      |       |     ✓      |
-| Change Admin or Superadmin roles (`accounts:assign-privileged`)        |      |                      |       |     ✓      |
-| Change User or Staff status (`accounts:status-basic`)                  |      |                      |       |     ✓      |
-| Change Admin or Superadmin status (`accounts:status-privileged`)       |      |                      |       |     ✓      |
-| Delete inactive accounts                                               |      |                      |       |     ✓      |
+| Permission                                                             | User | Staff | Admin | Superadmin |
+| ---------------------------------------------------------------------- | :--: | :---: | :---: | :--------: |
+| View Dashboard                                                         |  ✓   |   ✓   |   ✓   |     ✓      |
+| Open Staff Workload and manage department capacity/assignments         |      | Head  |       |            |
+| View own account and change own password                               |  ✓   |   ✓   |   ✓   |     ✓      |
+| View client directory, details, requests and projects (`clients:read`) |      |       |   ✓   |            |
+| View own activated projects and shared deliverables                    |  ✓   |       |       |            |
+| Edit own project brief and request project changes                     |  ✓   |       |       |            |
+| Request project cancellation with a reason                             |  ✓   |       |       |            |
+| Approve or request revision on own shared deliverables                 |  ✓   |       |       |            |
+| Review change requests for the assigned department's projects          |      | Head  |       |            |
+| Review project cancellation requests for the assigned department       |      | Head  |       |            |
+| Open Department Management page                                        |      |       |   ✓   |            |
+| Use Employee Management and Service Management pages and APIs          |      |       |   ✓   |            |
+| Use Account Management and its account APIs                            |      |       |       |     ✓      |
+| View accounts (`accounts:read`)                                        |      |       |       |     ✓      |
+| Change other accounts' passwords (`accounts:reset-password`)           |      |       |       |     ✓      |
+| Create User or Staff accounts (`accounts:create-basic`)                |      |       |       |     ✓      |
+| Change User or Staff roles (`accounts:assign-basic`)                   |      |       |       |     ✓      |
+| Create Admin or Superadmin accounts (`accounts:create-privileged`)     |      |       |       |     ✓      |
+| Change Admin or Superadmin roles (`accounts:assign-privileged`)        |      |       |       |     ✓      |
+| Change User or Staff status (`accounts:status-basic`)                  |      |       |       |     ✓      |
+| Change Admin or Superadmin status (`accounts:status-privileged`)       |      |       |       |     ✓      |
+| Delete inactive accounts                                               |      |       |       |     ✓      |
 
 Service Management is available to Admin accounts. Viewing the page and its API requires `services:read`; creating, editing, activating, and deactivating services requires `services:manage`. The `/api/services/available` endpoint is available to any authenticated account and returns only active services for new client-request forms.
 
@@ -49,7 +57,16 @@ Superadmins can select **Change password** from another account's Actions menu, 
 
 ### Project Workspace
 
-- All active STAFF accounts can view active and archived projects and update work-plan tasks in their department.
+- The current Department Head can view active and archived projects for their department. Other active STAFF accounts can view and update work-plan tasks only in project workspaces where they are assigned through the project team.
 - Only the current Department Head for a project's department can set up or rename its workspace, cancel active projects, and approve staff assignments. Cancelled and completed projects appear in the Archive view and are excluded from active workload totals. Assignment continues through the existing STAFF_PROJECT workflow action.
 - Clients retain their existing project view; the internal workspace is unavailable to USER, ADMIN, and SUPERADMIN accounts.
 - Only active staff assigned to a workstream can upload or remove its deliverable attachment. The Department Head can edit deliverable requirements, approve or reject submissions (a rejection reason is required), and send approved files to the client. Submitted files remain staff-only until sent; clients can access files after that action.
+
+### Project conversations
+
+- Started projects automatically provide a chat for the owning client and currently assigned active staff. A single assigned staff member shares a chat with the client; multiple assigned staff members share a group chat with the client. Project staffing determines membership, including when members belong to an assigned team. Membership changes take effect immediately; being a Department Head or administrator alone does not grant access to these chats.
+- Project chats share the Messages conversation list with client booking chats, ordered by recent activity, and link from client project details and assigned staff workspaces. They use the existing message panel and conversation row design, support paginated history, message retry IDs, participant names, and per-account unread counts. Completed project chats appear in the list's Archive view.
+- Completing or cancelling a project automatically moves its conversation to **Archive** and prevents sending while retaining readable history for authorized participants. An on-hold project retains its chat. Archiving follows the project status rather than an individual task checkbox, so completing one task does not close the team's project conversation.
+- `/api/project-conversations` checks the owning client or current staff assignment for every list, history, read, and send request. Booking conversations between clients and Department Heads remain separate.
+- Assigned staff can submit a file and optional note to an existing deliverable from project chat, using the workspace upload endpoint and the same file validation. The workspace submission and staff-only chat card commit atomically. Retry upload IDs do not create duplicate files or cards. Private submission cards are excluded from client history, previews, cursors, and unread counts.
+- Department Heads retain deliverable review and client-sharing permissions. Sharing an approved deliverable publishes a separate client-visible card linking to the existing deliverable. Clients cannot submit work through the staff tool. Archived projects reject new submissions; existing delivery cards remain readable.
