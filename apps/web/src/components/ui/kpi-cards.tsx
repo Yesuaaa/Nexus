@@ -19,10 +19,12 @@ function MiniGraph({
   values,
   label,
   color,
+  inline = false,
 }: {
   values: number[]
   label: string
   color: string
+  inline?: boolean
 }) {
   const series = values.length > 1 ? values : [values[0] ?? 0, values[0] ?? 0]
   const width = 240
@@ -44,7 +46,7 @@ function MiniGraph({
 
   return (
     <svg
-      className="mt-3 h-10 w-full overflow-visible"
+      className={cn("w-full overflow-visible", inline ? "h-8" : "mt-3 h-10")}
       viewBox={`0 0 ${width} 42`}
       preserveAspectRatio="none"
       role="img"
@@ -94,6 +96,10 @@ export function KpiCards({
     >
       {metrics.map((metric) => {
         const Icon = metric.icon
+        const hasMiniGraph = Boolean(
+          metric.chartValues && metric.chartLabel && metric.chartColor,
+        )
+        const hasChart = Boolean(metric.chart || hasMiniGraph)
 
         return (
           <article
@@ -120,7 +126,7 @@ export function KpiCards({
                   <div
                     className={cn(
                       "animate-pulse rounded-md bg-[#edf1f4] motion-reduce:animate-none",
-                      metric.chart
+                      hasChart
                         ? "absolute top-[41px] right-4 h-8 w-[72px]"
                         : "mt-3 h-10",
                     )}
@@ -132,7 +138,7 @@ export function KpiCards({
                 <p
                   className={cn(
                     "mt-3 mb-0 text-2xl leading-none font-semibold tracking-[-0.025em] text-foreground tabular-nums",
-                    showCharts && metric.chart && "pr-[84px]",
+                    showCharts && hasChart && "pr-[84px]",
                   )}
                 >
                   {unavailable
@@ -154,21 +160,20 @@ export function KpiCards({
                     )}
                   </div>
                 )}
-                {showCharts &&
-                  !metric.chart &&
-                  metric.chartValues &&
-                  metric.chartLabel &&
-                  metric.chartColor && (
+                {showCharts && !metric.chart && hasMiniGraph && (
+                  <div className="absolute top-[41px] right-4 h-8 w-[72px]">
                     <MiniGraph
-                      values={unavailable ? [] : metric.chartValues}
+                      values={unavailable ? [] : (metric.chartValues ?? [])}
                       label={
                         unavailable
                           ? "Chart data unavailable"
-                          : metric.chartLabel
+                          : (metric.chartLabel ?? "KPI trend")
                       }
-                      color={metric.chartColor}
+                      color={metric.chartColor ?? "#4169bd"}
+                      inline
                     />
-                  )}
+                  </div>
+                )}
               </>
             )}
           </article>
