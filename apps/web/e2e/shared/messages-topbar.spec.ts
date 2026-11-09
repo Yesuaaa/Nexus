@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import { configureRegressionTest, restoreSession } from "./regression-support"
+import { configureRegressionTest, restoreSession } from "../regression-support"
 
 configureRegressionTest()
 

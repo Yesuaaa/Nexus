@@ -3,8 +3,8 @@ import {
   configureRegressionTest,
   live,
   restoreSession,
-} from "./regression-support"
-import type { ProjectWorkspaceDetail } from "../src/features/project-workspace/api/project-workspace-api"
+} from "../regression-support"
+import type { ProjectWorkspaceDetail } from "../../src/features/project-workspace/api/project-workspace-api"
 
 configureRegressionTest()
 

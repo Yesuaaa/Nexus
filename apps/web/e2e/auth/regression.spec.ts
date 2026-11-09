@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import type { ServiceInput } from "../src/features/services/api/services-api"
+import type { ServiceInput } from "../../src/features/services/api/services-api"
 import {
   configureRegressionTest,
   expiredAccess,
@@ -9,7 +9,7 @@ import {
   restoreSession,
   storedTokens,
   testAccounts,
-} from "./regression-support"
+} from "../regression-support"
 
 configureRegressionTest()
 

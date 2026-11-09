@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import { restoreSession } from "./regression-support"
+import { restoreSession } from "../regression-support"
 
 for (const route of ["/login", "/register"]) {
   test(`${route} renders with styles allowed by CSP`, async ({ page }) => {

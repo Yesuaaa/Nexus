@@ -4,7 +4,7 @@ import {
   live,
   restoreSession,
   storedTokens,
-} from "./regression-support"
+} from "../regression-support"
 
 configureRegressionTest()
 test.skip(live, "Portal regressions use isolated API fixtures")

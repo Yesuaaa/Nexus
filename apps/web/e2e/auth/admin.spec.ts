@@ -5,7 +5,7 @@ import {
   accountFor,
   managementRoutes,
   restoreSession,
-} from "./regression-support"
+} from "../regression-support"
 
 configureRegressionTest()
 
