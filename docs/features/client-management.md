@@ -1,8 +1,8 @@
 # Client Management
 
-The directory at `/clients` gives Admin accounts access to create, edit, delete and view client accounts. Superadmin, Staff and User accounts cannot access it. It follows Employee Management's layout with name/email search, Active/Inactive filtering, sorting and server pagination (10 records per page). The default order is newest registered first; an account ID tie-breaker keeps equal values ordered consistently. Narrow screens use stacked rows and a sort selector.
+The directory at `/clients` gives Admin accounts access to create and view client accounts. Superadmin, Staff and User accounts cannot access it. It follows Employee Management's layout with name/email search, Active/Inactive filtering, sorting and server pagination (10 records per page). The default order is newest registered first; an account ID tie-breaker keeps equal values ordered consistently. Narrow screens use stacked rows and a sort selector.
 
-The eye action opens the client's details drawer. The row menu can open Service requests or Projects directly. The drawer loads current account details, displays related record counts in Overview, and provides working tabs with paginated records. It preserves directory filters, sorting and page, closes with Escape or its close button, and restores focus to the row action. On phones it fills the screen. Each read has loading, empty and retryable error states; superseded responses cannot overwrite a newer selection. The header provides Create Client; row actions provide editing and deletion. Forms use the existing admin dialog styling and retain entered values on failure. Successful changes refresh the directory and display a confirmation toast.
+The eye action opens the client's details drawer. The drawer loads current account details, displays related record counts in Overview, and provides working tabs with paginated records. It preserves directory filters, sorting and page, closes with Escape or its close button, and restores focus to the row action. On phones it fills the screen. Each read has loading, empty and retryable error states; superseded responses cannot overwrite a newer selection. The header provides Create Client; rows provide view details only. Forms use the existing admin dialog styling and retain entered values on failure. Successful creation refreshes the directory and displays a confirmation toast.
 
 ## Account fields
 
@@ -59,12 +59,11 @@ The migration adds two enums, two tables, indexes and foreign keys without chang
 
 ## Verification
 
-`apps/api/src/client-integration.test.ts` uses a temporary PGlite database to exercise authentication, read permissions, safe field projection, filtering, sorting, pagination, related-record ownership, input validation, admin-only mutations, duplicate emails, password preservation, session revocation and deletion protection. `apps/web/e2e/clients.spec.ts` checks directory controls, related tabs, states, focus and role restrictions. No production database is seeded or modified by these tests.
+`apps/api/src/client-integration.test.ts` uses a temporary PGlite database to exercise authentication, read permissions, safe field projection, filtering, sorting, pagination, related-record ownership, input validation, admin-only creation, duplicate emails and mutation restrictions. `apps/web/e2e/clients.spec.ts` checks directory controls, related tabs, states, focus and role restrictions. No production database is seeded or modified by these tests.
 
 ## Client account changes
 
 - `POST /api/clients` creates a USER account from fullName (2–100 characters), normalized email, contactNumber (7–20 characters, digits/spaces/hyphens with an optional leading +), isActive and an initial password (at least 12 characters, up to 1024 UTF-8 bytes). Passwords use the existing scrypt hashing implementation.
-- `PATCH /api/clients/:id` updates the same profile fields and status, without changing passwords or roles. Inactive status revokes existing sessions.
-- `DELETE /api/clients/:id` retires the account with accountDeletedAt and isActive=false, revokes sessions, and excludes it from the directory. Email remains reserved. Linked service requests or projects prevent deletion with 409; use inactive status instead.
+- `PATCH /api/clients/:id` and `DELETE /api/clients/:id` are reserved and unavailable to Admin accounts. Client details, status and account deletion are not editable from Client Management.
 
-All mutations require an authenticated Admin. Other roles receive 403. Missing/deleted/non-client targets return 404. Duplicate emails (case-insensitive across all accounts, including retired accounts) return 409. Validation errors return 400. Serializable transactions protect changes; concurrent conflicts return 409 for retry. Responses never expose credentials. No database migration is needed.
+Client creation requires an authenticated Admin. Other roles receive 403. Missing/deleted/non-client targets return 404. Duplicate emails (case-insensitive across all accounts, including retired accounts) return 409. Validation errors return 400. Serializable transactions protect creation; responses never expose credentials. No database migration is needed.

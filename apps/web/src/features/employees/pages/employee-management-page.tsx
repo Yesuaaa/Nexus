@@ -2,10 +2,14 @@
 
 import { Trash2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
+import dynamic from "next/dynamic"
+import { PanelLoading } from "@/components/ui/panel-loading"
 import { PlusIcon } from "@/components/layout/icons"
 import { contentClass, focusRing } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
+import { useTableSearch } from "@/components/ui/use-table-search"
+import { TableSearchStatus } from "@/components/ui/table-search-status"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
 import { SearchEmptyState } from "@/components/ui/search-empty-state"
 import { SearchField } from "@/components/ui/search-field"
@@ -21,14 +25,9 @@ import {
   listDepartments,
   type Department,
 } from "@/features/departments/api/departments-api"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { hasPermission, Permissions } from "@/features/auth/model/permissions"
-import { ManageMembersDrawer } from "@/features/departments/components/manage-members-drawer"
-import { EmployeeDetailsDrawer } from "../components/employee-details-drawer"
-import { EmployeeLoginDialog } from "../components/employee-login-dialog"
-import { EmployeeFormDialog } from "../components/employee-form-dialog"
-import { EmployeeStatusDialog } from "../components/employee-status-dialog"
 import { EmployeeTable } from "../components/employee-table"
 import {
   setEmployeeLoginStatus,
@@ -41,6 +40,34 @@ import {
   type EmploymentType,
 } from "../api/employees-api"
 
+const ManageMembersDrawer = dynamic(
+  () =>
+    import("@/features/departments/components/manage-members-drawer").then(
+      (module) => module.ManageMembersDrawer,
+    ),
+  { loading: PanelLoading },
+)
+const EmployeeDetailsDrawer = dynamic(
+  () =>
+    import("../components/employee-details-drawer").then(
+      (module) => module.EmployeeDetailsDrawer,
+    ),
+  { loading: PanelLoading },
+)
+const EmployeeLoginDialog = dynamic(
+  () =>
+    import("../components/employee-login-dialog").then(
+      (module) => module.EmployeeLoginDialog,
+    ),
+  { loading: PanelLoading },
+)
+const EmployeeFormDialog = dynamic(
+  () =>
+    import("../components/employee-form-dialog").then(
+      (module) => module.EmployeeFormDialog,
+    ),
+  { loading: PanelLoading },
+)
 const employmentTypes: { value: EmploymentType | ""; label: string }[] = [
   { value: "", label: "All Types" },
   { value: "FULL_TIME", label: "Full Time" },
@@ -54,6 +81,12 @@ const statuses: { value: EmploymentStatus | ""; label: string }[] = [
   { value: "ON_LEAVE", label: "On Leave" },
   { value: "INACTIVE", label: "Inactive" },
 ]
+
+function matchesTableSearch(item: Employee, query: string) {
+  return [item.fullName, item.employeeId, item.email].some((value) =>
+    value?.toLowerCase().includes(query),
+  )
+}
 
 export function EmployeeManagementPage() {
   const actor = usePortalAccount()
@@ -74,14 +107,14 @@ export function EmployeeManagementPage() {
   const [page, setPage] = useState(1)
   const [animateRows, setAnimateRows] = useState(true)
   const [search, setSearch] = useState("")
-  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const query = search.trim()
   const [departmentId, setDepartmentId] = useState("")
   const [employmentType, setEmploymentType] = useState<EmploymentType | "">("")
   const [status, setStatus] = useState<EmploymentStatus | "">("")
-  const [error, setError] = useState("")
+  const [errorMessage, setError] = useState("")
+  const [errorRequestKey, setErrorRequestKey] = useState("")
   const [resolvedListKey, setResolvedListKey] = useState("")
   const [resolvedViewKey, setResolvedViewKey] = useState("")
-  const [resolvedSearch, setResolvedSearch] = useState("")
   const [departments, setDepartments] = useState<Department[]>([])
   const [departmentsError, setDepartmentsError] = useState("")
   const [departmentsLoading, setDepartmentsLoading] = useState(true)
@@ -94,7 +127,6 @@ export function EmployeeManagementPage() {
     null,
   )
   const [returnEmployeeId, setReturnEmployeeId] = useState<string | null>(null)
-  const [statusTarget, setStatusTarget] = useState<Employee | null>(null)
   const [createLoginTarget, setCreateLoginTarget] = useState<Employee | null>(
     null,
   )
@@ -105,7 +137,7 @@ export function EmployeeManagementPage() {
   const [loginActionPending, setLoginActionPending] = useState(false)
   const [loginActionError, setLoginActionError] = useState("")
   const listRequestKey = JSON.stringify({
-    search: debouncedSearch,
+    search: query,
     departmentId,
     employmentType,
     status,
@@ -114,33 +146,45 @@ export function EmployeeManagementPage() {
     archiveView,
   })
   const viewKey = JSON.stringify({
-    search: debouncedSearch,
+    search: query,
     departmentId,
     employmentType,
     status,
     page,
     archiveView,
   })
+  const error = errorRequestKey === listRequestKey ? errorMessage : ""
   const isLoading =
-    resolvedListKey !== listRequestKey || search.trim() !== debouncedSearch
+    resolvedListKey !== listRequestKey || search.trim() !== query
+
+  const searchScope = JSON.stringify([
+    departmentId,
+    employmentType,
+    status,
+    archiveView,
+    revision,
+  ])
+  const { acceptRows, preview, previewing } = useTableSearch<Employee>({
+    search: query,
+    scope: searchScope,
+    page,
+    matches: matchesTableSearch,
+  })
+  const tableViewKey = previewing
+    ? JSON.stringify([searchScope, query, 1])
+    : resolvedViewKey
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(search.trim())
-      setPage(1)
-    }, 150)
-    return () => clearTimeout(timer)
-  }, [search])
-
-  useEffect(() => {
+    const controller = new AbortController()
     let active = true
     listEmployees({
-      search: debouncedSearch,
+      search: query,
       departmentId,
       employmentType,
       status,
       page,
       archived: archiveView,
+      signal: controller.signal,
     })
       .then((result) => {
         if (active) {
@@ -152,16 +196,17 @@ export function EmployeeManagementPage() {
             setPage(lastPage)
             return
           }
+          acceptRows(result.employees)
           pendingResult.current = result
           setEmployees(result.employees)
           setError("")
           setResolvedListKey(listRequestKey)
           setResolvedViewKey(viewKey)
-          setResolvedSearch(debouncedSearch)
         }
       })
       .catch((reason: unknown) => {
         if (active) {
+          setErrorRequestKey(listRequestKey)
           setError(
             reason instanceof Error
               ? reason.message
@@ -172,9 +217,10 @@ export function EmployeeManagementPage() {
       })
     return () => {
       active = false
+      controller.abort()
     }
   }, [
-    debouncedSearch,
+    query,
     departmentId,
     employmentType,
     status,
@@ -183,6 +229,7 @@ export function EmployeeManagementPage() {
     listRequestKey,
     archiveView,
     viewKey,
+    acceptRows,
   ])
 
   const [departmentRevision, setDepartmentRevision] = useState(0)
@@ -218,9 +265,7 @@ export function EmployeeManagementPage() {
   }
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
-  const hasFilters = Boolean(
-    debouncedSearch || departmentId || employmentType || status,
-  )
+  const hasFilters = Boolean(query || departmentId || employmentType || status)
   const shownFrom = total === 0 ? 0 : (resolvedPage - 1) * pageSize + 1
   const shownTo = Math.min(resolvedPage * pageSize, total)
 
@@ -268,6 +313,7 @@ export function EmployeeManagementPage() {
               onChange={(event) => {
                 setAnimateRows(true)
                 setSearch(event.target.value)
+                setPage(1)
               }}
             />
             <Select
@@ -365,7 +411,6 @@ export function EmployeeManagementPage() {
               setArchiveView((current) => !current)
               setPage(1)
               setSearch("")
-              setDebouncedSearch("")
               setDepartmentId("")
               setEmploymentType("")
               setStatus("")
@@ -396,16 +441,16 @@ export function EmployeeManagementPage() {
         </div>
         <EmployeeTable
           archiveView={archiveView}
-          employees={employees}
-          viewKey={resolvedViewKey}
-          quickKey={resolvedSearch}
+          employees={preview ?? employees}
+          viewKey={tableViewKey}
+          quickKey={query}
           onRowsSettled={settleRows}
           animateRows={animateRows}
           loading={isLoading}
           error={error}
           emptyMessage={
-            debouncedSearch ? (
-              <SearchEmptyState query={debouncedSearch} />
+            query ? (
+              <SearchEmptyState query={query} />
             ) : hasFilters ? (
               "No employees match these filters. Try clearing a filter or search term."
             ) : archiveView ? (
@@ -419,7 +464,6 @@ export function EmployeeManagementPage() {
           }}
           onView={(employee) => setDrawerEmployeeId(employee.id)}
           onEdit={(employee) => setFormState({ employee })}
-          onChangeStatus={setStatusTarget}
           onManageLogin={(employee, action) => {
             if (action === "create") {
               setCreateLoginTarget(employee)
@@ -433,7 +477,8 @@ export function EmployeeManagementPage() {
             canManageDepartment ? setMembersDepartmentId : undefined
           }
         />
-        {!error && total > 0 && (
+        <TableSearchStatus active={isLoading && previewing} label="employees" />
+        {!error && !previewing && total > 0 && (
           <footer className="flex items-center justify-between gap-3 pt-4 text-[11px] text-[#65718a] max-[560px]:flex-wrap max-[560px]:pt-[14px]">
             <span role="status" aria-live="polite" aria-atomic="true">
               Showing {shownFrom}–{shownTo} of {total}
@@ -504,18 +549,6 @@ export function EmployeeManagementPage() {
             setReturnEmployeeId(null)
           }}
           onChanged={() => setRevision((value) => value + 1)}
-        />
-      )}
-      {statusTarget && (
-        <EmployeeStatusDialog
-          employee={statusTarget}
-          onClose={() => setStatusTarget(null)}
-          onSaved={() => {
-            setStatusTarget(null)
-            setPage(1)
-            sileo.success({ title: "Employee status updated" })
-            setRevision((value) => value + 1)
-          }}
         />
       )}
       {createLoginTarget && (

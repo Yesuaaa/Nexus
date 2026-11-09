@@ -70,6 +70,7 @@ export type EmployeeList = {
 }
 
 export async function listEmployees(filters: {
+  signal?: AbortSignal
   search?: string
   departmentId?: string
   employmentType?: EmploymentType | ""
@@ -84,7 +85,9 @@ export async function listEmployees(filters: {
   if (filters.employmentType)
     params.set("employmentType", filters.employmentType)
   if (filters.status) params.set("status", filters.status)
-  return apiRequest<EmployeeList>(`/api/employees?${params}`)
+  return apiRequest<EmployeeList>(`/api/employees?${params}`, {
+    signal: filters.signal,
+  })
 }
 
 export async function getEmployee(id: string): Promise<Employee> {

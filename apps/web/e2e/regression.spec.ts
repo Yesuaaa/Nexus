@@ -204,7 +204,8 @@ test.describe("Authentication and session regression", () => {
         await expect(
           page.getByRole("button", { name: "Sign In", exact: true }),
         ).toBeVisible()
-        expect(await storedTokens(page)).toEqual([null, null])
+        // The public form is now server-rendered, before the session check ends.
+        await expect.poll(() => storedTokens(page)).toEqual([null, null])
         expect(refreshes).toBe(1)
       } else {
         await expect(page.getByRole("main").getByRole("alert")).toContainText(

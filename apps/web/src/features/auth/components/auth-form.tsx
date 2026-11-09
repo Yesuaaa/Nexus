@@ -1,8 +1,7 @@
 import { Form } from "@/components/ui/form"
 import { useRef, useState, type FormEvent } from "react"
 import Link from "next/link"
-import { motion, useReducedMotion } from "framer-motion"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import { Button } from "@/components/ui/button"
 import { ApiError, register, signIn } from "../api/auth-api"
 import type { AuthCopy } from "../content/auth-copy"
@@ -28,7 +27,6 @@ export function AuthContent({
   language: AuthLanguage
   onLoggedIn: (mode: AuthMode) => void
 }) {
-  const reduceMotion = useReducedMotion()
   const formRef = useRef<HTMLFormElement>(null)
   const submissionInFlight = useRef(false)
   const [fullName, setFullName] = useState("")
@@ -130,11 +128,8 @@ export function AuthContent({
 
   return (
     <div className="flex min-h-0 flex-1 justify-center overflow-y-auto px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden max-[850px]:overflow-visible max-[850px]:px-6">
-      <motion.div
-        className={`my-auto w-full max-w-[400px] min-w-0 max-[850px]:pt-8 max-[850px]:pb-14 ${mode === "register" ? "py-0" : "py-12"}`}
-        initial={reduceMotion ? false : { opacity: 0, x: -24 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.45, ease: "easeOut" }}
+      <div
+        className={`auth-form-enter my-auto w-full max-w-[400px] min-w-0 max-[850px]:pt-8 max-[850px]:pb-14 ${mode === "register" ? "py-0" : "py-12"}`}
       >
         <div className="text-center">
           <Brand />
@@ -276,7 +271,7 @@ export function AuthContent({
             {mode === "login" ? copy.createOne : copy.signInHere}
           </Link>
         </p>
-      </motion.div>
+      </div>
     </div>
   )
 }

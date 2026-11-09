@@ -7,7 +7,7 @@ import {
 import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
 import { Bell, CheckCheck } from "lucide-react"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import { apiRequest } from "@/features/auth/api/auth-api"
 import {
   DropdownMenu,

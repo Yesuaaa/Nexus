@@ -1,20 +1,8 @@
 import { Form } from "@/components/ui/form"
 import { useEffect, useRef, useState } from "react"
-import {
-  CloseIcon,
-  PlusIcon,
-  SearchIcon,
-  TrashIcon,
-} from "@/components/layout/icons"
+import { CloseIcon, PlusIcon, TrashIcon } from "@/components/layout/icons"
 import { focusRing } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import {
   Sheet,
   SheetClose,
@@ -26,7 +14,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Pill } from "@/components/ui/pill"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
+import { SearchField } from "@/components/ui/search-field"
 import { useAnimatedPanelClose } from "@/components/ui/use-animated-panel-close"
 import { cn } from "@/lib/utils"
 import { EditMemberDialog } from "./edit-member-dialog"
@@ -39,24 +35,28 @@ import {
   panelInput,
   panelMuted,
   panelSecondaryButton,
-  panelSelectTrigger,
 } from "../styles/member-panel-styles"
 import {
   assignDepartmentMembers,
   createTeam,
   deleteTeam,
   getDepartment,
-  listEmployees,
+  listAssignableStaff,
   removeDepartmentMember,
   updateDepartmentMember,
   type DepartmentDetail,
   type DepartmentMember,
+  type DepartmentStaffOption,
 } from "../api/departments-api"
 
 function MemberIdentity({
   member,
 }: {
-  member: Pick<DepartmentMember, "fullName" | "email" | "user">
+  member: {
+    fullName: string | null
+    email: string | null
+    user: { fullName: string | null; email: string } | null
+  }
 }) {
   const email = member.email || member.user?.email || null
   return (
@@ -101,23 +101,14 @@ export function ManageMembersDrawer({
   const [loadError, setLoadError] = useState("")
   const [actionError, setActionError] = useState("")
 
-  // Available employees (for dropdown assignment)
-  const [quickAssignEmployeeId, setQuickAssignEmployeeId] = useState("")
-  const [quickAssignRetry, setQuickAssignRetry] = useState(0)
-  const [quickAssignResult, setQuickAssignResult] = useState<{
-    key: string
-    employees: DepartmentMember[]
-    error: string
-  } | null>(null)
-
-  // Member search state
+  // Available staff search state
   const [assignSearch, setAssignSearch] = useState("")
   const [debouncedAssignSearch, setDebouncedAssignSearch] = useState("")
   const [candidatePage, setCandidatePage] = useState(1)
   const [candidateRetry, setCandidateRetry] = useState(0)
   const [candidateResult, setCandidateResult] = useState<{
     key: string
-    candidates: DepartmentMember[]
+    candidates: DepartmentStaffOption[]
     total: number
     pageSize: number
     error: string
@@ -134,12 +125,13 @@ export function ManageMembersDrawer({
   // Team creation state
   const [newTeamName, setNewTeamName] = useState("")
   const [newTeamDesc, setNewTeamDesc] = useState("")
+  const [newTeamMemberSearch, setNewTeamMemberSearch] = useState("")
+  const [newTeamMemberIds, setNewTeamMemberIds] = useState<string[]>([])
   const [creatingTeam, setCreatingTeam] = useState(false)
-
-  // Team member assignment state: mapping teamId -> selected employeeId
-  const [teamAddSelection, setTeamAddSelection] = useState<
-    Record<string, string>
-  >({})
+  const [assignMembersOpen, setAssignMembersOpen] = useState(false)
+  const [assignTeamId, setAssignTeamId] = useState<string | null>(null)
+  const [teamAssignSearch, setTeamAssignSearch] = useState("")
+  const [activeTab, setActiveTab] = useState<"members" | "teams">("members")
 
   // Member editing modal/dialog state
   const [editingMember, setEditingMember] = useState<DepartmentMember | null>(
@@ -150,18 +142,8 @@ export function ManageMembersDrawer({
   const [editMemberError, setEditMemberError] = useState("")
 
   const [revision, setRevision] = useState(0)
-  const quickAssignRequestKey = `${departmentId}\u0000${revision}\u0000${quickAssignRetry}`
   const candidateRequestKey = `${debouncedAssignSearch}\u0000${candidatePage}\u0000${candidateRetry}\u0000${revision}`
-  const quickAssignResultIsCurrent =
-    quickAssignResult?.key === quickAssignRequestKey
   const candidateResultIsCurrent = candidateResult?.key === candidateRequestKey
-  const allEmployees = quickAssignResultIsCurrent
-    ? quickAssignResult.employees
-    : []
-  const quickAssignLoading = canManage && !quickAssignResultIsCurrent
-  const quickAssignError = quickAssignResultIsCurrent
-    ? quickAssignResult.error
-    : ""
   const searchCandidates = candidateResultIsCurrent
     ? candidateResult.candidates
     : []
@@ -169,9 +151,7 @@ export function ManageMembersDrawer({
   const candidatePageSize = candidateResultIsCurrent
     ? candidateResult.pageSize
     : 10
-  const candidateLoading = Boolean(
-    canManage && debouncedAssignSearch && !candidateResultIsCurrent,
-  )
+  const candidateLoading = Boolean(canManage && !candidateResultIsCurrent)
   const candidateError = candidateResultIsCurrent ? candidateResult.error : ""
   const candidateResultsKey = candidateResultIsCurrent
     ? `${debouncedAssignSearch}\u0000${candidatePage}`
@@ -203,38 +183,7 @@ export function ManageMembersDrawer({
     }
   }, [departmentId, revision])
 
-  // 2. Load the first employee page for quick assignment
-  useEffect(() => {
-    if (!canManage) return
-    let active = true
-    listEmployees("", 1)
-      .then((res) => {
-        if (active) {
-          setQuickAssignResult({
-            key: quickAssignRequestKey,
-            employees: res.employees,
-            error: "",
-          })
-        }
-      })
-      .catch((error: unknown) => {
-        if (active) {
-          setQuickAssignResult({
-            key: quickAssignRequestKey,
-            employees: [],
-            error:
-              error instanceof Error
-                ? error.message
-                : "Couldn't load employees to assign.",
-          })
-        }
-      })
-    return () => {
-      active = false
-    }
-  }, [canManage, quickAssignRequestKey])
-
-  // 3. Debounced search for assignable employees
+  // 2. Debounced search for available staff
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedAssignSearch(assignSearch.trim())
@@ -244,16 +193,14 @@ export function ManageMembersDrawer({
   }, [assignSearch])
 
   useEffect(() => {
-    if (!canManage || !debouncedAssignSearch) return
+    if (!canManage) return
     let active = true
-    listEmployees(debouncedAssignSearch, candidatePage)
+    listAssignableStaff(debouncedAssignSearch, candidatePage)
       .then((res) => {
         if (active) {
           setCandidateResult({
             key: candidateRequestKey,
-            candidates: res.employees.filter(
-              (employee) => employee.departmentId !== departmentId,
-            ),
+            candidates: res.employees,
             total: res.total,
             pageSize: res.pageSize,
             error: "",
@@ -270,7 +217,7 @@ export function ManageMembersDrawer({
             error:
               error instanceof Error
                 ? error.message
-                : "Couldn't search employees.",
+                : "Couldn't load employees to assign.",
           })
         }
       })
@@ -291,37 +238,59 @@ export function ManageMembersDrawer({
   )
   const expectedCandidateResultsKey = `${debouncedAssignSearch}\u0000${candidatePage}`
   const displayedCandidates =
-    assignSearch.trim() &&
     assignSearch.trim() === debouncedAssignSearch &&
     candidateResultsKey === expectedCandidateResultsKey
       ? searchCandidates
       : []
 
-  const currentMemberIds = new Set(detail?.members.map((m) => m.id) || [])
-  const departmentHeadId = detail?.headId ?? null
-  const availableEmployeesForQuickAssign = allEmployees.filter(
-    (employee) =>
-      employee.departmentId !== departmentId &&
-      !currentMemberIds.has(employee.id),
+  const currentMemberAccountIds = new Set(
+    detail?.members.flatMap((member) =>
+      member.userId ? [member.userId] : [],
+    ) || [],
   )
-  const selectedQuickAssignEmployee = availableEmployeesForQuickAssign.find(
-    (employee) => employee.id === quickAssignEmployeeId,
+  const departmentHeadId = detail?.headId ?? null
+  const availableStaffToAssign = displayedCandidates.filter(
+    (employee) => !currentMemberAccountIds.has(employee.id),
+  )
+  const newTeamMemberQuery = newTeamMemberSearch.trim().toLowerCase()
+  const newTeamMemberCandidates = (detail?.members ?? []).filter(
+    (member) =>
+      member.status === "ACTIVE" &&
+      member.user?.role === "STAFF" &&
+      member.user.isActive &&
+      member.user.accountDeletedAt === null &&
+      (departmentHeadId === null || member.userId !== departmentHeadId),
+  )
+  const filteredNewTeamMembers = newTeamMemberCandidates.filter((member) =>
+    [
+      member.fullName,
+      member.email,
+      member.user?.fullName,
+      member.user?.email,
+      member.position,
+    ].some((value) => value?.toLowerCase().includes(newTeamMemberQuery)),
   )
 
-  async function handleAddMember(employeeId: string) {
-    if (
-      !availableEmployeesForQuickAssign.some(
-        (employee) => employee.id === employeeId,
-      )
+  function toggleNewTeamMember(memberId: string) {
+    setNewTeamMemberIds((previous) =>
+      previous.includes(memberId)
+        ? previous.filter((id) => id !== memberId)
+        : [...previous, memberId],
     )
-      return
+  }
+
+  async function handleAddMember(userId: string) {
+    const isAvailable = availableStaffToAssign.some(
+      (employee) => employee.id === userId,
+    )
+    if (!isAvailable || submitting) return
     try {
       setActionError("")
       setSubmitting(true)
-      await assignDepartmentMembers(departmentId, [employeeId])
+      await assignDepartmentMembers(departmentId, [userId])
       setAssignSearch("")
-      setQuickAssignEmployeeId("")
       setCandidatePage(1)
+      setAssignMembersOpen(false)
       setRevision((r) => r + 1)
       onChanged()
     } catch (error: unknown) {
@@ -381,15 +350,22 @@ export function ManageMembersDrawer({
   async function handleCreateTeam(e: React.FormEvent) {
     e.preventDefault()
     if (!newTeamName.trim()) return
+    if (newTeamMemberIds.length === 0) {
+      setActionError("Select at least one member before creating the team.")
+      return
+    }
     try {
       setActionError("")
       setSubmitting(true)
       await createTeam(departmentId, {
         name: newTeamName.trim(),
         description: newTeamDesc.trim() || undefined,
+        memberIds: newTeamMemberIds,
       })
       setNewTeamName("")
       setNewTeamDesc("")
+      setNewTeamMemberSearch("")
+      setNewTeamMemberIds([])
       setCreatingTeam(false)
       setRevision((r) => r + 1)
       onChanged()
@@ -413,7 +389,7 @@ export function ManageMembersDrawer({
       setActionError("")
       setSubmitting(true)
       await updateDepartmentMember(departmentId, userId, { teamId })
-      setTeamAddSelection((prev) => ({ ...prev, [teamId]: "" }))
+      setAssignTeamId(null)
       setRevision((r) => r + 1)
       onChanged()
     } catch (error: unknown) {
@@ -545,7 +521,13 @@ export function ManageMembersDrawer({
           </SheetClose>
         </header>
 
-        <Tabs defaultValue="members" className="flex min-h-0 flex-1 flex-col">
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => {
+            if (value === "members" || value === "teams") setActiveTab(value)
+          }}
+          className="flex min-h-0 flex-1 flex-col"
+        >
           <TabsList
             className="flex h-auto flex-none justify-start gap-5 rounded-none border-b border-[#eceef1] bg-transparent px-6 py-0 max-[560px]:px-5"
             aria-label="Department sections"
@@ -603,253 +585,198 @@ export function ManageMembersDrawer({
                 )}
                 <TabsContent value="members" className="mt-0 space-y-5">
                   {canManage && (
-                    <section
-                      className="grid min-w-0 gap-3 rounded-lg border border-[#e8ebef] p-4"
-                      aria-label="Assign employees"
+                    <Dialog
+                      open={assignMembersOpen}
+                      onOpenChange={(nextOpen) => {
+                        if (!submitting) setAssignMembersOpen(nextOpen)
+                      }}
                     >
-                      <div>
-                        <h3 className="m-0 text-xs font-semibold">
-                          Add Members
-                        </h3>
-                        <p className={`${panelMuted} mt-1 mb-0`}>
-                          Assign an existing employee to this department.
-                        </p>
-                      </div>
-                      <div className="flex min-w-0 items-start gap-2">
-                        <Select
-                          value={selectedQuickAssignEmployee?.id ?? ""}
-                          onValueChange={setQuickAssignEmployeeId}
-                          disabled={
-                            submitting ||
-                            quickAssignLoading ||
-                            Boolean(quickAssignError)
-                          }
+                      <DialogContent
+                        showCloseButton={false}
+                        overlayClassName="bg-[rgb(13_28_57_/_48%)]"
+                        className="max-h-[90dvh] w-[min(560px,calc(100vw-28px))] gap-0 overflow-y-auto rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_22px_75px_rgb(18_36_73_/_22%)]"
+                        onEscapeKeyDown={(event) => {
+                          if (submitting) event.preventDefault()
+                        }}
+                        onInteractOutside={(event) => {
+                          if (submitting) event.preventDefault()
+                        }}
+                      >
+                        <header className="flex items-start justify-between gap-4 border-b border-[#eceef1] p-5">
+                          <div className="min-w-0">
+                            <DialogTitle className="m-0 text-lg font-[650] tracking-[-0.03em]">
+                              Assign employees
+                            </DialogTitle>
+                            <DialogDescription className="mt-1 mb-0 text-xs text-[#738096]">
+                              Assign an existing employee to this department.
+                            </DialogDescription>
+                          </div>
+                          <DialogClose asChild>
+                            <button
+                              type="button"
+                              className={panelIconButton}
+                              aria-label="Close assign employees"
+                              disabled={submitting}
+                            >
+                              <CloseIcon width="16" height="16" />
+                            </button>
+                          </DialogClose>
+                        </header>
+                        <section
+                          className="grid min-w-0 gap-3 p-5"
+                          aria-label="Assign employees"
                         >
-                          <SelectTrigger
-                            className={cn(panelSelectTrigger, "flex-1")}
-                            aria-label="Employee to assign"
-                          >
-                            <SelectValue placeholder="Select Employee" />
-                          </SelectTrigger>
-                          <SelectContent collisionPadding={24}>
-                            {quickAssignLoading ? (
-                              <p
-                                className="m-0 p-3 text-xs text-muted-foreground"
-                                role="status"
-                              >
-                                Loading employees...
-                              </p>
-                            ) : quickAssignError ? (
-                              <p
-                                className="m-0 p-3 text-xs text-destructive"
-                                role="alert"
-                              >
-                                Employee list unavailable.
-                              </p>
-                            ) : availableEmployeesForQuickAssign.length ===
-                              0 ? (
-                              <p className="m-0 p-3 text-xs text-muted-foreground">
-                                No employees available to assign.
-                              </p>
-                            ) : (
-                              availableEmployeesForQuickAssign.map(
-                                (employee) => (
-                                  <SelectItem
-                                    key={employee.id}
-                                    value={employee.id}
-                                  >
-                                    {employee.fullName ||
-                                      employee.email ||
-                                      "Employee"}
-                                    {employee.user?.role
-                                      ? ` (${employee.user.role})`
-                                      : " (No account)"}
-                                  </SelectItem>
-                                ),
-                              )
-                            )}
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          type="button"
-                          className={panelAssignButton}
-                          disabled={
-                            !selectedQuickAssignEmployee ||
-                            submitting ||
-                            quickAssignLoading ||
-                            Boolean(quickAssignError)
-                          }
-                          onClick={() =>
-                            void handleAddMember(quickAssignEmployeeId)
-                          }
-                        >
-                          <PlusIcon width="14" height="14" /> Assign
-                        </Button>
-                      </div>
-                      {quickAssignError && (
-                        <div
-                          className="flex items-center justify-between gap-3 text-xs"
-                          role="alert"
-                        >
-                          <span className="text-[#bc3649]">
-                            {quickAssignError}
-                          </span>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className={panelSecondaryButton}
-                            disabled={submitting || quickAssignLoading}
-                            onClick={() =>
-                              setQuickAssignRetry((count) => count + 1)
-                            }
-                          >
-                            Retry
-                          </Button>
-                        </div>
-                      )}
-                      <div className="border-t border-[#eceef1] pt-3">
-                        <label className="flex h-[34px] min-w-0 items-center gap-2 rounded-lg border border-[#e1e4ea] px-[11px] text-[#7b8ca7] focus-within:bg-[#f8fafd]">
-                          <SearchIcon
-                            width="16"
-                            height="16"
-                            className="flex-none"
-                          />
-                          <span className="sr-only">
-                            Search employees to assign
-                          </span>
-                          <input
+                          <SearchField
                             id="member-assign-search"
-                            className="w-full min-w-0 border-0 bg-transparent text-xs text-foreground outline-none placeholder:text-[#8a9ab1]"
+                            label="Search employees to assign"
                             placeholder="Search name or email"
                             value={assignSearch}
                             onChange={(event) =>
                               setAssignSearch(event.target.value)
                             }
                             disabled={submitting}
+                            containerClassName="w-full max-[1050px]:w-full max-[1050px]:flex-none"
                           />
-                        </label>
-                      </div>
-                      {isSearching && (
-                        <p className={`${panelMuted} m-0`} role="status">
-                          Searching employees...
-                        </p>
-                      )}
-                      {candidateError && !isSearching && (
-                        <div
-                          className="flex items-center justify-between gap-3 text-xs"
-                          role="alert"
-                        >
-                          <span className="text-[#bc3649]">
-                            {candidateError}
-                          </span>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className={panelSecondaryButton}
-                            disabled={candidateLoading || submitting}
-                            onClick={() =>
-                              setCandidateRetry((count) => count + 1)
-                            }
-                          >
-                            Retry
-                          </Button>
-                        </div>
-                      )}
-                      {displayedCandidates.length > 0 && !isSearching && (
-                        <ul
-                          className="m-0 grid list-none gap-2 p-0"
-                          aria-label="Employee search results"
-                        >
-                          {displayedCandidates.map((employee) => (
-                            <li
-                              key={employee.id}
-                              className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-[#e8ebef] p-2.5"
+                          {candidateLoading && (
+                            <p className={`${panelMuted} m-0`} role="status">
+                              {assignSearch.trim()
+                                ? "Searching employees..."
+                                : "Loading available staff..."}
+                            </p>
+                          )}
+                          {candidateError && !isSearching && (
+                            <div
+                              className="flex items-center justify-between gap-3 text-xs"
+                              role="alert"
                             >
-                              <MemberIdentity member={employee} />
+                              <span className="text-[#bc3649]">
+                                {candidateError}
+                              </span>
                               <Button
                                 type="button"
                                 variant="outline"
                                 className={panelSecondaryButton}
-                                aria-label={`Assign ${employee.fullName || employee.email || "employee"}`}
+                                disabled={candidateLoading || submitting}
                                 onClick={() =>
-                                  void handleAddMember(employee.id)
+                                  setCandidateRetry((count) => count + 1)
                                 }
-                                disabled={submitting}
                               >
-                                Assign
+                                Retry
                               </Button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      {debouncedAssignSearch &&
-                        assignSearch.trim() === debouncedAssignSearch &&
-                        !isSearching &&
-                        !candidateError &&
-                        displayedCandidates.length === 0 && (
-                          <p className={`${panelMuted} m-0`}>
-                            No unassigned employees match your search.
-                          </p>
-                        )}
-                      {debouncedAssignSearch &&
-                        assignSearch.trim() === debouncedAssignSearch &&
-                        !isSearching &&
-                        !candidateError &&
-                        candidateTotal > candidatePageSize && (
-                          <div className="flex items-center justify-between text-[11px] text-[#65718a]">
-                            <span>
-                              Page {candidatePage} of{" "}
-                              {Math.max(
-                                1,
-                                Math.ceil(candidateTotal / candidatePageSize),
-                              )}
-                            </span>
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
-                                className={cn(
-                                  "cursor-pointer rounded border border-[#e1e4ea] bg-white px-2 py-1",
-                                  focusRing,
-                                )}
-                                disabled={candidatePage <= 1 || submitting}
-                                onClick={() =>
-                                  setCandidatePage((page) => page - 1)
-                                }
-                              >
-                                Previous
-                              </button>
-                              <button
-                                type="button"
-                                className={cn(
-                                  "cursor-pointer rounded border border-[#e1e4ea] bg-white px-2 py-1",
-                                  focusRing,
-                                )}
-                                disabled={
-                                  candidatePage >=
+                            </div>
+                          )}
+                          {displayedCandidates.length > 0 && !isSearching && (
+                            <ul
+                              className="m-0 grid list-none gap-2 p-0"
+                              aria-label="Employee search results"
+                            >
+                              {displayedCandidates.map((employee) => (
+                                <li
+                                  key={employee.id}
+                                  className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-[#e8ebef] p-2.5"
+                                >
+                                  <MemberIdentity member={employee} />
+                                  <Button
+                                    type="button"
+                                    className={panelAssignButton}
+                                    aria-label={`Assign ${employee.fullName || employee.email || "employee"}`}
+                                    onClick={() =>
+                                      void handleAddMember(employee.id)
+                                    }
+                                    disabled={submitting}
+                                  >
+                                    Assign
+                                  </Button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          {assignSearch.trim() === debouncedAssignSearch &&
+                            !candidateLoading &&
+                            !isSearching &&
+                            !candidateError &&
+                            displayedCandidates.length === 0 && (
+                              <p className={`${panelMuted} m-0`}>
+                                {assignSearch.trim()
+                                  ? "No unassigned staff accounts match your search."
+                                  : "No unassigned staff accounts available."}
+                              </p>
+                            )}
+                          {assignSearch.trim() === debouncedAssignSearch &&
+                            !candidateLoading &&
+                            !isSearching &&
+                            !candidateError &&
+                            candidateTotal > candidatePageSize && (
+                              <div className="flex items-center justify-between text-[11px] text-[#65718a]">
+                                <span>
+                                  Page {candidatePage} of{" "}
+                                  {Math.max(
+                                    1,
                                     Math.ceil(
                                       candidateTotal / candidatePageSize,
-                                    ) || submitting
-                                }
-                                onClick={() =>
-                                  setCandidatePage((page) => page + 1)
-                                }
-                              >
-                                Next
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                    </section>
+                                    ),
+                                  )}
+                                </span>
+                                <div className="flex gap-2">
+                                  <button
+                                    type="button"
+                                    className={cn(
+                                      "cursor-pointer rounded border border-[#e1e4ea] bg-white px-2 py-1",
+                                      focusRing,
+                                    )}
+                                    disabled={candidatePage <= 1 || submitting}
+                                    onClick={() =>
+                                      setCandidatePage((page) => page - 1)
+                                    }
+                                  >
+                                    Previous
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={cn(
+                                      "cursor-pointer rounded border border-[#e1e4ea] bg-white px-2 py-1",
+                                      focusRing,
+                                    )}
+                                    disabled={
+                                      candidatePage >=
+                                        Math.ceil(
+                                          candidateTotal / candidatePageSize,
+                                        ) || submitting
+                                    }
+                                    onClick={() =>
+                                      setCandidatePage((page) => page + 1)
+                                    }
+                                  >
+                                    Next
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                        </section>
+                      </DialogContent>
+                    </Dialog>
                   )}
 
                   <section aria-label="Current members">
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <h3 className="m-0 text-xs font-semibold">
-                        Current Members
-                      </h3>
-                      <span className={panelMuted}>
-                        {detail?.members.length ?? 0} Members
-                      </span>
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="m-0 text-xs font-semibold">
+                          Current Members
+                        </h3>
+                        <p className={`${panelMuted} mt-1 mb-0`}>
+                          {detail?.members.length ?? 0} Members
+                        </p>
+                      </div>
+                      {canManage && (
+                        <Button
+                          type="button"
+                          className={panelAssignButton}
+                          onClick={() => setAssignMembersOpen(true)}
+                          disabled={submitting}
+                        >
+                          <PlusIcon width="14" height="14" /> Assign
+                        </Button>
+                      )}
                     </div>
                     <div className="overflow-hidden rounded-lg border border-[#e8ebef]">
                       {detail?.members.length === 0 ? (
@@ -975,70 +902,187 @@ export function ManageMembersDrawer({
                           Organize employees into focused teams.
                         </p>
                       </div>
-                      {canManage && !creatingTeam && (
+                      {canManage && (
                         <Button
                           type="button"
                           className={panelAssignButton}
-                          onClick={() => setCreatingTeam(true)}
+                          onClick={() => {
+                            setActionError("")
+                            setNewTeamMemberSearch("")
+                            setNewTeamMemberIds([])
+                            setCreatingTeam(true)
+                          }}
+                          disabled={submitting}
                         >
                           <PlusIcon width="14" height="14" /> Create Team
                         </Button>
                       )}
                     </div>
-                    {canManage && creatingTeam && (
-                      <Form
-                        onSubmit={(event) => void handleCreateTeam(event)}
-                        className="grid gap-4 rounded-lg border border-[#e8ebef] p-4"
+                    {canManage && (
+                      <Dialog
+                        open={creatingTeam}
+                        onOpenChange={(nextOpen) => {
+                          if (!submitting) setCreatingTeam(nextOpen)
+                        }}
                       >
-                        <h4 className="m-0 text-xs font-semibold">New team</h4>
-                        <label className={panelField} htmlFor="team-name">
-                          Team name{" "}
-                          <Input
-                            id="team-name"
-                            className={panelInput}
-                            placeholder="e.g. Software engineering"
-                            value={newTeamName}
-                            onChange={(event) =>
-                              setNewTeamName(event.target.value)
-                            }
-                            required
-                            autoFocus
-                            disabled={submitting}
-                          />
-                        </label>
-                        <label className={panelField} htmlFor="team-desc">
-                          Description{" "}
-                          <span className="sr-only">(optional)</span>
-                          <Input
-                            id="team-desc"
-                            className={panelInput}
-                            placeholder="What does this team do? (optional)"
-                            value={newTeamDesc}
-                            onChange={(event) =>
-                              setNewTeamDesc(event.target.value)
-                            }
-                            disabled={submitting}
-                          />
-                        </label>
-                        <div className="flex justify-end gap-2 border-t border-[#eceef1] pt-3">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className={panelSecondaryButton}
-                            onClick={() => setCreatingTeam(false)}
-                            disabled={submitting}
+                        <DialogContent
+                          showCloseButton={false}
+                          overlayClassName="bg-[rgb(13_28_57_/_48%)]"
+                          className="max-h-[90dvh] w-[min(440px,calc(100vw-28px))] gap-0 overflow-y-auto rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_22px_75px_rgb(18_36_73_/_22%)]"
+                          onEscapeKeyDown={(event) => {
+                            if (submitting) event.preventDefault()
+                          }}
+                          onInteractOutside={(event) => {
+                            if (submitting) event.preventDefault()
+                          }}
+                        >
+                          <Form
+                            onSubmit={(event) => void handleCreateTeam(event)}
+                            className="grid gap-4"
                           >
-                            Cancel
-                          </Button>
-                          <Button
-                            type="submit"
-                            className={panelAssignButton}
-                            disabled={submitting}
-                          >
-                            {submitting ? "Saving..." : "Save team"}
-                          </Button>
-                        </div>
-                      </Form>
+                            <header className="flex items-start justify-between gap-4 border-b border-[#eceef1] p-5">
+                              <div className="min-w-0">
+                                <DialogTitle className="m-0 text-lg font-[650] tracking-[-0.03em]">
+                                  Create team
+                                </DialogTitle>
+                                <DialogDescription className="mt-1 mb-0 text-xs text-[#738096]">
+                                  Organize department employees into a focused
+                                  team.
+                                </DialogDescription>
+                              </div>
+                              <DialogClose asChild>
+                                <button
+                                  type="button"
+                                  className={panelIconButton}
+                                  aria-label="Close create team"
+                                  disabled={submitting}
+                                >
+                                  <CloseIcon width="16" height="16" />
+                                </button>
+                              </DialogClose>
+                            </header>
+                            <div className="grid gap-4 p-5">
+                              <label className={panelField} htmlFor="team-name">
+                                Team name{" "}
+                                <Input
+                                  id="team-name"
+                                  className={panelInput}
+                                  placeholder="e.g. Software engineering"
+                                  value={newTeamName}
+                                  onChange={(event) =>
+                                    setNewTeamName(event.target.value)
+                                  }
+                                  required
+                                  autoFocus
+                                  disabled={submitting}
+                                />
+                              </label>
+                              <label className={panelField} htmlFor="team-desc">
+                                Description{" "}
+                                <span className="sr-only">(optional)</span>
+                                <Input
+                                  id="team-desc"
+                                  className={panelInput}
+                                  placeholder="What does this team do? (optional)"
+                                  value={newTeamDesc}
+                                  onChange={(event) =>
+                                    setNewTeamDesc(event.target.value)
+                                  }
+                                  disabled={submitting}
+                                />
+                              </label>
+                              <div className="grid gap-2">
+                                <div className="flex items-center justify-between gap-3">
+                                  <p className="m-0 text-xs font-medium text-foreground">
+                                    Team members{" "}
+                                    <span className="font-normal text-[#bc3649]">
+                                      (required)
+                                    </span>
+                                  </p>
+                                  <span className={panelMuted}>
+                                    {newTeamMemberIds.length} selected
+                                  </span>
+                                </div>
+                                <SearchField
+                                  id="new-team-member-search"
+                                  label="Search team members"
+                                  placeholder="Search name, email, or position"
+                                  value={newTeamMemberSearch}
+                                  onChange={(event) =>
+                                    setNewTeamMemberSearch(event.target.value)
+                                  }
+                                  disabled={submitting}
+                                  containerClassName="w-full max-[1050px]:w-full max-[1050px]:flex-none"
+                                />
+                                {filteredNewTeamMembers.length > 0 ? (
+                                  <ul
+                                    className="m-0 grid max-h-52 list-none gap-2 overflow-y-auto p-0"
+                                    aria-label="Available team members"
+                                  >
+                                    {filteredNewTeamMembers.map((member) => {
+                                      const selected =
+                                        newTeamMemberIds.includes(member.id)
+                                      return (
+                                        <li
+                                          key={member.id}
+                                          className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-[#e8ebef] p-2.5"
+                                        >
+                                          <MemberIdentity member={member} />
+                                          <Button
+                                            type="button"
+                                            variant={
+                                              selected ? "default" : "outline"
+                                            }
+                                            className={
+                                              selected
+                                                ? panelAssignButton
+                                                : panelSecondaryButton
+                                            }
+                                            aria-pressed={selected}
+                                            onClick={() =>
+                                              toggleNewTeamMember(member.id)
+                                            }
+                                            disabled={submitting}
+                                          >
+                                            {selected ? "Added" : "Add"}
+                                          </Button>
+                                        </li>
+                                      )
+                                    })}
+                                  </ul>
+                                ) : (
+                                  <p className={`${panelMuted} m-0`}>
+                                    {newTeamMemberCandidates.length > 0
+                                      ? "No department members match your search."
+                                      : "No eligible department members are available."}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex justify-end gap-2 border-t border-[#eceef1] px-5 py-4">
+                              <DialogClose asChild>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className={panelSecondaryButton}
+                                  disabled={submitting}
+                                >
+                                  Cancel
+                                </Button>
+                              </DialogClose>
+                              <Button
+                                type="submit"
+                                className={panelAssignButton}
+                                disabled={
+                                  submitting || newTeamMemberIds.length === 0
+                                }
+                              >
+                                {submitting ? "Saving..." : "Save team"}
+                              </Button>
+                            </div>
+                          </Form>
+                        </DialogContent>
+                      </Dialog>
                     )}
                     {detail?.teams.length === 0 ? (
                       <div className="rounded-lg border border-[#e8ebef]">
@@ -1051,20 +1095,41 @@ export function ManageMembersDrawer({
                         const teamMembers = detail.members.filter(
                           (member) => member.teamId === team.id,
                         )
-                        const eligibleEmployees = detail.members.filter(
+                        const eligibleDepartmentStaff = detail.members.filter(
                           (member) =>
+                            member.status === "ACTIVE" &&
+                            member.user?.role === "STAFF" &&
+                            member.user.isActive &&
+                            member.user.accountDeletedAt === null &&
                             (departmentHeadId === null ||
-                              member.userId !== departmentHeadId) &&
-                            member.teamId !== team.id,
+                              member.userId !== departmentHeadId),
                         )
-                        const selectedUserId = teamAddSelection[team.id] || ""
+                        const eligibleEmployees =
+                          eligibleDepartmentStaff.filter(
+                            (member) => member.teamId !== team.id,
+                          )
+                        const teamSearchQuery = teamAssignSearch
+                          .trim()
+                          .toLowerCase()
+                        const filteredEligibleEmployees =
+                          eligibleEmployees.filter((member) =>
+                            [
+                              member.fullName,
+                              member.email,
+                              member.user?.fullName,
+                              member.user?.email,
+                              member.position,
+                            ].some((value) =>
+                              value?.toLowerCase().includes(teamSearchQuery),
+                            ),
+                          )
                         return (
                           <section
                             key={team.id}
                             className="min-w-0 overflow-visible rounded-lg border border-[#e8ebef]"
                             aria-label={`${team.name} team`}
                           >
-                            <header className="flex items-start justify-between gap-3 rounded-t-lg border-b border-[#eceef1] bg-[#f7f7f8] px-4 py-3">
+                            <header className="flex items-start justify-between gap-3 rounded-t-lg border-b border-[#eceef1] bg-[#e8eef2] px-4 py-3">
                               <div className="min-w-0">
                                 <h4 className="m-0 text-xs font-semibold break-words">
                                   {team.name}
@@ -1084,18 +1149,35 @@ export function ManageMembersDrawer({
                                 </p>
                               </div>
                               {canManage && (
-                                <button
-                                  type="button"
-                                  className={panelDangerButton}
-                                  aria-label={`Delete ${team.name} team`}
-                                  disabled={submitting}
-                                  onClick={() =>
-                                    void handleDeleteTeam(team.id, team.name)
-                                  }
-                                >
-                                  <TrashIcon width="15" height="15" />
-                                  <HoverTooltip>Delete team</HoverTooltip>
-                                </button>
+                                <div className="flex flex-none items-center gap-2">
+                                  <Button
+                                    type="button"
+                                    className={panelAssignButton}
+                                    aria-label={`Assign member to ${team.name}`}
+                                    disabled={
+                                      submitting ||
+                                      eligibleEmployees.length === 0
+                                    }
+                                    onClick={() => {
+                                      setTeamAssignSearch("")
+                                      setAssignTeamId(team.id)
+                                    }}
+                                  >
+                                    <PlusIcon width="14" height="14" /> Assign
+                                  </Button>
+                                  <button
+                                    type="button"
+                                    className={panelDangerButton}
+                                    aria-label={`Delete ${team.name} team`}
+                                    disabled={submitting}
+                                    onClick={() =>
+                                      void handleDeleteTeam(team.id, team.name)
+                                    }
+                                  >
+                                    <TrashIcon width="15" height="15" />
+                                    <HoverTooltip>Delete team</HoverTooltip>
+                                  </button>
+                                </div>
                               )}
                             </header>
                             {teamMembers.length === 0 ? (
@@ -1151,72 +1233,111 @@ export function ManageMembersDrawer({
                               </ul>
                             )}
                             {canManage && (
-                              <div className="border-t border-[#eceef1] p-3">
-                                {eligibleEmployees.length > 0 ? (
-                                  <div className="flex min-w-0 items-start gap-2">
-                                    <Select
-                                      value={selectedUserId}
-                                      onValueChange={(value) =>
-                                        setTeamAddSelection((previous) => ({
-                                          ...previous,
-                                          [team.id]: value,
-                                        }))
-                                      }
-                                      disabled={submitting}
-                                    >
-                                      <SelectTrigger
-                                        className={cn(
-                                          panelSelectTrigger,
-                                          "flex-1",
-                                        )}
-                                        aria-label={`Add employee to ${team.name}`}
+                              <Dialog
+                                open={assignTeamId === team.id}
+                                onOpenChange={(nextOpen) => {
+                                  if (!submitting)
+                                    setAssignTeamId(nextOpen ? team.id : null)
+                                }}
+                              >
+                                <DialogContent
+                                  showCloseButton={false}
+                                  overlayClassName="bg-[rgb(13_28_57_/_48%)]"
+                                  className="max-h-[90dvh] w-[min(440px,calc(100vw-28px))] gap-0 overflow-y-auto rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_22px_75px_rgb(18_36_73_/_22%)]"
+                                  onEscapeKeyDown={(event) => {
+                                    if (submitting) event.preventDefault()
+                                  }}
+                                  onInteractOutside={(event) => {
+                                    if (submitting) event.preventDefault()
+                                  }}
+                                >
+                                  <header className="flex items-start justify-between gap-4 border-b border-[#eceef1] p-5">
+                                    <div className="min-w-0">
+                                      <DialogTitle className="m-0 text-lg font-[650] tracking-[-0.03em]">
+                                        Assign team member
+                                      </DialogTitle>
+                                      <DialogDescription className="mt-1 mb-0 text-xs text-[#738096]">
+                                        Add an employee to {team.name}.
+                                      </DialogDescription>
+                                    </div>
+                                    <DialogClose asChild>
+                                      <button
+                                        type="button"
+                                        className={panelIconButton}
+                                        aria-label={`Close assign member for ${team.name}`}
+                                        disabled={submitting}
                                       >
-                                        <SelectValue placeholder="Select department member" />
-                                      </SelectTrigger>
-                                      <SelectContent collisionPadding={24}>
-                                        {eligibleEmployees.map((member) => (
-                                          <SelectItem
-                                            key={member.id}
-                                            value={member.id}
+                                        <CloseIcon width="16" height="16" />
+                                      </button>
+                                    </DialogClose>
+                                  </header>
+                                  <div className="grid gap-4 p-5">
+                                    {eligibleEmployees.length > 0 ? (
+                                      <>
+                                        <SearchField
+                                          id={`team-member-search-${team.id}`}
+                                          label={`Search members for ${team.name}`}
+                                          placeholder="Search name, email, or position"
+                                          value={teamAssignSearch}
+                                          onChange={(event) =>
+                                            setTeamAssignSearch(
+                                              event.target.value,
+                                            )
+                                          }
+                                          disabled={submitting}
+                                          containerClassName="w-full max-[1050px]:w-full max-[1050px]:flex-none"
+                                        />
+                                        {filteredEligibleEmployees.length >
+                                        0 ? (
+                                          <ul
+                                            className="m-0 grid list-none gap-2 p-0"
+                                            aria-label={`Available members for ${team.name}`}
                                           >
-                                            {member.fullName ||
-                                              member.email ||
-                                              member.user?.email ||
-                                              "Employee"}
-                                            {member.position
-                                              ? ` (${member.position})`
-                                              : ""}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                    <Button
-                                      type="button"
-                                      className={panelAssignButton}
-                                      aria-label={`Add selected employee to ${team.name}`}
-                                      disabled={!selectedUserId || submitting}
-                                      onClick={() =>
-                                        void handleAssignMemberToTeam(
-                                          team.id,
-                                          selectedUserId,
-                                        )
-                                      }
-                                    >
-                                      <PlusIcon width="14" height="14" /> Add
-                                    </Button>
+                                            {filteredEligibleEmployees.map(
+                                              (member) => (
+                                                <li
+                                                  key={member.id}
+                                                  className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-[#e8ebef] p-2.5"
+                                                >
+                                                  <MemberIdentity
+                                                    member={member}
+                                                  />
+                                                  <Button
+                                                    type="button"
+                                                    className={
+                                                      panelAssignButton
+                                                    }
+                                                    aria-label={`Assign ${member.fullName || member.email || member.user?.email || "employee"} to ${team.name}`}
+                                                    disabled={submitting}
+                                                    onClick={() =>
+                                                      void handleAssignMemberToTeam(
+                                                        team.id,
+                                                        member.id,
+                                                      )
+                                                    }
+                                                  >
+                                                    Assign
+                                                  </Button>
+                                                </li>
+                                              ),
+                                            )}
+                                          </ul>
+                                        ) : (
+                                          <p className={`${panelMuted} m-0`}>
+                                            No department members match your
+                                            search.
+                                          </p>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <p className={`${panelMuted} m-0`}>
+                                        All active department staff are already
+                                        in this team.
+                                      </p>
+                                    )}
                                   </div>
-                                ) : (
-                                  <p className={`${panelMuted} m-0`}>
-                                    {detail.members.filter(
-                                      (member) =>
-                                        departmentHeadId === null ||
-                                        member.userId !== departmentHeadId,
-                                    ).length === 0
-                                      ? "Assign employees in the Employees tab first to add them here."
-                                      : "All department employees are already in this team."}
-                                  </p>
-                                )}
-                              </div>
+                                </DialogContent>
+                              </Dialog>
                             )}
                           </section>
                         )

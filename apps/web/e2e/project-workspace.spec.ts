@@ -10,6 +10,7 @@ async function mockProject(page: Page, contributor: boolean) {
     status: "IN_PROGRESS",
     startDate: "2026-10-30T10:00:00Z",
     createdAt: "2026-10-30T09:30:00Z",
+    workspaceManaged: false,
     canManage: contributor,
     request: {
       id: "request-1",
@@ -17,7 +18,13 @@ async function mockProject(page: Page, contributor: boolean) {
       service: { name: "Website Development" },
     },
     milestones: [
-      { id: "milestone-1", title: "Design approval", completedAt: null },
+      {
+        id: "milestone-1",
+        title: "Design approval",
+        completedAt: null,
+        deliveryStatus: "NOT_SUBMITTED",
+        sentToClientAt: null,
+      },
     ],
   }
   const writes: unknown[] = []

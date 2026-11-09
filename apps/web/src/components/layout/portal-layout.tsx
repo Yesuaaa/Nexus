@@ -2,7 +2,7 @@
 
 import { useEffect, type ReactNode } from "react"
 import { usePathname, useRouter } from "next/navigation"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import { signOut } from "@/features/auth/api/auth-api"
 import { useAccount } from "@/features/auth/hooks/use-account"
 import {
@@ -16,6 +16,7 @@ import {
   canAccessClientManagement,
   canAccessMessages,
   canAccessProjects,
+  canAccessProjectWorkspace,
 } from "@/features/auth/model/permissions"
 import { AccountContext } from "@/features/auth/providers/account-context"
 import { useAuthTransition } from "@/features/auth/providers/auth-provider"
@@ -36,6 +37,8 @@ export function PortalLayout({ children }: { children: ReactNode }) {
       !canAccessAccountManagement(account)) ||
       (pathname.startsWith("/messages") && !canAccessMessages(account)) ||
       (pathname.startsWith("/projects") && !canAccessProjects(account)) ||
+      (pathname.startsWith("/project-workspace") &&
+        !canAccessProjectWorkspace(account)) ||
       (pathname === "/departments" &&
         !canAccessDepartmentManagement(account)) ||
       (pathname.startsWith("/employees") &&

@@ -11,7 +11,7 @@ import {
 } from "react"
 import { useRouter } from "next/navigation"
 import { Plus, Trash2 } from "lucide-react"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,

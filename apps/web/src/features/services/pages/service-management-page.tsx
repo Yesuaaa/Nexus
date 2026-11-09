@@ -1,7 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { sileo } from "sileo"
+import dynamic from "next/dynamic"
+import { PanelLoading } from "@/components/ui/panel-loading"
+import { sileo } from "@/lib/toast"
 import { PlusIcon } from "@/components/layout/icons"
 import { contentClass, focusRing } from "@/components/layout/styles"
 import { hasPermission, Permissions } from "@/features/auth/model/permissions"
@@ -19,13 +21,32 @@ import {
   type PricingTemplate,
   type Service,
 } from "../api/services-api"
-import { ServiceDetailsDialog } from "../components/service-details-dialog"
 import { DeleteServiceDialog } from "../components/delete-service-dialog"
-import { ServiceFormDialog } from "../components/service-form-dialog"
 import { ServiceKpiCards } from "../components/service-kpi-cards"
 import { ServiceStatusDialog } from "../components/service-status-dialog"
 import { ServiceTable } from "../components/service-table"
-import { PricingTemplatesDialog } from "../components/pricing-templates-dialog"
+
+const ServiceFormDialog = dynamic(
+  () =>
+    import("../components/service-form-dialog").then(
+      (module) => module.ServiceFormDialog,
+    ),
+  { loading: PanelLoading },
+)
+const ServiceDetailsDialog = dynamic(
+  () =>
+    import("../components/service-details-dialog").then(
+      (module) => module.ServiceDetailsDialog,
+    ),
+  { loading: PanelLoading },
+)
+const PricingTemplatesDialog = dynamic(
+  () =>
+    import("../components/pricing-templates-dialog").then(
+      (module) => module.PricingTemplatesDialog,
+    ),
+  { loading: PanelLoading },
+)
 
 export function ServiceManagementPage() {
   const actor = usePortalAccount()

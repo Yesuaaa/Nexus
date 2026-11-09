@@ -6,6 +6,7 @@ import {
   useState,
   useRef,
   useCallback,
+  useMemo,
   type ReactNode,
 } from "react"
 import {
@@ -13,12 +14,32 @@ import {
   getSettings,
   type Preferences,
 } from "../api/settings-api"
+
+function createDateFormatters(preferences: Preferences) {
+  return {
+    date: new Intl.DateTimeFormat("en-US", {
+      timeZone: preferences.timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }),
+    time: new Intl.DateTimeFormat("en-US", {
+      timeZone: preferences.timeZone,
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: preferences.timeFormat === "12h",
+    }),
+  }
+}
+
 const PreferencesContext = createContext<{
   preferences: Preferences
   update: (value: Preferences) => void
+  formatters: ReturnType<typeof createDateFormatters>
 }>({
   preferences: defaultPreferences,
   update: () => {},
+  formatters: createDateFormatters(defaultPreferences),
 })
 export function PreferencesProvider({ children }: { children: ReactNode }) {
   const [preferences, setPreferences] = useState(defaultPreferences)
@@ -27,6 +48,10 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     version.current += 1
     setPreferences(value)
   }, [])
+  const formatters = useMemo(
+    () => createDateFormatters(preferences),
+    [preferences],
+  )
   useEffect(() => {
     const controller = new AbortController()
     const initialVersion = version.current
@@ -43,21 +68,16 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     return () => controller.abort()
   }, [])
   return (
-    <PreferencesContext value={{ preferences, update }}>
+    <PreferencesContext value={{ preferences, update, formatters }}>
       {children}
     </PreferencesContext>
   )
 }
 export const usePreferences = () => useContext(PreferencesContext)
 export function useDatePreferences() {
-  const { preferences } = usePreferences()
+  const { preferences, formatters } = usePreferences()
   const date = (value: Date | string) => {
-    const parts = new Intl.DateTimeFormat("en-US", {
-      timeZone: preferences.timeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(new Date(value))
+    const parts = formatters.date.formatToParts(new Date(value))
     const part = (type: string) =>
       parts.find((item) => item.type === type)?.value || ""
     const y = part("year"),
@@ -69,13 +89,7 @@ export function useDatePreferences() {
         ? d + "/" + m + "/" + y
         : m + "/" + d + "/" + y
   }
-  const time = (value: Date | string) =>
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: preferences.timeZone,
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: preferences.timeFormat === "12h",
-    }).format(new Date(value))
+  const time = (value: Date | string) => formatters.time.format(new Date(value))
   return {
     formatDate: date,
     formatTime: time,

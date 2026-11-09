@@ -36,7 +36,7 @@ test("service input trims and accepts all required fields", () => {
 })
 
 test("service input validates images, reusable pricing, and packages", () => {
-  const imageDataUrl = `data:image/png;base64,${Buffer.from("image").toString("base64")}`
+  const imageDataUrl = `data:image/webp;base64,${Buffer.from("image").toString("base64")}`
   const result = validateServiceInput({
     name: "Website Development",
     description: "Custom websites for clients.",
@@ -88,6 +88,18 @@ test("service input validates images, reusable pricing, and packages", () => {
   ])
   assert.equal(result.value?.requiresConsultation, true)
   assert.equal(result.value?.keyBenefits[0]?.title, "Launch with confidence")
+})
+
+test("service input rejects non-WebP images", () => {
+  const result = validateServiceInput({
+    name: "Website Development",
+    description: "Custom websites for clients.",
+    departmentIds: ["dept-1"],
+    isActive: true,
+    imageDataUrl: `data:image/png;base64,${Buffer.from("image").toString("base64")}`,
+    imageAltText: "A responsive website on a laptop",
+  })
+  assert.match(result.error ?? "", /WebP/)
 })
 
 test("pricing rules reject invalid amounts and recurring intervals", () => {

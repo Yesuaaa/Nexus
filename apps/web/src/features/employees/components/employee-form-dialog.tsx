@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { DateInput } from "@/components/ui/date-input"
 import {
   Select,
   SelectContent,
@@ -561,7 +562,7 @@ export function EmployeeFormDialog({
             </div>
             <label className={fieldClass}>
               <RequiredFieldLabel>Start Date</RequiredFieldLabel>
-              <Input
+              <DateInput
                 type="date"
                 id="employee-start-date"
                 className={validatedInputClass("startDate")}

@@ -20,28 +20,15 @@ export function ServiceCard({
   const imageRevealRef = useRef<HTMLSpanElement>(null)
   const fillRef = useRef<HTMLSpanElement>(null)
   const contentRef = useRef<HTMLSpanElement>(null)
-  const iconRef = useRef<HTMLSpanElement>(null)
   const nameRef = useRef<HTMLSpanElement>(null)
   const typeTweenRef = useRef<gsap.core.Tween | null>(null)
 
   useEffect(() => {
-    const media = gsap.matchMedia()
     const imageReveal = imageRevealRef.current
     const fill = fillRef.current
     const content = contentRef.current
 
-    media.add("(prefers-reduced-motion: no-preference)", () => {
-      gsap.to(iconRef.current, {
-        y: -6,
-        duration: 1.6,
-        ease: "sine.inOut",
-        repeat: -1,
-        yoyo: true,
-      })
-    })
-
     return () => {
-      media.revert()
       typeTweenRef.current?.kill()
       gsap.killTweensOf([imageReveal, fill, content])
     }
@@ -203,7 +190,6 @@ export function ServiceCard({
             src={service.imageUrl}
             alt=""
             fill
-            unoptimized
             sizes="(max-width: 560px) 100vw, (max-width: 1080px) 50vw, 25vw"
             className="object-cover"
           />
@@ -227,8 +213,7 @@ export function ServiceCard({
         className="relative z-20 flex h-full min-w-0 flex-col p-6 text-white max-[560px]:p-5"
       >
         <span
-          ref={iconRef}
-          className="grid size-14 shrink-0 place-items-center rounded-2xl border-2 border-current bg-[rgb(22_48_105_/_10%)] max-[560px]:size-12"
+          className="service-icon-float grid size-14 shrink-0 place-items-center rounded-2xl border-2 border-current bg-[rgb(22_48_105_/_10%)] max-[560px]:size-12"
           aria-hidden="true"
         >
           <ServiceIcon iconKey={service.iconKey} />
