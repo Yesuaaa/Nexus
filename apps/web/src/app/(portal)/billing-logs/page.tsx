@@ -1,10 +1,19 @@
 "use client"
 
+import { useWorkflowFilePreview } from "@/features/request-workflow/hooks/use-workflow-file-preview"
 import Link from "next/link"
 import Image from "next/image"
 import { useEffect, useState } from "react"
 import { ChevronRight, Download } from "lucide-react"
 import { contentClass, focusRing } from "@/components/layout/styles"
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -17,10 +26,7 @@ import { apiRequest } from "@/features/auth/api/auth-api"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Pill } from "@/components/ui/pill"
 import { rowActionButton } from "@/components/ui/row-action-styles"
-import {
-  createWorkflowFilePreviewUrl,
-  downloadWorkflowFile,
-} from "@/features/request-workflow/api/workflow-api"
+import { downloadWorkflowFile } from "@/features/request-workflow/api/workflow-api"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 
 type BillingPayment = {
@@ -84,31 +90,9 @@ function ProofAttachment({
   requestId: string
   file: NonNullable<BillingPayment["proofFile"]>
 }) {
-  const [url, setUrl] = useState("")
   const [expanded, setExpanded] = useState(false)
   const isImage = ["image/png", "image/jpeg"].includes(file.mimeType)
-
-  useEffect(() => {
-    if (!isImage) return
-    let active = true
-    let objectUrl = ""
-    void createWorkflowFilePreviewUrl(requestId, file.id)
-      .then((preview) => {
-        if (!active) {
-          URL.revokeObjectURL(preview)
-          return
-        }
-        objectUrl = preview
-        setUrl(preview)
-      })
-      .catch(() => {
-        // The original attachment remains available through Download proof.
-      })
-    return () => {
-      active = false
-      if (objectUrl) URL.revokeObjectURL(objectUrl)
-    }
-  }, [file.id, isImage, requestId])
+  const url = useWorkflowFilePreview(requestId, file.id, isImage)
 
   return (
     <div className="min-w-0">
@@ -392,7 +376,7 @@ export default function BillingLogsPage() {
               )}
             </div>
             <dl
-              className={`grid gap-3 rounded-lg border border-[#e2e8f0] px-4 py-3 text-sm empty:hidden ${selected.status === "VERIFIED" ? "[&_dd]:font-medium" : ""}`}
+              className={`grid rounded-lg border border-[#e2e8f0] text-sm empty:hidden ${selected.status === "VERIFIED" ? "gap-5 px-4 py-5 [&_dd]:text-sm [&_dd]:leading-5 [&_dd]:font-medium" : "gap-3 px-4 py-3"}`}
             >
               {selected.bookingReference &&
                 (!selected.proofFile || selected.sandbox) && (
@@ -469,41 +453,54 @@ export default function BillingLogsPage() {
               )}
             </dl>
             {selected.status === "PENDING" && (
-              <table className="w-full text-sm">
-                <thead className="border-b border-[#e2e8f0] text-xs text-[#475569]">
-                  <tr>
-                    <th scope="col" className="pb-2 text-left font-medium">
+              <Table className="text-sm">
+                <TableHeader className="border-b border-[#e2e8f0] text-xs text-[#475569]">
+                  <TableRow>
+                    <TableHead
+                      scope="col"
+                      className="px-0 pb-2 text-left font-medium"
+                    >
                       Item
-                    </th>
-                    <th scope="col" className="pb-2 text-right font-medium">
+                    </TableHead>
+                    <TableHead
+                      scope="col"
+                      className="px-0 pb-2 text-right font-medium"
+                    >
                       Amount
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {selected.lineItems && selected.lineItems.length > 1 ? (
                     selected.lineItems.map((item, index) => (
-                      <tr key={index} className="border-b border-[#e2e8f0]">
-                        <td className="py-3 pr-3">{item.description}</td>
-                        <td className="py-3 text-right tabular-nums">
+                      <TableRow
+                        key={index}
+                        className="border-b border-[#e2e8f0]"
+                      >
+                        <TableCell className="px-0 py-3 pr-3">
+                          {item.description}
+                        </TableCell>
+                        <TableCell className="px-0 py-3 text-right tabular-nums">
                           {formatAmount({
                             amount: String(
                               item.quantity * Number(item.unitPrice),
                             ),
                             currency: selected.currency,
                           })}
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))
                   ) : (
-                    <tr className="border-b border-[#e2e8f0]">
-                      <td className="py-3 pr-3">{selected.serviceName}</td>
-                      <td className="py-3 text-right tabular-nums">
+                    <TableRow className="border-b border-[#e2e8f0]">
+                      <TableCell className="px-0 py-3 pr-3">
+                        {selected.serviceName}
+                      </TableCell>
+                      <TableCell className="px-0 py-3 text-right tabular-nums">
                         {formatAmount(selected)}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   )}
-                </tbody>
+                </TableBody>
                 {selected.lineItems && selected.lineItems.length > 1 && (
                   <tfoot className="font-semibold">
                     <tr>
@@ -516,7 +513,7 @@ export default function BillingLogsPage() {
                     </tr>
                   </tfoot>
                 )}
-              </table>
+              </Table>
             )}
             {downloadError && (
               <p role="alert" className="text-xs text-red-700">

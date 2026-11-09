@@ -1,5 +1,6 @@
 "use client"
 
+import { useWorkflowFilePreview } from "@/features/request-workflow/hooks/use-workflow-file-preview"
 import { Form, validateFields } from "@/components/ui/form"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 
@@ -75,10 +76,7 @@ import {
 } from "@/components/ui/dialog"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { cn } from "@/lib/utils"
-import {
-  createWorkflowFilePreviewUrl,
-  downloadWorkflowFile,
-} from "../api/workflow-api"
+import { downloadWorkflowFile } from "../api/workflow-api"
 import type { WorkflowControls } from "../hooks/use-request-workflow"
 import type {
   Workflow,
@@ -121,33 +119,10 @@ export function FileSubmissionCard({
   className?: string
 }) {
   const [downloading, setDownloading] = useState(false)
-  const [preview, setPreview] = useState<{
-    fileId: string
-    url: string
-  } | null>(null)
   const isImage = file.mimeType.startsWith("image/")
   const isVideo = file.mimeType.startsWith("video/")
   const isMedia = isImage || isVideo
-
-  useEffect(() => {
-    if (!isMedia) return
-    let active = true
-    let objectUrl: string | null = null
-    void createWorkflowFilePreviewUrl(requestId, file.id)
-      .then((url) => {
-        objectUrl = url
-        if (!active) {
-          URL.revokeObjectURL(url)
-          return
-        }
-        setPreview({ fileId: file.id, url })
-      })
-      .catch(() => undefined)
-    return () => {
-      active = false
-      if (objectUrl) URL.revokeObjectURL(objectUrl)
-    }
-  }, [file.id, isMedia, requestId])
+  const previewUrl = useWorkflowFilePreview(requestId, file.id, isMedia)
 
   return (
     <div
@@ -158,10 +133,10 @@ export function FileSubmissionCard({
         className,
       )}
     >
-      {isMedia && preview?.fileId === file.id ? (
+      {previewUrl ? (
         isImage ? (
           <Image
-            src={preview.url}
+            src={previewUrl}
             alt={file.name}
             width={960}
             height={640}
@@ -174,7 +149,7 @@ export function FileSubmissionCard({
             preload="metadata"
             className="block h-auto max-h-[min(50dvh,18rem)] max-w-full w-auto bg-[#101828]"
           >
-            <source src={preview.url} type={file.mimeType} />
+            <source src={previewUrl} type={file.mimeType} />
             Your browser does not support video playback.
           </video>
         )
