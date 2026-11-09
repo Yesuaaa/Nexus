@@ -5,7 +5,9 @@ import Link from "next/link"
 import { ChevronDown, MessageSquare } from "lucide-react"
 import { contentClass, focusRing } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
+import { SearchEmptyState } from "@/components/ui/search-empty-state"
 import { SearchField } from "@/components/ui/search-field"
+import { RequestStatus } from "@/features/services/components/client-requests-table"
 import { serviceRequestStatuses } from "@/features/services/model/service-request-status"
 
 type Faq = {
@@ -142,23 +144,15 @@ export default function HelpCenterPage() {
                                 <p>{answer}</p>
                               ) : statuses ? (
                                 <ul className="space-y-1.5">
-                                  {statuses.map((status, index) => {
-                                    const { label, className } =
-                                      serviceRequestStatuses[status]
-                                    return (
-                                      <li
-                                        key={status}
-                                        className="flex flex-wrap items-center gap-x-2 gap-y-1"
-                                      >
-                                        <span
-                                          className={`rounded px-1.5 py-0.5 text-xs font-medium ${className}`}
-                                        >
-                                          {label}
-                                        </span>
-                                        <span>{answer[index]}</span>
-                                      </li>
-                                    )
-                                  })}
+                                  {statuses.map((status, index) => (
+                                    <li
+                                      key={status}
+                                      className="flex flex-wrap items-center gap-x-2 gap-y-1"
+                                    >
+                                      <RequestStatus status={status} />
+                                      <span>{answer[index]}</span>
+                                    </li>
+                                  ))}
                                 </ul>
                               ) : (
                                 <ol className="list-inside list-decimal">
@@ -177,12 +171,9 @@ export default function HelpCenterPage() {
               </section>
             ))
           ) : (
-            <p
-              role="status"
-              className="rounded-lg border border-[#e2e8f0] px-4 py-6 text-sm text-[#475569]"
-            >
-              No matching questions. Try a different search.
-            </p>
+            <div className="rounded-lg border border-[#e2e8f0] px-4 py-6">
+              <SearchEmptyState query={search.trim()} />
+            </div>
           )}
         </div>
 
@@ -203,7 +194,7 @@ export default function HelpCenterPage() {
           </p>
           <Button
             asChild
-            className="mt-4 h-[34px] bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
+            className="mt-4 bg-[#203f8c] text-white hover:bg-[#172f70]"
           >
             <Link href="/messages">Open messages</Link>
           </Button>
