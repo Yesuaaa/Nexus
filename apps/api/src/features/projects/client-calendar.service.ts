@@ -13,6 +13,7 @@ export async function listClientCalendar(clientId: string) {
         startsAt: true,
         endsAt: true,
         location: true,
+        status: true,
         workflow: {
           select: {
             request: {
@@ -35,6 +36,7 @@ export async function listClientCalendar(clientId: string) {
         id: true,
         conversationId: true,
         proposedStartsAt: true,
+        status: true,
         startsAt: true,
         endsAt: true,
         location: true,
@@ -57,6 +59,7 @@ export async function listClientCalendar(clientId: string) {
         id: true,
         title: true,
         sentToClientAt: true,
+        completedAt: true,
         project: { select: { id: true, name: true } },
       },
     }),
@@ -64,7 +67,7 @@ export async function listClientCalendar(clientId: string) {
 
   return [
     ...consultations.map(
-      ({ id, startsAt, endsAt, location, workflow: { request } }) => ({
+      ({ id, startsAt, endsAt, location, status, workflow: { request } }) => ({
         id: `consultation-${id}`,
         type: "consultation",
         title: `${request.service.name} consultation`,
@@ -76,6 +79,7 @@ export async function listClientCalendar(clientId: string) {
         location,
         staff: request.acceptedDepartment?.head?.fullName ?? null,
         pending: false,
+        completed: status === "COMPLETED",
         href: `/messages?request=${encodeURIComponent(request.id)}`,
       }),
     ),
@@ -88,6 +92,7 @@ export async function listClientCalendar(clientId: string) {
         location,
         bookings,
         proposedStartsAt,
+        status,
       }) => ({
         id: `meeting-${id}`,
         type: "meeting",
@@ -101,26 +106,29 @@ export async function listClientCalendar(clientId: string) {
         location,
         staff: null,
         pending: Boolean(proposedStartsAt),
+        completed: status === "COMPLETED",
         href: `/messages?request=${encodeURIComponent(conversationId)}`,
       }),
     ),
-    ...milestones.flatMap(({ id, title, sentToClientAt, project }) =>
-      sentToClientAt
-        ? [
-            {
-              id: `milestone-${id}`,
-              type: "milestone",
-              title,
-              context: `${project.name} · Shared deliverable`,
-              startsAt: sentToClientAt,
-              endsAt: null,
-              location: null,
-              staff: null,
-              pending: false,
-              href: `/projects/${encodeURIComponent(project.id)}`,
-            },
-          ]
-        : [],
+    ...milestones.flatMap(
+      ({ id, title, sentToClientAt, completedAt, project }) =>
+        sentToClientAt
+          ? [
+              {
+                id: `milestone-${id}`,
+                type: "milestone",
+                title,
+                context: `${project.name} · Shared deliverable`,
+                startsAt: sentToClientAt,
+                endsAt: null,
+                location: null,
+                staff: null,
+                pending: false,
+                completed: Boolean(completedAt),
+                href: `/projects/${encodeURIComponent(project.id)}`,
+              },
+            ]
+          : [],
     ),
   ]
 }

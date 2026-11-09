@@ -40,6 +40,7 @@ export function Calendar({
   min,
   max,
   week = false,
+  variant = "compact",
   today: currentDate = calendarToday(),
   markers,
   onSelect,
@@ -48,11 +49,13 @@ export function Calendar({
   min?: string
   max?: string
   week?: boolean
+  variant?: "compact" | "month"
   today?: string
-  markers?: Record<string, { label: string; color: string }[]>
+  markers?: Record<string, { label: string; color: string; title?: string }[]>
   onSelect: (date: string) => void
 }) {
   const [view, setView] = useState(() => calendarDate(value))
+  const monthGrid = variant === "month"
   const [focused, setFocused] = useState(() => calendarKey(calendarDate(value)))
   const grid = useRef<HTMLDivElement>(null)
   const first = new Date(view)
@@ -110,7 +113,8 @@ export function Calendar({
         >
           {monthLabel.format(view)}
         </p>
-        <div className="flex gap-1">
+        <div className="flex items-center gap-1">
+          {monthGrid && todayButton}
           {[-1, 1].map((amount) => {
             const next = moveMonth(amount)
             const last = new Date(next)
@@ -152,6 +156,9 @@ export function Calendar({
         ref={grid}
         role="grid"
         aria-label={monthLabel.format(view)}
+        className={cn(
+          monthGrid && "overflow-hidden rounded-lg border border-[#e1e4ea]",
+        )}
         onKeyDown={(event) => {
           const target = event.target
           if (!(target instanceof HTMLButtonElement) || !target.dataset.date)
@@ -183,13 +190,24 @@ export function Calendar({
             navigate(date)
         }}
       >
-        <div role="row" className="mb-1 grid grid-cols-7">
-          {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((day) => (
+        <div
+          role="row"
+          className={cn(
+            "grid grid-cols-7",
+            monthGrid ? "bg-[#f5f7fa]" : "mb-1",
+          )}
+        >
+          {(monthGrid
+            ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+            : ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
+          ).map((day) => (
             <span
               key={day}
               role="columnheader"
               className={cn(
                 "py-2 text-center font-medium",
+                monthGrid &&
+                  "border-r border-[#e1e4ea] text-[10px] tracking-wide uppercase last:border-r-0",
                 markers
                   ? "text-xs text-slate-600"
                   : "text-[10px] text-[#738096]",
@@ -207,7 +225,8 @@ export function Calendar({
               const key = calendarKey(date)
               const active = key === selected
               const markedToday = Boolean(markers) && key === today
-              const dots = markers?.[key]?.slice(0, 3) ?? []
+              const dayMarkers = markers?.[key] ?? []
+              const dots = dayMarkers.slice(0, 3)
               const inWeek =
                 week && !!selected && date >= monday && date <= sunday
               return (
@@ -216,7 +235,13 @@ export function Calendar({
                   role="gridcell"
                   aria-selected={active}
                   className={cn(
-                    "my-0.5 flex justify-center",
+                    monthGrid
+                      ? "min-w-0 border-t border-r border-[#e1e4ea] last:border-r-0"
+                      : "my-0.5 flex justify-center",
+                    monthGrid &&
+                      (date.getUTCMonth() === view.getUTCMonth()
+                        ? "bg-[#f8fafb]"
+                        : "bg-[#f0f3f6]"),
                     inWeek &&
                       "bg-[#eaf0fb] first:rounded-l-lg last:rounded-r-lg",
                   )}
@@ -228,6 +253,9 @@ export function Calendar({
                     aria-label={[
                       dayLabel.format(date),
                       ...dots.map(({ label }) => label),
+                      ...(monthGrid
+                        ? dayMarkers.map(({ title }) => title).filter(Boolean)
+                        : []),
                     ].join(", ")}
                     aria-current={key === today ? "date" : undefined}
                     disabled={disabled(key)}
@@ -236,21 +264,80 @@ export function Calendar({
                       buttonClass,
                       "text-xs",
                       markers &&
+                        !monthGrid &&
                         "flex h-11 w-full max-w-14 flex-col items-center justify-center gap-1 text-base text-slate-800",
                       date.getUTCMonth() !== view.getUTCMonth() &&
                         (markers ? "text-slate-500" : "text-[#9aa8bb]"),
                       key === today &&
+                        !monthGrid &&
                         !active &&
                         !markedToday &&
                         "ring-1 ring-inset ring-[#a7b9df]",
                       active &&
+                        !monthGrid &&
                         "bg-[#203f8c] font-semibold text-white hover:bg-[#172f70] hover:text-white",
+                      monthGrid &&
+                        "flex h-32 w-full min-w-0 flex-col items-stretch justify-start gap-1.5 rounded-none p-2 text-left text-xs hover:bg-[#f1f5fb] max-[560px]:h-24 max-[560px]:gap-1 max-[560px]:p-1 focus-visible:-outline-offset-2",
+                      monthGrid &&
+                        active &&
+                        "bg-[#edf2fc] ring-1 ring-inset ring-[#b8c9eb]",
                     )}
                     onFocus={() => setFocused(key)}
                     onClick={() => onSelect(key)}
                   >
-                    {date.getUTCDate()}
-                    {markers && (
+                    {monthGrid ? (
+                      <>
+                        <span className="flex items-center justify-between gap-1">
+                          <span
+                            className={cn(
+                              "grid size-6 place-items-center rounded-full text-[11px] tabular-nums",
+                              key === today &&
+                                "bg-[#203f8c] font-semibold text-white",
+                              active &&
+                                key !== today &&
+                                "bg-[#dce6f8] font-semibold text-[#203f8c]",
+                            )}
+                          >
+                            {date.getUTCDate()}
+                          </span>
+                          {dayMarkers.length > 0 && (
+                            <span
+                              className="mr-1 size-1.5 shrink-0 rounded-full bg-[#4168b0]"
+                              aria-hidden="true"
+                            />
+                          )}
+                        </span>
+                        <span
+                          className="flex min-w-0 flex-col gap-1"
+                          aria-hidden="true"
+                        >
+                          {dots
+                            .slice(0, 2)
+                            .map(({ label, title, color }, index) => (
+                              <span
+                                key={index}
+                                title={title ?? label}
+                                className="block truncate rounded border-l-2 px-1.5 py-1 text-[10px] leading-tight font-medium max-[560px]:px-0.5 max-[560px]:text-[9px]"
+                                style={{
+                                  color,
+                                  borderColor: color,
+                                  backgroundColor: `color-mix(in srgb, ${color} 10%, white)`,
+                                }}
+                              >
+                                {title ?? label}
+                              </span>
+                            ))}
+                          {dayMarkers.length > 2 && (
+                            <span className="px-1 text-[10px] font-medium text-[#52627a]">
+                              +{dayMarkers.length - 2} more
+                            </span>
+                          )}
+                        </span>
+                      </>
+                    ) : (
+                      date.getUTCDate()
+                    )}
+                    {markers && !monthGrid && (
                       <span
                         className={cn(
                           "flex h-2 items-center gap-1",

@@ -18,6 +18,7 @@ import {
   canAccessDepartmentManagement,
   canAccessEmployeeManagement,
   canAccessServiceCatalog,
+  canAccessCalendar,
   canAccessServiceManagement,
   canAccessClientManagement,
   canAccessProjects,
@@ -31,7 +32,6 @@ import {
   DashboardIcon,
   DepartmentIcon,
   PanelIcon,
-  SignOutIcon,
   ServiceIcon,
 } from "./icons"
 
@@ -54,14 +54,12 @@ export function Sidebar({
   drawerOpen,
   onToggleCollapse,
   onCloseDrawer,
-  onSignOut,
 }: {
   account: Account
   collapsed: boolean
   drawerOpen: boolean
   onToggleCollapse: () => void
   onCloseDrawer: () => void
-  onSignOut: () => void
 }) {
   const pathname = usePathname()
   const collapsedLabelClass = collapsed
@@ -261,7 +259,7 @@ export function Sidebar({
               )}
             </Link>
           )}
-          {canAccessServiceCatalog(account) && (
+          {canAccessCalendar(account) && (
             <Link
               href="/calendar"
               aria-current={pathname === "/calendar" ? "page" : undefined}
@@ -360,27 +358,6 @@ export function Sidebar({
             </Link>
           )}
         </nav>
-
-        <div
-          className={cn(
-            "mt-auto border-t border-[#e2e5e9] px-6 pt-4 pb-[19px] max-[767px]:px-[22px]",
-            collapsed && "px-3",
-          )}
-        >
-          <button
-            type="button"
-            className={cn(
-              navLinkClass,
-              "font-normal text-[#f35b61] hover:bg-[#fff0f1]",
-              collapsed && "justify-center gap-0 p-0",
-            )}
-            onClick={onSignOut}
-          >
-            <SignOutIcon className="flex-none" />
-            <span className={collapsedLabelClass}>Sign Out</span>
-            {collapsed && <CollapsedTooltip>Sign Out</CollapsedTooltip>}
-          </button>
-        </div>
       </div>
     </aside>
   )

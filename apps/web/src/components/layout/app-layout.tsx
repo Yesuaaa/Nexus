@@ -92,7 +92,6 @@ export function AppLayout({
         drawerOpen={drawerOpen}
         onToggleCollapse={toggleSidebar}
         onCloseDrawer={() => setDrawerOpen(false)}
-        onSignOut={onSignOut}
       />
       <div
         className={cn(

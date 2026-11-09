@@ -1,5 +1,5 @@
-import { ClientCalendarPage } from "@/features/projects/pages/client-calendar-page"
+import { CalendarPage } from "@/features/calendar/pages/calendar-page"
 
 export default function Page() {
-  return <ClientCalendarPage />
+  return <CalendarPage />
 }

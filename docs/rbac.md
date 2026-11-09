@@ -55,6 +55,10 @@ Superadmins can select **Change password** from another account's Actions menu, 
 
 `PATCH /api/users/:id/status` accepts `{ "isActive": false }` to deactivate or `{ "isActive": true }` to reactivate and returns `{ "user": ... }`. Deactivation preserves the account and department/team assignments, revokes all its sessions, and blocks login and authenticated requests. Reactivated accounts must sign in again. Account responses include `isActive`; new and existing accounts default to active. Apply the `20261026090000_account_status` migration before deploying these changes with `pnpm --filter @nexus/api exec prisma migrate deploy`.
 
+### Calendar
+
+All active portal roles may open `/calendar`. Clients receive only their own calendar events. Staff default to assigned work and their department-head appointments, with a team scope available to current heads and eligible project/team leads within existing project access. Admin and Superadmin receive read-only organization schedule metadata and filters; this does not grant access to staff workspaces, booking conversations, or scheduling mutations. The API rechecks current role and assignments for each calendar request. See [Role-aware calendar](features/calendar.md).
+
 ### Project Workspace
 
 - The current Department Head can view active and archived projects for their department. Other active STAFF accounts can view and update work-plan tasks only in project workspaces where they are assigned through the project team.
