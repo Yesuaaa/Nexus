@@ -1,0 +1,13 @@
+{
+  "cwd": "C:/Users/ADMIN/Documents/Thesis/Nexus/apps/web",
+  "command": "node node_modules/@playwright/test/cli.js test --list --reporter=json",
+  "environmentOverrides": {
+    "NEXUS_E2E_LIVE": "0",
+    "NEXUS_E2E_BASE_URL": "http://127.0.0.1:5273"
+  },
+  "exitCode": 0,
+  "discoveredCases": 292,
+  "specFiles": 35,
+  "writes": "stdout redirected to ignored root test-results/phase2-audit/discovery.json; Playwright transformation cache may write temporary cache; --list does not run webServer, setup hooks or tests; no tracked source writes observed",
+  "note": "Initial audit harness spawnSync was denied by sandbox; direct CLI discovery succeeded."
+}

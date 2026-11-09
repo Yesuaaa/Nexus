@@ -1,0 +1,2 @@
+# Preserve historical evidence bytes across Git add and checkout.
+artifacts/** -text

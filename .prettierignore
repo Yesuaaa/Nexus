@@ -17,3 +17,4 @@ pnpm-lock.yaml
 .env.*
 !.env.example
 apps/mobile/
+docs/testing/migrations/phase4/baseline/artifacts/
