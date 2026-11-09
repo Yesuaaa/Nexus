@@ -13,15 +13,19 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog"
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet"
 import { rowActionButton } from "@/components/ui/row-action-styles"
+import { TaskRowActions } from "./task-row-actions"
 import { useRequestWorkflow } from "@/features/request-workflow/hooks/use-request-workflow"
 import { ProjectStaffingDialog } from "@/features/request-workflow/components/project-staffing-dialog"
-import type { ProjectWorkspaceDetail } from "../api/project-workspace-api"
+import {
+  assignProjectTeamLead,
+  type ProjectWorkspaceDetail,
+} from "../api/project-workspace-api"
 
 function AssignStaff({
   requestId,
@@ -75,27 +79,30 @@ function AssignStaff({
 export function WorkspaceTeam({
   workspace,
   onChanged,
+  onUpdated,
 }: {
   workspace: ProjectWorkspaceDetail
   onChanged: () => void
+  onUpdated: (workspace: ProjectWorkspaceDetail) => void
 }) {
   const [search, setSearch] = useState("")
   const [streamId, setStreamId] = useState("all")
-  const [detail, setDetail] = useState<{
-    name: string
-    position: string
-    skills: string[]
-    service: string
-  } | null>(null)
+  const [detailId, setDetailId] = useState<string | null>(null)
+  const [savingLead, setSavingLead] = useState(false)
+  const [leadError, setLeadError] = useState("")
   const rows = useMemo(
     () =>
-      workspace.workstreams.flatMap((stream) =>
-        (stream.staff ?? []).map((person) => ({
-          id: `${stream.id}-${person.id}`,
-          person,
-          stream,
-        })),
-      ),
+      workspace.workstreams
+        .flatMap((stream) =>
+          (stream.staff ?? []).map((person) => ({
+            id: `${stream.id}-${person.id}`,
+            person,
+            stream,
+          })),
+        )
+        .sort(
+          (a, b) => Number(b.person.isTeamLead) - Number(a.person.isTeamLead),
+        ),
     [workspace.workstreams],
   )
   const visible = useMemo(
@@ -115,6 +122,35 @@ export function WorkspaceTeam({
       stream.requestId &&
       (streamId === "all" || stream.id === streamId),
   )
+  const detail = rows.find(({ id }) => id === detailId)
+  const teamLead = rows.find(({ person }) => person.isTeamLead)
+  const assignedTasks =
+    detail?.stream.plan?.phases.flatMap((phase) =>
+      phase.tasks
+        .filter((task) => task.employeeId === detail.person.id)
+        .map((task) => ({ task, phase: phase.title })),
+    ) ?? []
+
+  async function saveTeamLead() {
+    if (!detail || savingLead) return
+    setSavingLead(true)
+    setLeadError("")
+    try {
+      onUpdated(
+        await assignProjectTeamLead(
+          workspace.id,
+          detail.stream.id,
+          detail.person.id,
+        ),
+      )
+    } catch (error) {
+      setLeadError(
+        error instanceof Error ? error.message : "Could not assign team lead.",
+      )
+    } finally {
+      setSavingLead(false)
+    }
+  }
   return (
     <section aria-label="Project team">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -185,7 +221,7 @@ export function WorkspaceTeam({
               columns={5}
               rowClassName="border-t border-[#edf0f4]"
               emptyContent="No staff match these filters."
-              renderRow={({ person, stream }) => (
+              renderRow={({ id, person, stream }) => (
                 <>
                   {" "}
                   <td className="px-4 py-4">
@@ -198,6 +234,11 @@ export function WorkspaceTeam({
                           .join("")}
                       </span>
                       <span className="font-medium">{person.fullName}</span>
+                      {person.isTeamLead && (
+                        <span className="rounded-md bg-[#e9effc] px-2 py-1 text-[11px] text-[#294c96]">
+                          Team lead
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="px-4 py-4 text-[#60718c]">
@@ -215,14 +256,10 @@ export function WorkspaceTeam({
                     <button
                       className={rowActionButton}
                       aria-label={`View ${person.fullName}`}
-                      onClick={() =>
-                        setDetail({
-                          name: person.fullName,
-                          position: person.position || "Staff",
-                          skills: person.profileSpecialties,
-                          service: stream.serviceName,
-                        })
-                      }
+                      onClick={() => {
+                        setLeadError("")
+                        setDetailId(id)
+                      }}
                     >
                       <Eye size={16} />
                     </button>
@@ -260,22 +297,146 @@ export function WorkspaceTeam({
           )}
         </div>
       )}
-      <Dialog
+      <Sheet
         open={Boolean(detail)}
         onOpenChange={(open) => {
-          if (!open) setDetail(null)
+          if (!open && !savingLead) setDetailId(null)
         }}
       >
-        <DialogContent>
-          <DialogTitle>{detail?.name}</DialogTitle>
-          <DialogDescription>
-            {detail?.position} · {detail?.service}
-          </DialogDescription>
-          <p className="text-xs text-[#60718c]">
-            {detail?.skills.join(", ") || "No skills recorded."}
-          </p>
-        </DialogContent>
-      </Dialog>
+        <SheetContent
+          overlayClassName="bg-[#14213d]/40"
+          className="nexus-side-panel inset-y-auto top-[15px] right-[15px] flex h-[calc(100dvh-30px)] w-[min(600px,calc(100vw-30px))] max-w-none flex-col gap-0 overflow-hidden rounded-[13px] border border-[#dedede] bg-background p-0 shadow-[0_16px_60px_rgb(18_36_73_/_18%)] sm:max-w-none max-[560px]:top-0 max-[560px]:right-0 max-[560px]:h-dvh max-[560px]:w-full max-[560px]:rounded-none"
+        >
+          <header className="border-b border-[#eceef1] px-6 py-6 pr-14">
+            <SheetTitle className="text-[22px] leading-tight tracking-tight">
+              {detail?.person.fullName}
+            </SheetTitle>
+            <SheetDescription className="mt-2 text-xs text-[#738096]">
+              Project team member
+            </SheetDescription>
+          </header>
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+            {detail && (
+              <dl className="rounded-xl border border-[#e1e4ea] px-4">
+                {[
+                  ["Position", detail.person.position || "Staff"],
+                  ["Service", detail.stream.serviceName],
+                  [
+                    "Assigned on",
+                    new Date(detail.person.approvedAt).toLocaleDateString(),
+                  ],
+                  [
+                    "Project role",
+                    detail.person.isTeamLead ? "Team lead" : "Team member",
+                  ],
+                  [
+                    "Skills",
+                    detail.person.profileSpecialties.join(", ") ||
+                      "No skills recorded",
+                  ],
+                ].map(([label, value]) => (
+                  <div
+                    key={label}
+                    className="border-b border-[#eceef1] py-3 last:border-0"
+                  >
+                    <dt className="text-[11px] font-medium text-[#738096]">
+                      {label}
+                    </dt>
+                    <dd className="mt-1.5 break-words text-xs font-medium">
+                      {value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+            {detail && (
+              <section className="mt-5" aria-labelledby="member-assigned-tasks">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <h3
+                    id="member-assigned-tasks"
+                    className="text-xs font-semibold"
+                  >
+                    Assigned tasks
+                  </h3>
+                  <span className="text-[11px] text-[#738096]">
+                    {assignedTasks.length} assigned
+                  </span>
+                </div>
+                {assignedTasks.length ? (
+                  <ul className="rounded-xl border border-[#e1e4ea]">
+                    {assignedTasks.map(({ task, phase }) => (
+                      <li
+                        key={task.id}
+                        className="flex items-center justify-between gap-3 border-b border-[#eceef1] px-4 py-3 last:border-0"
+                      >
+                        <div className="min-w-0">
+                          <p className="break-words text-xs font-medium">
+                            {task.title}
+                          </p>
+                          <p className="mt-1 text-[11px] text-[#738096]">
+                            {phase} ·{" "}
+                            {task.status === "DONE"
+                              ? "Complete"
+                              : task.status === "IN_PROGRESS"
+                                ? "In progress"
+                                : "Not started"}
+                          </p>
+                        </div>
+                        {detail.stream.canAssign &&
+                          ["PLANNED", "IN_PROGRESS"].includes(
+                            detail.stream.status,
+                          ) && (
+                            <TaskRowActions
+                              workspaceId={workspace.id}
+                              stream={detail.stream}
+                              task={task}
+                              onUpdated={onUpdated}
+                              disabled={savingLead}
+                              editOnly
+                            />
+                          )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="rounded-xl border border-[#e1e4ea] px-4 py-3 text-xs text-[#738096]">
+                    No tasks assigned for this service yet.
+                  </p>
+                )}
+              </section>
+            )}
+          </div>
+          {detail &&
+          !detail.person.isTeamLead &&
+          workspace.canManage &&
+          detail.stream.canAssign &&
+          ["PLANNED", "IN_PROGRESS"].includes(detail.stream.status) &&
+          detail.person.status === "ACTIVE" ? (
+            <footer className="shrink-0 border-t border-[#eceef1] px-6 py-4">
+              {teamLead && (
+                <p className="text-xs text-[#60718c]">
+                  This will replace {teamLead.person.fullName} as team lead.
+                </p>
+              )}
+              {leadError && (
+                <p role="alert" className="text-xs text-red-700">
+                  {leadError}
+                </p>
+              )}
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  type="button"
+                  disabled={savingLead}
+                  onClick={() => void saveTeamLead()}
+                  className="bg-[#203f8c] text-white hover:bg-[#172f70]"
+                >
+                  {savingLead ? "Assigning…" : "Assign as team lead"}
+                </Button>
+              </div>
+            </footer>
+          ) : null}
+        </SheetContent>
+      </Sheet>
     </section>
   )
 }

@@ -1,7 +1,5 @@
 "use client"
 
-import dynamic from "next/dynamic"
-import { PanelLoading } from "@/components/ui/panel-loading"
 import { useEffect, useMemo, useState } from "react"
 import {
   Archive,
@@ -10,30 +8,29 @@ import {
   CheckCircle2,
   FolderKanban,
   Layers3,
-  Plus,
 } from "lucide-react"
 import { contentClass } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
 import { KpiCards } from "@/components/ui/kpi-cards"
+import { KpiDistributionChart } from "@/components/ui/kpi-distribution-chart"
+import { KpiDonutChart } from "@/components/ui/kpi-donut-chart"
+import { KpiPieChart } from "@/components/ui/kpi-pie-chart"
 import { SearchField } from "@/components/ui/search-field"
-import { Dropdown } from "@/components/ui/dropdown"
-import { canCreateProjectWorkspace } from "@/features/auth/model/permissions"
-import { usePortalAccount } from "@/features/auth/providers/account-context"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   listProjectWorkspaces,
   type ProjectWorkspaceSummary,
 } from "../api/project-workspace-api"
 import { WorkspaceListTable } from "../components/workspace-list-table"
-const NewWorkspaceDialog = dynamic(
-  () =>
-    import("./new-workspace-page").then((module) => module.NewWorkspaceDialog),
-  { loading: PanelLoading },
-)
 
 export function ProjectWorkspacePage() {
-  const account = usePortalAccount()
   const [workspaces, setWorkspaces] = useState<ProjectWorkspaceSummary[]>([])
-  const [canCreate, setCanCreate] = useState(false)
   const [sort, setSort] = useState<"recent" | "most-active">("recent")
   const [view, setView] = useState<"active" | "archive">("active")
   const [status, setStatus] = useState("all")
@@ -41,7 +38,6 @@ export function ProjectWorkspacePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [revision, setRevision] = useState(0)
-  const [createOpen, setCreateOpen] = useState(false)
 
   function refresh() {
     setLoading(true)
@@ -55,7 +51,6 @@ export function ProjectWorkspacePage() {
       .then((result) => {
         if (!controller.signal.aborted) {
           setWorkspaces(result.workspaces)
-          setCanCreate(result.canCreate)
           setError("")
         }
       })
@@ -114,6 +109,91 @@ export function ProjectWorkspacePage() {
       ),
     0,
   )
+  const totalTaskCount = workspaces.reduce(
+    (count, workspace) =>
+      count +
+      workspace.workstreams.reduce(
+        (total, workstream) => total + workstream.taskCount,
+        0,
+      ),
+    0,
+  )
+  const serviceCounts = workspaces.reduce((counts, workspace) => {
+    workspace.workstreams.forEach((workstream) => {
+      counts.set(
+        workstream.serviceName,
+        (counts.get(workstream.serviceName) ?? 0) + 1,
+      )
+    })
+    return counts
+  }, new Map<string, number>())
+  const topServices = [...serviceCounts.entries()]
+    .sort(([, firstCount], [, secondCount]) => secondCount - firstCount)
+    .slice(0, 5)
+  const remainingServiceCount =
+    workstreamCount - topServices.reduce((count, [, value]) => count + value, 0)
+  const serviceSegments = [
+    ...topServices.map(([label, value], index) => ({
+      label,
+      value,
+      color: ["#4169bd", "#29906b", "#7159bd", "#c27625", "#d81758"][index],
+    })),
+    ...(remainingServiceCount > 0
+      ? [
+          {
+            label: "Other services",
+            value: remainingServiceCount,
+            color: "#8a9ab1",
+          },
+        ]
+      : []),
+  ]
+  const projectStatusSegments = [
+    {
+      label: "Planned",
+      value: workspaces.filter(
+        ({ status: itemStatus }) => itemStatus === "PLANNED",
+      ).length,
+      color: "#7088b5",
+    },
+    {
+      label: "In progress",
+      value: activeCount,
+      color: "#29906b",
+    },
+    {
+      label: "On hold",
+      value: workspaces.filter(
+        ({ status: itemStatus }) => itemStatus === "ON_HOLD",
+      ).length,
+      color: "#c27625",
+    },
+    {
+      label: "Completed",
+      value: workspaces.filter(
+        ({ status: itemStatus }) => itemStatus === "COMPLETED",
+      ).length,
+      color: "#4169bd",
+    },
+    {
+      label: "Cancelled",
+      value: workspaces.filter(
+        ({ status: itemStatus }) => itemStatus === "CANCELLED",
+      ).length,
+      color: "#d81758",
+    },
+  ]
+  const activeProjectStatusSegments = projectStatusSegments.filter(
+    ({ label }) => !["Completed", "Cancelled"].includes(label),
+  )
+  const taskSegments = [
+    { label: "Completed", value: activeTasks, color: "#29906b" },
+    {
+      label: "Remaining",
+      value: Math.max(totalTaskCount - activeTasks, 0),
+      color: "#e3e9ef",
+    },
+  ]
 
   return (
     <main
@@ -130,23 +210,12 @@ export function ProjectWorkspacePage() {
             your department.
           </p>
         </div>
-        {canCreateProjectWorkspace(account) && canCreate && (
-          <Button
-            type="button"
-            onClick={() => setCreateOpen(true)}
-            className="h-[34px] text-xs max-[560px]:h-11"
-          >
-            <Plus size={15} />
-            New project
-          </Button>
-        )}
       </header>
 
       <KpiCards
         label="Project summary"
         pending={loading}
         unavailable={!!error}
-        showCharts={false}
         className="mt-[18px] grid-cols-4 max-[1200px]:grid-cols-2 max-[560px]:grid-cols-1"
         metrics={[
           {
@@ -155,6 +224,12 @@ export function ProjectWorkspacePage() {
             description: "Across your department",
             icon: FolderKanban,
             iconClassName: "text-[#3153a5]",
+            chart: (
+              <KpiDistributionChart
+                label={`Project status distribution: ${projectStatusSegments.map((segment) => `${segment.label}: ${segment.value}`).join("; ")}`}
+                segments={projectStatusSegments}
+              />
+            ),
           },
           {
             label: "In progress",
@@ -162,6 +237,12 @@ export function ProjectWorkspacePage() {
             description: `${openCount} active or planned`,
             icon: Activity,
             iconClassName: "text-[#138447]",
+            chart: (
+              <KpiPieChart
+                label={`Active project status distribution: ${activeProjectStatusSegments.map((segment) => `${segment.label}: ${segment.value}`).join("; ")}`}
+                segments={activeProjectStatusSegments}
+              />
+            ),
           },
           {
             label: "Services",
@@ -169,6 +250,9 @@ export function ProjectWorkspacePage() {
             description: "Services in project plans",
             icon: Layers3,
             iconClassName: "text-[#526b95]",
+            chartValues: serviceSegments.map((segment) => segment.value),
+            chartLabel: `Service distribution in project plans: ${serviceSegments.map((segment) => `${segment.label}: ${segment.value}`).join("; ") || "No services"}`,
+            chartColor: "#7159bd",
           },
           {
             label: "Tasks completed",
@@ -176,6 +260,12 @@ export function ProjectWorkspacePage() {
             description: "Across saved work plans",
             icon: CheckCircle2,
             iconClassName: "text-[#138447]",
+            chart: (
+              <KpiDonutChart
+                label={`Task completion: ${activeTasks} completed of ${totalTaskCount} total`}
+                segments={taskSegments}
+              />
+            ),
           },
         ]}
       />
@@ -194,48 +284,56 @@ export function ProjectWorkspacePage() {
                 label="Search projects"
                 placeholder="Search project, service, or client..."
                 value={search}
+                maxLength={100}
                 onChange={(event) => setSearch(event.target.value)}
-                containerClassName="w-[260px] max-[1050px]:w-[260px] max-[1050px]:flex-none max-[560px]:h-11 max-[560px]:w-full"
+                containerClassName="max-[560px]:h-11"
               />
-              <Dropdown
-                value={status}
-                onChange={setStatus}
-                label="Filter by project status"
-                className="w-[150px] max-[560px]:w-full"
-                triggerClassName="h-[34px] text-xs max-[560px]:h-11"
-                options={[
-                  {
-                    value: "all",
-                    label: view === "archive" ? "All archived" : "All active",
-                  },
-                  ...(view === "archive"
-                    ? [
-                        { value: "COMPLETED", label: "Completed" },
-                        { value: "CANCELLED", label: "Cancelled" },
-                      ]
-                    : [
-                        { value: "PLANNED", label: "Planned" },
-                        { value: "IN_PROGRESS", label: "In progress" },
-                        { value: "ON_HOLD", label: "On hold" },
-                      ]),
-                ]}
-              />
-              <Dropdown<"recent" | "most-active">
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger
+                  aria-label="Filter projects by status"
+                  className="h-[34px] w-[185px] border-[#e1e4ea] text-xs max-[560px]:h-11 max-[560px]:w-full"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">
+                    {view === "archive" ? "All archived" : "All active"}
+                  </SelectItem>
+                  {view === "archive" ? (
+                    <>
+                      <SelectItem value="COMPLETED">Completed</SelectItem>
+                      <SelectItem value="CANCELLED">Cancelled</SelectItem>
+                    </>
+                  ) : (
+                    <>
+                      <SelectItem value="PLANNED">Planned</SelectItem>
+                      <SelectItem value="IN_PROGRESS">In progress</SelectItem>
+                      <SelectItem value="ON_HOLD">On hold</SelectItem>
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
+              <Select
                 value={sort}
-                label="Sort projects"
-                className="w-[174px] max-[560px]:w-full"
-                triggerClassName="h-[34px] text-xs max-[560px]:h-11"
-                options={[
-                  { value: "recent", label: "Most recent activity" },
-                  { value: "most-active", label: "Most activity" },
-                ]}
-                onChange={(value) => {
-                  if (value === sort) return
+                onValueChange={(value) => {
+                  const nextSort = value as "recent" | "most-active"
+                  if (nextSort === sort) return
                   setLoading(true)
                   setError("")
-                  setSort(value)
+                  setSort(nextSort)
                 }}
-              />
+              >
+                <SelectTrigger
+                  aria-label="Sort projects"
+                  className="h-[34px] w-[174px] border-[#e1e4ea] text-xs max-[560px]:h-11 max-[560px]:w-full"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="recent">Most recent activity</SelectItem>
+                  <SelectItem value="most-active">Most activity</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <Button
               type="button"
@@ -248,7 +346,7 @@ export function ProjectWorkspacePage() {
                 setStatus("all")
                 setSearch("")
               }}
-              className="h-[34px] flex-none text-xs max-[560px]:h-11 max-[560px]:w-full"
+              className="h-[34px] flex-none border-[#d64557] text-xs text-[#b3343b] hover:bg-[#fff0f1] hover:text-[#9f2638] focus-visible:ring-[#b3343b] max-[560px]:h-11 max-[560px]:w-full"
             >
               <Archive size={14} aria-hidden="true" />
               {view === "archive" ? "Back to Projects" : "Archive"}
@@ -287,20 +385,9 @@ export function ProjectWorkspacePage() {
                 No project workspaces yet
               </h3>
               <p className="m-0 max-w-md text-xs leading-5 text-[#738096]">
-                {canCreate
-                  ? "Start with a client-accepted booking, then choose a delivery plan for each service."
-                  : "Your department head can set up a workspace after a booking is approved."}
+                Workspaces will appear here once approved bookings are set up
+                for delivery.
               </p>
-              {canCreateProjectWorkspace(account) && canCreate && (
-                <Button
-                  type="button"
-                  onClick={() => setCreateOpen(true)}
-                  className="mt-4 text-xs"
-                >
-                  <Plus size={14} />
-                  New project
-                </Button>
-              )}
             </div>
           </div>
         ) : view === "archive" &&
@@ -340,11 +427,6 @@ export function ProjectWorkspacePage() {
           </p>
         )}
       </section>
-      <NewWorkspaceDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        onCreated={refresh}
-      />
     </main>
   )
 }

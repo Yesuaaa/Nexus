@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { contentClass, focusRing } from "@/components/layout/styles"
+import { ClientPageHeader } from "@/components/layout/client-page-header"
 import {
   Select,
   SelectContent,
@@ -406,35 +407,31 @@ export function ClientServicesPage() {
       className={cn(contentClass, "p-[clamp(20px,2.1vw,32px)]")}
       aria-label="Services catalog"
     >
-      <header className="flex items-start justify-between gap-4 max-[560px]:flex-col">
-        <div>
-          <p className="m-0 text-[11px] font-bold tracking-[0.16em] text-[#2456b6] uppercase">
-            Services
-          </p>
-          <h1 className="mt-1 mb-0 text-[clamp(23px,2.2vw,31px)] leading-tight font-bold tracking-[-0.035em] text-[#101d35]">
-            {submittedRequest
-              ? "Request Submitted"
-              : currentStep === 4
-                ? "Preferred Specialist"
-                : currentStep === 3
-                  ? "Project Requirements"
-                  : currentStep === 2
-                    ? "Choose Your Package"
-                    : "Build Your Brand with EXP"}
-          </h1>
-          <p className="mt-1.5 mb-0 max-w-[760px] text-sm leading-relaxed text-[#587095]">
-            {submittedRequest
-              ? "Your service request is pending review."
-              : currentStep === 4
-                ? "Let us know who you’d prefer to work with, subject to availability and Department Manager approval."
-                : currentStep === 3
-                  ? "Share your goals, requirements, and expected timeline so we can understand your project."
-                  : currentStep === 2
-                    ? "Find the right package for your goals, with clear pricing and everything you need to get started."
-                    : "Discover powerful digital services crafted to amplify your presence, connect with your audience, and turn ideas into real business impact."}
-          </p>
-        </div>
-      </header>
+      <ClientPageHeader
+        eyebrow="Services"
+        title={
+          submittedRequest
+            ? "Request Submitted"
+            : currentStep === 4
+              ? "Preferred Specialist"
+              : currentStep === 3
+                ? "Project Requirements"
+                : currentStep === 2
+                  ? "Choose Your Package"
+                  : "Build Your Brand with EXP"
+        }
+        description={
+          submittedRequest
+            ? "Your service request is pending review."
+            : currentStep === 4
+              ? "Let us know who you’d prefer to work with, subject to availability and Department Manager approval."
+              : currentStep === 3
+                ? "Share your goals, requirements, and expected timeline so we can understand your project."
+                : currentStep === 2
+                  ? "Find the right package for your goals, with clear pricing and everything you need to get started."
+                  : "Discover powerful digital services crafted to amplify your presence, connect with your audience, and turn ideas into real business impact."
+        }
+      />
 
       {detailState && (
         <div

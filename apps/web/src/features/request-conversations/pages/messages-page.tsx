@@ -5,7 +5,9 @@ import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
+  Archive,
   ChevronDown,
+  List,
   LoaderCircle,
   MessageSquare,
   UsersRound,
@@ -27,7 +29,12 @@ import {
   type RequestMessage,
 } from "../api/request-conversations-api"
 import { ConversationAvatar } from "../components/conversation-avatar"
-import { ConversationListItem } from "../components/conversation-list-item"
+import {
+  ConversationListItem,
+  ProjectConversationListItem,
+} from "../components/conversation-list-item"
+import { useProjectConversations } from "../hooks/use-project-conversations"
+import { projectConversationTransport } from "../api/project-conversations-api"
 import {
   createInternalConversation,
   listInternalContacts,
@@ -68,13 +75,22 @@ const InternalConversation = dynamic(
 type MessagesPageProps = {
   requestId: string | null
   internalId: string | null
+  projectId?: string | null
+  view?: "active" | "archived"
   mode: "requests" | "internal"
 }
 export function MessagesPage(props: MessagesPageProps) {
-  return <ConversationInbox key={props.mode} {...props} />
+  const mode = props.mode === "internal" ? "internal" : "requests"
+  return <ConversationInbox key={mode} {...props} mode={mode} />
 }
 
-function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
+function ConversationInbox({
+  requestId,
+  internalId,
+  projectId = null,
+  view = "active",
+  mode,
+}: MessagesPageProps) {
   const router = useRouter()
   const account = usePortalAccount()
   const [result, setResult] = useState<ConversationList | null>(null)
@@ -117,6 +133,11 @@ function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
   )
   const isClient = account.role === "USER"
   const canUseInternalChat = !isClient
+  const canUseProjectChat = isClient || account.role === "STAFF"
+  const projectChats = useProjectConversations(
+    mode === "requests" && canUseProjectChat,
+    view,
+  )
   const canCollapseConversations = isClient || account.role === "STAFF"
   const railCollapsed = canCollapseConversations && conversationRailCollapsed
 
@@ -453,11 +474,33 @@ function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
     (row) => row.id === internalId,
   )
   const hasSelection =
-    mode === "internal" ? Boolean(internalId) : Boolean(requestId)
+    mode === "internal" ? Boolean(internalId) : Boolean(requestId || projectId)
   const unreadCount =
     mode === "internal"
       ? (internalResult?.unreadCount ?? 0)
-      : result?.unreadCount
+      : (result?.unreadCount ?? 0) + (projectChats.result?.unreadCount ?? 0)
+  const sharedConversations = orderConversations([
+    ...(result?.conversations ?? [])
+      .filter(
+        (conversation) =>
+          (conversation.status === "ARCHIVED") === (view === "archived"),
+      )
+      .map((conversation) => ({
+        kind: "request" as const,
+        id: conversation.id,
+        updatedAt: conversation.updatedAt,
+        conversation,
+      })),
+    ...(projectChats.result?.conversations ?? []).map((conversation) => ({
+      kind: "project" as const,
+      id: conversation.id,
+      updatedAt: conversation.updatedAt,
+      conversation,
+    })),
+  ])
+  const conversationsLoading = loading || projectChats.loading
+  const moreConversationsLoading = loadingMore || projectChats.loadingMore
+  const nextView = view === "active" ? "archived" : "active"
   return (
     <main
       aria-label="Messages"
@@ -483,16 +526,26 @@ function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
             "max-[767px]:justify-between max-[767px]:px-5",
           )}
         >
-          <h1
+          <div
             className={cn(
-              "m-0 mr-auto min-w-0 flex-none overflow-hidden text-sm font-semibold whitespace-nowrap transition-[max-width,opacity,transform] duration-[160ms] ease-out motion-reduce:transition-none",
+              "mr-auto flex min-w-0 items-center gap-2",
               railCollapsed
-                ? "hidden max-[767px]:block max-[767px]:max-w-24"
-                : "max-w-24 opacity-100",
+                ? "hidden max-[767px]:flex max-[767px]:max-w-32"
+                : "max-w-full",
             )}
           >
-            Messages
-          </h1>
+            <h1 className="m-0 min-w-0 overflow-hidden text-sm font-semibold whitespace-nowrap">
+              Messages
+            </h1>
+            <span
+              aria-label={
+                mode === "internal" ? "Internal chats" : "Client chats"
+              }
+              className="inline-flex shrink-0 items-center rounded-full border border-[#dbe3ef] bg-[#f3f6fb] px-2 py-1 text-[10px] leading-none font-medium text-[#52627a]"
+            >
+              {mode === "internal" ? "Internal" : "Client"}
+            </span>
+          </div>
           {mode === "requests" && Boolean(unreadCount) && (
             <span
               role="status"
@@ -531,20 +584,42 @@ function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
         </header>
         <div
           className={cn(
-            "mb-3 flex gap-1 px-3",
+            "mb-3 flex flex-wrap gap-1 px-3",
             railCollapsed &&
               "flex-col items-center max-[767px]:flex-row max-[767px]:items-start",
           )}
         >
+          {mode === "requests" && canUseProjectChat && (
+            <Button
+              type="button"
+              variant="outline"
+              aria-label={
+                nextView === "archived"
+                  ? "Archived conversations"
+                  : "Active conversations"
+              }
+              onClick={() =>
+                router.push(`/messages?view=${nextView}`, { scroll: false })
+              }
+              className="size-11 shrink-0 cursor-pointer border-transparent p-0"
+            >
+              {nextView === "archived" ? (
+                <Archive size={16} aria-hidden="true" />
+              ) : (
+                <List size={16} aria-hidden="true" />
+              )}
+              <HoverTooltip>
+                {nextView === "archived"
+                  ? "Archived conversations"
+                  : "Active conversations"}
+              </HoverTooltip>
+            </Button>
+          )}
           {canUseInternalChat && mode === "internal" && (
             <Button
               asChild
               variant="outline"
-              className={cn(
-                "h-11 shrink-0 border-transparent text-xs text-[#203f8c]",
-                railCollapsed &&
-                  "size-11 p-0 max-[767px]:w-auto max-[767px]:px-4",
-              )}
+              className="size-11 shrink-0 cursor-pointer border-transparent p-0"
             >
               <Link
                 href="/messages"
@@ -552,13 +627,6 @@ function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
                 aria-label="Back to client chats"
               >
                 <MessageSquare size={16} aria-hidden="true" />
-                <span
-                  className={cn(
-                    railCollapsed && "sr-only max-[767px]:not-sr-only",
-                  )}
-                >
-                  Client chats
-                </span>
                 <HoverTooltip>Back to client chats</HoverTooltip>
               </Link>
             </Button>
@@ -581,7 +649,7 @@ function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
           id="conversation-list"
           className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2 pb-3"
         >
-          {mode === "requests" && loading && (
+          {mode === "requests" && conversationsLoading && (
             <p
               role="status"
               className={cn(
@@ -619,9 +687,10 @@ function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
             </p>
           )}
           {mode === "requests" &&
-            !loading &&
+            !conversationsLoading &&
             !error &&
-            !result?.conversations.length && (
+            !projectChats.error &&
+            !sharedConversations.length && (
               <div
                 className={cn(
                   "py-10 text-center text-[#52627a]",
@@ -640,7 +709,9 @@ function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
                     railCollapsed && "hidden max-[767px]:block",
                   )}
                 >
-                  No conversations yet
+                  {view === "archived"
+                    ? "No archived conversations"
+                    : "No conversations yet"}
                 </h2>
                 <p
                   className={cn(
@@ -648,61 +719,80 @@ function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
                     railCollapsed && "hidden max-[767px]:block",
                   )}
                 >
-                  Conversations appear here when a department head accepts a
-                  service request.
+                  {view === "archived"
+                    ? "Completed project chats will appear here."
+                    : "Conversations appear here when a service request is accepted or an assigned project starts."}
                 </p>
               </div>
             )}
           {mode === "requests" &&
-            !loading &&
-            orderConversations(result?.conversations ?? []).map(
-              (conversation) => (
+            sharedConversations.map((entry) =>
+              entry.kind === "request" ? (
                 <ConversationListItem
-                  key={conversation.id}
-                  conversation={conversation}
+                  key={`request:${entry.id}`}
+                  conversation={entry.conversation}
                   isClient={isClient}
-                  requestId={requestId}
+                  requestId={projectId ? null : requestId}
+                  railCollapsed={railCollapsed}
+                />
+              ) : (
+                <ProjectConversationListItem
+                  key={`project:${entry.id}`}
+                  conversation={entry.conversation}
+                  accountId={account.id}
+                  projectId={projectId}
+                  view={view}
                   railCollapsed={railCollapsed}
                 />
               ),
             )}
-          {mode === "requests" && !loading && result?.nextCursor && (
-            <Button
-              variant="outline"
-              aria-label={
-                railCollapsed
-                  ? loadingMore
-                    ? "Loading more conversations"
-                    : "Load more conversations"
-                  : undefined
-              }
-              className={cn(
-                "m-4 text-xs",
-                railCollapsed && "mx-auto flex size-11 items-center p-0",
-              )}
-              disabled={loadingMore}
-              onClick={() => void loadMore()}
-            >
-              {railCollapsed ? (
-                loadingMore ? (
-                  <LoaderCircle
-                    size={16}
-                    aria-hidden="true"
-                    className="animate-spin motion-reduce:animate-none"
-                  />
-                ) : (
-                  <>
-                    <ChevronDown size={16} aria-hidden="true" />
-                    <span className="sr-only">Load more conversations</span>
-                  </>
-                )
-              ) : loadingMore ? (
-                "Loading…"
-              ) : (
-                "Load more conversations"
-              )}
-            </Button>
+          {mode === "requests" && projectChats.error && (
+            <p role="alert" className="p-3 text-xs text-rose-700">
+              {projectChats.error}
+            </p>
           )}
+          {mode === "requests" &&
+            !conversationsLoading &&
+            (result?.nextCursor || projectChats.result?.nextCursor) && (
+              <Button
+                variant="outline"
+                aria-label={
+                  railCollapsed
+                    ? moreConversationsLoading
+                      ? "Loading more conversations"
+                      : "Load more conversations"
+                    : undefined
+                }
+                className={cn(
+                  "m-4 text-xs",
+                  railCollapsed && "mx-auto flex size-11 items-center p-0",
+                )}
+                disabled={moreConversationsLoading}
+                onClick={() => {
+                  void loadMore()
+                  void projectChats.loadMore()
+                }}
+              >
+                {railCollapsed ? (
+                  moreConversationsLoading ? (
+                    <LoaderCircle
+                      size={16}
+                      aria-hidden="true"
+                      className="animate-spin motion-reduce:animate-none"
+                    />
+                  ) : (
+                    <>
+                      <ChevronDown size={16} aria-hidden="true" />
+                      <span className="sr-only">Load more conversations</span>
+                    </>
+                  )
+                ) : moreConversationsLoading ? (
+                  "Loading…"
+                ) : (
+                  "Load more conversations"
+                )}
+              </Button>
+            )}
           {mode === "internal" && !internalLoading && !internalError && (
             <>
               <div
@@ -909,7 +999,18 @@ function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
           !hasSelection && "max-[767px]:hidden",
         )}
       >
-        {mode === "requests" && requestId ? (
+        {mode === "requests" && projectId ? (
+          <InternalConversation
+            conversationId={projectId}
+            kind="project"
+            transport={projectConversationTransport}
+            onLatestMessage={projectChats.onMessage}
+            onConversationRead={projectChats.onRead}
+            listHref={
+              view === "archived" ? "/messages?view=archived" : "/messages"
+            }
+          />
+        ) : mode === "requests" && requestId ? (
           <RequestConversation
             requestId={requestId}
             clientName={selected?.client.fullName || undefined}
@@ -942,8 +1043,8 @@ function ConversationInbox({ requestId, internalId, mode }: MessagesPageProps) {
               {mode === "internal"
                 ? "Choose a staff member or administrator to start a private chat."
                 : isClient
-                  ? "Choose a department to discuss all your bookings in one conversation."
-                  : "Choose a client to discuss all their department bookings in one conversation."}
+                  ? "Choose a conversation to discuss your bookings or projects."
+                  : "Choose a client or project team conversation."}
             </p>
           </div>
         )}

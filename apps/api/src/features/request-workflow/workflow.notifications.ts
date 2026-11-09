@@ -77,7 +77,7 @@ export async function listWorkflowNotifications(userId: string) {
             requestId: true,
             createdAt: true,
             readAt: true,
-            event: { select: { summary: true, type: true } },
+            event: { select: { summary: true, type: true, entityId: true } },
           },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take: 40,

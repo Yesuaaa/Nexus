@@ -228,6 +228,6 @@ export type WorkflowAction =
       paymentVerifierId: string | null
     }
   | { type: "STAFF_PROJECT"; employeeIds: string[] }
-  | { type: "ACTIVATE_PROJECT" }
+  | { type: "ACTIVATE_PROJECT"; projectName?: string }
   | { type: "HOLD" | "RESUME" | "CANCEL"; note: string }
   | { type: "INTERNAL_NOTE"; note: string }

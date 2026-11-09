@@ -12,16 +12,7 @@ import {
   useState,
   type FormEvent,
 } from "react"
-import Link from "next/link"
-import {
-  ArrowLeft,
-  Info,
-  MoreHorizontal,
-  Pencil,
-  Send,
-  Trash2,
-  UserRound,
-} from "lucide-react"
+import { Info, MoreHorizontal, Pencil, Trash2, UserRound } from "lucide-react"
 import { sileo } from "@/lib/toast"
 import { Button } from "@/components/ui/button"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
@@ -61,6 +52,13 @@ import { ClientProfileDialog } from "./client-profile-dialog"
 import { statusText } from "@/features/request-workflow/components/workflow-primitives"
 import type { Workflow } from "@/features/request-workflow/model/workflow"
 import { ConversationAvatar } from "./conversation-avatar"
+import {
+  ConversationSurface,
+  ConversationHeader,
+  ConversationMessage,
+  ConversationBubble,
+  ConversationComposer,
+} from "./conversation-ui"
 import { ConversationTools } from "./conversation-tools"
 import { ConversationBookingWorkflow } from "./conversation-booking-workflow"
 import {
@@ -803,43 +801,25 @@ function ConversationPanel({
           />
         ))}
       <div className="flex min-h-0 flex-1 max-[1023px]:flex-col-reverse">
-        <div className="m-3 flex min-h-0 flex-1 overflow-hidden rounded-[13px] border border-[#dedede] bg-background shadow-[0_2px_8px_rgb(20_30_50_/_11%)] max-[767px]:m-2">
-          <section
-            aria-label="Request conversation"
-            className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
-          >
-            <header className="flex min-h-[68px] shrink-0 items-center gap-3 border-b border-[#efefee] bg-background px-6 py-3 max-[767px]:gap-2 max-[767px]:px-4">
-              <Link
-                href={listHref}
-                aria-label="All conversations"
-                className={cn(
-                  "hidden size-8 shrink-0 items-center justify-center rounded-full text-[#52627a] hover:bg-[#f1f1ee] max-[767px]:flex",
-                  focusRing,
-                )}
-              >
-                <ArrowLeft size={17} aria-hidden="true" />
-              </Link>
-              <ConversationAvatar
-                name={participantName}
-                imageUrl={
-                  isClient
-                    ? history?.conversation?.head?.imageUrl
-                    : history?.conversation?.client?.imageUrl
-                }
-                className="size-8"
-              />
-              <div className="min-w-0 flex-1">
-                <h2 className="m-0 truncate text-sm font-semibold text-[#182235]">
-                  {participantName}
-                </h2>
-                <p className="mt-0.5 mb-0 truncate text-xs text-[#8791a2]">
-                  {history?.conversation
-                    ? `${history.conversation.department.name} · ${conversationBookings.length} ${conversationBookings.length === 1 ? "booking" : "bookings"}`
-                    : requestTitle || "Service conversation"}
-                  {requestTitle && <HoverTooltip>{requestTitle}</HoverTooltip>}
-                </p>
-              </div>
-              {isParticipant && (
+        <ConversationSurface label="Request conversation">
+          <ConversationHeader
+            listHref={listHref}
+            name={participantName}
+            imageUrl={
+              isClient
+                ? history?.conversation?.head?.imageUrl
+                : history?.conversation?.client?.imageUrl
+            }
+            subtitle={
+              <>
+                {history?.conversation
+                  ? `${history.conversation.department.name} · ${conversationBookings.length} ${conversationBookings.length === 1 ? "booking" : "bookings"}`
+                  : requestTitle || "Service conversation"}
+                {requestTitle && <HoverTooltip>{requestTitle}</HoverTooltip>}
+              </>
+            }
+            actions={
+              isParticipant && (
                 <div className="flex shrink-0 items-center gap-1.5">
                   {isClient && (
                     <button
@@ -913,529 +893,452 @@ function ConversationPanel({
                     </HoverTooltip>
                   </button>
                 </div>
-              )}
-            </header>
-            {!history ? (
-              <p className="p-4 text-xs text-[#52627a]">
-                {error
-                  ? "Refresh to try loading this conversation again."
-                  : "Loading messages…"}
-              </p>
-            ) : !history.conversation ? (
-              <p className="p-4 text-xs leading-5 text-[#52627a]">
-                Messaging opens when a department head accepts your request. You
-                can return to this page to read and send messages.
-              </p>
-            ) : (
-              <>
-                {history.nextCursor && (
-                  <Button
-                    variant="outline"
-                    className="mx-4 mt-3 text-xs"
-                    onClick={() => void loadOlder()}
-                    disabled={olderLoading}
-                  >
-                    {olderLoading ? "Loading…" : "Load earlier messages"}
-                  </Button>
-                )}
-                <div
-                  ref={logRef}
-                  role="log"
-                  aria-label="Conversation messages"
-                  aria-live="polite"
-                  aria-relevant="additions"
-                  tabIndex={0}
-                  onScroll={(event) => {
-                    const node = event.currentTarget
-                    followLatest.current =
-                      node.scrollHeight - node.scrollTop - node.clientHeight <
-                      70
-                  }}
-                  className="min-h-0 flex-1 overflow-y-auto px-7 py-5 focus-visible:outline-none max-[767px]:px-4"
+              )
+            }
+          />
+          {!history ? (
+            <p className="p-4 text-xs text-[#52627a]">
+              {error
+                ? "Refresh to try loading this conversation again."
+                : "Loading messages…"}
+            </p>
+          ) : !history.conversation ? (
+            <p className="p-4 text-xs leading-5 text-[#52627a]">
+              Messaging opens when a department head accepts your request. You
+              can return to this page to read and send messages.
+            </p>
+          ) : (
+            <>
+              {history.nextCursor && (
+                <Button
+                  variant="outline"
+                  className="mx-4 mt-3 text-xs"
+                  onClick={() => void loadOlder()}
+                  disabled={olderLoading}
                 >
-                  {!timeline.length && (
-                    <p className="my-3 text-center text-xs text-[#52627a]">
-                      No messages yet. Start the conversation below.
+                  {olderLoading ? "Loading…" : "Load earlier messages"}
+                </Button>
+              )}
+              <div
+                ref={logRef}
+                role="log"
+                aria-label="Conversation messages"
+                aria-live="polite"
+                aria-relevant="additions"
+                tabIndex={0}
+                onScroll={(event) => {
+                  const node = event.currentTarget
+                  followLatest.current =
+                    node.scrollHeight - node.scrollTop - node.clientHeight < 70
+                }}
+                className="min-h-0 flex-1 overflow-y-auto px-7 py-5 focus-visible:outline-none max-[767px]:px-4"
+              >
+                {!timeline.length && (
+                  <p className="my-3 text-center text-xs text-[#52627a]">
+                    No messages yet. Start the conversation below.
+                  </p>
+                )}
+                {timeline.map((entry, index) => {
+                  const date = new Date(entry.createdAt)
+                  const previousEntry = timeline[index - 1]
+                  const newDay =
+                    !previousEntry ||
+                    formatDate(date) !== formatDate(previousEntry.createdAt)
+                  const daySeparator = newDay ? (
+                    <p className="mt-3 mb-5 text-center text-[11px] text-[#8791a2]">
+                      {formatDate(date)}
                     </p>
-                  )}
-                  {timeline.map((entry, index) => {
-                    const date = new Date(entry.createdAt)
-                    const previousEntry = timeline[index - 1]
-                    const newDay =
-                      !previousEntry ||
-                      formatDate(date) !== formatDate(previousEntry.createdAt)
-                    const daySeparator = newDay ? (
-                      <p className="mt-3 mb-5 text-center text-[11px] text-[#8791a2]">
-                        {formatDate(date)}
-                      </p>
-                    ) : null
-                    if (entry.kind === "meeting")
-                      return (
-                        <div
-                          key={`meeting-${entry.id}`}
-                          id={`meeting-${entry.id}`}
-                        >
-                          {daySeparator}
-                          <ConversationMeetingCard
-                            meeting={entry.meeting}
-                            conversationId={
-                              history.conversation?.id ?? requestId
-                            }
-                            isManager={
-                              isStaff &&
-                              history.conversation?.head?.id === account.id
-                            }
-                            canAct={history.canSend}
-                            onSaved={applyMeetingUpdate}
-                            onRefresh={() => setRevision((value) => value + 1)}
-                          />
-                        </div>
-                      )
-                    if (entry.kind === "event") {
-                      const eventWorkflow = entry.workflow
-                      const sameBooking =
-                        previousEntry?.kind === "event" &&
-                        previousEntry.workflow.request.id ===
-                          eventWorkflow.request.id
-                      return (
-                        <div
-                          id={
-                            entry.event.entityId &&
-                            eventWorkflow.events
-                              .filter(
-                                (item) =>
-                                  item.entityId === entry.event.entityId,
-                              )
-                              .at(-1)?.id === entry.event.id
-                              ? `workflow-${entry.event.entityId}`
-                              : undefined
-                          }
-                          key={`event-${entry.id}`}
-                          data-booking-event={eventWorkflow.request.id}
-                          className="scroll-mt-4"
-                        >
-                          {daySeparator}
-                          {(!sameBooking || newDay) && (
-                            <p
-                              title={`${eventWorkflow.request.serviceName} · ${eventWorkflow.request.referenceNumber || eventWorkflow.request.id}`}
-                              className="mx-1 mt-4 mb-1 max-w-full truncate text-[10px] font-medium text-[#52627a]"
-                            >
-                              {eventWorkflow.request.serviceName} ·{" "}
-                              {eventWorkflow.request.referenceNumber ||
-                                eventWorkflow.request.id}
-                            </p>
-                          )}
-                          <WorkflowEventCard
-                            onPrepareQuotation={() => {
-                              setSchedulingMeeting(false)
-                              setSelectedBookingId(eventWorkflow.request.id)
-                              setActiveWorkflowDraft("quotation")
-                            }}
-                            event={entry.event}
-                            workflow={eventWorkflow}
-                            controls={entry.controls}
-                            fileClassName={
-                              eventWorkflow.files.find(
-                                (file) => file.id === entry.event.entityId,
-                              )?.uploaderId === account.id
-                                ? "ml-auto"
-                                : undefined
-                            }
-                          />
-                        </div>
-                      )
-                    }
-                    const message = entry.message
-                    const own = message.sender.id === account.id
-                    const previous =
-                      previousEntry?.kind === "message"
-                        ? previousEntry.message
-                        : undefined
-                    const nextEntry = timeline[index + 1]
-                    const deletedAt = message.deletedAt
-                      ? new Date(message.deletedAt)
-                      : null
-                    const grouped =
-                      !newDay && previous?.sender.id === message.sender.id
-                    const groupedWithNext = Boolean(
-                      nextEntry?.kind === "message" &&
-                      date.toDateString() ===
-                        new Date(nextEntry.createdAt).toDateString() &&
-                      nextEntry.message.sender.id === message.sender.id,
-                    )
-                    const deleted = Boolean(message.deletedAt)
-                    const canManageMessage = Boolean(
-                      isStaff && history?.canSend && own && !deleted,
-                    )
-                    const editing = editingMessageId === message.id
+                  ) : null
+                  if (entry.kind === "meeting")
                     return (
-                      <div key={message.id}>
+                      <div
+                        key={`meeting-${entry.id}`}
+                        id={`meeting-${entry.id}`}
+                      >
                         {daySeparator}
-                        <article
-                          className={cn(
-                            "relative flex w-fit max-w-[85%] items-end gap-2 pb-1 max-[767px]:max-w-[92%]",
-                            canManageMessage && "pl-11",
-                            grouped ? "mt-1" : "mt-4",
-                            own ? "ml-auto flex-row-reverse" : "mr-auto",
-                          )}
-                        >
-                          {!own && (
-                            <ConversationAvatar
-                              name={message.sender.fullName || participantName}
-                              imageUrl={conversationParticipantImageUrl}
-                              className={cn(
-                                "size-7",
-                                groupedWithNext && "invisible",
-                              )}
-                            />
-                          )}
-                          <div className="min-w-0">
-                            <p className="sr-only">
-                              {own
-                                ? "You"
-                                : message.sender.fullName || "Participant"}
-                            </p>
-                            {editing ? (
-                              <Form
-                                className="w-[min(70vw,420px)] max-w-full space-y-2 rounded-xl border border-[#d8e1ef] bg-white p-3 shadow-sm"
-                                onSubmit={(event) => {
-                                  event.preventDefault()
-                                  void saveEditedMessage(message.id)
-                                }}
-                              >
-                                <label
-                                  htmlFor={`edit-message-${message.id}`}
-                                  className="sr-only"
-                                >
-                                  Edit message
-                                </label>
-                                <textarea
-                                  id={`edit-message-${message.id}`}
-                                  autoFocus
-                                  rows={3}
-                                  maxLength={4000}
-                                  value={editingMessageBody}
-                                  onChange={(event) =>
-                                    setEditingMessageBody(event.target.value)
-                                  }
-                                  onKeyDown={(event) => {
-                                    if (
-                                      event.key !== "Enter" ||
-                                      event.shiftKey ||
-                                      event.nativeEvent.isComposing
-                                    )
-                                      return
-                                    event.preventDefault()
-                                    event.currentTarget.form?.requestSubmit()
-                                  }}
-                                  className="block min-h-20 w-full resize-y rounded-lg border border-[#d8e1ef] bg-white px-3 py-2 text-xs leading-5 text-[#182235] outline-none focus-visible:ring-2 focus-visible:ring-[#294a9b]"
-                                />
-                                {messageActionError && (
-                                  <p
-                                    role="alert"
-                                    className="m-0 text-xs text-red-700"
-                                  >
-                                    {messageActionError}
-                                  </p>
-                                )}
-                                <div className="flex justify-end gap-2">
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    className="h-9 min-w-16 text-xs"
-                                    disabled={messageActionBusy}
-                                    onClick={() => {
-                                      setEditingMessageId(null)
-                                      setEditingMessageBody("")
-                                      setMessageActionError("")
-                                    }}
-                                  >
-                                    Cancel
-                                  </Button>
-                                  <Button
-                                    type="submit"
-                                    className="h-9 min-w-20 bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
-                                    disabled={
-                                      messageActionBusy ||
-                                      !editingMessageBody.trim()
-                                    }
-                                  >
-                                    {messageActionBusy ? "Saving…" : "Save"}
-                                  </Button>
-                                </div>
-                              </Form>
-                            ) : (
-                              <div className="relative w-fit max-w-full">
-                                <p
-                                  className={cn(
-                                    "m-0 rounded-2xl px-3.5 py-2.5 text-[13px] leading-5 whitespace-pre-wrap [overflow-wrap:anywhere]",
-                                    deleted
-                                      ? "border border-dashed border-[#d8e1ef] bg-[#f6f8fc] text-[#52627a]"
-                                      : own
-                                        ? "rounded-br-md bg-[#203f8c] text-white"
-                                        : "rounded-bl-md bg-[#dfe4eb] text-[#182235]",
-                                    deleted && "w-fit max-w-full py-1.5 italic",
-                                    deleted && own && "ml-auto",
-                                  )}
-                                >
-                                  {deleted
-                                    ? "This message was deleted"
-                                    : message.body}
-                                </p>
-                                <HoverTooltip>
-                                  {deleted
-                                    ? `Deleted ${formatDate(deletedAt!)}, ${formatTime(deletedAt!)}`
-                                    : `${message.editedAt ? "Edited · " : ""}${formatTime(date)}`}
-                                </HoverTooltip>
-                              </div>
-                            )}
-                            {deleted ? (
-                              <div
-                                className={cn(
-                                  "mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 px-1 text-[11px] text-[#8791a2]",
-                                  own && "justify-end",
-                                )}
-                              >
-                                <MessageDeletionCountdown
-                                  purgeAt={message.purgeAt}
-                                />
-                              </div>
-                            ) : canManageMessage ? (
-                              <div className="mt-1 flex items-center gap-1 px-1 text-[11px] text-[#8791a2]">
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      aria-label={`Actions for your message at ${formatTime(date)}`}
-                                      className="absolute top-0 left-0 size-11 shrink-0 border-0 bg-transparent p-0 text-[#52627a] hover:bg-[#f1f4fa]"
-                                    >
-                                      <MoreHorizontal
-                                        size={16}
-                                        aria-hidden="true"
-                                      />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent
-                                    side="top"
-                                    align="end"
-                                    className="min-w-36 rounded-xl border-[#dce3ee] bg-white p-1.5 text-[#203047] shadow-[0_12px_30px_rgb(18_36_73_/_16%)]"
-                                  >
-                                    <DropdownMenuItem
-                                      className="min-h-10 cursor-pointer gap-2 rounded-md px-2.5 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
-                                      onSelect={() => {
-                                        setEditingMessageId(message.id)
-                                        setEditingMessageBody(
-                                          message.body || "",
-                                        )
-                                        setMessageActionError("")
-                                      }}
-                                    >
-                                      <Pencil aria-hidden="true" />
-                                      Edit message
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      className="min-h-10 cursor-pointer gap-2 rounded-md px-2.5 text-xs font-medium text-red-700 focus:bg-red-50 focus:text-red-700"
-                                      onSelect={() => {
-                                        setDeleteTarget(message)
-                                        setDeleteError("")
-                                      }}
-                                    >
-                                      <Trash2 aria-hidden="true" />
-                                      Delete message
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </div>
-                            ) : null}
-                          </div>
-                        </article>
-                      </div>
-                    )
-                  })}
-                </div>
-                <div className="relative shrink-0">
-                  {schedulingMeeting &&
-                    history.canSend &&
-                    history.conversation &&
-                    isStaff &&
-                    history.conversation.head?.id === account.id && (
-                      <div className="absolute right-0 bottom-full left-0 z-10">
-                        <ScheduleConversationMeeting
-                          conversationId={history.conversation.id}
-                          bookings={conversationBookings}
-                          onClose={() => setSchedulingMeeting(false)}
+                        <ConversationMeetingCard
+                          meeting={entry.meeting}
+                          conversationId={history.conversation?.id ?? requestId}
+                          isManager={
+                            isStaff &&
+                            history.conversation?.head?.id === account.id
+                          }
+                          canAct={history.canSend}
                           onSaved={applyMeetingUpdate}
+                          onRefresh={() => setRevision((value) => value + 1)}
                         />
                       </div>
-                    )}
-                  {workflow && activeWorkflowDraft && (
+                    )
+                  if (entry.kind === "event") {
+                    const eventWorkflow = entry.workflow
+                    const sameBooking =
+                      previousEntry?.kind === "event" &&
+                      previousEntry.workflow.request.id ===
+                        eventWorkflow.request.id
+                    return (
+                      <div
+                        id={
+                          entry.event.entityId &&
+                          eventWorkflow.events
+                            .filter(
+                              (item) => item.entityId === entry.event.entityId,
+                            )
+                            .at(-1)?.id === entry.event.id
+                            ? `workflow-${entry.event.entityId}`
+                            : undefined
+                        }
+                        key={`event-${entry.id}`}
+                        data-booking-event={eventWorkflow.request.id}
+                        className="scroll-mt-4"
+                      >
+                        {daySeparator}
+                        {(!sameBooking || newDay) && (
+                          <p
+                            title={`${eventWorkflow.request.serviceName} · ${eventWorkflow.request.referenceNumber || eventWorkflow.request.id}`}
+                            className="mx-1 mt-4 mb-1 max-w-full truncate text-[10px] font-medium text-[#52627a]"
+                          >
+                            {eventWorkflow.request.serviceName} ·{" "}
+                            {eventWorkflow.request.referenceNumber ||
+                              eventWorkflow.request.id}
+                          </p>
+                        )}
+                        <WorkflowEventCard
+                          onPrepareQuotation={() => {
+                            setSchedulingMeeting(false)
+                            setSelectedBookingId(eventWorkflow.request.id)
+                            setActiveWorkflowDraft("quotation")
+                          }}
+                          event={entry.event}
+                          workflow={eventWorkflow}
+                          controls={entry.controls}
+                          fileClassName={
+                            eventWorkflow.files.find(
+                              (file) => file.id === entry.event.entityId,
+                            )?.uploaderId === account.id
+                              ? "ml-auto"
+                              : undefined
+                          }
+                        />
+                      </div>
+                    )
+                  }
+                  const message = entry.message
+                  const own = message.sender.id === account.id
+                  const previous =
+                    previousEntry?.kind === "message"
+                      ? previousEntry.message
+                      : undefined
+                  const nextEntry = timeline[index + 1]
+                  const deletedAt = message.deletedAt
+                    ? new Date(message.deletedAt)
+                    : null
+                  const grouped =
+                    !newDay && previous?.sender.id === message.sender.id
+                  const groupedWithNext = Boolean(
+                    nextEntry?.kind === "message" &&
+                    date.toDateString() ===
+                      new Date(nextEntry.createdAt).toDateString() &&
+                    nextEntry.message.sender.id === message.sender.id,
+                  )
+                  const deleted = Boolean(message.deletedAt)
+                  const canManageMessage = Boolean(
+                    isStaff && history?.canSend && own && !deleted,
+                  )
+                  const editing = editingMessageId === message.id
+                  return (
+                    <div key={message.id}>
+                      {daySeparator}
+                      <ConversationMessage
+                        own={own}
+                        name={message.sender.fullName || participantName}
+                        imageUrl={conversationParticipantImageUrl}
+                        grouped={grouped}
+                        groupedWithNext={groupedWithNext}
+                        hasActions={canManageMessage}
+                      >
+                        {editing ? (
+                          <Form
+                            className="w-[min(70vw,420px)] max-w-full space-y-2 rounded-xl border border-[#d8e1ef] bg-white p-3 shadow-sm"
+                            onSubmit={(event) => {
+                              event.preventDefault()
+                              void saveEditedMessage(message.id)
+                            }}
+                          >
+                            <label
+                              htmlFor={`edit-message-${message.id}`}
+                              className="sr-only"
+                            >
+                              Edit message
+                            </label>
+                            <textarea
+                              id={`edit-message-${message.id}`}
+                              autoFocus
+                              rows={3}
+                              maxLength={4000}
+                              value={editingMessageBody}
+                              onChange={(event) =>
+                                setEditingMessageBody(event.target.value)
+                              }
+                              onKeyDown={(event) => {
+                                if (
+                                  event.key !== "Enter" ||
+                                  event.shiftKey ||
+                                  event.nativeEvent.isComposing
+                                )
+                                  return
+                                event.preventDefault()
+                                event.currentTarget.form?.requestSubmit()
+                              }}
+                              className="block min-h-20 w-full resize-y rounded-lg border border-[#d8e1ef] bg-white px-3 py-2 text-xs leading-5 text-[#182235] outline-none focus-visible:ring-2 focus-visible:ring-[#294a9b]"
+                            />
+                            {messageActionError && (
+                              <p
+                                role="alert"
+                                className="m-0 text-xs text-red-700"
+                              >
+                                {messageActionError}
+                              </p>
+                            )}
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-9 min-w-16 text-xs"
+                                disabled={messageActionBusy}
+                                onClick={() => {
+                                  setEditingMessageId(null)
+                                  setEditingMessageBody("")
+                                  setMessageActionError("")
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                type="submit"
+                                className="h-9 min-w-20 bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
+                                disabled={
+                                  messageActionBusy ||
+                                  !editingMessageBody.trim()
+                                }
+                              >
+                                {messageActionBusy ? "Saving…" : "Save"}
+                              </Button>
+                            </div>
+                          </Form>
+                        ) : (
+                          <ConversationBubble
+                            own={own}
+                            deleted={deleted}
+                            body={message.body}
+                            timestamp={
+                              deleted
+                                ? `Deleted ${formatDate(deletedAt!)}, ${formatTime(deletedAt!)}`
+                                : `${message.editedAt ? "Edited · " : ""}${formatTime(date)}`
+                            }
+                          />
+                        )}
+                        {deleted ? (
+                          <div
+                            className={cn(
+                              "mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 px-1 text-[11px] text-[#8791a2]",
+                              own && "justify-end",
+                            )}
+                          >
+                            <MessageDeletionCountdown
+                              purgeAt={message.purgeAt}
+                            />
+                          </div>
+                        ) : canManageMessage ? (
+                          <div className="mt-1 flex items-center gap-1 px-1 text-[11px] text-[#8791a2]">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  aria-label={`Actions for your message at ${formatTime(date)}`}
+                                  className="absolute top-0 left-0 size-11 shrink-0 border-0 bg-transparent p-0 text-[#52627a] hover:bg-[#f1f4fa]"
+                                >
+                                  <MoreHorizontal
+                                    size={16}
+                                    aria-hidden="true"
+                                  />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent
+                                side="top"
+                                align="end"
+                                className="min-w-36 rounded-xl border-[#dce3ee] bg-white p-1.5 text-[#203047] shadow-[0_12px_30px_rgb(18_36_73_/_16%)]"
+                              >
+                                <DropdownMenuItem
+                                  className="min-h-10 cursor-pointer gap-2 rounded-md px-2.5 text-xs font-medium focus:bg-[#f1f4fa] focus:text-[#203f8c]"
+                                  onSelect={() => {
+                                    setEditingMessageId(message.id)
+                                    setEditingMessageBody(message.body || "")
+                                    setMessageActionError("")
+                                  }}
+                                >
+                                  <Pencil aria-hidden="true" />
+                                  Edit message
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className="min-h-10 cursor-pointer gap-2 rounded-md px-2.5 text-xs font-medium text-red-700 focus:bg-red-50 focus:text-red-700"
+                                  onSelect={() => {
+                                    setDeleteTarget(message)
+                                    setDeleteError("")
+                                  }}
+                                >
+                                  <Trash2 aria-hidden="true" />
+                                  Delete message
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        ) : null}
+                      </ConversationMessage>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="relative shrink-0">
+                {schedulingMeeting &&
+                  history.canSend &&
+                  history.conversation &&
+                  isStaff &&
+                  history.conversation.head?.id === account.id && (
                     <div className="absolute right-0 bottom-full left-0 z-10">
-                      <WorkflowActionDraft
-                        key={`${workflow.request.id}:${activeWorkflowDraft}`}
-                        action={activeWorkflowDraft}
-                        workflow={workflow}
-                        controls={controls}
-                        onClose={() => setActiveWorkflowDraft(null)}
+                      <ScheduleConversationMeeting
+                        conversationId={history.conversation.id}
+                        bookings={conversationBookings}
+                        onClose={() => setSchedulingMeeting(false)}
+                        onSaved={applyMeetingUpdate}
                       />
                     </div>
                   )}
-                  {!history.canSend && (
-                    <div className="mx-4 my-3 flex flex-wrap items-center justify-between gap-2">
-                      <p className="m-0 min-w-0 flex-1 basis-48 text-xs leading-5 text-[#52627a]">
-                        Messaging is paused while this conversation has no
-                        active department head. Your message history is still
-                        available.
-                      </p>
-                    </div>
-                  )}
-                  {history.canSend && (
-                    <Form
-                      aria-label="Send a message"
-                      onSubmit={(event) => void submit(event)}
-                      className="border-t border-[#efefee] px-5 py-3 max-[767px]:px-3"
-                    >
-                      {attachmentDraft && (
-                        <div className="mb-3 space-y-2">
-                          <AttachmentPreview
-                            file={attachmentDraft}
-                            disabled={controls.busy}
-                            onRemove={() => {
+                {workflow && activeWorkflowDraft && (
+                  <div className="absolute right-0 bottom-full left-0 z-10">
+                    <WorkflowActionDraft
+                      key={`${workflow.request.id}:${activeWorkflowDraft}`}
+                      action={activeWorkflowDraft}
+                      workflow={workflow}
+                      controls={controls}
+                      onClose={() => setActiveWorkflowDraft(null)}
+                    />
+                  </div>
+                )}
+                {!history.canSend && (
+                  <div className="mx-4 my-3 flex flex-wrap items-center justify-between gap-2">
+                    <p className="m-0 min-w-0 flex-1 basis-48 text-xs leading-5 text-[#52627a]">
+                      Messaging is paused while this conversation has no active
+                      department head. Your message history is still available.
+                    </p>
+                  </div>
+                )}
+                {history.canSend && (
+                  <Form
+                    aria-label="Send a message"
+                    onSubmit={(event) => void submit(event)}
+                    className="border-t border-[#efefee] px-5 py-3 max-[767px]:px-3"
+                  >
+                    {attachmentDraft && (
+                      <div className="mb-3 space-y-2">
+                        <AttachmentPreview
+                          file={attachmentDraft}
+                          disabled={controls.busy}
+                          onRemove={() => {
+                            setAttachmentDraft(null)
+                            if (fileInput.current) fileInput.current.value = ""
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          className="ml-auto flex bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
+                          disabled={controls.busy || !history.canSend}
+                          onClick={async () => {
+                            if (await controls.attach(attachmentDraft)) {
+                              setAttachmentDraft(null)
+                              if (fileInput.current)
+                                fileInput.current.value = ""
+                            }
+                          }}
+                        >
+                          {controls.busy ? "Sending file…" : "Send file"}
+                        </Button>
+                      </div>
+                    )}
+                    <ConversationComposer
+                      id={inputId}
+                      inputRef={messageInputRef}
+                      draft={draft}
+                      onDraftChange={setDraft}
+                      sending={sending}
+                      canSend={history.canSend}
+                      sendError={sendError}
+                      hint={workflow ? "Attachments up to 5 MB" : undefined}
+                      tools={
+                        <>
+                          <input
+                            ref={fileInput}
+                            type="file"
+                            accept={attachmentAccept}
+                            className="sr-only"
+                            aria-label="Attach a file"
+                            disabled={
+                              controls.busy || !history.canSend || !canAttach
+                            }
+                            onChange={(event) => {
+                              const file = event.currentTarget.files?.[0]
+                              if (file) setAttachmentDraft(file)
+                            }}
+                          />
+                          <ConversationTools
+                            workflow={workflow}
+                            bookings={conversationBookings}
+                            workflows={Object.values(bookingControls)
+                              .map((booking) => booking.workflow)
+                              .filter(
+                                (booking): booking is Workflow =>
+                                  booking !== null,
+                              )}
+                            isClient={isClient}
+                            isManager={
+                              isStaff &&
+                              (history.conversation.head?.id === account.id ||
+                                Boolean(workflow?.permissions.manage))
+                            }
+                            canSend={history.canSend}
+                            loading={
+                              controls.loading || (!workflow && !controls.error)
+                            }
+                            busy={controls.busy}
+                            error={controls.error}
+                            onSelectBooking={(id) => {
+                              setSelectedBookingId(id)
+                              setActiveWorkflowDraft(null)
                               setAttachmentDraft(null)
                               if (fileInput.current)
                                 fileInput.current.value = ""
                             }}
-                          />
-                          <Button
-                            type="button"
-                            className="ml-auto flex bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
-                            disabled={controls.busy || !history.canSend}
-                            onClick={async () => {
-                              if (await controls.attach(attachmentDraft)) {
-                                setAttachmentDraft(null)
-                                if (fileInput.current)
-                                  fileInput.current.value = ""
-                              }
+                            onDraft={(action) => {
+                              setSchedulingMeeting(false)
+                              setActiveWorkflowDraft(action)
                             }}
-                          >
-                            {controls.busy ? "Sending file…" : "Send file"}
-                          </Button>
-                        </div>
-                      )}
-                      <label htmlFor={inputId} className="sr-only">
-                        Message
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          ref={fileInput}
-                          type="file"
-                          accept={attachmentAccept}
-                          className="sr-only"
-                          aria-label="Attach a file"
-                          disabled={
-                            controls.busy || !history.canSend || !canAttach
-                          }
-                          onChange={(event) => {
-                            const file = event.currentTarget.files?.[0]
-                            if (file) setAttachmentDraft(file)
-                          }}
-                        />
-                        <ConversationTools
-                          workflow={workflow}
-                          bookings={conversationBookings}
-                          workflows={Object.values(bookingControls)
-                            .map((booking) => booking.workflow)
-                            .filter(
-                              (booking): booking is Workflow =>
-                                booking !== null,
-                            )}
-                          isClient={isClient}
-                          isManager={
-                            isStaff &&
-                            (history.conversation.head?.id === account.id ||
-                              Boolean(workflow?.permissions.manage))
-                          }
-                          canSend={history.canSend}
-                          loading={
-                            controls.loading || (!workflow && !controls.error)
-                          }
-                          busy={controls.busy}
-                          error={controls.error}
-                          onSelectBooking={(id) => {
-                            setSelectedBookingId(id)
-                            setActiveWorkflowDraft(null)
-                            setAttachmentDraft(null)
-                            if (fileInput.current) fileInput.current.value = ""
-                          }}
-                          onDraft={(action) => {
-                            setSchedulingMeeting(false)
-                            setActiveWorkflowDraft(action)
-                          }}
-                          onScheduleMeeting={() => {
-                            setActiveWorkflowDraft(null)
-                            setSchedulingMeeting(true)
-                          }}
-                          onActivate={() => openProjectSetup("activation")}
-                          onAttach={() => fileInput.current?.click()}
-                          onRetry={() => void refreshWorkflow()}
-                        />
-                        <div className="flex min-w-0 flex-1 items-end gap-2 rounded-2xl border border-[#e8e9eb] bg-[#fafaf9] p-2">
-                          <textarea
-                            ref={messageInputRef}
-                            id={inputId}
-                            value={draft}
-                            onChange={(event) => setDraft(event.target.value)}
-                            maxLength={4000}
-                            rows={1}
-                            disabled={sending || !history.canSend}
-                            placeholder="Write a message…"
-                            onKeyDown={(event) => {
-                              if (
-                                event.key !== "Enter" ||
-                                event.shiftKey ||
-                                event.nativeEvent.isComposing
-                              )
-                                return
-                              event.preventDefault()
-                              event.currentTarget.form?.requestSubmit()
+                            onScheduleMeeting={() => {
+                              setActiveWorkflowDraft(null)
+                              setSchedulingMeeting(true)
                             }}
-                            className="block min-h-9 max-h-32 min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-2 py-2 text-xs leading-5 focus-visible:outline-none disabled:opacity-50"
+                            onActivate={() => openProjectSetup("activation")}
+                            onAttach={() => fileInput.current?.click()}
+                            onRetry={() => void refreshWorkflow()}
                           />
-                          <Button
-                            type="submit"
-                            aria-label={sending ? "Sending…" : "Send message"}
-                            className="size-9 shrink-0 rounded-full bg-[#203f8c] p-0 text-white hover:bg-[#172f70]"
-                            disabled={
-                              !draft.trim() || !history.canSend || sending
-                            }
-                          >
-                            <Send
-                              size={15}
-                              aria-hidden="true"
-                              className="translate-x-[-1px] translate-y-[1px]"
-                            />
-                          </Button>
-                        </div>
-                      </div>
-                      {sendError && (
-                        <p
-                          role="status"
-                          className="mt-2 text-xs text-[#52627a]"
-                        >
-                          Your text is saved here so you can retry.
-                        </p>
-                      )}
-                      <div className="mt-1.5 px-1 text-[9px] text-[#8791a2]">
-                        {draft.length}/4000
-                        {workflow ? " · Attachments up to 5 MB" : ""}
-                      </div>
-                    </Form>
-                  )}
-                </div>
-              </>
-            )}
-          </section>
-        </div>
+                        </>
+                      }
+                    />
+                  </Form>
+                )}
+              </div>
+            </>
+          )}
+        </ConversationSurface>
         {(workflow || history?.conversation) && (
           <WorkflowContextPanel
             id={`request-context-${requestId}`}
@@ -1443,6 +1346,7 @@ function ConversationPanel({
             workflow={workflow}
             hasSelectedBooking={Boolean(selectedBookingId)}
             controls={controls}
+            className="ml-0 max-[1023px]:mt-0"
             onProjectSetup={openProjectSetup}
             onDraft={(action) => {
               setSchedulingMeeting(false)
