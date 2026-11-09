@@ -1,6 +1,8 @@
 import { expect, test, type Page } from "@playwright/test"
 import type { ProjectWorkspace } from "../src/features/projects/api/projects-api"
-import { accountFor } from "./regression-support"
+import { accountFor, configureRegressionTest } from "./regression-support"
+
+configureRegressionTest()
 
 async function mockProject(page: Page, contributor: boolean) {
   const project: ProjectWorkspace = {
@@ -28,6 +30,7 @@ async function mockProject(page: Page, contributor: boolean) {
     ],
   }
   const writes: unknown[] = []
+  const state = { failUpdate: false }
   await page.addInitScript(() =>
     sessionStorage.setItem("nexus.auth.token", "project-session"),
   )
@@ -45,8 +48,14 @@ async function mockProject(page: Page, contributor: boolean) {
     if (path === "/api/projects/project-1")
       return route.fulfill({ json: project })
     if (path === "/api/projects/project-1/milestones/milestone-1") {
+      expect(route.request().method()).toBe("PATCH")
       const input = route.request().postDataJSON() as { completed: boolean }
       writes.push(input)
+      if (state.failUpdate)
+        return route.fulfill({
+          status: 503,
+          json: { error: "Milestone temporarily unavailable" },
+        })
       project.milestones[0]!.completedAt = input.completed
         ? "2026-10-30T11:00:00Z"
         : null
@@ -54,7 +63,7 @@ async function mockProject(page: Page, contributor: boolean) {
     }
     return route.fulfill({ status: 404, json: { error: "Not found" } })
   })
-  return { writes }
+  return { writes, state }
 }
 
 test("client project workspace shows milestones and conversation handoff on mobile", async ({
@@ -80,6 +89,33 @@ test("client project workspace shows milestones and conversation handoff on mobi
     ),
   ).toBe(true)
 })
+
+for (const width of [1440, 390]) {
+  test(`failed milestone updates preserve progress and can be retried at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const { writes, state } = await mockProject(page, true)
+    state.failUpdate = true
+    await page.goto("/projects/project-1")
+    await page
+      .getByRole("button", { name: "Mark complete", exact: true })
+      .click()
+    await expect(
+      page.getByText("Couldn't update milestone", { exact: true }),
+    ).toBeVisible()
+    await expect(page.getByText("0/1 completed", { exact: true })).toBeVisible()
+    await expect(
+      page.getByRole("button", { name: "Mark complete", exact: true }),
+    ).toBeEnabled()
+    state.failUpdate = false
+    await page
+      .getByRole("button", { name: "Mark complete", exact: true })
+      .click()
+    await expect(page.getByText("1/1 completed", { exact: true })).toBeVisible()
+    expect(writes).toEqual([{ completed: true }, { completed: true }])
+  })
+}
 
 test("assigned staff can complete and reopen a project milestone", async ({
   page,

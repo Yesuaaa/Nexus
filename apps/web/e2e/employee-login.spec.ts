@@ -30,6 +30,7 @@ for (const width of [1440, 390]) {
     }
     let accountDeleted = false
     let accountArchived = false
+    const loginStatusWrites: boolean[] = []
     await page.addInitScript(() =>
       sessionStorage.setItem("nexus.auth.token", "test-session"),
     )
@@ -124,6 +125,8 @@ for (const width of [1440, 390]) {
         return route.fulfill({ status: 201, json: { employee } })
       }
       if (path === "/api/employees/employee-1/account/status") {
+        expect(request.method()).toBe("PATCH")
+        loginStatusWrites.push(request.postDataJSON().isActive as boolean)
         employee = {
           ...employee,
           accountIsActive: request.postDataJSON().isActive,
@@ -187,13 +190,6 @@ for (const width of [1440, 390]) {
         .click()
       await page.getByRole("menuitem", { name: label, exact: true }).click()
     }
-    await menu("Change status")
-    await dialog.getByRole("combobox", { name: "Status", exact: true }).click()
-    await page.getByRole("option", { name: "Inactive", exact: true }).click()
-    await dialog
-      .getByRole("button", { name: "Confirm status", exact: true })
-      .click()
-    await expect(dialog).toHaveCount(0)
     await page
       .getByRole("button", {
         name: "More actions for Alex Employee",
@@ -209,6 +205,7 @@ for (const width of [1440, 390]) {
       .getByRole("button", { name: "Deactivate account", exact: true })
       .click()
     await expect(dialog).toHaveCount(0)
+    expect(employee.status).toBe("ACTIVE")
     await page
       .getByRole("button", {
         name: "More actions for Alex Employee",
@@ -250,6 +247,10 @@ for (const width of [1440, 390]) {
     await expect(
       page.getByText("No archived accounts.", { exact: true }),
     ).toBeVisible()
+    expect(loginStatusWrites).toEqual([false, true, false])
+    expect(accountArchived).toBe(true)
+    expect(accountDeleted).toBe(true)
+    expect(employee.status).toBe("ACTIVE")
     await page
       .getByRole("button", { name: "Back to Employees", exact: true })
       .click()

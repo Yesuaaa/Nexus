@@ -725,18 +725,25 @@ test(
           "fullName",
           "id",
           "position",
+          "status",
           "team",
           "teamId",
           "user",
           "userId",
         ])
+        assert.equal(projectedStaff.status, staff.status)
         assert.deepEqual(Object.keys(projectedStaff.user as object).sort(), [
+          "accountDeletedAt",
           "email",
           "fullName",
           "id",
           "isActive",
           "role",
         ])
+        assert.equal(
+          (projectedStaff.user as Record<string, unknown>).accountDeletedAt,
+          null,
+        )
         assert.equal(
           await prisma.employee.count({ where: { userId: "superadmin" } }),
           0,
