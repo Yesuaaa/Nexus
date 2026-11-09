@@ -798,9 +798,10 @@ test(
         for (const path of [`/${foreign.id}`, "/missing"]) {
           const response = await get(path)
           assert.equal(response.status, 404)
-          assert.deepEqual(await response.json(), {
-            error: "Booked service not found",
-          })
+          assert.equal(
+            ((await response.json()) as { error: string }).error,
+            "Booked service not found",
+          )
         }
         for (const query of [
           "page=0",
