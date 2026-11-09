@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import type { Client } from "../src/features/clients/api/clients-api"
+import type { Client } from "../../src/features/clients/api/clients-api"
 
 for (const width of [1440, 390]) {
   test(`client creation validates, retries conflicts and opens read-only details at ${width}px`, async ({

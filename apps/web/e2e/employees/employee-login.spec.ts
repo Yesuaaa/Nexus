@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import type { Employee } from "../src/features/employees/api/employees-api"
+import type { Employee } from "../../src/features/employees/api/employees-api"
 
 for (const width of [1440, 390]) {
   test(`employee profile and login controls at ${width}px`, async ({

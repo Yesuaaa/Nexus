@@ -9,6 +9,9 @@ import {
   compare,
   createEvidenceDirectory,
   executionResults,
+  proofApiOrigin,
+  proofBuildDirectory,
+  proofTestDirectory,
   reconcile,
   safeEnvironment,
   testList,
@@ -222,6 +225,32 @@ test("execution comparison follows original PW identity across file relocation",
   compare(before.report, after.report, before.inputs.expected, [afterIdentity])
 })
 
+test("a selected unit can use a full-suite reference without rerunning its before tests", () => {
+  const before = fixture()
+  const after = fixture()
+  const extra = structuredClone(before.report.suites[0].specs[0])
+  extra.title = "another original case"
+  before.report.suites[0].specs.push(extra)
+  const identities = [
+    before.inputs.expected[0],
+    { ...before.inputs.expected[0], baselineId: "PW-002", title: extra.title },
+  ]
+  const result = compare(
+    before.report,
+    after.report,
+    identities,
+    after.inputs.expected,
+    ["PW-001"],
+  )
+  assert.equal(result.before.passed, 1)
+  assert.equal(result.after.passed, 1)
+  assert.throws(() =>
+    compare(before.report, after.report, identities, after.inputs.expected, [
+      "PW-003",
+    ]),
+  )
+})
+
 test("evidence directories are distinct, with exclusive writes", () => {
   const discovery = createEvidenceDirectory("discovery")
   const execution = createEvidenceDirectory("execution")
@@ -263,6 +292,51 @@ test("unverified build proof is rejected before any execution", () => {
     }),
   )
   assert.equal(launched, false)
+})
+
+test("proof identifies an isolated build and rejects directory escape", () => {
+  const directory =
+    "test-results/phase4-reference/isolated/source/apps/web/.next"
+  assert.equal(
+    proofBuildDirectory({ buildDirectory: directory }),
+    path.resolve(directory),
+  )
+  assert.equal(proofBuildDirectory({}), path.resolve("apps/web/.next"))
+  assert.equal(
+    proofTestDirectory({ buildDirectory: directory }),
+    path.resolve("apps/web"),
+  )
+  assert.equal(
+    proofTestDirectory({
+      testDirectory: "test-results/phase4-reference/isolated/source/apps/web",
+    }),
+    path.resolve("test-results/phase4-reference/isolated/source/apps/web"),
+  )
+  assert.throws(() =>
+    proofTestDirectory({ testDirectory: "../outside/apps/web" }),
+  )
+  assert.throws(() =>
+    proofBuildDirectory({ buildDirectory: "../outside/.next" }),
+  )
+  assert.throws(() =>
+    proofBuildDirectory({ buildDirectory: path.resolve("apps/web/.next") }),
+  )
+})
+
+test("proof supports a reserved local API port without permitting remote origins", () => {
+  assert.equal(
+    proofApiOrigin({ apiOrigin: "http://127.0.0.1:60908" }),
+    "http://127.0.0.1:60908",
+  )
+  assert.equal(proofApiOrigin({}), "http://localhost:3001")
+  for (const apiOrigin of [
+    "https://api.example.com",
+    "http://example.com:3001",
+    "http://localhost:3001/api",
+    "http://user:password@localhost:3001",
+    "http://localhost:3001?target=remote",
+  ])
+    assert.throws(() => proofApiOrigin({ apiOrigin }))
 })
 
 test("failed launch evidence is retained", () => {

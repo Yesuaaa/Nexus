@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import { getAuthCopy } from "../src/features/auth/content/auth-copy"
+import { getAuthCopy } from "../../src/features/auth/content/auth-copy"
 
 test("login validates both fields, preserves credentials, and prevents duplicate requests", async ({
   page,

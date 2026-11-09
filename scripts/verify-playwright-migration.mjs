@@ -366,6 +366,43 @@ function sourceDigest(atRevision) {
   return hash(JSON.stringify(entries))
 }
 
+function repositoryDirectory(directory) {
+  assert(
+    !path.isAbsolute(directory),
+    "Build directory must be repository-relative",
+  )
+  const resolved = path.resolve(root, directory)
+  const relative = path.relative(root, resolved)
+  assert(
+    relative && !relative.startsWith("..") && !path.isAbsolute(relative),
+    "Build directory must stay inside the repository",
+  )
+  return resolved
+}
+
+export function proofBuildDirectory(proof) {
+  return repositoryDirectory(proof.buildDirectory ?? "apps/web/.next")
+}
+
+export function proofTestDirectory(proof) {
+  return repositoryDirectory(proof?.testDirectory ?? "apps/web")
+}
+
+export function proofApiOrigin(proof) {
+  const origin = new URL(proof.apiOrigin ?? "http://localhost:3001")
+  assert(
+    origin.protocol === "http:" &&
+      ["127.0.0.1", "localhost", "[::1]"].includes(origin.hostname) &&
+      !origin.username &&
+      !origin.password &&
+      origin.pathname === "/" &&
+      !origin.search &&
+      !origin.hash,
+    "API rewrite must use a local HTTP origin",
+  )
+  return origin.origin
+}
+
 export function validateProof(proof) {
   assert.equal(proof.verification, "VERIFIED")
   assert(
@@ -380,17 +417,25 @@ export function validateProof(proof) {
     "Reference build must use original source revision",
   )
   assert.equal(proof.sourceSha256, sourceDigest(proof.sourceRevision))
-  assert.equal(proof.buildId, read("apps/web/.next/BUILD_ID").toString().trim())
+  const buildDirectory = proofBuildDirectory(proof)
   assert.equal(
     proof.buildId,
-    read("apps/web/.next/standalone/apps/web/.next/BUILD_ID").toString().trim(),
+    read(path.join(buildDirectory, "BUILD_ID")).toString().trim(),
+  )
+  assert.equal(
+    proof.buildId,
+    read(path.join(buildDirectory, "standalone/apps/web/.next/BUILD_ID"))
+      .toString()
+      .trim(),
   )
   const url = new URL(proof.baseURL)
   assert(
     ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) &&
       url.protocol === "http:",
   )
-  const rewrites = json("apps/web/.next/routes-manifest.json").rewrites
+  const rewrites = json(
+    path.join(buildDirectory, "routes-manifest.json"),
+  ).rewrites
   const routes = Array.isArray(rewrites)
     ? rewrites
     : Object.values(rewrites).flat()
@@ -398,16 +443,13 @@ export function validateProof(proof) {
     routes.some(
       (route) =>
         route.source === "/api/:path*" &&
-        /^http:\/\/(localhost|127\.0\.0\.1):3001\/api\/:path\*$/.test(
-          route.destination,
-        ),
+        route.destination === `${proofApiOrigin(proof)}/api/:path*`,
     ),
     "Build API rewrite must target local fixtures environment",
   )
 }
 
-export function executionResults(report) {
-  const rows = flatten(report)
+function executionTotals(rows) {
   const totals = { passed: 0, failed: 0, skipped: 0, unexpected: 0 }
   for (const test of rows) {
     assert.equal(
@@ -422,10 +464,15 @@ export function executionResults(report) {
     if (test.status === "unexpected" || test.status === "flaky")
       totals.unexpected++
   }
-  return { rows, totals }
+  return totals
 }
 
-export function compare(before, after, beforeIdentities, afterIdentities) {
+export function executionResults(report) {
+  const rows = flatten(report)
+  return { rows, totals: executionTotals(rows) }
+}
+
+export function compare(before, after, beforeIdentities, afterIdentities, ids) {
   const reference = executionResults(before)
   const migrated = executionResults(after)
   function attach(rows, identities) {
@@ -440,6 +487,17 @@ export function compare(before, after, beforeIdentities, afterIdentities) {
   }
   reference.rows = attach(reference.rows, beforeIdentities)
   migrated.rows = attach(migrated.rows, afterIdentities)
+  if (ids) {
+    for (const result of [reference, migrated]) {
+      result.rows = result.rows.filter((test) => ids.includes(test.baselineId))
+      reconcile(
+        ids,
+        result.rows.map((test) => test.baselineId),
+        (id) => id,
+      )
+      result.totals = executionTotals(result.rows)
+    }
+  }
   reconcile(reference.rows, migrated.rows, (test) => test.baselineId)
   assert.equal(
     reference.totals.failed + reference.totals.unexpected,
@@ -501,12 +559,14 @@ export function capture(mode, ids, proof, runner = spawnSync) {
     capture("discovery", ids, proof, runner)
   }
   const sourceRevision = git("rev-parse", "HEAD").toString().trim()
+  const testDirectory = proofTestDirectory(proof)
+  const testRequire = createRequire(path.join(testDirectory, "package.json"))
   const directory = createEvidenceDirectory(mode)
   const list = path.join(directory, "selection.txt")
   write(list, testList(selected))
   const args = [
     path.join(
-      path.dirname(requireWeb.resolve("@playwright/test/package.json")),
+      path.dirname(testRequire.resolve("@playwright/test/package.json")),
       "cli.js",
     ),
     "test",
@@ -521,7 +581,7 @@ export function capture(mode, ids, proof, runner = spawnSync) {
   if (mode === "discovery") args.push("--list")
   const env = safeEnvironment(proof)
   const result = runner(process.execPath, args, {
-    cwd: web,
+    cwd: testDirectory,
     env,
     encoding: "utf8",
     maxBuffer: 32 * 1024 * 1024,
@@ -531,6 +591,10 @@ export function capture(mode, ids, proof, runner = spawnSync) {
   write(path.join(directory, "record.json"), {
     kind: mode,
     sourceRevision,
+    testDirectory: path.relative(root, testDirectory).replaceAll("\\", "/"),
+    testSourceRevision: git("-C", testDirectory, "rev-parse", "HEAD")
+      .toString()
+      .trim(),
     baselineIds: selected.map((test) => test.baselineId),
     testIdentities: selected.map(
       ({ baselineId, file, describes, title, project }) => ({
@@ -604,6 +668,7 @@ function main([command, ...args]) {
   if (command === "source-digest") return console.log(sourceDigest(revision))
   if (command === "compare") {
     const [beforeDirectory, afterDirectory] = args
+    const selectedIds = args.length > 2 ? args.slice(2) : undefined
     assert.notEqual(path.resolve(beforeDirectory), path.resolve(afterDirectory))
     const before = json(path.join(beforeDirectory, "record.json"))
     const after = json(path.join(afterDirectory, "record.json"))
@@ -628,7 +693,14 @@ function main([command, ...args]) {
       const verified = json(path.join(directory, "verification.json"))
       reconcile(record.baselineIds, verified.ids, (id) => id)
     }
-    reconcile(before.baselineIds, after.baselineIds, (id) => id)
+    if (selectedIds) {
+      reconcile(selectedIds, after.baselineIds, (id) => id)
+      reconcile(
+        selectedIds,
+        before.baselineIds.filter((id) => selectedIds.includes(id)),
+        (id) => id,
+      )
+    } else reconcile(before.baselineIds, after.baselineIds, (id) => id)
     assert.equal(before.proof.sourceSha256, after.proof.sourceSha256)
     console.log(
       JSON.stringify({
@@ -647,6 +719,7 @@ function main([command, ...args]) {
           json(path.join(afterDirectory, "execution.json")),
           before.testIdentities,
           after.testIdentities,
+          selectedIds,
         ),
       ),
     )
