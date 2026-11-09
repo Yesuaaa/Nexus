@@ -3,18 +3,13 @@
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
-import {
-  CheckCircle2,
-  Eye,
-  FileCheck2,
-  FolderKanban,
-  Plus,
-  Search,
-} from "lucide-react"
+import { CheckCircle2, Eye, FileCheck2, FolderKanban, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { contentClass } from "@/components/layout/styles"
 import { KpiCards } from "@/components/ui/kpi-cards"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
+import { SearchField } from "@/components/ui/search-field"
+import { rowActionButton } from "@/components/ui/row-action-styles"
 import {
   Select,
   SelectContent,
@@ -32,7 +27,8 @@ type ProjectSort = "NEWEST" | "OLDEST"
 const PAGE_SIZE = 10
 
 function statusLabel(status: string) {
-  return status.replaceAll("_", " ")
+  const label = status.toLowerCase().replaceAll("_", " ")
+  return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
 function statusClass(status: string) {
@@ -150,17 +146,23 @@ export function ClientProjectsPage() {
   ]
 
   return (
-    <main className={`${contentClass} p-6 max-[767px]:p-4`}>
-      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-[#e5e9ee] px-7 py-6 max-[767px]:px-4">
+    <main
+      className={`${contentClass} p-[clamp(16px,2.1vw,32px)]`}
+      aria-label="My Projects"
+    >
+      <header className="-mx-[clamp(16px,2.1vw,32px)] flex items-center justify-between gap-6 border-b border-[#eceef1] px-[clamp(16px,2.1vw,32px)] pt-0.5 pb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-4">
         <div>
-          <h1 className="m-0 text-[24px] leading-tight font-semibold tracking-[-0.025em]">
+          <h1 className="m-0 text-[clamp(21px,2vw,25px)] leading-[1.25] font-[650] tracking-[-0.03em]">
             My Projects
           </h1>
-          <p className="mt-1.5 mb-0 text-xs text-[#60718c]">
+          <p className="mt-[5px] mb-0 text-xs leading-[1.45] text-[#52627a]">
             Follow project progress and review work shared with you.
           </p>
         </div>
-        <Button className="bg-[#243f8f] text-white hover:bg-[#1d367d]" asChild>
+        <Button
+          className="h-[34px] bg-[#203f8c] text-xs text-white hover:bg-[#172f70] max-[560px]:h-11"
+          asChild
+        >
           <Link href="/services">
             <Plus size={16} aria-hidden="true" />
             Book a service
@@ -168,7 +170,7 @@ export function ClientProjectsPage() {
         </Button>
       </header>
 
-      <div className="space-y-5 p-7 max-[767px]:p-4">
+      <div className="mt-[18px]">
         <KpiCards
           metrics={projectStats}
           label="Project summary"
@@ -177,26 +179,18 @@ export function ClientProjectsPage() {
           showCharts={false}
           className="grid-cols-3 max-[900px]:grid-cols-2 max-[560px]:grid-cols-1"
         />
-
-        <div className="flex flex-wrap items-center gap-2.5 pb-1 max-[560px]:flex-col max-[560px]:items-stretch">
-          <label className="relative block min-w-[220px] flex-1 sm:w-[260px] sm:flex-none">
-            <Search
-              size={16}
-              aria-hidden="true"
-              className="absolute top-1/2 left-3 -translate-y-1/2 text-[#8091aa]"
-            />
-            <span className="sr-only">Search projects</span>
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value)
-                setPage(1)
-              }}
-              placeholder="Search project, service or reference..."
-              className="h-[34px] w-full rounded-lg border border-[#e1e4ea] bg-transparent pr-3 pl-9 text-xs outline-none placeholder:text-[#8091aa] focus-visible:ring-2 focus-visible:ring-[#28468f]/20 max-[560px]:h-11"
-            />
-          </label>
+      </div>
+      <section className="@container mt-6 min-w-0" aria-label="Project list">
+        <div className="flex flex-wrap items-center gap-2.5 pb-4 max-[560px]:flex-col max-[560px]:items-stretch">
+          <SearchField
+            label="Search projects"
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value)
+              setPage(1)
+            }}
+            placeholder="Search project, service or reference…"
+          />
           <Select
             value={filter}
             onValueChange={(value) => {
@@ -226,13 +220,13 @@ export function ClientProjectsPage() {
           >
             <SelectTrigger
               aria-label="Sort projects"
-              className="h-[34px] w-[180px] border-[#e1e4ea] text-xs max-[560px]:h-11 max-[560px]:w-full"
+              className="h-[34px] w-[160px] text-xs max-[560px]:h-11 max-[560px]:w-full"
             >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="NEWEST">Most recently updated</SelectItem>
-              <SelectItem value="OLDEST">Least recently updated</SelectItem>
+              <SelectItem value="NEWEST">Newest update first</SelectItem>
+              <SelectItem value="OLDEST">Oldest update first</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -276,9 +270,9 @@ export function ClientProjectsPage() {
           </section>
         ) : (
           <>
-            <div className="overflow-x-auto rounded-xl border border-[#dce3eb] bg-white">
+            <div className="overflow-x-auto rounded-lg border border-[#e8ebef] bg-background">
               <table className="w-full min-w-[760px] border-collapse text-left text-xs">
-                <thead className="bg-[#e9eef3] text-[#1c2b40]">
+                <thead className="border-b border-[#dfe6eb] bg-[#e8eef2] text-foreground">
                   <tr>
                     <th scope="col" className="px-4 py-3 font-semibold">
                       Project
@@ -303,7 +297,7 @@ export function ClientProjectsPage() {
                     </th>
                     <th
                       scope="col"
-                      className="w-[108px] px-4 py-3 text-center font-semibold"
+                      className="w-20 px-3 py-3 text-left font-semibold"
                     >
                       Actions
                     </th>
@@ -317,29 +311,37 @@ export function ClientProjectsPage() {
                         )
                       : 0
                     return (
-                      <tr key={project.id} className="hover:bg-[#f8fafc]">
+                      <tr
+                        key={project.id}
+                        className="h-[58px] align-middle transition-colors hover:bg-[#e8eef2]"
+                      >
                         <th
                           scope="row"
-                          className="px-4 py-4 font-medium text-[#111d30]"
+                          className="px-4 py-[7px] font-medium text-[#111d30]"
                         >
-                          {project.name}
+                          <Link
+                            href={`/projects/${encodeURIComponent(project.id)}`}
+                            className="rounded font-semibold text-[#244993] hover:underline focus-visible:outline-2 focus-visible:outline-[#294c96]"
+                          >
+                            {project.name}
+                          </Link>
                           {project.request?.referenceNumber && (
                             <span className="mt-1 block font-normal text-[11px] text-[#71839d]">
                               {project.request.referenceNumber}
                             </span>
                           )}
                         </th>
-                        <td className="px-4 py-4 text-[#50627e]">
+                        <td className="px-4 py-[7px] text-[#50627e]">
                           {project.request?.service.name || "—"}
                         </td>
-                        <td className="px-4 py-4">
+                        <td className="px-4 py-[7px]">
                           <span
-                            className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-medium ${statusClass(project.status)}`}
+                            className={`inline-flex rounded-sm px-1.5 py-0.5 text-[10px] font-medium ${statusClass(project.status)}`}
                           >
                             {statusLabel(project.status)}
                           </span>
                         </td>
-                        <td className="px-4 py-4">
+                        <td className="px-4 py-[7px]">
                           {project.taskCount ? (
                             <div className="flex w-[160px] min-w-[136px] items-center gap-2">
                               <div
@@ -363,26 +365,21 @@ export function ClientProjectsPage() {
                             <span className="text-[#71839d]">Not started</span>
                           )}
                         </td>
-                        <td className="px-4 py-4 text-[#5e7391]">
+                        <td className="px-4 py-[7px] text-[#5e7391]">
                           {formatDate(project.updatedAt)}
                         </td>
-                        <td className="px-4 py-4 text-center text-[#5e7391]">
+                        <td className="px-4 py-[7px] text-center text-[#5e7391]">
                           {project.deliverableCount}
                         </td>
-                        <td className="px-4 py-4 text-center">
-                          <Button
+                        <td className="px-3 py-[7px]">
+                          <Link
                             id={`project-view-${project.id}`}
-                            variant="outline"
-                            className="size-9 shrink-0 p-0 text-[#586d8a]"
-                            asChild
+                            className={rowActionButton}
+                            href={`/projects/${encodeURIComponent(project.id)}`}
+                            aria-label={`View ${project.name}`}
                           >
-                            <Link
-                              href={`/projects/${encodeURIComponent(project.id)}`}
-                              aria-label={`View ${project.name}`}
-                            >
-                              <Eye size={17} aria-hidden="true" />
-                            </Link>
-                          </Button>
+                            <Eye size={16} aria-hidden="true" />
+                          </Link>
                         </td>
                       </tr>
                     )
@@ -403,7 +400,7 @@ export function ClientProjectsPage() {
             </footer>
           </>
         )}
-      </div>
+      </section>
     </main>
   )
 }

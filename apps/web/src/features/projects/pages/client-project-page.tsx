@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 import { sileo } from "sileo"
 import { Button } from "@/components/ui/button"
+import { rowActionButton } from "@/components/ui/row-action-styles"
 import { contentClass } from "@/components/layout/styles"
 import { useBreadcrumbLabel } from "@/components/layout/breadcrumbs"
 import {
@@ -223,32 +224,23 @@ export function ClientProjectPage({
   return (
     <main className={`${contentClass} p-6 max-[767px]:p-4`}>
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#e5e9ee] px-7 pt-6 pb-0 max-[767px]:px-4">
-        <div className="flex min-w-0 flex-1 items-start gap-3">
-          <Link
-            href="/projects"
-            aria-label="Back to My Projects"
-            className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#60718c] no-underline transition-colors hover:bg-[#edf2fa] hover:text-[#243f8f] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#31518f]"
-          >
-            <ArrowLeft size={16} aria-hidden="true" />
-          </Link>
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-              <h1 className="m-0 text-[24px] leading-tight font-semibold tracking-[-0.025em]">
-                {project.name}
-              </h1>
-              <span
-                className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-medium ${statusClass(project.status)}`}
-              >
-                {project.status.replaceAll("_", " ")}
-              </span>
-            </div>
-            <p className="mt-2 mb-0 text-xs text-[#60718c]">
-              {project.request?.service.name || "Project"}
-              {project.request?.referenceNumber && (
-                <span> · {project.request.referenceNumber}</span>
-              )}
-            </p>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <h1 className="m-0 text-[24px] leading-tight font-semibold tracking-[-0.025em]">
+              {project.name}
+            </h1>
+            <span
+              className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-medium ${statusClass(project.status)}`}
+            >
+              {project.status.replaceAll("_", " ")}
+            </span>
           </div>
+          <p className="mt-2 mb-0 text-xs text-[#60718c]">
+            {project.request?.service.name || "Project"}
+            {project.request?.referenceNumber && (
+              <span> · {project.request.referenceNumber}</span>
+            )}
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 pt-4 max-[767px]:pt-0">
           {editable && !pendingCancellation && (
@@ -274,19 +266,14 @@ export function ClientProjectPage({
             </Button>
           )}
           {project.request && (
-            <Button
-              type="button"
-              variant="outline"
-              className="size-10 text-[#31518f]"
-              asChild
+            <Link
+              href={`/messages?request=${encodeURIComponent(project.request.id)}`}
+              className={`${rowActionButton} size-9 hover:bg-[#f1f5fc] hover:text-foreground`}
+              aria-label="Open project conversation"
+              title="Go to chat"
             >
-              <Link
-                href={`/messages?request=${encodeURIComponent(project.request.id)}`}
-                aria-label="Open project conversation"
-              >
-                <MessageSquare size={17} aria-hidden="true" />
-              </Link>
-            </Button>
+              <MessageSquare size={16} aria-hidden="true" />
+            </Link>
           )}
         </div>
         <div className="w-full border-t border-[#e5e9ee]">

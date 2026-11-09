@@ -307,6 +307,7 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
           ) : (
             <WorkspaceTeam
               workspace={workspace}
+              onUpdated={setWorkspace}
               onChanged={() => {
                 getProjectWorkspace(id)
                   .then(setWorkspace)

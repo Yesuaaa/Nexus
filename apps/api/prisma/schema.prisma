@@ -783,6 +783,7 @@ model WorkloadCapacity {
 }
 
 model ProjectStaff {
+  isTeamLead      Boolean   @default(false)
   weeklyHours     Float?
   allocationStart DateTime?
   allocationEnd   DateTime?

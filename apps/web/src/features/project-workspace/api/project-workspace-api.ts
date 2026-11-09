@@ -98,6 +98,7 @@ export type ProjectWorkspaceWorkstream = {
     status: string
     profileSpecialties: string[]
     approvedAt: string
+    isTeamLead: boolean
   }[]
   canAssign: boolean
 }
@@ -186,6 +187,16 @@ export const cancelProjectWorkspace = (workspaceId: string) =>
   apiRequest<{ saved: boolean }>(
     `/api/project-workspace/${encodeURIComponent(workspaceId)}/cancel`,
     { method: "POST" },
+  )
+
+export const assignProjectTeamLead = (
+  workspaceId: string,
+  projectId: string,
+  employeeId: string,
+) =>
+  apiRequest<ProjectWorkspaceDetail>(
+    `/api/project-workspace/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/team-lead`,
+    { method: "PUT", body: JSON.stringify({ employeeId }) },
   )
 
 export const updateProjectWorkspaceStatus = (

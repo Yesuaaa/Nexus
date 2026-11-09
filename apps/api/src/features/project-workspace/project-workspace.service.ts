@@ -276,6 +276,7 @@ const projectInclude = {
   staff: {
     select: {
       approvedAt: true,
+      isTeamLead: true,
       employee: {
         select: {
           id: true,
@@ -331,10 +332,10 @@ function projectWorkstream(
     completedTaskCount: tasks.filter(({ status }) => status === "DONE").length,
     plan: includePlan ? plan : undefined,
     milestones: project.milestones,
-    staff: project.staff.map(({ employee, approvedAt }) => {
+    staff: project.staff.map(({ employee, approvedAt, isTeamLead }) => {
       const { userId: _userId, ...safeEmployee } = employee
       void _userId
-      return { ...safeEmployee, approvedAt }
+      return { ...safeEmployee, approvedAt, isTeamLead }
     }),
     canUploadDeliverables: project.staff.some(
       ({ employee }) =>
@@ -745,6 +746,13 @@ export async function getProjectWorkspace(userId: string, id: string) {
       ...workspace,
       activity: events.map(({ workflow, ...event }) => ({
         ...event,
+        summary:
+          event.type === "STAFFING_APPROVED" &&
+          event.summary.startsWith(
+            "The department head approved project staffing. Employee records: ",
+          )
+            ? "The department head updated the project team."
+            : event.summary,
         projectName: workflow.request.project?.name ?? workspace.name,
       })),
     }
@@ -826,6 +834,65 @@ async function lockWorkspaceProjects(
     await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${project.id} FOR UPDATE`
   if (!groupId && projects[0]?.id !== workspaceId)
     throw new ServiceRequestsError(404, "Project workspace not found")
+}
+
+export async function assignProjectTeamLead(
+  userId: string,
+  workspaceId: string,
+  projectId: string,
+  employeeId: unknown,
+) {
+  if (typeof employeeId !== "string" || !employeeId)
+    throw new ServiceRequestsError(400, "Choose a project team member")
+
+  await getPrisma()!.$transaction(async (tx) => {
+    const context = await getStaffContext(tx, userId)
+    const current = await getMutableWorkspace(tx, context, workspaceId)
+    requireWorkspaceManager(context, current.projects)
+    await lockWorkspaceProjects(
+      tx,
+      workspaceId,
+      current.groupId,
+      current.projects,
+    )
+    const workspace = await getMutableWorkspace(tx, context, workspaceId)
+    requireWorkspaceManager(context, workspace.projects)
+    const project = workspace.projects.find(({ id }) => id === projectId)
+    if (!project || !["PLANNED", "IN_PROGRESS"].includes(project.status))
+      throw new ServiceRequestsError(409, "Choose a planned or active project")
+
+    const projectScope = workspace.groupId
+      ? { workspaceGroupId: workspace.groupId }
+      : { id: projectId }
+    const projectCount = await tx.project.count({ where: projectScope })
+    if (projectCount !== workspace.projects.length)
+      throw new ServiceRequestsError(
+        403,
+        "Only the department head can manage the full project team",
+      )
+    await tx.projectStaff.updateMany({
+      where: { project: projectScope, isTeamLead: true },
+      data: { isTeamLead: false },
+    })
+    const updated = await tx.projectStaff.updateMany({
+      where: {
+        projectId,
+        employeeId,
+        employee: {
+          departmentId: project.request?.acceptedDepartmentId,
+          status: "ACTIVE",
+          user: { role: "STAFF", ...activeAccount },
+        },
+      },
+      data: { isTeamLead: true },
+    })
+    if (!updated.count)
+      throw new ServiceRequestsError(
+        409,
+        "Choose an active project team member",
+      )
+  })
+  return getProjectWorkspace(userId, workspaceId)
 }
 
 export async function renameProjectWorkspace(
