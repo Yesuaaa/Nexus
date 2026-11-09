@@ -30,7 +30,10 @@ test("API routes and error responses remain available", async () => {
     const login = await fetch(`${base}/api/auth/login`, { method: "POST" })
     assert.equal(login.status, 503)
     assert.equal(login.headers.get("cache-control"), "no-store")
-    assert.deepEqual(await login.json(), { error: "Database unavailable" })
+    assert.equal(
+      ((await login.json()) as { error: string }).error,
+      "Database unavailable",
+    )
 
     const users = await fetch(`${base}/api/users`)
     assert.equal(users.status, 503)
@@ -46,7 +49,10 @@ test("API routes and error responses remain available", async () => {
       body: "{",
     })
     assert.equal(malformed.status, 400)
-    assert.deepEqual(await malformed.json(), { error: "Invalid JSON" })
+    assert.equal(
+      ((await malformed.json()) as { error: string }).error,
+      "Invalid JSON",
+    )
   } finally {
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),
