@@ -48,6 +48,7 @@ export function PortalLayout({ children }: { children: ReactNode }) {
         !canAccessServiceManagement(account)) ||
       (pathname.startsWith("/service-requests") &&
         !canAccessServiceCatalog(account)) ||
+      (pathname === "/billing-logs" && account.role !== "USER") ||
       (pathname.startsWith("/clients") &&
         !canAccessClientManagement(account)) ||
       (pathname.startsWith("/booked-services") &&

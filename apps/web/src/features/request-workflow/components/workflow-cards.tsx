@@ -1726,7 +1726,11 @@ export function WorkflowEventCard({
       <>
         {statusUpdate()}
         <AgreementCard workflow={workflow} controls={controls} />
-        <PaymentVerificationCard workflow={workflow} controls={controls} />
+        {workflow.payment && (
+          <div data-workflow-payment={workflow.payment.id}>
+            <PaymentVerificationCard workflow={workflow} controls={controls} />
+          </div>
+        )}
       </>
     )
   if (workflow.payment?.id === event.entityId)
@@ -1736,7 +1740,9 @@ export function WorkflowEventCard({
         {!workflow.events.some(
           (item) => item.entityId === workflow.agreement?.id,
         ) && (
-          <PaymentVerificationCard workflow={workflow} controls={controls} />
+          <div data-workflow-payment={workflow.payment.id}>
+            <PaymentVerificationCard workflow={workflow} controls={controls} />
+          </div>
         )}
       </>
     )
