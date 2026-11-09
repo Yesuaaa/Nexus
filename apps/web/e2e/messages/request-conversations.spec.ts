@@ -5,9 +5,9 @@ import type {
   ConversationSummary,
   RequestMessage,
   ConversationMeeting,
-} from "../src/features/request-conversations/api/request-conversations-api"
-import type { Workflow } from "../src/features/request-workflow/model/workflow"
-import { defaultPreferences } from "../src/features/settings/api/settings-api"
+} from "../../src/features/request-conversations/api/request-conversations-api"
+import type { Workflow } from "../../src/features/request-workflow/model/workflow"
+import { defaultPreferences } from "../../src/features/settings/api/settings-api"
 
 let server: Server
 let streamOrigin: string

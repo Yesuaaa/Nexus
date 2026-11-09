@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
-import type { Account } from "../src/features/auth/model/types"
-import type { BookingDetails } from "../src/features/bookings/api/bookings-api"
-import type { InboxRequest } from "../src/features/request-inbox/api/request-inbox-api"
+import type { Account } from "../../src/features/auth/model/types"
+import type { BookingDetails } from "../../src/features/bookings/api/bookings-api"
+import type { InboxRequest } from "../../src/features/request-inbox/api/request-inbox-api"
 
 type RequestDetails = InboxRequest & BookingDetails
 function fixture(index: number): RequestDetails {

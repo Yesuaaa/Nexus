@@ -1,8 +1,8 @@
 import { expect, test, type Page } from "@playwright/test"
-import type { InternalParticipant } from "../src/features/request-conversations/api/internal-conversations-api"
-import type { RequestMessage } from "../src/features/request-conversations/api/request-conversations-api"
-import { configureRegressionTest, restoreSession } from "./regression-support"
-import { defaultPreferences } from "../src/features/settings/api/settings-api"
+import type { InternalParticipant } from "../../src/features/request-conversations/api/internal-conversations-api"
+import type { RequestMessage } from "../../src/features/request-conversations/api/request-conversations-api"
+import { configureRegressionTest, restoreSession } from "../regression-support"
+import { defaultPreferences } from "../../src/features/settings/api/settings-api"
 
 configureRegressionTest()
 

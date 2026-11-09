@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
-import type { Workflow } from "../src/features/request-workflow/model/workflow"
+import type { Workflow } from "../../src/features/request-workflow/model/workflow"
 
 function fixture(): Workflow {
   return {
