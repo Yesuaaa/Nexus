@@ -217,14 +217,35 @@ test(
       data: {
         employeeId: "REG-001",
         fullName: "Design Member",
-        departmentId: department.id,
+        department: { connect: { id: department.id } },
+        user: {
+          create: {
+            email: "design-member@example.com",
+            role: "STAFF",
+            passwordHash,
+          },
+        },
       },
     })
     const outsider = await prisma.employee.create({
       data: {
         employeeId: "REG-002",
         fullName: "Other Member",
-        departmentId: otherDepartment.id,
+        department: { connect: { id: otherDepartment.id } },
+        user: {
+          create: {
+            email: "other-member@example.com",
+            role: "STAFF",
+            passwordHash,
+          },
+        },
+      },
+    })
+    const memberWithoutAccount = await prisma.employee.create({
+      data: {
+        employeeId: "REG-003",
+        fullName: "Member Without Account",
+        departmentId: department.id,
       },
     })
     const capacity = {
@@ -260,15 +281,18 @@ test(
           assert.ok(payload.error.length > 0)
         }
         assert.equal(await prisma.workloadCapacity.count(), 0)
-        assert.equal(
-          (
-            await request("/workload/capacity", "STAFF", "PUT", {
-              ...capacity,
-              employeeId: outsider.id,
-            })
-          ).status,
-          404,
-        )
+        for (const employeeId of [outsider.id, memberWithoutAccount.id]) {
+          assert.equal(
+            (
+              await request("/workload/capacity", "STAFF", "PUT", {
+                ...capacity,
+                employeeId,
+              })
+            ).status,
+            404,
+          )
+        }
+        assert.equal(await prisma.workloadCapacity.count(), 0)
         for (let replay = 0; replay < 2; replay++) {
           assert.equal(
             (await request("/workload/capacity", "STAFF", "PUT", capacity))
@@ -304,6 +328,10 @@ test(
     await t.test(
       "removing head assignment immediately revokes workload writes for an existing token",
       async () => {
+        const revocationCapacity = { ...capacity, week: "2026-11-16" }
+        const saved = await prisma.workloadCapacity.create({
+          data: { ...revocationCapacity, updatedById: "STAFF" },
+        })
         await prisma.department.update({
           where: { id: department.id },
           data: { headId: null },
@@ -315,14 +343,18 @@ test(
         assert.equal(
           (
             await request("/workload/capacity", "STAFF", "PUT", {
-              ...capacity,
+              ...revocationCapacity,
               scheduledHours: 20,
             })
           ).status,
           403,
         )
         assert.equal(
-          (await prisma.workloadCapacity.findFirstOrThrow()).scheduledHours,
+          (
+            await prisma.workloadCapacity.findUniqueOrThrow({
+              where: { id: saved.id },
+            })
+          ).scheduledHours,
           40,
         )
       },

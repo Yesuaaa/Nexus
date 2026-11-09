@@ -10,44 +10,75 @@ configureRegressionTest()
 test.describe("Department management", () => {
   test.skip(live, "Live mode uses the supplied accounts against the real API")
 
-  test("department head status changes are blocked without an eligible replacement", async ({
+  test("employee account menu does not expose the retired employment status action", async ({
     page,
   }) => {
     await restoreSession(page, "ADMIN")
-    await page.route("**/api/employees/employee-1/status-options", (route) =>
-      route.fulfill({
-        json: {
-          isDepartmentHead: true,
-          replacementCandidates: [],
-          recommendedReplacementEmployeeId: null,
-          willRestoreOriginalHead: false,
-        },
-      }),
-    )
     await page.goto("/employees")
     await page
       .getByRole("button", { name: "More actions for Alex Employee" })
       .click()
-    await page.getByRole("menuitem", { name: "Change status" }).click()
-    await page.getByRole("combobox", { name: "Status", exact: true }).click()
-    await page.getByRole("option", { name: "On leave", exact: false }).click()
     await expect(
-      page.getByText(
-        "No active Staff member with an EXP account is available.",
-        {
-          exact: false,
-        },
-      ),
+      page.getByRole("menuitem", { name: "Deactivate account", exact: true }),
     ).toBeVisible()
     await expect(
-      page.getByRole("button", { name: "Confirm status" }),
+      page.getByRole("menuitem", { name: "Change status", exact: true }),
+    ).toHaveCount(0)
+    await expect(
+      page.getByRole("menuitem", { name: "Delete account", exact: true }),
     ).toBeDisabled()
+    await page.keyboard.press("Escape")
+    await expect(
+      page.getByRole("button", { name: "More actions for Alex Employee" }),
+    ).toBeFocused()
   })
 
   test("department team creation reports authorization errors without adding a team", async ({
     page,
   }) => {
     await restoreSession(page, "ADMIN")
+    await page.route("**/api/departments/dept-1", (route) =>
+      route.fulfill({
+        json: {
+          department: {
+            id: "dept-1",
+            name: "Engineering",
+            code: "ENG",
+            color: "teal",
+            description: null,
+            headId: null,
+            head: null,
+            memberCount: 1,
+            teamCount: 0,
+            teams: [],
+            createdAt: "2026-01-01T00:00:00Z",
+            updatedAt: "2026-01-01T00:00:00Z",
+            members: [
+              {
+                id: "employee-1",
+                fullName: "Alex Employee",
+                email: "alex@example.com",
+                contactNumber: null,
+                position: "Designer",
+                status: "ACTIVE",
+                teamId: null,
+                team: null,
+                userId: "staff-1",
+                createdAt: "2026-01-01T00:00:00Z",
+                user: {
+                  id: "staff-1",
+                  fullName: "Alex Employee",
+                  email: "alex@example.com",
+                  role: "STAFF",
+                  isActive: true,
+                  accountDeletedAt: null,
+                },
+              },
+            ],
+          },
+        },
+      }),
+    )
     await page.route("**/api/departments/dept-1/teams", (route) =>
       route.fulfill({
         status: 403,
@@ -59,6 +90,13 @@ test.describe("Department management", () => {
     await page.getByRole("tab", { name: /Teams/ }).click()
     await page.getByRole("button", { name: "Create Team", exact: true }).click()
     await page.getByLabel("Team name").fill("Restricted Team")
+    await expect(
+      page.getByRole("button", { name: "Save team", exact: true }),
+    ).toBeDisabled()
+    await page
+      .getByRole("list", { name: "Available team members" })
+      .getByRole("button", { name: "Add", exact: true })
+      .click()
     const request = page.waitForRequest(
       (request) =>
         request.method() === "POST" &&
@@ -67,6 +105,7 @@ test.describe("Department management", () => {
     await page.getByRole("button", { name: "Save team" }).click()
     expect((await request).postDataJSON()).toMatchObject({
       name: "Restricted Team",
+      memberIds: ["employee-1"],
     })
     await expect(page.getByText("Team permission revoked")).toBeVisible()
     await expect(
