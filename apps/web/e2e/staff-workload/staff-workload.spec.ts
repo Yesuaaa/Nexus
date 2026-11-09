@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test"
-import { accountFor } from "./regression-support"
-import { defaultPreferences } from "../src/features/settings/api/settings-api"
+import { accountFor } from "../regression-support"
+import { defaultPreferences } from "../../src/features/settings/api/settings-api"
 
 test("department head manages capacity and reviews real allocation state", async ({
   page,

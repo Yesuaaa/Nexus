@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test"
-import type { ProjectWorkspace } from "../src/features/projects/api/projects-api"
-import { accountFor, configureRegressionTest } from "./regression-support"
+import type { ProjectWorkspace } from "../../src/features/projects/api/projects-api"
+import { accountFor, configureRegressionTest } from "../regression-support"
 
 configureRegressionTest()
 

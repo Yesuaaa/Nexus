@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
-import type { ServiceRequestSummary } from "../src/features/services/api/client-services-api"
+import type { ServiceRequestSummary } from "../../src/features/services/api/client-services-api"
 
 const timestamp = "2026-10-30T04:00:00.000Z"
 function request(index: number): ServiceRequestSummary {

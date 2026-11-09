@@ -4,7 +4,7 @@ import {
   live,
   accountFor,
   restoreSession,
-} from "./regression-support"
+} from "../regression-support"
 
 configureRegressionTest()
 

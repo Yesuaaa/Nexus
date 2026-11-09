@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import type { Profile } from "../src/features/profile/api/profile-api"
+import type { Profile } from "../../src/features/profile/api/profile-api"
 
 for (const role of ["USER", "STAFF", "ADMIN", "SUPERADMIN"] as const) {
   test(`${role} can manage their profile on desktop and mobile`, async ({

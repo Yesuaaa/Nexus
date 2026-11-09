@@ -1,10 +1,10 @@
 import { expect, test } from "@playwright/test"
-import type { Service } from "../src/features/services/api/services-api"
+import type { Service } from "../../src/features/services/api/services-api"
 import {
   configureRegressionTest,
   live,
   restoreSession,
-} from "./regression-support"
+} from "../regression-support"
 
 configureRegressionTest()
 

@@ -2,12 +2,12 @@ import { expect, test, type Page } from "@playwright/test"
 import type {
   Client,
   ClientSort,
-} from "../src/features/clients/api/clients-api"
+} from "../../src/features/clients/api/clients-api"
 import {
   configureRegressionTest,
   live,
   restoreSession,
-} from "./regression-support"
+} from "../regression-support"
 
 configureRegressionTest()
 

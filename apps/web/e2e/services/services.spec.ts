@@ -1,11 +1,11 @@
 import { expect, test } from "@playwright/test"
-import { Permissions } from "../src/features/auth/model/permissions"
+import { Permissions } from "../../src/features/auth/model/permissions"
 import {
   configureRegressionTest,
   live,
   restoreSession,
   storedTokens,
-} from "./regression-support"
+} from "../regression-support"
 
 configureRegressionTest()
 

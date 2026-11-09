@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import type { Settings } from "../src/features/settings/api/settings-api"
+import type { Settings } from "../../src/features/settings/api/settings-api"
 for (const role of ["USER", "STAFF", "ADMIN", "SUPERADMIN"] as const) {
   test(
     role + " settings persist and sessions can be revoked",

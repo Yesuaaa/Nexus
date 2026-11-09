@@ -1,9 +1,9 @@
 import { expect, test, type Page } from "@playwright/test"
-import type { Account } from "../src/features/auth/model/types"
+import type { Account } from "../../src/features/auth/model/types"
 import type {
   BookedService,
   BookingDetails,
-} from "../src/features/bookings/api/bookings-api"
+} from "../../src/features/bookings/api/bookings-api"
 
 function bookingFixture(index = 1): BookingDetails {
   return {
