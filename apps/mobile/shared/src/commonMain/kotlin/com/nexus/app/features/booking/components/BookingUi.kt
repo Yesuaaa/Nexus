@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.SubcomposeAsyncImage
+import com.nexus.app.core.components.NexusDropdown
 import com.nexus.app.core.network.ApiEndpoints
 import com.nexus.app.core.theme.NexusColors
 
@@ -92,19 +93,10 @@ fun ServiceImage(url: String?, description: String?, modifier: Modifier = Modifi
 }
 
 @Composable
-fun FilterMenu(label: String, options: List<Pair<String, String>>, enabled: Boolean = true,
+fun FilterMenu(label: String, options: List<Pair<String, String>>, enabled: Boolean = true, modifier: Modifier = Modifier,
     onSelect: (String) -> Unit) {
-    var expanded by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-    Box {
-        OutlinedButton(onClick = { expanded = true }, enabled = enabled) { Text(label, fontSize = 12.sp) }
-        DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { (value, text) ->
-                DropdownMenuItem(text = { Text(text) }, onClick = { expanded = false; onSelect(value) })
-            }
-        }
-    }
+    NexusDropdown(label, options, options.firstOrNull { it.second == label }?.first, onSelect, modifier.widthIn(max = 240.dp), enabled)
 }
-
 
 @Composable
 fun BookingContinueButton(

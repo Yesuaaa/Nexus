@@ -82,7 +82,7 @@ class MobileUiRegressionTest {
         compose.setContent { MaterialTheme { NexusTopAppBar(onChatClick = { chats++ }, notificationUnread = 6) } }
         val notification = compose.onNodeWithContentDescription("Notifications").fetchSemanticsNode().boundsInRoot
         val chat = compose.onNodeWithContentDescription("Messages").fetchSemanticsNode().boundsInRoot
-        val profile = compose.onNodeWithContentDescription("Open profile").fetchSemanticsNode().boundsInRoot
+        val profile = compose.onNodeWithContentDescription("Open account menu").fetchSemanticsNode().boundsInRoot
         org.junit.Assert.assertTrue(notification.left < chat.left && chat.left < profile.left)
         compose.onNodeWithContentDescription("Messages").performClick()
         compose.runOnIdle { assertEquals(1, chats) }
@@ -140,41 +140,110 @@ class MobileUiRegressionTest {
         compose.runOnIdle { assertEquals(1, repo.cancellations) }
     }
 
-    @Test fun compactProfileShowsFallbacksAndScrollsToLogout() {
-        var logouts = 0
-        compose.setContent {
-            MaterialTheme {
-                Box(Modifier.requiredSize(320.dp, 480.dp)) {
-                    CompositionLocalProvider(LocalNexusLayout provides NexusLayout(narrow = true, short = true)) {
-                        ProfileScreen(user, {}, { logouts++ }, false)
-                    }
-                }
+    @androidx.compose.runtime.Composable
+    private fun AccountUnderTest(backend: com.nexus.app.features.profile.FakeProfileBackend, settings: Boolean = false) {
+        com.nexus.app.core.theme.NexusTheme {
+            CompositionLocalProvider(LocalNexusToast provides remember { NexusToastState() }) {
+                val vm = remember { com.nexus.app.features.profile.viewmodel.ProfileViewModel(backend.repository, com.nexus.app.core.session.SessionManager()) }
+                ProfileScreen(user, initialSettings = settings, viewModel = vm)
             }
         }
-        compose.onNodeWithText("My account").assertIsDisplayed()
-        compose.onNodeWithText("mobile@example.com").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Not provided").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Client").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Log out").performScrollTo().performClick()
+    }
+
+    private fun screenshot(name: String) {
+        if (androidx.test.platform.app.InstrumentationRegistry.getArguments().getString("screenshots") != "true") return
+        compose.waitForIdle()
+        val instrumentation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+        val resolver = instrumentation.targetContext.contentResolver
+        val values = android.content.ContentValues().apply {
+            put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, "nexus-$name.png")
+            put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/png")
+            put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Nexus")
+        }
+        val uri = requireNotNull(resolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values))
+        resolver.openOutputStream(uri)!!.use { instrumentation.uiAutomation.takeScreenshot().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+    }
+    @Test fun compactProfileEditsDetailsAndReturnsToOverview() {
+        val backend = com.nexus.app.features.profile.FakeProfileBackend()
+        compose.setContent { Box(Modifier.requiredSize(320.dp, 600.dp)) { AccountUnderTest(backend) } }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Test Client").fetchSemanticsNodes().isNotEmpty() }
+        screenshot("profile")
+        compose.onNodeWithText("Edit profile").performScrollTo().performClick()
+        compose.onNodeWithText("Personal details").assertIsDisplayed()
+        screenshot("personal-details")
+        compose.onAllNodes(hasSetTextAction()).onFirst().performTextReplacement("Updated Client")
+        compose.onNodeWithText("Save personal details").performScrollTo().performClick()
+        compose.waitUntil(10_000) { backend.personalSaves == 1 && compose.onAllNodesWithText("My profile").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("My profile").assertIsDisplayed()
+        compose.onNodeWithText("Updated Client").assertIsDisplayed()
+        backend.client.close()
+    }
+
+    @Test fun profileImageEditorCanBeCancelledWithoutUploading() {
+        val backend = com.nexus.app.features.profile.FakeProfileBackend()
+        compose.setContent { AccountUnderTest(backend) }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Test Client").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Edit banner").performClick()
+        compose.onNodeWithText("Profile photo & banner").assertIsDisplayed()
+        screenshot("profile-images")
+        compose.onNodeWithText("Save changes").performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithContentDescription("Close editor").performScrollTo().performClick()
+        compose.onNodeWithText("My profile").assertIsDisplayed()
+        backend.client.close()
+    }
+
+    @Test fun settingsSessionSignOutRequiresConfirmation() {
+        val backend = com.nexus.app.features.profile.FakeProfileBackend()
+        compose.setContent { AccountUnderTest(backend, settings = true) }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Windows - Chrome").fetchSemanticsNodes().isNotEmpty() }
+        screenshot("security")
+        compose.onNodeWithText("Sign out").performScrollTo().performClick()
+        compose.onNodeWithText("Sign out this device?").assertIsDisplayed()
+        compose.onNodeWithText("Cancel").performClick()
+        compose.runOnIdle { assertEquals(0, backend.revocations) }
+        screenshot("security")
+        compose.onNodeWithText("Sign out").performScrollTo().performClick()
+        compose.onNode(hasText("Sign out") and hasAnyAncestor(isDialog())).performClick()
+        compose.waitUntil(10_000) { backend.revocations == 1 }
+        backend.client.close()
+    }
+
+    @Test fun settingsPreferencesPersistAndPasswordMismatchStaysLocal() {
+        val backend = com.nexus.app.features.profile.FakeProfileBackend()
+        compose.setContent { AccountUnderTest(backend, settings = true) }
+        compose.onNodeWithText("Preferences").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Date and time").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Save preferences").assertIsNotEnabled()
+        screenshot("preferences")
+        compose.onAllNodesWithText("12-hour (AM/PM)").onFirst().performScrollTo().performClick()
+        compose.onNodeWithText("24-hour").performClick()
+        compose.onNodeWithText("Save preferences").performScrollTo().performClick()
+        compose.waitUntil(10_000) { backend.preferences.timeFormat == "24h" && compose.onAllNodesWithText("Saving...").fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithText("Security").performScrollTo().performClick()
+        compose.onAllNodesWithText("Change password").onFirst().performScrollTo().performClick()
+        screenshot("password")
+        compose.onAllNodes(hasSetTextAction())[0].performTextInput("CurrentPassword1!")
+        compose.onAllNodes(hasSetTextAction())[1].performTextInput("DifferentPassword1!")
+        compose.onAllNodes(hasSetTextAction())[2].performTextInput("MismatchPassword1!")
+        compose.onNodeWithText("Update password").performScrollTo().performClick()
+        compose.onNodeWithText("Passwords do not match.").performScrollTo().assertIsDisplayed()
+        compose.runOnIdle { assertEquals(0, backend.passwordSaves) }
+        backend.client.close()
+    }
+
+    @Test fun accountMenuShowsIdentityAndDispatchesSettingsAndLogout() {
+        var settings = 0
+        var logouts = 0
+        compose.setContent { MaterialTheme { NexusTopAppBar(accountName = "Test Client", accountEmail = "mobile@example.com", onSettingsClick = { settings++ }, onLogoutClick = { logouts++ }) } }
+        compose.onNodeWithContentDescription("Open account menu").performClick()
+        compose.onNodeWithText("mobile@example.com").assertIsDisplayed()
+        screenshot("account-menu")
+        compose.onNodeWithText("Settings").performClick()
+        compose.runOnIdle { assertEquals(1, settings) }
+        compose.onNodeWithContentDescription("Open account menu").performClick()
+        compose.onNodeWithText("Log out").performClick()
         compose.runOnIdle { assertEquals(1, logouts) }
     }
-
-    @Test fun profileBackInvokesNavigation() {
-        var backs = 0
-        compose.setContent { MaterialTheme { ProfileScreen(user, { backs++ }, {}, false) } }
-        compose.onNodeWithText("Back").performClick()
-        compose.runOnIdle { assertEquals(1, backs) }
-    }
-
-    @Test fun logoutInProgressDisablesBackAndLogout() {
-        compose.setContent { MaterialTheme { ProfileScreen(user, {}, {}, true) } }
-        compose.onNodeWithText("Back").assertIsNotEnabled()
-        compose.onAllNodes(hasClickAction()).assertCountEquals(2)
-        compose.onAllNodes(hasClickAction()).fetchSemanticsNodes().indices.forEach { index ->
-            compose.onAllNodes(hasClickAction())[index].assertIsNotEnabled()
-        }
-    }
-
     @Test fun compactLandscapeTabsDispatchEveryDestination() {
         val selected = mutableListOf<BottomTab>()
         compose.setContent {

@@ -28,11 +28,13 @@ fun rememberAndroidFiles(): PlatformFiles {
     DisposableEffect(Unit) { onDispose { pick?.cancel(); save?.cancel() } }
     return remember(context, picker, saver) {
         object : PlatformFiles {
-            override suspend fun select(): SelectedFile? {
+            override suspend fun select(): SelectedFile? = selectFile(supportedFileTypes.keys.toTypedArray(), true)
+            override suspend fun selectImage(): SelectedFile? = selectFile(arrayOf("image/jpeg", "image/png", "image/webp"), false)
+            private suspend fun selectFile(types: Array<String>, document: Boolean): SelectedFile? {
                 val uri = suspendCancellableCoroutine<android.net.Uri?> { continuation ->
                     check(pick == null) { "A file picker is already open" }
                     pick = continuation
-                    picker.launch(supportedFileTypes.keys.toTypedArray())
+                    picker.launch(types)
                 } ?: return null
                 return withContext(Dispatchers.IO) {
                     var name = "attachment"
@@ -54,7 +56,7 @@ fun rememberAndroidFiles(): PlatformFiles {
                         }
                         out.toByteArray()
                     } ?: error("Unable to read selected file")
-                    SelectedFile(name, mime, bytes).also(::validateFile)
+                    SelectedFile(name, mime, bytes).also { if (document) validateFile(it) }
                 }
             }
             override suspend fun save(file: SelectedFile) {
