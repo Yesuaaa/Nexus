@@ -503,6 +503,26 @@ function ConversationPanel({
       logRef.current.scrollTop = logRef.current.scrollHeight
   }, [history?.messages, history?.meetings, bookingControls])
 
+  const openedWorkflowAnchor = useRef("")
+  useEffect(() => {
+    const anchor = window.location.hash.slice(1)
+    if (
+      !/^workflow-[A-Za-z0-9_-]{1,80}$/.test(anchor) ||
+      openedWorkflowAnchor.current === anchor
+    )
+      return
+    const log = logRef.current
+    const target = log?.querySelectorAll(
+      `[data-workflow-payment="${anchor.slice("workflow-".length)}"]`,
+    )
+    const card = target?.[target.length - 1]
+    if (!log || !card) return
+    openedWorkflowAnchor.current = anchor
+    followLatest.current = false
+    log.scrollTop +=
+      card.getBoundingClientRect().top - log.getBoundingClientRect().top - 16
+  }, [history?.messages, history?.meetings, bookingControls])
+
   const latestMessageId = history?.messages.at(-1)?.id
   const conversationReady = Boolean(history?.conversation)
   useEffect(() => {

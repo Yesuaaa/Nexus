@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { LogOut, UserRound, Settings } from "lucide-react"
+import { LogOut, Receipt, UserRound, Settings } from "lucide-react"
 import { iconButtonClass } from "@/components/layout/styles"
 import {
   DropdownMenu,
@@ -51,6 +51,17 @@ export function AccountMenu({ onSignOut }: { onSignOut: () => void }) {
             Profile
           </Link>
         </DropdownMenuItem>
+        {account.role === "USER" && (
+          <DropdownMenuItem
+            asChild
+            className="min-h-[38px] cursor-pointer rounded-md px-3 text-xs"
+          >
+            <Link href="/billing-logs">
+              <Receipt aria-hidden="true" />
+              Billing Logs
+            </Link>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem
           asChild
           className="min-h-[38px] cursor-pointer rounded-md px-3 text-xs"

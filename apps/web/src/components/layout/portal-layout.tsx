@@ -51,6 +51,7 @@ export function PortalLayout({ children }: { children: ReactNode }) {
       (pathname === "/calendar" && !canAccessCalendar(account)) ||
       ((pathname.startsWith("/service-requests") || pathname === "/help") &&
         !canAccessServiceCatalog(account)) ||
+      (pathname === "/billing-logs" && account.role !== "USER") ||
       (pathname.startsWith("/clients") &&
         !canAccessClientManagement(account)) ||
       (pathname.startsWith("/booked-services") &&

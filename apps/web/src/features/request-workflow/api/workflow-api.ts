@@ -66,7 +66,7 @@ export async function uploadWorkflowFile(
 
 export async function downloadWorkflowFile(
   requestId: string,
-  file: WorkflowFile,
+  file: Pick<WorkflowFile, "id" | "name">,
 ) {
   const response = await apiStreamRequest(
     `${path(requestId)}/files/${encodeURIComponent(file.id)}`,
