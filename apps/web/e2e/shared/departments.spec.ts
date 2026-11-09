@@ -3,7 +3,7 @@ import {
   configureRegressionTest,
   live,
   restoreSession,
-} from "./regression-support"
+} from "../regression-support"
 
 configureRegressionTest()
 
