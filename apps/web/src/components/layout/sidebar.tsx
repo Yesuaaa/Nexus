@@ -2,7 +2,13 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ClipboardList, FolderKanban, Inbox, UsersRound } from "lucide-react"
+import {
+  CalendarDays,
+  ClipboardList,
+  FolderKanban,
+  Inbox,
+  UsersRound,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Account } from "@/features/auth/model/types"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
@@ -12,6 +18,7 @@ import {
   canAccessDepartmentManagement,
   canAccessEmployeeManagement,
   canAccessServiceCatalog,
+  canAccessCalendar,
   canAccessServiceManagement,
   canAccessClientManagement,
   canAccessProjects,
@@ -25,7 +32,6 @@ import {
   DashboardIcon,
   DepartmentIcon,
   PanelIcon,
-  SignOutIcon,
   ServiceIcon,
 } from "./icons"
 
@@ -48,14 +54,12 @@ export function Sidebar({
   drawerOpen,
   onToggleCollapse,
   onCloseDrawer,
-  onSignOut,
 }: {
   account: Account
   collapsed: boolean
   drawerOpen: boolean
   onToggleCollapse: () => void
   onCloseDrawer: () => void
-  onSignOut: () => void
 }) {
   const pathname = usePathname()
   const collapsedLabelClass = collapsed
@@ -255,6 +259,23 @@ export function Sidebar({
               )}
             </Link>
           )}
+          {canAccessCalendar(account) && (
+            <Link
+              href="/calendar"
+              aria-current={pathname === "/calendar" ? "page" : undefined}
+              className={cn(
+                navLinkClass,
+                collapsed &&
+                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
+                pathname === "/calendar" && "bg-[#e1e3e5]",
+              )}
+              onClick={onCloseDrawer}
+            >
+              <CalendarDays size={20} strokeWidth={1.7} className="flex-none" />
+              <span className={collapsedLabelClass}>Calendar</span>
+              {collapsed && <CollapsedTooltip>Calendar</CollapsedTooltip>}
+            </Link>
+          )}
           {account.role === "USER" && canAccessProjects(account) && (
             <Link
               href="/projects"
@@ -337,27 +358,6 @@ export function Sidebar({
             </Link>
           )}
         </nav>
-
-        <div
-          className={cn(
-            "mt-auto border-t border-[#e2e5e9] px-6 pt-4 pb-[19px] max-[767px]:px-[22px]",
-            collapsed && "px-3",
-          )}
-        >
-          <button
-            type="button"
-            className={cn(
-              navLinkClass,
-              "font-normal text-[#f35b61] hover:bg-[#fff0f1]",
-              collapsed && "justify-center gap-0 p-0",
-            )}
-            onClick={onSignOut}
-          >
-            <SignOutIcon className="flex-none" />
-            <span className={collapsedLabelClass}>Sign Out</span>
-            {collapsed && <CollapsedTooltip>Sign Out</CollapsedTooltip>}
-          </button>
-        </div>
       </div>
     </aside>
   )

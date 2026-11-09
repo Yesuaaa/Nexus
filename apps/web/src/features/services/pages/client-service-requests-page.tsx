@@ -9,8 +9,11 @@ import {
   LoaderCircle,
   Plus,
 } from "lucide-react"
+import {
+  ClientPageHeader,
+  clientPageHeaderActionClass,
+} from "@/components/layout/client-page-header"
 import { contentClass } from "@/components/layout/styles"
-import { ClientPageHeader } from "@/components/layout/client-page-header"
 import { Button } from "@/components/ui/button"
 import { ClientTableSkeleton } from "@/components/ui/client-table-skeleton"
 import { KpiCards } from "@/components/ui/kpi-cards"
@@ -199,10 +202,7 @@ export function ClientServiceRequestsPage() {
         title="Booked Requests"
         description="Track your requests, review project details, and follow their progress."
         actions={
-          <Button
-            asChild
-            className="h-[34px] bg-[#203f8c] text-xs text-white hover:bg-[#172f70] max-[560px]:h-11"
-          >
+          <Button asChild className={clientPageHeaderActionClass}>
             <Link href="/services">
               <Plus size={16} aria-hidden="true" />
               New Service Request

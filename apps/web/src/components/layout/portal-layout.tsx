@@ -8,6 +8,7 @@ import { useAccount } from "@/features/auth/hooks/use-account"
 import {
   canAccessAccountManagement,
   canAccessBookedServices,
+  canAccessCalendar,
   canAccessRequestInbox,
   canAccessDepartmentManagement,
   canAccessEmployeeManagement,
@@ -47,6 +48,7 @@ export function PortalLayout({ children }: { children: ReactNode }) {
       (pathname === "/services" &&
         !canAccessServiceCatalog(account) &&
         !canAccessServiceManagement(account)) ||
+      (pathname === "/calendar" && !canAccessCalendar(account)) ||
       (pathname.startsWith("/service-requests") &&
         !canAccessServiceCatalog(account)) ||
       (pathname.startsWith("/clients") &&
