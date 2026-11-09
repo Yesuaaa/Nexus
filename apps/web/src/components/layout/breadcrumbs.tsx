@@ -2,10 +2,59 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { useEffect, useState } from "react"
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react"
 import { getProjectWorkspace } from "@/features/project-workspace/api/project-workspace-api"
 import { ChevronRightIcon, HomeIcon } from "./icons"
 import { focusRing } from "./styles"
+
+type BreadcrumbLabels = Record<string, string>
+type BreadcrumbLabelContextValue = {
+  labels: BreadcrumbLabels
+  setLabel: (key: string, label: string | null) => void
+}
+
+const BreadcrumbLabelContext = createContext<BreadcrumbLabelContextValue>({
+  labels: {},
+  setLabel: () => undefined,
+})
+
+export function BreadcrumbLabelProvider({ children }: { children: ReactNode }) {
+  const [labels, setLabels] = useState<BreadcrumbLabels>({})
+  const setLabel = useCallback((key: string, label: string | null) => {
+    setLabels((current) => {
+      if (label) {
+        if (current[key] === label) return current
+        return { ...current, [key]: label }
+      }
+      if (!(key in current)) return current
+      const remaining = { ...current }
+      delete remaining[key]
+      return remaining
+    })
+  }, [])
+  const value = useMemo(() => ({ labels, setLabel }), [labels, setLabel])
+
+  return (
+    <BreadcrumbLabelContext value={value}>{children}</BreadcrumbLabelContext>
+  )
+}
+
+export function useBreadcrumbLabel(key: string, label: string | undefined) {
+  const { setLabel } = useContext(BreadcrumbLabelContext)
+
+  useEffect(() => {
+    setLabel(key, label ?? null)
+    return () => setLabel(key, null)
+  }, [key, label, setLabel])
+}
 
 const routeLabels: Record<string, string> = {
   dashboard: "Dashboard",
@@ -38,6 +87,7 @@ function labelFor(segment: string) {
 
 export function Breadcrumbs() {
   const pathname = usePathname()
+  const { labels } = useContext(BreadcrumbLabelContext)
   const segments = pathname.split("/").filter(Boolean)
   const projectId =
     segments[0] === "project-workspace" && segments[1] !== "new"
@@ -76,22 +126,24 @@ export function Breadcrumbs() {
         </li>
         {segments.map((segment, index) => {
           const label =
-            index === 1 && projectId
+            labels[segment] ??
+            (index === 1 && projectId
               ? projectLabel?.id === projectId
                 ? projectLabel.name
                 : "Project"
-              : labelFor(segment)
+              : index === 1 && segments[0] === "projects"
+                ? "Project"
+                : labelFor(segment))
+          const isCurrent = index === segments.length - 1
           return (
             <li
               key={`${index}-${segment}`}
               className="flex min-w-0 items-center gap-[7px] text-[#8a9ab3]"
             >
               <ChevronRightIcon width="14" height="14" />
-              {index === segments.length - 1 || segment === "projects" ? (
+              {isCurrent ? (
                 <span
-                  aria-current={
-                    index === segments.length - 1 ? "page" : undefined
-                  }
+                  aria-current="page"
                   className="overflow-hidden text-ellipsis font-semibold text-[#253f8c]"
                 >
                   {label}

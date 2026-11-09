@@ -71,7 +71,7 @@ function ActionForm({
   inline = false,
   destructive = false,
 }: {
-  controls: WorkflowControls
+  controls?: WorkflowControls
   action: (data: FormData) => WorkflowAction
   children?: ReactNode
   label: string
@@ -81,7 +81,7 @@ function ActionForm({
   inline?: boolean
   destructive?: boolean
 }) {
-  if (readOnly) return <div>{children}</div>
+  if (readOnly || !controls) return <div>{children}</div>
   const submitClass = cn(
     workflowButton,
     destructive &&
@@ -187,9 +187,12 @@ export function WorkflowContextPanel({
   hasSelectedBooking,
   onDraft,
   onProjectSetup,
+  contextLabel = "Request context",
+  summaryLabel = "Request details and actions",
+  className,
 }: {
   workflow: Workflow | null
-  controls: WorkflowControls
+  controls?: WorkflowControls
   id?: string
   hidden?: boolean
   onViewEvent?: (entityId: string) => void
@@ -197,6 +200,9 @@ export function WorkflowContextPanel({
   hasSelectedBooking: boolean
   onDraft?: (action: "approver-assignments" | "internal-note") => void
   onProjectSetup?: (mode: "activation" | "staffing") => void
+  contextLabel?: string
+  summaryLabel?: string
+  className?: string
 }) {
   const { formatDate, formatTime } = useDatePreferences()
 
@@ -233,12 +239,13 @@ export function WorkflowContextPanel({
       id={id}
       aria-hidden={hidden}
       inert={hidden}
-      aria-label="Request context"
+      aria-label={contextLabel}
       className={cn(
         "m-3 shrink-0 overflow-x-hidden overflow-y-auto rounded-[13px] border border-[#dedede] bg-background px-4 py-1 shadow-[0_2px_8px_rgb(20_30_50_/_11%)] transition-[width,max-height,opacity,transform,padding,margin,border-color] duration-[240ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none max-[1023px]:w-auto max-[1023px]:shrink max-[1023px]:overflow-hidden",
         hidden
           ? "m-0 w-0 min-w-0 translate-x-2 border-0 px-0 opacity-0 pointer-events-none max-[1199px]:w-0 max-[1023px]:max-h-0 max-[1023px]:translate-x-0 max-[1023px]:translate-y-2 max-[1023px]:px-4 max-[1023px]:py-0 max-[1023px]:opacity-0"
           : "w-[300px] max-[1199px]:w-[270px] max-[1023px]:max-h-[calc(50dvh+64px)] max-[1023px]:translate-x-0 max-[1023px]:translate-y-0 max-[1023px]:opacity-100",
+        className,
       )}
     >
       <details
@@ -247,7 +254,7 @@ export function WorkflowContextPanel({
         open
       >
         <summary className="hidden cursor-pointer list-none items-center justify-between py-3 text-xs font-semibold max-[1023px]:flex [&::-webkit-details-marker]:hidden">
-          Request details and actions
+          {summaryLabel}
           <ChevronDown
             size={14}
             className="group-open/context:rotate-180"
@@ -290,7 +297,7 @@ export function WorkflowContextPanel({
                 </dl>
               ) : (
                 <p role="status" className="m-0 text-[11px] text-[#52627a]">
-                  {controls.error || "Loading service details…"}
+                  {controls?.error || "Loading service details…"}
                 </p>
               )}
             </WorkflowDisclosure>
@@ -413,7 +420,7 @@ export function WorkflowContextPanel({
                     </p>
                     <Button
                       type="button"
-                      disabled={controls.busy || !onProjectSetup}
+                      disabled={Boolean(controls?.busy) || !onProjectSetup}
                       className={`${workflowButton} w-full bg-[#203f8c] text-white hover:bg-[#172f70]`}
                       onClick={() => onProjectSetup?.("activation")}
                     >
@@ -630,10 +637,10 @@ export function WorkflowContextPanel({
                 {workflow.state === "CONSULTATION" && (
                   <div className="py-3">
                     <Button
-                      disabled={controls.busy}
+                      disabled={Boolean(controls?.busy)}
                       className={`${workflowButton} w-full`}
                       onClick={() =>
-                        void controls.act({ type: "PREPARE_QUOTATION" })
+                        void controls?.act({ type: "PREPARE_QUOTATION" })
                       }
                     >
                       Continue to quotation
@@ -661,9 +668,9 @@ export function WorkflowContextPanel({
                   <Button
                     variant="outline"
                     className={workflowButton}
-                    disabled={controls.busy}
+                    disabled={Boolean(controls?.busy)}
                     onClick={() =>
-                      void controls.act({ type: "FIXED_QUOTATION" })
+                      void controls?.act({ type: "FIXED_QUOTATION" })
                     }
                   >
                     Use fixed package price
@@ -693,7 +700,7 @@ export function WorkflowContextPanel({
                         type="button"
                         variant="outline"
                         className={workflowButton}
-                        disabled={controls.busy}
+                        disabled={Boolean(controls?.busy)}
                         onClick={() => onDraft("approver-assignments")}
                       >
                         Approver assignments
@@ -702,7 +709,7 @@ export function WorkflowContextPanel({
                         type="button"
                         variant="outline"
                         className={workflowButton}
-                        disabled={controls.busy}
+                        disabled={Boolean(controls?.busy)}
                         onClick={() => onDraft("internal-note")}
                       >
                         Internal notes

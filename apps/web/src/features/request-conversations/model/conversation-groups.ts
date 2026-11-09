@@ -3,7 +3,9 @@ import type {
   RequestMessage,
 } from "../api/request-conversations-api"
 
-export function orderConversations(rows: ConversationSummary[]) {
+export function orderConversations<
+  T extends Pick<ConversationSummary, "id" | "updatedAt">,
+>(rows: T[]) {
   return [...rows].sort(
     (a, b) =>
       b.updatedAt.localeCompare(a.updatedAt) || b.id.localeCompare(a.id),

@@ -3,6 +3,7 @@ import { requireAuth } from "../auth/auth.middleware.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 import {
   addProjectTask,
+  assignProjectTeamLead,
   cancelProjectWorkspace,
   createProjectWorkspaces,
   getProjectWorkspace,
@@ -105,6 +106,21 @@ projectWorkspaceRouter.post("/:id/status", async (request, response) => {
     ),
   )
 })
+
+projectWorkspaceRouter.put(
+  "/:id/projects/:projectId/team-lead",
+  json({ limit: "4kb" }),
+  async (request, response) => {
+    response.json(
+      await assignProjectTeamLead(
+        request.auth!.user.id,
+        String(request.params.id),
+        String(request.params.projectId),
+        request.body?.employeeId,
+      ),
+    )
+  },
+)
 
 projectWorkspaceRouter.put(
   "/:id/projects/:projectId/plan",

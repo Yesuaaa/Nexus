@@ -73,6 +73,10 @@ export function canAccessBookedServices(account: Account): boolean {
   return account.role === "USER"
 }
 
+export function canAccessCalendar(account: Account): boolean {
+  return ["USER", "STAFF", "ADMIN", "SUPERADMIN"].includes(account.role)
+}
+
 export function canAccessRequestInbox(account: Account): boolean {
   return account.role === "STAFF" && !!account.headOf
 }

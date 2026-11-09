@@ -51,12 +51,23 @@ body {
   animation: service-icon-float 1.6s cubic-bezier(0.37, 0, 0.63, 1) infinite
     alternate;
 }
+.request-icon-float {
+  animation: request-icon-float 2.8s ease-in-out infinite alternate;
+}
 @keyframes service-icon-float {
   from {
     transform: translateY(0);
   }
   to {
     transform: translateY(-6px);
+  }
+}
+@keyframes request-icon-float {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-2px);
   }
 }
 @keyframes auth-form-in {
@@ -93,7 +104,8 @@ body {
   .auth-photo-enter {
     animation: none;
   }
-  .service-icon-float {
+  .service-icon-float,
+  .request-icon-float {
     animation: none;
   }
 }
