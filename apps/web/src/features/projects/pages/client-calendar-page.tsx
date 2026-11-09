@@ -111,7 +111,8 @@ function EventRowLink({
 }
 
 export function ClientCalendarPage() {
-  const today = dateKey.format(new Date())
+  const [now] = useState(() => Date.now())
+  const today = dateKey.format(now)
   const [selected, setSelected] = useState(today)
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [loading, setLoading] = useState(true)
@@ -154,7 +155,6 @@ export function ClientCalendarPage() {
   const dayEvents = [...(byDay[selected] ?? [])].sort(
     (a, b) => Number(b.type === "milestone") - Number(a.type === "milestone"),
   )
-  const now = Date.now()
   const upcoming = events.filter(
     (event) => event.type !== "milestone" && Date.parse(event.startsAt) >= now,
   )
