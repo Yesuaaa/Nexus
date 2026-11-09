@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ClipboardList, Inbox, UsersRound } from "lucide-react"
+import { CircleHelp, ClipboardList, Inbox, UsersRound } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Account } from "@/features/auth/model/types"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
@@ -324,19 +324,37 @@ export function Sidebar({
             collapsed && "px-3",
           )}
         >
-          <button
-            type="button"
-            className={cn(
-              navLinkClass,
-              "font-normal text-[#f35b61] hover:bg-[#fff0f1]",
-              collapsed && "justify-center gap-0 p-0",
-            )}
-            onClick={onSignOut}
-          >
-            <SignOutIcon className="flex-none" />
-            <span className={collapsedLabelClass}>Sign Out</span>
-            {collapsed && <CollapsedTooltip>Sign Out</CollapsedTooltip>}
-          </button>
+          {account.role === "USER" ? (
+            <Link
+              href="/help"
+              aria-current={pathname === "/help" ? "page" : undefined}
+              className={cn(
+                navLinkClass,
+                collapsed && "justify-center gap-0 p-0",
+              )}
+              onClick={onCloseDrawer}
+            >
+              <CircleHelp size={20} strokeWidth={1.7} className="flex-none" />
+              <span className={collapsedLabelClass}>Help &amp; Support</span>
+              {collapsed && (
+                <CollapsedTooltip>Help &amp; Support</CollapsedTooltip>
+              )}
+            </Link>
+          ) : (
+            <button
+              type="button"
+              className={cn(
+                navLinkClass,
+                "font-normal text-[#f35b61] hover:bg-[#fff0f1]",
+                collapsed && "justify-center gap-0 p-0",
+              )}
+              onClick={onSignOut}
+            >
+              <SignOutIcon className="flex-none" />
+              <span className={collapsedLabelClass}>Sign Out</span>
+              {collapsed && <CollapsedTooltip>Sign Out</CollapsedTooltip>}
+            </button>
+          )}
         </div>
       </div>
     </aside>
