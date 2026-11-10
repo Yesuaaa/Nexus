@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { randomBytes } from "node:crypto"
+import { randomBytes, randomUUID } from "node:crypto"
 import { readdir, readFile } from "node:fs/promises"
 import type { Server } from "node:http"
 import type { AddressInfo } from "node:net"
@@ -577,5 +577,258 @@ test(
     )
     assert.equal(repeatedCancel.status, 409)
     assert.equal((await workspace(cancellableId)).status, "CANCELLED")
+
+    await t.test(
+      "[NEX-005] deliverable uploads, review, rejection, and sharing enforce access and persist transitions",
+      async () => {
+        const booking = await createBooking("deliverable", true)
+        const createWorkspace = await request(
+          "/",
+          head.id,
+          "POST",
+          createPayload(
+            [booking.request.id],
+            "SEPARATE",
+            "NEX-005 Deliverable Workspace",
+          ),
+        )
+        assert.equal(createWorkspace.status, 201)
+        const createdWorkspace = (await createWorkspace.json()) as {
+          workspaces: { id: string }[]
+        }
+        const workspaceId = createdWorkspace.workspaces[0]!.id
+        const staffEmployee = await prisma.employee.findUniqueOrThrow({
+          where: { userId: staff.id },
+        })
+        const outsider = await prisma.user.create({
+          data: {
+            id: "nex003-outsider",
+            email: "nex003-outsider@example.com",
+            fullName: "NEX-005 Unassigned Staff",
+            passwordHash: "test-only-hash",
+            role: "STAFF",
+            departmentId: department.id,
+          },
+        })
+        await prisma.employee.create({
+          data: {
+            employeeId: "NEX005-OUTSIDER",
+            fullName: outsider.fullName!,
+            userId: outsider.id,
+            departmentId: department.id,
+          },
+        })
+        sessions.set(outsider.id, (await issueSession(outsider)).token)
+        await prisma.projectStaff.create({
+          data: {
+            projectId: booking.project.id,
+            employeeId: staffEmployee.id,
+            approvedById: head.id,
+          },
+        })
+        await prisma.requestWorkflow.update({
+          where: { requestId: booking.request.id },
+          data: { state: "ACTIVE_PROJECT" },
+        })
+        await prisma.project.update({
+          where: { id: booking.project.id },
+          data: { status: "IN_PROGRESS" },
+        })
+        const deliverable = await prisma.projectMilestone.create({
+          data: { projectId: booking.project.id, title: "Brand guide" },
+        })
+        const path = `/${workspaceId}/projects/${booking.project.id}/deliverables/${deliverable.id}`
+        const upload = (fileName: string, content: string) => ({
+          uploadId: randomUUID(),
+          name: fileName,
+          mimeType: "text/plain",
+          content: Buffer.from(content).toString("base64"),
+        })
+        const milestone = () =>
+          prisma.projectMilestone.findUniqueOrThrow({
+            where: { id: deliverable.id },
+            include: { workflowFile: true },
+          })
+
+        const headUpload = await request(
+          `${path}/attachment`,
+          head.id,
+          "POST",
+          upload("head.txt", "head cannot submit"),
+        )
+        assert.equal(headUpload.status, 403)
+        assert.equal((await milestone()).deliveryStatus, "NOT_SUBMITTED")
+        assert.equal(await prisma.workflowFile.count(), 0)
+
+        const outsiderUpload = await request(
+          `${path}/attachment`,
+          outsider.id,
+          "POST",
+          upload("outsider.txt", "Unassigned staff cannot submit"),
+        )
+        assert.equal(outsiderUpload.status, 404)
+        assert.equal((await milestone()).deliveryStatus, "NOT_SUBMITTED")
+        assert.equal(await prisma.workflowFile.count(), 0)
+
+        const firstUpload = await request(
+          `${path}/attachment`,
+          staff.id,
+          "POST",
+          upload("draft.txt", "Draft one"),
+        )
+        assert.equal(firstUpload.status, 201, await firstUpload.clone().text())
+        const firstSaved = await milestone()
+        assert.equal(firstSaved.deliveryStatus, "IN_REVIEW")
+        assert.equal(firstSaved.workflowFile?.clientVisible, false)
+        assert.equal(
+          Buffer.from(firstSaved.workflowFile!.data).toString(),
+          "Draft one",
+        )
+
+        const headRemove = await request(
+          `${path}/attachment`,
+          head.id,
+          "DELETE",
+        )
+        assert.equal(headRemove.status, 403)
+        assert.equal(
+          (await milestone()).workflowFileId,
+          firstSaved.workflowFileId,
+        )
+
+        const outsiderRemove = await request(
+          `${path}/attachment`,
+          outsider.id,
+          "DELETE",
+        )
+        assert.equal(outsiderRemove.status, 404)
+        assert.equal(
+          (await milestone()).workflowFileId,
+          firstSaved.workflowFileId,
+        )
+
+        const removed = await request(`${path}/attachment`, staff.id, "DELETE")
+        assert.equal(removed.status, 200, await removed.clone().text())
+        const afterRemove = await milestone()
+        assert.equal(afterRemove.deliveryStatus, "NOT_SUBMITTED")
+        assert.equal(afterRemove.workflowFileId, null)
+        assert.equal(
+          await prisma.workflowFile.count({
+            where: { id: firstSaved.workflowFileId! },
+          }),
+          0,
+        )
+
+        const repeatedRemove = await request(
+          `${path}/attachment`,
+          staff.id,
+          "DELETE",
+        )
+        assert.equal(repeatedRemove.status, 409)
+        assert.equal((await milestone()).deliveryStatus, "NOT_SUBMITTED")
+
+        const secondUpload = await request(
+          `${path}/attachment`,
+          staff.id,
+          "POST",
+          upload("draft.txt", "Draft two"),
+        )
+        assert.equal(
+          secondUpload.status,
+          201,
+          await secondUpload.clone().text(),
+        )
+        const inReview = await milestone()
+        assert.equal(inReview.deliveryStatus, "IN_REVIEW")
+        assert.equal(inReview.workflowFile?.clientVisible, false)
+
+        for (const reason of ["", "ok", "x".repeat(2001)]) {
+          const invalidReject = await request(
+            `${path}/reject`,
+            head.id,
+            "POST",
+            {
+              reason,
+            },
+          )
+          assert.equal(invalidReject.status, 400)
+          const unchanged = await milestone()
+          assert.equal(unchanged.deliveryStatus, "IN_REVIEW")
+          assert.equal(unchanged.rejectionReason, null)
+        }
+        const staffReject = await request(`${path}/reject`, staff.id, "POST", {
+          reason: "Please revise the layout",
+        })
+        assert.equal(staffReject.status, 403)
+        assert.equal((await milestone()).deliveryStatus, "IN_REVIEW")
+
+        const prematureSend = await request(`${path}/send`, head.id, "POST")
+        assert.equal(prematureSend.status, 409)
+        assert.equal((await milestone()).deliveryStatus, "IN_REVIEW")
+        assert.equal((await milestone()).workflowFile?.clientVisible, false)
+
+        const rejected = await request(`${path}/reject`, head.id, "POST", {
+          reason: "  Please revise the layout.  ",
+        })
+        assert.equal(rejected.status, 200, await rejected.clone().text())
+        const rejectedMilestone = await milestone()
+        assert.equal(rejectedMilestone.deliveryStatus, "REJECTED")
+        assert.equal(
+          rejectedMilestone.rejectionReason,
+          "Please revise the layout.",
+        )
+        assert.equal(rejectedMilestone.reviewedById, head.id)
+        assert.equal(rejectedMilestone.workflowFile?.clientVisible, false)
+
+        const retry = await request(
+          `${path}/attachment`,
+          staff.id,
+          "POST",
+          upload("draft-v2.txt", "Revised draft"),
+        )
+        assert.equal(retry.status, 201, await retry.clone().text())
+        const resubmitted = await milestone()
+        assert.equal(resubmitted.deliveryStatus, "IN_REVIEW")
+        assert.equal(resubmitted.rejectionReason, null)
+        assert.equal(resubmitted.workflowFile?.name, "draft-v2.txt")
+        assert.equal(resubmitted.workflowFile?.clientVisible, false)
+
+        const staffApprove = await request(`${path}/approve`, staff.id, "POST")
+        assert.equal(staffApprove.status, 403)
+        assert.equal((await milestone()).deliveryStatus, "IN_REVIEW")
+
+        const approved = await request(`${path}/approve`, head.id, "POST")
+        assert.equal(approved.status, 200, await approved.clone().text())
+        const approvedMilestone = await milestone()
+        assert.equal(approvedMilestone.deliveryStatus, "APPROVED")
+        assert.equal(approvedMilestone.workflowFile?.clientVisible, false)
+
+        const staffSend = await request(`${path}/send`, staff.id, "POST")
+        assert.equal(staffSend.status, 403)
+        assert.equal((await milestone()).deliveryStatus, "APPROVED")
+
+        const lockedRemove = await request(
+          `${path}/attachment`,
+          staff.id,
+          "DELETE",
+        )
+        assert.equal(lockedRemove.status, 409)
+        assert.equal((await milestone()).deliveryStatus, "APPROVED")
+
+        const sent = await request(`${path}/send`, head.id, "POST")
+        assert.equal(sent.status, 200, await sent.clone().text())
+        const sentMilestone = await milestone()
+        assert.equal(sentMilestone.deliveryStatus, "SENT_TO_CLIENT")
+        assert.equal(sentMilestone.workflowFile?.clientVisible, true)
+        assert.ok(sentMilestone.sentToClientAt)
+
+        const editSent = await request(path, head.id, "PATCH", {
+          title: "Changed after sharing",
+        })
+        assert.equal(editSent.status, 409)
+        assert.equal((await milestone()).title, "Brand guide")
+        assert.equal((await milestone()).deliveryStatus, "SENT_TO_CLIENT")
+      },
+    )
   },
 )

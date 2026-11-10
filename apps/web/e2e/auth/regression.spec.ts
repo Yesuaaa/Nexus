@@ -79,8 +79,9 @@ test.describe("Authentication and session regression", () => {
         await route.fulfill({ json: renewedTokens })
       })
       await page.goto("/dashboard")
+      await page.getByRole("button", { name: "Open account menu" }).click()
       await expect(
-        page.getByRole("button", { name: "Sign Out", exact: true }),
+        page.getByRole("menuitem", { name: "Log out", exact: true }),
       ).toBeVisible()
       expect(refreshes).toBe(1)
       expect(await storedTokens(page)).toEqual([
@@ -88,8 +89,9 @@ test.describe("Authentication and session regression", () => {
         renewedTokens.refreshToken,
       ])
       await page.reload()
+      await page.getByRole("button", { name: "Open account menu" }).click()
       await expect(
-        page.getByRole("button", { name: "Sign Out", exact: true }),
+        page.getByRole("menuitem", { name: "Log out", exact: true }),
       ).toBeVisible()
       expect(refreshes).toBe(1)
       expect(
@@ -108,7 +110,7 @@ test.describe("Authentication and session regression", () => {
       const logout = page.waitForRequest(
         (request) => new URL(request.url()).pathname === "/api/auth/logout",
       )
-      await page.getByRole("button", { name: "Sign Out", exact: true }).click()
+      await page.getByRole("menuitem", { name: "Log out", exact: true }).click()
       expect((await logout).headers().authorization).toBe(
         `Bearer ${renewedTokens.token}`,
       )
@@ -433,7 +435,8 @@ test.describe("Authentication and session regression", () => {
         localStorage.getItem("nexus.auth.refreshToken"),
       ),
     ).toBeNull()
-    await page.getByRole("button", { name: "Sign Out", exact: true }).click()
+    await page.getByRole("button", { name: "Open account menu" }).click()
+    await page.getByRole("menuitem", { name: "Log out", exact: true }).click()
     await expect(page).toHaveURL(/\/login$/)
     expect(await storedTokens(page)).toEqual([null, null])
     expect(

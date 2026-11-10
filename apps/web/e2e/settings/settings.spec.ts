@@ -134,7 +134,11 @@ for (const role of ["USER", "STAFF", "ADMIN", "SUPERADMIN"] as const) {
       await page.keyboard.press("Escape")
       await page.getByRole("button", { name: "Open account menu" }).click()
       const items = await page.getByRole("menuitem").allTextContents()
-      expect(items).toEqual(["Profile", "Settings", "Log out"])
+      expect(items).toEqual(
+        role === "USER"
+          ? ["Profile", "Billing Logs", "Settings", "Log out"]
+          : ["Profile", "Settings", "Log out"],
+      )
       await page.keyboard.press("Escape")
       await page.getByRole("button", { name: "Sign out", exact: true }).click()
       await expect(page.getByRole("dialog")).toBeVisible()

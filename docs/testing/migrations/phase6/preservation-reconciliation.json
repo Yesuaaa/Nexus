@@ -1,8 +1,8 @@
 {
   "title": "Phase 6.2.5 Final Preservation Reconciliation",
-  "generatedAt": "2026-11-10T06:38:31.137Z",
+  "generatedAt": "2026-11-10T08:13:28.090Z",
   "status": "COMPLETE",
-  "recommendation": "READY TO COMMIT",
+  "recommendation": "READY FOR REVIEW",
   "scope": {
     "method": "One-time AST reconciliation using the immutable Phase 4 baseline, proposed-mapping.json, preservation-map.csv, existing migration verifier exports (loadInputs, flatten, inspectSource), and the installed TypeScript parser. No verifier or test code was changed and no tests were executed for this reconciliation.",
     "baselineRevision": "2075d354d62dd15b6d34b53600416de336eca4d6",
@@ -11,7 +11,56 @@
     "baselineArtifactsValidatedByExistingLoader": true,
     "phase4EvidenceModified": false,
     "strictVerifierModified": false,
-    "strictVerifierNote": "The strict verifier remains unchanged. Its original-only discovery still reaches the approved PW-120 declaration difference; this evidence applies only the exact delta sites recorded in the Phase 6 ledger."
+    "strictVerifierNote": "The strict verifier remains unchanged. Its original-only discovery still reaches the approved PW-120 declaration difference; this evidence applies only the exact delta sites recorded in the Phase 6 ledger.",
+    "stabilizationExtension": {
+      "date": "2026-11-10",
+      "currentRevision": "f40ed7b468e77f1accec0541327ecd55833b59cc",
+      "userApprovedHistoricalDeltas": [
+        "PW-130",
+        "PW-131",
+        "PW-132",
+        "PW-133",
+        "PW-263",
+        "PW-264",
+        "PW-265",
+        "PW-266"
+      ],
+      "exactNewHistoricalSites": [
+        "apps/web/e2e/regression.spec.ts:82:13",
+        "apps/web/e2e/regression.spec.ts:91:13",
+        "apps/web/e2e/settings.spec.ts:137:7"
+      ],
+      "verifiedReplacementAssertions": [
+        {
+          "file": "apps/web/e2e/auth/regression.spec.ts",
+          "line": 83,
+          "column": 13,
+          "expression": "expect(page.getByRole(\"menuitem\", { name: \"Log out\", exact: true })).toBeVisible()",
+          "ownerIds": ["PW-130", "PW-131", "PW-132", "PW-133"],
+          "approvalReference": "PW-130"
+        },
+        {
+          "file": "apps/web/e2e/auth/regression.spec.ts",
+          "line": 93,
+          "column": 13,
+          "expression": "expect(page.getByRole(\"menuitem\", { name: \"Log out\", exact: true })).toBeVisible()",
+          "ownerIds": ["PW-130", "PW-131", "PW-132", "PW-133"],
+          "approvalReference": "PW-130"
+        },
+        {
+          "file": "apps/web/e2e/settings/settings.spec.ts",
+          "line": 137,
+          "column": 7,
+          "expression": "expect(items).toEqual(role === \"USER\"\n    ? [\"Profile\", \"Billing Logs\", \"Settings\", \"Log out\"]\n    : [\"Profile\", \"Settings\", \"Log out\"])",
+          "ownerIds": ["PW-263", "PW-264", "PW-265", "PW-266"],
+          "approvalReference": "PW-263"
+        }
+      ],
+      "addedIndependentBrowserIdentity": "[NEX-009] assigned staff upload and department head review deliverables before client sharing",
+      "additionalIdentityCount": 17,
+      "phase4EvidenceModified": false,
+      "strictVerifierModified": false
+    }
   },
   "metrics": {
     "originalIdentities": {
@@ -23,13 +72,21 @@
     "declarations": {
       "baselineExpandedIdentities": 292,
       "sourceDeclarations": 157,
-      "unchangedExpandedIdentities": 285,
+      "unchangedExpandedIdentities": 277,
       "approvedChangedExpandedIdentities": [
         "PW-120",
+        "PW-130",
+        "PW-131",
+        "PW-132",
+        "PW-133",
         "PW-195",
         "PW-200",
         "PW-237",
         "PW-238",
+        "PW-263",
+        "PW-264",
+        "PW-265",
+        "PW-266",
         "PW-281",
         "PW-282"
       ],
@@ -37,8 +94,8 @@
     },
     "historicalAssertions": {
       "uniqueSites": 1630,
-      "exactlyPreserved": 1623,
-      "approvedSupersededSites": 7,
+      "exactlyPreserved": 1620,
+      "approvedSupersededSites": 10,
       "allAccounted": 1630,
       "unapprovedMissing": 0,
       "uniqueDirectSites": 1605,
@@ -46,7 +103,7 @@
       "currentMappedAssertions": 1632,
       "currentDirectAssertions": 1607,
       "currentHelperHookAssertions": 25,
-      "approvedCurrentAddedAssertions": 9,
+      "approvedCurrentAddedAssertions": 12,
       "unapprovedCurrentExtraAssertions": 0
     },
     "ownershipMappings": {
@@ -54,8 +111,8 @@
       "csvRows": 4211,
       "directEdges": 3456,
       "helperHookEdges": 755,
-      "unchangedEdges": 4199,
-      "approvedSupersededEdges": 12,
+      "unchangedEdges": 4187,
+      "approvedSupersededEdges": 24,
       "csvMismatches": 0,
       "invalidSiteReferences": 0,
       "missingHelperOwners": 0,
@@ -69,13 +126,14 @@
       "mappedTests": 292
     },
     "developmentInventory": {
-      "totalCurrentIdentities": 308,
+      "totalCurrentIdentities": 309,
       "originalIdentities": 292,
-      "additionalIdentities": 16,
+      "additionalIdentities": 17,
       "additionalFiles": [
         "apps/web/e2e/accounts/account-creation.spec.ts",
         "apps/web/e2e/calendar.spec.ts",
-        "apps/web/e2e/project-conversations.spec.ts"
+        "apps/web/e2e/project-conversations.spec.ts",
+        "apps/web/e2e/projects/workspace-deliverables.spec.ts"
       ],
       "coLocatedAdditionalIdentities": 0,
       "additionalIdentitiesInventory": [
@@ -88,18 +146,6 @@
         {
           "project": "chromium",
           "file": "apps/web/e2e/calendar.spec.ts",
-          "title": "STAFF calendar supports its role-specific view at 1440px",
-          "excludedFromOriginalOnly": true
-        },
-        {
-          "project": "chromium",
-          "file": "apps/web/e2e/calendar.spec.ts",
-          "title": "STAFF calendar supports its role-specific view at 390px",
-          "excludedFromOriginalOnly": true
-        },
-        {
-          "project": "chromium",
-          "file": "apps/web/e2e/calendar.spec.ts",
           "title": "ADMIN calendar supports its role-specific view at 1440px",
           "excludedFromOriginalOnly": true
         },
@@ -107,6 +153,18 @@
           "project": "chromium",
           "file": "apps/web/e2e/calendar.spec.ts",
           "title": "ADMIN calendar supports its role-specific view at 390px",
+          "excludedFromOriginalOnly": true
+        },
+        {
+          "project": "chromium",
+          "file": "apps/web/e2e/calendar.spec.ts",
+          "title": "STAFF calendar supports its role-specific view at 1440px",
+          "excludedFromOriginalOnly": true
+        },
+        {
+          "project": "chromium",
+          "file": "apps/web/e2e/calendar.spec.ts",
+          "title": "STAFF calendar supports its role-specific view at 390px",
           "excludedFromOriginalOnly": true
         },
         {
@@ -136,13 +194,13 @@
         {
           "project": "chromium",
           "file": "apps/web/e2e/project-conversations.spec.ts",
-          "title": "USER can message the project team and read archived history",
+          "title": "client chats offer approved deliverable access without staff submission tools",
           "excludedFromOriginalOnly": true
         },
         {
           "project": "chromium",
           "file": "apps/web/e2e/project-conversations.spec.ts",
-          "title": "STAFF can message the project team and read archived history",
+          "title": "legacy project-chat links open the shared conversation list",
           "excludedFromOriginalOnly": true
         },
         {
@@ -154,7 +212,7 @@
         {
           "project": "chromium",
           "file": "apps/web/e2e/project-conversations.spec.ts",
-          "title": "legacy project-chat links open the shared conversation list",
+          "title": "STAFF can message the project team and read archived history",
           "excludedFromOriginalOnly": true
         },
         {
@@ -172,7 +230,13 @@
         {
           "project": "chromium",
           "file": "apps/web/e2e/project-conversations.spec.ts",
-          "title": "client chats offer approved deliverable access without staff submission tools",
+          "title": "USER can message the project team and read archived history",
+          "excludedFromOriginalOnly": true
+        },
+        {
+          "project": "chromium",
+          "file": "apps/web/e2e/projects/workspace-deliverables.spec.ts",
+          "title": "[NEX-009] assigned staff upload and department head review deliverables before client sharing",
           "excludedFromOriginalOnly": true
         }
       ]
@@ -282,6 +346,51 @@
         }
       ],
       "basis": "Task-authorized, source-verified direct-link and combobox test adaptation."
+    },
+    {
+      "identities": ["PW-130", "PW-131", "PW-132", "PW-133"],
+      "originalSites": ["apps/web/e2e/regression.spec.ts:82:13"],
+      "replacementAssertions": [
+        {
+          "file": "apps/web/e2e/auth/regression.spec.ts",
+          "line": 83,
+          "column": 13,
+          "expression": "expect(page.getByRole(\"menuitem\", { name: \"Log out\", exact: true })).toBeVisible()",
+          "ownerIds": ["PW-130", "PW-131", "PW-132", "PW-133"],
+          "approvalReference": "PW-130"
+        }
+      ],
+      "basis": "Explicitly approved by the user for Phase 6.2 stabilization. The account-menu locator changes while logout behavior assertions remain."
+    },
+    {
+      "identities": ["PW-130", "PW-131", "PW-132", "PW-133"],
+      "originalSites": ["apps/web/e2e/regression.spec.ts:91:13"],
+      "replacementAssertions": [
+        {
+          "file": "apps/web/e2e/auth/regression.spec.ts",
+          "line": 93,
+          "column": 13,
+          "expression": "expect(page.getByRole(\"menuitem\", { name: \"Log out\", exact: true })).toBeVisible()",
+          "ownerIds": ["PW-130", "PW-131", "PW-132", "PW-133"],
+          "approvalReference": "PW-130"
+        }
+      ],
+      "basis": "Explicitly approved by the user for Phase 6.2 stabilization. The account-menu locator changes while logout behavior assertions remain."
+    },
+    {
+      "identities": ["PW-263", "PW-264", "PW-265", "PW-266"],
+      "originalSites": ["apps/web/e2e/settings.spec.ts:137:7"],
+      "replacementAssertions": [
+        {
+          "file": "apps/web/e2e/settings/settings.spec.ts",
+          "line": 137,
+          "column": 7,
+          "expression": "expect(items).toEqual(role === \"USER\"\n    ? [\"Profile\", \"Billing Logs\", \"Settings\", \"Log out\"]\n    : [\"Profile\", \"Settings\", \"Log out\"])",
+          "ownerIds": ["PW-263", "PW-264", "PW-265", "PW-266"],
+          "approvalReference": "PW-263"
+        }
+      ],
+      "basis": "Explicitly approved by the user for Phase 6.2 stabilization. USER includes Billing Logs; STAFF, ADMIN, and SUPERADMIN retain their exact existing menu items."
     }
   ],
   "unapprovedDifferences": [],
@@ -13284,11 +13393,11 @@
       "targetFile": "apps/web/e2e/auth/regression.spec.ts",
       "owners": ["PW-130", "PW-131", "PW-132", "PW-133"],
       "scope": "direct",
-      "status": "PRESERVED",
+      "status": "APPROVED_SUPERSEDED",
       "currentLocations": [
         {
           "file": "apps/web/e2e/auth/regression.spec.ts",
-          "line": 82,
+          "line": 83,
           "column": 13
         }
       ]
@@ -13344,11 +13453,11 @@
       "targetFile": "apps/web/e2e/auth/regression.spec.ts",
       "owners": ["PW-130", "PW-131", "PW-132", "PW-133"],
       "scope": "direct",
-      "status": "PRESERVED",
+      "status": "APPROVED_SUPERSEDED",
       "currentLocations": [
         {
           "file": "apps/web/e2e/auth/regression.spec.ts",
-          "line": 91,
+          "line": 93,
           "column": 13
         }
       ]
@@ -28331,7 +28440,7 @@
       "targetFile": "apps/web/e2e/settings/settings.spec.ts",
       "owners": ["PW-263", "PW-264", "PW-265", "PW-266"],
       "scope": "direct",
-      "status": "PRESERVED",
+      "status": "APPROVED_SUPERSEDED",
       "currentLocations": [
         {
           "file": "apps/web/e2e/settings/settings.spec.ts",
@@ -53386,10 +53495,10 @@
       "originalFile": "apps/web/e2e/regression.spec.ts",
       "targetFile": "apps/web/e2e/auth/regression.spec.ts",
       "sha256": "67e8f5ed47d38427b98ba133ec2dc0611cd2ed7e3c2973f40c4e04cc938ddace",
-      "status": "PRESERVED",
+      "status": "APPROVED_SUPERSEDED",
       "currentLocation": {
         "file": "apps/web/e2e/auth/regression.spec.ts",
-        "line": 82,
+        "line": 83,
         "column": 13
       }
     },
@@ -53428,10 +53537,10 @@
       "originalFile": "apps/web/e2e/regression.spec.ts",
       "targetFile": "apps/web/e2e/auth/regression.spec.ts",
       "sha256": "67e8f5ed47d38427b98ba133ec2dc0611cd2ed7e3c2973f40c4e04cc938ddace",
-      "status": "PRESERVED",
+      "status": "APPROVED_SUPERSEDED",
       "currentLocation": {
         "file": "apps/web/e2e/auth/regression.spec.ts",
-        "line": 91,
+        "line": 93,
         "column": 13
       }
     },
@@ -53582,10 +53691,10 @@
       "originalFile": "apps/web/e2e/regression.spec.ts",
       "targetFile": "apps/web/e2e/auth/regression.spec.ts",
       "sha256": "67e8f5ed47d38427b98ba133ec2dc0611cd2ed7e3c2973f40c4e04cc938ddace",
-      "status": "PRESERVED",
+      "status": "APPROVED_SUPERSEDED",
       "currentLocation": {
         "file": "apps/web/e2e/auth/regression.spec.ts",
-        "line": 82,
+        "line": 83,
         "column": 13
       }
     },
@@ -53624,10 +53733,10 @@
       "originalFile": "apps/web/e2e/regression.spec.ts",
       "targetFile": "apps/web/e2e/auth/regression.spec.ts",
       "sha256": "67e8f5ed47d38427b98ba133ec2dc0611cd2ed7e3c2973f40c4e04cc938ddace",
-      "status": "PRESERVED",
+      "status": "APPROVED_SUPERSEDED",
       "currentLocation": {
         "file": "apps/web/e2e/auth/regression.spec.ts",
-        "line": 91,
+        "line": 93,
         "column": 13
       }
     },
@@ -53778,10 +53887,10 @@
       "originalFile": "apps/web/e2e/regression.spec.ts",
       "targetFile": "apps/web/e2e/auth/regression.spec.ts",
       "sha256": "67e8f5ed47d38427b98ba133ec2dc0611cd2ed7e3c2973f40c4e04cc938ddace",
-      "status": "PRESERVED",
+      "status": "APPROVED_SUPERSEDED",
       "currentLocation": {
         "file": "apps/web/e2e/auth/regression.spec.ts",
-        "line": 82,
+        "line": 83,
         "column": 13
       }
     },
@@ -53820,10 +53929,10 @@
       "originalFile": "apps/web/e2e/regression.spec.ts",
       "targetFile": "apps/web/e2e/auth/regression.spec.ts",
       "sha256": "67e8f5ed47d38427b98ba133ec2dc0611cd2ed7e3c2973f40c4e04cc938ddace",
-      "status": "PRESERVED",
+      "status": "APPROVED_SUPERSEDED",
       "currentLocation": {
         "file": "apps/web/e2e/auth/regression.spec.ts",
-        "line": 91,
+        "line": 93,
         "column": 13
       }
     },
@@ -53974,10 +54083,10 @@
       "originalFile": "apps/web/e2e/regression.spec.ts",
       "targetFile": "apps/web/e2e/auth/regression.spec.ts",
       "sha256": "67e8f5ed47d38427b98ba133ec2dc0611cd2ed7e3c2973f40c4e04cc938ddace",
-      "status": "PRESERVED",
+      "status": "APPROVED_SUPERSEDED",
       "currentLocation": {
         "file": "apps/web/e2e/auth/regression.spec.ts",
-        "line": 82,
+        "line": 83,
         "column": 13
       }
     },
@@ -54016,10 +54125,10 @@
       "originalFile": "apps/web/e2e/regression.spec.ts",
       "targetFile": "apps/web/e2e/auth/regression.spec.ts",
       "sha256": "67e8f5ed47d38427b98ba133ec2dc0611cd2ed7e3c2973f40c4e04cc938ddace",
-      "status": "PRESERVED",
+      "status": "APPROVED_SUPERSEDED",
       "currentLocation": {
         "file": "apps/web/e2e/auth/regression.spec.ts",
-        "line": 91,
+        "line": 93,
         "column": 13
       }
     },
@@ -72900,7 +73009,7 @@
       "originalFile": "apps/web/e2e/settings.spec.ts",
       "targetFile": "apps/web/e2e/settings/settings.spec.ts",
       "sha256": "05203b5917b5f5d46a25887c4ad2894f9eb2f3c32eb14314e6fe48f1c1af0d26",
-      "status": "PRESERVED",
+      "status": "APPROVED_SUPERSEDED",
       "currentLocation": {
         "file": "apps/web/e2e/settings/settings.spec.ts",
         "line": 137,
@@ -73418,7 +73527,7 @@
       "originalFile": "apps/web/e2e/settings.spec.ts",
       "targetFile": "apps/web/e2e/settings/settings.spec.ts",
       "sha256": "05203b5917b5f5d46a25887c4ad2894f9eb2f3c32eb14314e6fe48f1c1af0d26",
-      "status": "PRESERVED",
+      "status": "APPROVED_SUPERSEDED",
       "currentLocation": {
         "file": "apps/web/e2e/settings/settings.spec.ts",
         "line": 137,
@@ -73936,7 +74045,7 @@
       "originalFile": "apps/web/e2e/settings.spec.ts",
       "targetFile": "apps/web/e2e/settings/settings.spec.ts",
       "sha256": "05203b5917b5f5d46a25887c4ad2894f9eb2f3c32eb14314e6fe48f1c1af0d26",
-      "status": "PRESERVED",
+      "status": "APPROVED_SUPERSEDED",
       "currentLocation": {
         "file": "apps/web/e2e/settings/settings.spec.ts",
         "line": 137,
@@ -74454,7 +74563,7 @@
       "originalFile": "apps/web/e2e/settings.spec.ts",
       "targetFile": "apps/web/e2e/settings/settings.spec.ts",
       "sha256": "05203b5917b5f5d46a25887c4ad2894f9eb2f3c32eb14314e6fe48f1c1af0d26",
-      "status": "PRESERVED",
+      "status": "APPROVED_SUPERSEDED",
       "currentLocation": {
         "file": "apps/web/e2e/settings/settings.spec.ts",
         "line": 137,
@@ -95364,7 +95473,7 @@
         "line": 58,
         "column": 5
       },
-      "declarationStatus": "UNCHANGED",
+      "declarationStatus": "APPROVED_DELTA",
       "directAssertionSites": 14,
       "helperHookAssertionEdges": 4
     },
@@ -95378,7 +95487,7 @@
         "line": 58,
         "column": 5
       },
-      "declarationStatus": "UNCHANGED",
+      "declarationStatus": "APPROVED_DELTA",
       "directAssertionSites": 14,
       "helperHookAssertionEdges": 4
     },
@@ -95392,7 +95501,7 @@
         "line": 58,
         "column": 5
       },
-      "declarationStatus": "UNCHANGED",
+      "declarationStatus": "APPROVED_DELTA",
       "directAssertionSites": 14,
       "helperHookAssertionEdges": 4
     },
@@ -95406,7 +95515,7 @@
         "line": 58,
         "column": 5
       },
-      "declarationStatus": "UNCHANGED",
+      "declarationStatus": "APPROVED_DELTA",
       "directAssertionSites": 14,
       "helperHookAssertionEdges": 4
     },
@@ -97226,7 +97335,7 @@
         "line": 4,
         "column": 3
       },
-      "declarationStatus": "UNCHANGED",
+      "declarationStatus": "APPROVED_DELTA",
       "directAssertionSites": 37,
       "helperHookAssertionEdges": 0
     },
@@ -97240,7 +97349,7 @@
         "line": 4,
         "column": 3
       },
-      "declarationStatus": "UNCHANGED",
+      "declarationStatus": "APPROVED_DELTA",
       "directAssertionSites": 37,
       "helperHookAssertionEdges": 0
     },
@@ -97254,7 +97363,7 @@
         "line": 4,
         "column": 3
       },
-      "declarationStatus": "UNCHANGED",
+      "declarationStatus": "APPROVED_DELTA",
       "directAssertionSites": 37,
       "helperHookAssertionEdges": 0
     },
@@ -97268,7 +97377,7 @@
         "line": 4,
         "column": 3
       },
-      "declarationStatus": "UNCHANGED",
+      "declarationStatus": "APPROVED_DELTA",
       "directAssertionSites": 37,
       "helperHookAssertionEdges": 0
     },
@@ -97647,18 +97756,6 @@
     {
       "project": "chromium",
       "file": "apps/web/e2e/calendar.spec.ts",
-      "title": "STAFF calendar supports its role-specific view at 1440px",
-      "excludedFromOriginalOnly": true
-    },
-    {
-      "project": "chromium",
-      "file": "apps/web/e2e/calendar.spec.ts",
-      "title": "STAFF calendar supports its role-specific view at 390px",
-      "excludedFromOriginalOnly": true
-    },
-    {
-      "project": "chromium",
-      "file": "apps/web/e2e/calendar.spec.ts",
       "title": "ADMIN calendar supports its role-specific view at 1440px",
       "excludedFromOriginalOnly": true
     },
@@ -97666,6 +97763,18 @@
       "project": "chromium",
       "file": "apps/web/e2e/calendar.spec.ts",
       "title": "ADMIN calendar supports its role-specific view at 390px",
+      "excludedFromOriginalOnly": true
+    },
+    {
+      "project": "chromium",
+      "file": "apps/web/e2e/calendar.spec.ts",
+      "title": "STAFF calendar supports its role-specific view at 1440px",
+      "excludedFromOriginalOnly": true
+    },
+    {
+      "project": "chromium",
+      "file": "apps/web/e2e/calendar.spec.ts",
+      "title": "STAFF calendar supports its role-specific view at 390px",
       "excludedFromOriginalOnly": true
     },
     {
@@ -97695,13 +97804,13 @@
     {
       "project": "chromium",
       "file": "apps/web/e2e/project-conversations.spec.ts",
-      "title": "USER can message the project team and read archived history",
+      "title": "client chats offer approved deliverable access without staff submission tools",
       "excludedFromOriginalOnly": true
     },
     {
       "project": "chromium",
       "file": "apps/web/e2e/project-conversations.spec.ts",
-      "title": "STAFF can message the project team and read archived history",
+      "title": "legacy project-chat links open the shared conversation list",
       "excludedFromOriginalOnly": true
     },
     {
@@ -97713,7 +97822,7 @@
     {
       "project": "chromium",
       "file": "apps/web/e2e/project-conversations.spec.ts",
-      "title": "legacy project-chat links open the shared conversation list",
+      "title": "STAFF can message the project team and read archived history",
       "excludedFromOriginalOnly": true
     },
     {
@@ -97731,11 +97840,49 @@
     {
       "project": "chromium",
       "file": "apps/web/e2e/project-conversations.spec.ts",
-      "title": "client chats offer approved deliverable access without staff submission tools",
+      "title": "USER can message the project team and read archived history",
+      "excludedFromOriginalOnly": true
+    },
+    {
+      "project": "chromium",
+      "file": "apps/web/e2e/projects/workspace-deliverables.spec.ts",
+      "title": "[NEX-009] assigned staff upload and department head review deliverables before client sharing",
       "excludedFromOriginalOnly": true
     }
   ],
   "approvedCurrentAddedAssertions": [
+    {
+      "file": "apps/web/e2e/auth/regression.spec.ts",
+      "line": 83,
+      "column": 13,
+      "expression": "expect(page.getByRole(\"menuitem\", { name: \"Log out\", exact: true })).toBeVisible()",
+      "ownerIds": ["PW-130", "PW-131", "PW-132", "PW-133"],
+      "approvalReference": "PW-130"
+    },
+    {
+      "file": "apps/web/e2e/auth/regression.spec.ts",
+      "line": 93,
+      "column": 13,
+      "expression": "expect(page.getByRole(\"menuitem\", { name: \"Log out\", exact: true })).toBeVisible()",
+      "ownerIds": ["PW-130", "PW-131", "PW-132", "PW-133"],
+      "approvalReference": "PW-130"
+    },
+    {
+      "file": "apps/web/e2e/messages/request-conversations.spec.ts",
+      "line": 2317,
+      "column": 11,
+      "expression": "expect(nav.locator('[data-conversation-id=\"shared-design\"]')).toHaveCount(0)",
+      "ownerIds": ["PW-195", "PW-200"],
+      "approvalReference": "PW-195"
+    },
+    {
+      "file": "apps/web/e2e/messages/request-conversations.spec.ts",
+      "line": 2323,
+      "column": 11,
+      "expression": "expect(nav.locator('[data-conversation-id=\"shared-design\"]')).toBeVisible()",
+      "ownerIds": ["PW-195", "PW-200"],
+      "approvalReference": "PW-195"
+    },
     {
       "file": "apps/web/e2e/projects/project-workspace.spec.ts",
       "line": 102,
@@ -97769,28 +97916,12 @@
       "approvalReference": "PW-120"
     },
     {
-      "file": "apps/web/e2e/messages/request-conversations.spec.ts",
-      "line": 2317,
-      "column": 11,
-      "expression": "expect(nav.locator('[data-conversation-id=\"shared-design\"]')).toHaveCount(0)",
-      "ownerIds": ["PW-195", "PW-200"],
-      "approvalReference": "PW-195"
-    },
-    {
-      "file": "apps/web/e2e/messages/request-conversations.spec.ts",
-      "line": 2323,
-      "column": 11,
-      "expression": "expect(nav.locator('[data-conversation-id=\"shared-design\"]')).toBeVisible()",
-      "ownerIds": ["PW-195", "PW-200"],
-      "approvalReference": "PW-195"
-    },
-    {
-      "file": "apps/web/e2e/workflows/request-workflow.spec.ts",
-      "line": 1321,
+      "file": "apps/web/e2e/settings/settings.spec.ts",
+      "line": 137,
       "column": 7,
-      "expression": "expect(actions[2]).toMatchObject({\n    type: \"ACTIVATE_PROJECT\",\n    projectName: \"Website launch\",\n})",
-      "ownerIds": ["PW-237", "PW-238"],
-      "approvalReference": "PW-237"
+      "expression": "expect(items).toEqual(role === \"USER\"\n    ? [\"Profile\", \"Billing Logs\", \"Settings\", \"Log out\"]\n    : [\"Profile\", \"Settings\", \"Log out\"])",
+      "ownerIds": ["PW-263", "PW-264", "PW-265", "PW-266"],
+      "approvalReference": "PW-263"
     },
     {
       "file": "apps/web/e2e/shared/table-interactions.spec.ts",
@@ -97807,6 +97938,14 @@
       "expression": "expect(statusFilter).toContainText(\"All archived\")",
       "ownerIds": ["PW-281", "PW-282"],
       "approvalReference": "PW-281"
+    },
+    {
+      "file": "apps/web/e2e/workflows/request-workflow.spec.ts",
+      "line": 1321,
+      "column": 7,
+      "expression": "expect(actions[2]).toMatchObject({\n    type: \"ACTIVATE_PROJECT\",\n    projectName: \"Website launch\",\n})",
+      "ownerIds": ["PW-237", "PW-238"],
+      "approvalReference": "PW-237"
     }
   ]
 }

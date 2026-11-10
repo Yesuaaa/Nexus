@@ -67,7 +67,8 @@ test("route utilities stay styled across auth and portal navigation", async ({
   await expect(dashboard).toHaveCSS("border-radius", "13px")
   await expect(dashboard).toHaveCSS("background-color", "rgb(243, 247, 249)")
 
-  await page.getByRole("button", { name: "Sign Out", exact: true }).click()
+  await page.getByRole("button", { name: "Open account menu" }).click()
+  await page.getByRole("menuitem", { name: "Log out", exact: true }).click()
   await expect(page).toHaveURL(/\/login$/)
   await expect(page.locator("main[lang]")).toHaveCSS("display", "grid")
   await page.setViewportSize({ width: 390, height: 844 })
