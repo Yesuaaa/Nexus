@@ -1,21 +1,40 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
 import { MessageSquare } from "lucide-react"
 import { iconButtonClass } from "@/components/layout/styles"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { listConversations } from "../api/request-conversations-api"
 import { listInternalConversations } from "../api/internal-conversations-api"
+import { listProjectConversations } from "../api/project-conversations-api"
 import {
   unreadMessagesEvent,
   type UnreadMessagesUpdate,
 } from "../model/unread-messages"
 
-function AccountMessagesLink({ internal }: { internal: boolean }) {
+function AccountMessagesLink({
+  internal,
+  projects,
+}: {
+  internal: boolean
+  projects: boolean
+}) {
   const pathname = usePathname()
-  const [counts, setCounts] = useState({ requests: 0, internal: 0 })
+  const searchParams = useSearchParams()
+  // The open inbox already refreshes its active list and publishes its count.
+  const inboxKind =
+    pathname === "/messages"
+      ? searchParams.get("mode") === "internal"
+        ? "internal"
+        : "requests"
+      : null
+  const [counts, setCounts] = useState({
+    requests: 0,
+    internal: 0,
+    projects: 0,
+  })
 
   useEffect(() => {
     const controller = new AbortController()
@@ -24,6 +43,7 @@ function AccountMessagesLink({ internal }: { internal: boolean }) {
       const { kind, count } = (event as CustomEvent<UnreadMessagesUpdate>)
         .detail
       if (kind === "internal" && !internal) return
+      if (kind === "projects" && !projects) return
       setCounts((previous) => ({ ...previous, [kind]: count }))
     }
     async function refresh() {
@@ -31,9 +51,14 @@ function AccountMessagesLink({ internal }: { internal: boolean }) {
       loading = true
       // Keep the last known count when one source is temporarily unavailable.
       await Promise.allSettled([
-        listConversations(undefined, controller.signal),
-        ...(internal
+        ...(inboxKind !== "requests"
+          ? [listConversations(undefined, controller.signal)]
+          : []),
+        ...(internal && inboxKind !== "internal"
           ? [listInternalConversations(undefined, controller.signal)]
+          : []),
+        ...(projects && inboxKind !== "requests"
+          ? [listProjectConversations("active", undefined, controller.signal)]
           : []),
       ])
       loading = false
@@ -53,9 +78,12 @@ function AccountMessagesLink({ internal }: { internal: boolean }) {
       document.removeEventListener("visibilitychange", refreshVisible)
       window.removeEventListener("focus", refreshVisible)
     }
-  }, [internal])
+  }, [internal, projects, inboxKind])
 
-  const unreadCount = counts.requests + (internal ? counts.internal : 0)
+  const unreadCount =
+    counts.requests +
+    (internal ? counts.internal : 0) +
+    (projects ? counts.projects : 0)
   return (
     <Link
       href="/messages"
@@ -79,6 +107,10 @@ function AccountMessagesLink({ internal }: { internal: boolean }) {
 export function MessagesLink() {
   const account = usePortalAccount()
   return (
-    <AccountMessagesLink key={account.id} internal={account.role !== "USER"} />
+    <AccountMessagesLink
+      key={account.id}
+      internal={account.role !== "USER"}
+      projects={account.role === "USER" || account.role === "STAFF"}
+    />
   )
 }

@@ -1,12 +1,47 @@
 "use client"
 
-import { createContext, useContext, type ReactNode } from "react"
+import {
+  createContext,
+  useContext,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react"
 import { usePathname } from "next/navigation"
-import { Toaster } from "sileo"
-import { AuthRouteLoader } from "../components/auth-loader"
+import dynamic from "next/dynamic"
+import {
+  subscribeToasts,
+  getToastSnapshot,
+  getServerToastSnapshot,
+} from "@/lib/toast"
 import { getAuthCopy, getStoredAuthLanguage } from "../content/auth-copy"
 import { useLoginTransition } from "../hooks/use-login-transition"
 import type { AuthMode } from "../model/types"
+
+const ToastViewport = dynamic(
+  () =>
+    import("../components/toast-viewport").then(
+      (module) => module.ToastViewport,
+    ),
+  { ssr: false },
+)
+
+const AuthRouteLoader = dynamic(
+  () =>
+    import("../components/auth-loader").then(
+      (module) => module.AuthRouteLoader,
+    ),
+  {
+    loading: () => (
+      <div
+        className="fixed inset-0 z-[100] grid place-items-center bg-background"
+        role="status"
+        aria-label="Opening your account"
+      >
+        <span className="sr-only">Opening your account…</span>
+      </div>
+    ),
+  },
+)
 
 type AuthTransition = {
   beginLoginTransition: (mode: AuthMode) => void
@@ -25,6 +60,11 @@ export function useAuthTransition() {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const transition = useLoginTransition()
+  const showToasts = useSyncExternalStore(
+    subscribeToasts,
+    getToastSnapshot,
+    getServerToastSnapshot,
+  )
   const authPage = pathname === "/login" || pathname === "/register"
 
   return (
@@ -35,18 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }}
     >
       <div className={authPage ? "auth-toast-region" : undefined}>
-        <Toaster
-          position="top-center"
-          offset={{ top: 24 }}
-          options={{
-            fill: "#253f8c",
-            roundness: 12,
-            styles: {
-              title: "exp-toast-title",
-              description: "exp-toast-description",
-            },
-          }}
-        />
+        {showToasts && <ToastViewport />}
       </div>
       {children}
       {transition.showLoader && (

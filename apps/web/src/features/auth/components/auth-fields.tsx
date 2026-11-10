@@ -40,6 +40,9 @@ export function Brand() {
       className="mx-auto -mb-1 block h-[69px] w-[134px] object-contain"
       src="/auth/exp-logo.svg"
       alt="EXP"
+      width={134}
+      height={69}
+      fetchPriority="high"
     />
   )
 }

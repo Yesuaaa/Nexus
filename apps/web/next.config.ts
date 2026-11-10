@@ -13,7 +13,14 @@ const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
   outputFileTracingRoot: path.resolve(import.meta.dirname, "../.."),
+  // Native DLLs/DSOs loaded by Sharp are not all discovered by file tracing.
+  outputFileTracingIncludes: {
+    "/*": [
+      "../../node_modules/.pnpm/@img+sharp-*/node_modules/@img/sharp-*/lib/**/*",
+    ],
+  },
   images: {
+    qualities: [70, 75],
     remotePatterns: [
       {
         protocol: "https",

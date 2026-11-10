@@ -320,9 +320,45 @@ export async function mockApi(
       return
     }
 
+    if (pathname === "/api/project-workspace" && method === "GET") {
+      await route.fulfill({
+        json: {
+          workspaces: [],
+          canCreate: role === "STAFF" && Boolean(currentUser.headOf),
+        },
+      })
+      return
+    }
+
+    if (
+      method === "GET" &&
+      (pathname === "/api/request-conversations" ||
+        pathname === "/api/project-conversations" ||
+        pathname === "/api/internal-conversations")
+    ) {
+      await route.fulfill({
+        json: { conversations: [], nextCursor: null, unreadCount: 0 },
+      })
+      return
+    }
+
     if (pathname === "/api/auth/settings" && method === "GET") {
       await route.fulfill({
         json: { preferences: defaultPreferences, sessions: [] },
+      })
+      return
+    }
+
+    // The portal topbar reads each inbox to calculate unread messages.
+    // Feature specs can override these exact list routes with populated fixtures.
+    if (
+      (pathname === "/api/request-conversations" ||
+        pathname === "/api/project-conversations" ||
+        pathname === "/api/internal-conversations") &&
+      method === "GET"
+    ) {
+      await route.fulfill({
+        json: { conversations: [], nextCursor: null, unreadCount: 0 },
       })
       return
     }

@@ -1,9 +1,13 @@
 export const unreadMessagesEvent = "nexus:unread-messages"
 
-export type ChatKind = "requests" | "internal"
+export type ChatKind = "requests" | "internal" | "projects"
 export type UnreadMessagesUpdate = { kind: ChatKind; count: number }
 
-const revisions: Record<ChatKind, number> = { requests: 0, internal: 0 }
+const revisions: Record<ChatKind, number> = {
+  requests: 0,
+  internal: 0,
+  projects: 0,
+}
 
 // A slow list response must not restore a count from before a mark-as-read call.
 export async function withUnreadCount<T extends { unreadCount?: number }>(

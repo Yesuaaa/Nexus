@@ -18,6 +18,8 @@ import { internalConversationsRouter } from "./features/internal-conversations/i
 import type { ConversationRealtime } from "./features/request-conversations/request-conversations.realtime.js"
 import { requestWorkflowRouter } from "./features/request-workflow/workflow.controller.js"
 import { projectsRouter } from "./features/projects/projects.controller.js"
+import { projectWorkspaceRouter } from "./features/project-workspace/project-workspace.controller.js"
+import { projectConversationsRouter } from "./features/project-conversations/project-conversations.controller.js"
 import { devErrorInterceptor, handleError } from "./shared/error-handler.js"
 
 import { workloadRouter } from "./features/workload/workload.controller.js"
@@ -51,6 +53,24 @@ export function createApp(
     requireAuth,
     express.json({ limit: "128kb" }),
   )
+  app.use((request, response, next) => {
+    const path = request.originalUrl
+    const isDeliverableUpload =
+      request.method === "POST" &&
+      /^\/api\/project-workspace\/[^/]+\/projects\/[^/]+\/deliverables\/[^/]+\/attachment(?:\?.*)?$/.test(
+        path,
+      )
+    const isDeliverableRejection =
+      request.method === "POST" &&
+      /^\/api\/project-workspace\/[^/]+\/projects\/[^/]+\/deliverables\/[^/]+\/reject(?:\?.*)?$/.test(
+        path,
+      )
+    if (isDeliverableUpload)
+      return express.json({ limit: "7mb" })(request, response, next)
+    if (isDeliverableRejection)
+      return express.json({ limit: "8kb" })(request, response, next)
+    next()
+  })
   app.use(express.json({ limit: "16kb" }))
   app.use("/api/auth", authRouter)
   app.use("/api/users", usersRouter)
@@ -59,6 +79,8 @@ export function createApp(
   app.use("/api/clients", clientsRouter)
   app.use("/api/request-inbox", requestInboxRouter)
   app.use("/api/projects", projectsRouter)
+  app.use("/api/project-workspace", projectWorkspaceRouter)
+  app.use("/api/project-conversations", projectConversationsRouter)
   app.use("/api/workload", workloadRouter)
   app.use(
     "/api/request-conversations",

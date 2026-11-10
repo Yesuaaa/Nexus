@@ -30,6 +30,7 @@ export interface TeamInput {
   name: string
   description: string | null
   leadId: string | null
+  memberIds?: string[]
 }
 
 export function validateDepartmentCreateInput(
@@ -187,12 +188,42 @@ export function validateTeamCreateInput(
     typeof input.leadId === "string" && input.leadId.trim()
       ? input.leadId.trim()
       : null
+  const rawMemberIds = input.memberIds
+  const memberIds =
+    rawMemberIds === undefined
+      ? undefined
+      : Array.isArray(rawMemberIds)
+        ? rawMemberIds
+        : null
 
   if (!name || name.length < 2 || name.length > 80) {
     return { error: "Team name must be between 2 and 80 characters" }
   }
 
-  return { value: { name, description: description || null, leadId } }
+  if (
+    memberIds === null ||
+    (memberIds !== undefined &&
+      (memberIds.length === 0 ||
+        memberIds.length > 1000 ||
+        !memberIds.every(
+          (memberId) =>
+            typeof memberId === "string" &&
+            memberId.length > 0 &&
+            memberId.length <= 80,
+        ) ||
+        new Set(memberIds).size !== memberIds.length))
+  ) {
+    return { error: "Provide at least one unique team member ID" }
+  }
+
+  return {
+    value: {
+      name,
+      description: description || null,
+      leadId,
+      memberIds: memberIds as string[] | undefined,
+    },
+  }
 }
 
 export function validateTeamUpdateInput(body: unknown):

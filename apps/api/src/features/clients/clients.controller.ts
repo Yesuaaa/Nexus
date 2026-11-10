@@ -16,7 +16,7 @@ clientsRouter.use(requireAuth, requirePermission(Permission.CLIENTS_READ))
 for (const method of ["post", "patch"] as const) {
   clientsRouter[method](
     method === "post" ? "/" : "/:id",
-    requireRole(Role.ADMIN),
+    requireRole(method === "post" ? Role.ADMIN : Role.SUPERADMIN),
     async (request, response) => {
       const creating = method === "post"
       if (!creating && !/^[A-Za-z0-9_-]{1,80}$/.test(String(request.params.id)))
@@ -59,7 +59,7 @@ for (const method of ["post", "patch"] as const) {
 
 clientsRouter.delete(
   "/:id",
-  requireRole(Role.ADMIN),
+  requireRole(Role.SUPERADMIN),
   async (request, response) => {
     const id = String(request.params.id)
     if (!/^[A-Za-z0-9_-]{1,80}$/.test(id))

@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
-import { AnimatePresence } from "framer-motion"
 import { CloseIcon } from "@/components/layout/icons"
-import {
-  AnimatedGridRow,
-  AnimatedTableRow,
-} from "@/components/ui/animated-data-row"
+import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
+import { useTableFooter } from "@/components/ui/use-table-search"
+import { AnimatedTableBody } from "@/components/ui/animated-table-body"
 import { Button } from "@/components/ui/button"
 import { Pill } from "@/components/ui/pill"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -66,10 +64,14 @@ function statusLabel(status: string) {
     .join(" ")
 }
 
+const relatedRowKey = (row: { id: string }) => row.id
+
 function RelatedTable({
   kind,
   data,
+  onRowsSettled,
 }: {
+  onRowsSettled: () => void
   kind: "service-requests" | "projects"
   data: ClientPage<ClientServiceRequest> | ClientPage<ClientProject>
 }) {
@@ -96,47 +98,47 @@ function RelatedTable({
               </th>
             </tr>
           </thead>
-          <tbody className="relative">
-            <AnimatePresence custom={true} mode="popLayout">
-              {data.rows.map((row, index) => (
-                <AnimatedTableRow
-                  key={`${kind}:${data.page}:${row.id}`}
-                  animateRows={true}
-                  rowIndex={index}
-                  className="border-t border-[#eceef1] align-top"
-                >
-                  <td className="max-w-[200px] break-all px-3 py-3 font-medium">
-                    {requests
-                      ? (row as ClientServiceRequest).title
-                      : (row as ClientProject).name}
+          <AnimatedTableBody<ClientServiceRequest | ClientProject>
+            items={data.rows}
+            viewKey={`${kind}:${data.page}`}
+            onRowsSettled={onRowsSettled}
+            columns={requests ? 4 : 3}
+            rowClassName="border-t border-[#eceef1] align-top"
+            emptyContent="No related records."
+            renderRow={(row) => (
+              <>
+                {" "}
+                <td className="max-w-[200px] break-all px-3 py-3 font-medium">
+                  {requests
+                    ? (row as ClientServiceRequest).title
+                    : (row as ClientProject).name}
+                </td>
+                {requests && (
+                  <td className="max-w-[150px] break-all px-3 py-3 text-[#52627a]">
+                    {(row as ClientServiceRequest).service.name}
                   </td>
-                  {requests && (
-                    <td className="max-w-[150px] break-all px-3 py-3 text-[#52627a]">
-                      {(row as ClientServiceRequest).service.name}
-                    </td>
-                  )}
-                  <td className="px-3 py-3">
-                    <Pill>{statusLabel(row.status)}</Pill>
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-3 text-[#52627a]">
-                    <time
-                      dateTime={
-                        requests
-                          ? row.createdAt
-                          : ((row as ClientProject).startDate ?? undefined)
-                      }
-                    >
-                      {dateLabel(
-                        requests
-                          ? row.createdAt
-                          : (row as ClientProject).startDate,
-                      )}
-                    </time>
-                  </td>
-                </AnimatedTableRow>
-              ))}
-            </AnimatePresence>
-          </tbody>
+                )}
+                <td className="px-3 py-3">
+                  <Pill>{statusLabel(row.status)}</Pill>
+                </td>
+                <td className="whitespace-nowrap px-3 py-3 text-[#52627a]">
+                  <time
+                    dateTime={
+                      requests
+                        ? row.createdAt
+                        : ((row as ClientProject).startDate ?? undefined)
+                    }
+                  >
+                    {dateLabel(
+                      requests
+                        ? row.createdAt
+                        : (row as ClientProject).startDate,
+                    )}
+                  </time>
+                </td>
+              </>
+            )}
+          />
         </table>
       </div>
       <div
@@ -144,8 +146,19 @@ function RelatedTable({
         role="list"
         aria-label={requests ? "Service requests" : "Projects"}
       >
-        <AnimatePresence custom={true} mode="popLayout">
-          {data.rows.map((row, index) => {
+        <AnimatedSlotGridBody<ClientServiceRequest | ClientProject>
+          items={data.rows}
+          viewKey={`${kind}:${data.page}`}
+          animateRows
+          onRowsSettled={onRowsSettled}
+          getKey={relatedRowKey}
+          bodyRole="presentation"
+          rowRole="listitem"
+          rowClassName={() =>
+            "grid gap-2 rounded-lg border border-[#e8ebef] p-3 mb-2 text-xs"
+          }
+          emptyContent="No related records."
+          renderRow={(row) => {
             const title = requests
               ? (row as ClientServiceRequest).title
               : (row as ClientProject).name
@@ -157,13 +170,8 @@ function RelatedTable({
               ? row.createdAt
               : (row as ClientProject).createdAt
             return (
-              <AnimatedGridRow
-                key={`${kind}:${data.page}:${row.id}`}
-                animateRows={true}
-                rowIndex={index}
-                role="listitem"
-                className="grid gap-2 rounded-lg border border-[#e8ebef] p-3 text-xs"
-              >
+              <>
+                {" "}
                 <h3 className="m-0 break-all font-semibold">{title}</h3>
                 <dl className="m-0 grid gap-2">
                   {requests && (
@@ -195,10 +203,10 @@ function RelatedTable({
                     </div>
                   )}
                 </dl>
-              </AnimatedGridRow>
+              </>
             )
-          })}
-        </AnimatePresence>
+          }}
+        />
       </div>
     </>
   )
@@ -228,6 +236,7 @@ export function ClientDetailsDrawer({
     ClientPage<ClientServiceRequest> | ClientPage<ClientProject> | null
   >(null)
   const [relatedResolvedKey, setRelatedResolvedKey] = useState("")
+  const [relatedTab, setRelatedTab] = useState<ClientDetailsTab>("overview")
   const [relatedError, setRelatedError] = useState("")
   const [relatedRevision, setRelatedRevision] = useState(0)
   const name =
@@ -242,8 +251,7 @@ export function ClientDetailsDrawer({
     tab !== "overview" &&
     !detailsError &&
     (!details || relatedResolvedKey !== relatedRequestKey)
-  const currentRelatedData =
-    relatedResolvedKey === relatedRequestKey ? relatedData : null
+  const currentRelatedData = relatedTab === tab ? relatedData : null
   const currentRelatedError =
     relatedResolvedKey === relatedRequestKey ? relatedError : ""
 
@@ -292,6 +300,7 @@ export function ClientDetailsDrawer({
           return
         }
         setRelatedData(data)
+        setRelatedTab(tab)
         setRelatedError("")
       })
       .catch((reason: unknown) => {
@@ -554,7 +563,6 @@ export function ClientDetailsDrawer({
                   }
                 }}
                 onPage={(value) => {
-                  setRelatedData(null)
                   setPage(value)
                 }}
               />
@@ -576,7 +584,6 @@ export function ClientDetailsDrawer({
                   }
                 }}
                 onPage={(value) => {
-                  setRelatedData(null)
                   setPage(value)
                 }}
               />
@@ -605,9 +612,10 @@ function RelatedPanel({
   onRetry: () => void
   onPage: (page: number) => void
 }) {
+  const { footer, onRowsSettled } = useTableFooter(data, loading)
   const label = kind === "service-requests" ? "service requests" : "projects"
   const pages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1
-  if (loading)
+  if (loading && !data)
     return (
       <div
         role="status"
@@ -653,14 +661,15 @@ function RelatedPanel({
         Loading {label}…
       </div>
     )
-  const first = (data.page - 1) * data.pageSize + 1
-  const last = Math.min(data.page * data.pageSize, data.total)
+  const summary = footer ?? data
+  const first = (summary.page - 1) * summary.pageSize + 1
+  const last = Math.min(summary.page * summary.pageSize, summary.total)
   return (
     <div className="grid gap-3">
-      <RelatedTable kind={kind} data={data} />
+      <RelatedTable kind={kind} data={data} onRowsSettled={onRowsSettled} />
       <div className="flex flex-wrap items-center justify-between gap-3 text-[11px] text-[#52627a]">
         <span role="status" aria-live="polite">
-          Showing {first}–{last} of {data.total}
+          Showing {first}–{last} of {summary.total}
         </span>
         <nav
           aria-label={`${kind === "service-requests" ? "Service request" : "Project"} pages`}
@@ -670,19 +679,20 @@ function RelatedPanel({
             type="button"
             variant="outline"
             className="h-9 text-xs"
-            disabled={page <= 1}
+            disabled={loading || footer !== data || page <= 1}
             onClick={() => onPage(page - 1)}
           >
             Back
           </Button>
           <span aria-current="page">
-            Page {data.page} of {pages}
+            Page {summary.page} of{" "}
+            {Math.max(1, Math.ceil(summary.total / summary.pageSize))}
           </span>
           <Button
             type="button"
             variant="outline"
             className="h-9 text-xs"
-            disabled={page >= pages}
+            disabled={loading || footer !== data || page >= pages}
             onClick={() => onPage(page + 1)}
           >
             Next

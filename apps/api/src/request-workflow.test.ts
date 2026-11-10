@@ -1559,11 +1559,20 @@ test(
           ).status,
           404,
         )
+        assert.deepEqual(
+          (JSON.parse(workspaceJson) as { milestones: unknown[] }).milestones,
+          [],
+        )
+        const staffWorkspace = await fetch(`${base}/projects/${projectId}`, {
+          headers: staff.headers,
+        })
+        assert.equal(staffWorkspace.status, 200)
         const milestones = (
-          JSON.parse(workspaceJson) as {
+          (await staffWorkspace.json()) as {
             milestones: { id: string; completedAt: string | null }[]
           }
         ).milestones
+        assert.equal(milestones.length, 2)
         const milestoneId = milestones[0]!.id
         const patchMilestone = (actor: Actor, completed: boolean) =>
           fetch(`${base}/projects/${projectId}/milestones/${milestoneId}`, {

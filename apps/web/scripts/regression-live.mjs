@@ -7,7 +7,7 @@ const result = spawnSync(
   [
     require.resolve("@playwright/test/cli"),
     "test",
-    "regression.spec.ts",
+    "regression-live.spec.ts",
     "--grep",
     "live test accounts",
     ...process.argv.slice(2),

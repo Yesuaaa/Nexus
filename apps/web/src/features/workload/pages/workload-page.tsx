@@ -23,8 +23,11 @@ import {
   type WorkloadStaff as Staff,
   type WorkloadAssignment as Assignment,
 } from "../model/workload"
+import { AnimatedTableBody } from "@/components/ui/animated-table-body"
+import { TableSkeletonBody } from "@/components/ui/data-table-skeleton"
+import { useTableFooter } from "@/components/ui/use-table-search"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { apiRequest } from "@/features/auth/api/auth-api"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { contentClass } from "@/components/layout/styles"
@@ -50,7 +53,15 @@ type Project = {
   status: string
   requestId: string | null
   request: { referenceNumber: string | null; service: { name: string } } | null
-  staff: { employeeId: string }[]
+  staff: {
+    id: string
+    employeeId: string
+    employeeName: string
+    weeklyHours: number | null
+    allocationStart: string | null
+    allocationEnd: string | null
+    eligible: boolean
+  }[]
 }
 type Data = {
   department: { id: string; name: string }
@@ -85,6 +96,8 @@ export function WorkloadPage() {
     projectId: string
     employeeId: string
     previousEmployeeId?: string
+    weeklyHours?: number | null
+    allocationEnd?: string | null
   } | null>(null)
   const [projection, setProjection] = useState("")
   const [busy, setBusy] = useState(false)
@@ -130,33 +143,71 @@ export function WorkloadPage() {
       setBusy(false)
     }
   }
-  const staff = data?.staff ?? []
+  const staff = useMemo(() => data?.staff ?? [], [data])
   const current = staff.find((s) => s.id === selected)
   const teams = [
     ...new Map(
       staff.filter((s) => s.team).map((s) => [s.team!.id, s.team!]),
     ).values(),
   ]
-  const filtered = staff.filter(
-    (s) =>
-      (team === "all" || s.team?.id === team) &&
-      (availability === "all" || metrics(s).availability === availability) &&
-      `${s.fullName} ${s.position ?? ""} ${s.profileSpecialties.join(" ")}`
-        .toLowerCase()
-        .includes(search.toLowerCase()),
+  const filtered = useMemo(
+    () =>
+      staff.filter(
+        (s) =>
+          (team === "all" || s.team?.id === team) &&
+          (availability === "all" ||
+            metrics(s).availability === availability) &&
+          `${s.fullName} ${s.position ?? ""} ${s.profileSpecialties.join(" ")}`
+            .toLowerCase()
+            .includes(search.toLowerCase()),
+      ),
+    [staff, team, availability, search],
   )
   const selectedProject = data?.projects.find(
     (project) => project.id === allocation?.projectId,
   )
-  const pending = (data?.projects ?? []).filter((p) => p.staff.length === 0)
+  const staffingAttention = (data?.projects ?? []).filter(
+    (project) =>
+      project.staff.length === 0 ||
+      project.staff.some((assignment) => assignment.eligible === false),
+  )
   const openAssignment = (
     projectId = "",
     employeeId = "",
     previousEmployeeId?: string,
+    allocationDefaults?: {
+      weeklyHours: number | null
+      allocationEnd: string | null
+    },
   ) => {
     setActionError("")
     setProjection("")
-    setAllocation({ projectId, employeeId, previousEmployeeId })
+    setAllocation({
+      projectId,
+      employeeId,
+      previousEmployeeId,
+      ...allocationDefaults,
+    })
+  }
+  const removeProjectAllocation = (
+    project: Project,
+    assignment: Project["staff"][number],
+  ) => {
+    setRequestsOpen(false)
+    setActionError("")
+    setConfirmation({
+      id: assignment.id,
+      projectId: project.id,
+      employeeId: assignment.employeeId,
+      weeklyHours: assignment.weeklyHours,
+      allocationStart: assignment.allocationStart,
+      allocationEnd: assignment.allocationEnd,
+      project: {
+        id: project.id,
+        name: project.request?.service.name ?? project.name,
+        status: project.status,
+      },
+    })
   }
   function selectAssignment(person: Staff, action: "reassign" | "unassign") {
     if (person.assignments.length === 1)
@@ -177,7 +228,26 @@ export function WorkloadPage() {
   }
   const totalPages = Math.max(1, Math.ceil(filtered.length / 10))
   const resolvedPage = Math.min(page, totalPages)
-  const visible = filtered.slice((resolvedPage - 1) * 10, resolvedPage * 10)
+  const visible = useMemo(
+    () => filtered.slice((resolvedPage - 1) * 10, resolvedPage * 10),
+    [filtered, resolvedPage],
+  )
+  const tableResult = useMemo(
+    () => ({
+      page: resolvedPage,
+      total: filtered.length,
+      view: [search, team, availability, week],
+    }),
+    [resolvedPage, filtered.length, search, team, availability, week],
+  )
+  const { footer, onRowsSettled } = useTableFooter(tableResult, loading)
+  const tableViewKey = JSON.stringify([
+    search,
+    team,
+    availability,
+    resolvedPage,
+    week,
+  ])
   return (
     <main className={cn(contentClass, "p-[clamp(16px,2.1vw,32px)]")}>
       <header className="-mx-[clamp(16px,2.1vw,32px)] flex items-center justify-between gap-6 border-b border-[#eceef1] px-[clamp(16px,2.1vw,32px)] pt-0.5 pb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-4">
@@ -284,7 +354,7 @@ export function WorkloadPage() {
           >
             Assign staff
             <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-white px-1 text-[9px] font-semibold tabular-nums text-[#203f8c]">
-              {pending.length}
+              {staffingAttention.length}
             </span>
           </Button>
         </div>
@@ -294,7 +364,10 @@ export function WorkloadPage() {
           role="region"
           aria-label="Staff workload table"
         >
-          <table className="w-full min-w-[850px] text-left text-xs">
+          <table
+            className="w-full min-w-[850px] text-left text-xs"
+            aria-busy={loading}
+          >
             <thead className="bg-[#e8eef2]">
               <tr>
                 {[
@@ -311,13 +384,44 @@ export function WorkloadPage() {
                 ))}
               </tr>
             </thead>
-            <tbody>
-              {!loading &&
-                !error &&
-                visible.map((s) => {
+            {loading && !data ? (
+              <TableSkeletonBody label="staff workload" columns={6} />
+            ) : (
+              <AnimatedTableBody
+                items={visible}
+                viewKey={tableViewKey}
+                quickKey={search}
+                columns={6}
+                rowClassName="border-t border-[#eceef1]"
+                onRowsSettled={onRowsSettled}
+                emptyContent={
+                  <>
+                    {" "}
+                    {error ? (
+                      <div role="alert">
+                        {error}
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setLoading(true)
+                            setRevision((v) => v + 1)
+                          }}
+                        >
+                          Retry
+                        </Button>
+                      </div>
+                    ) : staff.length ? (
+                      "No staff match these filters."
+                    ) : (
+                      "No employees in this department yet."
+                    )}
+                  </>
+                }
+                renderRow={(s) => {
                   const m = metrics(s)
                   return (
-                    <tr key={s.id} className="border-t border-[#eceef1]">
+                    <>
+                      {" "}
                       <td className="px-4 py-3">
                         <span className="font-medium">{s.fullName}</span>
                         <div className="mt-1 text-[11px] text-[#738096]">
@@ -392,48 +496,23 @@ export function WorkloadPage() {
                           onUnassign={() => selectAssignment(s, "unassign")}
                         />
                       </td>
-                    </tr>
+                    </>
                   )
-                })}
-              {(loading || error || !visible.length) && (
-                <tr>
-                  <td colSpan={6} className="p-8 text-center text-xs">
-                    {error ? (
-                      <div role="alert">
-                        {error}
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setLoading(true)
-                            setRevision((v) => v + 1)
-                          }}
-                        >
-                          Retry
-                        </Button>
-                      </div>
-                    ) : loading ? (
-                      <span role="status">Loading staff workload…</span>
-                    ) : staff.length ? (
-                      "No staff match these filters."
-                    ) : (
-                      "No employees in this department yet."
-                    )}
-                  </td>
-                </tr>
-              )}
-            </tbody>
+                }}
+              />
+            )}
           </table>
         </div>
-        {!loading && !error && filtered.length > 0 && (
+        {!loading && !error && footer.total > 0 && (
           <footer className="flex flex-wrap items-center justify-between gap-3 pt-4 text-[11px] text-[#65718a]">
             <span role="status">
-              Showing {(resolvedPage - 1) * 10 + 1}–
-              {Math.min(resolvedPage * 10, filtered.length)} of{" "}
-              {filtered.length}
+              Showing {(footer.page - 1) * 10 + 1}–
+              {Math.min(footer.page * 10, footer.total)} of {footer.total}
             </span>
             <NumberedPagination
-              page={resolvedPage}
-              totalPages={totalPages}
+              page={footer.page}
+              totalPages={Math.max(1, Math.ceil(footer.total / 10))}
+              disabled={loading || footer !== tableResult}
               label="Staff workload pages"
               onPageChange={setPage}
             />
@@ -594,40 +673,95 @@ export function WorkloadPage() {
       )}
       <Dialog open={requestsOpen} onOpenChange={setRequestsOpen}>
         <WorkloadDialog
-          title="Assign staff"
-          description="Choose an authorized project awaiting its first staff assignment."
+          title="Staffing attention"
+          description="Assign staff to projects or resolve allocations that no longer match the active department roster."
           onClose={() => setRequestsOpen(false)}
         >
           <div className="grid gap-3 p-5 sm:p-6">
-            {pending.map((project) => (
+            {staffingAttention.map((project) => (
               <div
                 key={project.id}
-                className="flex items-center justify-between gap-3 rounded-lg border border-[#e8ebef] p-4 max-[420px]:flex-col max-[420px]:items-stretch"
+                className="grid gap-3 rounded-lg border border-[#e8ebef] p-4"
               >
-                <div className="min-w-0">
-                  <p className="m-0 break-words text-xs font-semibold">
-                    {project.request?.service.name ?? project.name}
-                  </p>
-                  <p className="mt-1 mb-0 break-all text-[11px] text-[#738096]">
-                    {project.request?.referenceNumber ??
-                      project.requestId ??
-                      project.id}
-                  </p>
+                <div className="flex items-start justify-between gap-3 max-[420px]:flex-col">
+                  <div className="min-w-0">
+                    <p className="m-0 break-words text-xs font-semibold">
+                      {project.request?.service.name ?? project.name}
+                    </p>
+                    <p className="mt-1 mb-0 break-all text-[11px] text-[#738096]">
+                      {project.request?.referenceNumber ??
+                        project.requestId ??
+                        project.id}
+                    </p>
+                  </div>
+                  {project.staff.length === 0 && (
+                    <Button
+                      className={panelAssignButton}
+                      onClick={() => {
+                        setRequestsOpen(false)
+                        openAssignment(project.id)
+                      }}
+                    >
+                      Assign staff
+                    </Button>
+                  )}
                 </div>
-                <Button
-                  className={panelAssignButton}
-                  onClick={() => {
-                    setRequestsOpen(false)
-                    openAssignment(project.id)
-                  }}
-                >
-                  Assign staff
-                </Button>
+                {project.staff
+                  .filter((assignment) => assignment.eligible === false)
+                  .map((assignment) => (
+                    <div
+                      key={assignment.id}
+                      className="flex flex-wrap items-center justify-between gap-3 border-t border-[#eceef1] pt-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="m-0 break-words text-xs font-medium">
+                          {assignment.employeeName}
+                        </p>
+                        <p className="mt-1 mb-0 text-[11px] text-[#738096]">
+                          {assignment.weeklyHours ?? "Unrecorded"} hrs/week · No
+                          longer eligible for new assignments
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 gap-2">
+                        <Button
+                          variant="outline"
+                          className={panelSecondaryButton}
+                          onClick={() => {
+                            setRequestsOpen(false)
+                            openAssignment(
+                              project.id,
+                              "",
+                              assignment.employeeId,
+                              {
+                                weeklyHours: assignment.weeklyHours,
+                                allocationEnd:
+                                  assignment.allocationEnd &&
+                                  assignment.allocationEnd.slice(0, 10) >= week
+                                    ? assignment.allocationEnd.slice(0, 10)
+                                    : week,
+                              },
+                            )
+                          }}
+                        >
+                          Reassign
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className={panelDangerButton}
+                          onClick={() =>
+                            removeProjectAllocation(project, assignment)
+                          }
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
               </div>
             ))}
-            {!pending.length && (
+            {!staffingAttention.length && (
               <p className="m-0 py-6 text-center text-xs text-[#738096]">
-                No authorized projects are awaiting staff.
+                No projects need staffing attention.
               </p>
             )}
           </div>
@@ -881,7 +1015,9 @@ export function WorkloadPage() {
                       .find((s) => s.id === allocation.employeeId)
                       ?.assignments.find(
                         (a) => a.projectId === allocation.projectId,
-                      )?.weeklyHours ?? ""
+                      )?.weeklyHours ??
+                    allocation.weeklyHours ??
+                    ""
                   }
                 />
               </label>
@@ -898,7 +1034,9 @@ export function WorkloadPage() {
                       ?.assignments.find(
                         (a) => a.projectId === allocation.projectId,
                       )
-                      ?.allocationEnd?.slice(0, 10) ?? week
+                      ?.allocationEnd?.slice(0, 10) ??
+                    allocation.allocationEnd?.slice(0, 10) ??
+                    week
                   }
                 />
               </label>

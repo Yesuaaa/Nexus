@@ -7,7 +7,7 @@ import {
 import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
 import { Bell, CheckCheck } from "lucide-react"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import { apiRequest } from "@/features/auth/api/auth-api"
 import {
   DropdownMenu,
@@ -23,6 +23,7 @@ type Notification = {
   requestId: string
   summary: string
   type: string
+  entityId: string | null
   createdAt: string
   readAt: string | null
 }
@@ -134,7 +135,17 @@ export function WorkflowNotifications() {
           result.notifications.map((item) => (
             <DropdownMenuItem key={item.id} asChild>
               <Link
-                href={`/messages?request=${encodeURIComponent(item.requestId)}`}
+                href={
+                  item.entityId &&
+                  [
+                    "PROJECT_ACTIVATED",
+                    "PROJECT_CANCELLATION_REQUESTED",
+                    "PROJECT_CANCELLATION_APPROVED",
+                    "PROJECT_CANCELLATION_DECLINED",
+                  ].includes(item.type)
+                    ? `/projects/${encodeURIComponent(item.entityId)}`
+                    : `/messages?request=${encodeURIComponent(item.requestId)}`
+                }
                 onClick={() => {
                   if (!item.readAt) void read(item.id)
                 }}

@@ -2,12 +2,13 @@
 
 import { useEffect, type ReactNode } from "react"
 import { usePathname, useRouter } from "next/navigation"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import { signOut } from "@/features/auth/api/auth-api"
 import { useAccount } from "@/features/auth/hooks/use-account"
 import {
   canAccessAccountManagement,
   canAccessBookedServices,
+  canAccessCalendar,
   canAccessRequestInbox,
   canAccessDepartmentManagement,
   canAccessEmployeeManagement,
@@ -16,10 +17,12 @@ import {
   canAccessClientManagement,
   canAccessMessages,
   canAccessProjects,
+  canAccessProjectWorkspace,
 } from "@/features/auth/model/permissions"
 import { AccountContext } from "@/features/auth/providers/account-context"
 import { useAuthTransition } from "@/features/auth/providers/auth-provider"
 import { PreferencesProvider } from "@/features/settings/providers/preferences-provider"
+import { BreadcrumbLabelProvider } from "./breadcrumbs"
 import { RoleLayout } from "./role-layout"
 
 const stateClassName =
@@ -36,6 +39,8 @@ export function PortalLayout({ children }: { children: ReactNode }) {
       !canAccessAccountManagement(account)) ||
       (pathname.startsWith("/messages") && !canAccessMessages(account)) ||
       (pathname.startsWith("/projects") && !canAccessProjects(account)) ||
+      (pathname.startsWith("/project-workspace") &&
+        !canAccessProjectWorkspace(account)) ||
       (pathname === "/departments" &&
         !canAccessDepartmentManagement(account)) ||
       (pathname.startsWith("/employees") &&
@@ -43,8 +48,10 @@ export function PortalLayout({ children }: { children: ReactNode }) {
       (pathname === "/services" &&
         !canAccessServiceCatalog(account) &&
         !canAccessServiceManagement(account)) ||
-      (pathname.startsWith("/service-requests") &&
+      (pathname === "/calendar" && !canAccessCalendar(account)) ||
+      ((pathname.startsWith("/service-requests") || pathname === "/help") &&
         !canAccessServiceCatalog(account)) ||
+      (pathname === "/billing-logs" && account.role !== "USER") ||
       (pathname.startsWith("/clients") &&
         !canAccessClientManagement(account)) ||
       (pathname.startsWith("/booked-services") &&
@@ -91,9 +98,11 @@ export function PortalLayout({ children }: { children: ReactNode }) {
   return (
     <AccountContext value={account}>
       <PreferencesProvider key={account.id}>
-        <RoleLayout account={account} onSignOut={() => void handleSignOut()}>
-          {children}
-        </RoleLayout>
+        <BreadcrumbLabelProvider>
+          <RoleLayout account={account} onSignOut={() => void handleSignOut()}>
+            {children}
+          </RoleLayout>
+        </BreadcrumbLabelProvider>
       </PreferencesProvider>
     </AccountContext>
   )

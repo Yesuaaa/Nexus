@@ -399,7 +399,7 @@ test(
       },
     )
     await t.test(
-      "client mutations validate input, enforce admin access, and preserve history",
+      "client creation validates input and client edits/deletion are unavailable",
       async () => {
         const mutate = (
           path: string,
@@ -461,55 +461,20 @@ test(
           (
             await mutate(`/${client.id}`, "PATCH", {
               ...input,
-              email: "ADMIN@example.com",
-            })
-          ).status,
-          409,
-        )
-        const session = await prisma.session.create({
-          data: {
-            userId: client.id,
-            tokenHash: "client-session",
-            expiresAt: new Date(Date.now() + 60000),
-          },
-        })
-        assert.equal(
-          (
-            await mutate(`/${client.id}`, "PATCH", {
-              ...input,
               fullName: "Updated Client",
               isActive: false,
               password: "ignored password",
             })
           ).status,
-          200,
+          403,
         )
-        assert.equal(
-          await prisma.session.count({ where: { id: session.id } }),
-          0,
-        )
-        const updated = await prisma.user.findUniqueOrThrow({
+        assert.equal((await mutate(`/${client.id}`, "DELETE")).status, 403)
+        const unchanged = await prisma.user.findUniqueOrThrow({
           where: { id: client.id },
         })
-        assert.equal(updated.fullName, "Updated Client")
-        assert.equal(updated.passwordHash, stored.passwordHash)
-        assert.equal(
-          (await mutate(`/${adminUser.id}`, "PATCH", input)).status,
-          404,
-        )
-        assert.equal((await mutate(`/${adminUser.id}`, "DELETE")).status, 404)
-        assert.equal((await mutate("/client-00", "DELETE")).status, 409)
-        assert.equal(
-          await prisma.project.count({ where: { clientId: "client-00" } }),
-          12,
-        )
-        assert.equal((await mutate(`/${client.id}`, "DELETE")).status, 204)
-        assert.equal((await related(client.id)).status, 404)
-        assert.equal(
-          (await mutate(`/${client.id}`, "PATCH", input)).status,
-          404,
-        )
-        assert.equal((await mutate(`/${client.id}`, "DELETE")).status, 404)
+        assert.equal(unchanged.fullName, stored.fullName)
+        assert.equal(unchanged.isActive, stored.isActive)
+        assert.equal(unchanged.passwordHash, stored.passwordHash)
         assert.equal((await mutate("", "POST", input)).status, 409)
       },
     )

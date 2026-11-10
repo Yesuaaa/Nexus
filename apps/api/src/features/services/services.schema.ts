@@ -1,7 +1,6 @@
 import { BillingInterval, PricingModel } from "../../generated/prisma/client.js"
 
-const imageDataUrlPattern =
-  /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/
+const imageDataUrlPattern = /^data:image\/(webp);base64,([A-Za-z0-9+/]+={0,2})$/
 const maxImageBytes = 2 * 1024 * 1024
 const serviceIconKeys = [
   "social",
@@ -222,12 +221,12 @@ function validateImage(input: Record<string, unknown>) {
     }
   }
   if (typeof imageDataUrl !== "string") {
-    return { error: "Service image must be a JPG, PNG, or WebP file" }
+    return { error: "Service image must be a WebP file" }
   }
   const match = imageDataUrl.match(imageDataUrlPattern)
   if (!match || Buffer.byteLength(match[2]!, "base64") > maxImageBytes) {
     return {
-      error: "Service image must be a JPG, PNG, or WebP file up to 2 MB",
+      error: "Service image must be a WebP file up to 2 MB",
     }
   }
   if (!imageAltText) {

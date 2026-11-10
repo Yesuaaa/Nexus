@@ -21,6 +21,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { FormInput } from "@/components/ui/form-input"
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -57,7 +58,7 @@ const buttonClass = `inline-flex min-h-[38px] cursor-pointer items-center justif
 // Shared popup style: no border/ring, soft navy-tinted shadow
 const menuContentClass =
   "z-[130] border-0 bg-white p-1 ring-0 shadow-[0_8px_24px_rgb(18_36_73_/_14%)]"
-const imageTypes = ["image/jpeg", "image/png", "image/webp"]
+const imageTypes = ["image/webp"]
 const maxImageBytes = 2 * 1024 * 1024
 const initialFormSteps = [
   { label: "Details", description: "Basic information and service image" },
@@ -253,7 +254,7 @@ export function ServiceFormDialog({
   function handleImage(file: File | undefined) {
     if (!file) return
     if (!imageTypes.includes(file.type) || file.size > maxImageBytes) {
-      setError("Choose a JPG, PNG, or WebP image up to 2 MB")
+      setError("Choose a WebP image up to 2 MB")
       if (imageInputRef.current) imageInputRef.current.value = ""
       return
     }
@@ -603,7 +604,7 @@ export function ServiceFormDialog({
                         ref={imageInputRef}
                         id="service-image"
                         type="file"
-                        accept="image/jpeg,image/png,image/webp"
+                        accept="image/webp"
                         className="sr-only"
                         onChange={(event) =>
                           handleImage(event.target.files?.[0])
@@ -635,7 +636,7 @@ export function ServiceFormDialog({
                         </button>
                       )}
                       <p className="m-0 text-[10px] leading-relaxed text-[#8290a5]">
-                        JPG, PNG, or WebP. Maximum 2 MB.
+                        WebP only. Maximum 2 MB.
                       </p>
                     </div>
                     <div className="grid content-start gap-4">
@@ -644,9 +645,8 @@ export function ServiceFormDialog({
                           Service Name{" "}
                           <strong className="text-[#d04b56]">*</strong>
                         </label>
-                        <input
+                        <FormInput
                           id="service-name"
-                          className={cn(inputClass, "h-10")}
                           value={name}
                           onChange={(event) => setName(event.target.value)}
                           maxLength={100}
@@ -682,9 +682,8 @@ export function ServiceFormDialog({
                             Image Alternative Text{" "}
                             <strong className="text-[#d04b56]">*</strong>
                           </label>
-                          <input
+                          <FormInput
                             id="service-image-alt"
-                            className={cn(inputClass, "h-10")}
                             value={imageAltText}
                             onChange={(event) =>
                               setImageAltText(event.target.value)
@@ -859,9 +858,8 @@ export function ServiceFormDialog({
                         >
                           Benefit Title
                         </label>
-                        <input
+                        <FormInput
                           id={`${benefit.id}-title`}
-                          className={cn(inputClass, "h-10")}
                           value={benefit.title}
                           onChange={(event) =>
                             updateBenefit(benefit.id, {
@@ -1152,9 +1150,8 @@ export function ServiceFormDialog({
                         >
                           Template Name
                         </label>
-                        <input
+                        <FormInput
                           id="pricing-template-name"
-                          className={cn(inputClass, "h-10")}
                           value={templateName}
                           onChange={(event) =>
                             setTemplateName(event.target.value)
@@ -1261,9 +1258,8 @@ export function ServiceFormDialog({
                           >
                             Package Name
                           </label>
-                          <input
+                          <FormInput
                             id={`${servicePackage.id}-name`}
-                            className={cn(inputClass, "h-10")}
                             value={servicePackage.name}
                             onChange={(event) =>
                               updatePackage(servicePackage.id, {
@@ -1281,12 +1277,11 @@ export function ServiceFormDialog({
                           >
                             Display Order
                           </label>
-                          <input
+                          <FormInput
                             id={`${servicePackage.id}-order`}
                             type="number"
                             min="0"
                             max="10000"
-                            className={cn(inputClass, "h-10")}
                             value={servicePackage.displayOrder}
                             onChange={(event) =>
                               updatePackage(servicePackage.id, {

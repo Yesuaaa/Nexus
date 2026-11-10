@@ -1,12 +1,17 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import dynamic from "next/dynamic"
+import { PanelLoading } from "@/components/ui/panel-loading"
 import { Plus } from "lucide-react"
-import { sileo } from "sileo"
-import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
-import { ClientFormDialog } from "../components/client-form-dialog"
+import { sileo } from "@/lib/toast"
 import { contentClass } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
+import {
+  useTableSearch,
+  useTableFooter,
+} from "@/components/ui/use-table-search"
+import { TableSearchStatus } from "@/components/ui/table-search-status"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
 import { SearchEmptyState } from "@/components/ui/search-empty-state"
 import { SearchField } from "@/components/ui/search-field"
@@ -20,17 +25,28 @@ import {
 import { cn } from "@/lib/utils"
 import {
   listClients,
-  deleteClient,
   type ClientList,
   type ClientSort,
   type ClientStatus,
   type Client,
 } from "../api/clients-api"
 import { ClientTable } from "../components/client-table"
-import {
-  ClientDetailsDrawer,
-  type ClientDetailsTab,
-} from "../components/client-details-drawer"
+import type { ClientDetailsTab } from "../components/client-details-drawer"
+
+const ClientFormDialog = dynamic(
+  () =>
+    import("../components/client-form-dialog").then(
+      (module) => module.ClientFormDialog,
+    ),
+  { loading: PanelLoading },
+)
+const ClientDetailsDrawer = dynamic(
+  () =>
+    import("../components/client-details-drawer").then(
+      (module) => module.ClientDetailsDrawer,
+    ),
+  { loading: PanelLoading },
+)
 
 const sortOptions: { value: string; label: string }[] = [
   { value: "createdAt:desc", label: "Newest registered" },
@@ -43,40 +59,20 @@ const sortOptions: { value: string; label: string }[] = [
   { value: "isActive:asc", label: "Inactive first" },
 ]
 
+function matchesTableSearch(item: Client, query: string) {
+  return [item.fullName, item.email].some((value) =>
+    value?.toLowerCase().includes(query),
+  )
+}
+
 export function ClientManagementPage() {
   const [formTarget, setFormTarget] = useState<Client | "create" | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<Client | null>(null)
-  const [deleting, setDeleting] = useState(false)
-  const [deleteError, setDeleteError] = useState("")
-
-  async function confirmDelete() {
-    if (!deleteTarget || deleting) return
-    setDeleting(true)
-    setDeleteError("")
-    try {
-      await deleteClient(deleteTarget.id)
-      setDeleteTarget(null)
-      setRevision((value) => value + 1)
-      sileo.success({
-        title: "Client deleted",
-        description: "The client account was removed.",
-      })
-    } catch (reason) {
-      setDeleteError(
-        reason instanceof Error
-          ? reason.message
-          : "Could not delete the client.",
-      )
-    } finally {
-      setDeleting(false)
-    }
-  }
   const [selectedClient, setSelectedClient] = useState<{
     client: Client
     tab: ClientDetailsTab
   } | null>(null)
   const [search, setSearch] = useState("")
-  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const query = search.trim()
   const [status, setStatus] = useState<ClientStatus>("")
   const [page, setPage] = useState(1)
   const [animateRows, setAnimateRows] = useState(true)
@@ -91,9 +87,10 @@ export function ClientManagementPage() {
   })
   const [resolvedKey, setResolvedKey] = useState("")
   const [resolvedViewKey, setResolvedViewKey] = useState("")
-  const [error, setError] = useState("")
+  const [errorMessage, setError] = useState("")
+  const [errorRequestKey, setErrorRequestKey] = useState("")
   const requestKey = JSON.stringify({
-    search: debouncedSearch,
+    search: query,
     status,
     page,
     sortBy,
@@ -101,26 +98,42 @@ export function ClientManagementPage() {
     revision,
   })
   const viewKey = JSON.stringify({
-    search: debouncedSearch,
+    search: query,
     status,
     page,
     sortBy,
     sortOrder,
   })
-  const loading =
-    resolvedKey !== requestKey || search.trim() !== debouncedSearch
+  const error = errorRequestKey === requestKey ? errorMessage : ""
+  const loading = resolvedKey !== requestKey || search.trim() !== query
   const filtered = Boolean(search.trim() || status)
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(search.trim())
-    }, 150)
-    return () => clearTimeout(timer)
-  }, [search])
+  const searchScope = JSON.stringify([status, sortBy, sortOrder, revision])
+  const { acceptRows, preview, previewing } = useTableSearch<Client>({
+    search: query,
+    scope: searchScope,
+    page,
+    matches: matchesTableSearch,
+  })
+  const { footer, onRowsSettled } = useTableFooter(
+    result,
+    loading || previewing,
+  )
+  const tableViewKey = previewing
+    ? JSON.stringify([searchScope, query, 1])
+    : resolvedViewKey
 
   useEffect(() => {
+    const controller = new AbortController()
     let active = true
-    listClients({ search: debouncedSearch, status, page, sortBy, sortOrder })
+    listClients({
+      search: query,
+      status,
+      page,
+      sortBy,
+      sortOrder,
+      signal: controller.signal,
+    })
       .then((data) => {
         if (!active) return
         const lastPage = Math.max(1, Math.ceil(data.total / data.pageSize))
@@ -128,6 +141,7 @@ export function ClientManagementPage() {
           setPage(lastPage)
           return
         }
+        acceptRows(data.clients)
         setResult(data)
         setError("")
         setResolvedKey(requestKey)
@@ -135,6 +149,7 @@ export function ClientManagementPage() {
       })
       .catch((reason: unknown) => {
         if (!active) return
+        setErrorRequestKey(requestKey)
         setError(
           reason instanceof Error ? reason.message : "Could not load clients.",
         )
@@ -142,9 +157,10 @@ export function ClientManagementPage() {
       })
     return () => {
       active = false
+      controller.abort()
     }
   }, [
-    debouncedSearch,
+    query,
     status,
     page,
     sortBy,
@@ -152,6 +168,7 @@ export function ClientManagementPage() {
     revision,
     requestKey,
     viewKey,
+    acceptRows,
   ])
 
   function sort(key: ClientSort) {
@@ -163,13 +180,12 @@ export function ClientManagementPage() {
   function clearFilters() {
     setAnimateRows(true)
     setSearch("")
-    setDebouncedSearch("")
     setStatus("")
     setPage(1)
   }
-  const pages = Math.max(1, Math.ceil(result.total / result.pageSize))
-  const from = result.total === 0 ? 0 : (result.page - 1) * result.pageSize + 1
-  const to = (result.page - 1) * result.pageSize + result.clients.length
+  const pages = Math.max(1, Math.ceil(footer.total / footer.pageSize))
+  const from = footer.total === 0 ? 0 : (footer.page - 1) * footer.pageSize + 1
+  const to = (footer.page - 1) * footer.pageSize + footer.clients.length
 
   return (
     <main
@@ -270,15 +286,16 @@ export function ClientManagementPage() {
           )}
         </div>
         <ClientTable
-          clients={result.clients}
-          viewKey={resolvedViewKey}
-          quickKey={debouncedSearch}
+          clients={preview ?? result.clients}
+          viewKey={tableViewKey}
+          onRowsSettled={onRowsSettled}
+          quickKey={query}
           animateRows={animateRows}
           loading={loading}
           error={error}
           emptyMessage={
-            debouncedSearch ? (
-              <SearchEmptyState query={debouncedSearch} />
+            query ? (
+              <SearchEmptyState query={query} />
             ) : filtered ? (
               "No clients match the selected filters."
             ) : (
@@ -290,21 +307,17 @@ export function ClientManagementPage() {
           onRetry={() => setRevision((value) => value + 1)}
           onSort={sort}
           onView={(client) => setSelectedClient({ client, tab: "overview" })}
-          onEdit={setFormTarget}
-          onDelete={(client) => {
-            setDeleteError("")
-            setDeleteTarget(client)
-          }}
         />
-        {!error && result.total > 0 && (
+        <TableSearchStatus active={loading && previewing} label="clients" />
+        {!error && !previewing && footer.total > 0 && (
           <footer className="flex flex-wrap items-center justify-between gap-3 pt-4 text-[11px] text-[#738096]">
             <span role="status" aria-live="polite" aria-atomic="true">
-              Showing {from}–{to} of {result.total}
+              Showing {from}–{to} of {footer.total}
             </span>
             <NumberedPagination
-              page={result.page}
+              page={footer.page}
               totalPages={pages}
-              disabled={loading}
+              disabled={loading || footer !== result}
               label="Client pages"
               onPageChange={(nextPage) => {
                 setAnimateRows(true)
@@ -327,21 +340,6 @@ export function ClientManagementPage() {
             setFormTarget(null)
             setRevision((value) => value + 1)
           }}
-        />
-      )}
-      {deleteTarget && (
-        <ConfirmationDialog
-          title="Delete client?"
-          subject={deleteTarget.fullName || deleteTarget.email}
-          description="This removes the client account and ends its active sessions. Clients with linked service requests or projects cannot be deleted. The email address remains reserved."
-          confirmLabel="Delete Client"
-          pendingLabel="Deleting…"
-          pending={deleting}
-          error={deleteError}
-          onClose={() => {
-            if (!deleting) setDeleteTarget(null)
-          }}
-          onConfirm={confirmDelete}
         />
       )}
       {selectedClient && (

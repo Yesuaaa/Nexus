@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 import { messagePreview } from "../model/conversation-groups"
 import { ConversationAvatar } from "./conversation-avatar"
 import type { ConversationSummary } from "../api/request-conversations-api"
+import type { ProjectConversationSummary } from "../api/project-conversations-api"
 
 export function ConversationListItem({
   conversation,
@@ -20,8 +21,6 @@ export function ConversationListItem({
   requestId: string | null
   railCollapsed: boolean
 }) {
-  const { formatDate } = useDatePreferences()
-
   const selected =
     requestId === conversation.id ||
     conversation.bookings?.some((booking) => booking.id === requestId)
@@ -36,9 +35,87 @@ export function ConversationListItem({
   const preview = messagePreview(conversation.lastMessage)
   const label = `${name}, ${department}: ${bookingsLabel}. ${preview}${conversation.unreadCount ? `. ${conversation.unreadCount} unread messages` : ""}`
   return (
-    <div className="relative mb-2" data-conversation-id={conversation.id}>
+    <ConversationRow
+      id={conversation.id}
+      href={`/messages?request=${encodeURIComponent(conversation.id)}`}
+      name={name}
+      subtitle={`${department} · ${bookingsLabel}`}
+      imageUrl={participant?.imageUrl}
+      label={label}
+      preview={preview}
+      updatedAt={conversation.lastMessage?.createdAt || conversation.updatedAt}
+      unreadCount={conversation.unreadCount ?? 0}
+      selected={Boolean(selected)}
+      railCollapsed={railCollapsed}
+    />
+  )
+}
+
+export function ProjectConversationListItem({
+  conversation,
+  accountId,
+  projectId,
+  view,
+  railCollapsed,
+}: {
+  conversation: ProjectConversationSummary
+  accountId: string
+  projectId: string | null
+  view: "active" | "archived"
+  railCollapsed: boolean
+}) {
+  const members = conversation.participants
+    .filter((person) => person.id !== accountId)
+    .map((person) => person.fullName || "Participant")
+    .join(", ")
+  const subtitle = `${conversation.archived ? "Archived project" : conversation.isGroup ? "Project group" : "Project"} · ${members || "Awaiting staff assignment"}`
+  const preview = messagePreview(conversation.lastMessage)
+  return (
+    <ConversationRow
+      id={conversation.id}
+      href={`/messages?project=${encodeURIComponent(conversation.id)}${view === "archived" ? "&view=archived" : ""}`}
+      name={conversation.name}
+      subtitle={subtitle}
+      label={`${conversation.name}, ${subtitle}. ${preview}${conversation.unreadCount ? `. ${conversation.unreadCount} unread messages` : ""}`}
+      preview={preview}
+      updatedAt={conversation.lastMessage?.createdAt || conversation.updatedAt}
+      unreadCount={conversation.unreadCount}
+      selected={projectId === conversation.id}
+      railCollapsed={railCollapsed}
+    />
+  )
+}
+
+function ConversationRow({
+  id,
+  href,
+  name,
+  subtitle,
+  imageUrl,
+  label,
+  preview,
+  updatedAt,
+  unreadCount,
+  selected,
+  railCollapsed,
+}: {
+  id: string
+  href: string
+  name: string
+  subtitle: string
+  imageUrl?: string | null
+  label: string
+  preview: string
+  updatedAt: string
+  unreadCount: number
+  selected: boolean
+  railCollapsed: boolean
+}) {
+  const { formatDate } = useDatePreferences()
+  return (
+    <div className="relative mb-2" data-conversation-id={id}>
       <Link
-        href={`/messages?request=${encodeURIComponent(conversation.id)}`}
+        href={href}
         scroll={false}
         aria-current={selected ? "page" : undefined}
         aria-label={label}
@@ -53,15 +130,13 @@ export function ConversationListItem({
         )}
       >
         <span className="relative shrink-0">
-          <ConversationAvatar name={name} imageUrl={participant?.imageUrl} />
-          {Boolean(conversation.unreadCount) && railCollapsed && (
+          <ConversationAvatar name={name} imageUrl={imageUrl} />
+          {Boolean(unreadCount) && railCollapsed && (
             <span
               aria-hidden="true"
               className="absolute -top-1 -right-1 grid size-4 place-items-center rounded-full bg-[#203f8c] text-[10px] leading-none text-white max-[767px]:hidden"
             >
-              {conversation.unreadCount! > 99
-                ? "99+"
-                : conversation.unreadCount}
+              {unreadCount > 99 ? "99+" : unreadCount}
             </span>
           )}
         </span>
@@ -76,17 +151,13 @@ export function ConversationListItem({
               {name}
             </span>
             <time
-              dateTime={
-                conversation.lastMessage?.createdAt || conversation.updatedAt
-              }
+              dateTime={updatedAt}
               className={cn(
                 "shrink-0 text-[10px]",
                 selected ? "text-white/70" : "text-[#52627a]",
               )}
             >
-              {formatDate(
-                conversation.lastMessage?.createdAt || conversation.updatedAt,
-              )}
+              {formatDate(updatedAt)}
             </time>
           </span>
           <span
@@ -95,7 +166,7 @@ export function ConversationListItem({
               selected ? "text-white/80" : "text-[#52627a]",
             )}
           >
-            {department} · {bookingsLabel}
+            {subtitle}
           </span>
           <span className="mt-1 flex items-center gap-2">
             <span
@@ -106,7 +177,7 @@ export function ConversationListItem({
             >
               {preview}
             </span>
-            {Boolean(conversation.unreadCount) && (
+            {Boolean(unreadCount) && (
               <span
                 aria-hidden="true"
                 className={cn(
@@ -116,16 +187,14 @@ export function ConversationListItem({
                     : "bg-[#203f8c] text-white",
                 )}
               >
-                {conversation.unreadCount! > 99
-                  ? "99+"
-                  : conversation.unreadCount}
+                {unreadCount > 99 ? "99+" : unreadCount}
               </span>
             )}
           </span>
         </span>
         {railCollapsed && (
           <HoverTooltip side="right">
-            {name} · {department} · {bookingsLabel}
+            {name} · {subtitle}
           </HoverTooltip>
         )}
       </Link>

@@ -4,16 +4,25 @@ import { Form } from "@/components/ui/form"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 
 import { useEffect, useRef, useState, type FormEvent } from "react"
-import Link from "next/link"
-import { ArrowLeft, LoaderCircle, Send } from "lucide-react"
-import { sileo } from "sileo"
+import { Info } from "lucide-react"
+import { sileo } from "@/lib/toast"
 import { Button } from "@/components/ui/button"
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { ApiError } from "@/features/auth/api/auth-api"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
-import { cn } from "@/lib/utils"
 import { focusRing } from "@/components/layout/styles"
-import { ConversationAvatar } from "./conversation-avatar"
+import { cn } from "@/lib/utils"
+import { WorkflowContextPanel } from "@/features/request-workflow/components/workflow-context-panel"
+import {
+  ConversationSurface,
+  ConversationHeader,
+  ConversationMessage,
+  ConversationBubble,
+  ConversationComposer,
+} from "./conversation-ui"
+import { ProjectConversationContext } from "./project-conversation-context"
+import { ProjectConversationTools } from "./project-conversation-tools"
+import { ProjectDeliverableMessage } from "./project-deliverable-message"
 import {
   getInternalConversation,
   markInternalConversationRead,
@@ -26,6 +35,12 @@ type InternalConversationProps = {
   conversationId: string
   listHref?: string
   participantName?: string
+  kind?: "internal" | "project"
+  transport?: {
+    getHistory: typeof getInternalConversation
+    markRead: typeof markInternalConversationRead
+    sendMessage: typeof sendInternalMessage
+  }
   onLatestMessage?: (id: string, message: RequestMessage) => void
   onConversationRead?: (
     id: string,
@@ -33,6 +48,8 @@ type InternalConversationProps = {
     conversationUnreadCount: number,
   ) => void
 }
+
+const contextPanelStorageKey = "nexus.messages.context-panel-open"
 
 function mergeMessages(current: RequestMessage[], incoming: RequestMessage[]) {
   return [
@@ -56,7 +73,14 @@ function InternalConversationPanel({
   participantName,
   onLatestMessage,
   onConversationRead,
+  kind = "internal",
+  transport,
 }: InternalConversationProps) {
+  const getHistory = transport?.getHistory ?? getInternalConversation
+  const markRead = transport?.markRead ?? markInternalConversationRead
+  const sendMessage = transport?.sendMessage ?? sendInternalMessage
+  const conversationLabel =
+    kind === "project" ? "Project conversation" : "Internal conversation"
   const { formatDate, formatTime } = useDatePreferences()
 
   const account = usePortalAccount()
@@ -72,6 +96,14 @@ function InternalConversationPanel({
   const [sending, setSending] = useState(false)
   const [olderLoading, setOlderLoading] = useState(false)
   const [sendError, setSendError] = useState("")
+  const [contextPanelOpen, setContextPanelOpen] = useState(() => {
+    if (typeof window === "undefined") return true
+    try {
+      return window.sessionStorage.getItem(contextPanelStorageKey) !== "false"
+    } catch {
+      return true
+    }
+  })
   const [revision, setRevision] = useState(0)
   const pending = useRef<{ body: string; id: string } | null>(null)
   const sendingRef = useRef(false)
@@ -84,17 +116,28 @@ function InternalConversationPanel({
     let active = true
     async function refresh() {
       try {
-        const result = await getInternalConversation(
+        const result = await getHistory(
           conversationId,
           undefined,
           controller.signal,
         )
         if (active) {
-          setHistory(result)
+          setHistory((previous) =>
+            previous && previous.messages.length > result.messages.length
+              ? {
+                  ...result,
+                  messages: mergeMessages(previous.messages, result.messages),
+                  nextCursor: previous.nextCursor,
+                }
+              : result,
+          )
           setError("")
+          const latest = result.messages.at(-1)
+          if (latest) onLatestMessage?.(conversationId, latest)
         }
       } catch (reason) {
         if (active && !controller.signal.aborted) {
+          setHistory(null)
           setError(
             reason instanceof Error
               ? reason.message
@@ -112,7 +155,7 @@ function InternalConversationPanel({
       controller.abort()
       clearInterval(timer)
     }
-  }, [conversationId, revision])
+  }, [conversationId, revision, getHistory, onLatestMessage])
 
   useEffect(() => {
     if (followLatest.current && logRef.current)
@@ -125,7 +168,7 @@ function InternalConversationPanel({
       return
     lastMarkedReadMessage.current = latestMessageId
     let active = true
-    void markInternalConversationRead(conversationId)
+    void markRead(conversationId)
       .then((result) => {
         if (active)
           onConversationRead?.(
@@ -140,16 +183,13 @@ function InternalConversationPanel({
     return () => {
       active = false
     }
-  }, [conversationId, latestMessageId, onConversationRead])
+  }, [conversationId, latestMessageId, onConversationRead, markRead])
 
   async function loadOlder() {
     if (!history?.nextCursor || olderLoading) return
     setOlderLoading(true)
     try {
-      const result = await getInternalConversation(
-        conversationId,
-        history.nextCursor,
-      )
+      const result = await getHistory(conversationId, history.nextCursor)
       followLatest.current = false
       setHistory((previous) =>
         previous
@@ -182,7 +222,7 @@ function InternalConversationPanel({
     setSending(true)
     setSendError("")
     try {
-      const message = await sendInternalMessage(
+      const message = await sendMessage(
         conversationId,
         body,
         pending.current.id,
@@ -216,46 +256,76 @@ function InternalConversationPanel({
     }
   }
 
+  function setContextPanel(open: boolean) {
+    setContextPanelOpen(open)
+    try {
+      window.sessionStorage.setItem(contextPanelStorageKey, String(open))
+    } catch {
+      // Keep the control functional when storage is unavailable.
+    }
+  }
+
   const name =
     participantName ||
     history?.conversation.fullName?.trim() ||
-    "Internal contact"
+    (kind === "project" ? "Project team" : "Internal contact")
   const timeline = history?.messages ?? []
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-      <div className="m-3 flex min-h-0 flex-1 overflow-hidden rounded-[13px] border border-[#dedede] bg-background shadow-[0_2px_8px_rgb(20_30_50_/_11%)] max-[767px]:m-2">
-        <section
-          aria-label="Internal conversation"
-          className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
-        >
-          <header className="flex min-h-[68px] shrink-0 items-center gap-3 border-b border-[#efefee] bg-background px-6 py-3 max-[767px]:gap-2 max-[767px]:px-4">
-            <Link
-              href={listHref}
-              aria-label="All internal conversations"
-              className={cn(
-                "hidden size-8 shrink-0 items-center justify-center rounded-full text-[#52627a] hover:bg-[#f1f1ee] max-[767px]:flex",
-                focusRing,
-              )}
-            >
-              <ArrowLeft size={17} aria-hidden="true" />
-            </Link>
-            <ConversationAvatar
-              name={name}
-              imageUrl={history?.conversation.imageUrl}
-              className="size-8"
-            />
-            <div className="min-w-0 flex-1">
-              <h2 className="m-0 truncate text-sm font-semibold text-[#182235]">
-                {name}
-              </h2>
-              <p className="mt-0.5 mb-0 truncate text-xs text-[#8791a2]">
-                {history?.conversation.position ||
+      <div className="flex min-h-0 flex-1 max-[1023px]:flex-col-reverse">
+        <ConversationSurface label={conversationLabel}>
+          <ConversationHeader
+            listHref={listHref}
+            backLabel={
+              kind === "project"
+                ? "All project conversations"
+                : "All internal conversations"
+            }
+            name={name}
+            imageUrl={history?.conversation.imageUrl}
+            archived={history?.archived}
+            subtitle={
+              history?.participants
+                ? history.participants
+                    .map((person) => person.fullName || "Participant")
+                    .join(", ")
+                : history?.conversation.position ||
                   history?.conversation.department?.name ||
-                  "Internal chat"}
-              </p>
-            </div>
-          </header>
+                  (kind === "project" ? "Project chat" : "Internal chat")
+            }
+            actions={
+              kind === "project" &&
+              history?.project &&
+              history?.participants && (
+                <button
+                  type="button"
+                  aria-label={
+                    contextPanelOpen
+                      ? "Hide project details"
+                      : "Show project details"
+                  }
+                  aria-expanded={contextPanelOpen}
+                  aria-controls={`project-context-${conversationId}`}
+                  className={cn(
+                    "grid size-11 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 transition-colors duration-150",
+                    contextPanelOpen
+                      ? "text-[#294a9b] hover:text-[#203f8c]"
+                      : "text-[#7c8ba5] hover:text-[#294a9b]",
+                    focusRing,
+                  )}
+                  onClick={() => setContextPanel(!contextPanelOpen)}
+                >
+                  <Info size={17} aria-hidden="true" />
+                  <HoverTooltip>
+                    {contextPanelOpen
+                      ? "Hide project details"
+                      : "Show project details"}
+                  </HoverTooltip>
+                </button>
+              )
+            }
+          />
           {!history ? (
             <p className="p-4 text-xs text-[#52627a]">
               {error
@@ -277,7 +347,7 @@ function InternalConversationPanel({
               <div
                 ref={logRef}
                 role="log"
-                aria-label="Internal conversation messages"
+                aria-label={`${conversationLabel} messages`}
                 aria-live="polite"
                 aria-relevant="additions"
                 tabIndex={0}
@@ -317,108 +387,89 @@ function InternalConversationPanel({
                           {formatDate(date)}
                         </p>
                       )}
-                      <article
-                        className={cn(
-                          "flex w-fit max-w-[85%] items-end gap-2 pb-1 max-[767px]:max-w-[92%]",
-                          grouped ? "mt-1" : "mt-4",
-                          own ? "ml-auto flex-row-reverse" : "mr-auto",
-                        )}
+                      <ConversationMessage
+                        own={own}
+                        name={message.sender.fullName || "Participant"}
+                        imageUrl={
+                          history.participants
+                            ? null
+                            : history.conversation.imageUrl
+                        }
+                        grouped={grouped}
+                        groupedWithNext={groupedWithNext}
+                        showSender={Boolean(history.participants)}
                       >
-                        {!own && (
-                          <ConversationAvatar
-                            name={message.sender.fullName || "Participant"}
-                            imageUrl={history.conversation.imageUrl}
-                            className={cn(
-                              "size-7",
-                              groupedWithNext && "invisible",
-                            )}
+                        {message.deliverable && history.project ? (
+                          <ProjectDeliverableMessage
+                            message={message}
+                            project={history.project}
+                            isClient={account.role === "USER"}
+                          />
+                        ) : (
+                          <ConversationBubble
+                            own={own}
+                            body={message.body}
+                            timestamp={formatTime(date)}
                           />
                         )}
-                        <div className="min-w-0">
-                          <p className="sr-only">
-                            {own
-                              ? "You"
-                              : message.sender.fullName || "Participant"}
-                          </p>
-                          <div className="relative w-fit max-w-full">
-                            <p
-                              className={cn(
-                                "m-0 rounded-2xl px-3.5 py-2.5 text-[13px] leading-5 whitespace-pre-wrap [overflow-wrap:anywhere]",
-                                own
-                                  ? "rounded-br-md bg-[#203f8c] text-white"
-                                  : "rounded-bl-md bg-[#dfe4eb] text-[#182235]",
-                              )}
-                            >
-                              {message.body}
-                            </p>
-                            <HoverTooltip>{formatTime(date)}</HoverTooltip>
-                          </div>
-                        </div>
-                      </article>
+                      </ConversationMessage>
                     </div>
                   )
                 })}
               </div>
               {history.canSend ? (
                 <Form
-                  className="flex shrink-0 items-end gap-2 border-t border-[#efefee] bg-white px-5 py-4 max-[767px]:px-3"
+                  aria-label="Send a message"
+                  className="shrink-0 border-t border-[#efefee] px-5 py-3 max-[767px]:px-3"
                   onSubmit={(event) => void submit(event)}
                 >
-                  <label htmlFor="internal-message-input" className="sr-only">
-                    Message {name}
-                  </label>
-                  <textarea
-                    id="internal-message-input"
-                    rows={1}
-                    maxLength={4000}
-                    value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (
-                        event.key !== "Enter" ||
-                        event.shiftKey ||
-                        event.nativeEvent.isComposing
-                      )
-                        return
-                      event.preventDefault()
-                      event.currentTarget.form?.requestSubmit()
-                    }}
-                    placeholder={`Message ${name}`}
-                    className="min-h-11 min-w-0 flex-1 resize-none rounded-xl border border-[#d8e1ef] bg-white px-3.5 py-3 text-xs leading-5 text-[#182235] outline-none focus-visible:ring-2 focus-visible:ring-[#294a9b]"
+                  <ConversationComposer
+                    label={`Message ${name}`}
+                    draft={draft}
+                    onDraftChange={setDraft}
+                    sending={sending}
+                    canSend={history.canSend}
+                    sendError={sendError}
+                    tools={
+                      kind === "project" ? (
+                        <ProjectConversationTools
+                          history={history}
+                          isClient={account.role === "USER"}
+                          onSubmitted={() => setRevision((value) => value + 1)}
+                        />
+                      ) : undefined
+                    }
                   />
-                  <Button
-                    type="submit"
-                    aria-label="Send message"
-                    className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#203f8c] p-0 text-white hover:bg-[#172f70]"
-                    disabled={sending || !draft.trim()}
-                  >
-                    {sending ? (
-                      <LoaderCircle
-                        size={16}
-                        aria-hidden="true"
-                        className="animate-spin motion-reduce:animate-none"
-                      />
-                    ) : (
-                      <Send size={16} aria-hidden="true" />
-                    )}
-                  </Button>
                 </Form>
               ) : (
                 <p className="m-0 shrink-0 border-t border-[#efefee] px-5 py-4 text-xs text-[#52627a]">
-                  Messaging is unavailable for this account.
-                </p>
-              )}
-              {sendError && (
-                <p
-                  role="status"
-                  className="m-0 px-5 pb-3 text-xs text-[#52627a]"
-                >
-                  Your text is saved here so you can retry.
+                  {history.archived
+                    ? "This project is complete or cancelled. The chat is archived and read-only."
+                    : "Messaging is unavailable for this account."}
                 </p>
               )}
             </>
           )}
-        </section>
+        </ConversationSurface>
+        {kind === "project" && history?.project && history.participants && (
+          <WorkflowContextPanel
+            id={`project-context-${conversationId}`}
+            hidden={!contextPanelOpen}
+            workflow={null}
+            hasSelectedBooking={false}
+            contextLabel="Project context"
+            summaryLabel="Project details"
+            className="ml-0 max-[1023px]:mt-0"
+            conversationOverview={
+              <ProjectConversationContext
+                project={history.project}
+                participants={history.participants}
+                accountId={account.id}
+                isClient={account.role === "USER"}
+              />
+            }
+          />
+        )}
       </div>
     </div>
   )

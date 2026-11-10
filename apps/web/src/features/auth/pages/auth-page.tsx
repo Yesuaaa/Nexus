@@ -30,8 +30,21 @@ function getServerLanguage(): AuthLanguage {
   return "en"
 }
 
+function hasStoredSession() {
+  return Boolean(getToken())
+}
+
+function getServerSession() {
+  return false
+}
+
 export function AuthPage({ mode }: { mode: AuthMode }) {
   const router = useRouter()
+  const hasSession = useSyncExternalStore(
+    subscribeLanguage,
+    hasStoredSession,
+    getServerSession,
+  )
   const [guest, setGuest] = useState(false)
   const [error, setError] = useState(false)
   const [revision, setRevision] = useState(0)
@@ -64,7 +77,9 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
     }
   }, [router, revision])
 
-  if (guest) return <AuthFormPage mode={mode} />
+  // Public content is useful before hydration. Existing sessions still go
+  // through the server account check before entering the protected portal.
+  if (guest || !hasSession) return <AuthFormPage mode={mode} />
   return (
     <main className="grid min-h-dvh place-content-center gap-4 bg-[var(--portal-canvas)] px-6 text-center text-sm text-[#5a6f95]">
       <h1 className="m-0 text-xl font-semibold text-[#203f8c]">
