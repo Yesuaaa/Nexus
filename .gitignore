@@ -6,6 +6,7 @@ docs/testing/coverage/*
 !docs/testing/coverage/phase5/
 docs/testing/coverage/phase5/*
 !docs/testing/coverage/phase5/coverage-assessment.md
+!docs/testing/coverage/phase5/phase6-backlog.md
 **/.vite/
 **/.next/
 **/out/
