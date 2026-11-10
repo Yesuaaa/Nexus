@@ -1204,6 +1204,8 @@ for (const width of [1440, 390]) {
           if (action.type === "ACTIVATE_PROJECT") {
             workflow.state = "ACTIVE_PROJECT"
             workflow.project!.status = "IN_PROGRESS"
+            if (typeof action.projectName === "string")
+              workflow.project!.name = action.projectName
             workflow.events.push({
               id: "project-activated",
               type: "PROJECT_ACTIVATED",
@@ -1271,6 +1273,9 @@ for (const width of [1440, 390]) {
       await expect(
         setup.getByRole("checkbox", { name: /Dani Worker/ }),
       ).not.toBeChecked()
+      await setup
+        .getByRole("textbox", { name: "Project name", exact: true })
+        .fill("Website launch")
       await setup.getByRole("checkbox", { name: /Dani Worker/ }).check()
       await page.screenshot({
         path: `test-results/project-staffing-modal-${width}.png`,
@@ -1313,7 +1318,10 @@ for (const width of [1440, 390]) {
         type: "STAFF_PROJECT",
         employeeIds: ["employee-1"],
       })
-      expect(actions[2]).toMatchObject({ type: "ACTIVATE_PROJECT" })
+      expect(actions[2]).toMatchObject({
+        type: "ACTIVATE_PROJECT",
+        projectName: "Website launch",
+      })
       await expect(
         page.getByRole("link", { name: "View Project", exact: true }),
       ).toHaveAttribute("href", "/project-workspace/project-1")

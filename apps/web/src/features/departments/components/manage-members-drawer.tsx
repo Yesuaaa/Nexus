@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Pill } from "@/components/ui/pill"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
+import { MemberIdentity } from "@/components/ui/member-identity"
 import {
   Dialog,
   DialogClose,
@@ -48,38 +49,6 @@ import {
   type DepartmentMember,
   type DepartmentStaffOption,
 } from "../api/departments-api"
-
-function MemberIdentity({
-  member,
-}: {
-  member: {
-    fullName: string | null
-    email: string | null
-    user: { fullName: string | null; email: string } | null
-  }
-}) {
-  const email = member.email || member.user?.email || null
-  return (
-    <div className="flex min-w-0 items-center gap-2.5">
-      <span
-        className="grid size-8 flex-none place-items-center rounded-full bg-[#eef0f3] text-xs font-medium text-[#65718a]"
-        aria-hidden="true"
-      >
-        {(member.fullName?.[0] || email?.[0] || "E").toUpperCase()}
-      </span>
-      <div className="min-w-0">
-        <p className="m-0 truncate text-xs font-medium">
-          {member.fullName || email || "Employee"}
-          <HoverTooltip>{member.fullName || email || "Employee"}</HoverTooltip>
-        </p>
-        <p className={`${panelMuted} mt-0.5 mb-0 truncate`}>
-          {email || "No account linked"}
-          <HoverTooltip>{email || "No account linked"}</HoverTooltip>
-        </p>
-      </div>
-    </div>
-  )
-}
 
 export function ManageMembersDrawer({
   departmentId,

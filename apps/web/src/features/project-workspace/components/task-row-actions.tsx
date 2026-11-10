@@ -33,12 +33,14 @@ export function TaskRowActions({
   task,
   onUpdated,
   disabled,
+  editOnly = false,
 }: {
   workspaceId: string
   stream: ProjectWorkspaceWorkstream
   task: ProjectTask
   onUpdated: (workspace: ProjectWorkspaceDetail) => void
   disabled: boolean
+  editOnly?: boolean
 }) {
   const [mode, setMode] = useState<"view" | "edit" | null>(null)
   const [draft, setDraft] = useState(task)
@@ -76,17 +78,19 @@ export function TaskRowActions({
   return (
     <>
       <div className="flex justify-center gap-2">
-        <button
-          className={rowActionButton}
-          disabled={disabled}
-          aria-label={`View ${task.title}`}
-          onClick={() => {
-            setMode("view")
-            setError("")
-          }}
-        >
-          <Eye size={16} />
-        </button>
+        {!editOnly && (
+          <button
+            className={rowActionButton}
+            disabled={disabled}
+            aria-label={`View ${task.title}`}
+            onClick={() => {
+              setMode("view")
+              setError("")
+            }}
+          >
+            <Eye size={16} />
+          </button>
+        )}
         <button
           className={`${rowActionButton} border-transparent! bg-[#203f8c]! text-white! hover:bg-[#172f70]!`}
           disabled={disabled}

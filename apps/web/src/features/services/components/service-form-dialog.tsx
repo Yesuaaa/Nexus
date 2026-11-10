@@ -21,6 +21,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { FormInput } from "@/components/ui/form-input"
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -644,9 +645,8 @@ export function ServiceFormDialog({
                           Service Name{" "}
                           <strong className="text-[#d04b56]">*</strong>
                         </label>
-                        <input
+                        <FormInput
                           id="service-name"
-                          className={cn(inputClass, "h-10")}
                           value={name}
                           onChange={(event) => setName(event.target.value)}
                           maxLength={100}
@@ -682,9 +682,8 @@ export function ServiceFormDialog({
                             Image Alternative Text{" "}
                             <strong className="text-[#d04b56]">*</strong>
                           </label>
-                          <input
+                          <FormInput
                             id="service-image-alt"
-                            className={cn(inputClass, "h-10")}
                             value={imageAltText}
                             onChange={(event) =>
                               setImageAltText(event.target.value)
@@ -859,9 +858,8 @@ export function ServiceFormDialog({
                         >
                           Benefit Title
                         </label>
-                        <input
+                        <FormInput
                           id={`${benefit.id}-title`}
-                          className={cn(inputClass, "h-10")}
                           value={benefit.title}
                           onChange={(event) =>
                             updateBenefit(benefit.id, {
@@ -1152,9 +1150,8 @@ export function ServiceFormDialog({
                         >
                           Template Name
                         </label>
-                        <input
+                        <FormInput
                           id="pricing-template-name"
-                          className={cn(inputClass, "h-10")}
                           value={templateName}
                           onChange={(event) =>
                             setTemplateName(event.target.value)
@@ -1261,9 +1258,8 @@ export function ServiceFormDialog({
                           >
                             Package Name
                           </label>
-                          <input
+                          <FormInput
                             id={`${servicePackage.id}-name`}
-                            className={cn(inputClass, "h-10")}
                             value={servicePackage.name}
                             onChange={(event) =>
                               updatePackage(servicePackage.id, {
@@ -1281,12 +1277,11 @@ export function ServiceFormDialog({
                           >
                             Display Order
                           </label>
-                          <input
+                          <FormInput
                             id={`${servicePackage.id}-order`}
                             type="number"
                             min="0"
                             max="10000"
-                            className={cn(inputClass, "h-10")}
                             value={servicePackage.displayOrder}
                             onChange={(event) =>
                               updatePackage(servicePackage.id, {

@@ -914,10 +914,20 @@ async function runAction(
           status: "ACTIVE",
           user: { role: "STAFF", isActive: true, accountDeletedAt: null },
         },
-        select: { id: true },
+        select: { id: true, fullName: true },
       })
       if (eligible.length !== command.employeeIds.length)
         fail("Select active staff from the responsible department", 409)
+      const previous = await tx.projectStaff.findMany({
+        where: { projectId: project.id },
+        select: { employeeId: true, employee: { select: { fullName: true } } },
+      })
+      const previousIds = new Set(previous.map(({ employeeId }) => employeeId))
+      const selectedIds = new Set(command.employeeIds)
+      const added = eligible.filter(({ id }) => !previousIds.has(id))
+      const removed = previous.filter(
+        ({ employeeId }) => !selectedIds.has(employeeId),
+      )
       await tx.projectStaff.deleteMany({
         where: {
           projectId: project.id,
@@ -932,9 +942,18 @@ async function runAction(
           approvedById: userId,
         })),
       })
+      const changes = []
+      if (added.length)
+        changes.push(
+          `The department head added ${added.map(({ fullName }) => fullName).join(", ")} to the project team.`,
+        )
+      if (removed.length)
+        changes.push(
+          `The department head removed ${removed.map(({ employee }) => employee.fullName).join(", ")} from the project team.`,
+        )
       await event(
         "STAFFING_APPROVED",
-        `The department head approved project staffing. Employee records: ${eligible.map((employee) => employee.id).join(", ")}.`,
+        changes.join(" ") || "The department head confirmed the project team.",
         project.id,
         true,
       )
@@ -979,7 +998,11 @@ async function runAction(
         fail("Approve eligible department staffing before activation", 409)
       const activated = await tx.project.updateMany({
         where: { id: project.id, status: "PLANNED" },
-        data: { status: "IN_PROGRESS", startDate: new Date() },
+        data: {
+          status: "IN_PROGRESS",
+          startDate: new Date(),
+          ...(command.projectName ? { name: command.projectName } : {}),
+        },
       })
       if (activated.count !== 1)
         fail("This project has already been activated", 409)

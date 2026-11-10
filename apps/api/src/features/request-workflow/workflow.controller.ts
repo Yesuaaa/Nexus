@@ -10,9 +10,17 @@ import {
 } from "./workflow.notifications.js"
 import { actOnWorkflow } from "./workflow.service.js"
 import { getWorkflow } from "./workflow.snapshot.js"
+import { listClientBillingPayments } from "./workflow.billing.js"
 
 export const requestWorkflowRouter = Router()
 requestWorkflowRouter.use(requireAuth)
+requestWorkflowRouter.get("/billing", async (request, response) => {
+  if (request.auth!.user.role !== "USER")
+    return response
+      .status(403)
+      .json({ error: "Billing Logs are available to clients" })
+  response.json(await listClientBillingPayments(request.auth!.user.id))
+})
 requestWorkflowRouter.get("/notifications", async (request, response) => {
   response.json(await listWorkflowNotifications(request.auth!.user.id))
 })

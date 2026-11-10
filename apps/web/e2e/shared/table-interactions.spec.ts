@@ -77,6 +77,7 @@ function workspaceFixture(name: string, id: string): ProjectWorkspaceDetail {
           status: "ACTIVE",
           profileSpecialties: [],
           approvedAt: timestamp,
+          isTeamLead: false,
         })),
         plan: {
           phases: [
@@ -130,16 +131,13 @@ for (const width of [1440, 390]) {
     await page.goto("/dashboard")
     if (width < 768)
       await page.getByRole("button", { name: "Open navigation menu" }).click()
-    const submenuToggle = page.getByRole("button", {
-      name: "Toggle project workspace submenu",
+    const workspaceLink = page.getByRole("link", {
+      name: "Project Workspace",
+      exact: true,
     })
-    await expect(submenuToggle).toHaveAttribute("aria-expanded", "true")
-    await submenuToggle.click()
-    await expect(submenuToggle).toHaveAttribute("aria-expanded", "false")
+    await expect(workspaceLink).toBeVisible()
     await expect(page).toHaveURL(/\/dashboard$/)
-    await page
-      .getByRole("link", { name: "Project Workspace", exact: true })
-      .click()
+    await workspaceLink.click()
     await expect(page).toHaveURL(/\/project-workspace$/)
     await expect(
       page.getByRole("region", { name: "Project list" }).getByRole("table"),
@@ -153,32 +151,25 @@ for (const width of [1440, 390]) {
       '[data-animated-slot-row][aria-hidden="false"]:visible',
     )
     await expect(rows).toHaveCount(2)
-    await page
-      .getByRole("button", { name: "Filter by project status:" })
-      .click()
-    await page
-      .getByRole("menuitemradio", { name: "Planned", exact: true })
-      .click()
+    const statusFilter = page.getByRole("combobox", {
+      name: "Filter projects by status",
+    })
+    await statusFilter.click()
+    await page.getByRole("option", { name: "Planned", exact: true }).click()
     await expect(rows).toHaveCount(0)
-    await page
-      .getByRole("button", { name: "Filter by project status:" })
-      .click()
-    await page
-      .getByRole("menuitemradio", { name: "In progress", exact: true })
-      .click()
+    await statusFilter.click()
+    await page.getByRole("option", { name: "In progress", exact: true }).click()
     await expect(rows).toHaveCount(2)
     await page.getByRole("button", { name: "Archive", exact: true }).click()
     await expect(rows).toHaveCount(0)
-    await expect(
-      page.getByRole("button", { name: "Filter by project status:" }),
-    ).toContainText("All archived")
+    await expect(statusFilter).toContainText("All archived")
     await page
       .getByRole("button", { name: "Back to Projects", exact: true })
       .click()
     await expect(rows).toHaveCount(2)
-    await page.getByRole("button", { name: "Sort projects:" }).click()
+    await page.getByRole("combobox", { name: "Sort projects" }).click()
     await page
-      .getByRole("menuitemradio", { name: "Most activity", exact: true })
+      .getByRole("option", { name: "Most activity", exact: true })
       .click()
     await expect(rows).toHaveCount(2)
     expect(

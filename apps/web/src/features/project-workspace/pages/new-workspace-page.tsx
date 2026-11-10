@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Check, ChevronRight, X } from "lucide-react"
+import { ArrowLeft, ChevronRight, X } from "lucide-react"
 import { focusRing } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
+import { DialogStepProgress } from "@/components/ui/dialog-step-progress"
 import {
   Dialog,
   DialogContent,
@@ -236,46 +237,11 @@ export function NewWorkspaceDialog({
           </button>
         </DialogHeader>
 
-        <nav
-          className="shrink-0 border-b border-[#eceef1] px-5 pt-5 pb-4"
-          aria-label="Project setup progress"
-        >
-          <ol className="m-0 grid list-none grid-cols-4 gap-2 p-0">
-            {steps.map((item, index) => {
-              const complete = index < step
-              const current = index === step
-              return (
-                <li
-                  key={item.label}
-                  aria-current={current ? "step" : undefined}
-                  className="relative flex min-w-0 flex-col items-center gap-1.5 text-center"
-                >
-                  {index > 0 && (
-                    <span
-                      className={`absolute top-[14px] right-1/2 h-px w-full -translate-y-1/2 ${index <= step ? "bg-[#203f8c]" : "bg-[#dce3ed]"}`}
-                      aria-hidden="true"
-                    />
-                  )}
-                  <span
-                    aria-hidden="true"
-                    className={`relative z-10 grid size-7 place-items-center rounded-full border text-[11px] font-bold transition-colors motion-reduce:transition-none ${complete ? "border-[#203f8c] bg-[#203f8c] text-white" : current ? "border-[#203f8c] bg-white text-[#203f8c] ring-2 ring-[#dce6fb]" : "border-[#d4dce8] bg-white text-[#8290a5]"}`}
-                  >
-                    {complete ? (
-                      <Check size={14} strokeWidth={2.5} aria-hidden="true" />
-                    ) : (
-                      index + 1
-                    )}
-                  </span>
-                  <span
-                    className={`truncate text-[10px] font-semibold sm:text-[11px] ${complete || current ? "text-[#203f8c]" : "text-[#8290a5]"}`}
-                  >
-                    {item.label}
-                  </span>
-                </li>
-              )
-            })}
-          </ol>
-        </nav>
+        <DialogStepProgress
+          steps={steps}
+          currentStep={step}
+          label="Project setup progress"
+        />
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           {loading ? (

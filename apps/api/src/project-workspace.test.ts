@@ -388,13 +388,13 @@ test(
     const deniedRename = await request(`/${workspaceId}`, staff.id, "PATCH", {
       name: "Unauthorized rename",
     })
-    assert.equal(deniedRename.status, 403)
+    assert.equal(deniedRename.status, 404)
     const deniedCancel = await request(
       `/${workspaceId}/cancel`,
       staff.id,
       "POST",
     )
-    assert.equal(deniedCancel.status, 403)
+    assert.equal(deniedCancel.status, 404)
     assert.equal(
       (await workspace(workspaceId)).name,
       "Initial NEX-003 Workspace",
@@ -544,7 +544,7 @@ test(
       staff.id,
       "POST",
     )
-    assert.equal(deniedSeparateCancel.status, 403)
+    assert.equal(deniedSeparateCancel.status, 404)
     assert.equal(
       (
         await prisma.project.findUniqueOrThrow({

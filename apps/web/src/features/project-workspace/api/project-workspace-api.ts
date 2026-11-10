@@ -98,6 +98,7 @@ export type ProjectWorkspaceWorkstream = {
     status: string
     profileSpecialties: string[]
     approvedAt: string
+    isTeamLead: boolean
   }[]
   canAssign: boolean
 }
@@ -188,6 +189,16 @@ export const cancelProjectWorkspace = (workspaceId: string) =>
     { method: "POST" },
   )
 
+export const assignProjectTeamLead = (
+  workspaceId: string,
+  projectId: string,
+  employeeId: string,
+) =>
+  apiRequest<ProjectWorkspaceDetail>(
+    `/api/project-workspace/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/team-lead`,
+    { method: "PUT", body: JSON.stringify({ employeeId }) },
+  )
+
 export const updateProjectWorkspaceStatus = (
   workspaceId: string,
   action: "ON_HOLD" | "RESUME" | "COMPLETE",
@@ -255,6 +266,7 @@ export async function uploadProjectDeliverable(
   projectId: string,
   deliverableId: string,
   file: File,
+  options: { uploadId?: string; note?: string } = {},
 ) {
   if (!file.size || file.size > 5 * 1024 * 1024)
     throw new Error("Choose a nonempty file up to 5 MB.")
@@ -289,7 +301,8 @@ export async function uploadProjectDeliverable(
     {
       method: "POST",
       body: JSON.stringify({
-        uploadId: crypto.randomUUID(),
+        uploadId: options.uploadId ?? crypto.randomUUID(),
+        ...(options.note ? { note: options.note } : {}),
         name: file.name,
         mimeType,
         content,

@@ -28,6 +28,25 @@ async function mockProject(page: Page, contributor: boolean) {
         sentToClientAt: null,
       },
     ],
+    deliverables: contributor
+      ? []
+      : [
+          {
+            id: "shared-deliverable",
+            title: "Shared website build",
+            description: null,
+            expectedFileType: "Plain text",
+            sentToClientAt: "2026-10-30T11:00:00Z",
+            workflowFile: {
+              id: "shared-file",
+              name: "website.txt",
+              mimeType: "text/plain",
+              size: 12,
+              createdAt: "2026-10-30T11:00:00Z",
+            },
+            clientReviews: [],
+          },
+        ],
   }
   const writes: unknown[] = []
   const state = { failUpdate: false }
@@ -75,10 +94,26 @@ test("client project workspace shows milestones and conversation handoff on mobi
   await expect(
     page.getByRole("heading", { name: "Business website", exact: true }),
   ).toBeVisible()
-  await expect(page.getByText("Design approval", { exact: true })).toBeVisible()
+  await page.getByRole("tab", { name: /Deliverables/ }).click()
+  await page.screenshot({
+    path: "test-results/project-deliverables-mobile.png",
+    fullPage: true,
+  })
+  await expect(page.getByText("Design approval", { exact: true })).toHaveCount(
+    0,
+  )
   await expect(
-    page.getByRole("link", { name: "View service conversation" }),
-  ).toHaveAttribute("href", "/messages?request=request-1")
+    page.getByText("Shared website build", { exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("link", { name: "View Shared website build", exact: true }),
+  ).toHaveAttribute(
+    "href",
+    "/projects/project-1/deliverables/shared-deliverable",
+  )
+  await expect(
+    page.getByRole("link", { name: "Open project conversation" }),
+  ).toHaveAttribute("href", "/messages?project=project-1")
   await expect(page.getByRole("button", { name: "Mark complete" })).toHaveCount(
     0,
   )
