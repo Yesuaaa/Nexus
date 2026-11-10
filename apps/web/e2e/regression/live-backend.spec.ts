@@ -1,10 +1,10 @@
 import { expect, test, type Page } from "@playwright/test"
-import type { Account } from "../src/features/auth/model/types"
+import type { Account } from "../../src/features/auth/model/types"
 import {
   configureRegressionTest,
   live,
   testAccounts,
-} from "./regression-support"
+} from "../regression-support"
 
 configureRegressionTest()
 

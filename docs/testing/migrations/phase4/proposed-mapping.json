@@ -10,6 +10,27 @@
     "Review and approval of migration assignments before moving files"
   ],
   "proposedDestinations": {
+    "apps/web/e2e/regression-live.spec.ts": {
+      "status": "AUTHORIZED BY PHASE 4.10 TASK",
+      "batch": "Phase 4.10",
+      "originalFile": "apps/web/e2e/regression-live.spec.ts",
+      "destination": "apps/web/e2e/regression/live-backend.spec.ts",
+      "originalIds": ["PW-124", "PW-125", "PW-126", "PW-127", "PW-128"],
+      "declarationSites": 2,
+      "expandedCases": 5,
+      "assertionSites": 31,
+      "basis": "Explicit Phase 4.10 approval for existing regression/ directory; new filename identifies opt-in live-backend ownership; whole file and original guards retained.",
+      "guard": "Unchanged describe-level test.skip(!live); live is true only for NEXUS_E2E_LIVE === \"1\"",
+      "importAdjustments": [
+        [
+          "../src/features/auth/model/types",
+          "../../src/features/auth/model/types"
+        ],
+        ["./regression-support", "../regression-support"]
+      ],
+      "verificationStatus": "PASSED (NON-LIVE: FIVE SKIPPED)",
+      "verificationEvidence": "test-results/phase4-migration/check-xSZrDj/result.json"
+    },
     "apps/web/e2e/internal-conversations.spec.ts": {
       "status": "AUTHORIZED BY PHASE 4.7 TASK",
       "batch": "Phase 4.7",
@@ -922,7 +943,7 @@
     "apps/web/e2e/profile.spec.ts": "apps/web/e2e/profile/profile.spec.ts",
     "apps/web/e2e/project-pages-regression.spec.ts": "apps/web/e2e/shared/project-pages-regression.spec.ts",
     "apps/web/e2e/project-workspace.spec.ts": "apps/web/e2e/projects/project-workspace.spec.ts",
-    "apps/web/e2e/regression-live.spec.ts": "apps/web/e2e/regression-live.spec.ts",
+    "apps/web/e2e/regression-live.spec.ts": "apps/web/e2e/regression/live-backend.spec.ts",
     "apps/web/e2e/regression-support.ts": "apps/web/e2e/regression-support.ts",
     "apps/web/e2e/regression.spec.ts": "apps/web/e2e/auth/regression.spec.ts",
     "apps/web/e2e/request-conversations.spec.ts": "apps/web/e2e/messages/request-conversations.spec.ts",
@@ -1061,11 +1082,11 @@
     "PW-121": "apps/web/e2e/projects/project-workspace.spec.ts",
     "PW-122": "apps/web/e2e/projects/project-workspace.spec.ts",
     "PW-123": "apps/web/e2e/projects/project-workspace.spec.ts",
-    "PW-124": "apps/web/e2e/regression-live.spec.ts",
-    "PW-125": "apps/web/e2e/regression-live.spec.ts",
-    "PW-126": "apps/web/e2e/regression-live.spec.ts",
-    "PW-127": "apps/web/e2e/regression-live.spec.ts",
-    "PW-128": "apps/web/e2e/regression-live.spec.ts",
+    "PW-124": "apps/web/e2e/regression/live-backend.spec.ts",
+    "PW-125": "apps/web/e2e/regression/live-backend.spec.ts",
+    "PW-126": "apps/web/e2e/regression/live-backend.spec.ts",
+    "PW-127": "apps/web/e2e/regression/live-backend.spec.ts",
+    "PW-128": "apps/web/e2e/regression/live-backend.spec.ts",
     "PW-129": "apps/web/e2e/auth/regression.spec.ts",
     "PW-130": "apps/web/e2e/auth/regression.spec.ts",
     "PW-131": "apps/web/e2e/auth/regression.spec.ts",
