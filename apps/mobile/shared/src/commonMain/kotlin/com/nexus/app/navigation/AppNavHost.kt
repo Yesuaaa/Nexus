@@ -38,7 +38,7 @@ import com.nexus.app.core.components.ToastKind
 import com.nexus.app.core.session.SessionManager
 import com.nexus.app.core.theme.NexusColors
 import com.nexus.app.features.auth.api.AuthRepository
-import com.nexus.app.features.auth.api.AuthRequestException
+import com.nexus.app.features.auth.api.SessionRestoration
 import com.nexus.app.features.auth.screens.LoginScreen
 import com.nexus.app.features.auth.screens.RegisterScreen
 import com.nexus.app.features.booked_requests.screens.BookedRequestsScreen
@@ -46,6 +46,7 @@ import com.nexus.app.features.dashboard.screens.DashboardScreen
 import com.nexus.app.features.profile.screens.ProfileScreen
 import com.nexus.app.features.services.screens.ServicesScreen
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.awaitCancellation
 import org.koin.compose.koinInject
 
 import com.nexus.app.features.conversations.screens.*
@@ -128,14 +129,15 @@ fun AppNavHost(modifier: Modifier = Modifier) {
     val notificationViewModel: NotificationsViewModel = koinViewModel()
     val notificationState by notificationViewModel.state.collectAsState()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val user by session.user.collectAsState()
-    LaunchedEffect(user?.id, lifecycle) {
+    val sessionState by session.state.collectAsState()
+    val user = sessionState.user
+    LaunchedEffect(user?.id, sessionState.generation, lifecycle) {
         notificationViewModel.reset()
         if (user != null) lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (isActive) { notificationViewModel.refresh(); delay(30_000) }
         }
     }
-    val notice by session.notice.collectAsState()
+    val notice = sessionState.notice
     val pendingLink by DeepLinks.pending.collectAsState()
     var restorationAttempt by rememberSaveable { mutableStateOf(0) }
     var restorationError by remember { mutableStateOf<String?>(null) }
@@ -148,26 +150,24 @@ fun AppNavHost(modifier: Modifier = Modifier) {
     val route = backStackEntry?.destination?.route
     routeToTab(route)?.let { lastTab = it }
 
-    // Session restoration (also runs after process death).
-    LaunchedEffect(restorationAttempt) {
-        restorationError = null
-        authRepository.restoreSession()
-            .onSuccess { restored ->
-                if (restored == null) {
-                    navController.resetTo(Routes.LOGIN)
-                } else {
-                    session.setUser(restored)
-                    navController.restoreAuthenticatedDestination()
+    // Revalidate on every resume and explicit retry. Cancellation never discards credentials.
+    LaunchedEffect(restorationAttempt, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            restorationError = null
+            when (authRepository.restoreClientSession()) {
+                SessionRestoration.SignedOut -> {
+                    if (session.state.value.signedOut) navController.resetTo(Routes.LOGIN)
                 }
-            }
-            .onFailure { error ->
-                if (error is AuthRequestException && error.status in setOf(401, 403)) {
-                    navController.resetTo(Routes.LOGIN)
-                } else {
+                is SessionRestoration.VerifiedClient, is SessionRestoration.CachedOfflineClient -> {
+                    if (session.state.value.user != null) navController.restoreAuthenticatedDestination()
+                }
+                is SessionRestoration.TemporarilyUnavailable -> {
                     restorationError = "Can't restore your session right now. Check your connection and retry."
                     navController.navigate(Routes.CHECKING) { launchSingleTop = true }
                 }
             }
+            awaitCancellation()
+        }
     }
 
     // Deep links: wait until restore has finished (route is a main screen or Login/Register).
@@ -184,13 +184,17 @@ fun AppNavHost(modifier: Modifier = Modifier) {
         }
     }
 
-    // Refresh token rejected: back to Login.
-    LaunchedEffect(session) {
-        session.expired.collect { navController.resetTo(Routes.LOGIN) }
+    // Durable state also handles expiry while no event collector is present.
+    LaunchedEffect(sessionState.signedOut, sessionState.generation, route) {
+        if (sessionState.signedOut && route != Routes.LOGIN && route != Routes.REGISTER) {
+            navController.resetTo(Routes.LOGIN)
+        }
     }
 
     fun signedIn() {
-        navController.resetTo(Routes.DASHBOARD)
+        if (session.state.value.user != null && !session.state.value.signedOut) {
+            navController.resetTo(Routes.DASHBOARD)
+        }
     }
 
     fun logout() {
@@ -199,20 +203,12 @@ fun AppNavHost(modifier: Modifier = Modifier) {
         coroutineScope.launch {
             try {
                 val result = authRepository.logout()
-                session.clear(
-                    if (result.isFailure) {
-                        "You are signed out on this device. We couldn't confirm sign-out with the server."
-                    } else {
-                        null
-                    }
-                )
-                toast.show(
+                if (session.state.value.signedOut) toast.show(
                     if (result.isSuccess) "Signed out" else "Signed out on this device",
                     if (result.isSuccess) "You can sign in again at any time." else "Server sign-out could not be confirmed.",
                     if (result.isSuccess) ToastKind.SUCCESS else ToastKind.INFO
                 )
             } finally {
-                navController.resetTo(Routes.LOGIN)
                 loggingOut = false
             }
         }
@@ -242,7 +238,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
         Routes.PROFILE, Routes.SETTINGS -> accountTitle
         else -> ""
     }
-    val showBars = route in Routes.main
+    val showBars = user != null && !sessionState.signedOut && route in Routes.main
 
     Scaffold(
         topBar = {
@@ -256,12 +252,12 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                     },
                     onSettingsClick = { if (route != Routes.SETTINGS) navController.navigate(Routes.SETTINGS) { launchSingleTop = true } },
                     onLogoutClick = { logout() },
-                    accountName = user?.fullName ?: "Your account",
-                    accountEmail = user?.email ?: "",
+                    accountName = user.fullName ?: "Your account",
+                    accountEmail = user.email,
                     accountPageOpen = route in setOf(Routes.PROFILE, Routes.SETTINGS),
                     onCloseAccountPage = { closeHeaderPage() },
                     onAccountMenuChange = { accountMenuOpen = it },
-                    notificationUnread = if (user != null) notificationState.feed.unreadCount else 0,
+                    notificationUnread = notificationState.feed.unreadCount,
                     accountActionsEnabled = !loggingOut
                 )
             }
@@ -292,9 +288,16 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 .background(NexusColors.Background),
             contentAlignment = Alignment.TopCenter
         ) {
-            Box(Modifier.widthIn(max = 1120.dp).fillMaxSize()) {
+            Column(Modifier.widthIn(max = 1120.dp).fillMaxSize()) {
+                if (sessionState.offline && route in Routes.main) {
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        Text("Offline session. Your identity was previously verified. Connect to refresh your session.", color = NexusColors.TextSecondary)
+                        Button(shape = NexusButtonShape, onClick = { restorationAttempt++ }) { Text("Retry connection") }
+                    }
+                }
                 NavHost(
                     navController = navController,
+                    modifier = Modifier.weight(1f),
                     startDestination = Routes.CHECKING
                 ) {
                     composable(Routes.CHECKING) {
@@ -316,7 +319,6 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                     composable(Routes.LOGIN) {
                         LoginScreen(
                             onLoggedIn = {
-                                session.setUser(it)
                                 signedIn()
                                 toast.show("Signed in", "Welcome back to EXP.", ToastKind.SUCCESS)
                             },
@@ -327,7 +329,6 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                     composable(Routes.REGISTER) {
                         RegisterScreen(
                             onRegistered = {
-                                session.setUser(it)
                                 signedIn()
                                 toast.show("Account created", "Welcome to your client portal.", ToastKind.SUCCESS)
                             },

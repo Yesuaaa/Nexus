@@ -1,6 +1,7 @@
 package com.nexus.app.core.di
 
 import com.nexus.app.core.network.HttpClientFactory
+import com.nexus.app.core.session.SessionCoordinator
 import com.nexus.app.core.session.SessionManager
 import com.nexus.app.core.storage.SettingsTokenStorage
 import com.nexus.app.features.auth.api.AuthRepository
@@ -30,11 +31,11 @@ val appModule = module {
 
     single { SessionManager() }
     single { SettingsTokenStorage() }
+    single { SessionCoordinator(get<SettingsTokenStorage>(), get()) }
     single {
-        val session = get<SessionManager>()
         HttpClientFactory.create(
             tokenStorage = get<SettingsTokenStorage>(),
-            onSessionExpired = { session.expire() }
+            coordinator = get()
         )
     }
     single { AuthRepository(get(), get<SettingsTokenStorage>()) }
