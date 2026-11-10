@@ -10,7 +10,8 @@ const clientProjectScope = (userId: string): Prisma.ProjectWhereInput => ({
   client: { ...active, role: "USER" },
   OR: [
     { requestId: { not: null }, startDate: { not: null } },
-    { requestId: null, status: { not: "PLANNED" } },
+    { requestId: null, startDate: { not: null } },
+    { requestId: null, status: { notIn: ["PLANNED", "CANCELLED"] } },
   ],
 })
 
@@ -53,17 +54,7 @@ function visibleScope(
   projectId: string,
 ): Prisma.ProjectWhereInput {
   return {
-    OR: [
-      {
-        clientId: userId,
-        client: { ...active, role: "USER" },
-        OR: [
-          { requestId: null, status: { not: "PLANNED" } },
-          { requestId: { not: null }, startDate: { not: null } },
-        ],
-      },
-      contributorScope(userId, projectId),
-    ],
+    OR: [clientProjectScope(userId), contributorScope(userId, projectId)],
   }
 }
 

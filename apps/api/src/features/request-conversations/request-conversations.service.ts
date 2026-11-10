@@ -48,8 +48,24 @@ function participantScope(
   }
 }
 
-function lifecycleScope(): Prisma.RequestConversationWhereInput {
-  return {}
+function lifecycleScope(
+  userId: string,
+  view: ConversationView,
+): Prisma.RequestConversationWhereInput {
+  if (view === "archived") {
+    return {
+      bookings: {
+        some: {},
+        every: { status: { in: [...archivedStatuses] } },
+      },
+      deletions: { none: { userId } },
+    }
+  }
+  return {
+    bookings: {
+      some: { status: { notIn: [...archivedStatuses] } },
+    },
+  }
 }
 
 function visibleScope(
@@ -57,7 +73,21 @@ function visibleScope(
   view?: ConversationView,
 ): Prisma.RequestConversationWhereInput {
   return {
-    AND: [participantScope(userId), ...(view ? [lifecycleScope()] : [])],
+    AND: [
+      participantScope(userId),
+      view
+        ? lifecycleScope(userId, view)
+        : {
+            OR: [
+              {
+                bookings: {
+                  some: { status: { notIn: [...archivedStatuses] } },
+                },
+              },
+              { deletions: { none: { userId } } },
+            ],
+          },
+    ],
   }
 }
 
@@ -189,11 +219,14 @@ async function resolveConversation(
 }
 
 function isArchived(bookings: readonly { status: string }[]) {
-  return !bookings.some(
-    (booking) =>
-      !archivedStatuses.includes(
-        booking.status as (typeof archivedStatuses)[number],
-      ),
+  return (
+    bookings.length > 0 &&
+    !bookings.some(
+      (booking) =>
+        !archivedStatuses.includes(
+          booking.status as (typeof archivedStatuses)[number],
+        ),
+    )
   )
 }
 
@@ -294,42 +327,45 @@ export async function listConversations(
     take: 31,
   })
   const conversations = await Promise.all(
-    rows.slice(0, 30).map(async ({ messages, ...row }) => ({
-      id: row.id,
-      status: "ACTIVE",
-      title:
-        row.bookings.length === 1
-          ? row.bookings[0]!.title
-          : `${row.bookings.length} booked services`,
-      referenceNumber:
-        row.bookings.length === 1 ? row.bookings[0]!.referenceNumber : null,
-      service: { name: row.bookings[0]?.service.name ?? "Booked services" },
-      updatedAt: row.updatedAt,
-      client: {
-        id: row.client.id,
-        fullName: row.client.fullName,
-        imageUrl: avatarUrl(row.client),
-      },
-      acceptedDepartment: {
-        id: row.department.id,
-        name: row.department.name,
-        headId: row.department.headId,
-        head: row.department.head
-          ? {
-              id: row.department.head.id,
-              fullName: row.department.head.fullName,
-              imageUrl: avatarUrl(row.department.head),
-            }
-          : null,
-      },
-      bookings: row.bookings.map(serializeBooking),
-      lastMessage: messages[0] ? serializeMessage(messages[0]) : null,
-      unreadCount: await unreadCount(
-        row.id,
-        userId,
-        row.clientId === userId ? row.clientReadAt : row.managerReadAt,
-      ),
-    })),
+    rows.slice(0, 30).map(async ({ messages, ...row }) => {
+      const archived = isArchived(row.bookings)
+      return {
+        id: row.id,
+        status: archived ? "ARCHIVED" : "ACTIVE",
+        title:
+          row.bookings.length === 1
+            ? row.bookings[0]!.title
+            : `${row.bookings.length} booked services`,
+        referenceNumber:
+          row.bookings.length === 1 ? row.bookings[0]!.referenceNumber : null,
+        service: { name: row.bookings[0]?.service.name ?? "Booked services" },
+        updatedAt: row.updatedAt,
+        client: {
+          id: row.client.id,
+          fullName: row.client.fullName,
+          imageUrl: avatarUrl(row.client),
+        },
+        acceptedDepartment: {
+          id: row.department.id,
+          name: row.department.name,
+          headId: row.department.headId,
+          head: row.department.head
+            ? {
+                id: row.department.head.id,
+                fullName: row.department.head.fullName,
+                imageUrl: avatarUrl(row.department.head),
+              }
+            : null,
+        },
+        bookings: row.bookings.map(serializeBooking),
+        lastMessage: messages[0] ? serializeMessage(messages[0]) : null,
+        unreadCount: await unreadCount(
+          row.id,
+          userId,
+          row.clientId === userId ? row.clientReadAt : row.managerReadAt,
+        ),
+      }
+    }),
   )
   return {
     conversations,
@@ -401,7 +437,7 @@ export async function getConversationAccess(
   const head = record.department.head
   const activeHead =
     head?.role === "STAFF" && head.isActive && !head.accountDeletedAt
-  const archived = false
+  const archived = isArchived(record.bookings)
   const aliasBooking = record.bookings.find((booking) => booking.id === id)?.id
   const selectedBookingId =
     record.bookings.find((booking) => booking.id === requestedBookingId)?.id ??
@@ -443,7 +479,7 @@ export async function getConversationAccess(
             },
           }),
     },
-    canSend: Boolean(activeHead),
+    canSend: Boolean(activeHead && !archived),
   }
 }
 
@@ -504,13 +540,18 @@ async function lockWritableConversation(
       id: conversation.id,
       ...participantScope(userId),
       department: { head: { ...activeUser, role: "STAFF" } },
+      bookings: {
+        some: { status: { notIn: [...archivedStatuses] } },
+      },
     },
     select: { id: true },
   })
   if (!writable)
     throw new ServiceRequestsError(
       409,
-      "Messaging is unavailable without an active department manager.",
+      isArchived(conversation.bookings)
+        ? "This conversation is archived and read-only."
+        : "Messaging is unavailable without an active department manager.",
     )
   return conversation.id
 }
@@ -702,7 +743,18 @@ export async function updateConversationMeeting(
 
 export async function deleteArchivedConversation(userId: string, id: string) {
   return getPrisma()!.$transaction(async (tx) => {
-    const conversation = await resolveConversation(tx, userId, id)
+    const conversation = await tx.requestConversation.findFirst({
+      where: {
+        ...participantScope(userId),
+        OR: [{ id }, { bookings: { some: { id } } }],
+      },
+      select: {
+        id: true,
+        bookings: { select: { id: true, status: true } },
+      },
+    })
+    if (!conversation)
+      throw new ServiceRequestsError(404, "Conversation not found")
     await tx.$queryRaw`SELECT "id" FROM "RequestConversation" WHERE "id" = ${conversation.id} FOR UPDATE`
     if (!isArchived(conversation.bookings))
       throw new ServiceRequestsError(
