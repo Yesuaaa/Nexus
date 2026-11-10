@@ -27,6 +27,8 @@ object DeepLinks {
             "dashboard" -> Routes.DASHBOARD
             "services" -> Routes.SERVICES
             "booked-requests" -> Routes.BOOKED_REQUESTS
+            "calendar" -> Routes.CALENDAR
+            "projects" -> Routes.PROJECTS
             else -> null
         }
     }

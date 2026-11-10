@@ -45,7 +45,8 @@ fun NexusDropdown(
     selectedValue: String?,
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    scrollable: Boolean = true
 ) {
     var expanded by remember { mutableStateOf(false) }
     var anchorSize by remember { mutableStateOf(IntSize.Zero) }
@@ -55,12 +56,16 @@ fun NexusDropdown(
     val bringIntoView = remember { BringIntoViewRequester() }
     val scroll = rememberScrollState()
     val shape = RoundedCornerShape(8.dp)
-    val position = remember(density) {
+    val position = remember(density, scrollable) {
         val gap = with(density) { 4.dp.roundToPx() }
         object : PopupPositionProvider {
             override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
                 val left = if (layoutDirection == LayoutDirection.Ltr) anchorBounds.left else anchorBounds.right - popupContentSize.width
-                return IntOffset(left.coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0)), anchorBounds.bottom + gap)
+                val below = anchorBounds.bottom + gap
+                val top = if (!scrollable && below + popupContentSize.height > windowSize.height) {
+                    (anchorBounds.top - gap - popupContentSize.height).coerceAtLeast(0)
+                } else below
+                return IntOffset(left.coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0)), top)
             }
         }
     }
@@ -101,8 +106,9 @@ fun NexusDropdown(
                 tonalElevation = 0.dp,
                 shadowElevation = 6.dp
             ) {
-                Box(Modifier.heightIn(max = minOf(if (options.size >= 5) 220.dp else 228.dp, availableHeight))) {
-                    Column(Modifier.verticalScroll(scroll).padding(vertical = 4.dp)) {
+                val menuModifier = if (scrollable) Modifier.heightIn(max = minOf(if (options.size >= 5) 220.dp else 228.dp, availableHeight)) else Modifier
+                Box(menuModifier) {
+                    Column(Modifier.then(if (scrollable) Modifier.verticalScroll(scroll) else Modifier).padding(vertical = 4.dp)) {
                         options.forEach { (value, text) ->
                             val selected = value == selectedValue
                             Row(
@@ -117,7 +123,7 @@ fun NexusDropdown(
                             }
                         }
                     }
-                    if (scroll.maxValue > 0) Canvas(Modifier.matchParentSize()) {
+                    if (scrollable && scroll.maxValue > 0) Canvas(Modifier.matchParentSize()) {
                         val inset = 4.dp.toPx()
                         val trackHeight = (size.height - inset * 2).coerceAtLeast(1f)
                         val thumbHeight = (trackHeight * size.height / (size.height + scroll.maxValue)).coerceAtLeast(20.dp.toPx()).coerceAtMost(trackHeight)

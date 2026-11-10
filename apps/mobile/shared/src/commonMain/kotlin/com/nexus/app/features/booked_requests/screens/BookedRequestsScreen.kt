@@ -112,9 +112,9 @@ fun BookedRequestsScreen(
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf(summary.total to "Total requests", summary.pending to "Pending review",
                             summary.inProgress to "In review", summary.completed to "Closed").forEach { (count, label) ->
-                            Column(Modifier.weight(1f).background(Color.White).padding(vertical = 12.dp, horizontal = 4.dp)) {
-                                Text(count.toString(), fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = NexusColors.HeaderDarkNavy)
-                                Text(label, fontSize = 10.sp, color = NexusColors.TextSecondary)
+                            Column(Modifier.weight(1f).background(NexusColors.PrimaryBlue, RoundedCornerShape(8.dp)).padding(start = 8.dp, end = 4.dp, top = 12.dp, bottom = 12.dp)) {
+                                Text(count.toString(), fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                                Text(label, fontSize = 10.sp, color = Color.White)
                             }
                         }
                     }

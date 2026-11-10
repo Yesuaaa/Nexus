@@ -57,6 +57,8 @@ import kotlinx.coroutines.isActive
 import org.koin.compose.viewmodel.koinViewModel
 import com.nexus.app.features.notifications.viewmodel.NotificationsViewModel
 
+import com.nexus.app.features.projects.screens.*
+
 object Routes {
     const val CHECKING = "checking"
     const val LOGIN = "login"
@@ -64,6 +66,13 @@ object Routes {
     const val DASHBOARD = "dashboard"
     const val SERVICES = "services"
     const val BOOKED_REQUESTS = "booked_requests"
+    const val CALENDAR = "calendar"
+    const val PROJECTS = "projects"
+    const val PROJECT_DETAILS = "projects/{projectId}/details"
+    const val PROJECT_OVERVIEW = "projects/{projectId}/overview?tab={tab}"
+    const val PROJECT_BRIEF = "projects/{projectId}/brief"
+    const val PROJECT_REQUEST = "projects/{projectId}/request"
+    const val PROJECT_CHAT = "projects/{projectId}/chat"
     const val NOTIFICATIONS = "notifications"
     const val MESSAGES = "messages"
     const val CHAT = "chat/{conversationId}"
@@ -72,19 +81,23 @@ object Routes {
     const val SETTINGS = "settings"
     const val REQUEST_DETAIL = "request/{requestId}"
 
-    val main = setOf(NOTIFICATIONS, MESSAGES, CHAT, WORKFLOW, DASHBOARD, SERVICES, BOOKED_REQUESTS, PROFILE, SETTINGS, REQUEST_DETAIL)
+    val main = setOf(NOTIFICATIONS, MESSAGES, CHAT, WORKFLOW, DASHBOARD, SERVICES, BOOKED_REQUESTS, PROFILE, SETTINGS, REQUEST_DETAIL, CALENDAR, PROJECTS, PROJECT_DETAILS, PROJECT_OVERVIEW, PROJECT_BRIEF, PROJECT_REQUEST, PROJECT_CHAT)
 }
 
 private fun BottomTab.route() = when (this) {
     BottomTab.DASHBOARD -> Routes.DASHBOARD
     BottomTab.SERVICES -> Routes.SERVICES
     BottomTab.BOOKED_REQUESTS -> Routes.BOOKED_REQUESTS
+    BottomTab.CALENDAR -> Routes.CALENDAR
+    BottomTab.PROJECTS -> Routes.PROJECTS
 }
 
 private fun routeToTab(route: String?): BottomTab? = when (route) {
     Routes.DASHBOARD -> BottomTab.DASHBOARD
     Routes.SERVICES -> BottomTab.SERVICES
     Routes.BOOKED_REQUESTS, Routes.REQUEST_DETAIL -> BottomTab.BOOKED_REQUESTS
+    Routes.CALENDAR -> BottomTab.CALENDAR
+    Routes.PROJECTS, Routes.PROJECT_DETAILS, Routes.PROJECT_OVERVIEW, Routes.PROJECT_BRIEF, Routes.PROJECT_REQUEST, Routes.PROJECT_CHAT -> BottomTab.PROJECTS
     else -> null
 }
 
@@ -234,6 +247,13 @@ fun AppNavHost(modifier: Modifier = Modifier) {
         Routes.DASHBOARD -> "Dashboard"
         Routes.SERVICES -> "Services"
         Routes.BOOKED_REQUESTS -> "Booked Requests"
+        Routes.CALENDAR -> "Calendar"
+        Routes.PROJECTS -> "My Projects"
+        Routes.PROJECT_DETAILS -> "Project details"
+        Routes.PROJECT_OVERVIEW -> "Project overview"
+        Routes.PROJECT_BRIEF -> "Edit project brief"
+        Routes.PROJECT_REQUEST -> "Project change"
+        Routes.PROJECT_CHAT -> "Project chat"
         Routes.REQUEST_DETAIL -> "Request details"
         Routes.NOTIFICATIONS -> "Notifications"
         Routes.MESSAGES -> "Messages"
@@ -267,7 +287,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
             }
         },
         bottomBar = {
-            if (showBars && !editingAccount && route !in setOf(Routes.CHAT, Routes.WORKFLOW)) {
+            if (showBars && !editingAccount && route !in setOf(Routes.CHAT, Routes.WORKFLOW, Routes.PROJECT_CHAT)) {
                 NexusBottomBar(
                     currentTab = if (accountMenuOpen) null else routeToTab(route),
                     onTabSelected = { tab ->
@@ -357,6 +377,59 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                                 navController.previousBackStackEntry?.takeIf { it.destination.route == Routes.CHAT }
                                     ?.savedStateHandle?.set("selectedBookingId", bookingId)
                             })
+                    }
+                    composable(Routes.CALENDAR) {
+                        CalendarScreen(
+                            onBooking = { navController.switchTab(Routes.SERVICES) },
+                            onEvent = { event ->
+                                val targetId = event.href.substringAfterLast('/').substringAfter("request=")
+                                if (targetId.matches(Regex("[A-Za-z0-9_-]{1,80}"))) {
+                                    when (event.type) {
+                                        "milestone" -> navController.navigate("projects/$targetId/overview")
+                                        "meeting" -> navController.navigate("chat/$targetId")
+                                        else -> navController.navigate("workflow/$targetId")
+                                    }
+                                }
+                            }
+                        )
+                    }
+                    composable(Routes.PROJECTS) {
+                        MyProjectsScreen(
+                            onNewRequest = { navController.switchTab(Routes.SERVICES) },
+                            onProject = { navController.navigate("projects/$it/details") }
+                        )
+                    }
+                    composable(Routes.PROJECT_DETAILS) { entry ->
+                        val id = entry.arguments?.getString("projectId") ?: return@composable
+                        ProjectScreen(id, overview = false,
+                            onBack = { navController.popBackStack() },
+                            onOpen = { navController.navigate("projects/$id/overview") },
+                            onEdit = { navController.navigate("projects/$id/brief") },
+                            onRequest = { navController.navigate("projects/$id/request") },
+                            onChat = { navController.navigate("projects/$id/chat") })
+                    }
+                    composable(Routes.PROJECT_OVERVIEW, arguments = listOf(navArgument("tab") { defaultValue = "OVERVIEW" })) { entry ->
+                        val id = entry.arguments?.getString("projectId") ?: return@composable
+                        ProjectScreen(id, overview = true,
+                            onBack = { navController.navigate(Routes.PROJECTS) { popUpTo(Routes.DASHBOARD); launchSingleTop = true } },
+                            onOpen = {},
+                            onEdit = { navController.navigate("projects/$id/brief") },
+                            onRequest = { navController.navigate("projects/$id/request") },
+                            onChat = { navController.navigate("projects/$id/chat") },
+                            initialTab = entry.arguments?.getString("tab") ?: "OVERVIEW")
+                    }
+                    composable(Routes.PROJECT_BRIEF) { entry ->
+                        val id = entry.arguments?.getString("projectId") ?: return@composable
+                        ProjectFormScreen(id, edit = true, onBack = { navController.popBackStack() })
+                    }
+                    composable(Routes.PROJECT_REQUEST) { entry ->
+                        val id = entry.arguments?.getString("projectId") ?: return@composable
+                        ProjectFormScreen(id, edit = false, onBack = { navController.popBackStack() })
+                    }
+                    composable(Routes.PROJECT_CHAT) { entry ->
+                        val id = entry.arguments?.getString("projectId") ?: return@composable
+                        ProjectChatScreen(id, user?.id.orEmpty(), onBack = { navController.popBackStack() },
+                            onDeliverables = { navController.navigate("projects/$id/overview?tab=DELIVERABLES") })
                     }
                     composable(Routes.DASHBOARD) { DashboardScreen() }
                     composable(Routes.SERVICES) {

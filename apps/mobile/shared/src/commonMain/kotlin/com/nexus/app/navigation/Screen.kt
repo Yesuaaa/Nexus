@@ -9,7 +9,9 @@ enum class BottomTab(
 ) {
     DASHBOARD("Dashboard", NexusNavIcons.Dashboard),
     SERVICES("Services", NexusNavIcons.Services),
-    BOOKED_REQUESTS("Booked Requests", NexusNavIcons.BookedRequests)
+    BOOKED_REQUESTS("Booked Requests", NexusNavIcons.BookedRequests),
+    CALENDAR("Calendar", NexusNavIcons.Calendar),
+    PROJECTS("My Projects", NexusNavIcons.Projects)
 }
 
 sealed class Screen(val route: String) {
@@ -37,4 +39,3 @@ sealed class Screen(val route: String) {
         fun createRoute(requestId: String) = "chat/$requestId"
     }
 }
-
