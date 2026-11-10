@@ -1,6 +1,11 @@
 **/node_modules/
 **/dist/
 **/coverage/
+!docs/testing/coverage/
+docs/testing/coverage/*
+!docs/testing/coverage/phase5/
+docs/testing/coverage/phase5/*
+!docs/testing/coverage/phase5/coverage-assessment.md
 **/.vite/
 **/.next/
 **/out/
