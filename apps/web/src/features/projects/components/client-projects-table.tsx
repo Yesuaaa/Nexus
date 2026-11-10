@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/button"
 import { ClientRowTable } from "@/components/ui/client-row-table"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Pill } from "@/components/ui/pill"
@@ -96,23 +95,19 @@ function projectProgress(project: ClientProjectSummary) {
 
 function ProjectAction({
   project,
-  onView,
 }: {
   project: ClientProjectSummary
-  onView: (project: ClientProjectSummary) => void
 }) {
   return (
-    <Button
+    <Link
       id={`project-view-${project.id}`}
-      variant="outline"
       className={rowActionButton}
-      type="button"
       aria-label={`View ${project.name}`}
-      onClick={() => onView(project)}
+      href={`/projects/${encodeURIComponent(project.id)}`}
     >
       <Eye size={15} aria-hidden="true" />
       <HoverTooltip>View project</HoverTooltip>
-    </Button>
+    </Link>
   )
 }
 
@@ -121,13 +116,11 @@ export function ClientProjectsTable({
   formatDate,
   viewKey,
   quickKey,
-  onView,
 }: {
   projects: ClientProjectSummary[]
   formatDate: (value: Date | string) => string
   viewKey: string
   quickKey: string
-  onView: (project: ClientProjectSummary) => void
 }) {
   return (
     <ClientRowTable
@@ -214,7 +207,7 @@ export function ClientProjectsTable({
               </time>
             </td>
             <td className="rounded-r-xl border-y border-r border-[#e1e7ef] bg-[#f4f7fb] px-3 py-2 align-middle">
-              <ProjectAction project={project} onView={onView} />
+              <ProjectAction project={project} />
             </td>
           </>
         )
@@ -270,7 +263,7 @@ export function ClientProjectsTable({
               >
                 Last updated {formatDate(project.updatedAt)}
               </time>
-              <ProjectAction project={project} onView={onView} />
+              <ProjectAction project={project} />
             </div>
           </article>
         )
