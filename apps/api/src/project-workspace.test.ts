@@ -8,6 +8,7 @@ import { PGlite } from "@electric-sql/pglite"
 import { PGLiteSocketServer } from "@electric-sql/pglite-socket"
 import { createApp } from "./app.js"
 import { issueSession } from "./features/auth/auth.service.js"
+import type { ProjectWorkPlan } from "./features/project-workspace/templates.js"
 import { getPrisma } from "./lib/db.js"
 
 type Booking = {
@@ -25,7 +26,7 @@ type Workspace = {
     requestId: string | null
     status: string
     templateKey: string | null
-    plan: { phases: { tasks: { status: string }[] }[] } | null
+    plan: ProjectWorkPlan | null
   }[]
 }
 
@@ -577,6 +578,189 @@ test(
     )
     assert.equal(repeatedCancel.status, 409)
     assert.equal((await workspace(cancellableId)).status, "CANCELLED")
+
+    await t.test(
+      "[NEX-004] plan and task API updates persist and enforce project scope",
+      async () => {
+        const booking = await createBooking("plan-tasks", true)
+        const createWorkspace = await request(
+          "/",
+          head.id,
+          "POST",
+          createPayload([booking.request.id], "SEPARATE", ""),
+        )
+        assert.equal(createWorkspace.status, 201)
+        const createdWorkspace = (await createWorkspace.json()) as {
+          workspaces: { id: string }[]
+        }
+        const workspaceId = createdWorkspace.workspaces[0]!.id
+        const originalProject = await prisma.project.findUniqueOrThrow({
+          where: { id: booking.project.id },
+          select: { updatedAt: true },
+        })
+        const plan: ProjectWorkPlan = {
+          phases: [
+            {
+              id: "nex004-planning",
+              title: "Planning",
+              tasks: [
+                {
+                  id: "nex004-scope-task",
+                  title: "Confirm scope",
+                  role: "Project lead",
+                  status: "NOT_STARTED",
+                },
+              ],
+            },
+          ],
+        }
+        const projectPath = `/${workspaceId}/projects/${booking.project.id}`
+        const savePlan = await request(`${projectPath}/plan`, head.id, "PUT", {
+          plan,
+          expectedUpdatedAt: originalProject.updatedAt.toISOString(),
+        })
+        assert.equal(savePlan.status, 200, await savePlan.clone().text())
+
+        type WorkspacePlanResponse = {
+          workstreams: { id: string; plan: ProjectWorkPlan | null }[]
+        }
+        function planFromResponse(response: WorkspacePlanResponse) {
+          const workstream = response.workstreams.find(
+            ({ id }) => id === booking.project.id,
+          )
+          assert.ok(workstream?.plan)
+          return workstream.plan
+        }
+        async function readProjectPlan(actorId: string) {
+          const response = await request(`/${workspaceId}`, actorId)
+          assert.equal(response.status, 200, await response.clone().text())
+          return planFromResponse(
+            (await response.json()) as WorkspacePlanResponse,
+          )
+        }
+        async function persistedProjectPlan(projectId: string) {
+          return (
+            await prisma.project.findUniqueOrThrow({
+              where: { id: projectId },
+              select: { workPlan: true },
+            })
+          ).workPlan
+        }
+
+        assert.deepEqual(
+          planFromResponse((await savePlan.json()) as WorkspacePlanResponse),
+          plan,
+        )
+        assert.deepEqual(await readProjectPlan(head.id), plan)
+        assert.deepEqual(await persistedProjectPlan(booking.project.id), plan)
+
+        const staffEmployee = await prisma.employee.findUniqueOrThrow({
+          where: { userId: staff.id },
+        })
+        await prisma.projectStaff.create({
+          data: {
+            projectId: booking.project.id,
+            employeeId: staffEmployee.id,
+            approvedById: head.id,
+          },
+        })
+
+        const addTask = await request(
+          `${projectPath}/tasks`,
+          staff.id,
+          "POST",
+          {
+            phaseId: "nex004-planning",
+            title: "  Prepare assets  ",
+            role: "Designer",
+          },
+        )
+        assert.equal(addTask.status, 200, await addTask.clone().text())
+        const addedPlan = planFromResponse(
+          (await addTask.json()) as WorkspacePlanResponse,
+        )
+        const addedTask = addedPlan.phases[0]!.tasks.find(
+          ({ title }) => title === "Prepare assets",
+        )
+        assert.ok(addedTask)
+        assert.equal(addedTask.role, "Designer")
+        assert.equal(addedTask.status, "NOT_STARTED")
+        assert.deepEqual(await readProjectPlan(staff.id), addedPlan)
+        assert.deepEqual(
+          await persistedProjectPlan(booking.project.id),
+          addedPlan,
+        )
+
+        const updateTask = await request(
+          `${projectPath}/tasks/${addedTask.id}`,
+          staff.id,
+          "PATCH",
+          { status: "IN_PROGRESS" },
+        )
+        assert.equal(updateTask.status, 200, await updateTask.clone().text())
+        const updatedPlan = planFromResponse(
+          (await updateTask.json()) as WorkspacePlanResponse,
+        )
+        const expectedUpdatedPlan: ProjectWorkPlan = {
+          phases: addedPlan.phases.map((phase) => ({
+            ...phase,
+            tasks: phase.tasks.map((task) =>
+              task.id === addedTask.id
+                ? { ...task, status: "IN_PROGRESS" }
+                : task,
+            ),
+          })),
+        }
+        assert.deepEqual(updatedPlan, expectedUpdatedPlan)
+        assert.deepEqual(await readProjectPlan(staff.id), expectedUpdatedPlan)
+        assert.deepEqual(
+          await persistedProjectPlan(booking.project.id),
+          expectedUpdatedPlan,
+        )
+
+        const unchangedPlan = await persistedProjectPlan(booking.project.id)
+        const invalidTask = await request(
+          `${projectPath}/tasks`,
+          staff.id,
+          "POST",
+          { phaseId: "nex004-planning", title: "x" },
+        )
+        assert.equal(invalidTask.status, 400)
+        assert.deepEqual(
+          await persistedProjectPlan(booking.project.id),
+          unchangedPlan,
+        )
+        assert.deepEqual(await readProjectPlan(staff.id), expectedUpdatedPlan)
+
+        const invalidStatus = await request(
+          `${projectPath}/tasks/${addedTask.id}`,
+          staff.id,
+          "PATCH",
+          { status: "BLOCKED" },
+        )
+        assert.equal(invalidStatus.status, 400)
+        assert.deepEqual(
+          await persistedProjectPlan(booking.project.id),
+          unchangedPlan,
+        )
+        assert.deepEqual(await readProjectPlan(staff.id), expectedUpdatedPlan)
+
+        const secondPlanBeforeOutOfScopeRequest = await persistedProjectPlan(
+          second.project.id,
+        )
+        const outOfScope = await request(
+          `/${workspaceId}/projects/${second.project.id}/tasks`,
+          staff.id,
+          "POST",
+          { phaseId: "nex003-phase-1", title: "Unassigned project task" },
+        )
+        assert.equal(outOfScope.status, 404)
+        assert.deepEqual(
+          await persistedProjectPlan(second.project.id),
+          secondPlanBeforeOutOfScopeRequest,
+        )
+      },
+    )
 
     await t.test(
       "[NEX-005] deliverable uploads, review, rejection, and sharing enforce access and persist transitions",
