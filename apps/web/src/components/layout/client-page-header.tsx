@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import type { ReactNode, Ref } from "react"
 import { cn } from "@/lib/utils"
 
 export const clientPageHeaderActionClass =
@@ -11,6 +11,7 @@ export function ClientPageHeader({
   actions,
   children,
   className,
+  headingRef,
 }: {
   eyebrow?: ReactNode
   title: ReactNode
@@ -18,6 +19,7 @@ export function ClientPageHeader({
   actions?: ReactNode
   children?: ReactNode
   className?: string
+  headingRef?: Ref<HTMLHeadingElement>
 }) {
   const actionContent = actions ?? children
   const legacyLayout = eyebrow == null
@@ -38,6 +40,8 @@ export function ClientPageHeader({
           </p>
         )}
         <h1
+          ref={headingRef}
+          tabIndex={headingRef ? -1 : undefined}
           className={cn(
             legacyLayout
               ? "m-0 text-[clamp(21px,2vw,25px)] leading-[1.25] font-[650] tracking-[-0.03em]"
