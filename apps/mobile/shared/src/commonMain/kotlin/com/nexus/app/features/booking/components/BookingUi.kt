@@ -1,5 +1,6 @@
 package com.nexus.app.features.booking.components
 
+import com.nexus.app.core.theme.NexusButtonShape
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,7 +25,7 @@ import com.nexus.app.core.theme.NexusColors
 @Composable
 fun PageHeading(title: String, description: String = "") {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(title, fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold,
+        Text(title, fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold,
             color = NexusColors.HeaderDarkNavy)
         if (description.isNotEmpty()) Text(description, fontSize = 13.sp, lineHeight = 20.sp,
             color = NexusColors.TextSecondary)
@@ -66,7 +67,7 @@ fun RetryNotice(message: String, onRetry: () -> Unit) {
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(message, fontSize = 13.sp, color = NexusColors.ErrorRed)
-        OutlinedButton(onClick = onRetry) { Text("Retry") }
+        OutlinedButton(shape = NexusButtonShape, onClick = onRetry) { Text("Retry") }
     }
 }
 
@@ -108,7 +109,7 @@ fun BookingContinueButton(
         onClick = onClick,
         enabled = enabled,
         modifier = modifier.heightIn(min = 44.dp),
-        shape = RoundedCornerShape(6.dp),
+        shape = NexusButtonShape,
         colors = ButtonDefaults.buttonColors(
             containerColor = NexusColors.PrimaryBlue,
             contentColor = Color.White,

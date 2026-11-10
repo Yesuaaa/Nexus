@@ -1,10 +1,10 @@
 package com.nexus.app.core.components
 
+import com.nexus.app.core.theme.NexusButtonShape
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -37,14 +37,12 @@ fun NexusButton(
         .fillMaxWidth()
         .heightIn(min = 48.dp)
 
-    val shape = RoundedCornerShape(10.dp)
-
     if (variant == NexusButtonVariant.PRIMARY) {
         Button(
             onClick = onClick,
             modifier = buttonModifier,
             enabled = enabled && !loading,
-            shape = shape,
+            shape = NexusButtonShape,
             colors = ButtonDefaults.buttonColors(
                 containerColor = NexusColors.PrimaryBlue,
                 contentColor = Color.White,
@@ -59,7 +57,7 @@ fun NexusButton(
             onClick = onClick,
             modifier = buttonModifier,
             enabled = enabled && !loading,
-            shape = shape,
+            shape = NexusButtonShape,
             colors = ButtonDefaults.outlinedButtonColors(
                 contentColor = NexusColors.PrimaryBlue
             )

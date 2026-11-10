@@ -16,6 +16,8 @@ import kotlinx.coroutines.sync.withLock
 
 data class ConversationsState(
     val archived: Boolean = false, val page: ConversationPage = ConversationPage(),
+    val selectedBookingId: String? = null,
+    val selectedWorkflow: com.nexus.app.features.workflow.model.ClientWorkflow? = null,
     val loading: Boolean = false, val error: String? = null, val id: String? = null,
     val attachments: List<ConversationAttachment> = emptyList(), val attachmentError: String? = null,
     val history: History? = null, val messages: List<ChatMessage> = emptyList(),
@@ -33,7 +35,7 @@ class ConversationsViewModel(private val repository: ClientCommunicationReposito
         val current = state.value
         val id = current.id ?: return
         val head = current.history?.conversation?.head ?: return
-        mutable.update { it.copy(profile = SpecialistProfile(head.specialistId ?: head.id, head.fullName, imageUrl = head.imageUrl), profileLoading = true, profileError = null) }
+        mutable.update { it.copy(profile = SpecialistProfile(head.specialistId ?: head.id, head.fullName ?: "Department head", imageUrl = head.imageUrl), profileLoading = true, profileError = null) }
         val specialistId = head.specialistId
         val gateway = booking
         if (specialistId == null || gateway == null) {
@@ -65,8 +67,15 @@ class ConversationsViewModel(private val repository: ClientCommunicationReposito
     }
     fun open(id: String) {
         streamJob?.cancel()
-        mutable.update { if (it.id == id) it else it.copy(id = id, history = null, attachments = emptyList(), attachmentError = null, messages = emptyList(), pending = emptyList(), error = null) }
+        mutable.update { if (it.id == id) it else it.copy(id = id, selectedBookingId = null, selectedWorkflow = null, reconnecting = false, history = null, attachments = emptyList(), attachmentError = null, messages = emptyList(), pending = emptyList(), error = null) }
         if (foreground) connect()
+    }
+    fun selectBooking(bookingId: String) {
+        if (state.value.selectedBookingId == bookingId) return
+        mutable.update { it.copy(selectedBookingId = bookingId, selectedWorkflow = null,
+            history = it.history?.copy(selectedBookingId = bookingId),
+            attachments = emptyList(), attachmentError = null) }
+        refreshAttachments()
     }
     fun foreground(active: Boolean) {
         foreground = active
@@ -82,6 +91,7 @@ class ConversationsViewModel(private val repository: ClientCommunicationReposito
             while (isActive) {
                 try {
                     reconcile(id)
+                    mutable.update { it.copy(reconnecting = false, error = null) }
                     repository.events(id) {
                         reconcile(id)
                         mutable.update { it.copy(reconnecting = false) }
@@ -103,39 +113,50 @@ class ConversationsViewModel(private val repository: ClientCommunicationReposito
     }
     private suspend fun reconcile(id: String, older: Boolean = false) = historyMutex.withLock {
         val before = if (older) state.value.history?.nextCursor ?: return@withLock else null
-        val history = repository.history(id, before)
+        val history = repository.history(id, before, state.value.selectedBookingId)
         if (state.value.id != id) return@withLock
         // Follow newest-page cursors until reaching known history after a long disconnect.
         var incoming = history.messages
         var cursor = history.nextCursor
         val oldestKnown = state.value.messages.firstOrNull()?.id
         while (!older && cursor != null && oldestKnown != null && incoming.none { it.id == oldestKnown }) {
-            val page = repository.history(id, cursor)
+            val page = repository.history(id, cursor, state.value.selectedBookingId)
             incoming = page.messages + incoming
             cursor = page.nextCursor
         }
         mutable.update {
             val messages = mergeMessages(it.messages, incoming)
-            it.copy(history = history.copy(nextCursor = if (older) history.nextCursor else cursor),
+            val selected = it.selectedBookingId?.takeIf { selected ->
+                history.conversation?.bookings?.any { booking -> booking.id == selected } == true
+            } ?: history.selectedBookingId
+            it.copy(selectedBookingId = selected,
+                history = history.copy(selectedBookingId = selected,
+                    nextCursor = if (older) history.nextCursor else if (it.history != null) it.history.nextCursor else cursor),
                 messages = messages, pending = reconcilePending(it.pending, messages), error = null)
         }
-        refreshAttachments(id, history)
-        repository.read(id)
+        refreshAttachments(id, state.value.history ?: history)
+        // Read receipts must not turn successfully loaded messages into a connection error.
+        try { repository.read(id) }
+        catch (e: CancellationException) { throw e }
+        catch (_: Exception) { /* Retry the receipt on the next history refresh. */ }
     }
     private suspend fun refreshAttachments(conversationId: String, history: History) {
         val gateway = workflows ?: return
-        val ids = history.conversation?.bookings?.map { it.id }.orEmpty().ifEmpty { listOfNotNull(history.selectedBookingId) }
+        val selectedBookingId = state.value.selectedBookingId ?: history.selectedBookingId
+        val ids = listOfNotNull(selectedBookingId)
+        var selectedWorkflow: com.nexus.app.features.workflow.model.ClientWorkflow? = null
         val attachments = mutableListOf<ConversationAttachment>()
         var failed = false
         for (requestId in ids.distinct()) {
             try {
                 val workflow = gateway.get(requestId)
+                selectedWorkflow = workflow
                 attachments += workflow.files.map { ConversationAttachment(requestId, workflow.request.serviceName, it) }
             } catch (e: CancellationException) { throw e }
             catch (_: Exception) { failed = true }
         }
-        if (state.value.id == conversationId) mutable.update { it.copy(attachments = attachments,
-            attachmentError = if (failed) "Some attachments couldn't be loaded. Please retry." else null) }
+        if (state.value.id == conversationId && state.value.selectedBookingId == selectedBookingId) mutable.update { it.copy(selectedWorkflow = if (failed) it.selectedWorkflow else selectedWorkflow, attachments = if (failed) it.attachments else attachments,
+            attachmentError = if (failed) "Couldn't load attachments for this booking. Please retry." else null) }
     }
     fun refreshAttachments() {
         val current = state.value
@@ -148,7 +169,7 @@ class ConversationsViewModel(private val repository: ClientCommunicationReposito
     fun older() { val id = state.value.id ?: return; viewModelScope.launch { attempt { reconcile(id, true) } } }
     fun send(body: String) {
         if (body.isBlank() || body.length > 4000 || '\u0000' in body || state.value.history?.canSend != true) return
-        val pending = PendingMessage(newSubmissionKey(), body.trim())
+        val pending = PendingMessage(newSubmissionKey(), body.trim(), bookingId = state.value.selectedBookingId)
         mutable.update { it.copy(pending = it.pending + pending) }
         deliver(pending)
     }
@@ -158,7 +179,7 @@ class ConversationsViewModel(private val repository: ClientCommunicationReposito
         mutable.update { it.copy(pending = it.pending.map { row -> if (row.clientMessageId == pending.clientMessageId) row.copy(failed = false, failureReason = null) else row }) }
         viewModelScope.launch {
             try {
-                val message = repository.send(id, SendMessage(pending.body, pending.clientMessageId))
+                val message = repository.send(id, SendMessage(pending.body, pending.clientMessageId, pending.bookingId))
                 if (state.value.id == id) mutable.update {
                     val messages = mergeMessages(it.messages, listOf(message))
                     it.copy(messages = messages, pending = reconcilePending(it.pending, messages))

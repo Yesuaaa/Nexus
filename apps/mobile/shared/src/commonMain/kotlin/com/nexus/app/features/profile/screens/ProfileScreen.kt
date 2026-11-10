@@ -1,5 +1,8 @@
 package com.nexus.app.features.profile.screens
 
+import com.nexus.app.core.components.NexusDialogButton
+import com.nexus.app.core.components.NexusAlertDialog
+import com.nexus.app.core.theme.NexusButtonShape
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ScrollState
 import androidx.compose.ui.focus.onFocusChanged
@@ -59,14 +62,20 @@ private val blue = NexusColors.PrimaryBlue
 fun ProfileScreen(
     user: AuthUser,
     initialSettings: Boolean = false, onEditingChange: (Boolean) -> Unit = {},
-    viewModel: ProfileViewModel = koinViewModel()
+    viewModel: ProfileViewModel = koinViewModel(),
+    onTitleChange: (String) -> Unit = {}
 ) {
     val state by viewModel.state.collectAsState()
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
     val editor = entry?.destination?.route in setOf("details", "images", "password")
+    LaunchedEffect(entry?.destination?.route) {
+        onTitleChange(if (entry?.destination?.route == "settings" ||
+            (entry == null && initialSettings)) "Settings" else "Profile")
+    }
     LaunchedEffect(editor) { onEditingChange(editor) }
     DisposableEffect(Unit) { onDispose { onEditingChange(false) } }
+    var signOutAfterPassword by rememberSaveable { mutableStateOf(false) }
     val toast = LocalNexusToast.current
     LaunchedEffect(state.message) {
         state.message?.let { toast.show(it, "Your account is up to date.", ToastKind.SUCCESS); viewModel.clearFeedback() }
@@ -78,14 +87,14 @@ fun ProfileScreen(
             Surface(color = NexusColors.ErrorLightBg, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp)) {
                     Text(state.error!!, color = NexusColors.ErrorRed)
-                    TextButton(onClick = { viewModel.reload() }, enabled = !state.loading && !state.busy) { Text("Retry loading account") }
+                    TextButton(shape = NexusButtonShape, onClick = { viewModel.reload() }, enabled = !state.loading && !state.busy) { Text("Retry loading account") }
                 }
             }
         }
         if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = blue)
         NavHost(nav, startDestination = if (initialSettings) "settings" else "overview", modifier = Modifier.weight(1f)) {
             composable("overview") {
-                AccountPage("My profile") {
+                AccountPage {
                     val account = profile?.user ?: user
                     ProfileIdentity(profile, account, preferences, { nav.navigate("images") }, { nav.navigate("details") })
                     AccountCard {
@@ -120,7 +129,7 @@ fun ProfileScreen(
             }
             composable("password") {
                 Editor("Password & security", "Use at least 12 characters. Mix uppercase, lowercase, numbers, and symbols.", "account", state.busy, { nav.popBackStack() }) {
-                    PasswordForm(state.busy, state.error, viewModel::clearFeedback) { current, next -> viewModel.password(current, next) { nav.popBackStack() } }
+                    PasswordForm(state.busy, state.error, viewModel::clearFeedback) { current, next -> viewModel.password(current, next) { nav.popBackStack(); signOutAfterPassword = true } }
                 }
             }
             composable("settings") {
@@ -128,11 +137,19 @@ fun ProfileScreen(
             }
         }
     }
+    if (signOutAfterPassword) NexusAlertDialog(
+        onDismissRequest = { if (!state.busy) signOutAfterPassword = false },
+        title = { Text("Sign out other devices?") },
+        text = { Text("Your password was changed. Sign out all other devices so they need to use your new password. This device will stay signed in.") },
+        confirmButton = {
+            NexusDialogButton(enabled = !state.busy, destructive = true, onClick = { viewModel.revoke(); signOutAfterPassword = false }) { Text("Sign out", maxLines = 1, softWrap = false) }
+        },
+        dismissButton = { NexusDialogButton(enabled = !state.busy, onClick = { signOutAfterPassword = false }) { Text("Keep signed in") } }
+    )
 }
 
-@Composable private fun AccountPage(title: String, scrollState: ScrollState = rememberScrollState(), content: @Composable ColumnScope.() -> Unit) {
+@Composable private fun AccountPage(scrollState: ScrollState = rememberScrollState(), content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(scrollState).padding(20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        Text(title, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = ink)
         content()
         Spacer(Modifier.height(8.dp))
     }
@@ -159,8 +176,8 @@ fun ProfileScreen(
     }
 }
 @Composable private fun Action(text: String, click: () -> Unit, enabled: Boolean = true, outlined: Boolean = false) {
-    if (outlined) OutlinedButton(onClick = click, enabled = enabled, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(6.dp), border = BorderStroke(1.dp, NexusColors.Border)) { Text(text, color = if (enabled) blue else muted, fontSize = 13.sp) }
-    else Button(onClick = click, enabled = enabled, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(6.dp), colors = ButtonDefaults.buttonColors(containerColor = blue)) { Text(text, color = Color.White, fontSize = 13.sp) }
+    if (outlined) OutlinedButton(onClick = click, enabled = enabled, modifier = Modifier.fillMaxWidth(), shape = NexusButtonShape, border = BorderStroke(1.dp, NexusColors.Border)) { Text(text, color = if (enabled) blue else muted, fontSize = 13.sp) }
+    else Button(onClick = click, enabled = enabled, modifier = Modifier.fillMaxWidth(), shape = NexusButtonShape, colors = ButtonDefaults.buttonColors(containerColor = blue)) { Text(text, color = Color.White, fontSize = 13.sp) }
 }
 @Composable private fun ProfileIdentity(profile: Profile?, user: AuthUser, preferences: Preferences, images: () -> Unit, edit: () -> Unit) {
     Surface(shape = RoundedCornerShape(6.dp), color = Color.White, border = BorderStroke(1.dp, NexusColors.Border)) {
@@ -171,7 +188,7 @@ fun ProfileScreen(
                     Box(Modifier.size(180.dp).offset(160.dp, 60.dp).background(Color.White.copy(alpha = .05f), CircleShape))
                     Box(Modifier.size(150.dp).offset(240.dp, (-40).dp).background(Color.White.copy(alpha = .05f), CircleShape))
                 }
-                TextButton(onClick = images, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp), colors = ButtonDefaults.textButtonColors(contentColor = Color.White)) {
+                TextButton(shape = NexusButtonShape, onClick = images, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp), colors = ButtonDefaults.textButtonColors(contentColor = Color.White)) {
                     Icon(Icons.Outlined.PhotoCamera, null, Modifier.size(14.dp)); Spacer(Modifier.width(6.dp)); Text("Edit banner", color = Color.White, fontSize = 11.sp)
                 }
             }
@@ -199,7 +216,7 @@ private fun roleLabel(role: String) = when (role) { "USER" -> "Client"; "SUPERAD
 @Composable private fun Editor(title: String, description: String, backLabel: String, busy: Boolean, back: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding().padding(horizontal = 20.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = back, enabled = !busy) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text("Back to $backLabel", color = blue, fontSize = 12.sp) }
+            TextButton(shape = NexusButtonShape, onClick = back, enabled = !busy, contentPadding = PaddingValues(0.dp)) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text("Back to $backLabel", color = blue, fontSize = 12.sp) }
             Spacer(Modifier.weight(1f))
             IconButton(onClick = back, enabled = !busy) { Icon(Icons.Outlined.Close, "Close editor", tint = blue, modifier = Modifier.size(18.dp)) }
         }
@@ -267,7 +284,7 @@ private fun roleLabel(role: String) = when (role) { "USER" -> "Client"; "SUPERAD
                     catch (e: Exception) { error = e.message }
                     finally { selecting = false }
                 }
-            }, enabled = !busy && !selecting && files != null, shape = RoundedCornerShape(6.dp)) { Icon(Icons.Outlined.AddPhotoAlternate, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text("Change image", fontSize = 12.sp) }
+            }, enabled = !busy && !selecting && files != null, shape = NexusButtonShape) { Icon(Icons.Outlined.AddPhotoAlternate, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text("Change image", fontSize = 12.sp) }
             Hint("JPEG, PNG, or WebP - up to 2 MB - ${if (isAvatar) "a square image works best." else "a wide image works best."}")
             draft?.let { Hint("Selected: ${it.name}") }
         }
@@ -319,10 +336,10 @@ private fun roleLabel(role: String) = when (role) { "USER" -> "Client"; "SUPERAD
         submitted = true
         if (currentError == null && nextError == null && confirmError == null) choice = true
     }, !busy)
-    if (choice) AlertDialog(onDismissRequest = { choice = false }, title = { Text("Update password?") },
+    if (choice) NexusAlertDialog(onDismissRequest = { choice = false }, title = { Text("Update password?") },
         text = { Text("Your password will change. You can manage other signed-in devices in Settings > Security.") },
-        confirmButton = { TextButton(onClick = { choice = false; save(current, next) }) { Text("Update password") } },
-        dismissButton = { TextButton(onClick = { choice = false }) { Text("Cancel") } })
+        confirmButton = { NexusDialogButton(onClick = { choice = false; save(current, next) }) { Text("Update password") } },
+        dismissButton = { NexusDialogButton(onClick = { choice = false }, destructive = true) { Text("Cancel") } })
 }
 @Composable private fun SettingsContent(settings: AccountSettings?, busy: Boolean, password: () -> Unit, save: (Preferences) -> Unit, revoke: (String?) -> Unit) {
     var tab by rememberSaveable { mutableStateOf(0) }
@@ -342,7 +359,7 @@ private fun roleLabel(role: String) = when (role) { "USER" -> "Client"; "SUPERAD
     var draft by remember(saved) { mutableStateOf(saved) }
     var revokeTarget by remember { mutableStateOf<AccountSession?>(null) }
     var revokeAll by remember { mutableStateOf(false) }
-    AccountPage("Settings", scrollState) {
+    AccountPage(scrollState) {
         Hint("Manage your security, notifications, and preferences.")
         PrimaryTabRow(selectedTabIndex = tab, containerColor = Color.Transparent, contentColor = blue) {
             listOf("Security", "Notifications", "Preferences").forEachIndexed { index, title ->
@@ -365,18 +382,23 @@ private fun roleLabel(role: String) = when (role) { "USER" -> "Client"; "SUPERAD
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Icon(Icons.Outlined.Devices, null, Modifier.size(18.dp), tint = muted)
                                 Text(session.device, Modifier.weight(1f), fontSize = 12.sp, color = ink)
-                                if (session.current) Surface(color = Color(0xFFE9EFF9), shape = RoundedCornerShape(4.dp)) { Text("Current session", Modifier.padding(4.dp), color = blue, fontSize = 9.sp) }
+                                if (session.current) Surface(color = Color(0xFFE9EFF9), shape = RoundedCornerShape(4.dp)) { Text("Current session", Modifier.padding(4.dp), color = blue, fontSize = 12.sp) }
                             }
                             Hint(session.location ?: "Location unavailable")
                             Hint("Signed in ${dateLabel(session.createdAt, saved)}")
                             session.lastActiveAt?.let { Hint("Last active ${dateLabel(it, saved)}") }
                             if (!session.current) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                OutlinedButton(onClick = { revokeTarget = session }, enabled = !busy, shape = RoundedCornerShape(6.dp)) { Text("Sign out", fontSize = 12.sp) }
+                                Button(onClick = { revokeTarget = session }, enabled = !busy, shape = NexusButtonShape, colors = ButtonDefaults.buttonColors(containerColor = NexusColors.ErrorRed, contentColor = Color.White, disabledContainerColor = NexusColors.ErrorRed.copy(alpha = 0.5f), disabledContentColor = Color.White.copy(alpha = 0.7f))) { Text("Sign out", fontSize = 12.sp) }
                             }
                             HorizontalDivider(color = NexusColors.Border)
                         }
                     }
-                    Action("Sign out all other sessions", { revokeAll = true }, !busy && settings.sessions.any { !it.current }, outlined = true)
+                    Button(onClick = { revokeAll = true }, enabled = !busy && settings.sessions.any { !it.current },
+                        modifier = Modifier.fillMaxWidth(), shape = NexusButtonShape,
+                        colors = ButtonDefaults.buttonColors(containerColor = NexusColors.ErrorRed, contentColor = Color.White,
+                            disabledContainerColor = NexusColors.ErrorRed.copy(alpha = .5f), disabledContentColor = Color.White.copy(alpha = .7f))) {
+                        Text("Sign out all other sessions", fontSize = 13.sp)
+                    }
                     Hint("Your current session will stay signed in.")
                 }
             }
@@ -395,8 +417,8 @@ private fun roleLabel(role: String) = when (role) { "USER" -> "Client"; "SUPERAD
                 Selector("Date format", draft.dateFormat, listOf("MM/DD/YYYY", "DD/MM/YYYY", "YYYY-MM-DD"), !busy) { draft = draft.copy(dateFormat = it) }
                 Selector("Time format", draft.timeFormat, listOf("12h", "24h"), !busy) { draft = draft.copy(timeFormat = it) }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(onClick = { draft = saved }, enabled = !busy && draft != saved, modifier = Modifier.weight(1f), shape = RoundedCornerShape(6.dp)) { Text("Cancel") }
-                    Button(onClick = { save(draft) }, enabled = !busy && draft != saved, modifier = Modifier.weight(1f), shape = RoundedCornerShape(6.dp), colors = ButtonDefaults.buttonColors(containerColor = blue)) { Text(if (busy) "Saving..." else "Save preferences", color = Color.White, fontSize = 12.sp) }
+                    OutlinedButton(onClick = { draft = saved }, enabled = !busy && draft != saved, modifier = Modifier.weight(1f), shape = NexusButtonShape) { Text("Cancel") }
+                    Button(onClick = { save(draft) }, enabled = !busy && draft != saved, modifier = Modifier.weight(1f), shape = NexusButtonShape, colors = ButtonDefaults.buttonColors(containerColor = blue)) { Text(if (busy) "Saving..." else "Save preferences", color = Color.White, fontSize = 12.sp) }
                 }
             }
         }
@@ -429,12 +451,12 @@ private fun roleLabel(role: String) = when (role) { "USER" -> "Client"; "SUPERAD
             Hint(dateLabel(now.toString(), draft)); Hint(draft.timeZone)
         }
     }
-    if (revokeTarget != null || revokeAll) AlertDialog(
+    if (revokeTarget != null || revokeAll) NexusAlertDialog(
         onDismissRequest = { revokeTarget = null; revokeAll = false },
         title = { Text("Sign out ${if (revokeAll) "other sessions" else "this device"}?") },
         text = { Text("${revokeTarget?.device ?: "Other devices"} will need to sign in again. Your current session will stay signed in.") },
-        confirmButton = { TextButton(onClick = { revoke(revokeTarget?.id); revokeTarget = null; revokeAll = false }) { Text("Sign out") } },
-        dismissButton = { TextButton(onClick = { revokeTarget = null; revokeAll = false }) { Text("Cancel") } }
+        confirmButton = { NexusDialogButton(destructive = true, onClick = { revoke(revokeTarget?.id); revokeTarget = null; revokeAll = false }) { Text("Sign out", maxLines = 1, softWrap = false) } },
+        dismissButton = { NexusDialogButton(onClick = { revokeTarget = null; revokeAll = false }) { Text("Cancel") } }
     )
 }
 @Composable private fun Shortcut(icon: ImageVector, title: String, description: String, click: () -> Unit) {

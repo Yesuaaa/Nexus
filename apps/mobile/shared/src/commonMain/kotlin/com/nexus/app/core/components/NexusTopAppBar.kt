@@ -1,16 +1,7 @@
 package com.nexus.app.core.components
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import org.jetbrains.compose.resources.imageResource
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import kotlin.math.roundToInt
-import nexusmobile.shared.generated.resources.Res
-import nexusmobile.shared.generated.resources.exp_logo
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Arrangement
@@ -45,6 +36,7 @@ import com.nexus.app.core.theme.NexusColors
 
 @Composable
 fun NexusTopAppBar(
+    title: String,
     modifier: Modifier = Modifier,
     onNotificationClick: () -> Unit = {},
     onChatClick: () -> Unit = {},
@@ -62,52 +54,22 @@ fun NexusTopAppBar(
     var accountMenu by remember { mutableStateOf(false) }
     LaunchedEffect(accountMenu) { onAccountMenuChange(accountMenu) }
     DisposableEffect(Unit) { onDispose { onAccountMenuChange(false) } }
-    val logo = imageResource(Res.drawable.exp_logo)
     Column(modifier.fillMaxWidth().background(Color.White).statusBarsPadding()) {
         Row(
             modifier = Modifier.fillMaxWidth().height(63.dp).padding(start = 20.dp, end = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(
+            Text(
+                text = title,
                 modifier = Modifier.weight(1f).padding(end = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Canvas(Modifier.width(50.dp).height(25.75.dp).semantics { contentDescription = "EXP Digital Solutions" }) {
-                    // Draw the complete mark from the padded PNG without clipping the P.
-                    val markHeight = size.width * 163f / 443f
-                    drawImage(
-                        image = logo,
-                        srcOffset = IntOffset(82, 228),
-                        srcSize = IntSize(443, 163),
-                        dstOffset = IntOffset(0, ((size.height - markHeight) / 2).roundToInt()),
-                        dstSize = IntSize(size.width.roundToInt(), markHeight.roundToInt())
-                    )
-                }
-                Box(Modifier.width(1.dp).height(28.dp).background(Color(0xFFE1E4EA)))
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(
-                        text = "Digital Solutions",
-                        fontSize = 12.sp,
-                        lineHeight = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF1A2233),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = "CLIENT ACCESS",
-                        fontSize = 11.sp,
-                        lineHeight = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        letterSpacing = 0.8.sp,
-                        color = Color(0xFF52627A),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
+                fontSize = 22.sp,
+                lineHeight = 28.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = NexusColors.HeaderDarkNavy,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(
@@ -153,7 +115,7 @@ fun NexusTopAppBar(
                         }
                         HorizontalDivider(color = NexusColors.Border)
                         DropdownMenuItem(text = { Text("Profile", fontSize = 14.sp) }, leadingIcon = { Icon(Icons.Outlined.PersonOutline, null, Modifier.size(18.dp), tint = NexusColors.PrimaryBlue) }, onClick = { accountMenu = false; onProfileClick() })
-                        DropdownMenuItem(text = { Text("Settings", fontSize = 14.sp) }, leadingIcon = { Icon(Icons.Outlined.Settings, null, Modifier.size(18.dp), tint = NexusColors.TextSecondary) }, onClick = { accountMenu = false; onSettingsClick() })
+                        DropdownMenuItem(text = { Text("Settings", fontSize = 14.sp) }, leadingIcon = { Icon(Icons.Outlined.Settings, null, Modifier.size(18.dp), tint = NexusColors.PrimaryBlue) }, onClick = { accountMenu = false; onSettingsClick() })
                         HorizontalDivider(color = NexusColors.Border)
                         DropdownMenuItem(text = { Text("Log out", fontSize = 14.sp, color = NexusColors.ErrorRed) }, leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Logout, null, Modifier.size(18.dp), tint = NexusColors.ErrorRed) }, onClick = { accountMenu = false; onLogoutClick() })
                     }

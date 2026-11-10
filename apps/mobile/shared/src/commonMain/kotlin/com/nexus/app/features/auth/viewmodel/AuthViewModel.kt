@@ -21,6 +21,7 @@ data class LoginUiState(
     val email: String = "",
     val password: String = "",
     val submitting: Boolean = false,
+    val success: Boolean = false,
     /** Validation or server error (wrong password, inactive account, ...). */
     val error: String? = null,
     /** True when the failure was not a server answer: no connection or server unreachable. */
@@ -48,7 +49,7 @@ class AuthViewModel(
 
     fun submit(onSuccess: (AuthUser) -> Unit) {
         val current = _state.value
-        if (current.submitting) return
+        if (current.submitting || current.success) return
 
         val validation = validateLogin(current.email, current.password)
         if (validation != null) {
@@ -69,7 +70,7 @@ class AuthViewModel(
             result
                 .onSuccess { user ->
                     // Never keep the password in memory after a successful sign-in.
-                    _state.update { it.copy(submitting = false, password = "") }
+                    _state.update { it.copy(submitting = false, success = true, password = "") }
                     onSuccess(user)
                 }
                 .onFailure { error ->

@@ -1,5 +1,7 @@
 package com.nexus.app.features.auth.screens
 
+import com.nexus.app.core.components.NexusDialogButton
+import com.nexus.app.core.components.NexusAlertDialog
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -38,7 +40,7 @@ fun LoginScreen(onLoggedIn: (AuthUser) -> Unit, onNavigateToRegister: () -> Unit
                     Text("Forgot password?", Modifier.clickable(enabled = !state.submitting) { recovery = true }, fontSize = 12.sp,
                         lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF233D92))
                 }
-                AuthButton(if (state.offline) "Retry" else "Sign In", state.submitting) { submitted = true; viewModel.submit(onLoggedIn) }
+                AuthButton(if (state.offline) "Retry" else "Sign In", state.submitting) { submitted = true; viewModel.submit { user -> submitted = false; onLoggedIn(user) } }
             }
         },
         switchLink = { AuthSwitchLink("New to EXP?", "Create an account", !state.submitting, onNavigateToRegister) }
@@ -47,16 +49,16 @@ fun LoginScreen(onLoggedIn: (AuthUser) -> Unit, onNavigateToRegister: () -> Unit
         Spacer(Modifier.height(22.dp))
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             AuthTextField(state.email, viewModel::onEmailChange, "Email address", "you@example.com", keyboardType = KeyboardType.Email,
-                errorMessage = if (submitted && state.email.isBlank()) "Email address is required." else null,
+                errorMessage = if (submitted && !state.success && state.email.isBlank()) "Email address is required." else null,
                 enabled = !state.submitting, leadingIcon = Icons.Outlined.MailOutline)
             AuthTextField(state.password, viewModel::onPasswordChange, "Password", "Enter your password", isPassword = true,
-                errorMessage = if (submitted && state.password.isBlank()) "Password is required." else null,
+                errorMessage = if (submitted && !state.success && state.password.isBlank()) "Password is required." else null,
                 enabled = !state.submitting, leadingIcon = Icons.Outlined.Lock)
         }
-        if (!state.offline && state.email.isNotBlank() && state.password.isNotBlank()) state.error?.let { Text(it, Modifier.padding(top = 8.dp), color = NexusColors.ErrorRed, fontSize = 13.sp) }
+        if (!state.success && !state.offline && state.email.isNotBlank() && state.password.isNotBlank()) state.error?.let { Text(it, Modifier.padding(top = 8.dp), color = NexusColors.ErrorRed, fontSize = 13.sp) }
         sessionNotice?.let { Text(it, Modifier.padding(top = 8.dp), color = NexusColors.TextSecondary, fontSize = 13.sp) }
     }
-    if (recovery) AlertDialog(onDismissRequest = { recovery = false }, title = { Text("Forgot your password?") },
+    if (recovery) NexusAlertDialog(onDismissRequest = { recovery = false }, title = { Text("Forgot your password?") },
         text = { Text("Please contact EXP Digital Solutions support for help recovering your account.") },
-        confirmButton = { TextButton(onClick = { recovery = false }) { Text("Close") } })
+        confirmButton = { NexusDialogButton(onClick = { recovery = false }) { Text("Close") } })
 }

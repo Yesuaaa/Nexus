@@ -1,5 +1,6 @@
 package com.nexus.app.features.conversations.components
 
+import com.nexus.app.core.theme.NexusButtonShape
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -50,7 +51,7 @@ fun SpecialistProfileSheet(profile: SpecialistProfile, department: String, onClo
                 if (loading) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 20.dp), color = ConversationStyle.Navy)
                 if (error != null) Column(Modifier.padding(20.dp)) {
                     Text(error, fontSize = 14.sp, lineHeight = 21.sp, color = ConversationStyle.Muted)
-                    TextButton(onClick = onRetry) { Text("Try again", color = ConversationStyle.Navy) }
+                    TextButton(shape = NexusButtonShape, onClick = onRetry) { Text("Try again", color = ConversationStyle.Navy) }
                 }
                 if (!loading && error == null) Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -84,7 +85,7 @@ fun SpecialistProfileSheet(profile: SpecialistProfile, department: String, onClo
             HorizontalDivider(color = ConversationStyle.Divider)
             Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text("View the specialist's background and featured work from your request conversation.", fontSize = 12.sp, lineHeight = 18.sp, color = ConversationStyle.Muted)
-                OutlinedButton(onClick = onClose, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, ConversationStyle.Border)) {
+                OutlinedButton(onClick = onClose, modifier = Modifier.fillMaxWidth().height(48.dp), shape = NexusButtonShape, border = BorderStroke(1.dp, ConversationStyle.Border)) {
                     Text("Close profile", fontSize = 14.sp, color = ConversationStyle.Navy)
                 }
             }

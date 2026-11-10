@@ -24,6 +24,7 @@ data class RegisterUiState(
     val password: String = "",
     val confirmation: String = "",
     val submitting: Boolean = false,
+    val success: Boolean = false,
     /** Validation or server error (duplicate email, bad input, ...). */
     val error: String? = null,
     /** True when the failure was not a server answer: no connection or server unreachable. */
@@ -64,7 +65,7 @@ class RegisterViewModel(
 
     fun submit(onSuccess: (AuthUser) -> Unit) {
         val current = _state.value
-        if (current.submitting) return
+        if (current.submitting || current.success) return
 
         val validation = validateRegistration(
             current.fullName,
@@ -91,7 +92,7 @@ class RegisterViewModel(
             result
                 .onSuccess { user ->
                     // Never keep passwords in memory after a successful registration.
-                    _state.update { it.copy(submitting = false, password = "", confirmation = "") }
+                    _state.update { it.copy(submitting = false, success = true, password = "", confirmation = "") }
                     onSuccess(user)
                 }
                 .onFailure { error ->

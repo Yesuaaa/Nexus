@@ -1,5 +1,6 @@
 package com.nexus.app.features.conversations.components
 
+import com.nexus.app.core.theme.NexusButtonShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -65,7 +66,7 @@ fun ConversationAttachmentCard(
             FileAttachmentCard(file, ::download)
             error?.let {
                 Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
-                if (isImage) TextButton(onClick = { retry++ }) { Text("Retry preview") }
+                if (isImage) TextButton(shape = NexusButtonShape, onClick = { retry++ }) { Text("Retry preview") }
             }
         }
     }

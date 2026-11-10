@@ -1,18 +1,15 @@
 package com.nexus.app.navigation
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.Assignment
-import androidx.compose.material.icons.outlined.GridView
-import androidx.compose.material.icons.outlined.Widgets
+import com.nexus.app.core.components.NexusNavIcons
 import androidx.compose.ui.graphics.vector.ImageVector
 
 enum class BottomTab(
     val label: String,
     val icon: ImageVector
 ) {
-    DASHBOARD("Dashboard", Icons.Outlined.GridView),
-    SERVICES("Services", Icons.Outlined.Widgets),
-    BOOKED_REQUESTS("Booked Requests", Icons.AutoMirrored.Outlined.Assignment)
+    DASHBOARD("Dashboard", NexusNavIcons.Dashboard),
+    SERVICES("Services", NexusNavIcons.Services),
+    BOOKED_REQUESTS("Booked Requests", NexusNavIcons.BookedRequests)
 }
 
 sealed class Screen(val route: String) {

@@ -1,5 +1,8 @@
 package com.nexus.app.features.services.screens
 
+import com.nexus.app.core.components.NexusDialogButton
+import com.nexus.app.core.components.NexusAlertDialog
+import com.nexus.app.core.theme.NexusButtonShape
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -75,9 +78,9 @@ fun ServicesScreen(
                 PageHeading("Build Your Brand with EXP",
                     "Discover digital services crafted to amplify your presence and turn ideas into business impact.")
             }
-            item { TextButton(onClick = onBookedRequests) { Text("My booked requests  →") } }
+            item { TextButton(shape = NexusButtonShape, onClick = onBookedRequests, contentPadding = PaddingValues(0.dp)) { Text("My booked requests  →") } }
             if (service != null) item {
-                OutlinedButton(onClick = { viewModel.goTo(if (state.packageSelected) 3 else 2) }) { Text("Continue your draft") }
+                OutlinedButton(shape = NexusButtonShape, onClick = { viewModel.goTo(if (state.packageSelected) 3 else 2) }) { Text("Continue your draft") }
             }
             item { BookingProgress(1) }
             item { OutlinedTextField(
@@ -107,7 +110,7 @@ fun ServicesScreen(
                 BookingPanel("No services found") {
                     Text(if (state.services.isEmpty()) "No active services are available yet. Please check again later."
                         else "Try another search or department.", color = NexusColors.TextSecondary)
-                    TextButton(onClick = { viewModel.search(""); viewModel.department(""); viewModel.loadCatalog() }) { Text("Reset and refresh") }
+                    TextButton(shape = NexusButtonShape, onClick = { viewModel.search(""); viewModel.department(""); viewModel.loadCatalog() }) { Text("Reset and refresh") }
                 }
             }
             items(services.chunked(2), key = { it.first().id }) { row ->
@@ -134,7 +137,7 @@ fun ServicesScreen(
             }
         } else {
             item {
-                TextButton(onClick = { viewModel.goTo(state.step - 1) }, enabled = !locked,
+                TextButton(shape = NexusButtonShape, onClick = { viewModel.goTo(state.step - 1) }, enabled = !locked,
                     contentPadding = PaddingValues(0.dp)) {
                     Icon(Icons.Outlined.ArrowBack, null, Modifier.size(16.dp))
                     Text(" Back")
@@ -151,7 +154,7 @@ fun ServicesScreen(
                 item { BookingPanel("Selected service") {
                     Text(service.name, fontWeight = FontWeight.SemiBold)
                     Text(service.departments.joinToString { it.name }, fontSize = 12.sp, color = NexusColors.TextSecondary)
-                    TextButton(onClick = { viewModel.showDetails(service) }) { Text("View service details") }
+                    TextButton(shape = NexusButtonShape, onClick = { viewModel.showDetails(service) }) { Text("View service details") }
                 } }
                 item { PageHeading("Packages & pricing", "Choose a service option to see what's included.") }
                 if (service.packages.none { it.isActive }) {
@@ -189,7 +192,7 @@ fun ServicesScreen(
                 } }
                 item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { toast.show("Draft saved", "Your draft is kept while you continue in the app.", com.nexus.app.core.components.ToastKind.INFO) },
-                        enabled = !locked, shape = RoundedCornerShape(6.dp),
+                        enabled = !locked, shape = NexusButtonShape,
                         modifier = Modifier.heightIn(min = 44.dp)) { Text("Save requirements") }
                     BookingContinueButton(onClick = { viewModel.goTo(4) }, enabled = !locked,
                         modifier = Modifier.weight(1f))
@@ -214,7 +217,7 @@ fun ServicesScreen(
                                 Text(specialist.department?.name.orEmpty(), fontSize = 12.sp, color = NexusColors.TextSecondary)
                             }
                         }
-                        TextButton(onClick = { viewModel.showProfile(specialist.id) }, enabled = !state.profileLoading) { Text("View profile") }
+                        TextButton(shape = NexusButtonShape, onClick = { viewModel.showProfile(specialist.id) }, enabled = !state.profileLoading) { Text("View profile") }
                     }
                 }
                 if (!state.specialistsLoading && state.specialistError == null && state.specialists.isEmpty()) item {
@@ -228,8 +231,8 @@ fun ServicesScreen(
                     InfoLine("Expected timeline", state.draft.expectedTimeline)
                     if (state.draft.additionalDetails.isNotBlank()) InfoLine("Additional details", state.draft.additionalDetails)
                     Row {
-                        TextButton(onClick = { viewModel.goTo(3) }, enabled = !locked) { Text("Edit requirements") }
-                        TextButton(onClick = { viewModel.goTo(2) }, enabled = !locked) { Text("Edit package") }
+                        TextButton(shape = NexusButtonShape, onClick = { viewModel.goTo(3) }, enabled = !locked) { Text("Edit requirements") }
+                        TextButton(shape = NexusButtonShape, onClick = { viewModel.goTo(2) }, enabled = !locked) { Text("Edit package") }
                     }
                 } }
                 state.error?.let { item { Text(it, color = NexusColors.ErrorRed, fontSize = 13.sp) } }
@@ -284,14 +287,14 @@ fun ServicesScreen(
     }
 
     state.profile?.let { profile ->
-        AlertDialog(onDismissRequest = viewModel::closeProfile,
+        NexusAlertDialog(onDismissRequest = viewModel::closeProfile,
             title = { Text(profile.fullName) },
             text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(profile.position ?: "Specialist")
                 Text(profile.bio ?: "No biography has been added.")
                 if (profile.specialties.isNotEmpty()) Text(profile.specialties.joinToString(" ? "))
             } },
-            confirmButton = { TextButton(onClick = viewModel::closeProfile) { Text("Close") } })
+            confirmButton = { NexusDialogButton(onClick = viewModel::closeProfile) { Text("Close") } })
     }
 }
 
@@ -327,7 +330,7 @@ private fun PackageOption(name: String, description: String, price: String, feat
             features.forEach { Text("\u2022 $it", fontSize = 13.sp, color = secondary) }
             OutlinedButton(
                 onClick = onSelect, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
-                shape = RoundedCornerShape(6.dp),
+                shape = NexusButtonShape,
                 border = androidx.compose.foundation.BorderStroke(1.dp,
                     if (selected) Color.White.copy(alpha = 0.65f) else NexusColors.Border),
                 colors = ButtonDefaults.outlinedButtonColors(

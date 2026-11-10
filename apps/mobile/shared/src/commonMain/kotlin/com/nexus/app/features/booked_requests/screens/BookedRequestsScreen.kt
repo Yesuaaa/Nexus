@@ -1,5 +1,8 @@
 package com.nexus.app.features.booked_requests.screens
 
+import com.nexus.app.core.components.NexusDialogButton
+import com.nexus.app.core.components.NexusAlertDialog
+import com.nexus.app.core.theme.NexusButtonShape
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
@@ -52,7 +55,7 @@ fun BookedRequestsScreen(
         LazyColumn(modifier.fillMaxSize().background(Color(0xFFF7F8FA)),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 0.dp, bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            item { TextButton(onClick = { closeDetails() }, enabled = !state.cancelling,
+            item { TextButton(shape = NexusButtonShape, onClick = { closeDetails() }, enabled = !state.cancelling,
                 contentPadding = PaddingValues(0.dp)) { Text("←  Back to booked requests") } }
             item { PageHeading("Request details", detail?.referenceNumber ?: state.detailId.orEmpty()) }
             if (state.detailLoading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
@@ -78,32 +81,31 @@ fun BookedRequestsScreen(
                     InfoLine("Last updated", detail.updatedAt.take(10))
                 } }
                 if (detail.canCancel) item {
-                    OutlinedButton(onClick = { confirmCancellation = true },
-                        shape = RoundedCornerShape(6.dp),
+                    Button(onClick = { confirmCancellation = true },
+                        shape = NexusButtonShape,
                         enabled = !state.cancelling && !state.detailLoading,
                         modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NexusColors.ErrorRed)) {
+                        colors = ButtonDefaults.buttonColors(containerColor = NexusColors.ErrorRed, contentColor = Color.White, disabledContainerColor = NexusColors.ErrorRed.copy(alpha = 0.5f), disabledContentColor = Color.White.copy(alpha = 0.7f))) {
                         Text(if (state.cancelling) "Cancelling..." else "Cancel request")
                     }
                 }
             }
         }
         if (confirmCancellation && detail != null) {
-            AlertDialog(onDismissRequest = { if (!state.cancelling) confirmCancellation = false },
+            NexusAlertDialog(onDismissRequest = { if (!state.cancelling) confirmCancellation = false },
                 title = { Text("Cancel this request?") },
                 text = { Text(if (detail.acceptedDepartmentId == null)
                     "This request has not been accepted by a department. It will be cancelled directly."
                     else "This will cancel the accepted request through its department workflow.") },
-                confirmButton = { TextButton(onClick = { confirmCancellation = false; viewModel.cancel() },
-                    enabled = !state.cancelling) { Text("Cancel request", color = NexusColors.ErrorRed) } },
-                dismissButton = { TextButton(onClick = { confirmCancellation = false }) { Text("Keep request") } })
+                confirmButton = { NexusDialogButton(onClick = { confirmCancellation = false; viewModel.cancel() }, enabled = !state.cancelling, destructive = true) { Text("Cancel request", maxLines = 1, softWrap = false) } },
+                dismissButton = { NexusDialogButton(onClick = { confirmCancellation = false }) { Text("Keep request") } })
         }
     } else {
         PullToRefreshBox(isRefreshing = state.loading, onRefresh = { viewModel.refresh() },
             modifier = modifier.fillMaxSize().background(Color(0xFFF7F8FA))) {
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                item { PageHeading("Booked Requests", "Track your requests, review project details, and follow their progress.") }
+                item { Text("Track your requests, review project details, and follow their progress.", fontSize = 13.sp, lineHeight = 20.sp, color = NexusColors.TextSecondary) }
                 item { NexusButton("+ New Service Request", onNewRequestClick) }
                 item {
                     val summary = state.result.summary
@@ -169,10 +171,10 @@ fun BookedRequestsScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("${state.result.total} results", fontSize = 12.sp, color = NexusColors.TextSecondary)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            TextButton(onClick = { viewModel.page(state.filters.page - 1) },
+                            TextButton(shape = NexusButtonShape, onClick = { viewModel.page(state.filters.page - 1) },
                                 enabled = !state.loading && state.filters.page > 1) { Text("Previous") }
-                            TextButton(onClick = {}, enabled = false) { Text("${state.filters.page} / ${state.result.pages}") }
-                            TextButton(onClick = { viewModel.page(state.filters.page + 1) },
+                            TextButton(shape = NexusButtonShape, onClick = {}, enabled = false) { Text("${state.filters.page} / ${state.result.pages}") }
+                            TextButton(shape = NexusButtonShape, onClick = { viewModel.page(state.filters.page + 1) },
                                 enabled = !state.loading && state.filters.page < state.result.pages) { Text("Next") }
                         }
                     }
