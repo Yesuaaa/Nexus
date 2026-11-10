@@ -93,11 +93,7 @@ function projectProgress(project: ClientProjectSummary) {
     : 0
 }
 
-function ProjectAction({
-  project,
-}: {
-  project: ClientProjectSummary
-}) {
+function ProjectAction({ project }: { project: ClientProjectSummary }) {
   return (
     <Link
       id={`project-view-${project.id}`}
