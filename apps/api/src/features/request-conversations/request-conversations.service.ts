@@ -48,23 +48,9 @@ function participantScope(
   }
 }
 
-function lifecycleScope(
-  userId: string,
-  view: ConversationView,
-): Prisma.RequestConversationWhereInput {
-  if (view === "archived") {
-    return {
-      bookings: {
-        some: {},
-        every: { status: { in: [...archivedStatuses] } },
-      },
-      deletions: { none: { userId } },
-    }
-  }
+function lifecycleScope(userId: string): Prisma.RequestConversationWhereInput {
   return {
-    bookings: {
-      some: { status: { notIn: [...archivedStatuses] } },
-    },
+    deletions: { none: { userId } },
   }
 }
 
@@ -75,18 +61,7 @@ function visibleScope(
   return {
     AND: [
       participantScope(userId),
-      view
-        ? lifecycleScope(userId, view)
-        : {
-            OR: [
-              {
-                bookings: {
-                  some: { status: { notIn: [...archivedStatuses] } },
-                },
-              },
-              { deletions: { none: { userId } } },
-            ],
-          },
+      view ? lifecycleScope(userId) : lifecycleScope(userId),
     ],
   }
 }
@@ -327,45 +302,42 @@ export async function listConversations(
     take: 31,
   })
   const conversations = await Promise.all(
-    rows.slice(0, 30).map(async ({ messages, ...row }) => {
-      const archived = isArchived(row.bookings)
-      return {
-        id: row.id,
-        status: archived ? "ARCHIVED" : "ACTIVE",
-        title:
-          row.bookings.length === 1
-            ? row.bookings[0]!.title
-            : `${row.bookings.length} booked services`,
-        referenceNumber:
-          row.bookings.length === 1 ? row.bookings[0]!.referenceNumber : null,
-        service: { name: row.bookings[0]?.service.name ?? "Booked services" },
-        updatedAt: row.updatedAt,
-        client: {
-          id: row.client.id,
-          fullName: row.client.fullName,
-          imageUrl: avatarUrl(row.client),
-        },
-        acceptedDepartment: {
-          id: row.department.id,
-          name: row.department.name,
-          headId: row.department.headId,
-          head: row.department.head
-            ? {
-                id: row.department.head.id,
-                fullName: row.department.head.fullName,
-                imageUrl: avatarUrl(row.department.head),
-              }
-            : null,
-        },
-        bookings: row.bookings.map(serializeBooking),
-        lastMessage: messages[0] ? serializeMessage(messages[0]) : null,
-        unreadCount: await unreadCount(
-          row.id,
-          userId,
-          row.clientId === userId ? row.clientReadAt : row.managerReadAt,
-        ),
-      }
-    }),
+    rows.slice(0, 30).map(async ({ messages, ...row }) => ({
+      id: row.id,
+      status: "ACTIVE",
+      title:
+        row.bookings.length === 1
+          ? row.bookings[0]!.title
+          : `${row.bookings.length} booked services`,
+      referenceNumber:
+        row.bookings.length === 1 ? row.bookings[0]!.referenceNumber : null,
+      service: { name: row.bookings[0]?.service.name ?? "Booked services" },
+      updatedAt: row.updatedAt,
+      client: {
+        id: row.client.id,
+        fullName: row.client.fullName,
+        imageUrl: avatarUrl(row.client),
+      },
+      acceptedDepartment: {
+        id: row.department.id,
+        name: row.department.name,
+        headId: row.department.headId,
+        head: row.department.head
+          ? {
+              id: row.department.head.id,
+              fullName: row.department.head.fullName,
+              imageUrl: avatarUrl(row.department.head),
+            }
+          : null,
+      },
+      bookings: row.bookings.map(serializeBooking),
+      lastMessage: messages[0] ? serializeMessage(messages[0]) : null,
+      unreadCount: await unreadCount(
+        row.id,
+        userId,
+        row.clientId === userId ? row.clientReadAt : row.managerReadAt,
+      ),
+    })),
   )
   return {
     conversations,
@@ -437,7 +409,7 @@ export async function getConversationAccess(
   const head = record.department.head
   const activeHead =
     head?.role === "STAFF" && head.isActive && !head.accountDeletedAt
-  const archived = isArchived(record.bookings)
+  const archived = false
   const aliasBooking = record.bookings.find((booking) => booking.id === id)?.id
   const selectedBookingId =
     record.bookings.find((booking) => booking.id === requestedBookingId)?.id ??
@@ -479,7 +451,7 @@ export async function getConversationAccess(
             },
           }),
     },
-    canSend: Boolean(activeHead && !archived),
+    canSend: Boolean(activeHead),
   }
 }
 
@@ -540,18 +512,13 @@ async function lockWritableConversation(
       id: conversation.id,
       ...participantScope(userId),
       department: { head: { ...activeUser, role: "STAFF" } },
-      bookings: {
-        some: { status: { notIn: [...archivedStatuses] } },
-      },
     },
     select: { id: true },
   })
   if (!writable)
     throw new ServiceRequestsError(
       409,
-      isArchived(conversation.bookings)
-        ? "This conversation is archived and read-only."
-        : "Messaging is unavailable without an active department manager.",
+      "Messaging is unavailable without an active department manager.",
     )
   return conversation.id
 }
