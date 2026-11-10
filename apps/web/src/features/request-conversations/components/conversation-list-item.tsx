@@ -3,7 +3,6 @@ import { useDatePreferences } from "@/features/settings/providers/preferences-pr
 
 import Link from "next/link"
 import { focusRing } from "@/components/layout/styles"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { cn } from "@/lib/utils"
 import { messagePreview } from "../model/conversation-groups"
 import { ConversationAvatar } from "./conversation-avatar"
@@ -192,11 +191,6 @@ function ConversationRow({
             )}
           </span>
         </span>
-        {railCollapsed && (
-          <HoverTooltip side="right">
-            {name} · {subtitle}
-          </HoverTooltip>
-        )}
       </Link>
     </div>
   )

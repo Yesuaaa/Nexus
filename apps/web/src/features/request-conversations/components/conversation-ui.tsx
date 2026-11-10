@@ -4,7 +4,6 @@ import { useId, type ReactNode, type Ref } from "react"
 import Link from "next/link"
 import { ArrowLeft, Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { focusRing } from "@/components/layout/styles"
 import { cn } from "@/lib/utils"
 import { ConversationAvatar } from "./conversation-avatar"
@@ -131,12 +130,10 @@ export function ConversationBubble({
   own,
   deleted = false,
   body,
-  timestamp,
 }: {
   own: boolean
   deleted?: boolean
   body: string | null
-  timestamp: string
 }) {
   return (
     <div className="relative w-fit max-w-full">
@@ -154,7 +151,6 @@ export function ConversationBubble({
       >
         {deleted ? "This message was deleted" : body}
       </p>
-      <HoverTooltip>{timestamp}</HoverTooltip>
     </div>
   )
 }

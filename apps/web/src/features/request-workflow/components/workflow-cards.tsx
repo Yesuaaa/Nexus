@@ -22,7 +22,6 @@ import {
 import { sileo } from "@/lib/toast"
 import { AttachmentPreview, attachmentAccept } from "./attachment-preview"
 import { RequirementResponseForm } from "./requirement-response-form"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { DateInput } from "@/components/ui/date-input"
 
 export function getConsultationMeetingUrl(location: string) {
@@ -167,7 +166,6 @@ export function FileSubmissionCard({
         <div className="min-w-0 flex-1">
           <p className="m-0 truncate text-xs font-semibold text-[#182235]">
             {file.name}
-            <HoverTooltip>{file.name}</HoverTooltip>
           </p>
           <p className="mt-0.5 mb-0 text-[11px] text-[#6d7b91]">
             {isVideo ? "Video · " : isImage ? "Image · " : "File · "}
@@ -1606,16 +1604,12 @@ export function ProjectActivationCard({ workflow }: { workflow: Workflow }) {
 }
 
 export function SystemStatusUpdate({ event }: { event: WorkflowEvent }) {
-  const { formatTime } = useDatePreferences()
-
-  const date = new Date(event.createdAt)
   return (
     <div className="mx-auto my-3 w-fit max-w-full rounded-xl bg-[#edf2fb] px-3 py-1.5 text-center text-[11px] leading-5 text-[#294a9b]">
       <div className="relative min-w-0">
         <p className="my-0 whitespace-pre-wrap [overflow-wrap:anywhere]">
           {event.summary}
         </p>
-        <HoverTooltip>{formatTime(date)}</HoverTooltip>
       </div>
     </div>
   )

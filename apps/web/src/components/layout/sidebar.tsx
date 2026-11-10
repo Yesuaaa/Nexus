@@ -12,7 +12,6 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Account } from "@/features/auth/model/types"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import {
   canAccessAccountManagement,
   canAccessRequestInbox,
@@ -44,10 +43,6 @@ const accessLabels: Record<Account["role"], string> = {
 }
 
 const navLinkClass = `group relative flex min-h-10 w-full items-center gap-[13px] rounded-md border-0 bg-transparent px-[13px] text-left font-semibold text-foreground no-underline whitespace-nowrap cursor-pointer transition-colors duration-150 hover:bg-[#e1e3e5] max-[767px]:min-h-10 max-[767px]:w-full max-[767px]:justify-start max-[767px]:gap-[13px] max-[767px]:px-[13px] max-[767px]:aspect-auto motion-reduce:transition-none ${focusRing}`
-
-function CollapsedTooltip({ children }: { children: string }) {
-  return <HoverTooltip side="right">{children}</HoverTooltip>
-}
 
 export function Sidebar({
   account,
@@ -117,7 +112,6 @@ export function Sidebar({
             onClick={onToggleCollapse}
           >
             <PanelIcon />
-            {collapsed && <CollapsedTooltip>Expand sidebar</CollapsedTooltip>}
           </button>
           <button
             type="button"
@@ -152,7 +146,6 @@ export function Sidebar({
           >
             <DashboardIcon className="flex-none" />
             <span className={collapsedLabelClass}>Dashboard</span>
-            {collapsed && <CollapsedTooltip>Dashboard</CollapsedTooltip>}
           </Link>
           {canAccessAccountManagement(account) && (
             <Link
@@ -168,9 +161,6 @@ export function Sidebar({
             >
               <AccountsIcon className="flex-none" />
               <span className={collapsedLabelClass}>Account Management</span>
-              {collapsed && (
-                <CollapsedTooltip>Account Management</CollapsedTooltip>
-              )}
             </Link>
           )}
           {canAccessDepartmentManagement(account) && (
@@ -187,9 +177,6 @@ export function Sidebar({
             >
               <DepartmentIcon className="flex-none" />
               <span className={collapsedLabelClass}>Department Management</span>
-              {collapsed && (
-                <CollapsedTooltip>Department Management</CollapsedTooltip>
-              )}
             </Link>
           )}
           {canAccessEmployeeManagement(account) && (
@@ -206,9 +193,6 @@ export function Sidebar({
             >
               <UsersRound size={20} strokeWidth={1.7} className="flex-none" />
               <span className={collapsedLabelClass}>Employee Management</span>
-              {collapsed && (
-                <CollapsedTooltip>Employee Management</CollapsedTooltip>
-              )}
             </Link>
           )}
           {(canAccessServiceCatalog(account) ||
@@ -228,11 +212,6 @@ export function Sidebar({
               <span className={collapsedLabelClass}>
                 {account.role === "USER" ? "Services" : "Service Management"}
               </span>
-              {collapsed && (
-                <CollapsedTooltip>
-                  {account.role === "USER" ? "Services" : "Service Management"}
-                </CollapsedTooltip>
-              )}
             </Link>
           )}
           {canAccessServiceCatalog(account) && (
@@ -255,9 +234,6 @@ export function Sidebar({
                 className="flex-none"
               />
               <span className={collapsedLabelClass}>Booked Requests</span>
-              {collapsed && (
-                <CollapsedTooltip>Booked Requests</CollapsedTooltip>
-              )}
             </Link>
           )}
           {canAccessCalendar(account) && (
@@ -274,7 +250,6 @@ export function Sidebar({
             >
               <CalendarDays size={20} strokeWidth={1.7} className="flex-none" />
               <span className={collapsedLabelClass}>Calendar</span>
-              {collapsed && <CollapsedTooltip>Calendar</CollapsedTooltip>}
             </Link>
           )}
           {account.role === "USER" && canAccessProjects(account) && (
@@ -293,7 +268,6 @@ export function Sidebar({
             >
               <FolderKanban size={20} strokeWidth={1.7} className="flex-none" />
               <span className={collapsedLabelClass}>My Projects</span>
-              {collapsed && <CollapsedTooltip>My Projects</CollapsedTooltip>}
             </Link>
           )}
           {canAccessRequestInbox(account) && (
@@ -310,7 +284,6 @@ export function Sidebar({
             >
               <UsersRound size={20} strokeWidth={1.7} className="flex-none" />
               <span className={collapsedLabelClass}>Staff Workload</span>
-              {collapsed && <CollapsedTooltip>Staff Workload</CollapsedTooltip>}
             </Link>
           )}
           {canAccessRequestInbox(account) && (
@@ -329,7 +302,6 @@ export function Sidebar({
             >
               <Inbox size={20} strokeWidth={1.7} className="flex-none" />
               <span className={collapsedLabelClass}>Request Inbox</span>
-              {collapsed && <CollapsedTooltip>Request Inbox</CollapsedTooltip>}
             </Link>
           )}
           {canAccessProjectWorkspace(account) && (
@@ -353,9 +325,6 @@ export function Sidebar({
             >
               <AccountsIcon className="flex-none" />
               <span className={collapsedLabelClass}>Client Management</span>
-              {collapsed && (
-                <CollapsedTooltip>Client Management</CollapsedTooltip>
-              )}
             </Link>
           )}
         </nav>
@@ -378,9 +347,6 @@ export function Sidebar({
             >
               <CircleHelp size={20} strokeWidth={1.7} className="flex-none" />
               <span className={collapsedLabelClass}>Help &amp; Support</span>
-              {collapsed && (
-                <CollapsedTooltip>Help &amp; Support</CollapsedTooltip>
-              )}
             </Link>
           </div>
         )}

@@ -12,7 +12,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Input } from "@/components/ui/input"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import { RowActionsMenu } from "@/components/ui/row-actions-menu"
@@ -89,7 +88,6 @@ export function WorkspaceListRowActions({
           aria-label={`View ${workspace.name}`}
         >
           <Eye size={16} strokeWidth={1.7} aria-hidden="true" />
-          <HoverTooltip>View project</HoverTooltip>
         </Link>
         {workspace.canManage && !isArchived && (
           <>
@@ -103,7 +101,6 @@ export function WorkspaceListRowActions({
               onClick={() => openDialog("edit")}
             >
               <Pencil size={15} strokeWidth={1.8} aria-hidden="true" />
-              <HoverTooltip>Edit project</HoverTooltip>
             </button>
             <RowActionsMenu
               triggerLabel={`More actions for ${workspace.name}`}

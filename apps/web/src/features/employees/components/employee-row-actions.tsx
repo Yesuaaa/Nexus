@@ -1,4 +1,3 @@
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import {
   RowActionsMenu,
@@ -82,7 +81,6 @@ export function EmployeeRowActions({
               <path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z" />
               <circle cx="12" cy="12" r="2.5" />
             </svg>
-            <HoverTooltip>View details</HoverTooltip>
           </button>
           <button
             type="button"
@@ -107,7 +105,6 @@ export function EmployeeRowActions({
             >
               <path d="m16 3 5 5M4 16 17 3a2.1 2.1 0 0 1 3 3L7 19l-5 2 2-5Z" />
             </svg>
-            <HoverTooltip>Edit employee</HoverTooltip>
           </button>
         </>
       )}

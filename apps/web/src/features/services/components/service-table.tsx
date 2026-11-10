@@ -9,7 +9,6 @@ import { SearchEmptyState } from "@/components/ui/search-empty-state"
 import { SearchField } from "@/components/ui/search-field"
 import { Dropdown } from "@/components/ui/dropdown"
 import { Pill } from "@/components/ui/pill"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { useTableFooter } from "@/components/ui/use-table-search"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
 import { rowActionButton } from "@/components/ui/row-action-styles"
@@ -60,11 +59,6 @@ function DepartmentPills({ service }: { service: Service }) {
             .join(", ")}`}
         >
           +{remainingCount}
-          <HoverTooltip>
-            {remainingDepartments
-              .map((department) => department.name)
-              .join(", ")}
-          </HoverTooltip>
         </Pill>
       )}
     </span>
@@ -95,7 +89,6 @@ function ServiceActions({
         onClick={() => onView(service)}
       >
         <Eye size={15} aria-hidden="true" />
-        <HoverTooltip>View details</HoverTooltip>
       </button>
       {canManage && (
         <button
@@ -108,7 +101,6 @@ function ServiceActions({
           onClick={() => onEdit(service)}
         >
           <Pencil size={14} aria-hidden="true" />
-          <HoverTooltip>Edit service</HoverTooltip>
         </button>
       )}
       {canManage && (

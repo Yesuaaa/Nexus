@@ -1,7 +1,6 @@
 import Link from "next/link"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Pill } from "@/components/ui/pill"
 import {
   ResponsiveDataTable,
@@ -122,7 +121,6 @@ export function WorkspaceListTable({
                   className="block truncate font-semibold text-foreground no-underline hover:underline focus-visible:outline-2 focus-visible:outline-ring"
                 >
                   {workspace.name}
-                  <HoverTooltip>{workspace.name}</HoverTooltip>
                 </Link>
               </div>
               <div

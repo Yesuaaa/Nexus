@@ -12,7 +12,7 @@ import {
   listDepartments,
   type Department,
 } from "../api/departments-api"
-import { CreateEditDepartmentDialog } from "../components/create-edit-department-dialog"
+import { DepartmentFormPanel } from "../components/department-form-panel"
 import { DeleteDepartmentDialog } from "../components/delete-department-dialog"
 import { DepartmentKpiCards } from "../components/department-kpi-cards"
 import { DepartmentTable } from "../components/department-table"
@@ -152,7 +152,7 @@ export function DepartmentManagementPage() {
       </section>
 
       {dialogOpen && (
-        <CreateEditDepartmentDialog
+        <DepartmentFormPanel
           department={editingDept}
           onClose={() => setDialogOpen(false)}
           onSaved={() => {

@@ -15,7 +15,6 @@ import {
   TableSortButton,
   type SortDirection,
 } from "@/components/ui/table-sort-button"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { cn } from "@/lib/utils"
 import type { Department } from "../api/departments-api"
 import { DepartmentRowActions } from "./department-row-actions"
@@ -262,14 +261,6 @@ export function DepartmentTable({
                     >
                       {department.name}
                     </button>
-                    {department.description && (
-                      <HoverTooltip
-                        align="start"
-                        className="max-w-64 whitespace-normal text-left leading-4"
-                      >
-                        {department.description}
-                      </HoverTooltip>
-                    )}
                   </span>
                   {department.code && (
                     <span className="mt-0.5 block truncate text-[11px] text-[#738096]">

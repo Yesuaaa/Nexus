@@ -8,13 +8,10 @@ import {
   getDepartmentColorValue,
   resolveDepartmentColor,
 } from "@/components/ui/department-pill"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { EdgeSheetContent } from "@/components/ui/edge-sheet"
 import { Pill } from "@/components/ui/pill"
+import { Sheet, SheetDescription, SheetTitle } from "@/components/ui/sheet"
+import { useAnimatedPanelClose } from "@/components/ui/use-animated-panel-close"
 import { cn } from "@/lib/utils"
 import {
   Select,
@@ -38,7 +35,7 @@ const labelClass = "text-xs font-semibold"
 const inputClass = `w-full min-w-0 rounded-lg border border-[#d6dfec] bg-background px-3 text-sm text-foreground placeholder:text-[#9aa8bb] ${focusRing}`
 const buttonClass = `inline-flex min-h-[38px] cursor-pointer items-center justify-center rounded-[9px] border border-transparent px-[15px] text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none ${focusRing}`
 
-export function CreateEditDepartmentDialog({
+export function DepartmentFormPanel({
   department,
   onClose,
   onSaved,
@@ -50,6 +47,7 @@ export function CreateEditDepartmentDialog({
   const openerRef = useRef(
     typeof document === "undefined" ? null : document.activeElement,
   )
+  const { open, closeAfterTransition } = useAnimatedPanelClose(onClose)
   const isEditing = Boolean(department)
   const [selectedPreset, setSelectedPreset] = useState<string>(
     department
@@ -131,7 +129,7 @@ export function CreateEditDepartmentDialog({
           headId: headId || null,
         })
       }
-      onSaved()
+      closeAfterTransition(onSaved)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to save department")
     } finally {
@@ -142,54 +140,50 @@ export function CreateEditDepartmentDialog({
   const previewColor = resolveDepartmentColor(color, name)
 
   return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open && !submitting) onClose()
-      }}
-    >
-      <DialogContent
-        showCloseButton={false}
-        overlayClassName="z-[110] bg-[rgb(13_28_57_/_48%)]"
-        className="z-[110] max-h-[calc(100dvh-28px)] w-[min(440px,calc(100vw-28px))] gap-0 overflow-y-auto rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_22px_75px_rgb(18_36_73_/_22%)]"
+    <Sheet open={open}>
+      <EdgeSheetContent
+        open={open}
+        overlayClassName="bg-[rgb(13_28_57_/_18%)]"
+        className="overflow-hidden"
         onCloseAutoFocus={(event) => {
           event.preventDefault()
           const opener = openerRef.current
           if (opener instanceof HTMLElement && opener.isConnected)
             opener.focus()
         }}
+        // Unsaved form: close only through Cancel or the close button.
         onInteractOutside={(event) => event.preventDefault()}
         onEscapeKeyDown={(event) => event.preventDefault()}
       >
-        <div className="flex items-start justify-between gap-4 px-5 pt-5">
-          <div>
-            <DialogTitle className="m-0 text-lg font-[650] tracking-[-0.03em]">
+        <header className="flex flex-none items-start justify-between gap-4 border-b border-[#eceef1] px-6 pt-6 pb-5 max-[560px]:px-5">
+          <div className="min-w-0">
+            <SheetTitle className="m-0 text-[22px] leading-[1.25] font-[650] tracking-[-0.03em]">
               {isEditing ? "Edit Department" : "Create Department"}
-            </DialogTitle>
-            <DialogDescription className="mt-2 mb-0 text-xs leading-relaxed text-[#738096]">
+            </SheetTitle>
+            <SheetDescription className="mt-1 mb-0 text-xs leading-relaxed text-[#738096]">
               {isEditing
                 ? "Update the department details and assigned head."
                 : "Add a department and assign its head."}
-            </DialogDescription>
+            </SheetDescription>
           </div>
           <button
             type="button"
             className={cn(
-              "grid size-7 flex-none cursor-pointer place-items-center rounded-[7px] border-0 bg-background text-[#65718a] hover:enabled:bg-[#f1f5fc] disabled:cursor-not-allowed disabled:opacity-50",
+              "grid size-8 flex-none cursor-pointer place-items-center rounded-[7px] border-0 bg-background text-[#65718a] hover:enabled:bg-[#f1f5fc] disabled:cursor-not-allowed disabled:opacity-50",
               focusRing,
             )}
-            onClick={onClose}
-            aria-label="Close dialog"
+            onClick={() => closeAfterTransition()}
+            aria-label="Close panel"
             disabled={submitting}
           >
             <CloseIcon />
           </button>
-        </div>
+        </header>
 
-        <Form onSubmit={handleSubmit}>
+        <Form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <fieldset
             disabled={submitting}
-            className="m-0 grid min-w-0 gap-4 border-0 p-5 disabled:opacity-60"
+            className="m-0 grid min-h-0 min-w-0 flex-1 content-start gap-4 overflow-y-auto overscroll-contain border-0 px-6 py-5 disabled:opacity-60 max-[560px]:px-5"
           >
             {error && (
               <p className="m-0 text-xs text-[#bc3649]" role="alert">
@@ -332,14 +326,14 @@ export function CreateEditDepartmentDialog({
             </div>
           </fieldset>
 
-          <footer className="flex justify-end gap-2 border-t border-[#eceef1] px-5 py-4">
+          <footer className="flex flex-none justify-end gap-2 border-t border-[#eceef1] px-6 py-4 max-[560px]:px-5">
             <button
               type="button"
               className={cn(
                 buttonClass,
                 "border-[#d7e0ee] bg-background text-[#24437e] hover:enabled:bg-[#f1f5fc]",
               )}
-              onClick={onClose}
+              onClick={() => closeAfterTransition()}
               disabled={submitting}
             >
               Cancel
@@ -360,7 +354,7 @@ export function CreateEditDepartmentDialog({
             </button>
           </footer>
         </Form>
-      </DialogContent>
-    </Dialog>
+      </EdgeSheetContent>
+    </Sheet>
   )
 }

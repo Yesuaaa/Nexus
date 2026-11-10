@@ -16,7 +16,6 @@ import { Info, MoreHorizontal, Pencil, Trash2, UserRound } from "lucide-react"
 import { sileo } from "@/lib/toast"
 import { Button } from "@/components/ui/button"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -835,7 +834,6 @@ function ConversationPanel({
                 {history?.conversation
                   ? `${history.conversation.department.name} · ${conversationBookings.length} ${conversationBookings.length === 1 ? "booking" : "bookings"}`
                   : requestTitle || "Service conversation"}
-                {requestTitle && <HoverTooltip>{requestTitle}</HoverTooltip>}
               </>
             }
             actions={
@@ -864,13 +862,6 @@ function ConversationPanel({
                       }
                     >
                       <UserRound size={16} aria-hidden="true" />
-                      <HoverTooltip>
-                        {specialistProfileLoading
-                          ? "Loading specialist profile"
-                          : specialistProfileTarget
-                            ? "View specialist profile"
-                            : "Specialist profile unavailable"}
-                      </HoverTooltip>
                     </button>
                   )}
                   {isStaff && clientProfile && clientProfileKey && (
@@ -884,7 +875,6 @@ function ConversationPanel({
                       onClick={() => setClientProfileOpenFor(clientProfileKey)}
                     >
                       <UserRound size={16} aria-hidden="true" />
-                      <HoverTooltip>View client profile</HoverTooltip>
                     </button>
                   )}
                   <button
@@ -906,11 +896,6 @@ function ConversationPanel({
                     onClick={() => setContextPanel(!contextPanelOpen)}
                   >
                     <Info size={17} aria-hidden="true" />
-                    <HoverTooltip>
-                      {contextPanelOpen
-                        ? "Hide service details"
-                        : "Show service details"}
-                    </HoverTooltip>
                   </button>
                 </div>
               )
@@ -1049,9 +1034,6 @@ function ConversationPanel({
                       ? previousEntry.message
                       : undefined
                   const nextEntry = timeline[index + 1]
-                  const deletedAt = message.deletedAt
-                    ? new Date(message.deletedAt)
-                    : null
                   const grouped =
                     !newDay && previous?.sender.id === message.sender.id
                   const groupedWithNext = Boolean(
@@ -1150,11 +1132,6 @@ function ConversationPanel({
                             own={own}
                             deleted={deleted}
                             body={message.body}
-                            timestamp={
-                              deleted
-                                ? `Deleted ${formatDate(deletedAt!)}, ${formatTime(deletedAt!)}`
-                                : `${message.editedAt ? "Edited · " : ""}${formatTime(date)}`
-                            }
                           />
                         )}
                         {deleted ? (

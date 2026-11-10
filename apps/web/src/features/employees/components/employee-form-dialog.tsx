@@ -4,7 +4,6 @@ import { Eye, EyeOff } from "lucide-react"
 import { CloseIcon } from "@/components/layout/icons"
 import { focusRing } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import {
   Dialog,
   DialogContent,
@@ -74,7 +73,6 @@ function FieldError({ id, message }: { id: string; message?: string }) {
       aria-atomic="true"
     >
       {message}
-      {message && <HoverTooltip>{message}</HoverTooltip>}
     </p>
   )
 }

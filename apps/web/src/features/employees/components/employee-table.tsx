@@ -4,7 +4,6 @@ import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { Button } from "@/components/ui/button"
 import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
 import { DepartmentPill } from "@/components/ui/department-pill.tsx"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Pill } from "@/components/ui/pill"
 import {
   ResponsiveDataTable,
@@ -215,7 +214,6 @@ export function EmployeeTable({
                   ID{" "}
                 </span>
                 {employee.employeeId || "Not set"}
-                <HoverTooltip>{employee.employeeId || "Not set"}</HoverTooltip>
               </div>
               <div
                 role="cell"
@@ -229,11 +227,9 @@ export function EmployeeTable({
                 <div className="min-w-0">
                   <p className="m-0 truncate font-semibold">
                     {employee.fullName}
-                    <HoverTooltip>{employee.fullName}</HoverTooltip>
                   </p>
                   <p className="mt-0.5 mb-0 truncate text-[11px] text-[#738096]">
                     {employee.email || "No email"}
-                    <HoverTooltip>{employee.email || "No email"}</HoverTooltip>
                   </p>
                 </div>
               </div>
@@ -272,15 +268,11 @@ export function EmployeeTable({
                 {employee.position || employee.team ? (
                   <>
                     {employee.position && (
-                      <p className="m-0 truncate">
-                        {employee.position}
-                        <HoverTooltip>{employee.position}</HoverTooltip>
-                      </p>
+                      <p className="m-0 truncate">{employee.position}</p>
                     )}
                     {employee.team && (
                       <p className="mt-0.5 mb-0 truncate text-[11px] text-[#738096]">
                         {employee.team.name}
-                        <HoverTooltip>{employee.team.name}</HoverTooltip>
                       </p>
                     )}
                   </>

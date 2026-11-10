@@ -1,7 +1,6 @@
 import { useRef, useState, type FocusEvent } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type { AuthCopy } from "../content/auth-copy"
@@ -29,7 +28,6 @@ export function FieldError({
       aria-atomic="true"
     >
       {message}
-      {message && <HoverTooltip>{message}</HoverTooltip>}
     </p>
   )
 }

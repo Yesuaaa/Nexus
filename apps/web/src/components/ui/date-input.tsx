@@ -14,7 +14,6 @@ import * as Dialog from "@radix-ui/react-dialog"
 import { CalendarDays } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Calendar, calendarToday } from "./calendar"
-import { HoverTooltip } from "./hover-tooltip"
 import { TimeInput } from "./time-input"
 import { Button } from "./button"
 
@@ -205,11 +204,6 @@ export const DateInput = forwardRef<HTMLInputElement, DateInputProps>(
                 >
                   {triggerLabel}
                 </span>
-              )}
-              {buttonTrigger && (
-                <HoverTooltip className="whitespace-normal leading-4">
-                  {props.title || props["aria-label"] || "Open calendar"}
-                </HoverTooltip>
               )}
             </button>
           </Dialog.Trigger>
