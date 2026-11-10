@@ -29,6 +29,7 @@ export function DepartmentManagementPage() {
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string
     name: string
+    memberCount: number
   } | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState("")
@@ -67,7 +68,9 @@ export function DepartmentManagementPage() {
   function requestDelete(id: string, name: string) {
     if (!canDelete || deleting) return
     setDeleteError("")
-    setDeleteTarget({ id, name })
+    const memberCount =
+      departments.find((department) => department.id === id)?.memberCount ?? 0
+    setDeleteTarget({ id, name, memberCount })
   }
 
   async function handleDelete() {
@@ -179,6 +182,7 @@ export function DepartmentManagementPage() {
       {deleteTarget && (
         <DeleteDepartmentDialog
           name={deleteTarget.name}
+          memberCount={deleteTarget.memberCount}
           deleting={deleting}
           error={deleteError}
           onClose={() => {

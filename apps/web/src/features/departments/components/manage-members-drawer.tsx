@@ -1,9 +1,18 @@
 import { Form } from "@/components/ui/form"
 import { useEffect, useRef, useState } from "react"
+import {
+  Check,
+  ChevronDown,
+  Pencil,
+  Trash2,
+  UserMinus,
+  UserPlus,
+} from "lucide-react"
 import { CloseIcon, PlusIcon, TrashIcon } from "@/components/layout/icons"
 import { focusRing } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
 import { EdgeSheetContent } from "@/components/ui/edge-sheet"
+import { RowActionsMenu } from "@/components/ui/row-actions-menu"
 import {
   Sheet,
   SheetClose,
@@ -13,16 +22,16 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Pill } from "@/components/ui/pill"
-import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { MemberIdentity } from "@/components/ui/member-identity"
 import { SearchField } from "@/components/ui/search-field"
 import { useAnimatedPanelClose } from "@/components/ui/use-animated-panel-close"
 import { cn } from "@/lib/utils"
 import { EditMemberForm } from "./edit-member-form"
+import { ConfirmSwap, InlineConfirm } from "./inline-confirm"
+import { InfoTip } from "./info-tip"
 import { PanelSubview } from "./panel-subview"
 import {
   panelAssignButton,
-  panelDangerButton,
   panelEmpty,
   panelField,
   panelIconButton,
@@ -42,6 +51,11 @@ import {
   type DepartmentMember,
   type DepartmentStaffOption,
 } from "../api/departments-api"
+
+const panelDangerIcon = cn(
+  panelIconButton,
+  "border-0 bg-transparent text-[#bc3649] hover:bg-[#fff0f1] hover:text-[#a72d3f]",
+)
 
 const nameBadge =
   "flex-none rounded bg-[#e8eef8] px-1.5 py-px text-[10px] leading-4 font-semibold text-[#294a9b]"
@@ -89,7 +103,6 @@ export function ManageMembersDrawer({
   const [confirmation, setConfirmation] = useState<
     | { type: "member"; id: string; name: string }
     | { type: "team"; id: string; name: string }
-    | { type: "team-member"; id: string; name: string; teamName: string }
     | null
   >(null)
   const [confirmationError, setConfirmationError] = useState("")
@@ -141,6 +154,33 @@ export function ManageMembersDrawer({
     if (submitting) return
     setEditingMember(null)
     restoreSubviewOpenerFocus()
+  }
+
+  // "Remove members" selector opened from a team's Manage team menu.
+  const [removeTeamId, setRemoveTeamId] = useState<string | null>(null)
+  const [removeSelection, setRemoveSelection] = useState<string[]>([])
+  const [removeSearch, setRemoveSearch] = useState("")
+
+  function openRemoveTeamMembers(teamId: string) {
+    subviewOpenerRef.current = document.getElementById(`team-manage-${teamId}`)
+    setActionError("")
+    setRemoveSelection([])
+    setRemoveSearch("")
+    setRemoveTeamId(teamId)
+  }
+
+  function closeRemoveTeamMembers() {
+    if (submitting) return
+    setRemoveTeamId(null)
+    restoreSubviewOpenerFocus()
+  }
+
+  function toggleRemoveSelection(memberId: string) {
+    setRemoveSelection((previous) =>
+      previous.includes(memberId)
+        ? previous.filter((id) => id !== memberId)
+        : [...previous, memberId],
+    )
   }
 
   // Member editing modal/dialog state
@@ -310,11 +350,68 @@ export function ManageMembersDrawer({
       member.position,
     ].some((value) => value?.toLowerCase().includes(teamAssignQuery)),
   )
+  const removeTeam =
+    detail?.teams.find((team) => team.id === removeTeamId) ?? null
+  const removeTeamMembers = (detail?.members ?? []).filter(
+    (member) => removeTeamId !== null && member.teamId === removeTeamId,
+  )
+  const removeQuery = removeSearch.trim().toLowerCase()
+  const filteredRemoveMembers = removeTeamMembers.filter((member) =>
+    [
+      member.fullName,
+      member.email,
+      member.user?.fullName,
+      member.user?.email,
+      member.position,
+    ].some((value) => value?.toLowerCase().includes(removeQuery)),
+  )
+  const allVisibleSelected =
+    filteredRemoveMembers.length > 0 &&
+    filteredRemoveMembers.every((member) => removeSelection.includes(member.id))
   const subviewOpen =
     assignMembersOpen ||
     creatingTeam ||
     assignTeam !== null ||
+    removeTeam !== null ||
     editingMember !== null
+
+  /** "Staff • Position" line used for member rows. */
+  function memberSummary(member: DepartmentMember) {
+    const position =
+      member.position &&
+      !["dept head", "department head"].includes(member.position.toLowerCase())
+        ? member.position
+        : null
+    return [member.user ? roleLabels[member.user.role] : "No account", position]
+      .filter(Boolean)
+      .join(" • ")
+  }
+
+  async function handleRemoveTeamMembers() {
+    if (!removeTeam || removeSelection.length === 0 || submitting) return
+    try {
+      setActionError("")
+      setSubmitting(true)
+      for (const memberId of removeSelection) {
+        await updateDepartmentMember(departmentId, memberId, { teamId: null })
+      }
+      setRemoveTeamId(null)
+      restoreSubviewOpenerFocus()
+      setRevision((r) => r + 1)
+      onChanged()
+    } catch (error: unknown) {
+      // Some removals may have succeeded; refresh so the list is accurate.
+      setRevision((r) => r + 1)
+      onChanged()
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : "Couldn't remove the selected members.",
+      )
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   function toggleNewTeamMember(memberId: string) {
     setNewTeamMemberIds((previous) =>
@@ -349,9 +446,34 @@ export function ManageMembersDrawer({
     }
   }
 
+  // Id of the control that opened the inline confirmation. The control is
+  // swapped out while confirming, so it is refocused by id once it returns.
+  const confirmOpenerIdRef = useRef<string | null>(null)
+
+  function rememberConfirmOpener(openerId: string) {
+    confirmOpenerIdRef.current = openerId
+    setConfirmationError("")
+  }
+
+  function cancelConfirmation() {
+    if (submitting) return
+    setConfirmation(null)
+    setConfirmationError("")
+    const openerId = confirmOpenerIdRef.current
+    if (!openerId) return
+    // Retry until the row's swap-back animation has remounted the control.
+    let attempts = 0
+    const focusOpener = () => {
+      const opener = document.getElementById(openerId)
+      if (opener) opener.focus()
+      else if (++attempts < 20) window.setTimeout(focusOpener, 25)
+    }
+    focusOpener()
+  }
+
   function handleRemoveMember(userId: string) {
     const member = detail?.members.find((candidate) => candidate.id === userId)
-    setConfirmationError("")
+    rememberConfirmOpener(`member-remove-${userId}`)
     setConfirmation({
       type: "member",
       id: userId,
@@ -367,12 +489,8 @@ export function ManageMembersDrawer({
       setSubmitting(true)
       if (confirmation.type === "member") {
         await removeDepartmentMember(departmentId, confirmation.id)
-      } else if (confirmation.type === "team") {
-        await deleteTeam(departmentId, confirmation.id)
       } else {
-        await updateDepartmentMember(departmentId, confirmation.id, {
-          teamId: null,
-        })
+        await deleteTeam(departmentId, confirmation.id)
       }
       setConfirmation(null)
       setRevision((r) => r + 1)
@@ -383,9 +501,7 @@ export function ManageMembersDrawer({
           ? error.message
           : confirmation.type === "team"
             ? "Couldn't delete this team."
-            : confirmation.type === "team-member"
-              ? "Couldn't remove this team assignment."
-              : "Couldn't remove this member.",
+            : "Couldn't remove this member.",
       )
     } finally {
       setSubmitting(false)
@@ -424,7 +540,7 @@ export function ManageMembersDrawer({
   }
 
   function handleDeleteTeam(teamId: string, teamName: string) {
-    setConfirmationError("")
+    rememberConfirmOpener(`team-manage-${teamId}`)
     setConfirmation({ type: "team", id: teamId, name: teamName })
   }
 
@@ -446,19 +562,6 @@ export function ManageMembersDrawer({
     } finally {
       setSubmitting(false)
     }
-  }
-
-  function handleRemoveMemberFromTeam(userId: string) {
-    const member = detail?.members.find((candidate) => candidate.id === userId)
-    const teamId = detail?.members.find((entry) => entry.id === userId)?.teamId
-    const team = detail?.teams.find((candidate) => candidate.id === teamId)
-    setConfirmationError("")
-    setConfirmation({
-      type: "team-member",
-      id: userId,
-      name: member?.fullName || member?.email || "this employee",
-      teamName: team?.name || "this team",
-    })
   }
 
   async function handleSaveMemberDetails(e: React.FormEvent) {
@@ -520,12 +623,18 @@ export function ManageMembersDrawer({
         className="overflow-hidden"
         onEscapeKeyDown={(event) => {
           if (submitting) event.preventDefault()
-          else if (assignMembersOpen) {
+          else if (confirmation) {
+            event.preventDefault()
+            cancelConfirmation()
+          } else if (assignMembersOpen) {
             event.preventDefault()
             closeAssignMembers()
           } else if (creatingTeam) {
             event.preventDefault()
             closeCreateTeam()
+          } else if (removeTeamId !== null) {
+            event.preventDefault()
+            closeRemoveTeamMembers()
           } else if (assignTeamId !== null) {
             event.preventDefault()
             closeAssignTeam()
@@ -725,73 +834,103 @@ export function ManageMembersDrawer({
                                 )
                                   ? member.position
                                   : null
+                              const memberName =
+                                member.fullName ||
+                                member.email ||
+                                member.user?.email ||
+                                "this employee"
                               return (
-                                <li
-                                  key={member.id}
-                                  className="flex min-w-0 flex-wrap items-center justify-between gap-3 px-4 py-3 hover:bg-[#fafbfc]"
-                                >
-                                  <div className="min-w-0 flex-1 basis-[180px]">
-                                    <MemberIdentity
-                                      member={member}
-                                      secondaryText={[
-                                        member.user
-                                          ? roleLabels[member.user.role]
-                                          : "No account",
-                                        position,
-                                      ]
-                                        .filter(Boolean)
-                                        .join(" • ")}
-                                      nameAdornment={
-                                        (isHead || member.team) && (
-                                          <>
-                                            {isHead && (
-                                              <span className={nameBadge}>
-                                                Head
-                                              </span>
-                                            )}
-                                            {member.team && (
-                                              <span
-                                                className={cn(
-                                                  nameBadge,
-                                                  "min-w-0 flex-initial truncate",
+                                <li key={member.id} className="min-w-0">
+                                  <ConfirmSwap
+                                    confirming={
+                                      confirmation?.type === "member" &&
+                                      confirmation.id === member.id
+                                    }
+                                    confirm={
+                                      <InlineConfirm
+                                        message={`Remove ${memberName} from ${detail?.name || "this department"}?`}
+                                        detail="Their employee record and account are kept."
+                                        confirmLabel="Remove"
+                                        pendingLabel="Removing…"
+                                        pending={submitting}
+                                        error={confirmationError}
+                                        onCancel={cancelConfirmation}
+                                        onConfirm={() => void confirmRemoval()}
+                                      />
+                                    }
+                                  >
+                                    <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 px-4 py-3 hover:bg-[#fafbfc]">
+                                      <div className="min-w-0 flex-1 basis-[180px]">
+                                        <MemberIdentity
+                                          member={member}
+                                          secondaryText={[
+                                            member.user
+                                              ? roleLabels[member.user.role]
+                                              : "No account",
+                                            position,
+                                          ]
+                                            .filter(Boolean)
+                                            .join(" • ")}
+                                          nameAdornment={
+                                            (isHead || member.team) && (
+                                              <>
+                                                {isHead && (
+                                                  <span className={nameBadge}>
+                                                    Head
+                                                  </span>
                                                 )}
-                                              >
-                                                {member.team.name}
-                                              </span>
+                                                {member.team && (
+                                                  <span
+                                                    className={cn(
+                                                      nameBadge,
+                                                      "min-w-0 flex-initial truncate",
+                                                    )}
+                                                  >
+                                                    {member.team.name}
+                                                  </span>
+                                                )}
+                                              </>
+                                            )
+                                          }
+                                        />
+                                      </div>
+                                      {canManage && !isHead && (
+                                        <div className="flex flex-none items-center gap-2">
+                                          <button
+                                            type="button"
+                                            className={cn(
+                                              panelIconButton,
+                                              "border-0 bg-transparent",
                                             )}
-                                          </>
-                                        )
-                                      }
-                                    />
-                                  </div>
-                                  {canManage && !isHead && (
-                                    <div className="flex flex-none items-center gap-2">
-                                      <Button
-                                        type="button"
-                                        className={panelAssignButton}
-                                        aria-label={`Edit ${member.fullName || member.email || member.user?.email || "employee"}`}
-                                        onClick={(event) => {
-                                          subviewOpenerRef.current =
-                                            event.currentTarget
-                                          startEditMember(member)
-                                        }}
-                                        disabled={submitting}
-                                      >
-                                        Edit info
-                                      </Button>
-                                      <button
-                                        type="button"
-                                        className={panelDangerButton}
-                                        aria-label={`Remove ${member.fullName || member.email || member.user?.email || "employee"} from department`}
-                                        disabled={submitting}
-                                        onClick={() =>
-                                          void handleRemoveMember(member.id)
-                                        }
-                                      >
-                                        <TrashIcon width="15" height="15" />
-                                      </button>
+                                            aria-label={`Edit ${member.fullName || member.email || member.user?.email || "employee"}`}
+                                            onClick={(event) => {
+                                              subviewOpenerRef.current =
+                                                event.currentTarget
+                                              startEditMember(member)
+                                            }}
+                                            disabled={submitting}
+                                          >
+                                            <Pencil
+                                              size={15}
+                                              aria-hidden="true"
+                                            />
+                                          </button>
+                                          <button
+                                            id={`member-remove-${member.id}`}
+                                            type="button"
+                                            className={panelDangerIcon}
+                                            aria-label={`Remove ${member.fullName || member.email || member.user?.email || "employee"} from department`}
+                                            disabled={submitting}
+                                            onClick={() =>
+                                              void handleRemoveMember(member.id)
+                                            }
+                                          >
+                                            <TrashIcon width="15" height="15" />
+                                          </button>
+                                        </div>
+                                      )}
                                     </div>
-                                  )}
+                                  </ConfirmSwap>
                                 </li>
                               )
                             })}
@@ -803,14 +942,9 @@ export function ManageMembersDrawer({
                 <TabsContent value="teams" className="mt-0">
                   <section className="grid gap-4" aria-label="Department teams">
                     <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <h3 className="m-0 text-xs font-semibold">
-                          Department Teams
-                        </h3>
-                        <p className={`${panelMuted} mt-1 mb-0`}>
-                          Organize employees into focused teams.
-                        </p>
-                      </div>
+                      <h3 className="m-0 text-[17px] leading-tight font-[650] tracking-[-0.02em]">
+                        Department Teams
+                      </h3>
                       {canManage && (
                         <Button
                           ref={createTeamTriggerRef}
@@ -849,57 +983,121 @@ export function ManageMembersDrawer({
                             className="min-w-0 overflow-visible rounded-lg border border-[#e8ebef]"
                             aria-label={`${team.name} team`}
                           >
-                            <header className="flex items-start justify-between gap-3 rounded-t-lg border-b border-[#eceef1] bg-[#e8eef2] px-4 py-3">
-                              <div className="min-w-0">
-                                <h4 className="m-0 text-xs font-semibold break-words">
-                                  {team.name}
-                                </h4>
-                                {team.description && (
-                                  <p
-                                    className={`${panelMuted} mt-1 mb-0 break-words`}
-                                  >
-                                    {team.description}
-                                  </p>
-                                )}
-                                <p className={`${panelMuted} mt-1 mb-0`}>
-                                  {teamMembers.length}{" "}
-                                  {teamMembers.length === 1
-                                    ? "member"
-                                    : "members"}
-                                </p>
-                              </div>
-                              {canManage && (
-                                <div className="flex flex-none items-center gap-2">
-                                  <Button
-                                    type="button"
-                                    className={panelAssignButton}
-                                    aria-label={`Assign member to ${team.name}`}
-                                    disabled={
-                                      submitting || !hasEligibleEmployees
-                                    }
-                                    onClick={(event) => {
-                                      subviewOpenerRef.current =
-                                        event.currentTarget
-                                      setTeamAssignSearch("")
-                                      setAssignTeamId(team.id)
-                                    }}
-                                  >
-                                    <PlusIcon width="14" height="14" /> Assign
-                                  </Button>
-                                  <button
-                                    type="button"
-                                    className={panelDangerButton}
-                                    aria-label={`Delete ${team.name} team`}
-                                    disabled={submitting}
-                                    onClick={() =>
-                                      void handleDeleteTeam(team.id, team.name)
-                                    }
-                                  >
-                                    <TrashIcon width="15" height="15" />
-                                  </button>
+                            <ConfirmSwap
+                              confirming={
+                                confirmation?.type === "team" &&
+                                confirmation.id === team.id
+                              }
+                              confirm={
+                                <div className="overflow-hidden rounded-t-lg border-b border-[#eceef1]">
+                                  <InlineConfirm
+                                    message={`Delete the ${team.name} team?`}
+                                    detail="Members stay in the department; only the team is removed."
+                                    confirmLabel="Delete team"
+                                    pendingLabel="Deleting…"
+                                    pending={submitting}
+                                    error={confirmationError}
+                                    onCancel={cancelConfirmation}
+                                    onConfirm={() => void confirmRemoval()}
+                                  />
                                 </div>
-                              )}
-                            </header>
+                              }
+                            >
+                              <header className="flex items-start justify-between gap-3 rounded-t-lg border-b border-[#eceef1] bg-[#e8eef2] px-4 py-3">
+                                <div className="min-w-0">
+                                  <div className="flex min-w-0 items-center gap-1">
+                                    <h4 className="m-0 min-w-0 text-[15px] leading-tight font-[650] tracking-[-0.01em] break-words">
+                                      {team.name}
+                                    </h4>
+                                    {team.description && (
+                                      <InfoTip label={`About ${team.name}`}>
+                                        {team.description}
+                                      </InfoTip>
+                                    )}
+                                  </div>
+                                  <p className={`${panelMuted} mt-1 mb-0`}>
+                                    {teamMembers.length}{" "}
+                                    {teamMembers.length === 1
+                                      ? "member"
+                                      : "members"}
+                                  </p>
+                                </div>
+                                {canManage && (
+                                  <RowActionsMenu
+                                    triggerId={`team-manage-${team.id}`}
+                                    triggerLabel={`Manage ${team.name} team`}
+                                    menuLabel={`Manage ${team.name} team`}
+                                    disabled={submitting}
+                                    triggerClassName="flex w-auto! gap-1 px-2.5 text-xs font-semibold whitespace-nowrap text-foreground"
+                                    triggerContent={
+                                      <>
+                                        Manage team
+                                        <ChevronDown
+                                          size={14}
+                                          aria-hidden="true"
+                                        />
+                                      </>
+                                    }
+                                    items={[
+                                      {
+                                        action: "assign",
+                                        label: (
+                                          <span className="flex items-center gap-2">
+                                            <UserPlus
+                                              size={14}
+                                              aria-hidden="true"
+                                            />
+                                            Assign members
+                                          </span>
+                                        ),
+                                        disabled: !hasEligibleEmployees,
+                                      },
+                                      {
+                                        action: "remove",
+                                        label: (
+                                          <span className="flex items-center gap-2">
+                                            <UserMinus
+                                              size={14}
+                                              aria-hidden="true"
+                                            />
+                                            Remove members
+                                          </span>
+                                        ),
+                                        disabled: teamMembers.length === 0,
+                                      },
+                                      {
+                                        action: "delete",
+                                        label: (
+                                          <span className="flex items-center gap-2">
+                                            <Trash2
+                                              size={14}
+                                              aria-hidden="true"
+                                            />
+                                            Delete team
+                                          </span>
+                                        ),
+                                        className:
+                                          "text-[#c33945] hover:bg-[#fff0f1] focus:bg-[#fff0f1] focus:text-[#c33945] focus-visible:bg-[#fff0f1]",
+                                      },
+                                    ]}
+                                    onAction={(action) => {
+                                      if (action === "assign") {
+                                        subviewOpenerRef.current =
+                                          document.getElementById(
+                                            `team-manage-${team.id}`,
+                                          )
+                                        setTeamAssignSearch("")
+                                        setAssignTeamId(team.id)
+                                      } else if (action === "remove") {
+                                        openRemoveTeamMembers(team.id)
+                                      } else {
+                                        handleDeleteTeam(team.id, team.name)
+                                      }
+                                    }}
+                                  />
+                                )}
+                              </header>
+                            </ConfirmSwap>
                             {teamMembers.length === 0 ? (
                               <p className="m-0 px-4 py-5 text-xs text-[#738096]">
                                 No members assigned to this team yet.
@@ -912,39 +1110,12 @@ export function ManageMembersDrawer({
                                 {teamMembers.map((member) => (
                                   <li
                                     key={member.id}
-                                    className="flex min-w-0 items-center justify-between gap-3 px-4 py-3"
+                                    className="min-w-0 px-4 py-3"
                                   >
-                                    <div className="min-w-0">
-                                      <MemberIdentity member={member} />
-                                      {member.position &&
-                                        ![
-                                          "dept head",
-                                          "department head",
-                                        ].includes(
-                                          member.position.toLowerCase(),
-                                        ) && (
-                                          <p
-                                            className={`${panelMuted} mt-1 mb-0 ml-[42px] break-words`}
-                                          >
-                                            {member.position}
-                                          </p>
-                                        )}
-                                    </div>
-                                    {canManage && (
-                                      <button
-                                        type="button"
-                                        className={panelIconButton}
-                                        aria-label={`Remove ${member.fullName || member.email || member.user?.email || "employee"} from ${team.name}`}
-                                        disabled={submitting}
-                                        onClick={() =>
-                                          void handleRemoveMemberFromTeam(
-                                            member.id,
-                                          )
-                                        }
-                                      >
-                                        <CloseIcon width="14" height="14" />
-                                      </button>
-                                    )}
+                                    <MemberIdentity
+                                      member={member}
+                                      secondaryText={memberSummary(member)}
+                                    />
                                   </li>
                                 ))}
                               </ul>
@@ -996,6 +1167,154 @@ export function ManageMembersDrawer({
               onCancel={closeEditMember}
               onSubmit={(event) => void handleSaveMemberDetails(event)}
             />
+          )}
+        </PanelSubview>
+        <PanelSubview
+          open={canManage && removeTeam !== null}
+          id="remove-team-members"
+          title="Remove members"
+          description={`Choose who to remove from ${removeTeam?.name ?? "this team"}. They stay in the department.`}
+          backLabel="Back to teams"
+          disabled={submitting}
+          initialFocusId="remove-team-member-search"
+          onBack={closeRemoveTeamMembers}
+        >
+          {removeTeam && (
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="flex flex-none flex-col gap-3 border-b border-[#eceef1] px-6 py-4 max-[560px]:px-5">
+                <SearchField
+                  id="remove-team-member-search"
+                  label={`Search ${removeTeam.name} members`}
+                  placeholder="Search name, email, or position"
+                  value={removeSearch}
+                  onChange={(event) => setRemoveSearch(event.target.value)}
+                  disabled={submitting}
+                  containerClassName="w-full max-[1050px]:w-full max-[1050px]:flex-none"
+                />
+                <div className="flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    className={cn(
+                      "cursor-pointer rounded border-0 bg-transparent p-0 text-xs font-semibold text-[#294a9b] hover:underline disabled:cursor-not-allowed disabled:opacity-50",
+                      focusRing,
+                    )}
+                    disabled={submitting || filteredRemoveMembers.length === 0}
+                    onClick={() => {
+                      const visibleIds = filteredRemoveMembers.map(
+                        (member) => member.id,
+                      )
+                      setRemoveSelection((previous) =>
+                        allVisibleSelected
+                          ? previous.filter((id) => !visibleIds.includes(id))
+                          : [...new Set([...previous, ...visibleIds])],
+                      )
+                    }}
+                  >
+                    {allVisibleSelected
+                      ? removeQuery
+                        ? "Clear matches"
+                        : "Clear all"
+                      : removeQuery
+                        ? "Select matches"
+                        : "Select all"}
+                  </button>
+                  <span className={panelMuted} aria-live="polite">
+                    {filteredRemoveMembers.length} of {removeTeamMembers.length}{" "}
+                    shown
+                  </span>
+                </div>
+              </div>
+              <div className="grid min-h-0 flex-1 content-start gap-2 overflow-y-auto overscroll-contain px-6 py-4 max-[560px]:px-5">
+                {actionError && (
+                  <p
+                    className="m-0 mb-1 rounded-lg border border-[#f4d6db] bg-[#fff6f7] p-3 text-xs text-[#bc3649]"
+                    role="alert"
+                  >
+                    {actionError}
+                  </p>
+                )}
+                {filteredRemoveMembers.length === 0 ? (
+                  <p className={`${panelEmpty} m-0`} role="status">
+                    No members match your search.
+                  </p>
+                ) : (
+                  <ul
+                    className="m-0 grid list-none gap-2 p-0"
+                    aria-label={`${removeTeam.name} members`}
+                  >
+                    {filteredRemoveMembers.map((member) => {
+                      const selected = removeSelection.includes(member.id)
+                      return (
+                        <li key={member.id}>
+                          <label
+                            className={cn(
+                              "group/pick flex min-w-0 cursor-pointer items-center justify-between gap-3 rounded-lg border px-3 py-2.5 transition-colors duration-150 motion-reduce:transition-none",
+                              selected
+                                ? "border-[#efc0c8] bg-[#fff5f6]"
+                                : "border-[#e8ebef] bg-background hover:border-[#d9dee6] hover:bg-[#fafbfc]",
+                              submitting && "cursor-not-allowed opacity-60",
+                            )}
+                          >
+                            <MemberIdentity
+                              member={member}
+                              secondaryText={memberSummary(member)}
+                            />
+                            <input
+                              type="checkbox"
+                              className="peer sr-only"
+                              checked={selected}
+                              onChange={() => toggleRemoveSelection(member.id)}
+                              disabled={submitting}
+                            />
+                            <span
+                              aria-hidden="true"
+                              className={cn(
+                                "grid size-5 flex-none place-items-center rounded-full border transition-colors duration-150 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[#294a9b] motion-reduce:transition-none",
+                                selected
+                                  ? "border-[#bc3649] bg-[#bc3649] text-white"
+                                  : "border-[#c9d1dd] bg-background text-transparent group-hover/pick:border-[#a9b4c4]",
+                              )}
+                            >
+                              <Check size={12} strokeWidth={3} />
+                            </span>
+                          </label>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </div>
+              <footer className="flex flex-none items-center justify-between gap-3 border-t border-[#eceef1] px-6 py-4 max-[560px]:px-5">
+                <span className="text-xs font-medium text-[#52627a]">
+                  {removeSelection.length === 0
+                    ? "No one selected"
+                    : `${removeSelection.length} selected`}
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={panelSecondaryButton}
+                    disabled={submitting}
+                    onClick={closeRemoveTeamMembers}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    className="h-[34px] rounded-lg bg-[#bc3649] px-3 text-xs font-semibold text-white hover:bg-[#a42f40] disabled:opacity-50"
+                    disabled={submitting || removeSelection.length === 0}
+                    onClick={() => void handleRemoveTeamMembers()}
+                  >
+                    {submitting
+                      ? "Removing…"
+                      : removeSelection.length > 0
+                        ? `Remove ${removeSelection.length}`
+                        : "Remove"}
+                  </Button>
+                </div>
+              </footer>
+            </div>
           )}
         </PanelSubview>
         <PanelSubview
@@ -1073,46 +1392,6 @@ export function ManageMembersDrawer({
             </div>
           )}
         </PanelSubview>
-        {confirmation && (
-          <ConfirmationDialog
-            title={
-              confirmation.type === "team"
-                ? "Delete team?"
-                : confirmation.type === "member"
-                  ? "Remove employee from department?"
-                  : "Remove employee from team?"
-            }
-            subject={
-              confirmation.type === "team"
-                ? confirmation.name
-                : confirmation.type === "team-member"
-                  ? `${confirmation.name} · ${confirmation.teamName}`
-                  : confirmation.name
-            }
-            description={
-              confirmation.type === "team"
-                ? "Team membership will be cleared. Employees will remain in the department."
-                : confirmation.type === "member"
-                  ? "The employee record and any linked account will remain."
-                  : "The employee will remain in the department."
-            }
-            confirmLabel={
-              confirmation.type === "team" ? "Delete team" : "Remove"
-            }
-            pendingLabel={
-              confirmation.type === "team" ? "Deleting…" : "Removing…"
-            }
-            pending={submitting}
-            error={confirmationError}
-            onClose={() => {
-              if (!submitting) {
-                setConfirmation(null)
-                setConfirmationError("")
-              }
-            }}
-            onConfirm={() => void confirmRemoval()}
-          />
-        )}
         <PanelSubview
           open={canManage && assignMembersOpen}
           id="assign-employees"

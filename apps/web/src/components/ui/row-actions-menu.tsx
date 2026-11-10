@@ -31,6 +31,7 @@ export function RowActionsMenu<Action extends string>({
   disabled = false,
   triggerId,
   triggerClassName,
+  triggerContent,
   menuClassName,
   open: controlledOpen,
   onOpenChange,
@@ -43,6 +44,8 @@ export function RowActionsMenu<Action extends string>({
   disabled?: boolean
   triggerId?: string
   triggerClassName?: string
+  /** Replaces the default "⋯" icon, e.g. a text label. */
+  triggerContent?: ReactNode
   menuClassName?: string
   open?: boolean
   onOpenChange?: (open: boolean) => void
@@ -117,7 +120,7 @@ export function RowActionsMenu<Action extends string>({
             }
           }}
         >
-          <MoreHorizontal size={16} aria-hidden="true" />
+          {triggerContent ?? <MoreHorizontal size={16} aria-hidden="true" />}
         </button>
         <DropdownMenuTrigger asChild>
           <span
