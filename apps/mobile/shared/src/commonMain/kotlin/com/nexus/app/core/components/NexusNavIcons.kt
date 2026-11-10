@@ -1,0 +1,54 @@
+package com.nexus.app.core.components
+
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.addPathNodes
+import androidx.compose.ui.unit.dp
+
+/** Navigation artwork supplied as SVGs, kept as vectors for crisp rendering. */
+object NexusNavIcons {
+    val Dashboard: ImageVector = ImageVector.Builder(
+        name = "Dashboard",
+        defaultWidth = 17.dp,
+        defaultHeight = 17.dp,
+        viewportWidth = 17f,
+        viewportHeight = 17f
+    ).addPath(
+        pathData = addPathNodes("M1.63338 0.799805H5.80005C6.26029 0.799805 6.63338 1.1729 6.63338 1.63314V5.7998C6.63338 6.26004 6.26029 6.63314 5.80005 6.63314H1.63338C1.17314 6.63314 0.800049 6.26004 0.800049 5.7998V1.63314C0.800049 1.1729 1.17314 0.799805 1.63338 0.799805ZM10.8 0.799805H14.9667C15.427 0.799805 15.8 1.1729 15.8 1.63314V5.7998C15.8 6.26004 15.427 6.63314 14.9667 6.63314H10.8C10.3398 6.63314 9.96671 6.26004 9.96671 5.7998V1.63314C9.96671 1.1729 10.3398 0.799805 10.8 0.799805ZM10.8 9.96647H14.9667C15.427 9.96647 15.8 10.3396 15.8 10.7998V14.9665C15.8 15.4267 15.427 15.7998 14.9667 15.7998H10.8C10.3398 15.7998 9.96671 15.4267 9.96671 14.9665V10.7998C9.96671 10.3396 10.3398 9.96647 10.8 9.96647ZM1.63338 9.96647H5.80005C6.26029 9.96647 6.63338 10.3396 6.63338 10.7998V14.9665C6.63338 15.4267 6.26029 15.7998 5.80005 15.7998H1.63338C1.17314 15.7998 0.800049 15.4267 0.800049 14.9665V10.7998C0.800049 10.3396 1.17314 9.96647 1.63338 9.96647Z"),
+        fill = null,
+        stroke = SolidColor(Color(0xFF52627A)),
+        strokeLineWidth = 1.6f,
+        strokeLineCap = StrokeCap.Round
+    ).build()
+
+    val Services: ImageVector = ImageVector.Builder(
+        name = "Services",
+        defaultWidth = 20.dp,
+        defaultHeight = 20.dp,
+        viewportWidth = 20f,
+        viewportHeight = 20f
+    ).addPath(
+        pathData = addPathNodes("M2.74984 5.83325L9.99984 10.0002M9.99984 10.0002L17.2498 5.83325M9.99984 10.0002L10 18.3322M10 18.3322V18.334M10 18.3322C9.70744 18.3322 9.42003 18.2552 9.16667 18.1089L3.33333 14.7753C3.08022 14.6292 2.86998 14.4191 2.72372 14.166C2.57745 13.913 2.5003 13.6259 2.5 13.3336V6.66655C2.5003 6.37426 2.57745 6.08719 2.72372 5.83414C2.86998 5.58108 3.08022 5.37094 3.33333 5.2248L9.16667 1.89127C9.42003 1.74498 9.70744 1.66797 10 1.66797C10.2926 1.66797 10.58 1.74498 10.8333 1.89127L16.6667 5.2248C16.9198 5.37094 17.13 5.58108 17.2763 5.83414C17.4225 6.08719 17.4997 6.37426 17.5 6.66655V13.3336C17.4997 13.6259 17.4225 13.913 17.2763 14.166C17.13 14.4191 16.9198 14.6292 16.6667 14.7753L10.8333 18.1089C10.58 18.2552 10.2926 18.3322 10 18.3322Z"),
+        fill = null,
+        stroke = SolidColor(Color(0xFF52627A)),
+        strokeLineWidth = 1.6f,
+        strokeLineCap = StrokeCap.Round
+    ).build()
+
+    val BookedRequests: ImageVector = ImageVector.Builder(
+        name = "BookedRequests",
+        defaultWidth = 15.dp,
+        defaultHeight = 19.dp,
+        viewportWidth = 15f,
+        viewportHeight = 19f
+    ).addPath(
+        pathData = addPathNodes("M10.799 2.4666H12.4655C12.9075 2.4666 13.3314 2.64221 13.6439 2.9548C13.9565 3.26738 14.132 3.69134 14.132 4.1334V15.801C14.132 16.2431 13.9565 16.667 13.6439 16.9796C13.3314 17.2922 12.9075 17.4678 12.4655 17.4678H2.46655C2.02457 17.4678 1.60068 17.2922 1.28816 16.9796C0.975626 16.667 0.800049 16.2431 0.800049 15.801V4.1334C0.800049 3.69134 0.975626 3.26738 1.28816 2.9548C1.60068 2.64221 2.02457 2.4666 2.46655 2.4666H4.13305M10.799 2.4666V1.6332C10.799 1.17293 10.426 0.799805 9.9658 0.799805H4.9663C4.50611 0.799805 4.13305 1.17293 4.13305 1.6332V2.4666M10.799 2.4666V3.3C10.799 3.76028 10.426 4.1334 9.9658 4.1334H4.9663C4.50611 4.1334 4.13305 3.76028 4.13305 3.3V2.4666M7.46605 8.3004H10.799M7.46605 12.4674H10.799M4.13305 8.3004H4.14138M4.13305 12.4674H4.14138"),
+        fill = null,
+        stroke = SolidColor(Color(0xFF52627A)),
+        strokeLineWidth = 1.6f,
+        strokeLineCap = StrokeCap.Round
+    ).build()
+
+}

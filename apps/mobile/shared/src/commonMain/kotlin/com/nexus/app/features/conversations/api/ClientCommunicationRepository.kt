@@ -27,8 +27,9 @@ class ClientCommunicationRepository(private val client: HttpClient) {
             parameter("view", if (archived) "archived" else "active")
             before?.let { parameter("before", it) }
         }.checked()
-    suspend fun history(id: String, before: String? = null): History = client.get("/api/request-conversations/$id") {
+    suspend fun history(id: String, before: String? = null, bookingId: String? = null): History = client.get("/api/request-conversations/$id") {
         before?.let { parameter("before", it) }
+        bookingId?.let { parameter("booking", it) }
     }.checked()
     suspend fun send(id: String, message: SendMessage): ChatMessage =
         client.post("/api/request-conversations/$id/messages") { setBody(message) }.checked<MessageResponse>().message

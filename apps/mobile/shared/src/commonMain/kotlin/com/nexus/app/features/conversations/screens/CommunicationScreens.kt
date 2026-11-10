@@ -1,5 +1,6 @@
 package com.nexus.app.features.conversations.screens
 
+import com.nexus.app.core.theme.NexusButtonShape
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -17,6 +18,7 @@ import com.nexus.app.features.workflow.viewmodel.WorkflowViewModel
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
@@ -41,22 +43,31 @@ fun NotificationsScreen(onRequest: (String) -> Unit, viewModel: NotificationsVie
     val state by viewModel.state.collectAsState()
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refresh() }
     LazyColumn(Modifier.fillMaxSize().background(NexusColors.SurfaceLight).padding(horizontal = 20.dp)) {
-        item { Row(Modifier.fillMaxWidth().padding(vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Notifications", Modifier.weight(1f), fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
-            TextButton(onClick = viewModel::readAll, enabled = state.feed.unreadCount > 0) { Text("Mark all as read", fontSize = 12.sp) }
-        } }
-        item { if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-            state.error?.let { Text(it, color = NexusColors.ErrorRed, modifier = Modifier.padding(12.dp)) }
-            TextButton(onClick = viewModel::refresh) { Text("Refresh") }
+        item {
+            Row(Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically) {
+                TextButton(shape = NexusButtonShape, onClick = viewModel::refresh,
+                    contentPadding = PaddingValues(0.dp)) { Text("Refresh", fontSize = 14.sp) }
+                TextButton(shape = NexusButtonShape, onClick = viewModel::readAll,
+                    enabled = state.feed.unreadCount > 0,
+                    contentPadding = PaddingValues(0.dp)) { Text("Mark all as read", fontSize = 14.sp) }
+            }
+        }
+        item {
+            if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+            state.error?.let { Text(it, color = NexusColors.ErrorRed, modifier = Modifier.padding(vertical = 12.dp)) }
         }
         if (!state.loading && state.feed.notifications.isEmpty()) item { Text("You're all caught up.", Modifier.padding(16.dp)) }
         items(state.feed.notifications, key = { it.id }) { notification ->
-            Surface(color = Color.White, shape = RoundedCornerShape(6.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NexusColors.Border)) {
+            val unread = notification.readAt == null
+            Surface(color = if (unread) Color(0xFFDFE6F2) else Color.White, shape = RoundedCornerShape(6.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, if (unread) Color(0xFFA7B5CF) else NexusColors.Border)) {
                 Column(Modifier.fillMaxWidth().clickable { viewModel.open(notification, onRequest) }.padding(16.dp)) {
                     Text(notification.summary, fontSize = 14.sp, fontWeight = if (notification.readAt == null) FontWeight.SemiBold else FontWeight.Normal,
-                        color = NexusColors.TextPrimary)
+                        color = if (unread) Color(0xFF172B4D) else NexusColors.TextSecondary)
                     Spacer(Modifier.height(10.dp))
-                    Text(displayTime(notification.createdAt), fontSize = 12.sp, color = NexusColors.TextSecondary)
+                    Text(displayTime(notification.createdAt), fontSize = 12.sp, color = if (unread) Color(0xFF344968) else NexusColors.TextSecondary)
                 }
             }
         }
@@ -69,14 +80,13 @@ fun MessagesScreen(onConversation: (String) -> Unit, viewModel: ConversationsVie
     val state by viewModel.state.collectAsState()
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refresh(false) }
     LazyColumn(Modifier.fillMaxSize().background(NexusColors.SurfaceLight).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Text("Messages", fontSize = 22.sp, fontWeight = FontWeight.SemiBold) }
         item { Text("Select a conversation", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             Text("Choose a department below to discuss all your bookings in one conversation.", fontSize = 12.sp, lineHeight = 18.sp, color = ConversationStyle.Muted) }
         item {
             if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
             state.error?.let {
                 Text("Unable to load conversations. Please try again.", color = NexusColors.ErrorRed)
-                TextButton(onClick = { viewModel.refresh(false) }, enabled = !state.loading) { Text("Retry") }
+                TextButton(shape = NexusButtonShape, onClick = { viewModel.refresh(false) }, enabled = !state.loading) { Text("Retry") }
             }
         }
         if (!state.loading && state.error == null && state.page.conversations.isEmpty()) item {
@@ -98,7 +108,7 @@ fun MessagesScreen(onConversation: (String) -> Unit, viewModel: ConversationsVie
                 }
             }
         }
-        if (state.page.nextCursor != null) item { TextButton(onClick = { viewModel.refresh(more = true) }, enabled = !state.loading) { Text("Load more") } }
+        if (state.page.nextCursor != null) item { TextButton(shape = NexusButtonShape, onClick = { viewModel.refresh(more = true) }, enabled = !state.loading) { Text("Load more") } }
     }
 }
 
@@ -109,40 +119,52 @@ fun ChatScreen(
     onBack: () -> Unit,
     onDetails: (String) -> Unit,
     onBooking: (String) -> Unit = onDetails,
-    viewModel: ConversationsViewModel = koinViewModel()
+    viewModel: ConversationsViewModel = koinViewModel(),
+    selectedBookingId: String? = null
 ) {
     val state by viewModel.state.collectAsState()
     val workflowViewModel: WorkflowViewModel = koinViewModel()
     val workflowState by workflowViewModel.state.collectAsState()
     val files = com.nexus.app.core.files.LocalPlatformFiles.current
-    var draft by rememberSaveable(id) { mutableStateOf("") }
+    var draft by rememberSaveable(id, state.selectedBookingId) { mutableStateOf("") }
     var tools by remember(id) { mutableStateOf(false) }
     var attachmentChooser by remember(id) { mutableStateOf(false) }
     var chooser by remember(id) { mutableStateOf(false) }
-    val timeline = remember(state.messages, state.attachments) { conversationTimeline(state.messages, state.attachments) }
-    val list = rememberLazyListState()
+    val visibleMessages = state.messages.filter { it.booking == null || it.booking.id == state.selectedBookingId }
+    val visiblePending = state.pending.filter { it.bookingId == null || it.bookingId == state.selectedBookingId }
+    val timeline = remember(visibleMessages, state.attachments) { conversationTimeline(visibleMessages, state.attachments) }
+    val list = key(state.selectedBookingId) { rememberLazyListState() }
     val conversation = state.history?.conversation
+    val workflow = workflowState.workflow?.takeIf { it.request.id == state.selectedBookingId }
+    val selectedBooking = conversation?.bookings?.find { it.id == state.selectedBookingId }
     fun openDetails() { state.history?.selectedBookingId?.let(onDetails) }
 
-    LaunchedEffect(id) { viewModel.open(id); viewModel.foreground(true) }
-    LaunchedEffect(state.history?.selectedBookingId) {
+    LaunchedEffect(id, selectedBookingId) {
+        viewModel.open(id)
+        selectedBookingId?.let(viewModel::selectBooking)
+        viewModel.foreground(true)
+    }
+    LaunchedEffect(state.selectedBookingId, state.selectedWorkflow?.version) {
         state.history?.selectedBookingId?.let { workflowViewModel.open(it) }
     }
     LaunchedEffect(workflowState.selectedFileId) {
         if (workflowState.selectedFileId != null) viewModel.refreshAttachments()
     }
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.foreground(true) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        viewModel.foreground(true)
+        state.selectedBookingId?.let(workflowViewModel::open)
+    }
     LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { viewModel.foreground(false) }
     DisposableEffect(id) { onDispose { viewModel.foreground(false) } }
-    LaunchedEffect(timeline.lastOrNull()?.id, state.pending.size) {
-        if (timeline.isNotEmpty() || state.pending.isNotEmpty()) {
+    LaunchedEffect(state.selectedBookingId, timeline.lastOrNull()?.id, visiblePending.size) {
+        if (timeline.isNotEmpty() || visiblePending.isNotEmpty()) {
             snapshotFlow { list.layoutInfo.totalItemsCount }.first { it > 0 }
             list.scrollToItem(list.layoutInfo.totalItemsCount - 1)
         }
     }
 
 
-    Column(Modifier.fillMaxSize().background(ConversationStyle.Background).imePadding()) {
+    Column(Modifier.fillMaxSize().imePadding().background(ConversationStyle.Background)) {
         Row(Modifier.fillMaxWidth().height(60.dp).background(Color.White).padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack, modifier = Modifier.size(32.dp)) {
@@ -162,22 +184,29 @@ fun ChatScreen(
                 Icon(Icons.Outlined.Info, "Conversation details", Modifier.size(20.dp), tint = ConversationStyle.Navy)
             }
         }
+        selectedBooking?.let { booking ->
+            Text(booking.title, Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 20.dp, vertical = 8.dp),
+                fontSize = 12.sp, color = ConversationStyle.Muted)
+        }
         HorizontalDivider(color = ConversationStyle.Divider)
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = list, contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.Bottom)) {
             if (state.reconnecting) item { Text("Reconnecting...", fontSize = 12.sp, color = ConversationStyle.Muted) }
             state.error?.let { error -> item { Text(error, color = NexusColors.ErrorRed, fontSize = 12.sp) } }
-            workflowState.workflow?.let { workflow ->
+            workflow?.let { workflow ->
                 item { Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    WorkflowDocumentCards(workflow) { file -> files?.let { workflowViewModel.file(it, file, false) } }
+                    ChatWorkflowForms(workflow, workflowState.busy, workflowState.selectedFileId,
+                        workflowViewModel::action, onDetails = { onDetails(workflow.request.id) },
+                        onDocuments = { onBooking(workflow.request.id) },
+                        onFile = { file -> files?.let { workflowViewModel.file(it, file, false) } })
                 } }
                 items(workflow.events.takeLast(3), key = { "event-${it.id}" }) { event ->
                     SystemEventRow(event.summary, event.summary.contains("verified", ignoreCase = true))
                 }
             }
-            if (state.history?.nextCursor != null) item { TextButton(onClick = viewModel::older) { Text("Load earlier messages", fontSize = 12.sp) } }
+            if (state.history?.nextCursor != null) item { TextButton(shape = NexusButtonShape, onClick = viewModel::older) { Text("Load earlier messages", fontSize = 12.sp) } }
             state.attachmentError?.let { error -> item {
                 Text(error, color = NexusColors.ErrorRed, fontSize = 12.sp)
-                TextButton(onClick = viewModel::refreshAttachments) { Text("Retry attachments") }
+                TextButton(shape = NexusButtonShape, onClick = viewModel::refreshAttachments) { Text("Retry attachments") }
             } }
             items(timeline, key = { it.id }) { entry ->
                 val attachment = entry.attachment
@@ -189,20 +218,25 @@ fun ChatScreen(
                 val message = entry.message ?: return@items
                 val own = message.sender.id == userId
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = if (own) Alignment.End else Alignment.Start) {
-                    Surface(shape = RoundedCornerShape(8.dp), color = if (own) ConversationStyle.Navy else Color.White,
-                        border = if (own) null else androidx.compose.foundation.BorderStroke(1.dp, ConversationStyle.Divider)) {
+                    Surface(shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp,
+                        bottomEnd = if (own) 6.dp else 16.dp, bottomStart = if (own) 16.dp else 6.dp),
+                        color = if (message.deletedAt != null) Color(0xFFF6F8FC) else if (own) ConversationStyle.Navy else Color(0xFFDFE4EB),
+                        border = if (message.deletedAt != null) androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD8E1EF)) else null) {
                         Text(if (message.deletedAt != null) "Message deleted" else message.body.orEmpty(), Modifier.widthIn(max = 300.dp).padding(12.dp),
-                            fontSize = 14.sp, lineHeight = 21.sp, color = if (own) Color.White else ConversationStyle.Ink)
+                            fontSize = 14.sp, lineHeight = 21.sp, color = if (message.deletedAt != null) ConversationStyle.Muted else if (own) Color.White else ConversationStyle.Ink)
+                    }
+                    if (message.booking == null && conversation?.bookings.orEmpty().size > 1) {
+                        Text("Shared conversation", fontSize = 10.sp, color = ConversationStyle.Muted)
                     }
                     Text(displayTime(message.createdAt) + if (message.editedAt != null) " - Edited" else "", Modifier.padding(top = 4.dp), fontSize = 10.sp, color = ConversationStyle.Muted)
                 }
             }
-            items(state.pending, key = { it.clientMessageId }) { pending ->
+            items(visiblePending, key = { it.clientMessageId }) { pending ->
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
                     Surface(shape = RoundedCornerShape(8.dp), color = ConversationStyle.Notice) { Text(pending.body, Modifier.padding(12.dp), fontSize = 14.sp) }
                     if (pending.failed) {
                         pending.failureReason?.let { Text(it, color = NexusColors.ErrorRed, fontSize = 12.sp) }
-                        TextButton(onClick = { viewModel.retry(pending) }) { Text("Send failed - Retry", fontSize = 12.sp) }
+                        TextButton(shape = NexusButtonShape, onClick = { viewModel.retry(pending) }) { Text("Send failed - Retry", fontSize = 12.sp) }
                     }
                     else Text("Sending...", fontSize = 11.sp, color = ConversationStyle.Muted)
                 }
@@ -223,11 +257,19 @@ fun ChatScreen(
                 }
             }
             workflowState.uploadProgress?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth(), color = ConversationStyle.Navy) }
-            workflowState.error?.let { Text(it, color = NexusColors.ErrorRed, fontSize = 12.sp) }
+            if (workflowState.busy) LinearProgressIndicator(Modifier.fillMaxWidth(), color = ConversationStyle.Navy)
+            workflowState.error?.let {
+                Text(it, color = NexusColors.ErrorRed, fontSize = 12.sp)
+                TextButton(shape = NexusButtonShape, enabled = !workflowState.busy,
+                    onClick = { state.selectedBookingId?.let(workflowViewModel::open) }) { Text("Retry booking forms") }
+            }
+            if (workflowState.pendingAction && !workflowState.busy) {
+                TextButton(shape = NexusButtonShape, onClick = workflowViewModel::retryAction) { Text("Confirm previous action") }
+            }
             if (state.history?.canSend == true) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     SquareChatAction(Icons.Outlined.Add, "Conversation tools", { tools = !tools })
-                    Box(Modifier.weight(1f).heightIn(min = 48.dp).border(1.dp, ConversationStyle.Border, RoundedCornerShape(8.dp)).padding(12.dp), contentAlignment = Alignment.CenterStart) {
+                    Box(Modifier.weight(1f).heightIn(min = 48.dp).clip(RoundedCornerShape(16.dp)).background(Color(0xFFFAFAF9)).border(1.dp, Color(0xFFE8E9EB), RoundedCornerShape(16.dp)).padding(12.dp), contentAlignment = Alignment.CenterStart) {
                         androidx.compose.foundation.text.BasicTextField(value = draft, onValueChange = { if (it.length <= 4000) draft = it },
                             modifier = Modifier.fillMaxWidth(), maxLines = 4, textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = ConversationStyle.Ink),
                             decorationBox = { input -> if (draft.isEmpty()) Text("Write a message...", color = ConversationStyle.Muted, fontSize = 14.sp); input() })
@@ -284,7 +326,7 @@ internal fun ConversationBookingSheet(bookings: List<ConversationBooking>, onDis
                 if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
                 if (error != null) {
                     Text(error, color = NexusColors.ErrorRed, fontSize = 12.sp)
-                    TextButton(onClick = onRetry, enabled = !loading) { Text("Retry booking options") }
+                    TextButton(shape = NexusButtonShape, onClick = onRetry, enabled = !loading) { Text("Retry booking options") }
                 } else if (attachment && !loading && bookings.isEmpty()) {
                     Text("No eligible bookings for attachments at the current stage.", fontSize = 14.sp, color = ConversationStyle.Muted)
                 }
@@ -293,8 +335,8 @@ internal fun ConversationBookingSheet(bookings: List<ConversationBooking>, onDis
         }
         HorizontalDivider(color = ConversationStyle.Divider)
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(8.dp), border = androidx.compose.foundation.BorderStroke(1.dp, ConversationStyle.Border)) { Text("Cancel", color = ConversationStyle.Navy, fontSize = 14.sp) }
-            Button(onClick = { selected?.let(onContinue) }, enabled = !loading && error == null && bookings.any { it.id == selected }, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(8.dp),
+            OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp), shape = NexusButtonShape, border = androidx.compose.foundation.BorderStroke(1.dp, ConversationStyle.Border)) { Text("Cancel", color = ConversationStyle.Navy, fontSize = 14.sp) }
+            Button(onClick = { selected?.let(onContinue) }, enabled = !loading && error == null && bookings.any { it.id == selected }, modifier = Modifier.weight(1f).height(48.dp), shape = NexusButtonShape,
                 colors = ButtonDefaults.buttonColors(containerColor = ConversationStyle.Navy, disabledContainerColor = Color(0xFFE5E8EE), disabledContentColor = Color(0xFF9AA4B4))) { Text("Continue", fontSize = 14.sp) }
         }
     }

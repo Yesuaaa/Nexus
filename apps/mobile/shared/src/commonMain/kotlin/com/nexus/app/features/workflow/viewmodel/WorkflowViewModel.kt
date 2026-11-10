@@ -18,10 +18,11 @@ class WorkflowViewModel(private val repository: WorkflowRepository) : ViewModel(
     val state = mutable.asStateFlow()
     private var id: String? = null
     private var job: Job? = null
+    private var requestedOpen: String? = null
     private var upload: Pair<SelectedFile, String>? = null
     private var uncertain: Triple<String, Map<String, String>, Pair<Int, String>>? = null
     fun open(requestId: String) {
-        if (state.value.busy) return
+        if (state.value.busy) { requestedOpen = requestId; return }
         if (id != requestId) { uncertain = null; upload = null; mutable.value = WorkflowState() }
         id = requestId
         job?.cancel()
@@ -107,6 +108,11 @@ class WorkflowViewModel(private val repository: WorkflowRepository) : ViewModel(
         mutable.update { it.copy(busy = true, error = null) }
         try { block() } catch (e: CancellationException) { throw e }
         catch (e: Exception) { mutable.update { it.copy(error = e.message) } }
-        finally { mutable.update { it.copy(busy = false) } }
+        finally {
+            mutable.update { it.copy(busy = false) }
+            val next = requestedOpen
+            requestedOpen = null
+            if (next != null && currentCoroutineContext().isActive) open(next)
+        }
     }
 }

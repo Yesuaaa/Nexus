@@ -22,10 +22,10 @@ fun RegisterScreen(onRegistered: (AuthUser) -> Unit, onNavigateToLogin: () -> Un
     val state by viewModel.state.collectAsState()
     val toast = LocalNexusToast.current
     var submitted by rememberSaveable { mutableStateOf(false) }
-    val errors = if (submitted) registrationFieldErrors(state.fullName, state.contactNumber, state.email, state.password, state.confirmation) else emptyMap()
+    val errors = if (submitted && !state.success) registrationFieldErrors(state.fullName, state.contactNumber, state.email, state.password, state.confirmation) else emptyMap()
     LaunchedEffect(viewModel) { viewModel.toasts.collect { toast.show(it.title, it.message, it.kind) } }
     AuthScreenLayout(modifier = modifier, registering = true, header = { AuthHeader() },
-        action = { AuthButton(if (state.offline) "Retry" else "Create Account", state.submitting) { submitted = true; viewModel.submit(onRegistered) } },
+        action = { AuthButton(if (state.offline) "Retry" else "Create Account", state.submitting) { submitted = true; viewModel.submit { user -> submitted = false; onRegistered(user) } } },
         switchLink = { AuthSwitchLink("Already have an account?", "Sign In", !state.submitting, onNavigateToLogin) }
     ) {
         AuthHeading("Create Account", "Begin your digital journey with EXP today.")
@@ -44,6 +44,6 @@ fun RegisterScreen(onRegistered: (AuthUser) -> Unit, onNavigateToLogin: () -> Un
             AuthTextField(state.confirmation, viewModel::onConfirmationChange, "Confirm Password", "Re-enter your password", isPassword = true,
                 errorMessage = errors["confirmation"], enabled = !state.submitting, fieldHeight = 48.dp)
         }
-        if (!state.offline && errors.isEmpty()) state.error?.let { Text(it, Modifier.padding(top = 8.dp), color = NexusColors.ErrorRed, fontSize = 13.sp) }
+        if (!state.success && !state.offline && errors.isEmpty()) state.error?.let { Text(it, Modifier.padding(top = 8.dp), color = NexusColors.ErrorRed, fontSize = 13.sp) }
     }
 }

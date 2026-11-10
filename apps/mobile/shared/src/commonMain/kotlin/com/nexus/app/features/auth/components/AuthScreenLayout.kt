@@ -69,18 +69,18 @@ private fun AuthMainContent(
 ) {
     Column(Modifier.fillMaxWidth()) {
         BoxWithConstraints(Modifier.fillMaxWidth().height(if (registering) 157.dp else 184.dp).clipToBounds()) {
-            val photoSize = if (registering) 160.dp else 198.dp
-            val orbitSize = if (registering) 196.dp else 254.dp
-            Box(Modifier.offset(x = maxWidth - if (registering) 133.dp else 203.dp, y = if (registering) (-59).dp else (-52).dp)
+            val photoSize = if (registering) 160.dp else 158.dp
+            val orbitSize = if (registering) 196.dp else 204.dp
+            Box(Modifier.offset(x = maxWidth - if (registering) 133.dp else 163.dp, y = if (registering) (-59).dp else (-42).dp)
                 .size(orbitSize).border(1.dp, Color(0xFFDDE8F5).copy(alpha = if (registering) 1f else .35f), CircleShape))
-            Box(Modifier.offset(x = maxWidth - if (registering) 115.dp else 187.dp, y = if (registering) (-41).dp else (-36).dp)
-                .size(if (registering) 160.dp else 222.dp).background(Color(0xFFD9F3F6).copy(alpha = if (registering) .65f else .18f), CircleShape))
+            Box(Modifier.offset(x = maxWidth - if (registering) 115.dp else 150.dp, y = if (registering) (-41).dp else (-29).dp)
+                .size(if (registering) 160.dp else 178.dp).background(Color(0xFFD9F3F6).copy(alpha = if (registering) .65f else .18f), CircleShape))
             if (!registering) Image(painterResource(Res.drawable.auth_administration), "Administrative work", contentScale = ContentScale.Crop,
-                modifier = Modifier.offset(x = maxWidth - 175.dp, y = (-24).dp).size(photoSize).clip(CircleShape))
+                modifier = Modifier.offset(x = maxWidth - 140.dp, y = (-19).dp).size(photoSize).clip(CircleShape))
             Box(Modifier.offset(x = if (registering) 28.dp else 22.dp, y = if (registering) 36.dp else 51.dp)) { AuthBrand() }
             Text("DIGITAL SOLUTIONS", Modifier.offset(x = 28.dp, y = if (registering) 105.dp else 124.dp), fontSize = 11.sp, letterSpacing = .7.sp, color = Color(0xFF61748D))
-            Box(Modifier.offset(x = maxWidth - if (registering) 115.dp else 202.dp, y = if (registering) 122.dp else 139.dp)
-                .size(if (registering) 7.dp else 12.dp).background(Color(0xFF28C9E0).copy(alpha = .5f), CircleShape))
+            Box(Modifier.offset(x = maxWidth - if (registering) 115.dp else 162.dp, y = if (registering) 122.dp else 111.dp)
+                .size(if (registering) 7.dp else 9.dp).background(Color(0xFF28C9E0).copy(alpha = .5f), CircleShape))
             Box(Modifier.align(Alignment.TopEnd).padding(top = if (registering) 22.dp else 16.dp, end = if (registering) 52.dp else 80.dp)) { header() }
         }
         Column(Modifier.fillMaxWidth().padding(horizontal = 28.dp)) {
@@ -104,12 +104,12 @@ private fun AuthBrand() {
 
 @Composable
 private fun LoginSupportFooter() {
-    BoxWithConstraints(Modifier.fillMaxWidth().height(202.dp).clipToBounds()) {
-        Box(Modifier.offset(x = (-62).dp, y = (-14).dp).size(214.dp).border(1.dp, Color(0xFFDDE8F5).copy(alpha = .6f), CircleShape))
-        Box(Modifier.offset(x = (-47).dp, y = 1.dp).size(184.dp).background(Color(0xFFD9F3F6).copy(alpha = .25f), CircleShape))
+    BoxWithConstraints(Modifier.fillMaxWidth().height(178.dp).clipToBounds()) {
+        Box(Modifier.offset(x = (-50).dp, y = (-6).dp).size(172.dp).border(1.dp, Color(0xFFDDE8F5).copy(alpha = .6f), CircleShape))
+        Box(Modifier.offset(x = (-38).dp, y = 6.dp).size(148.dp).background(Color(0xFFD9F3F6).copy(alpha = .25f), CircleShape))
         Image(painterResource(Res.drawable.auth_support), "Customer support at work", contentScale = ContentScale.Crop,
-            modifier = Modifier.offset(x = (-36).dp, y = 12.dp).size(162.dp).clip(CircleShape))
-        Column(Modifier.offset(x = 156.dp, y = 28.dp).widthIn(max = 209.dp).padding(end = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            modifier = Modifier.offset(x = (-29).dp, y = 15.dp).size(130.dp).clip(CircleShape))
+        Column(Modifier.offset(x = 130.dp, y = 20.dp).widthIn(max = 209.dp).padding(end = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Icon(Icons.Outlined.HeadsetMic, null, Modifier.size(14.dp), tint = Color(0xFF233D92))
                 Text("Customer Service", fontSize = 11.sp, color = Color(0xFF233D92))

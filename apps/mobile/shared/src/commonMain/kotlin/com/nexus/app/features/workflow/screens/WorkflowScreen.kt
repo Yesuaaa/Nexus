@@ -1,5 +1,9 @@
 package com.nexus.app.features.workflow.screens
 
+import com.nexus.app.core.components.NexusDialogButton
+import com.nexus.app.core.components.NexusAlertDialog
+import com.nexus.app.core.theme.NexusButtonShape
+import com.nexus.app.core.theme.NexusColors
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -34,7 +38,7 @@ import org.koin.compose.viewmodel.koinViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WorkflowScreen(id: String, onBack: () -> Unit, conversationId: String? = null, initialDocuments: Boolean = false,
-    viewModel: WorkflowViewModel = koinViewModel()) {
+    viewModel: WorkflowViewModel = koinViewModel(), onBookingSelected: (String) -> Unit = {}, onOpenThread: ((String) -> Unit)? = null) {
     val state by viewModel.state.collectAsState()
     val repository: ClientCommunicationRepository = koinInject()
     val platformFiles = LocalPlatformFiles.current
@@ -50,7 +54,7 @@ fun WorkflowScreen(id: String, onBack: () -> Unit, conversationId: String? = nul
     var rescheduleNote by remember { mutableStateOf("") }
     var scheduleError by remember { mutableStateOf<String?>(null) }
     var consultationDetails by remember { mutableStateOf<Consultation?>(null) }
-    LaunchedEffect(selectedBooking) { viewModel.open(selectedBooking) }
+    LaunchedEffect(selectedBooking) { onBookingSelected(selectedBooking); viewModel.open(selectedBooking) }
     LaunchedEffect(conversationId, id) {
         try { history = repository.history(conversationId ?: id) }
         catch (error: CancellationException) { throw error }
@@ -69,9 +73,9 @@ fun WorkflowScreen(id: String, onBack: () -> Unit, conversationId: String? = nul
         if (state.busy) item { LinearProgressIndicator(Modifier.fillMaxWidth(), color = ConversationStyle.Navy) }
         state.error?.let { error -> item {
             Text(error, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
-            TextButton(onClick = { viewModel.open(selectedBooking) }, enabled = !state.busy) { Text("Refresh details") }
+            TextButton(shape = NexusButtonShape, onClick = { viewModel.open(selectedBooking) }, enabled = !state.busy) { Text("Refresh details") }
         } }
-        if (state.pendingAction && !state.busy) item { TextButton(onClick = viewModel::retryAction) { Text("Confirm previous action") } }
+        if (state.pendingAction && !state.busy) item { TextButton(shape = NexusButtonShape, onClick = viewModel::retryAction) { Text("Confirm previous action") } }
         if (workflow != null) {
             item { DetailSection {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -99,7 +103,7 @@ fun WorkflowScreen(id: String, onBack: () -> Unit, conversationId: String? = nul
                     workflow.request.serviceName, workflow.state, workflow.request.referenceNumber, workflow.state), true, {}, true)
                 else bookings.forEach { booking ->
                     BookingOption(if (booking.id == selectedBooking) booking.copy(workflowState = workflow.state) else booking,
-                        selectedBooking == booking.id, { if (!state.busy) selectedBooking = booking.id }, true)
+                        selectedBooking == booking.id, { if (!state.busy) { selectedBooking = booking.id; onOpenThread?.invoke(booking.id) } }, true)
                 }
             } }
             item { DetailSection("Service details") {
@@ -120,7 +124,7 @@ fun WorkflowScreen(id: String, onBack: () -> Unit, conversationId: String? = nul
                     WorkflowPill(humanStatus(requirement.status), requirement.status == "COMPLETED")
                     if (workflow.state !in setOf("PENDING_REVIEW", "CANCELLED", "DECLINED", "ACTIVE_PROJECT", "ON_HOLD") && requirement.status !in setOf("COMPLETED", "SUBMITTED")) {
                         OutlinedTextField(submission, { submission = it.take(4000) }, Modifier.fillMaxWidth(), placeholder = { Text("Your response", fontSize = 14.sp) }, shape = RoundedCornerShape(6.dp))
-                        OutlinedButton(onClick = { viewModel.action("SUBMIT_REQUIREMENT", buildMap { put("requirementId", requirement.id); put("submission", submission); state.selectedFileId?.let { put("fileId", it) } }) }, enabled = !state.busy && (submission.isNotBlank() || state.selectedFileId != null), shape = RoundedCornerShape(6.dp)) { Text("Submit requirement", fontSize = 12.sp) }
+                        Button(colors = ButtonDefaults.buttonColors(containerColor = NexusColors.PrimaryBlue, contentColor = Color.White, disabledContainerColor = NexusColors.PrimaryBlue.copy(alpha = 0.5f), disabledContentColor = Color.White.copy(alpha = 0.7f)), onClick = { viewModel.action("SUBMIT_REQUIREMENT", buildMap { put("requirementId", requirement.id); put("submission", submission); state.selectedFileId?.let { put("fileId", it) } }) }, enabled = !state.busy && (submission.isNotBlank() || state.selectedFileId != null), shape = NexusButtonShape) { Text("Submit requirement", fontSize = 12.sp) }
                     } else requirement.submission?.let { Text(it, fontSize = 14.sp, lineHeight = 21.sp) }
                 }
             } }
@@ -140,7 +144,7 @@ fun WorkflowScreen(id: String, onBack: () -> Unit, conversationId: String? = nul
                     Text(quote.paymentTerms, fontSize = 12.sp, color = ConversationStyle.Muted)
                     OutlinedTextField(decisionNote, { decisionNote = it.take(2000) }, label = { Text("Decision note") }, modifier = Modifier.fillMaxWidth())
                     Row { listOf("ACCEPT", "REVISE", "DECLINE").forEach { decision ->
-                        TextButton(onClick = { viewModel.action("RESPOND_QUOTATION", mapOf("quotationId" to quote.id, "decision" to decision, "note" to decisionNote)) }, enabled = !state.busy && (decision == "ACCEPT" || decisionNote.isNotBlank())) { Text(humanStatus(decision), fontSize = 12.sp) }
+                        TextButton(shape = NexusButtonShape, onClick = { viewModel.action("RESPOND_QUOTATION", mapOf("quotationId" to quote.id, "decision" to decision, "note" to decisionNote)) }, enabled = !state.busy && (decision == "ACCEPT" || decisionNote.isNotBlank())) { Text(humanStatus(decision), fontSize = 12.sp) }
                     } }
                 }
             }
@@ -160,17 +164,17 @@ fun WorkflowScreen(id: String, onBack: () -> Unit, conversationId: String? = nul
                     Checkbox(confirmed, { confirmed = it }, modifier = Modifier.size(36.dp), colors = CheckboxDefaults.colors(checkedColor = ConversationStyle.Navy))
                     Text("I confirm this cancellation will end the request workflow.", Modifier.padding(top = 4.dp), fontSize = 12.sp, lineHeight = 18.sp, color = ConversationStyle.Muted)
                 }
-                OutlinedButton(onClick = { cancelConfirm = true }, enabled = !state.busy && confirmed && cancellationNote.isNotBlank(), modifier = Modifier.fillMaxWidth().height(44.dp), shape = RoundedCornerShape(6.dp), border = BorderStroke(1.dp, Color(0xFFEF4444)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFDC2626))) { Text("Cancel request", fontSize = 14.sp) }
+                Button(onClick = { cancelConfirm = true }, enabled = !state.busy && confirmed && cancellationNote.isNotBlank(), modifier = Modifier.fillMaxWidth().height(44.dp), shape = NexusButtonShape, colors = ButtonDefaults.buttonColors(containerColor = NexusColors.ErrorRed, contentColor = Color.White, disabledContainerColor = NexusColors.ErrorRed.copy(alpha = 0.5f), disabledContentColor = Color.White.copy(alpha = 0.7f))) { Text("Cancel request", fontSize = 14.sp) }
             } }
         }
     }
-    if (cancelConfirm) AlertDialog(onDismissRequest = { cancelConfirm = false }, title = { Text("Cancel this request?") }, text = { Text("This ends the selected request workflow.") },
-        confirmButton = { TextButton(onClick = { cancelConfirm = false; viewModel.action("CANCEL", mapOf("note" to cancellationNote)) }) { Text("Cancel request") } },
-        dismissButton = { TextButton(onClick = { cancelConfirm = false }) { Text("Keep request") } })
-    consultationDetails?.let { consultation -> AlertDialog(onDismissRequest = { consultationDetails = null }, title = { Text("Consultation appointment") },
+    if (cancelConfirm) NexusAlertDialog(onDismissRequest = { cancelConfirm = false }, title = { Text("Cancel this request?") }, text = { Text("This ends the selected request workflow.") },
+        confirmButton = { NexusDialogButton(onClick = { cancelConfirm = false; viewModel.action("CANCEL", mapOf("note" to cancellationNote)) }, destructive = true) { Text("Cancel request", maxLines = 1, softWrap = false) } },
+        dismissButton = { NexusDialogButton(onClick = { cancelConfirm = false }) { Text("Keep request") } })
+    consultationDetails?.let { consultation -> NexusAlertDialog(onDismissRequest = { consultationDetails = null }, title = { Text("Consultation appointment") },
         text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(appointmentDate(consultation.startsAt)); Text(consultation.location)
-            if (consultation.notes.isNotBlank()) Text(consultation.notes)
+            consultation.notes?.takeIf { it.isNotBlank() }?.let { Text(it) }
             if (consultation.status == "SCHEDULED") {
                 OutlinedTextField(proposedTime, { proposedTime = it }, label = { Text("Proposed date and time") }, placeholder = { Text("2026-11-06 09:00") })
                 OutlinedTextField(rescheduleNote, { rescheduleNote = it.take(2000) }, label = { Text("Reason for rescheduling") })
@@ -178,12 +182,12 @@ fun WorkflowScreen(id: String, onBack: () -> Unit, conversationId: String? = nul
             }
         } },
         confirmButton = {
-            if (consultation.status == "SCHEDULED") TextButton(onClick = {
+            if (consultation.status == "SCHEDULED") NexusDialogButton(onClick = {
                 val startsAt = runCatching { LocalDateTime.parse(proposedTime.trim().replace(' ', 'T')).toInstant(TimeZone.currentSystemDefault()).toString() }.getOrNull()
                 if (startsAt == null) scheduleError = "Enter a valid date and time."
                 else { viewModel.action("REQUEST_CONSULTATION_RESCHEDULE", mapOf("consultationId" to consultation.id, "startsAt" to startsAt, "note" to rescheduleNote)); consultationDetails = null }
             }, enabled = !state.busy && proposedTime.isNotBlank() && rescheduleNote.isNotBlank()) { Text("Request reschedule") }
-        }, dismissButton = { TextButton(onClick = { consultationDetails = null }) { Text("Close") } }) }
+        }, dismissButton = { NexusDialogButton(onClick = { consultationDetails = null }) { Text("Close") } }) }
     if (documents && workflow != null) ModalBottomSheet(onDismissRequest = { documents = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = Color.White, dragHandle = null) {
         Column(Modifier.fillMaxWidth().heightIn(max = 640.dp).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -193,7 +197,7 @@ fun WorkflowScreen(id: String, onBack: () -> Unit, conversationId: String? = nul
             Text(workflow.request.serviceName, fontSize = 14.sp, color = ConversationStyle.Muted)
             WorkflowDocumentCards(workflow) { file -> platformFiles?.let { viewModel.file(it, file, false) } }
             state.uploadProgress?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth()) }
-            if (platformFiles != null && workflow.state !in setOf("PENDING_REVIEW", "CANCELLED", "DECLINED", "ON_HOLD")) OutlinedButton(onClick = { viewModel.upload(platformFiles) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp)) { Text("Attach signed agreement or payment evidence", fontSize = 12.sp) }
+            if (platformFiles != null && workflow.state !in setOf("PENDING_REVIEW", "CANCELLED", "DECLINED", "ON_HOLD")) OutlinedButton(onClick = { viewModel.upload(platformFiles) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth(), shape = NexusButtonShape) { Text("Attach signed agreement or payment evidence", fontSize = 12.sp) }
             workflow.files.forEach { file ->
                 Row(Modifier.fillMaxWidth().clickable { viewModel.selectFile(file.id) }, verticalAlignment = Alignment.CenterVertically) {
                     RadioButton(state.selectedFileId == file.id, { viewModel.selectFile(file.id) })
@@ -202,11 +206,11 @@ fun WorkflowScreen(id: String, onBack: () -> Unit, conversationId: String? = nul
                 }
             }
             workflow.agreement?.let { agreement -> if (agreement.documentFileId != null && agreement.status == "PENDING" && workflow.state in setOf("AGREEMENT_PAYMENT_PENDING", "READY_FOR_ACTIVATION"))
-                Button(onClick = { state.selectedFileId?.let { viewModel.action("SIGN_AGREEMENT", mapOf("fileId" to it)) } }, enabled = !state.busy && state.selectedFileId != null, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp)) { Text("Submit signed agreement") }
+                Button(onClick = { state.selectedFileId?.let { viewModel.action("SIGN_AGREEMENT", mapOf("fileId" to it)) } }, enabled = !state.busy && state.selectedFileId != null, modifier = Modifier.fillMaxWidth(), shape = NexusButtonShape) { Text("Submit signed agreement") }
             }
             workflow.payment?.let { payment -> if (payment.status !in setOf("VERIFIED", "SUBMITTED") && workflow.state in setOf("AGREEMENT_PAYMENT_PENDING", "READY_FOR_ACTIVATION")) {
                 OutlinedTextField(paymentReference, { paymentReference = it.take(200) }, label = { Text("Payment reference") }, modifier = Modifier.fillMaxWidth())
-                Button(onClick = { state.selectedFileId?.let { viewModel.action("SUBMIT_PAYMENT", mapOf("fileId" to it, "reference" to paymentReference)) } }, enabled = !state.busy && state.selectedFileId != null && paymentReference.isNotBlank(), modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp)) { Text("Submit payment evidence") }
+                Button(onClick = { state.selectedFileId?.let { viewModel.action("SUBMIT_PAYMENT", mapOf("fileId" to it, "reference" to paymentReference)) } }, enabled = !state.busy && state.selectedFileId != null && paymentReference.isNotBlank(), modifier = Modifier.fillMaxWidth(), shape = NexusButtonShape) { Text("Submit payment evidence") }
             } }
         }
     }
@@ -275,7 +279,7 @@ private fun ConsultationCard(consultation: Consultation, onDetails: () -> Unit) 
                 Text(consultation.location, fontSize = 14.sp, color = Color.White)
             }
         }
-        Button(onClick = onDetails, modifier = Modifier.fillMaxWidth().height(44.dp), colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = ConversationStyle.Navy), shape = RoundedCornerShape(6.dp)) {
+        Button(onClick = onDetails, modifier = Modifier.fillMaxWidth().height(44.dp), colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = ConversationStyle.Navy), shape = NexusButtonShape) {
             Icon(Icons.Outlined.Videocam, null, Modifier.size(16.dp)); Spacer(Modifier.width(8.dp)); Text("View details and reschedule", fontSize = 14.sp)
         }
     }

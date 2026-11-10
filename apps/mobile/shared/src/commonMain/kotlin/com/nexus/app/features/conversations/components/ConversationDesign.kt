@@ -31,7 +31,7 @@ object ConversationStyle {
     val Ink = Color(0xFF1A2233)
     val Muted = Color(0xFF52627A)
     val Border = Color(0xFFE1E4EA)
-    val Divider = Color(0xFFECEEF1)
+    val Divider = Color(0xFFEFEFEE)
     val Notice = Color(0xFFEDF1F9)
 }
 
@@ -75,6 +75,8 @@ fun DocumentFrame(title: String, icon: ImageVector, badge: String? = null, compl
 fun WorkflowDocumentCards(workflow: ClientWorkflow, onFile: (WorkflowFile) -> Unit) {
     workflow.agreement?.let { agreement ->
         DocumentFrame("Agreement", Icons.Outlined.AssignmentTurnedIn) {
+            workflow.files.filter { it.id == agreement.documentFileId || it.id == agreement.signedFileId }
+                .forEach { file -> FileAttachmentCard(file) { onFile(file) } }
             Text(if (agreement.status == "APPROVED") "The agreement has been approved for project activation." else "An approved agreement is required before project activation.",
                 color = ConversationStyle.Ink, fontSize = 14.sp, lineHeight = 21.sp)
         }
@@ -90,6 +92,7 @@ fun WorkflowDocumentCards(workflow: ClientWorkflow, onFile: (WorkflowFile) -> Un
                 Text(if (verified) "Payment has been verified. Project activation will wait until the required agreement is approved too." else "Payment can be completed now. Project activation will wait until the required agreement is approved too.",
                     color = ConversationStyle.Muted, fontSize = 12.sp, lineHeight = 18.sp)
             }
+            workflow.files.find { it.id == payment.proofFileId }?.let { file -> FileAttachmentCard(file) { onFile(file) } }
             payment.reference?.takeIf { it.isNotBlank() }?.let {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Reference", fontSize = 12.sp, color = ConversationStyle.Muted)

@@ -54,9 +54,10 @@ class CommunicationRecoveryTest {
             assertTrue(vm.state.value.pending.isEmpty())
         } finally { vm.foreground(false); vm.viewModelScope.cancel(); client.close() }
     }
-    @Test fun attachmentsLoadAcrossBookingsRefreshAndDownloadFromTheirOwnBooking() = runTest {
+    @Test fun attachmentsFollowSelectedBookingRefreshAndDownloadFromTheirOwnBooking() = runTest {
         var received = false
         var downloadPath = ""
+        val workflowReads = mutableListOf<String>()
         val client = client { request ->
             val path = request.url.encodedPath
             when {
@@ -68,6 +69,7 @@ class CommunicationRecoveryTest {
                 }
                 path.startsWith("/api/request-workflows/") -> {
                     val id = path.substringAfterLast('/')
+                    workflowReads.add(id)
                     val files = if (id == "second" && !received) "[]" else """[{"id":"file-$id","name":"brief.txt","mimeType":"text/plain","size":8,"uploaderId":"${if (id == "first") "client" else "head"}","createdAt":"2026-11-07T00:00:00Z"}]"""
                     respond("""{"request":{"id":"$id","serviceName":"Design"},"state":"CONSULTATION","version":1,"nextAction":"","permissions":{"isClient":true},"files":$files}""", headers = jsonHeaders)
                 }
@@ -78,14 +80,33 @@ class CommunicationRecoveryTest {
         try {
             vm.open("conversation"); vm.foreground(true)
             vm.state.first { it.attachments.size == 1 }
+            assertEquals("first", vm.state.value.attachments.single().requestId)
             assertEquals("client", vm.state.value.attachments.single().file.uploaderId)
+            assertEquals(listOf("first"), workflowReads)
+
+            // Selecting a booking replaces the previous booking's attachments, even if empty.
+            vm.selectBooking("second")
+            vm.state.first { it.selectedWorkflow?.request?.id == "second" }
+            assertEquals("second", vm.state.value.selectedBookingId)
+            assertEquals("second", vm.state.value.history?.selectedBookingId)
+            assertTrue(vm.state.value.attachments.isEmpty())
+            assertEquals(listOf("first", "second"), workflowReads)
+
+            // A new attachment appears only in the selected thread and downloads from its booking.
             received = true
             vm.refreshAttachments()
-            vm.state.first { it.attachments.size == 2 }
-            val attachment = vm.state.value.attachments.first { it.requestId == "second" }
+            vm.state.first { it.attachments.singleOrNull()?.requestId == "second" }
+            val attachment = vm.state.value.attachments.single()
             assertEquals("head", attachment.file.uploaderId)
+            assertEquals(listOf("first", "second", "second"), workflowReads)
             assertEquals("document", vm.attachmentContent(attachment).bytes.decodeToString())
             assertEquals("/api/request-workflows/second/files/file-second", downloadPath)
+
+            vm.selectBooking("first")
+            vm.state.first { it.attachments.singleOrNull()?.requestId == "first" }
+            assertEquals("client", vm.state.value.attachments.single().file.uploaderId)
+            assertEquals(listOf("first", "second", "second", "first"), workflowReads)
+            vm.foreground(false)
             vm.open("other")
             assertTrue(vm.state.value.attachments.isEmpty())
         } finally { vm.foreground(false); vm.viewModelScope.cancel(); client.close() }

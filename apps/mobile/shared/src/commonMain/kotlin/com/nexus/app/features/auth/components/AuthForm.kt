@@ -1,5 +1,6 @@
 package com.nexus.app.features.auth.components
 
+import com.nexus.app.core.theme.NexusButtonShape
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -78,7 +79,7 @@ fun AuthTextField(
 
 @Composable
 fun AuthButton(text: String, loading: Boolean, onClick: () -> Unit) {
-    Button(onClick = onClick, enabled = !loading, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(14.dp),
+    Button(onClick = onClick, enabled = !loading, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = NexusButtonShape,
         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF233D92), disabledContainerColor = Color(0xFF233D92).copy(alpha = .5f))) {
         if (loading) CircularProgressIndicator(Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
         else { Text(text, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold); Spacer(Modifier.width(12.dp)); Icon(Icons.AutoMirrored.Outlined.ArrowForward, null, Modifier.size(18.dp)) }

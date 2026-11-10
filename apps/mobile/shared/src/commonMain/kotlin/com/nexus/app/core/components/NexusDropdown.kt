@@ -1,5 +1,6 @@
 package com.nexus.app.core.components
 
+import com.nexus.app.core.theme.NexusButtonShape
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -78,7 +79,7 @@ fun NexusDropdown(
             },
             enabled = enabled,
             modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
-            shape = shape,
+            shape = NexusButtonShape,
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
             border = BorderStroke(1.dp, NexusColors.Border),
             colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.White, contentColor = NexusColors.TextPrimary)

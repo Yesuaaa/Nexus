@@ -1,5 +1,6 @@
 package com.nexus.app.navigation
 
+import com.nexus.app.core.theme.NexusButtonShape
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -226,12 +227,28 @@ fun AppNavHost(modifier: Modifier = Modifier) {
         else navController.navigate(target) { launchSingleTop = true }
     }
 
+    var accountTitle by remember(route) {
+        mutableStateOf(if (route == Routes.SETTINGS) "Settings" else "Profile")
+    }
+    val pageTitle = when (route) {
+        Routes.DASHBOARD -> "Dashboard"
+        Routes.SERVICES -> "Services"
+        Routes.BOOKED_REQUESTS -> "Booked Requests"
+        Routes.REQUEST_DETAIL -> "Request details"
+        Routes.NOTIFICATIONS -> "Notifications"
+        Routes.MESSAGES -> "Messages"
+        Routes.CHAT -> "Chat"
+        Routes.WORKFLOW -> "Request details"
+        Routes.PROFILE, Routes.SETTINGS -> accountTitle
+        else -> ""
+    }
     val showBars = route in Routes.main
 
     Scaffold(
         topBar = {
             if (showBars && route != Routes.CHAT) {
                 NexusTopAppBar(
+                    title = pageTitle,
                     onNotificationClick = { toggleHeaderPage(Routes.NOTIFICATIONS) },
                     onChatClick = { toggleHeaderPage(Routes.MESSAGES) },
                     onProfileClick = {
@@ -291,7 +308,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                                     verticalArrangement = Arrangement.spacedBy(16.dp)
                                 ) {
                                     Text(restorationError!!, color = NexusColors.TextSecondary)
-                                    Button(onClick = { restorationAttempt++ }) { Text("Retry") }
+                                    Button(shape = NexusButtonShape, onClick = { restorationAttempt++ }) { Text("Retry") }
                                 }
                             }
                         }
@@ -321,13 +338,25 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                     composable(Routes.MESSAGES) { MessagesScreen(onConversation = { navController.navigate("chat/$it") }) }
                     composable(Routes.CHAT) { entry ->
                         val id = entry.arguments?.getString("conversationId") ?: return@composable
-                        ChatScreen(id, user?.id ?: "", onBack = { navController.popBackStack() },
+                        val selectedBookingId by entry.savedStateHandle.getStateFlow<String?>("selectedBookingId", null).collectAsState()
+                        ChatScreen(id, user?.id ?: "", selectedBookingId = selectedBookingId, onBack = { navController.popBackStack() },
                             onDetails = { bookingId -> navController.navigate("workflow/$bookingId?conversationId=$id") },
                             onBooking = { navController.navigate("workflow/$it?conversationId=$id&documents=true") })
                     }
                     composable(Routes.WORKFLOW, arguments = listOf(navArgument("conversationId") { nullable = true; defaultValue = null }, navArgument("documents") { type = NavType.BoolType; defaultValue = false })) { entry ->
                         val id = entry.arguments?.getString("requestId") ?: return@composable
-                        com.nexus.app.features.workflow.screens.WorkflowScreen(id, onBack = { navController.popBackStack() }, conversationId = entry.arguments?.getString("conversationId"), initialDocuments = entry.arguments?.getBoolean("documents") ?: false)
+                        com.nexus.app.features.workflow.screens.WorkflowScreen(id, onBack = { navController.popBackStack() }, conversationId = entry.arguments?.getString("conversationId"), initialDocuments = entry.arguments?.getBoolean("documents") ?: false,
+                            onOpenThread = { bookingId ->
+                                val chatEntry = navController.previousBackStackEntry?.takeIf { it.destination.route == Routes.CHAT }
+                                if (chatEntry != null) {
+                                    chatEntry.savedStateHandle["selectedBookingId"] = bookingId
+                                    navController.popBackStack()
+                                }
+                            },
+                            onBookingSelected = { bookingId ->
+                                navController.previousBackStackEntry?.takeIf { it.destination.route == Routes.CHAT }
+                                    ?.savedStateHandle?.set("selectedBookingId", bookingId)
+                            })
                     }
                     composable(Routes.DASHBOARD) { DashboardScreen() }
                     composable(Routes.SERVICES) {
@@ -347,7 +376,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                         )
                     }
                     composable(Routes.SETTINGS) {
-                        user?.let { current -> ProfileScreen(current, initialSettings = true, onEditingChange = { editingAccount = it }) }
+                        user?.let { current -> ProfileScreen(current, initialSettings = true, onEditingChange = { editingAccount = it }, onTitleChange = { accountTitle = it }) }
                     }
                     composable(Routes.PROFILE) {
                         val current = user
@@ -358,6 +387,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                         } else {
                             ProfileScreen(
                                 user = current,
+                                onTitleChange = { accountTitle = it },
                                 onEditingChange = { editingAccount = it }
                             )
                         }
