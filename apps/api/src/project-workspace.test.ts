@@ -1,0 +1,581 @@
+import assert from "node:assert/strict"
+import { randomBytes } from "node:crypto"
+import { readdir, readFile } from "node:fs/promises"
+import type { Server } from "node:http"
+import type { AddressInfo } from "node:net"
+import { test } from "node:test"
+import { PGlite } from "@electric-sql/pglite"
+import { PGLiteSocketServer } from "@electric-sql/pglite-socket"
+import { createApp } from "./app.js"
+import { issueSession } from "./features/auth/auth.service.js"
+import { getPrisma } from "./lib/db.js"
+
+type Booking = {
+  request: { id: string }
+  project: { id: string }
+}
+
+type Workspace = {
+  id: string
+  name: string
+  status: string
+  structure: string
+  workstreams: {
+    id: string
+    requestId: string | null
+    status: string
+    templateKey: string | null
+    plan: { phases: { tasks: { status: string }[] }[] } | null
+  }[]
+}
+
+test(
+  "[NEX-003] workspace lifecycle API validates bookings, manager access, and persisted transitions",
+  { timeout: 120_000 },
+  async (t) => {
+    const original = {
+      DATABASE_URL: process.env.DATABASE_URL,
+      DIRECT_URL: process.env.DIRECT_URL,
+      DATABASE_POOL_MAX: process.env.DATABASE_POOL_MAX,
+      JWT_SECRET: process.env.JWT_SECRET,
+    }
+    process.env.JWT_SECRET = randomBytes(32).toString("base64url")
+    const database = new PGlite()
+    const cleanup: {
+      socket?: PGLiteSocketServer
+      server?: Server
+      prisma?: ReturnType<typeof getPrisma>
+    } = {}
+
+    t.after(async () => {
+      if (cleanup.server)
+        await new Promise<void>((resolve) =>
+          cleanup.server!.close(() => resolve()),
+        )
+      await cleanup.prisma?.$disconnect()
+      await cleanup.socket?.stop()
+      await database.close()
+      for (const [key, value] of Object.entries(original)) {
+        if (value === undefined) delete process.env[key]
+        else process.env[key] = value
+      }
+    })
+
+    await database.waitReady
+    const migrations = new URL("../prisma/migrations/", import.meta.url)
+    for (const name of (await readdir(migrations))
+      .filter((entry) => /^\d/.test(entry))
+      .sort()) {
+      await database.exec(
+        await readFile(new URL(`${name}/migration.sql`, migrations), "utf8"),
+      )
+    }
+
+    const socket = new PGLiteSocketServer({
+      db: database,
+      port: 0,
+      host: "127.0.0.1",
+    })
+    cleanup.socket = socket
+    await socket.start()
+    process.env.DATABASE_URL = `postgresql://postgres:postgres@${socket.getServerConn()}/postgres?sslmode=disable`
+    process.env.DATABASE_POOL_MAX = "1"
+    delete process.env.DIRECT_URL
+    const prisma = getPrisma()!
+    cleanup.prisma = prisma
+
+    const head = await prisma.user.create({
+      data: {
+        id: "nex003-head",
+        email: "nex003-head@example.com",
+        fullName: "NEX-003 Department Head",
+        passwordHash: "test-only-hash",
+        role: "STAFF",
+      },
+    })
+    const client = await prisma.user.create({
+      data: {
+        id: "nex003-client",
+        email: "nex003-client@example.com",
+        fullName: "NEX-003 Client",
+        passwordHash: "test-only-hash",
+        role: "USER",
+      },
+    })
+    const department = await prisma.department.create({
+      data: {
+        id: "nex003-department",
+        name: "NEX-003 Department",
+        code: "NX3",
+        headId: head.id,
+      },
+    })
+    await prisma.user.update({
+      where: { id: head.id },
+      data: { departmentId: department.id },
+    })
+    const staff = await prisma.user.create({
+      data: {
+        id: "nex003-staff",
+        email: "nex003-staff@example.com",
+        fullName: "NEX-003 Staff",
+        passwordHash: "test-only-hash",
+        role: "STAFF",
+        departmentId: department.id,
+      },
+    })
+    await prisma.employee.create({
+      data: {
+        employeeId: "NEX003-HEAD",
+        fullName: head.fullName!,
+        userId: head.id,
+        departmentId: department.id,
+      },
+    })
+    await prisma.employee.create({
+      data: {
+        employeeId: "NEX003-STAFF",
+        fullName: staff.fullName!,
+        userId: staff.id,
+        departmentId: department.id,
+      },
+    })
+    const service = await prisma.service.create({
+      data: {
+        name: "NEX-003 Test Service",
+        description: "Isolated workspace lifecycle fixture.",
+        departments: { connect: { id: department.id } },
+      },
+    })
+
+    async function createBooking(
+      key: string,
+      approved: boolean,
+    ): Promise<Booking> {
+      const title = `NEX-003 Booking ${key}`
+      const request = await prisma.serviceRequest.create({
+        data: {
+          id: `nex003-request-${key}`,
+          clientId: client.id,
+          serviceId: service.id,
+          title,
+          referenceNumber: `NEX003-${key}`,
+          acceptedDepartmentId: department.id,
+          workflow: { create: { state: "READY_FOR_ACTIVATION" } },
+        },
+      })
+      if (approved) {
+        const quotation = await prisma.workflowQuotation.create({
+          data: {
+            requestId: request.id,
+            version: 1,
+            scope: "Approved NEX-003 fixture scope",
+            deliverables: [],
+            lineItems: [],
+            total: 100,
+            currency: "PHP",
+            timeline: "One week",
+            paymentTerms: "Due on receipt",
+            paymentDue: 100,
+            validUntil: new Date("2027-01-01T00:00:00.000Z"),
+            createdById: head.id,
+          },
+        })
+        await prisma.workflowApproval.create({
+          data: {
+            requestId: request.id,
+            quotationId: quotation.id,
+            amount: 100,
+            currency: "PHP",
+            approvedById: head.id,
+          },
+        })
+      }
+      const project = await prisma.project.create({
+        data: {
+          id: `nex003-project-${key}`,
+          clientId: client.id,
+          name: title,
+          requestId: request.id,
+          status: "PLANNED",
+        },
+      })
+      return { request, project }
+    }
+
+    const first = await createBooking("first", true)
+    const second = await createBooking("second", true)
+    const third = await createBooking("third", true)
+    const unapproved = await createBooking("unapproved", false)
+
+    const sessions = new Map<string, string>()
+    sessions.set(head.id, (await issueSession(head)).token)
+    sessions.set(staff.id, (await issueSession(staff)).token)
+    const server = createApp().listen(0, "127.0.0.1")
+    cleanup.server = server
+    await new Promise<void>((resolve) => server.once("listening", resolve))
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/project-workspace`
+
+    async function request(
+      path: string,
+      actorId: string,
+      method = "GET",
+      body?: unknown,
+    ) {
+      return fetch(`${base}${path}`, {
+        method,
+        headers: {
+          authorization: `Bearer ${sessions.get(actorId)}`,
+          ...(body === undefined ? {} : { "content-type": "application/json" }),
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      })
+    }
+
+    function createPayload(
+      requestIds: string[],
+      structure: "SEPARATE" | "MULTI_WORKSTREAM",
+      name: string,
+    ) {
+      return {
+        requestIds,
+        structure,
+        name,
+        templateKeys: Object.fromEntries(
+          requestIds.map((requestId) => [requestId, "blank-custom"]),
+        ),
+        customPlans: Object.fromEntries(
+          requestIds.map((requestId, index) => [
+            requestId,
+            {
+              phases: [
+                {
+                  id: `nex003-phase-${index}`,
+                  title: "NEX-003 Plan",
+                  tasks: [],
+                },
+              ],
+            },
+          ]),
+        ),
+      }
+    }
+
+    async function workspace(id: string): Promise<Workspace> {
+      const response = await request(`/${id}`, head.id)
+      assert.equal(response.status, 200, await response.clone().text())
+      return (await response.json()) as Workspace
+    }
+
+    const approvedResponse = await request("/approved-bookings", head.id)
+    assert.equal(approvedResponse.status, 200)
+    const approvedBookings = (await approvedResponse.json()) as {
+      requestId: string
+      projectId: string
+    }[]
+    assert.deepEqual(
+      approvedBookings.map(({ requestId }) => requestId).sort(),
+      [first.request.id, second.request.id, third.request.id].sort(),
+    )
+
+    const groupsBefore = await prisma.projectWorkspaceGroup.count()
+    const staffCreate = await request(
+      "/",
+      staff.id,
+      "POST",
+      createPayload([third.request.id], "SEPARATE", "Ignored name"),
+    )
+    assert.equal(staffCreate.status, 403)
+    assert.equal(await prisma.projectWorkspaceGroup.count(), groupsBefore)
+    assert.equal(
+      (
+        await prisma.project.findUniqueOrThrow({
+          where: { id: third.project.id },
+        })
+      ).workspaceGroupId,
+      null,
+    )
+
+    const invalidCreate = await request(
+      "/",
+      head.id,
+      "POST",
+      createPayload(
+        [third.request.id, unapproved.request.id],
+        "MULTI_WORKSTREAM",
+        "Invalid mixed workspace",
+      ),
+    )
+    assert.equal(invalidCreate.status, 409)
+    assert.equal(await prisma.projectWorkspaceGroup.count(), groupsBefore)
+    assert.equal(
+      (
+        await prisma.project.findUniqueOrThrow({
+          where: { id: third.project.id },
+        })
+      ).workspaceGroupId,
+      null,
+    )
+    assert.equal(
+      await prisma.workflowEvent.count({
+        where: {
+          requestId: { in: [third.request.id, unapproved.request.id] },
+          type: "WORKSPACE_CREATED",
+        },
+      }),
+      0,
+    )
+
+    const createResponse = await request(
+      "/",
+      head.id,
+      "POST",
+      createPayload(
+        [first.request.id, second.request.id],
+        "MULTI_WORKSTREAM",
+        "Initial NEX-003 Workspace",
+      ),
+    )
+    assert.equal(
+      createResponse.status,
+      201,
+      await createResponse.clone().text(),
+    )
+    const created = (await createResponse.json()) as {
+      workspaces: { id: string; name: string }[]
+    }
+    assert.equal(created.workspaces.length, 1)
+    const workspaceId = created.workspaces[0]!.id
+    assert.equal(created.workspaces[0]!.name, "Initial NEX-003 Workspace")
+    assert.equal(await prisma.projectWorkspaceGroup.count(), groupsBefore + 1)
+    for (const project of [first.project, second.project]) {
+      const persisted = await prisma.project.findUniqueOrThrow({
+        where: { id: project.id },
+      })
+      assert.equal(persisted.workspaceGroupId, workspaceId)
+      assert.equal(persisted.templateKey, "blank-custom")
+      assert.ok(persisted.workPlan)
+    }
+    const createdView = await workspace(workspaceId)
+    assert.equal(createdView.name, "Initial NEX-003 Workspace")
+    assert.equal(createdView.structure, "MULTI_WORKSTREAM")
+    assert.deepEqual(
+      createdView.workstreams.map(({ requestId }) => requestId).sort(),
+      [first.request.id, second.request.id].sort(),
+    )
+
+    const staleCreate = await request(
+      "/",
+      head.id,
+      "POST",
+      createPayload(
+        [first.request.id, third.request.id],
+        "MULTI_WORKSTREAM",
+        "Stale NEX-003 Workspace",
+      ),
+    )
+    assert.equal(staleCreate.status, 409)
+    assert.equal(await prisma.projectWorkspaceGroup.count(), groupsBefore + 1)
+    assert.equal(
+      (
+        await prisma.project.findUniqueOrThrow({
+          where: { id: third.project.id },
+        })
+      ).workspaceGroupId,
+      null,
+    )
+
+    const deniedRename = await request(`/${workspaceId}`, staff.id, "PATCH", {
+      name: "Unauthorized rename",
+    })
+    assert.equal(deniedRename.status, 403)
+    const deniedCancel = await request(
+      `/${workspaceId}/cancel`,
+      staff.id,
+      "POST",
+    )
+    assert.equal(deniedCancel.status, 403)
+    assert.equal(
+      (await workspace(workspaceId)).name,
+      "Initial NEX-003 Workspace",
+    )
+    assert.deepEqual(
+      (
+        await prisma.project.findMany({
+          where: { id: { in: [first.project.id, second.project.id] } },
+          select: { status: true },
+        })
+      )
+        .map(({ status }) => status)
+        .sort(),
+      ["PLANNED", "PLANNED"],
+    )
+
+    const renamed = await request(`/${workspaceId}`, head.id, "PATCH", {
+      name: "  Renamed NEX-003 Workspace  ",
+    })
+    assert.equal(renamed.status, 200)
+    assert.deepEqual(await renamed.json(), { saved: true })
+    assert.equal(
+      (await workspace(workspaceId)).name,
+      "Renamed NEX-003 Workspace",
+    )
+
+    const invalidHold = await request(
+      `/${workspaceId}/status`,
+      head.id,
+      "POST",
+      { action: "ON_HOLD" },
+    )
+    assert.equal(invalidHold.status, 409)
+    assert.deepEqual(
+      (
+        await prisma.project.findMany({
+          where: { id: { in: [first.project.id, second.project.id] } },
+          select: { status: true },
+        })
+      )
+        .map(({ status }) => status)
+        .sort(),
+      ["PLANNED", "PLANNED"],
+    )
+
+    await prisma.project.updateMany({
+      where: { id: { in: [first.project.id, second.project.id] } },
+      data: { status: "IN_PROGRESS" },
+    })
+    const heldResponse = await request(
+      `/${workspaceId}/status`,
+      head.id,
+      "POST",
+      { action: "ON_HOLD" },
+    )
+    assert.equal(heldResponse.status, 200, await heldResponse.clone().text())
+    const held = (await heldResponse.json()) as Workspace
+    assert.equal(held.status, "ON_HOLD")
+    assert.ok(held.workstreams.every(({ status }) => status === "ON_HOLD"))
+
+    const resumedResponse = await request(
+      `/${workspaceId}/status`,
+      head.id,
+      "POST",
+      { action: "RESUME" },
+    )
+    assert.equal(
+      resumedResponse.status,
+      200,
+      await resumedResponse.clone().text(),
+    )
+    const resumed = (await resumedResponse.json()) as Workspace
+    assert.equal(resumed.status, "IN_PROGRESS")
+    assert.ok(
+      resumed.workstreams.every(({ status }) => status === "IN_PROGRESS"),
+    )
+    assert.ok(
+      (
+        await prisma.project.findMany({
+          where: { id: { in: [first.project.id, second.project.id] } },
+          select: { status: true },
+        })
+      ).every(({ status }) => status === "IN_PROGRESS"),
+    )
+
+    const invalidResume = await request(
+      `/${workspaceId}/status`,
+      head.id,
+      "POST",
+      { action: "RESUME" },
+    )
+    assert.equal(invalidResume.status, 409)
+    assert.equal((await workspace(workspaceId)).status, "IN_PROGRESS")
+
+    const completedResponse = await request(
+      `/${workspaceId}/status`,
+      head.id,
+      "POST",
+      { action: "COMPLETE" },
+    )
+    assert.equal(
+      completedResponse.status,
+      200,
+      await completedResponse.clone().text(),
+    )
+    const completed = (await completedResponse.json()) as Workspace
+    assert.equal(completed.status, "COMPLETED")
+    assert.ok(
+      completed.workstreams.every(({ status }) => status === "COMPLETED"),
+    )
+    assert.ok(
+      (
+        await prisma.project.findMany({
+          where: { id: { in: [first.project.id, second.project.id] } },
+          select: { status: true },
+        })
+      ).every(({ status }) => status === "COMPLETED"),
+    )
+
+    const archivedRename = await request(`/${workspaceId}`, head.id, "PATCH", {
+      name: "Cannot rename completed workspace",
+    })
+    assert.equal(archivedRename.status, 409)
+    assert.equal(
+      (await workspace(workspaceId)).name,
+      "Renamed NEX-003 Workspace",
+    )
+
+    const separateCreate = await request(
+      "/",
+      head.id,
+      "POST",
+      createPayload([third.request.id], "SEPARATE", "Ignored separate name"),
+    )
+    assert.equal(
+      separateCreate.status,
+      201,
+      await separateCreate.clone().text(),
+    )
+    const separate = (await separateCreate.json()) as {
+      workspaces: { id: string; name: string }[]
+    }
+    assert.equal(separate.workspaces.length, 1)
+    const cancellableId = separate.workspaces[0]!.id
+    const deniedSeparateCancel = await request(
+      `/${cancellableId}/cancel`,
+      staff.id,
+      "POST",
+    )
+    assert.equal(deniedSeparateCancel.status, 403)
+    assert.equal(
+      (
+        await prisma.project.findUniqueOrThrow({
+          where: { id: third.project.id },
+        })
+      ).status,
+      "PLANNED",
+    )
+
+    const cancelledResponse = await request(
+      `/${cancellableId}/cancel`,
+      head.id,
+      "POST",
+    )
+    assert.equal(cancelledResponse.status, 200)
+    assert.deepEqual(await cancelledResponse.json(), { saved: true })
+    assert.equal((await workspace(cancellableId)).status, "CANCELLED")
+    assert.equal(
+      (
+        await prisma.project.findUniqueOrThrow({
+          where: { id: third.project.id },
+        })
+      ).status,
+      "CANCELLED",
+    )
+    const repeatedCancel = await request(
+      `/${cancellableId}/cancel`,
+      head.id,
+      "POST",
+    )
+    assert.equal(repeatedCancel.status, 409)
+    assert.equal((await workspace(cancellableId)).status, "CANCELLED")
+  },
+)
