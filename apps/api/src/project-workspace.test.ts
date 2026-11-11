@@ -1014,5 +1014,825 @@ test(
         assert.equal((await milestone()).deliveryStatus, "SENT_TO_CLIENT")
       },
     )
+
+    // Phase 6 client APIs reuse this disposable PGlite database and loopback server.
+    const apiOrigin = base.replace(/\/api\/project-workspace$/, "/api")
+    async function api(
+      path: string,
+      actorId?: string,
+      method = "GET",
+      body?: unknown,
+    ) {
+      return fetch(`${apiOrigin}${path}`, {
+        method,
+        headers: {
+          ...(actorId
+            ? { authorization: `Bearer ${sessions.get(actorId)}` }
+            : {}),
+          ...(body === undefined ? {} : { "content-type": "application/json" }),
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      })
+    }
+    async function actor(
+      key: string,
+      role: "USER" | "STAFF" | "ADMIN" | "SUPERADMIN",
+    ) {
+      const user = await prisma.user.create({
+        data: {
+          id: `nex-final-${key}`,
+          email: `nex-final-${key}@example.com`,
+          fullName: `NEX ${key}`,
+          passwordHash: "test-only-hash",
+          role,
+        },
+      })
+      sessions.set(user.id, (await issueSession(user)).token)
+      return user
+    }
+    sessions.set(client.id, (await issueSession(client)).token)
+    const otherClient = await actor("other-client", "USER")
+    const admin = await actor("admin", "ADMIN")
+    const superadmin = await actor("superadmin", "SUPERADMIN")
+    async function activeBooking(key: string) {
+      const booking = await createBooking(key, true)
+      await prisma.project.update({
+        where: { id: booking.project.id },
+        data: {
+          status: "IN_PROGRESS",
+          startDate: new Date("2026-11-10T08:00:00Z"),
+        },
+      })
+      await prisma.requestWorkflow.update({
+        where: { requestId: booking.request.id },
+        data: { state: "ACTIVE_PROJECT" },
+      })
+      return booking
+    }
+
+    await t.test(
+      "[NEX-013] client project ownership, brief and head-reviewed requests persist without unauthorized writes",
+      async () => {
+        const booking = await activeBooking("nex013")
+        const id = booking.project.id
+        const path = `/projects/${id}`
+        const foreign = await prisma.project.create({
+          data: {
+            clientId: otherClient.id,
+            name: "Other client's project",
+            status: "IN_PROGRESS",
+          },
+        })
+        assert.equal((await api("/projects")).status, 401)
+        for (const user of [head, staff, admin, superadmin])
+          assert.equal((await api("/projects", user.id)).status, 403)
+        const list = await api("/projects", client.id)
+        assert.equal(list.status, 200)
+        const summaries = (await list.json()) as { id: string }[]
+        assert.ok(summaries.some((item) => item.id === id))
+        assert.ok(!summaries.some((item) => item.id === foreign.id))
+        assert.equal((await api(path, otherClient.id)).status, 404)
+        assert.equal((await api(path, staff.id)).status, 404)
+        assert.equal((await api(path, head.id)).status, 200)
+        const before = await prisma.project.findUniqueOrThrow({ where: { id } })
+        assert.equal(
+          (
+            await api(`${path}/brief`, otherClient.id, "PATCH", {
+              name: "Unauthorized",
+              description: "Changed",
+            })
+          ).status,
+          404,
+        )
+        for (const name of ["x", "x".repeat(161)])
+          assert.equal(
+            (
+              await api(`${path}/brief`, client.id, "PATCH", {
+                name,
+                description: "",
+              })
+            ).status,
+            400,
+          )
+        assert.equal(
+          (
+            await api(`${path}/brief`, client.id, "PATCH", {
+              name: "Valid name",
+              description: "x".repeat(6001),
+            })
+          ).status,
+          400,
+        )
+        assert.equal(
+          (await prisma.project.findUniqueOrThrow({ where: { id } })).name,
+          before.name,
+        )
+        assert.equal(
+          (
+            await api(`${path}/brief`, client.id, "PATCH", {
+              name: "  Client brief  ",
+              description: "  Agreed goals  ",
+            })
+          ).status,
+          200,
+        )
+        const reread = await api(path, client.id)
+        assert.equal(reread.status, 200)
+        const view = (await reread.json()) as {
+          name: string
+          description: string
+          milestones: unknown[]
+        }
+        assert.equal(view.name, "Client brief")
+        assert.equal(view.description, "Agreed goals")
+        assert.deepEqual(view.milestones, [])
+        assert.equal(
+          (await prisma.project.findUniqueOrThrow({ where: { id } }))
+            .description,
+          "Agreed goals",
+        )
+        const changes = `${path}/change-requests`
+        for (const details of ["short", "x".repeat(4001)])
+          assert.equal(
+            (await api(changes, client.id, "POST", { details })).status,
+            400,
+          )
+        assert.equal(
+          (
+            await api(changes, otherClient.id, "POST", {
+              details: "Change the layout please",
+            })
+          ).status,
+          404,
+        )
+        assert.equal(
+          await prisma.projectChangeRequest.count({ where: { projectId: id } }),
+          0,
+        )
+        assert.equal(
+          (
+            await api(changes, client.id, "POST", {
+              details: "  Change the layout please  ",
+            })
+          ).status,
+          201,
+        )
+        const change = await prisma.projectChangeRequest.findFirstOrThrow({
+          where: { projectId: id, kind: "CHANGE" },
+        })
+        assert.equal(change.details, "Change the layout please")
+        assert.equal(
+          (
+            await api(changes, client.id, "POST", {
+              details: "Another pending change",
+            })
+          ).status,
+          409,
+        )
+        const review = `${changes}/${change.id}`
+        for (const user of [client, staff, admin, superadmin])
+          assert.equal(
+            (await api(review, user.id, "PATCH", { decision: "ACCEPTED" }))
+              .status,
+            403,
+          )
+        assert.equal(
+          (
+            await api(review, head.id, "PATCH", {
+              decision: "NOT_APPROVED",
+              responseNote: "",
+            })
+          ).status,
+          400,
+        )
+        assert.equal(
+          (
+            await prisma.projectChangeRequest.findUniqueOrThrow({
+              where: { id: change.id },
+            })
+          ).status,
+          "PENDING",
+        )
+        assert.equal(
+          (await api(review, head.id, "PATCH", { decision: "ACCEPTED" }))
+            .status,
+          200,
+        )
+        assert.equal(
+          (
+            await prisma.projectChangeRequest.findUniqueOrThrow({
+              where: { id: change.id },
+            })
+          ).reviewedById,
+          head.id,
+        )
+        assert.equal(
+          (await api(review, head.id, "PATCH", { decision: "ACCEPTED" }))
+            .status,
+          409,
+        )
+        const cancellations = `${path}/cancellation-requests`
+        assert.equal(
+          (
+            await api(cancellations, otherClient.id, "POST", {
+              details: "Another client cannot cancel this",
+            })
+          ).status,
+          404,
+        )
+        for (const details of ["short", "x".repeat(2001)])
+          assert.equal(
+            (await api(cancellations, client.id, "POST", { details })).status,
+            400,
+          )
+        assert.equal(
+          (
+            await api(cancellations, client.id, "POST", {
+              details: "We need to cancel this project",
+            })
+          ).status,
+          201,
+        )
+        let cancellation = await prisma.projectChangeRequest.findFirstOrThrow({
+          where: { projectId: id, kind: "CANCELLATION" },
+        })
+        assert.equal(
+          (
+            await api(cancellations, client.id, "POST", {
+              details: "Duplicate cancellation request",
+            })
+          ).status,
+          409,
+        )
+        assert.equal(
+          (
+            await api(`${path}/brief`, client.id, "PATCH", {
+              name: "Paused change",
+              description: "",
+            })
+          ).status,
+          409,
+        )
+        assert.equal(
+          (
+            await api(changes, client.id, "POST", {
+              details: "Blocked while cancellation pending",
+            })
+          ).status,
+          409,
+        )
+        const cancellationPath = `${cancellations}/${cancellation.id}`
+        assert.equal(
+          (
+            await api(cancellationPath, staff.id, "PATCH", {
+              decision: "ACCEPTED",
+            })
+          ).status,
+          403,
+        )
+        assert.equal(
+          (
+            await api(cancellationPath, head.id, "PATCH", {
+              decision: "NOT_APPROVED",
+              responseNote: "ok",
+            })
+          ).status,
+          400,
+        )
+        assert.equal(
+          (await prisma.project.findUniqueOrThrow({ where: { id } })).status,
+          "IN_PROGRESS",
+        )
+        assert.equal(
+          (
+            await api(cancellationPath, head.id, "PATCH", {
+              decision: "NOT_APPROVED",
+              responseNote: "Continue as agreed",
+            })
+          ).status,
+          200,
+        )
+        assert.equal(
+          (
+            await prisma.projectChangeRequest.findUniqueOrThrow({
+              where: { id: cancellation.id },
+            })
+          ).responseNote,
+          "Continue as agreed",
+        )
+        assert.equal(
+          (
+            await api(changes, client.id, "POST", {
+              details: "A new pending change request",
+            })
+          ).status,
+          201,
+        )
+        assert.equal(
+          (
+            await api(cancellations, client.id, "POST", {
+              details: "Cancel after the final decision",
+            })
+          ).status,
+          201,
+        )
+        cancellation = await prisma.projectChangeRequest.findFirstOrThrow({
+          where: { projectId: id, kind: "CANCELLATION", status: "PENDING" },
+        })
+        assert.equal(
+          (
+            await api(`${cancellations}/${cancellation.id}`, head.id, "PATCH", {
+              decision: "ACCEPTED",
+            })
+          ).status,
+          200,
+        )
+        assert.equal(
+          (await prisma.project.findUniqueOrThrow({ where: { id } })).status,
+          "CANCELLED",
+        )
+        assert.equal(
+          (
+            await prisma.serviceRequest.findUniqueOrThrow({
+              where: { id: booking.request.id },
+            })
+          ).status,
+          "CANCELLED",
+        )
+        assert.equal(
+          (
+            await prisma.requestWorkflow.findUniqueOrThrow({
+              where: { requestId: booking.request.id },
+            })
+          ).state,
+          "CANCELLED",
+        )
+        assert.equal(
+          await prisma.projectChangeRequest.count({
+            where: { projectId: id, status: "PENDING" },
+          }),
+          0,
+        )
+        assert.equal(
+          (
+            await api(changes, client.id, "POST", {
+              details: "Cannot change an ended project",
+            })
+          ).status,
+          409,
+        )
+        const finalView = (await (await api(path, client.id)).json()) as {
+          status: string
+          changeRequests: { status: string }[]
+        }
+        assert.equal(finalView.status, "CANCELLED")
+        assert.ok(
+          finalView.changeRequests.every((item) => item.status !== "PENDING"),
+        )
+      },
+    )
+
+    await t.test(
+      "[NEX-014] client review decisions and file bytes enforce ownership, sharing and version persistence",
+      async () => {
+        const booking = await activeBooking("nex014")
+        const path = `/projects/${booking.project.id}`
+        async function delivery(key: string, visible: boolean) {
+          const file = await prisma.workflowFile.create({
+            data: {
+              requestId: booking.request.id,
+              uploaderId: staff.id,
+              uploadId: randomUUID(),
+              name: `${key}.txt`,
+              mimeType: "text/plain",
+              size: 12,
+              sha256: "a".repeat(64),
+              clientVisible: visible,
+              data: Buffer.from("private data"),
+            },
+          })
+          return prisma.projectMilestone.create({
+            data: {
+              projectId: booking.project.id,
+              title: key,
+              workflowFileId: file.id,
+              deliveryStatus: visible ? "SENT_TO_CLIENT" : "IN_REVIEW",
+              sentToClientAt: visible ? new Date() : null,
+            },
+          })
+        }
+        const shared = await delivery("Approval delivery", true)
+        const revision = await delivery("Revision delivery", true)
+        const internal = await delivery("Internal delivery", false)
+        const view = (await (await api(path, client.id)).json()) as {
+          deliverables: { id: string }[]
+        }
+        assert.deepEqual(
+          view.deliverables.map((item) => item.id).sort(),
+          [shared.id, revision.id].sort(),
+        )
+        const filePath = `${path}/deliverables/${shared.id}/file`
+        assert.equal((await api(filePath)).status, 401)
+        for (const user of [otherClient, staff, admin, head])
+          assert.equal((await api(filePath, user.id)).status, 404)
+        assert.equal(
+          (await api(`${path}/deliverables/${internal.id}/file`, client.id))
+            .status,
+          404,
+        )
+        const content = await api(filePath, client.id)
+        assert.equal(content.status, 200)
+        assert.equal(
+          content.headers.get("content-type"),
+          "text/plain; charset=utf-8",
+        )
+        assert.equal(content.headers.get("x-content-type-options"), "nosniff")
+        assert.equal(await content.text(), "private data")
+        const review = `${path}/deliverables/${shared.id}/review`
+        for (const body of [
+          { decision: "INVALID" },
+          { decision: "REVISION_REQUESTED", note: "ok" },
+          { decision: "APPROVED", note: "x".repeat(2001) },
+        ])
+          assert.equal((await api(review, client.id, "POST", body)).status, 400)
+        for (const user of [otherClient, head, staff, admin])
+          assert.equal(
+            (await api(review, user.id, "POST", { decision: "APPROVED" }))
+              .status,
+            404,
+          )
+        assert.equal(
+          (
+            await api(
+              `${path}/deliverables/${internal.id}/review`,
+              client.id,
+              "POST",
+              { decision: "APPROVED" },
+            )
+          ).status,
+          404,
+        )
+        assert.equal(
+          await prisma.projectDeliverableClientReview.count({
+            where: { milestone: { projectId: booking.project.id } },
+          }),
+          0,
+        )
+        assert.equal(
+          (await api(review, client.id, "POST", { decision: "APPROVED" }))
+            .status,
+          200,
+        )
+        assert.equal(
+          (
+            await api(review, client.id, "POST", {
+              decision: "REVISION_REQUESTED",
+              note: "Duplicate decision",
+            })
+          ).status,
+          409,
+        )
+        assert.equal(
+          (
+            await api(
+              `${path}/deliverables/${revision.id}/review`,
+              client.id,
+              "POST",
+              { decision: "REVISION_REQUESTED", note: "  Improve contrast  " },
+            )
+          ).status,
+          200,
+        )
+        const saved = await prisma.projectDeliverableClientReview.findMany({
+          where: { milestone: { projectId: booking.project.id } },
+        })
+        assert.equal(saved.length, 2)
+        assert.equal(
+          saved.find((item) => item.milestoneId === shared.id)?.status,
+          "APPROVED",
+        )
+        assert.equal(
+          saved.find((item) => item.milestoneId === revision.id)?.note,
+          "Improve contrast",
+        )
+        assert.ok(
+          saved.every(
+            (item) => item.clientId === client.id && item.workflowFileId,
+          ),
+        )
+        const reread = (await (await api(path, client.id)).json()) as {
+          deliverables: { id: string; clientReviews: { status: string }[] }[]
+        }
+        assert.equal(
+          reread.deliverables.find((item) => item.id === revision.id)
+            ?.clientReviews[0]?.status,
+          "REVISION_REQUESTED",
+        )
+        await prisma.project.update({
+          where: { id: booking.project.id },
+          data: { status: "CANCELLED" },
+        })
+        assert.equal(
+          (await api(review, client.id, "POST", { decision: "APPROVED" }))
+            .status,
+          409,
+        )
+        assert.equal(
+          await prisma.projectDeliverableClientReview.count({
+            where: { milestone: { projectId: booking.project.id } },
+          }),
+          2,
+        )
+      },
+    )
+
+    await t.test(
+      "[NEX-015] head assigns and replaces project lead with persisted and immediate calendar scope changes",
+      async () => {
+        const booking = await createBooking("nex015", true)
+        const createdResponse = await request(
+          "/",
+          head.id,
+          "POST",
+          createPayload([booking.request.id], "SEPARATE", "NEX-015 workspace"),
+        )
+        assert.equal(createdResponse.status, 201)
+        const created = (await createdResponse.json()) as {
+          workspaces: { id: string }[]
+        }
+        const workspaceId = created.workspaces[0]!.id
+        const colleague = await actor("colleague", "STAFF")
+        await prisma.user.update({
+          where: { id: colleague.id },
+          data: { departmentId: department.id },
+        })
+        const colleagueEmployee = await prisma.employee.create({
+          data: {
+            employeeId: "NEX015-COLLEAGUE",
+            fullName: "Colleague",
+            userId: colleague.id,
+            departmentId: department.id,
+          },
+        })
+        const staffEmployee = await prisma.employee.findUniqueOrThrow({
+          where: { userId: staff.id },
+        })
+        await prisma.projectStaff.createMany({
+          data: [staffEmployee, colleagueEmployee].map((employee) => ({
+            projectId: booking.project.id,
+            employeeId: employee.id,
+            approvedById: head.id,
+          })),
+        })
+        await prisma.project.update({
+          where: { id: booking.project.id },
+          data: {
+            status: "IN_PROGRESS",
+            startDate: new Date(),
+            workPlan: {
+              phases: [
+                {
+                  id: "phase",
+                  title: "Delivery",
+                  tasks: [
+                    {
+                      id: "team-deadline",
+                      title: "Team deadline NEX015",
+                      role: "Staff",
+                      status: "NOT_STARTED",
+                      employeeId: colleagueEmployee.id,
+                      dueDate: "2030-02-03",
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        })
+        const leadPath = `/project-workspace/${workspaceId}/projects/${booking.project.id}/team-lead`
+        const leadIds = async () =>
+          (
+            await prisma.projectStaff.findMany({
+              where: { projectId: booking.project.id, isTeamLead: true },
+            })
+          ).map((item) => item.employeeId)
+        assert.equal(
+          (await api("/projects/calendar?scope=team", staff.id)).status,
+          403,
+        )
+        assert.equal(
+          (
+            await api(leadPath, staff.id, "PUT", {
+              employeeId: staffEmployee.id,
+            })
+          ).status,
+          403,
+        )
+        for (const user of [client, admin, superadmin])
+          assert.equal(
+            (
+              await api(leadPath, user.id, "PUT", {
+                employeeId: staffEmployee.id,
+              })
+            ).status,
+            403,
+          )
+        assert.deepEqual(await leadIds(), [])
+        assert.equal(
+          (
+            await api(leadPath, head.id, "PUT", {
+              employeeId: staffEmployee.id,
+            })
+          ).status,
+          200,
+        )
+        assert.deepEqual(await leadIds(), [staffEmployee.id])
+        const calendar = await api("/projects/calendar?scope=team", staff.id)
+        assert.equal(calendar.status, 200)
+        const events = (await calendar.json()) as {
+          canViewTeam: boolean
+          events: { title: string }[]
+        }
+        assert.equal(events.canViewTeam, true)
+        assert.ok(
+          events.events.some((item) => item.title === "Team deadline NEX015"),
+        )
+        for (const employeeId of ["unknown-employee", "", null]) {
+          const failed = await api(leadPath, head.id, "PUT", { employeeId })
+          assert.equal(failed.status, employeeId ? 409 : 400)
+          assert.deepEqual(await leadIds(), [staffEmployee.id])
+        }
+        const foreignDepartment = await prisma.department.create({
+          data: { name: "NEX015 other department" },
+        })
+        const foreignStaff = await actor("foreign-staff", "STAFF")
+        const foreignEmployee = await prisma.employee.create({
+          data: {
+            employeeId: "NEX015-FOREIGN",
+            fullName: "Other department",
+            userId: foreignStaff.id,
+            departmentId: foreignDepartment.id,
+          },
+        })
+        await prisma.projectStaff.create({
+          data: {
+            projectId: booking.project.id,
+            employeeId: foreignEmployee.id,
+            approvedById: head.id,
+          },
+        })
+        assert.equal(
+          (
+            await api(leadPath, head.id, "PUT", {
+              employeeId: foreignEmployee.id,
+            })
+          ).status,
+          409,
+        )
+        assert.deepEqual(await leadIds(), [staffEmployee.id])
+        assert.equal(
+          (
+            await api(
+              leadPath.replace(booking.project.id, "other-project"),
+              head.id,
+              "PUT",
+              { employeeId: colleagueEmployee.id },
+            )
+          ).status,
+          409,
+        )
+        assert.deepEqual(await leadIds(), [staffEmployee.id])
+        assert.equal(
+          (
+            await api(leadPath, head.id, "PUT", {
+              employeeId: colleagueEmployee.id,
+            })
+          ).status,
+          200,
+        )
+        assert.deepEqual(await leadIds(), [colleagueEmployee.id])
+        assert.equal(
+          (await api("/projects/calendar?scope=team", staff.id)).status,
+          403,
+        )
+        assert.equal(
+          (await api("/projects/calendar?scope=team", colleague.id)).status,
+          200,
+        )
+        const detail = await request(`/${workspaceId}`, head.id)
+        assert.equal(detail.status, 200)
+        assert.ok((await detail.text()).includes(colleagueEmployee.id))
+      },
+    )
+
+    await t.test(
+      "[NEX-016] billing and proof bytes remain client scoped and hide private proof metadata",
+      async () => {
+        const owned = await activeBooking("nex016-owned")
+        const hidden = await activeBooking("nex016-hidden")
+        const foreign = await activeBooking("nex016-foreign")
+        await prisma.serviceRequest.update({
+          where: { id: foreign.request.id },
+          data: { clientId: otherClient.id },
+        })
+        async function payment(requestId: string, visible: boolean) {
+          const file = await prisma.workflowFile.create({
+            data: {
+              requestId,
+              uploaderId: client.id,
+              uploadId: randomUUID(),
+              name: "proof.txt",
+              mimeType: "text/plain",
+              size: 13,
+              data: Buffer.from("payment proof"),
+              sha256: "b".repeat(64),
+              clientVisible: visible,
+            },
+          })
+          const row = await prisma.workflowPayment.create({
+            data: {
+              requestId,
+              amount: 150,
+              currency: "PHP",
+              status: "SUBMITTED",
+              proofFileId: file.id,
+              reference: "TEST-ONLY",
+            },
+          })
+          return { file, row }
+        }
+        const ownedPayment = await payment(owned.request.id, true)
+        const hiddenPayment = await payment(hidden.request.id, false)
+        const foreignPayment = await payment(foreign.request.id, true)
+        const before = await prisma.workflowPayment.findMany({
+          where: {
+            id: {
+              in: [
+                ownedPayment.row.id,
+                hiddenPayment.row.id,
+                foreignPayment.row.id,
+              ],
+            },
+          },
+        })
+        assert.equal((await api("/request-workflows/billing")).status, 401)
+        for (const user of [head, staff, admin, superadmin])
+          assert.equal(
+            (await api("/request-workflows/billing", user.id)).status,
+            403,
+          )
+        const response = await api("/request-workflows/billing", client.id)
+        assert.equal(response.status, 200)
+        const records = (await response.json()) as {
+          id: string
+          amount: string
+          proofFile: { id: string } | null
+        }[]
+        assert.ok(!records.some((item) => item.id === foreignPayment.row.id))
+        assert.equal(
+          records.find((item) => item.id === ownedPayment.row.id)?.amount,
+          "150.00",
+        )
+        assert.equal(
+          records.find((item) => item.id === ownedPayment.row.id)?.proofFile
+            ?.id,
+          ownedPayment.file.id,
+        )
+        assert.equal(
+          records.find((item) => item.id === hiddenPayment.row.id)?.proofFile,
+          null,
+        )
+        const proof = `/request-workflows/${owned.request.id}/files/${ownedPayment.file.id}`
+        const bytes = await api(proof, client.id)
+        assert.equal(bytes.status, 200)
+        assert.equal(await bytes.text(), "payment proof")
+        assert.equal((await api(proof, otherClient.id)).status, 404)
+        assert.equal(
+          (
+            await api(
+              `/request-workflows/${hidden.request.id}/files/${hiddenPayment.file.id}`,
+              client.id,
+            )
+          ).status,
+          404,
+        )
+        const otherResponse = await api(
+          "/request-workflows/billing",
+          otherClient.id,
+        )
+        assert.equal(otherResponse.status, 200)
+        const otherRows = (await otherResponse.json()) as { id: string }[]
+        assert.deepEqual(
+          otherRows.map((item) => item.id),
+          [foreignPayment.row.id],
+        )
+        assert.deepEqual(
+          await prisma.workflowPayment.findMany({
+            where: { id: { in: before.map((item) => item.id) } },
+          }),
+          before,
+        )
+      },
+    )
   },
 )
