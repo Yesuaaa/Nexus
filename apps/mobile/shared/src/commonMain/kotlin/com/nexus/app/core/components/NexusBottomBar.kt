@@ -40,7 +40,7 @@ fun NexusBottomBar(
                     Column(Modifier.weight(1f).heightIn(min = 44.dp).clickable { onTabSelected(tab) },
                         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)) {
                         Icon(tab.icon, null, Modifier.size(20.dp), tint = NexusColors.TextSecondary)
-                        Text(tab.label, fontSize = 11.sp, fontWeight = FontWeight.Normal, color = NexusColors.TextSecondary)
+                        Text(tab.label, textAlign = androidx.compose.ui.text.style.TextAlign.Center, maxLines = 2, minLines = 2, lineHeight = 12.sp, fontSize = 10.sp, fontWeight = FontWeight.Normal, color = NexusColors.TextSecondary)
                     }
                 }
             }
@@ -64,43 +64,33 @@ fun NexusBottomBar(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .heightIn(min = 48.dp)
+                    .heightIn(min = 64.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(if (isSelected) NexusColors.SurfaceHover else NexusColors.Background)
                     .clickable { onTabSelected(tab) }
                     .padding(horizontal = 4.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center
             ) {
-                if (layout.short) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(tab.icon, contentDescription = null, tint = if (isSelected) NexusColors.ServiceCardNavy else NexusColors.TextSecondary, modifier = Modifier.size(20.dp))
-                        Text(
-                            tab.label, fontSize = 11.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            color = if (isSelected) NexusColors.ServiceCardNavy else NexusColors.TextSecondary
-                        )
-                    }
-                } else {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            imageVector = tab.icon,
-                            contentDescription = tab.label,
-                            tint = if (isSelected) NexusColors.ServiceCardNavy else NexusColors.TextSecondary,
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Text(
-                            text = tab.label,
-                            fontSize = 11.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            color = if (isSelected) NexusColors.ServiceCardNavy else NexusColors.TextSecondary
-                        )
-                    }
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = tab.icon,
+                        contentDescription = tab.label,
+                        tint = if (isSelected) NexusColors.ServiceCardNavy else NexusColors.TextSecondary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Text(
+                        text = tab.label,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        maxLines = 2,
+                        minLines = 2,
+                        lineHeight = 12.sp,
+                        fontSize = if (layout.narrow) 9.sp else 10.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isSelected) NexusColors.ServiceCardNavy else NexusColors.TextSecondary
+                    )
                 }
             }
         }
