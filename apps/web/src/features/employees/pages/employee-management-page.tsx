@@ -3,7 +3,7 @@
 import { Trash2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import dynamic from "next/dynamic"
-import { PanelLoading } from "@/components/ui/panel-loading"
+import { PanelLoading, SidePanelLoading } from "@/components/ui/panel-loading"
 import { PlusIcon } from "@/components/layout/icons"
 import { contentClass, focusRing } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
@@ -45,14 +45,14 @@ const ManageMembersDrawer = dynamic(
     import("@/features/departments/components/manage-members-drawer").then(
       (module) => module.ManageMembersDrawer,
     ),
-  { loading: PanelLoading },
+  { loading: () => <SidePanelLoading variant="edge" /> },
 )
 const EmployeeDetailsDrawer = dynamic(
   () =>
     import("../components/employee-details-drawer").then(
       (module) => module.EmployeeDetailsDrawer,
     ),
-  { loading: PanelLoading },
+  { loading: () => <SidePanelLoading /> },
 )
 const EmployeeLoginDialog = dynamic(
   () =>

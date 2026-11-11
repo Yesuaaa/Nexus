@@ -12,6 +12,8 @@ import { CloseIcon, PlusIcon, TrashIcon } from "@/components/layout/icons"
 import { focusRing } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
 import { EdgeSheetContent } from "@/components/ui/edge-sheet"
+import { MemberRowSkeleton } from "@/components/ui/panel-loading"
+import { Skeleton } from "@/components/ui/skeleton"
 import { RowActionsMenu } from "@/components/ui/row-actions-menu"
 import {
   Sheet,
@@ -670,9 +672,21 @@ export function ManageMembersDrawer({
               You&apos;re viewing
             </p>
             <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
-              <SheetTitle className="m-0 truncate text-[22px] leading-[1.25] font-[650] tracking-[-0.03em]">
-                {detail?.name || "Department"}
+              <SheetTitle
+                className={cn(
+                  "m-0 truncate text-[22px] leading-[1.25] font-[650] tracking-[-0.03em]",
+                  !detail && loading && "sr-only",
+                )}
+              >
+                {detail?.name ||
+                  (loading ? "Loading department" : "Department")}
               </SheetTitle>
+              {!detail && loading && (
+                <>
+                  <Skeleton className="h-7 w-44" />
+                  <Skeleton className="h-5 w-10 rounded-full" />
+                </>
+              )}
               {detail?.code && <Pill>{detail.code}</Pill>}
             </div>
             <SheetDescription className="sr-only">
@@ -719,8 +733,60 @@ export function ManageMembersDrawer({
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5 max-[560px]:px-5">
             {loading ? (
-              <div className={panelEmpty} role="status">
-                Loading department...
+              <div className="grid gap-3" aria-busy="true">
+                <span role="status" className="sr-only">
+                  Loading department…
+                </span>
+                {activeTab === "members" ? (
+                  <>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="grid gap-1.5">
+                        <Skeleton className="h-3.5 w-28" />
+                        <Skeleton className="h-2.5 w-16" />
+                      </div>
+                      <Skeleton className="h-[34px] w-20 rounded-lg" />
+                    </div>
+                    <Skeleton className="h-9 w-full rounded-lg" />
+                    <div className="divide-y divide-[#eceef1] rounded-lg border border-[#e8ebef]">
+                      {Array.from({ length: 5 }, (_, index) => (
+                        <MemberRowSkeleton
+                          key={index}
+                          trailing={canManage ? 2 : 0}
+                          className="px-4 py-3"
+                        />
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between gap-3">
+                      <Skeleton className="h-5 w-40" />
+                      <Skeleton className="h-[34px] w-28 rounded-lg" />
+                    </div>
+                    {Array.from({ length: 2 }, (_, index) => (
+                      <div
+                        key={index}
+                        className="overflow-hidden rounded-lg border border-[#e8ebef]"
+                      >
+                        <div className="flex items-start justify-between gap-3 border-b border-[#eceef1] bg-[#f3f6f8] px-4 py-3">
+                          <div className="grid gap-1.5">
+                            <Skeleton className="h-4 w-36" />
+                            <Skeleton className="h-2.5 w-16" />
+                          </div>
+                          <Skeleton className="h-8 w-28 rounded-[7px]" />
+                        </div>
+                        <div className="divide-y divide-[#eceef1]">
+                          {Array.from({ length: 2 }, (_, row) => (
+                            <MemberRowSkeleton
+                              key={row}
+                              className="px-4 py-3"
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
               </div>
             ) : loadError ? (
               <div className={panelEmpty} role="alert">
@@ -1413,11 +1479,22 @@ export function ManageMembersDrawer({
               containerClassName="w-full max-[1050px]:w-full max-[1050px]:flex-none"
             />
             {candidateLoading && (
-              <p className={`${panelMuted} m-0`} role="status">
-                {assignSearch.trim()
-                  ? "Searching employees..."
-                  : "Loading available staff..."}
-              </p>
+              <div className="grid gap-2" aria-busy="true">
+                <span role="status" className="sr-only">
+                  {assignSearch.trim()
+                    ? "Searching employees…"
+                    : "Loading available staff…"}
+                </span>
+                {Array.from({ length: 4 }, (_, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center gap-3 rounded-lg border border-[#e8ebef] p-2.5"
+                  >
+                    <MemberRowSkeleton className="flex-1" />
+                    <Skeleton className="h-[34px] w-16 flex-none rounded-lg" />
+                  </div>
+                ))}
+              </div>
             )}
             {candidateError && !isSearching && (
               <div

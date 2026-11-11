@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import dynamic from "next/dynamic"
-import { PanelLoading } from "@/components/ui/panel-loading"
+import { PanelLoading, SidePanelLoading } from "@/components/ui/panel-loading"
 import { sileo } from "@/lib/toast"
 import { PlusIcon } from "@/components/layout/icons"
 import { contentClass, focusRing } from "@/components/layout/styles"
@@ -38,7 +38,7 @@ const ServiceDetailsDialog = dynamic(
     import("../components/service-details-dialog").then(
       (module) => module.ServiceDetailsDialog,
     ),
-  { loading: PanelLoading },
+  { loading: () => <SidePanelLoading /> },
 )
 const PricingTemplatesDialog = dynamic(
   () =>

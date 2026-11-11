@@ -11,6 +11,7 @@ import {
 import { EdgeSheetContent } from "@/components/ui/edge-sheet"
 import { Pill } from "@/components/ui/pill"
 import { Sheet, SheetDescription, SheetTitle } from "@/components/ui/sheet"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useAnimatedPanelClose } from "@/components/ui/use-animated-panel-close"
 import { cn } from "@/lib/utils"
 import {
@@ -280,36 +281,45 @@ export function DepartmentFormPanel({
               <label className={labelClass} htmlFor="dept-head">
                 Department Head
               </label>
-              <Select
-                value={headId || "unassigned"}
-                onValueChange={(value) =>
-                  setHeadId(value === "unassigned" ? "" : value)
-                }
-                disabled={loadingHeads || submitting}
-              >
-                <SelectTrigger
-                  id="dept-head"
-                  className={cn(inputClass, "h-10 shadow-none")}
+              {loadingHeads ? (
+                <>
+                  <span role="status" className="sr-only">
+                    Loading eligible department heads…
+                  </span>
+                  <Skeleton className="h-10 w-full rounded-lg" />
+                </>
+              ) : (
+                <Select
+                  value={headId || "unassigned"}
+                  onValueChange={(value) =>
+                    setHeadId(value === "unassigned" ? "" : value)
+                  }
+                  disabled={submitting}
                 >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent
-                  collisionPadding={24}
-                  className="z-[120] border-[#cbd5e1] bg-white shadow-[0_12px_32px_rgb(20_45_97_/_13%)]"
-                >
-                  <SelectItem value="unassigned">
-                    No Department Head Assigned
-                  </SelectItem>
-                  {eligibleHeads.map((head) => (
-                    <SelectItem key={head.id} value={head.id}>
-                      {head.fullName || head.email}
-                      {head.headOf && head.headOf.id !== department?.id
-                        ? ` [Heads ${head.headOf.name}]`
-                        : ""}
+                  <SelectTrigger
+                    id="dept-head"
+                    className={cn(inputClass, "h-10 shadow-none")}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent
+                    collisionPadding={24}
+                    className="z-[120] border-[#cbd5e1] bg-white shadow-[0_12px_32px_rgb(20_45_97_/_13%)]"
+                  >
+                    <SelectItem value="unassigned">
+                      No Department Head Assigned
                     </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                    {eligibleHeads.map((head) => (
+                      <SelectItem key={head.id} value={head.id}>
+                        {head.fullName || head.email}
+                        {head.headOf && head.headOf.id !== department?.id
+                          ? ` [Heads ${head.headOf.name}]`
+                          : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             <div className={fieldClass}>
