@@ -87,16 +87,16 @@ object Routes {
 private fun BottomTab.route() = when (this) {
     BottomTab.DASHBOARD -> Routes.DASHBOARD
     BottomTab.SERVICES -> Routes.SERVICES
-    BottomTab.BOOKED_REQUESTS -> Routes.BOOKED_REQUESTS
     BottomTab.CALENDAR -> Routes.CALENDAR
+    BottomTab.BOOKED_REQUESTS -> Routes.BOOKED_REQUESTS
     BottomTab.PROJECTS -> Routes.PROJECTS
 }
 
 private fun routeToTab(route: String?): BottomTab? = when (route) {
     Routes.DASHBOARD -> BottomTab.DASHBOARD
     Routes.SERVICES -> BottomTab.SERVICES
-    Routes.BOOKED_REQUESTS, Routes.REQUEST_DETAIL -> BottomTab.BOOKED_REQUESTS
     Routes.CALENDAR -> BottomTab.CALENDAR
+    Routes.BOOKED_REQUESTS, Routes.REQUEST_DETAIL -> BottomTab.BOOKED_REQUESTS
     Routes.PROJECTS, Routes.PROJECT_DETAILS, Routes.PROJECT_OVERVIEW, Routes.PROJECT_BRIEF, Routes.PROJECT_REQUEST, Routes.PROJECT_CHAT -> BottomTab.PROJECTS
     else -> null
 }
@@ -394,9 +394,10 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                         )
                     }
                     composable(Routes.PROJECTS) {
-                        MyProjectsScreen(
+                        com.nexus.app.features.projects.screens.ClientProjectsScreen(
                             onNewRequest = { navController.switchTab(Routes.SERVICES) },
-                            onProject = { navController.navigate("projects/$it/details") }
+                            onOpenProject = { navController.navigate("projects/$it/details") },
+                            onProjectChat = { navController.navigate("projects/$it/chat") }
                         )
                     }
                     composable(Routes.PROJECT_DETAILS) { entry ->

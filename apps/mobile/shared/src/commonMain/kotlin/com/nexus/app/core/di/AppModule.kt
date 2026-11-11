@@ -12,6 +12,7 @@ import org.koin.dsl.module
 val appModule = module {
     single { com.nexus.app.features.projects.api.ProjectsRepository(get()) }
     viewModel { com.nexus.app.features.projects.viewmodel.ProjectsViewModel(get()) }
+    viewModel { com.nexus.app.features.projects.viewmodel.ClientProjectsViewModel(get()) }
     viewModel { com.nexus.app.features.projects.viewmodel.ProjectChatViewModel(get()) }
     single { com.nexus.app.features.profile.api.ProfileRepository(get()) }
     viewModel { com.nexus.app.features.profile.viewmodel.ProfileViewModel(get(), get()) }

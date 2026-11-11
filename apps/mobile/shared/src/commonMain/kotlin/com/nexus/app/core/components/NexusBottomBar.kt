@@ -1,8 +1,9 @@
 package com.nexus.app.core.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,13 +14,19 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nexus.app.core.theme.NexusColors
@@ -33,64 +40,92 @@ fun NexusBottomBar(
     conversationStyle: Boolean = false
 ) {
     if (conversationStyle) {
-        Column(modifier.fillMaxWidth().background(NexusColors.Background).navigationBarsPadding()) {
-            androidx.compose.material3.HorizontalDivider(color = NexusColors.Border)
+        Column(modifier.fillMaxWidth().background(Color.White).navigationBarsPadding()) {
+            HorizontalDivider(color = Color(0xFFECEEF1))
             Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.SpaceAround) {
                 BottomTab.entries.forEach { tab ->
-                    Column(Modifier.weight(1f).heightIn(min = 44.dp).clickable { onTabSelected(tab) },
-                        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Column(
+                        Modifier.weight(1f).heightIn(min = 44.dp).clickable { onTabSelected(tab) },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
                         Icon(tab.icon, null, Modifier.size(20.dp), tint = NexusColors.TextSecondary)
-                        Text(tab.label, textAlign = androidx.compose.ui.text.style.TextAlign.Center, maxLines = 2, minLines = 2, lineHeight = 12.sp, fontSize = 10.sp, fontWeight = FontWeight.Normal, color = NexusColors.TextSecondary)
+                        Text(
+                            tab.label,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Normal,
+                            color = NexusColors.TextSecondary
+                        )
                     }
                 }
             }
         }
         return
     }
+
     val layout = LocalNexusLayout.current
-    Row(
+    val activePillColor = Color(0xFF2C4C9B)
+    val inactiveColor = Color(0xFF64748B)
+
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .background(NexusColors.Background)
-            .border(width = 1.dp, color = NexusColors.Border)
-            .padding(horizontal = 8.dp, vertical = if (layout.short) 4.dp else 6.dp),
-        horizontalArrangement = Arrangement.SpaceAround,
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 16.dp, vertical = if (layout.short) 6.dp else 10.dp),
+        contentAlignment = Alignment.Center
     ) {
-        BottomTab.entries.forEach { tab ->
-            val isSelected = tab == currentTab
-
-            Box(
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(28.dp),
+            color = Color.White,
+            shadowElevation = 8.dp,
+            border = BorderStroke(1.dp, Color(0xFFECEEF1))
+        ) {
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 64.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(if (isSelected) NexusColors.SurfaceHover else NexusColors.Background)
-                    .clickable { onTabSelected(tab) }
-                    .padding(horizontal = 4.dp, vertical = 6.dp),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .padding(horizontal = 6.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceAround,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Icon(
-                        imageVector = tab.icon,
-                        contentDescription = tab.label,
-                        tint = if (isSelected) NexusColors.ServiceCardNavy else NexusColors.TextSecondary,
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Text(
-                        text = tab.label,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        maxLines = 2,
-                        minLines = 2,
-                        lineHeight = 12.sp,
-                        fontSize = if (layout.narrow) 9.sp else 10.sp,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (isSelected) NexusColors.ServiceCardNavy else NexusColors.TextSecondary
-                    )
+                BottomTab.entries.forEach { tab ->
+                    val isSelected = tab == currentTab
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(if (isSelected) activePillColor else Color.Transparent)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { onTabSelected(tab) }
+                            .padding(vertical = if (layout.short) 6.dp else 8.dp, horizontal = 2.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Icon(
+                                imageVector = tab.icon,
+                                contentDescription = tab.label,
+                                tint = if (isSelected) Color.White else inactiveColor,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = tab.label,
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                fontSize = if (layout.narrow) 10.sp else 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
+                                color = if (isSelected) Color.White else inactiveColor
+                            )
+                        }
+                    }
                 }
             }
         }

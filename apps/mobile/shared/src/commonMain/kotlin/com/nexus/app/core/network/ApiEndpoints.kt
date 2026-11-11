@@ -31,6 +31,8 @@ object ApiEndpoints {
     fun conversationStream(id: String) = "/api/request-conversations/$id/events"
 
     // Projects
+    const val CLIENT_PROJECTS = "/api/projects"
+    const val CLIENT_CALENDAR = "/api/projects/calendar"
     fun projectWorkspace(id: String) = "/api/projects/$id"
 
     // System Health
