@@ -1,75 +1,32 @@
 import assert from "node:assert/strict"
-import { randomBytes } from "node:crypto"
-import { readdir, readFile } from "node:fs/promises"
-import type { Server } from "node:http"
-import type { AddressInfo } from "node:net"
 import { test } from "node:test"
-import { PGlite } from "@electric-sql/pglite"
-import { PGLiteSocketServer } from "@electric-sql/pglite-socket"
-import { createApp } from "./app.js"
-import { getPrisma } from "./lib/db.js"
 import { issueSession } from "./features/auth/auth.service.js"
 import type { Role } from "./generated/prisma/client.js"
+import {
+  applyMigrations,
+  readMigration,
+  startPgliteApp,
+} from "./test/pglite-app.js"
 
 test(
   "department request inbox enforces current head routing and accepts bookings atomically",
   { timeout: 120_000 },
   async (t) => {
-    const original = {
-      DATABASE_URL: process.env.DATABASE_URL,
-      DIRECT_URL: process.env.DIRECT_URL,
-      DATABASE_POOL_MAX: process.env.DATABASE_POOL_MAX,
-      JWT_SECRET: process.env.JWT_SECRET,
-    }
-    process.env.JWT_SECRET = randomBytes(32).toString("base64url")
-    const database = new PGlite()
-    const cleanup: {
-      socket?: PGLiteSocketServer
-      server?: Server
-      prisma?: ReturnType<typeof getPrisma>
-    } = {}
-    t.after(async () => {
-      if (cleanup.server)
-        await new Promise<void>((resolve) =>
-          cleanup.server!.close(() => resolve()),
-        )
-      await cleanup.prisma?.$disconnect()
-      await cleanup.socket?.stop()
-      await database.close()
-      for (const [key, value] of Object.entries(original)) {
-        if (value === undefined) delete process.env[key]
-        else process.env[key] = value
-      }
-    })
-    await database.waitReady
-    const migrations = new URL("../prisma/migrations/", import.meta.url)
-    for (const name of (await readdir(migrations))
-      .filter((name) => /^\d/.test(name))
-      .sort())
-      await database.exec(
-        await readFile(new URL(`${name}/migration.sql`, migrations), "utf8"),
-      )
     // This migration is deliberately safe on normalized and previously deployed databases.
-    const inboxMigration = await readFile(
-      new URL(
-        "20261030153000_department_request_inbox/migration.sql",
-        migrations,
-      ),
-      "utf8",
+    const inboxMigration = await readMigration(
+      "20261030153000_department_request_inbox",
     )
-    await database.exec(inboxMigration)
-    const socket = new PGLiteSocketServer({
+    const {
+      prisma,
       db: database,
-      port: 0,
-      host: "127.0.0.1",
+      origin,
+    } = await startPgliteApp(t, {
+      async migrate(db) {
+        await applyMigrations(db)
+        await db.exec(inboxMigration)
+      },
     })
-    cleanup.socket = socket
-    await socket.start()
-    process.env.DATABASE_URL = `postgresql://postgres:postgres@${socket.getServerConn()}/postgres?sslmode=disable`
-    process.env.DATABASE_POOL_MAX = "1"
-    delete process.env.DIRECT_URL
-    const prisma = getPrisma()!
-    cleanup.prisma = prisma
+    const base = `${origin}/api`
     async function user(name: string, role: Role) {
       const record = await prisma.user.create({
         data: {
@@ -161,10 +118,6 @@ test(
         title: "Shared booking",
       },
     })
-    const server = createApp().listen(0, "127.0.0.1")
-    cleanup.server = server
-    await new Promise<void>((resolve) => server.once("listening", resolve))
-    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`
     const get = (path: string, actor = head) =>
       fetch(`${base}${path}`, { headers: actor.headers })
     const accept = (id: string, actor = head) =>

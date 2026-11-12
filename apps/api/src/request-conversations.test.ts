@@ -1,17 +1,15 @@
 import assert from "node:assert/strict"
-import { randomBytes, randomUUID } from "node:crypto"
-import { readdir, readFile } from "node:fs/promises"
-import type { Server } from "node:http"
-import type { AddressInfo } from "node:net"
+import { randomUUID } from "node:crypto"
 import { test } from "node:test"
-import { PGlite } from "@electric-sql/pglite"
-import { PGLiteSocketServer } from "@electric-sql/pglite-socket"
-import { createApp } from "./app.js"
 import { issueSession } from "./features/auth/auth.service.js"
-import { getPrisma } from "./lib/db.js"
 import type { Role } from "./generated/prisma/client.js"
 import { Prisma } from "./generated/prisma/client.js"
 import { authRepository } from "./features/auth/auth.repository.js"
+import {
+  migrationNames,
+  readMigration,
+  startPgliteApp,
+} from "./test/pglite-app.js"
 
 const sharedConversationMigration =
   "20261102000000_shared_request_conversations"
@@ -20,96 +18,65 @@ test(
   "request conversations share chronology while booking workflows stay independent",
   { timeout: 120_000 },
   async (t) => {
-    const original = {
-      DATABASE_URL: process.env.DATABASE_URL,
-      DIRECT_URL: process.env.DIRECT_URL,
-      DATABASE_POOL_MAX: process.env.DATABASE_POOL_MAX,
-      JWT_SECRET: process.env.JWT_SECRET,
-    }
-    process.env.JWT_SECRET = randomBytes(32).toString("base64url")
-    const db = new PGlite()
-    const resources: {
-      socket?: PGLiteSocketServer
-      server?: Server
-      prisma?: ReturnType<typeof getPrisma>
-    } = {}
-    t.after(async () => {
-      resources.server?.closeAllConnections()
-      if (resources.server)
-        await new Promise<void>((resolve) =>
-          resources.server!.close(() => resolve()),
-        )
-      await resources.prisma?.$disconnect()
-      await resources.socket?.stop()
-      await db.close()
-      for (const [key, value] of Object.entries(original)) {
-        if (value === undefined) delete process.env[key]
-        else process.env[key] = value
-      }
+    let notify: (() => void) | undefined
+    let released = 0
+    const { prisma, db, origin } = await startPgliteApp(t, {
+      async migrate(db) {
+        await db.exec(`CREATE SCHEMA realtime;
+          CREATE TABLE realtime.test_broadcasts (payload jsonb, event text, topic text, private boolean);
+          CREATE FUNCTION realtime.send(payload jsonb, event text, topic text, private boolean) RETURNS void LANGUAGE sql AS $$
+            INSERT INTO realtime.test_broadcasts VALUES (payload, event, topic, private);
+          $$;`)
+
+        const names = await migrationNames()
+        for (const name of names) {
+          if (name >= sharedConversationMigration) continue
+          await db.exec(await readMigration(name))
+        }
+
+        // Seed the pre-migration shape to verify that multiple historical request
+        // threads consolidate without losing messages or booking associations.
+        await db.exec(`
+          INSERT INTO "User" ("id", "email", "fullName", "passwordHash", "role", "updatedAt") VALUES
+            ('legacy-client', 'legacy-client@example.com', 'Legacy client', 'private', 'USER', CURRENT_TIMESTAMP),
+            ('legacy-head', 'legacy-head@example.com', 'Legacy head', 'private', 'STAFF', CURRENT_TIMESTAMP);
+          INSERT INTO "Department" ("id", "name", "headId", "updatedAt")
+            VALUES ('legacy-department', 'Legacy design', 'legacy-head', CURRENT_TIMESTAMP);
+          INSERT INTO "Service" ("id", "name", "description", "updatedAt")
+            VALUES ('legacy-service', 'Legacy service', 'Historical service', CURRENT_TIMESTAMP);
+          INSERT INTO "ServiceRequest" (
+            "id", "clientId", "serviceId", "title", "status",
+            "acceptedDepartmentId", "acceptedById", "acceptedAt", "updatedAt"
+          ) VALUES
+            ('legacy-booking-a', 'legacy-client', 'legacy-service', 'Legacy A', 'UNDER_REVIEW', 'legacy-department', 'legacy-head', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+            ('legacy-booking-b', 'legacy-client', 'legacy-service', 'Legacy B', 'UNDER_REVIEW', 'legacy-department', 'legacy-head', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+          INSERT INTO "ServiceRequestMessage" (
+            "id", "requestId", "senderId", "clientMessageId", "body"
+          ) VALUES (
+            'legacy-message', 'legacy-booking-b', 'legacy-client',
+            '00000000-0000-4000-8000-000000000001', 'Historical message'
+          );
+        `)
+        await db.exec(await readMigration(sharedConversationMigration))
+
+        for (const name of names.filter(
+          (name) => name > sharedConversationMigration,
+        ))
+          await db.exec(await readMigration(name))
+      },
+      app: {
+        conversationRealtime: {
+          async subscribe(_id, onChange, onStatus) {
+            notify = onChange
+            onStatus(true)
+            return async () => {
+              released++
+            }
+          },
+        },
+      },
     })
-    await db.waitReady
-    await db.exec(`CREATE SCHEMA realtime;
-      CREATE TABLE realtime.test_broadcasts (payload jsonb, event text, topic text, private boolean);
-      CREATE FUNCTION realtime.send(payload jsonb, event text, topic text, private boolean) RETURNS void LANGUAGE sql AS $$
-        INSERT INTO realtime.test_broadcasts VALUES (payload, event, topic, private);
-      $$;`)
-
-    const migrations = new URL("../prisma/migrations/", import.meta.url)
-    const names = (await readdir(migrations))
-      .filter((name) => /^\d/.test(name))
-      .sort()
-    for (const name of names) {
-      if (name >= sharedConversationMigration) continue
-      await db.exec(
-        await readFile(new URL(`${name}/migration.sql`, migrations), "utf8"),
-      )
-    }
-
-    // Seed the pre-migration shape to verify that multiple historical request
-    // threads consolidate without losing messages or booking associations.
-    await db.exec(`
-      INSERT INTO "User" ("id", "email", "fullName", "passwordHash", "role", "updatedAt") VALUES
-        ('legacy-client', 'legacy-client@example.com', 'Legacy client', 'private', 'USER', CURRENT_TIMESTAMP),
-        ('legacy-head', 'legacy-head@example.com', 'Legacy head', 'private', 'STAFF', CURRENT_TIMESTAMP);
-      INSERT INTO "Department" ("id", "name", "headId", "updatedAt")
-        VALUES ('legacy-department', 'Legacy design', 'legacy-head', CURRENT_TIMESTAMP);
-      INSERT INTO "Service" ("id", "name", "description", "updatedAt")
-        VALUES ('legacy-service', 'Legacy service', 'Historical service', CURRENT_TIMESTAMP);
-      INSERT INTO "ServiceRequest" (
-        "id", "clientId", "serviceId", "title", "status",
-        "acceptedDepartmentId", "acceptedById", "acceptedAt", "updatedAt"
-      ) VALUES
-        ('legacy-booking-a', 'legacy-client', 'legacy-service', 'Legacy A', 'UNDER_REVIEW', 'legacy-department', 'legacy-head', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-        ('legacy-booking-b', 'legacy-client', 'legacy-service', 'Legacy B', 'UNDER_REVIEW', 'legacy-department', 'legacy-head', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-      INSERT INTO "ServiceRequestMessage" (
-        "id", "requestId", "senderId", "clientMessageId", "body"
-      ) VALUES (
-        'legacy-message', 'legacy-booking-b', 'legacy-client',
-        '00000000-0000-4000-8000-000000000001', 'Historical message'
-      );
-    `)
-    await db.exec(
-      await readFile(
-        new URL(`${sharedConversationMigration}/migration.sql`, migrations),
-        "utf8",
-      ),
-    )
-
-    for (const name of names.filter(
-      (name) => name > sharedConversationMigration,
-    ))
-      await db.exec(
-        await readFile(new URL(`${name}/migration.sql`, migrations), "utf8"),
-      )
-
-    const socket = new PGLiteSocketServer({ db, port: 0, host: "127.0.0.1" })
-    resources.socket = socket
-    await socket.start()
-    process.env.DATABASE_URL = `postgresql://postgres:postgres@${socket.getServerConn()}/postgres?sslmode=disable`
-    process.env.DATABASE_POOL_MAX = "1"
-    delete process.env.DIRECT_URL
-    const prisma = getPrisma()!
-    resources.prisma = prisma
+    const base = `${origin}/api`
 
     const legacyConversation = await prisma.requestConversation.findUnique({
       where: {
@@ -172,22 +139,6 @@ test(
       ),
     )
 
-    let notify: (() => void) | undefined
-    let released = 0
-    const server = createApp({
-      conversationRealtime: {
-        async subscribe(_id, onChange, onStatus) {
-          notify = onChange
-          onStatus(true)
-          return async () => {
-            released++
-          }
-        },
-      },
-    }).listen(0, "127.0.0.1")
-    resources.server = server
-    await new Promise<void>((resolve) => server!.once("listening", resolve))
-    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`
     const accept = (id: string, actor = head) =>
       fetch(`${base}/request-inbox/${id}/accept`, {
         method: "POST",

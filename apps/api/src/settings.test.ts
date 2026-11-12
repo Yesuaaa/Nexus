@@ -1,63 +1,15 @@
 import assert from "node:assert/strict"
-import { randomBytes } from "node:crypto"
-import { readdir, readFile } from "node:fs/promises"
-import type { AddressInfo } from "node:net"
 import { test } from "node:test"
-import { PGlite } from "@electric-sql/pglite"
-import { PGLiteSocketServer } from "@electric-sql/pglite-socket"
-import { createApp } from "./app.js"
-import { getPrisma } from "./lib/db.js"
 import { issueSession } from "./features/auth/auth.service.js"
 import { hashPassword } from "./features/auth/auth.password.js"
+import { startPgliteApp } from "./test/pglite-app.js"
 
 test(
   "settings validate preferences and isolate and revoke sessions",
   { timeout: 90000 },
   async (t) => {
-    const original = {
-      DATABASE_URL: process.env.DATABASE_URL,
-      DIRECT_URL: process.env.DIRECT_URL,
-      DATABASE_POOL_MAX: process.env.DATABASE_POOL_MAX,
-      JWT_SECRET: process.env.JWT_SECRET,
-    }
-    const db = new PGlite()
-    const socket = new PGLiteSocketServer({ db, port: 0, host: "127.0.0.1" })
-    const cleanup: {
-      server?: ReturnType<ReturnType<typeof createApp>["listen"]>
-      prisma?: ReturnType<typeof getPrisma>
-    } = {}
-    t.after(async () => {
-      if (cleanup.server)
-        await new Promise<void>((resolve) =>
-          cleanup.server!.close(() => resolve()),
-        )
-      await cleanup.prisma?.$disconnect()
-      await socket.stop()
-      await db.close()
-      for (const [key, value] of Object.entries(original)) {
-        if (value === undefined) delete process.env[key]
-        else process.env[key] = value
-      }
-    })
-    await db.waitReady
-    const migrations = new URL("../prisma/migrations/", import.meta.url)
-    for (const name of (await readdir(migrations))
-      .filter((name) => /^\d/.test(name))
-      .sort())
-      await db.exec(
-        await readFile(new URL(`${name}/migration.sql`, migrations), "utf8"),
-      )
-    await socket.start()
-    process.env.DATABASE_URL = `postgresql://postgres:postgres@${socket.getServerConn()}/postgres?sslmode=disable`
-    process.env.DATABASE_POOL_MAX = "1"
-    process.env.JWT_SECRET = randomBytes(32).toString("base64url")
-    delete process.env.DIRECT_URL
-    const prisma = getPrisma()!
-    cleanup.prisma = prisma
-    const server = createApp().listen(0, "127.0.0.1")
-    cleanup.server = server
-    await new Promise<void>((resolve) => server!.once("listening", resolve))
-    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/auth`
+    const { prisma, origin } = await startPgliteApp(t)
+    const base = `${origin}/api/auth`
     const request = (
       token: string,
       path: string,

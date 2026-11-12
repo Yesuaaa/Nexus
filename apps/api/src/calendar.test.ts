@@ -1,60 +1,17 @@
 import assert from "node:assert/strict"
-import { randomBytes, randomUUID } from "node:crypto"
-import { readdir, readFile } from "node:fs/promises"
-import type { AddressInfo } from "node:net"
+import { randomUUID } from "node:crypto"
 import { test } from "node:test"
-import { PGlite } from "@electric-sql/pglite"
-import { PGLiteSocketServer } from "@electric-sql/pglite-socket"
-import { createApp } from "./app.js"
 import { issueSession } from "./features/auth/auth.service.js"
 import { listInternalCalendar } from "./features/projects/calendar.service.js"
 import type { Role } from "./generated/prisma/client.js"
-import { getPrisma } from "./lib/db.js"
+import { startPgliteApp } from "./test/pglite-app.js"
 
 test(
   "calendar aggregates existing records with current role, assignment and head boundaries",
   { timeout: 120_000 },
   async (t) => {
-    const original = {
-      DATABASE_URL: process.env.DATABASE_URL,
-      DIRECT_URL: process.env.DIRECT_URL,
-      JWT_SECRET: process.env.JWT_SECRET,
-      DATABASE_POOL_MAX: process.env.DATABASE_POOL_MAX,
-    }
-    process.env.JWT_SECRET = randomBytes(32).toString("base64url")
-    const db = new PGlite()
-    const socket = new PGLiteSocketServer({ db, port: 0, host: "127.0.0.1" })
-    const cleanup: {
-      server?: ReturnType<ReturnType<typeof createApp>["listen"]>
-      prisma?: ReturnType<typeof getPrisma>
-    } = {}
-    t.after(async () => {
-      cleanup.server?.closeAllConnections()
-      if (cleanup.server)
-        await new Promise<void>((resolve) =>
-          cleanup.server!.close(() => resolve()),
-        )
-      await cleanup.prisma?.$disconnect()
-      await socket.stop()
-      await db.close()
-      for (const [key, value] of Object.entries(original)) {
-        if (value === undefined) delete process.env[key]
-        else process.env[key] = value
-      }
-    })
-    const migrations = new URL("../prisma/migrations/", import.meta.url)
-    for (const name of (await readdir(migrations))
-      .filter((name) => /^\d/.test(name))
-      .sort())
-      await db.exec(
-        await readFile(new URL(`${name}/migration.sql`, migrations), "utf8"),
-      )
-    await socket.start()
-    process.env.DATABASE_URL = `postgresql://postgres:postgres@${socket.getServerConn()}/postgres?sslmode=disable`
-    process.env.DATABASE_POOL_MAX = "1"
-    delete process.env.DIRECT_URL
-    const database = getPrisma()!
-    cleanup.prisma = database
+    const { prisma: database, origin } = await startPgliteApp(t)
+    const base = origin
     async function user(name: string, role: Role) {
       return database.user.create({
         data: {
@@ -341,10 +298,6 @@ test(
       listInternalCalendar(head.id, "team"),
       /Team calendar access/,
     )
-    const server = createApp().listen(0, "127.0.0.1")
-    cleanup.server = server
-    await new Promise<void>((resolve) => server!.once("listening", resolve))
-    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
     assert.equal((await fetch(`${base}/api/projects/calendar`)).status, 401)
     const token = (await issueSession(client)).token
     const clientResponse = await fetch(

@@ -1,59 +1,15 @@
 import assert from "node:assert/strict"
-import { randomBytes } from "node:crypto"
-import { readdir, readFile } from "node:fs/promises"
-import type { AddressInfo } from "node:net"
 import { test } from "node:test"
-import { PGlite } from "@electric-sql/pglite"
-import { PGLiteSocketServer } from "@electric-sql/pglite-socket"
-import { createApp } from "./app.js"
-import { getPrisma } from "./lib/db.js"
 import { issueSession } from "./features/auth/auth.service.js"
+import { PASSWORD_POLICY_MESSAGE } from "./shared/password-policy.js"
+import { startPgliteApp } from "./test/pglite-app.js"
 
 test(
   "client directory reads only client accounts without exposing credentials",
   { timeout: 120_000 },
   async (t) => {
-    const original = {
-      DATABASE_URL: process.env.DATABASE_URL,
-      DIRECT_URL: process.env.DIRECT_URL,
-      DATABASE_POOL_MAX: process.env.DATABASE_POOL_MAX,
-      JWT_SECRET: process.env.JWT_SECRET,
-    }
-    process.env.JWT_SECRET = randomBytes(32).toString("base64url")
-    const db = new PGlite()
-    const socket = new PGLiteSocketServer({ db, port: 0, host: "127.0.0.1" })
-    const cleanup: {
-      prisma?: ReturnType<typeof getPrisma>
-      server?: ReturnType<ReturnType<typeof createApp>["listen"]>
-    } = {}
-    t.after(async () => {
-      if (cleanup.server)
-        await new Promise<void>((resolve) =>
-          cleanup.server!.close(() => resolve()),
-        )
-      await cleanup.prisma?.$disconnect()
-      await socket.stop()
-      await db.close()
-      for (const [key, value] of Object.entries(original)) {
-        if (value === undefined) delete process.env[key]
-        else process.env[key] = value
-      }
-    })
-    await db.waitReady
-    const migrations = new URL("../prisma/migrations/", import.meta.url)
-    for (const name of (await readdir(migrations))
-      .filter((name) => /^\d/.test(name))
-      .sort()) {
-      await db.exec(
-        await readFile(new URL(`${name}/migration.sql`, migrations), "utf8"),
-      )
-    }
-    await socket.start()
-    process.env.DATABASE_URL = `postgresql://postgres:postgres@${socket.getServerConn()}/postgres?sslmode=disable`
-    process.env.DATABASE_POOL_MAX = "1"
-    delete process.env.DIRECT_URL
-    const prisma = getPrisma()!
-    cleanup.prisma = prisma
+    const { prisma, origin } = await startPgliteApp(t)
+    const base = `${origin}/api/clients`
     const tokens = new Map<string, string>()
     for (const role of ["ADMIN", "SUPERADMIN", "STAFF", "USER"] as const) {
       const user = await prisma.user.create({
@@ -129,10 +85,6 @@ test(
       where: { email: "admin@example.com" },
       select: { id: true },
     })
-    const server = createApp().listen(0, "127.0.0.1")
-    cleanup.server = server
-    await new Promise<void>((resolve) => server!.once("listening", resolve))
-    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/clients`
     const request = (query = "", actor = "ADMIN", method = "GET") =>
       fetch(`${base}${query}`, {
         method,
@@ -420,7 +372,7 @@ test(
           email: "New.Client@example.com",
           contactNumber: "+63 917 123 4567",
           isActive: true,
-          password: "client initial password",
+          password: "Client-initial-password-1",
         }
         for (const actor of ["STAFF", "USER", "SUPERADMIN"]) {
           assert.equal((await mutate("", "POST", input, actor)).status, 403)
@@ -436,6 +388,15 @@ test(
         assert.equal(
           (await mutate("", "POST", { ...input, password: "short" })).status,
           400,
+        )
+        const weak = await mutate("", "POST", {
+          ...input,
+          password: "client initial password",
+        })
+        assert.equal(weak.status, 400)
+        assert.equal(
+          ((await weak.json()) as { error: string }).error,
+          PASSWORD_POLICY_MESSAGE,
         )
         assert.equal(
           (await mutate("", "POST", { ...input, contactNumber: "bad" })).status,
