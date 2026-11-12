@@ -80,7 +80,12 @@ export function SidePanel({
   dismissible?: boolean
   /** Blocks every close path (e.g. while saving). */
   busy?: boolean
-  /** Runs before the default Escape handling; call preventDefault to keep the panel open. */
+  /**
+   * Runs before the default Escape handling; call preventDefault to keep the
+   * panel open. Also runs when the panel isn't dismissible (the panel stays
+   * open regardless), so inner views such as an inline confirm can close.
+   * Skipped while `busy`.
+   */
   onEscapeKeyDown?: (event: KeyboardEvent) => void
   /** Element to focus on close if the opener is gone. */
   fallbackFocus?: () => HTMLElement | null
@@ -105,11 +110,12 @@ export function SidePanel({
         overlayClassName={cn("bg-[rgb(13_28_57_/_18%)]", overlayClassName)}
         className={cn("overflow-hidden", className)}
         onEscapeKeyDown={(event) => {
-          if (busy || !dismissible) {
+          if (busy) {
             event.preventDefault()
             return
           }
           onEscapeKeyDown?.(event)
+          if (!dismissible) event.preventDefault()
         }}
         onInteractOutside={(event) => {
           if (busy || !dismissible) event.preventDefault()
@@ -210,11 +216,8 @@ export function SidePanelHeader({
   )
 }
 
-/** Scrolling content area between the header and footer. */
-export function SidePanelBody({
-  className,
-  ...props
-}: HTMLAttributes<HTMLDivElement>) {
+/** Scrolling content area between the header and footer. Accepts a `ref`. */
+export function SidePanelBody({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       className={cn(

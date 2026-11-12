@@ -302,8 +302,12 @@ test.describe("Authentication and session regression", () => {
     })
     await page.goto("/services")
     await page
-      .getByRole("button", { name: "Edit Test Service", exact: true })
+      .getByRole("button", {
+        name: "More actions for Test Service",
+        exact: true,
+      })
       .click()
+    await page.getByRole("menuitem", { name: "Edit", exact: true }).click()
     await page
       .getByRole("dialog")
       .getByLabel("Service Name")

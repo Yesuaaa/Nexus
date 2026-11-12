@@ -58,6 +58,7 @@ export function InlineConfirm({
   message,
   detail,
   confirmLabel,
+  cancelLabel = "Cancel",
   pendingLabel,
   pending,
   error,
@@ -68,6 +69,8 @@ export function InlineConfirm({
   message: ReactNode
   detail?: ReactNode
   confirmLabel: string
+  /** Text of the cancel button. */
+  cancelLabel?: string
   pendingLabel: string
   pending: boolean
   error?: string
@@ -120,7 +123,7 @@ export function InlineConfirm({
           disabled={pending}
           onClick={onCancel}
         >
-          Cancel
+          {cancelLabel}
         </button>
         <button
           type="button"

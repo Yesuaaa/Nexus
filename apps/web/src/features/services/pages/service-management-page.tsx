@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import dynamic from "next/dynamic"
-import { PanelLoading, SidePanelLoading } from "@/components/ui/panel-loading"
+import { SidePanelLoading } from "@/components/ui/panel-loading"
 import { sileo } from "@/lib/toast"
 import { PlusIcon } from "@/components/layout/icons"
 import { contentClass, focusRing } from "@/components/layout/styles"
@@ -31,21 +31,21 @@ const ServiceFormDialog = dynamic(
     import("../components/service-form-dialog").then(
       (module) => module.ServiceFormDialog,
     ),
-  { loading: PanelLoading },
+  { loading: () => <SidePanelLoading variant="edge" /> },
 )
 const ServiceDetailsDialog = dynamic(
   () =>
     import("../components/service-details-dialog").then(
       (module) => module.ServiceDetailsDialog,
     ),
-  { loading: () => <SidePanelLoading /> },
+  { loading: () => <SidePanelLoading variant="edge" /> },
 )
 const PricingTemplatesDialog = dynamic(
   () =>
     import("../components/pricing-templates-dialog").then(
       (module) => module.PricingTemplatesDialog,
     ),
-  { loading: PanelLoading },
+  { loading: () => <SidePanelLoading variant="edge" /> },
 )
 
 export function ServiceManagementPage() {
@@ -199,7 +199,11 @@ export function ServiceManagementPage() {
     >
       <header className="-mx-[clamp(16px,2.1vw,32px)] flex items-center justify-between gap-6 border-b border-[#eceef1] px-[clamp(16px,2.1vw,32px)] pt-0.5 pb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-4 max-[560px]:pb-[18px]">
         <div>
-          <h1 className="m-0 text-[clamp(21px,2vw,25px)] leading-[1.25] font-[650] tracking-[-0.03em] text-foreground">
+          <h1
+            id="service-management-heading"
+            tabIndex={-1}
+            className="m-0 text-[clamp(21px,2vw,25px)] leading-[1.25] font-[650] tracking-[-0.03em] text-foreground"
+          >
             Service Management
           </h1>
           <p className="mt-[5px] mb-0 text-xs leading-[1.45] text-[#738096]">
@@ -299,6 +303,7 @@ export function ServiceManagementPage() {
         <ServiceDetailsDialog
           service={detailsTarget}
           onClose={() => setDetailsTarget(null)}
+          onEdit={canManage ? setFormTarget : undefined}
         />
       )}
       {statusTarget && (
