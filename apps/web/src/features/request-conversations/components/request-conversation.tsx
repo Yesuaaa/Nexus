@@ -10,10 +10,10 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-  type FormEvent,
 } from "react"
 import { Info, MoreHorizontal, Pencil, Trash2, UserRound } from "lucide-react"
 import { sileo } from "@/lib/toast"
+import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import {
@@ -48,9 +48,9 @@ import {
 } from "@/features/services/api/services-api"
 import { SpecialistProfileDialog } from "@/features/services/components/specialist-profile-dialog"
 import { ClientProfileDialog } from "./client-profile-dialog"
-import { statusText } from "@/features/request-workflow/components/workflow-primitives"
+import { humanizeEnum } from "@/lib/format"
 import type { Workflow } from "@/features/request-workflow/model/workflow"
-import { ConversationAvatar } from "./conversation-avatar"
+import { Avatar } from "@/components/ui/avatar"
 import {
   ConversationSurface,
   ConversationHeader,
@@ -80,6 +80,9 @@ import {
   mergeMessages,
   readConversationEvents,
 } from "../model/conversation-events"
+import { useConversationThread } from "../hooks/use-conversation-thread"
+import { errorMessage } from "@/lib/error-message"
+import { watchVisibleRefresh } from "@/lib/visible-refresh"
 
 const contextPanelStorageKey = "nexus.messages.context-panel-open"
 
@@ -174,23 +177,12 @@ function ConversationPanel({
   const { formatDate, formatTime } = useDatePreferences()
   const account = usePortalAccount()
   const inputId = useId()
-  const [history, setHistory] = useState<ConversationHistory | null>(null)
-  const [error, setError] = useState("")
-  useEffect(() => {
-    if (error)
-      sileo.error({ title: "Couldn't load messages", description: error })
-  }, [error])
-  const [revision, setRevision] = useState(0)
-  const [draft, setDraft] = useState("")
-  const [sending, setSending] = useState(false)
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editingMessageBody, setEditingMessageBody] = useState("")
   const [messageActionError, setMessageActionError] = useState("")
   const [messageActionBusy, setMessageActionBusy] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<RequestMessage | null>(null)
   const [deleteError, setDeleteError] = useState("")
-  const [olderLoading, setOlderLoading] = useState(false)
-  const [sendError, setSendError] = useState("")
   const [contextPanelOpen, setContextPanelOpen] = useState(() => {
     if (typeof window === "undefined") return true
     try {
@@ -206,7 +198,6 @@ function ConversationPanel({
     requestId: string
     mode: "activation" | "staffing"
   } | null>(null)
-  const projectSetupTrigger = useRef<HTMLElement | null>(null)
   const messageInputRef = useRef<HTMLTextAreaElement>(null)
   const [specialistProfileOpenFor, setSpecialistProfileOpenFor] = useState<
     string | null
@@ -216,14 +207,6 @@ function ConversationPanel({
   >(null)
   const [specialistProfileResolution, setSpecialistProfileResolution] =
     useState<SpecialistProfileResolution | null>(null)
-  const pending = useRef<{
-    body: string
-    id: string
-  } | null>(null)
-  const sendingRef = useRef(false)
-  const logRef = useRef<HTMLDivElement>(null)
-  const lastMarkedReadMessage = useRef<string | null>(null)
-  const followLatest = useRef(true)
   const accessRevoked = useRef(false)
   const [selectedBookingOverride, setSelectedBookingId] = useState<
     string | null
@@ -237,6 +220,35 @@ function ConversationPanel({
   const isClient = account.role === "USER"
   const isStaff = account.role === "STAFF"
   const isParticipant = isClient || isStaff
+  const {
+    history,
+    setHistory,
+    error,
+    setError,
+    revision,
+    reload,
+    draft,
+    setDraft,
+    sending,
+    sendError,
+    olderLoading,
+    loadOlder,
+    submit,
+    logRef,
+    followLatestRef,
+    onLogScroll,
+  } = useConversationThread<ConversationHistory>({
+    loadOlderPage: (cursor) => getConversation(requestId, cursor),
+    send: (body, idempotencyKey, thread) =>
+      sendMessage(thread.conversation?.id ?? requestId, body, idempotencyKey),
+    readConversationId: (thread) =>
+      isParticipant && thread.conversation ? thread.conversation.id : null,
+    markRead: markConversationRead,
+    onConversationRead,
+    onSent: (message, thread) =>
+      onLatestMessage?.(thread.conversation?.id ?? requestId, message),
+    onAccessLost: (message) => revokeWorkflow(message),
+  })
   const conversationBookings = visibleConversationBookings(
     history?.conversation?.bookings,
   )
@@ -422,8 +434,7 @@ function ConversationPanel({
           onLatestMessage?.(result.conversation?.id ?? requestId, latest)
       } catch (reason) {
         if (controller.signal.aborted) return
-        const message =
-          reason instanceof Error ? reason.message : "Couldn't load messages."
+        const message = errorMessage(reason, "Couldn't load messages.")
         if (
           reason instanceof ApiError &&
           [401, 403, 404].includes(reason.status)
@@ -486,21 +497,38 @@ function ConversationPanel({
     }
     void refresh()
     void connect()
-    const fallback = setInterval(() => {
-      if (document.visibilityState === "visible") void refresh()
-    }, 15_000)
+    // Fallback for missed live events; skips while a refresh is in flight.
+    const stopFallback = watchVisibleRefresh(
+      () => {
+        if (!loading) void refresh()
+      },
+      { intervalMs: 15_000 },
+    )
     return () => {
       controller.abort()
       clearTimeout(retryTimer)
       wakeRetry?.()
-      clearInterval(fallback)
+      stopFallback()
     }
-  }, [requestId, revision, onLatestMessage, revokeWorkflow])
+  }, [
+    requestId,
+    revision,
+    onLatestMessage,
+    revokeWorkflow,
+    setHistory,
+    setError,
+  ])
 
   useEffect(() => {
-    if (followLatest.current && logRef.current)
+    if (followLatestRef.current && logRef.current)
       logRef.current.scrollTop = logRef.current.scrollHeight
-  }, [history?.messages, history?.meetings, bookingControls])
+  }, [
+    history?.messages,
+    history?.meetings,
+    bookingControls,
+    followLatestRef,
+    logRef,
+  ])
 
   const openedWorkflowAnchor = useRef("")
   useEffect(() => {
@@ -517,134 +545,16 @@ function ConversationPanel({
     const card = target?.[target.length - 1]
     if (!log || !card) return
     openedWorkflowAnchor.current = anchor
-    followLatest.current = false
+    followLatestRef.current = false
     log.scrollTop +=
       card.getBoundingClientRect().top - log.getBoundingClientRect().top - 16
-  }, [history?.messages, history?.meetings, bookingControls])
-
-  const latestMessageId = history?.messages.at(-1)?.id
-  const conversationReady = Boolean(history?.conversation)
-  useEffect(() => {
-    if (
-      !isParticipant ||
-      !conversationReady ||
-      !latestMessageId ||
-      lastMarkedReadMessage.current === latestMessageId
-    )
-      return
-
-    lastMarkedReadMessage.current = latestMessageId
-    let active = true
-    const conversationId = history?.conversation?.id ?? requestId
-    void markConversationRead(conversationId)
-      .then((result) => {
-        if (active)
-          onConversationRead?.(
-            conversationId,
-            result.unreadCount,
-            result.conversationUnreadCount,
-          )
-      })
-      .catch(() => {
-        if (active) lastMarkedReadMessage.current = null
-      })
-    return () => {
-      active = false
-    }
   }, [
-    conversationReady,
-    isParticipant,
-    latestMessageId,
-    onConversationRead,
-    requestId,
-    history?.conversation?.id,
+    history?.messages,
+    history?.meetings,
+    bookingControls,
+    followLatestRef,
+    logRef,
   ])
-
-  async function loadOlder() {
-    if (!history?.nextCursor || olderLoading) return
-    setOlderLoading(true)
-    try {
-      const result = await getConversation(requestId, history.nextCursor)
-      followLatest.current = false
-      setHistory((previous) =>
-        previous
-          ? {
-              ...previous,
-              nextCursor: result.nextCursor,
-              messages: mergeMessages(result.messages, previous.messages),
-            }
-          : previous,
-      )
-      setError("")
-    } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Couldn't load earlier messages.",
-      )
-      if (
-        reason instanceof ApiError &&
-        [401, 403, 404].includes(reason.status)
-      ) {
-        setHistory(null)
-        revokeWorkflow(reason.message)
-      }
-    } finally {
-      setOlderLoading(false)
-    }
-  }
-
-  async function submit(event: FormEvent) {
-    event.preventDefault()
-    const body = draft.trim()
-    if (!body || !history?.canSend || sendingRef.current) return
-    if (pending.current?.body !== body)
-      pending.current = {
-        body,
-        id: crypto.randomUUID(),
-      }
-    sendingRef.current = true
-    setSending(true)
-    setSendError("")
-    try {
-      const message = await sendMessage(
-        history?.conversation?.id ?? requestId,
-        body,
-        pending.current.id,
-      )
-      followLatest.current = true
-      setHistory((previous) =>
-        previous
-          ? {
-              ...previous,
-              messages: mergeMessages(previous.messages, [message]),
-            }
-          : previous,
-      )
-      setDraft("")
-      onLatestMessage?.(history?.conversation?.id ?? requestId, message)
-      pending.current = null
-    } catch (reason) {
-      const message =
-        reason instanceof Error
-          ? reason.message
-          : "Couldn't send your message. Try again."
-      setSendError(message)
-      sileo.error({ title: "Message not sent", description: message })
-      if (
-        reason instanceof ApiError &&
-        [401, 403, 404].includes(reason.status)
-      ) {
-        setHistory(null)
-        revokeWorkflow(reason.message)
-      }
-      if (reason instanceof ApiError && reason.status === 409)
-        setRevision((value) => value + 1)
-    } finally {
-      sendingRef.current = false
-      setSending(false)
-    }
-  }
 
   const participantName =
     account.role === "USER"
@@ -705,10 +615,6 @@ function ConversationPanel({
 
   function openProjectSetup(mode: "activation" | "staffing") {
     if (!workflow) return
-    projectSetupTrigger.current =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null
     setProjectSetup({ requestId: workflow.request.id, mode })
   }
 
@@ -727,7 +633,7 @@ function ConversationPanel({
   }
 
   function applyMeetingUpdate(meeting: ConversationMeeting) {
-    followLatest.current = true
+    followLatestRef.current = true
     setHistory((previous) =>
       previous
         ? {
@@ -762,8 +668,7 @@ function ConversationPanel({
       setEditingMessageId(null)
       setEditingMessageBody("")
     } catch (reason) {
-      const message =
-        reason instanceof Error ? reason.message : "Couldn't edit this message."
+      const message = errorMessage(reason, "Couldn't edit this message.")
       sileo.error({ title: "Message not saved", description: message })
       if (
         reason instanceof ApiError &&
@@ -772,8 +677,7 @@ function ConversationPanel({
         setHistory(null)
         revokeWorkflow(reason.message)
       }
-      if (reason instanceof ApiError && reason.status === 409)
-        setRevision((value) => value + 1)
+      if (reason instanceof ApiError && reason.status === 409) reload()
     } finally {
       setMessageActionBusy(false)
     }
@@ -788,10 +692,7 @@ function ConversationPanel({
       applyMessageUpdate(message)
       setDeleteTarget(null)
     } catch (reason) {
-      const message =
-        reason instanceof Error
-          ? reason.message
-          : "Couldn't delete this message."
+      const message = errorMessage(reason, "Couldn't delete this message.")
       sileo.error({ title: "Message not deleted", description: message })
       if (
         reason instanceof ApiError &&
@@ -800,8 +701,7 @@ function ConversationPanel({
         setHistory(null)
         revokeWorkflow(reason.message)
       }
-      if (reason instanceof ApiError && reason.status === 409)
-        setRevision((value) => value + 1)
+      if (reason instanceof ApiError && reason.status === 409) reload()
     } finally {
       setMessageActionBusy(false)
     }
@@ -931,11 +831,7 @@ function ConversationPanel({
                 aria-live="polite"
                 aria-relevant="additions"
                 tabIndex={0}
-                onScroll={(event) => {
-                  const node = event.currentTarget
-                  followLatest.current =
-                    node.scrollHeight - node.scrollTop - node.clientHeight < 70
-                }}
+                onScroll={onLogScroll}
                 className="min-h-0 flex-1 overflow-y-auto px-7 py-5 focus-visible:outline-none max-[767px]:px-4"
               >
                 {!timeline.length && (
@@ -970,7 +866,7 @@ function ConversationPanel({
                           }
                           canAct={history.canSend}
                           onSaved={applyMeetingUpdate}
-                          onRefresh={() => setRevision((value) => value + 1)}
+                          onRefresh={reload}
                         />
                       </div>
                     )
@@ -1094,12 +990,7 @@ function ConversationPanel({
                               className="block min-h-20 w-full resize-y rounded-lg border border-[#d8e1ef] bg-white px-3 py-2 text-xs leading-5 text-[#182235] outline-none focus-visible:ring-2 focus-visible:ring-[#294a9b]"
                             />
                             {messageActionError && (
-                              <p
-                                role="alert"
-                                className="m-0 text-xs text-red-700"
-                              >
-                                {messageActionError}
-                              </p>
+                              <Alert variant="text">{messageActionError}</Alert>
                             )}
                             <div className="flex justify-end gap-2">
                               <Button
@@ -1117,7 +1008,8 @@ function ConversationPanel({
                               </Button>
                               <Button
                                 type="submit"
-                                className="h-9 min-w-20 bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
+                                variant="brand"
+                                className="h-9 min-w-20 text-xs"
                                 disabled={
                                   messageActionBusy ||
                                   !editingMessageBody.trim()
@@ -1248,7 +1140,8 @@ function ConversationPanel({
                         />
                         <Button
                           type="button"
-                          className="ml-auto flex bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
+                          variant="brand"
+                          className="ml-auto flex text-xs"
                           disabled={controls.busy || !history.canSend}
                           onClick={async () => {
                             if (await controls.attach(attachmentDraft)) {
@@ -1357,7 +1250,7 @@ function ConversationPanel({
                       Conversation details
                     </h3>
                     <div className="mt-3 flex items-center gap-3">
-                      <ConversationAvatar
+                      <Avatar
                         name={participantName}
                         imageUrl={
                           isClient
@@ -1388,7 +1281,7 @@ function ConversationPanel({
                         ["Department", history.conversation.department.name],
                         [
                           "Status",
-                          statusText(history.conversation.status || "ACTIVE"),
+                          humanizeEnum(history.conversation.status || "ACTIVE"),
                         ],
                         [
                           "Manager",
@@ -1444,8 +1337,8 @@ function ConversationPanel({
                               {booking.referenceNumber || booking.id}
                             </span>
                             <span className="mt-2 flex items-center justify-between gap-2 text-[9px] text-[#52627a]">
-                              <span>{statusText(booking.workflowState)}</span>
-                              <span>{statusText(booking.status)}</span>
+                              <span>{humanizeEnum(booking.workflowState)}</span>
+                              <span>{humanizeEnum(booking.status)}</span>
                             </span>
                             <span className="mt-2 block h-1 overflow-hidden rounded-full bg-[#dce3ef]">
                               <span
@@ -1475,7 +1368,7 @@ function ConversationPanel({
               const log = logRef.current
               const target = document.getElementById(`workflow-${entityId}`)
               if (!log || !target || !log.contains(target)) return
-              followLatest.current = false
+              followLatestRef.current = false
               log.scrollTo({
                 top:
                   log.scrollTop +
@@ -1502,16 +1395,13 @@ function ConversationPanel({
             controls={controls}
             mode={projectSetup.mode}
             onClose={() => setProjectSetup(null)}
-            onReturnFocus={() => {
-              if (projectSetupTrigger.current?.isConnected)
-                projectSetupTrigger.current.focus()
-              else
-                messageInputRef.current?.form
-                  ?.querySelector<HTMLButtonElement>(
-                    '[aria-label="Open request actions"]',
-                  )
-                  ?.focus()
-            }}
+            onReturnFocus={() =>
+              messageInputRef.current?.form
+                ?.querySelector<HTMLButtonElement>(
+                  '[aria-label="Open request actions"]',
+                )
+                ?.focus()
+            }
           />
         )}
       {deleteTarget && (

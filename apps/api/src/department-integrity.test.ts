@@ -1,69 +1,16 @@
 import assert from "node:assert/strict"
-import { randomBytes } from "node:crypto"
-import { readdir, readFile } from "node:fs/promises"
-import type { Server } from "node:http"
-import type { AddressInfo } from "node:net"
 import { test } from "node:test"
-import { PGlite } from "@electric-sql/pglite"
-import { PGLiteSocketServer } from "@electric-sql/pglite-socket"
 import express from "express"
-import { createApp } from "./app.js"
 import { Prisma } from "./generated/prisma/client.js"
-import { getPrisma } from "./lib/db.js"
 import { issueSession } from "./features/auth/auth.service.js"
 import { handleError } from "./shared/error-handler.js"
-
-async function listen(server: Server) {
-  await new Promise<void>((resolve) => server.once("listening", resolve))
-  return `http://127.0.0.1:${(server.address() as AddressInfo).port}`
-}
-
-async function close(server: Server | undefined) {
-  if (server)
-    await new Promise<void>((resolve) => server.close(() => resolve()))
-}
+import { closeServer, listen, startPgliteApp } from "./test/pglite-app.js"
 
 test(
   "department and employee writes keep head, lead, and history integrity",
   { timeout: 120_000 },
   async (t) => {
-    const original = {
-      DATABASE_URL: process.env.DATABASE_URL,
-      DIRECT_URL: process.env.DIRECT_URL,
-      DATABASE_POOL_MAX: process.env.DATABASE_POOL_MAX,
-      JWT_SECRET: process.env.JWT_SECRET,
-    }
-    const db = new PGlite()
-    const socket = new PGLiteSocketServer({ db, port: 0, host: "127.0.0.1" })
-    const cleanup: {
-      server?: Server
-      prisma?: ReturnType<typeof getPrisma>
-    } = {}
-    t.after(async () => {
-      await close(cleanup.server)
-      await cleanup.prisma?.$disconnect()
-      await socket.stop()
-      await db.close()
-      for (const [key, value] of Object.entries(original)) {
-        if (value === undefined) delete process.env[key]
-        else process.env[key] = value
-      }
-    })
-    await db.waitReady
-    const migrations = new URL("../prisma/migrations/", import.meta.url)
-    for (const name of (await readdir(migrations))
-      .filter((name) => /^\d/.test(name))
-      .sort())
-      await db.exec(
-        await readFile(new URL(`${name}/migration.sql`, migrations), "utf8"),
-      )
-    await socket.start()
-    process.env.DATABASE_URL = `postgresql://postgres:postgres@${socket.getServerConn()}/postgres?sslmode=disable`
-    process.env.DATABASE_POOL_MAX = "1"
-    process.env.JWT_SECRET = randomBytes(32).toString("base64url")
-    delete process.env.DIRECT_URL
-    const prisma = getPrisma()!
-    cleanup.prisma = prisma
+    const { prisma, origin } = await startPgliteApp(t)
 
     const admin = await prisma.user.create({
       data: {
@@ -125,9 +72,7 @@ test(
       data: { leadId: "lead" },
     })
 
-    const server = createApp().listen(0, "127.0.0.1")
-    cleanup.server = server
-    const base = `${await listen(server)}/api`
+    const base = `${origin}/api`
     async function request(path: string, method = "GET", body?: unknown) {
       const response = await fetch(`${base}${path}`, {
         method,
@@ -311,9 +256,9 @@ test(
           )
         })
         app.use(handleError)
-        const fkServer = app.listen(0, "127.0.0.1")
+        const fk = await listen(app)
         try {
-          const response = await fetch(`${await listen(fkServer)}/fk`)
+          const response = await fetch(`${fk.origin}/fk`)
           assert.equal(response.status, 409)
           const body = (await response.json()) as { error: string }
           assert.equal(
@@ -321,7 +266,7 @@ test(
             "This record is linked to other data and can't be changed or deleted",
           )
         } finally {
-          await close(fkServer)
+          await closeServer(fk.server)
         }
       },
     )

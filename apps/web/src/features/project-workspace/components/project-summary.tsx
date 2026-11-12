@@ -1,4 +1,9 @@
 import { ArrowRight, CheckCircle2, Circle } from "lucide-react"
+import { Avatar } from "@/components/ui/avatar"
+import { pillToneClass } from "@/components/ui/pill"
+import { ProgressMeter } from "@/components/ui/stat-strip"
+import { statusTone } from "@/features/projects/model/project-status"
+import { humanizeEnum } from "@/lib/format"
 import type { ProjectWorkspaceDetail } from "../api/project-workspace-api"
 import {
   deliverableStatusClass,
@@ -51,7 +56,7 @@ export function ProjectSummary({
                   .map((stream) => stream.serviceName)
                   .join(", "),
               ],
-              ["Status", workspace.status.toLowerCase().replaceAll("_", " ")],
+              ["Status", humanizeEnum(workspace.status, { capitalize: false })],
               [
                 "Started",
                 dates[0]
@@ -64,7 +69,7 @@ export function ProjectSummary({
                 <dd className="m-0 mt-1.5 leading-5 font-medium">
                   {label === "Status" ? (
                     <span
-                      className={`inline-flex rounded-md px-2 py-0.5 text-[11px] capitalize ${workspace.status === "IN_PROGRESS" ? "bg-[#fff1d4] text-[#946000]" : workspace.status === "COMPLETED" ? "bg-[#e3f5e9] text-[#13743b]" : workspace.status === "ON_HOLD" ? "bg-[#fbe9d5] text-[#9a4b12]" : workspace.status === "CANCELLED" ? "bg-[#ffeaeb] text-[#b3343b]" : "bg-[#edf1f6] text-[#60718c]"}`}
+                      className={`inline-flex rounded-md px-2 py-0.5 text-[11px] capitalize ${pillToneClass(statusTone(workspace.status))}`}
                     >
                       {value}
                     </span>
@@ -87,19 +92,12 @@ export function ProjectSummary({
           <p className="mt-0 mb-4 text-xs text-[#738096]">
             {done} of {tasks.length} tasks complete
           </p>
-          <div
-            role="progressbar"
-            aria-label="Overall task progress"
-            aria-valuenow={percent}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            className="h-2 overflow-hidden rounded-full bg-[#e1e6ee]"
-          >
-            <div
-              className="h-full rounded-full bg-[#294c96]"
-              style={{ width: `${percent}%` }}
-            />
-          </div>
+          <ProgressMeter
+            value={percent}
+            max={100}
+            label="Overall task progress"
+            colorClass="bg-[#294c96]"
+          />
         </div>
       </section>
       {workspace.workstreams.map((stream) => (
@@ -189,18 +187,7 @@ export function ProjectSummary({
                 key={person.id}
                 className="flex min-h-16 items-center gap-3 px-4 py-3 text-xs transition-colors hover:bg-[#fafbfd]"
               >
-                <span
-                  aria-hidden="true"
-                  className="grid size-9 shrink-0 place-items-center rounded-full bg-[#edf1f6] text-[11px] font-semibold text-[#536b91]"
-                >
-                  {person.fullName
-                    .split(/\s+/)
-                    .filter(Boolean)
-                    .slice(0, 2)
-                    .map((part) => part[0])
-                    .join("")
-                    .toUpperCase()}
-                </span>
+                <Avatar name={person.fullName} />
                 <div className="min-w-0">
                   <p className="m-0 truncate font-medium">{person.fullName}</p>
                   <p className="mt-1 mb-0 truncate text-[11px] text-[#738096]">

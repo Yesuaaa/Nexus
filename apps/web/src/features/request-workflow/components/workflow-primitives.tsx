@@ -6,19 +6,13 @@ import {
   LoaderCircle,
   type LucideIcon,
 } from "lucide-react"
+import { humanizeEnum } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { Workflow, WorkflowState } from "../model/workflow"
 
 export const workflowInput =
   "w-full min-w-0 rounded-lg border border-[#dfe5ee] bg-background px-3 py-2 text-xs leading-5 outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
 export const workflowButton = "h-auto min-h-8 rounded-lg px-3 py-2 text-[11px]"
-
-export function statusText(value: string) {
-  return value
-    .toLowerCase()
-    .replaceAll("_", " ")
-    .replace(/^./, (letter) => letter.toUpperCase())
-}
 
 export function WorkflowBadge({
   value,
@@ -54,7 +48,7 @@ export function WorkflowBadge({
         ? "Pending review"
         : checklist && value === "REQUESTED"
           ? "Incomplete"
-          : statusText(value)}
+          : humanizeEnum(value)}
     </span>
   )
 }
@@ -111,7 +105,7 @@ export function WorkflowCard({
         </div>
         {status && (
           <span className="inline-flex max-w-full items-center rounded-full border border-white/25 bg-white/15 px-3 py-1 text-[10px] font-medium text-white">
-            {statusText(status)}
+            {humanizeEnum(status)}
           </span>
         )}
       </header>

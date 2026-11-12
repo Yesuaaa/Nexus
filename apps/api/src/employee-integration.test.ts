@@ -1,15 +1,11 @@
 import assert from "node:assert/strict"
-import { randomBytes } from "node:crypto"
-import { readdir, readFile } from "node:fs/promises"
-import type { Server } from "node:http"
-import type { AddressInfo } from "node:net"
 import { test } from "node:test"
-import { PGlite } from "@electric-sql/pglite"
-import { PGLiteSocketServer } from "@electric-sql/pglite-socket"
-import { createApp } from "./app.js"
-import { setServiceImageStorageForTests } from "./features/services/service-image-storage.js"
-import { getPrisma } from "./lib/db.js"
 import { issueSession } from "./features/auth/auth.service.js"
+import {
+  migrationNames,
+  readMigration,
+  startPgliteApp,
+} from "./test/pglite-app.js"
 
 type Payload = {
   employee: { id: string; hasAccount?: boolean }
@@ -28,114 +24,64 @@ test(
   "employee records and department membership stay consistent",
   { timeout: 120_000 },
   async (t) => {
-    const originalUrl = process.env.DATABASE_URL
-    const originalDirectUrl = process.env.DIRECT_URL
-    const originalPoolMax = process.env.DATABASE_POOL_MAX
-    const originalJwtSecret = process.env.JWT_SECRET
-    process.env.JWT_SECRET = randomBytes(32).toString("base64url")
     const storedServiceImages = new Set<string>()
     let uploadedImageSequence = 0
-    setServiceImageStorageForTests({
-      async upload() {
-        uploadedImageSequence += 1
-        const path = `services/test-${uploadedImageSequence}.webp`
-        storedServiceImages.add(path)
-        return path
+    const { prisma, origin } = await startPgliteApp(t, {
+      imageStorage: {
+        async upload() {
+          uploadedImageSequence += 1
+          const path = `services/test-${uploadedImageSequence}.webp`
+          storedServiceImages.add(path)
+          return path
+        },
+        async remove(path) {
+          storedServiceImages.delete(path)
+        },
+        publicUrl(path) {
+          return `https://storage.test/${path}`
+        },
       },
-      async remove(path) {
-        storedServiceImages.delete(path)
-      },
-      publicUrl(path) {
-        return `https://storage.test/${path}`
-      },
-    })
-    const database = new PGlite()
-    const cleanup: {
-      socket?: PGLiteSocketServer
-      server?: Server
-      prisma?: ReturnType<typeof getPrisma>
-    } = {}
-    t.after(async () => {
-      setServiceImageStorageForTests(undefined)
-      if (cleanup.server)
-        await new Promise<void>((resolve) =>
-          cleanup.server!.close(() => resolve()),
+      // Seed legacy accounts before the employee backfill, then apply it and
+      // all dependent migrations in chronological order.
+      async migrate(database) {
+        const directories = await migrationNames()
+        const employeeMigrationIndex = directories.findIndex((name) =>
+          name.endsWith("employee_management"),
         )
-      await cleanup.prisma?.$disconnect()
-      await cleanup.socket?.stop()
-      await database.close()
-      if (originalUrl === undefined) delete process.env.DATABASE_URL
-      else process.env.DATABASE_URL = originalUrl
-      if (originalDirectUrl === undefined) delete process.env.DIRECT_URL
-      else process.env.DIRECT_URL = originalDirectUrl
-      if (originalPoolMax === undefined) delete process.env.DATABASE_POOL_MAX
-      else process.env.DATABASE_POOL_MAX = originalPoolMax
-      if (originalJwtSecret === undefined) delete process.env.JWT_SECRET
-      else process.env.JWT_SECRET = originalJwtSecret
-    })
-    await database.waitReady
-    const migrations = new URL("../prisma/migrations/", import.meta.url)
-    const directories = (await readdir(migrations))
-      .filter((name) => /^\d/.test(name))
-      .sort()
-    const employeeMigrationIndex = directories.findIndex((name) =>
-      name.endsWith("employee_management"),
-    )
-    assert.notEqual(employeeMigrationIndex, -1)
-    // Seed legacy accounts before the employee backfill, then apply it and
-    // all dependent migrations in chronological order.
-    for (const name of directories.slice(0, employeeMigrationIndex)) {
-      await database.exec(
-        await readFile(new URL(`${name}/migration.sql`, migrations), "utf8"),
-      )
-    }
-    for (const [id, role] of [
-      ["admin", "ADMIN"],
-      ["superadmin", "SUPERADMIN"],
-      ["staff", "STAFF"],
-      ["user", "USER"],
-      ["link-target", "USER"],
-    ]) {
-      await database.query(
-        'INSERT INTO "User" (id,email,"fullName","passwordHash",role,"updatedAt") VALUES ($1,$2,$3,$4,$5,NOW())',
-        [
-          id,
-          `${id}@example.com`,
-          `${id} Person`,
-          "unchanged-password-hash",
-          role,
-        ],
-      )
-    }
-    await database.exec(`INSERT INTO "Department" (id,name,"headId","updatedAt") VALUES ('product','Product','staff',NOW()),('operations','Operations',NULL,NOW());
+        assert.notEqual(employeeMigrationIndex, -1)
+        for (const name of directories.slice(0, employeeMigrationIndex))
+          await database.exec(await readMigration(name))
+        for (const [id, role] of [
+          ["admin", "ADMIN"],
+          ["superadmin", "SUPERADMIN"],
+          ["staff", "STAFF"],
+          ["user", "USER"],
+          ["link-target", "USER"],
+        ]) {
+          await database.query(
+            'INSERT INTO "User" (id,email,"fullName","passwordHash",role,"updatedAt") VALUES ($1,$2,$3,$4,$5,NOW())',
+            [
+              id,
+              `${id}@example.com`,
+              `${id} Person`,
+              "unchanged-password-hash",
+              role,
+            ],
+          )
+        }
+        await database.exec(`INSERT INTO "Department" (id,name,"headId","updatedAt") VALUES ('product','Product','staff',NOW()),('operations','Operations',NULL,NOW());
     INSERT INTO "Team" (id,name,"departmentId","updatedAt") VALUES ('product-team','Design','product',NOW()),('operations-team','Support','operations',NOW());
     UPDATE "User" SET "departmentId"='product' WHERE id='staff';`)
-    for (const name of directories.slice(employeeMigrationIndex)) {
-      await database.exec(
-        await readFile(new URL(`${name}/migration.sql`, migrations), "utf8"),
-      )
-    }
-    const socket = new PGLiteSocketServer({
-      db: database,
-      port: 0,
-      host: "127.0.0.1",
+        for (const name of directories.slice(employeeMigrationIndex))
+          await database.exec(await readMigration(name))
+      },
     })
-    cleanup.socket = socket
-    await socket.start()
-    process.env.DATABASE_URL = `postgresql://postgres:postgres@${socket.getServerConn()}/postgres?sslmode=disable`
-    process.env.DATABASE_POOL_MAX = "1"
-    delete process.env.DIRECT_URL
-    const prisma = getPrisma()!
-    cleanup.prisma = prisma
+    const base = `${origin}/api`
     const tokens = new Map<string, string>()
     for (const id of ["admin", "superadmin", "staff", "user"]) {
       const user = await prisma.user.findUniqueOrThrow({ where: { id } })
       tokens.set(id, (await issueSession(user)).token)
     }
-    const server = createApp().listen(0, "127.0.0.1")
-    cleanup.server = server
-    await new Promise<void>((resolve) => server.once("listening", resolve))
-    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`
     async function request(
       path: string,
       method = "GET",
@@ -1624,6 +1570,7 @@ test(
           null,
         )
 
+        // Leadership candidates need a linked ACTIVE employee record.
         await prisma.user.create({
           data: {
             id: "eligible-team-lead",
@@ -1631,6 +1578,12 @@ test(
             fullName: "Eligible Team Lead",
             passwordHash: "test-only-hash",
             role: "STAFF",
+            employee: {
+              create: {
+                employeeId: "EXP-eligible-team-lead",
+                fullName: "Eligible Team Lead",
+              },
+            },
           },
         })
         const created = await json(

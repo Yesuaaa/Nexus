@@ -22,6 +22,10 @@ const validDraft = {
 test("employee validation accepts the same identity fields as account creation", () => {
   assert.deepEqual(validateEmployeeDraft(validDraft), {})
   assert.deepEqual(
+    validateEmployeeDraft({ ...validDraft, email: "maria@example.org" }),
+    {},
+  )
+  assert.deepEqual(
     validateEmployeeDraft({
       ...validDraft,
       email: "",
@@ -47,7 +51,7 @@ test("employee validation returns field-specific identity and employment errors"
     ...validDraft,
     employeeId: "bad id",
     fullName: "Jane123",
-    email: "jane@example.org",
+    email: "jane..doe@example.com",
     contactNumber: "07123456789",
     position: "x".repeat(101),
     startDate: "2026-02-30",

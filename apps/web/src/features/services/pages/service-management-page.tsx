@@ -1,17 +1,20 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import dynamic from "next/dynamic"
 import { SidePanelLoading } from "@/components/ui/panel-loading"
 import { sileo } from "@/lib/toast"
 import { PlusIcon } from "@/components/layout/icons"
+import { PageHeader, PageHeaderButton } from "@/components/layout/page-header"
 import { contentClass, focusRing } from "@/components/layout/styles"
+import { Button } from "@/components/ui/button"
 import { hasPermission, Permissions } from "@/features/auth/model/permissions"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import {
   listDepartments,
   type Department,
 } from "@/features/departments/api/departments-api"
+import { useAsyncResource } from "@/lib/use-async-resource"
 import { cn } from "@/lib/utils"
 import {
   changeServiceStatus,
@@ -25,40 +28,60 @@ import { DeleteServiceDialog } from "../components/delete-service-dialog"
 import { ServiceKpiCards } from "../components/service-kpi-cards"
 import { ServiceStatusDialog } from "../components/service-status-dialog"
 import { ServiceTable } from "../components/service-table"
+import { errorMessage } from "@/lib/error-message"
 
 const ServiceFormDialog = dynamic(
   () =>
     import("../components/service-form-dialog").then(
       (module) => module.ServiceFormDialog,
     ),
-  { loading: () => <SidePanelLoading variant="edge" /> },
+  { loading: () => <SidePanelLoading /> },
 )
 const ServiceDetailsDialog = dynamic(
   () =>
     import("../components/service-details-dialog").then(
       (module) => module.ServiceDetailsDialog,
     ),
-  { loading: () => <SidePanelLoading variant="edge" /> },
+  { loading: () => <SidePanelLoading /> },
 )
 const PricingTemplatesDialog = dynamic(
   () =>
     import("../components/pricing-templates-dialog").then(
       (module) => module.PricingTemplatesDialog,
     ),
-  { loading: () => <SidePanelLoading variant="edge" /> },
+  { loading: () => <SidePanelLoading /> },
 )
+
+type Catalog = {
+  services: Service[]
+  departments: Department[]
+  pricingTemplates: PricingTemplate[]
+}
+
+const emptyCatalog: Catalog = {
+  services: [],
+  departments: [],
+  pricingTemplates: [],
+}
+
+async function loadCatalog(signal: AbortSignal): Promise<Catalog> {
+  const [services, departments, pricingTemplates] = await Promise.all([
+    listServices(signal),
+    listDepartments(),
+    listPricingTemplates(signal),
+  ])
+  return { services, departments, pricingTemplates }
+}
 
 export function ServiceManagementPage() {
   const actor = usePortalAccount()
   const canManage = hasPermission(actor, Permissions.SERVICES_MANAGE)
-  const [services, setServices] = useState<Service[]>([])
-  const [departments, setDepartments] = useState<Department[]>([])
-  const [pricingTemplates, setPricingTemplates] = useState<PricingTemplate[]>(
-    [],
-  )
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
-  const [revision, setRevision] = useState(0)
+  const catalog = useAsyncResource(loadCatalog, [], {
+    fallbackError: "Couldn't load services. Please try again.",
+  })
+  const { loading, error, setData } = catalog
+  const { services, departments, pricingTemplates } =
+    catalog.data ?? emptyCatalog
   const [formTarget, setFormTarget] = useState<Service | "create" | null>(null)
   const [detailsTarget, setDetailsTarget] = useState<Service | null>(null)
   const [statusTarget, setStatusTarget] = useState<Service | null>(null)
@@ -70,6 +93,21 @@ export function ServiceManagementPage() {
   const [templateManagerId, setTemplateManagerId] = useState<string | null>(
     null,
   )
+
+  function setServices(update: (current: Service[]) => Service[]) {
+    setData((current) => {
+      const value = current ?? emptyCatalog
+      return { ...value, services: update(value.services) }
+    })
+  }
+  function setPricingTemplates(
+    update: (current: PricingTemplate[]) => PricingTemplate[],
+  ) {
+    setData((current) => {
+      const value = current ?? emptyCatalog
+      return { ...value, pricingTemplates: update(value.pricingTemplates) }
+    })
+  }
 
   function savePricingTemplate(saved: PricingTemplate) {
     setPricingTemplates((current) =>
@@ -85,32 +123,6 @@ export function ServiceManagementPage() {
       ),
     )
   }
-
-  useEffect(() => {
-    let active = true
-    Promise.all([listServices(), listDepartments(), listPricingTemplates()])
-      .then(([serviceData, departmentData, pricingTemplateData]) => {
-        if (!active) return
-        setServices(serviceData)
-        setDepartments(departmentData)
-        setPricingTemplates(pricingTemplateData)
-        setError("")
-      })
-      .catch((caught: unknown) => {
-        if (!active) return
-        setError(
-          caught instanceof Error
-            ? caught.message
-            : "Couldn't load services. Please try again.",
-        )
-      })
-      .finally(() => {
-        if (active) setLoading(false)
-      })
-    return () => {
-      active = false
-    }
-  }, [revision])
 
   function saveInList(saved: Service) {
     setServices((current) => {
@@ -157,9 +169,10 @@ export function ServiceManagementPage() {
       })
     } catch (caught) {
       setStatusError(
-        caught instanceof Error
-          ? caught.message
-          : "Couldn't update the service status. Please try again.",
+        errorMessage(
+          caught,
+          "Couldn't update the service status. Please try again.",
+        ),
       )
     } finally {
       setStatusSaving(false)
@@ -183,9 +196,7 @@ export function ServiceManagementPage() {
       })
     } catch (caught) {
       setDeleteError(
-        caught instanceof Error
-          ? caught.message
-          : "Couldn't delete the service. Please try again.",
+        errorMessage(caught, "Couldn't delete the service. Please try again."),
       )
     } finally {
       setDeleting(false)
@@ -197,46 +208,33 @@ export function ServiceManagementPage() {
       className={cn(contentClass, "p-[clamp(16px,2.1vw,32px)]")}
       aria-label="Service management"
     >
-      <header className="-mx-[clamp(16px,2.1vw,32px)] flex items-center justify-between gap-6 border-b border-[#eceef1] px-[clamp(16px,2.1vw,32px)] pt-0.5 pb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-4 max-[560px]:pb-[18px]">
-        <div>
-          <h1
-            id="service-management-heading"
-            tabIndex={-1}
-            className="m-0 text-[clamp(21px,2vw,25px)] leading-[1.25] font-[650] tracking-[-0.03em] text-foreground"
-          >
-            Service Management
-          </h1>
-          <p className="mt-[5px] mb-0 text-xs leading-[1.45] text-[#738096]">
-            Create and manage company services and assign responsible
-            departments.
-          </p>
-        </div>
-        {canManage && (
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              disabled={loading || Boolean(error)}
-              className={cn(
-                "inline-flex min-h-[34px] cursor-pointer items-center justify-center rounded-lg border border-[#d7e0ee] px-[13px] text-xs font-semibold whitespace-nowrap text-[#24437e] hover:bg-[#f1f5fc] disabled:cursor-not-allowed disabled:opacity-50",
-                focusRing,
-              )}
-              onClick={() => setTemplateManagerId("")}
-            >
-              Pricing Templates
-            </button>
-            <button
-              type="button"
-              className={cn(
-                "inline-flex min-h-[34px] flex-none cursor-pointer items-center justify-center gap-[7px] rounded-lg border border-transparent bg-[#203f8c] px-[13px] text-xs leading-[1.2] font-semibold whitespace-nowrap text-white transition-colors hover:bg-[#172f70]",
-                focusRing,
-              )}
-              onClick={() => setFormTarget("create")}
-            >
-              <PlusIcon width="14" height="14" /> Create Service
-            </button>
-          </div>
-        )}
-      </header>
+      <PageHeader
+        headingId="service-management-heading"
+        title="Service Management"
+        description="Create and manage company services and assign responsible departments."
+        actions={
+          canManage && (
+            <>
+              <Button
+                type="button"
+                variant="brandOutline"
+                size="header"
+                disabled={loading || Boolean(error)}
+                className={cn("cursor-pointer", focusRing)}
+                onClick={() => setTemplateManagerId("")}
+              >
+                Pricing Templates
+              </Button>
+              <PageHeaderButton
+                type="button"
+                onClick={() => setFormTarget("create")}
+              >
+                <PlusIcon width="14" height="14" /> Create Service
+              </PageHeaderButton>
+            </>
+          )
+        }
+      />
 
       <div className="mt-[18px] max-[560px]:mt-[14px]">
         <ServiceKpiCards
@@ -264,10 +262,7 @@ export function ServiceManagementPage() {
             setDeleteError("")
             setDeleteTarget(service)
           }}
-          onRetry={() => {
-            setLoading(true)
-            setRevision((current) => current + 1)
-          }}
+          onRetry={catalog.retry}
         />
       </section>
 

@@ -2,9 +2,9 @@ import { useDatePreferences } from "@/features/settings/providers/preferences-pr
 import { Eye } from "lucide-react"
 import type { ReactNode } from "react"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
-import { Button } from "@/components/ui/button"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import {
+  DataTableErrorRow,
   ResponsiveDataTable,
   ResponsiveDataTableBody,
   ResponsiveDataTableCell,
@@ -61,10 +61,7 @@ export function BookedServicesTable({
     <ResponsiveDataTable label="Booked services" aria-busy={loading}>
       <ResponsiveDataTableHeader
         className="@max-[950px]:sr-only"
-        rowClassName={cn(
-          bookingGrid,
-          "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground",
-        )}
+        rowClassName={bookingGrid}
       >
         {[
           "Service / Reference",
@@ -79,29 +76,20 @@ export function BookedServicesTable({
           </ResponsiveDataTableColumnHeader>
         ))}
       </ResponsiveDataTableHeader>
-      {initialLoading || error ? (
+      {initialLoading ? (
         <ResponsiveDataTableBody>
           <ResponsiveDataTableRow>
             <ResponsiveDataTableCell
               aria-colspan={6}
               className="grid min-h-[150px] place-content-center gap-3 p-6 text-center text-xs text-[#7183a2]"
             >
-              {initialLoading ? (
-                <span role="status">Loading booked services…</span>
-              ) : (
-                <div role="alert" className="grid justify-items-center gap-3">
-                  <p className="m-0">{error}</p>
-                  <Button
-                    variant="outline"
-                    className="h-auto min-h-0 border-0 bg-transparent p-0 font-bold text-[#244993] shadow-none hover:bg-transparent"
-                    onClick={onRetry}
-                  >
-                    Try again
-                  </Button>
-                </div>
-              )}
+              <span role="status">Loading booked services…</span>
             </ResponsiveDataTableCell>
           </ResponsiveDataTableRow>
+        </ResponsiveDataTableBody>
+      ) : error ? (
+        <ResponsiveDataTableBody>
+          <DataTableErrorRow message={error} onRetry={onRetry} colSpan={6} />
         </ResponsiveDataTableBody>
       ) : (
         <AnimatedSlotGridBody

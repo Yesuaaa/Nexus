@@ -14,6 +14,7 @@ import {
   Trash2,
 } from "lucide-react"
 import { focusRing } from "@/components/layout/styles"
+import { EmptyState } from "@/components/ui/empty-state"
 import { FormInput } from "@/components/ui/form-input"
 import {
   DropdownMenu,
@@ -53,6 +54,8 @@ import {
 import { ServiceIcon, serviceIconOptions } from "./service-icon"
 import { needsAmount, PriceFields } from "./service-price-fields"
 import { serviceActionsTriggerId } from "./service-row-actions"
+import { errorMessage } from "@/lib/error-message"
+import { RequiredMark } from "@/components/ui/required-mark"
 
 const fieldClass = "grid min-w-0 gap-1.5"
 const labelClass = "text-xs font-semibold"
@@ -490,9 +493,7 @@ export function ServiceFormDialog({
       panel.close(() => onSaved(saved))
     } catch (caught) {
       showError(
-        caught instanceof Error
-          ? caught.message
-          : "Couldn't save the service. Please try again.",
+        errorMessage(caught, "Couldn't save the service. Please try again."),
       )
     } finally {
       setSubmitting(false)
@@ -658,8 +659,7 @@ export function ServiceFormDialog({
                   <div className="grid content-start gap-4">
                     <div className={fieldClass}>
                       <label className={labelClass} htmlFor="service-name">
-                        Service Name{" "}
-                        <strong className="text-[#d04b56]">*</strong>
+                        Service Name <RequiredMark />
                       </label>
                       <FormInput
                         id="service-name"
@@ -675,8 +675,7 @@ export function ServiceFormDialog({
                         className={labelClass}
                         htmlFor="service-description"
                       >
-                        Description{" "}
-                        <strong className="text-[#d04b56]">*</strong>
+                        Description <RequiredMark />
                       </label>
                       <textarea
                         id="service-description"
@@ -693,8 +692,7 @@ export function ServiceFormDialog({
                           className={labelClass}
                           htmlFor="service-image-alt"
                         >
-                          Image Alternative Text{" "}
-                          <strong className="text-[#d04b56]">*</strong>
+                          Image Alternative Text <RequiredMark />
                         </label>
                         <FormInput
                           id="service-image-alt"
@@ -740,8 +738,7 @@ export function ServiceFormDialog({
                   </div>
                   <div className={fieldClass}>
                     <label className={labelClass} htmlFor="service-departments">
-                      Responsible Departments{" "}
-                      <strong className="text-[#d04b56]">*</strong>
+                      Responsible Departments <RequiredMark />
                     </label>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -828,9 +825,10 @@ export function ServiceFormDialog({
                   }
                 />
                 {keyBenefits.length === 0 && (
-                  <p className="m-0 rounded-lg border border-dashed border-[#d6dfec] p-4 text-center text-xs text-[#738096]">
-                    No key benefits configured yet.
-                  </p>
+                  <EmptyState
+                    size="sm"
+                    description="No key benefits configured yet."
+                  />
                 )}
                 {keyBenefits.map((benefit, index) => (
                   <article key={benefit.id} className={cardClass}>
@@ -1191,9 +1189,7 @@ export function ServiceFormDialog({
                   }
                 />
                 {packages.length === 0 && (
-                  <p className="m-0 rounded-lg border border-dashed border-[#d6dfec] p-4 text-center text-xs text-[#738096]">
-                    No packages configured.
-                  </p>
+                  <EmptyState size="sm" description="No packages configured." />
                 )}
                 {packages.map((servicePackage, index) => (
                   <article key={servicePackage.id} className={cardClass}>

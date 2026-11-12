@@ -7,6 +7,7 @@ import {
   setEmployeeLoginStatus,
   type Employee,
 } from "../api/employees-api"
+import { errorMessage } from "@/lib/error-message"
 
 export type EmployeeLoginAction =
   "deactivate" | "reactivate" | "delete" | "permanent"
@@ -114,9 +115,7 @@ export function EmployeeLoginActionDialog({
           })
           .catch((reason: unknown) => {
             setError(
-              reason instanceof Error
-                ? reason.message
-                : "Couldn't update this login account.",
+              errorMessage(reason, "Couldn't update this login account."),
             )
           })
           .finally(() => onPendingChange(false))

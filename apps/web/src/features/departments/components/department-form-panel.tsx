@@ -1,5 +1,5 @@
 import { Form } from "@/components/ui/form"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { focusRing } from "@/components/layout/styles"
 import {
   autoDepartmentColor,
@@ -8,6 +8,7 @@ import {
   resolveDepartmentColor,
 } from "@/components/ui/department-pill"
 import { Pill } from "@/components/ui/pill"
+import { RequiredMark } from "@/components/ui/required-mark"
 import {
   SidePanel,
   SidePanelAlert,
@@ -35,6 +36,10 @@ import {
   type EligibleHead,
 } from "../api/departments-api"
 import type { DepartmentColor } from "../model/department-color"
+import { errorMessage } from "@/lib/error-message"
+import { useAsyncResource } from "@/lib/use-async-resource"
+
+const noHeads: EligibleHead[] = []
 
 const fieldClass = "grid min-w-0 gap-1.5"
 const labelClass = "text-xs font-semibold"
@@ -67,17 +72,17 @@ export function DepartmentFormPanel({
   )
   // Once the user picks a color manually, stop following the name.
   const [colorTouched, setColorTouched] = useState(isEditing)
-  const [eligibleHeads, setEligibleHeads] = useState<EligibleHead[]>([])
-  const [loadingHeads, setLoadingHeads] = useState(true)
+  const departmentId = department?.id ?? null
+  // Scoped to this department (or to unassigned staff when creating), so the
+  // picker only offers people the API will accept as head.
+  const heads = useAsyncResource<EligibleHead[]>(
+    (signal) => listEligibleHeads(departmentId, signal),
+    [departmentId],
+  )
+  const eligibleHeads = heads.data ?? noHeads
+  const loadingHeads = heads.loading
   const [error, setError] = useState("")
   const [submitting, setSubmitting] = useState(false)
-
-  useEffect(() => {
-    listEligibleHeads()
-      .then(setEligibleHeads)
-      .catch(() => {})
-      .finally(() => setLoadingHeads(false))
-  }, [])
 
   function syncColor(nextName: string) {
     if (!colorTouched) setColor(autoDepartmentColor(nextName))
@@ -133,7 +138,7 @@ export function DepartmentFormPanel({
       }
       panel.close(onSaved)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to save department")
+      setError(errorMessage(err, "Failed to save department"))
     } finally {
       setSubmitting(false)
     }
@@ -199,7 +204,7 @@ export function DepartmentFormPanel({
 
             <div className={fieldClass}>
               <label className={labelClass} htmlFor="dept-name">
-                Department Name *
+                Department Name <RequiredMark />
               </label>
               <input
                 id="dept-name"
@@ -284,9 +289,6 @@ export function DepartmentFormPanel({
                     {eligibleHeads.map((head) => (
                       <SelectItem key={head.id} value={head.id}>
                         {head.fullName || head.email}
-                        {head.headOf && head.headOf.id !== department?.id
-                          ? ` [Heads ${head.headOf.name}]`
-                          : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>

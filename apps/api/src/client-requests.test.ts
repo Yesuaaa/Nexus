@@ -1,18 +1,14 @@
 import assert from "node:assert/strict"
-import { randomBytes, randomUUID } from "node:crypto"
-import { readdir, readFile } from "node:fs/promises"
-import type { AddressInfo } from "node:net"
+import { randomUUID } from "node:crypto"
 import { test } from "node:test"
 import { PGlite } from "@electric-sql/pglite"
-import { PGLiteSocketServer } from "@electric-sql/pglite-socket"
-import { createApp } from "./app.js"
 import {
   Role,
   ServiceRequestStatus,
   type User,
 } from "./generated/prisma/client.js"
-import { getPrisma } from "./lib/db.js"
 import { issueSession } from "./features/auth/auth.service.js"
+import { readMigration, startPgliteApp } from "./test/pglite-app.js"
 
 test("request lifecycle migration preserves legacy records and supports already upgraded databases", async () => {
   const db = new PGlite()
@@ -22,12 +18,8 @@ test("request lifecycle migration preserves legacy records and supports already 
       CREATE TABLE requests (id integer, status "ServiceRequestStatus" DEFAULT 'PENDING');
       INSERT INTO requests VALUES (1, 'PENDING'), (2, 'IN_PROGRESS'), (3, 'COMPLETED'), (4, 'CANCELLED');
     `)
-    const sql = await readFile(
-      new URL(
-        "../prisma/migrations/20261030220000_align_service_request_statuses/migration.sql",
-        import.meta.url,
-      ),
-      "utf8",
+    const sql = await readMigration(
+      "20261030220000_align_service_request_statuses",
     )
     await db.exec(sql)
     await db.exec(sql)
@@ -62,36 +54,19 @@ test("combined inbox and client lifecycle migrations preserve status history and
       INSERT INTO "ServiceRequest" VALUES (1, 'PENDING'), (2, 'IN_PROGRESS'), (3, 'COMPLETED');
       INSERT INTO "ServiceRequestHistory" VALUES (1, NULL, 'PENDING'), (2, 'PENDING', 'IN_PROGRESS'), (3, 'IN_PROGRESS', 'COMPLETED');
     `)
-    const migrations = new URL("../prisma/migrations/", import.meta.url)
     await db.exec(
-      await readFile(
-        new URL(
-          "20261030153000_department_request_inbox/migration.sql",
-          migrations,
-        ),
-        "utf8",
-      ),
+      await readMigration("20261030153000_department_request_inbox"),
     )
     await db.exec(
       `INSERT INTO "ServiceRequest" VALUES (4, 'UNDER_REVIEW'); INSERT INTO "ServiceRequestHistory" VALUES (4, 'IN_PROGRESS', 'UNDER_REVIEW');`,
     )
-    const reconciliation = await readFile(
-      new URL(
-        "20261030215900_reconcile_inbox_request_statuses/migration.sql",
-        migrations,
-      ),
-      "utf8",
+    const reconciliation = await readMigration(
+      "20261030215900_reconcile_inbox_request_statuses",
     )
     await db.exec(reconciliation)
     await db.exec(reconciliation)
     await db.exec(
-      await readFile(
-        new URL(
-          "20261030220000_align_service_request_statuses/migration.sql",
-          migrations,
-        ),
-        "utf8",
-      ),
+      await readMigration("20261030220000_align_service_request_statuses"),
     )
     await db.exec(
       `INSERT INTO "ServiceRequest" (id) VALUES (5); INSERT INTO "ServiceRequestHistory" (id) VALUES (5);`,
@@ -132,51 +107,8 @@ test(
   "Client portal service request submission and dynamic requirements validation",
   { timeout: 90_000 },
   async (t) => {
-    const original = {
-      DATABASE_URL: process.env.DATABASE_URL,
-      DIRECT_URL: process.env.DIRECT_URL,
-      DATABASE_POOL_MAX: process.env.DATABASE_POOL_MAX,
-      JWT_SECRET: process.env.JWT_SECRET,
-    }
-    process.env.JWT_SECRET = randomBytes(32).toString("base64url")
-    const db = new PGlite()
-    const socket = new PGLiteSocketServer({ db, port: 0, host: "127.0.0.1" })
-    const cleanup: {
-      prisma?: ReturnType<typeof getPrisma>
-      server?: ReturnType<ReturnType<typeof createApp>["listen"]>
-    } = {}
-
-    t.after(async () => {
-      if (cleanup.server) {
-        await new Promise<void>((resolve) =>
-          cleanup.server!.close(() => resolve()),
-        )
-      }
-      await cleanup.prisma?.$disconnect()
-      await socket.stop()
-      await db.close()
-      for (const [key, value] of Object.entries(original)) {
-        if (value === undefined) delete process.env[key]
-        else process.env[key] = value
-      }
-    })
-
-    await db.waitReady
-    const migrations = new URL("../prisma/migrations/", import.meta.url)
-    for (const name of (await readdir(migrations))
-      .filter((name) => /^\d/.test(name))
-      .sort()) {
-      await db.exec(
-        await readFile(new URL(`${name}/migration.sql`, migrations), "utf8"),
-      )
-    }
-
-    await socket.start()
-    process.env.DATABASE_URL = `postgresql://postgres:postgres@${socket.getServerConn()}/postgres?sslmode=disable`
-    process.env.DATABASE_POOL_MAX = "1"
-    delete process.env.DIRECT_URL
-    const prisma = getPrisma()!
-    cleanup.prisma = prisma
+    const { prisma, origin } = await startPgliteApp(t)
+    const base = `${origin}/api/client`
 
     // Seed roles and sessions
     const tokens = new Map<string, string>()
@@ -295,11 +227,6 @@ test(
         isActive: false,
       },
     })
-
-    const server = createApp().listen(0, "127.0.0.1")
-    cleanup.server = server
-    await new Promise<void>((resolve) => server!.once("listening", resolve))
-    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/client`
 
     const request = (
       path: string,

@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react"
-import { ConversationAvatar } from "@/features/request-conversations/components/conversation-avatar"
+import { Avatar } from "@/components/ui/avatar"
 import { focusRing } from "@/components/layout/styles"
 import { DepartmentPill } from "@/components/ui/department-pill"
 import { Pill } from "@/components/ui/pill"
@@ -18,27 +17,13 @@ import {
 } from "@/components/ui/side-panel"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
+import { getEmployee, type Employee } from "../api/employees-api"
 import {
-  getEmployee,
-  type Employee,
-  type EmploymentStatus,
-  type EmploymentType,
-} from "../api/employees-api"
-
-const typeNames: Record<EmploymentType, string> = {
-  FULL_TIME: "Full time",
-  PART_TIME: "Part time",
-  CONTRACT: "Contract",
-  INTERN: "Intern",
-}
-const statusStyles: Record<
-  EmploymentStatus,
-  { label: string; className: string }
-> = {
-  ACTIVE: { label: "Active", className: "bg-[#dcf5e5] text-[#19703a]" },
-  ON_LEAVE: { label: "On leave", className: "bg-[#fff3df] text-[#805316]" },
-  INACTIVE: { label: "Inactive", className: "bg-[#fde4ea] text-[#b4234d]" },
-}
+  employmentStatusLabels,
+  employmentStatusTones,
+  employmentTypeLabels,
+} from "../model/employment"
+import { useAsyncResource } from "@/lib/use-async-resource"
 
 function DetailsSkeleton() {
   return (
@@ -75,37 +60,15 @@ export function EmployeeDetailsDrawer({
   onManageDepartment?: (departmentId: string) => void
 }) {
   const panel = useSidePanel(onClose)
-  const [employee, setEmployee] = useState<Employee | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState("")
-  const [revision, setRevision] = useState(0)
+  const resource = useAsyncResource(
+    (signal) => getEmployee(employeeId, signal),
+    [employeeId],
+    { fallbackError: "Couldn't load this employee." },
+  )
+  const employee = resource.data ?? null
+  const { loading, error: loadError } = resource
 
-  useEffect(() => {
-    let active = true
-    getEmployee(employeeId)
-      .then((item) => {
-        if (active) {
-          setEmployee(item)
-          setLoadError("")
-        }
-      })
-      .catch((reason: unknown) => {
-        if (active)
-          setLoadError(
-            reason instanceof Error
-              ? reason.message
-              : "Couldn't load this employee.",
-          )
-      })
-      .finally(() => {
-        if (active) setLoading(false)
-      })
-    return () => {
-      active = false
-    }
-  }, [employeeId, revision])
-
-  const status = employee?.status ? statusStyles[employee.status] : null
+  const status = employee?.status ?? null
 
   return (
     <SidePanel
@@ -119,7 +82,7 @@ export function EmployeeDetailsDrawer({
       <SidePanelHeader
         leading={
           employee ? (
-            <ConversationAvatar
+            <Avatar
               name={employee.fullName}
               imageUrl={employee.imageUrl}
               className="size-11"
@@ -136,7 +99,11 @@ export function EmployeeDetailsDrawer({
           !employee && loading ? (
             <Skeleton className="h-6 w-40" />
           ) : (
-            status && <Pill className={status.className}>{status.label}</Pill>
+            status && (
+              <Pill tone={employmentStatusTones[status]}>
+                {employmentStatusLabels[status]}
+              </Pill>
+            )
           )
         }
         description={
@@ -152,13 +119,7 @@ export function EmployeeDetailsDrawer({
         {loading ? (
           <DetailsSkeleton />
         ) : loadError ? (
-          <SidePanelError
-            message={loadError}
-            onRetry={() => {
-              setLoading(true)
-              setRevision((value) => value + 1)
-            }}
-          />
+          <SidePanelError message={loadError} onRetry={resource.retry} />
         ) : (
           employee && (
             <>
@@ -200,10 +161,12 @@ export function EmployeeDetailsDrawer({
                   <DetailItem label="Position">{employee.position}</DetailItem>
                   <DetailItem label="Employment type">
                     {employee.employmentType
-                      ? typeNames[employee.employmentType]
+                      ? employmentTypeLabels[employee.employmentType]
                       : null}
                   </DetailItem>
-                  <DetailItem label="Status">{status?.label}</DetailItem>
+                  <DetailItem label="Status">
+                    {status && employmentStatusLabels[status]}
+                  </DetailItem>
                   <DetailItem label="Start date">
                     {employee.startDate
                       ? new Date(employee.startDate).toLocaleDateString(

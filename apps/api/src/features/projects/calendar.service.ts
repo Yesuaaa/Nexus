@@ -1,5 +1,6 @@
 import type { Prisma } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
+import { activeAccount } from "../../shared/query/accounts.js"
 import { readWorkPlan } from "../project-workspace/templates.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 
@@ -26,7 +27,7 @@ export type CalendarEvent = {
 export async function listInternalCalendar(userId: string, scope: unknown) {
   const prisma = getPrisma()!
   const user = await prisma.user.findFirst({
-    where: { id: userId, isActive: true, accountDeletedAt: null },
+    where: { id: userId, ...activeAccount },
     select: {
       role: true,
       headOf: { select: { id: true } },

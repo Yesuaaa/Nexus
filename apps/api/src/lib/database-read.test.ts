@@ -1,37 +1,15 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { setTimeout as delay } from "node:timers/promises"
-import { PGlite } from "@electric-sql/pglite"
-import { PGLiteSocketServer } from "@electric-sql/pglite-socket"
 import { Prisma } from "../generated/prisma/client.js"
-import { getPrisma } from "./db.js"
 import { isTemporaryDatabaseError, readTransaction } from "./database-read.js"
+import { startPgliteDatabase } from "../test/pglite-app.js"
 
 test(
   "database reads tolerate latency and retry only temporary failures",
   { timeout: 30_000 },
   async (t) => {
-    const original = {
-      DATABASE_URL: process.env.DATABASE_URL,
-      DIRECT_URL: process.env.DIRECT_URL,
-      DATABASE_POOL_MAX: process.env.DATABASE_POOL_MAX,
-    }
-    const db = new PGlite()
-    const socket = new PGLiteSocketServer({ db, port: 0, host: "127.0.0.1" })
-    await socket.start()
-    process.env.DATABASE_URL = `postgresql://postgres:postgres@${socket.getServerConn()}/postgres?sslmode=disable`
-    process.env.DATABASE_POOL_MAX = "1"
-    delete process.env.DIRECT_URL
-    const prisma = getPrisma()!
-    t.after(async () => {
-      await prisma.$disconnect()
-      await socket.stop()
-      await db.close()
-      for (const [key, value] of Object.entries(original)) {
-        if (value === undefined) delete process.env[key]
-        else process.env[key] = value
-      }
-    })
+    await startPgliteDatabase(t, { migrate: async () => {} })
 
     await t.test(
       "a read can finish beyond Prisma's default five-second deadline",

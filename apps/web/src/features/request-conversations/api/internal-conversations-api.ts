@@ -1,4 +1,5 @@
 import { apiRequest } from "@/features/auth/api/auth-api"
+import type { InternalRole } from "@/features/auth/model/roles"
 import type { RequestMessage } from "./request-conversations-api"
 import type { ProjectConversationDetails } from "../model/project-conversation"
 import type { ProjectDeliverable } from "@/features/project-workspace/api/project-workspace-api"
@@ -8,7 +9,7 @@ export type InternalParticipant = {
   id: string
   fullName: string | null
   email: string
-  role: "STAFF" | "ADMIN" | "SUPERADMIN"
+  role: InternalRole
   position: string | null
   isActive: boolean
   accountDeletedAt: string | null

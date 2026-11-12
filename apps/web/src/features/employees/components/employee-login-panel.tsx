@@ -4,6 +4,7 @@ import { useState } from "react"
 import { KeyRound } from "lucide-react"
 import { Form } from "@/components/ui/form"
 import { PasswordInput } from "@/components/ui/password-input"
+import { RequiredMark } from "@/components/ui/required-mark"
 import {
   DetailItem,
   DetailList,
@@ -17,9 +18,10 @@ import {
   useSidePanel,
 } from "@/components/ui/side-panel"
 import { createEmployeeLogin, type Employee } from "../api/employees-api"
+import { errorMessage } from "@/lib/error-message"
+import { PASSWORD_MIN_LENGTH, passwordIssue } from "@/lib/validation"
 
-const passwordRule =
-  "Use at least 12 characters with uppercase, lowercase, a number, and a special character."
+const passwordRule = `Use at least ${PASSWORD_MIN_LENGTH} characters with uppercase, lowercase, a number, and a special character.`
 
 export function EmployeeLoginPanel({
   employee,
@@ -39,13 +41,7 @@ export function EmployeeLoginPanel({
   async function submit(event: React.FormEvent) {
     event.preventDefault()
     if (pending) return
-    if (
-      password.length < 12 ||
-      !/[A-Z]/.test(password) ||
-      !/[a-z]/.test(password) ||
-      !/[0-9]/.test(password) ||
-      !/[^A-Za-z0-9]/.test(password)
-    ) {
+    if (passwordIssue(password)) {
       setError(passwordRule)
       return
     }
@@ -59,11 +55,7 @@ export function EmployeeLoginPanel({
       await createEmployeeLogin(employee.id, password)
       panel.close(onSaved)
     } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Could not create the login account.",
-      )
+      setError(errorMessage(reason, "Could not create the login account."))
     } finally {
       setPending(false)
     }
@@ -108,9 +100,7 @@ export function EmployeeLoginPanel({
                   className="text-xs font-semibold"
                 >
                   {key === "password" ? "Password" : "Confirm password"}{" "}
-                  <span aria-hidden="true" className="text-[#d04b56]">
-                    *
-                  </span>
+                  <RequiredMark />
                 </label>
                 <PasswordInput
                   id={`login-${key}`}
@@ -125,7 +115,7 @@ export function EmployeeLoginPanel({
                   }
                   className="h-10 rounded-lg border-[#d6dfec] text-sm"
                   required
-                  minLength={12}
+                  minLength={PASSWORD_MIN_LENGTH}
                   maxLength={256}
                   autoComplete="new-password"
                   disabled={pending}

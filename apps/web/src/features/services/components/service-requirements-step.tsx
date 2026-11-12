@@ -16,6 +16,8 @@ import {
   ClipboardList,
 } from "lucide-react"
 import { focusRing } from "@/components/layout/styles"
+import { Alert } from "@/components/ui/alert"
+import { buttonTones } from "@/components/ui/button-variants"
 import { cn } from "@/lib/utils"
 import type { Service } from "../api/services-api"
 import {
@@ -204,13 +206,13 @@ export function ServiceRequirementsStep({
                   )}
                   <div className="mt-1.5 flex items-start justify-between gap-3">
                     {error && (
-                      <p
+                      <Alert
+                        variant="text"
                         id={`${id}-error`}
-                        role="alert"
-                        className="m-0 text-xs leading-5 text-[#b4234d]"
+                        className="leading-5"
                       >
                         {error}
-                      </p>
+                      </Alert>
                     )}
                     <span
                       className="ml-auto shrink-0 text-xs leading-5 text-[#687e9e]"
@@ -246,7 +248,8 @@ export function ServiceRequirementsStep({
                 name="intent"
                 value="continue"
                 className={cn(
-                  "inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border-0 bg-[#294c96] px-5 text-sm font-bold text-white hover:bg-[#203f80] max-[560px]:w-full",
+                  "inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border-0 px-5 text-sm font-bold max-[560px]:w-full",
+                  buttonTones.brand,
                   focusRing,
                 )}
               >

@@ -61,7 +61,11 @@ function DraftForm({
         >
           Cancel
         </Button>
-        <Button className={draftPrimaryButton} disabled={controls.busy}>
+        <Button
+          variant="brand"
+          className={draftPrimaryButton}
+          disabled={controls.busy}
+        >
           {controls.busy ? "Saving…" : label}
         </Button>
       </WorkflowDraftFooter>
@@ -179,7 +183,8 @@ export function WorkflowActionDraft({
               </Button>
               <Button
                 type="button"
-                className={`${workflowButton} min-w-[150px] bg-[#203f8c] text-white hover:bg-[#172f70]`}
+                variant="brand"
+                className={`${workflowButton} min-w-[150px]`}
                 disabled={controls.busy || !canPrepare}
                 onClick={async () => {
                   await controls.act({ type: "PREPARE_QUOTATION" })

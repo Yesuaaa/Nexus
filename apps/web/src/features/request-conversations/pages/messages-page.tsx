@@ -19,6 +19,7 @@ import {
   iconButtonClass,
 } from "@/components/layout/styles"
 import { PanelIcon } from "@/components/layout/icons"
+import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { cn } from "@/lib/utils"
@@ -27,7 +28,7 @@ import {
   type ConversationList,
   type RequestMessage,
 } from "../api/request-conversations-api"
-import { ConversationAvatar } from "../components/conversation-avatar"
+import { Avatar } from "@/components/ui/avatar"
 import {
   ConversationListItem,
   ProjectConversationListItem,
@@ -41,6 +42,8 @@ import {
   type InternalConversationList,
 } from "../api/internal-conversations-api"
 import { orderConversations } from "../model/conversation-groups"
+import { errorMessage } from "@/lib/error-message"
+import { watchVisibleRefresh } from "@/lib/visible-refresh"
 
 const conversationRailStorageKey = "nexus.messages.conversation-rail-collapsed"
 
@@ -257,11 +260,7 @@ function ConversationInbox({
       setError("")
     } catch (reason: unknown) {
       if (signal?.aborted || version !== listVersion.current) return
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Couldn't load conversations.",
-      )
+      setError(errorMessage(reason, "Couldn't load conversations."))
     } finally {
       if (!signal?.aborted && version === listVersion.current) setLoading(false)
     }
@@ -283,9 +282,7 @@ function ConversationInbox({
       } catch (reason: unknown) {
         if (signal?.aborted) return
         setInternalError(
-          reason instanceof Error
-            ? reason.message
-            : "Couldn't load internal conversations.",
+          errorMessage(reason, "Couldn't load internal conversations."),
         )
       } finally {
         if (!signal?.aborted) setInternalLoading(false)
@@ -304,17 +301,13 @@ function ConversationInbox({
       else void refreshConversations(controller.signal)
     }
     const initialRefresh = window.setTimeout(refreshVisible, 0)
-    const timer = setInterval(refreshVisible, 30_000)
-    window.addEventListener("focus", refreshVisible)
-    window.addEventListener("online", refreshVisible)
-    document.addEventListener("visibilitychange", refreshVisible)
+    const stopRefresh = watchVisibleRefresh(refreshVisible, {
+      intervalMs: 30_000,
+    })
     return () => {
       clearTimeout(initialRefresh)
       controller.abort()
-      clearInterval(timer)
-      window.removeEventListener("focus", refreshVisible)
-      window.removeEventListener("online", refreshVisible)
-      document.removeEventListener("visibilitychange", refreshVisible)
+      stopRefresh()
     }
   }, [mode, refreshConversations, refreshInternalConversations])
 
@@ -381,11 +374,7 @@ function ConversationInbox({
       )
       setError("")
     } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Couldn't load more conversations.",
-      )
+      setError(errorMessage(reason, "Couldn't load more conversations."))
     } finally {
       setLoadingMore(false)
     }
@@ -414,9 +403,7 @@ function ConversationInbox({
       setInternalError("")
     } catch (reason) {
       setInternalError(
-        reason instanceof Error
-          ? reason.message
-          : "Couldn't load more internal conversations.",
+        errorMessage(reason, "Couldn't load more internal conversations."),
       )
     } finally {
       setInternalLoadingMore(false)
@@ -455,9 +442,7 @@ function ConversationInbox({
       )
     } catch (reason) {
       setInternalError(
-        reason instanceof Error
-          ? reason.message
-          : "Couldn't open that internal conversation.",
+        errorMessage(reason, "Couldn't open that internal conversation."),
       )
     } finally {
       setCreatingInternal(null)
@@ -734,9 +719,9 @@ function ConversationInbox({
               ),
             )}
           {mode === "requests" && projectChats.error && (
-            <p role="alert" className="p-3 text-xs text-rose-700">
+            <Alert variant="text" className="p-3">
               {projectChats.error}
-            </p>
+            </Alert>
           )}
           {mode === "requests" &&
             !conversationsLoading &&
@@ -818,7 +803,7 @@ function ConversationInbox({
                           "relative mx-auto h-14 w-full max-w-14 justify-center gap-0 px-0 max-[767px]:h-auto max-[767px]:w-full max-[767px]:justify-start max-[767px]:gap-3 max-[767px]:px-3",
                       )}
                     >
-                      <ConversationAvatar
+                      <Avatar
                         name={name}
                         imageUrl={conversation.participant.imageUrl}
                         className="size-9 shrink-0"
@@ -914,7 +899,7 @@ function ConversationInbox({
                       disabled={creatingInternal === contact.id}
                       onClick={() => void openInternalChat(contact.id)}
                     >
-                      <ConversationAvatar
+                      <Avatar
                         name={name}
                         imageUrl={contact.imageUrl}
                         className="size-9 shrink-0"

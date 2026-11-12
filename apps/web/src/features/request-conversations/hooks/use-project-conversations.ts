@@ -7,6 +7,8 @@ import {
 } from "../api/project-conversations-api"
 import type { RequestMessage } from "../api/request-conversations-api"
 import { orderConversations } from "../model/conversation-groups"
+import { errorMessage } from "@/lib/error-message"
+import { watchVisibleRefresh } from "@/lib/visible-refresh"
 
 async function loadPages(
   view: "active" | "archived",
@@ -66,24 +68,15 @@ export function useProjectConversations(
           setState((previous) => ({
             view,
             result: previous.view === view ? previous.result : null,
-            error:
-              reason instanceof Error
-                ? reason.message
-                : "Couldn't load project conversations.",
+            error: errorMessage(reason, "Couldn't load project conversations."),
           }))
         })
     }
     refresh()
-    const timer = window.setInterval(refresh, 15_000)
-    window.addEventListener("focus", refresh)
-    window.addEventListener("online", refresh)
-    document.addEventListener("visibilitychange", refresh)
+    const stopRefresh = watchVisibleRefresh(refresh, { intervalMs: 15_000 })
     return () => {
       controller.abort()
-      clearInterval(timer)
-      window.removeEventListener("focus", refresh)
-      window.removeEventListener("online", refresh)
-      document.removeEventListener("visibilitychange", refresh)
+      stopRefresh()
     }
   }, [enabled, view])
 
@@ -124,10 +117,7 @@ export function useProjectConversations(
       if (!signal.aborted && currentVersion === version.current)
         setState((previous) => ({
           ...previous,
-          error:
-            reason instanceof Error
-              ? reason.message
-              : "Couldn't load more conversations.",
+          error: errorMessage(reason, "Couldn't load more conversations."),
         }))
     } finally {
       setLoadingMore(false)

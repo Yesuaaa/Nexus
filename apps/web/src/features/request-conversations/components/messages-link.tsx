@@ -6,6 +6,7 @@ import { useEffect, useState } from "react"
 import { MessageSquare } from "lucide-react"
 import { iconButtonClass } from "@/components/layout/styles"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
+import { watchVisibleRefresh } from "@/lib/visible-refresh"
 import { listConversations } from "../api/request-conversations-api"
 import { listInternalConversations } from "../api/internal-conversations-api"
 import { listProjectConversations } from "../api/project-conversations-api"
@@ -63,20 +64,15 @@ function AccountMessagesLink({
       ])
       loading = false
     }
-    function refreshVisible() {
-      if (document.visibilityState === "visible") void refresh()
-    }
     window.addEventListener(unreadMessagesEvent, update)
-    document.addEventListener("visibilitychange", refreshVisible)
-    window.addEventListener("focus", refreshVisible)
     void refresh()
-    const timer = window.setInterval(refreshVisible, 30_000)
+    const stopRefresh = watchVisibleRefresh(() => void refresh(), {
+      intervalMs: 30_000,
+    })
     return () => {
       controller.abort()
-      clearInterval(timer)
+      stopRefresh()
       window.removeEventListener(unreadMessagesEvent, update)
-      document.removeEventListener("visibilitychange", refreshVisible)
-      window.removeEventListener("focus", refreshVisible)
     }
   }, [internal, projects, inboxKind])
 

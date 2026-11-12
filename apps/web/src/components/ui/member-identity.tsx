@@ -1,4 +1,5 @@
 import type { ReactNode } from "react"
+import { getInitials } from "@/lib/initials"
 
 export type MemberIdentityData = {
   fullName: string | null
@@ -27,7 +28,7 @@ export function MemberIdentity({
         className="grid size-8 flex-none place-items-center rounded-full bg-[#eef0f3] text-xs font-medium text-[#65718a]"
         aria-hidden="true"
       >
-        {(name[0] || "E").toUpperCase()}
+        {getInitials(name) || "E"}
       </span>
       <div className="min-w-0">
         <p className="m-0 flex min-w-0 items-center gap-1.5 text-xs font-medium">

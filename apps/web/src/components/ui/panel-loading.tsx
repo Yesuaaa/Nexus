@@ -62,33 +62,14 @@ function PanelBodySkeleton() {
 }
 
 /**
- * Placeholder shown while a lazily loaded side panel downloads.
- * `edge` matches full-height panels attached to the right edge;
- * `floating` matches the inset card-style drawers.
+ * Placeholder shown while a lazily loaded side panel downloads; matches the
+ * full-height SidePanel attached to the right edge.
  */
-export function SidePanelLoading({
-  variant = "floating",
-}: {
-  variant?: "edge" | "floating"
-}) {
+export function SidePanelLoading() {
   return (
     <div className="fixed inset-0 z-50">
-      <div
-        className={cn(
-          "absolute inset-0",
-          variant === "edge"
-            ? "bg-[rgb(13_28_57_/_18%)]"
-            : "bg-[rgb(13_28_57_/_40%)]",
-        )}
-      />
-      <div
-        className={cn(
-          "absolute flex flex-col overflow-hidden bg-background",
-          variant === "edge"
-            ? "inset-y-0 right-0 w-[min(600px,100vw)] border-l border-[#dedede] shadow-[-12px_0_40px_rgb(18_36_73_/_12%)]"
-            : "top-[15px] right-[15px] h-[calc(100dvh-30px)] w-[min(600px,calc(100vw-30px))] rounded-[13px] border border-[#dedede] shadow-[0_16px_60px_rgb(18_36_73_/_18%)] max-[560px]:inset-0 max-[560px]:h-dvh max-[560px]:w-full max-[560px]:rounded-none max-[560px]:border-0",
-        )}
-      >
+      <div className="absolute inset-0 bg-[rgb(13_28_57_/_18%)]" />
+      <div className="absolute inset-y-0 right-0 flex w-[min(600px,100vw)] flex-col overflow-hidden border-l border-[#dedede] bg-background shadow-[-12px_0_40px_rgb(18_36_73_/_12%)] max-[560px]:border-l-0">
         <LoadingStatus />
         <PanelBodySkeleton />
       </div>

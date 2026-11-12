@@ -6,7 +6,6 @@ import { WorkloadWeekInput } from "../components/workload-week-input"
 import { CapacityFields } from "../components/capacity-fields"
 import { WorkloadRowActions } from "../components/workload-row-actions"
 import { WorkloadDetailsDrawer } from "../components/workload-details-drawer"
-import { BriefcaseBusiness, Trash2 } from "lucide-react"
 import {
   panelAssignButton,
   panelDangerButton,
@@ -15,7 +14,6 @@ import {
   panelSecondaryButton,
   panelSelectTrigger,
 } from "@/components/ui/panel-styles"
-import { WorkloadDialog } from "../components/workload-dialog"
 import { WorkloadKpiCards } from "../components/workload-kpi-cards"
 import {
   getWorkloadMetrics as metrics,
@@ -24,15 +22,25 @@ import {
 } from "../model/workload"
 import { AnimatedTableBody } from "@/components/ui/animated-table-body"
 import { TableSkeletonBody } from "@/components/ui/data-table-skeleton"
-import { useTableFooter } from "@/components/ui/use-table-search"
-import { NumberedPagination } from "@/components/ui/numbered-pagination"
-import { useEffect, useMemo, useState } from "react"
+import { useLocalTable } from "@/components/ui/use-local-table"
+import { TablePaginationFooter } from "@/components/ui/table-pagination-footer"
+import { useMemo, useState } from "react"
 import { apiRequest } from "@/features/auth/api/auth-api"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
+import { PageHeader } from "@/components/layout/page-header"
 import { contentClass } from "@/components/layout/styles"
+import { Alert } from "@/components/ui/alert"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { Button } from "@/components/ui/button"
-import { Pill } from "@/components/ui/pill"
+import { FilterSelect } from "@/components/ui/filter-select"
+import {
+  Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+} from "@/components/ui/modal"
+import { Pill, type PillTone } from "@/components/ui/pill"
+import { ProgressMeter } from "@/components/ui/stat-strip"
 import { Input } from "@/components/ui/input"
 import { DateInput } from "@/components/ui/date-input"
 import { SearchField } from "@/components/ui/search-field"
@@ -43,8 +51,31 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select"
-import { Dialog } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
+import { errorMessage } from "@/lib/error-message"
+import { useAsyncResource } from "@/lib/use-async-resource"
+
+const availabilityOptions = [
+  "all",
+  "Available",
+  "Near capacity",
+  "Overloaded",
+  "Needs setup",
+  "Unavailable",
+  "On leave",
+  "Inactive",
+].map((value) => ({
+  value,
+  label: value === "all" ? "All Availability" : value,
+}))
+
+const availabilityTones: Record<string, PillTone> = {
+  Available: "success",
+  "Near capacity": "warning",
+  "On leave": "warning",
+  Overloaded: "danger",
+  Inactive: "danger",
+}
 
 type Project = {
   id: string
@@ -80,16 +111,20 @@ function monday() {
 export function WorkloadPage() {
   const account = usePortalAccount()
   const [week, setWeek] = useState(monday)
-  const [data, setData] = useState<Data | null>(null)
-  const [error, setError] = useState("")
-  const [loading, setLoading] = useState(true)
-  const [revision, setRevision] = useState(0)
+  const workload = useAsyncResource(
+    (signal) => apiRequest<Data>(`/api/workload?week=${week}`, { signal }),
+    [week],
+    { fallbackError: "Unable to load workload" },
+  )
+  const data = workload.data ?? null
+  const error = workload.error
+  // Reloads after a save keep the current rows instead of showing skeletons.
+  const loading = workload.loading && !data
   const [search, setSearch] = useState("")
   const [team, setTeam] = useState("all")
   const [availability, setAvailability] = useState("all")
   const [selected, setSelected] = useState("")
   const [requestsOpen, setRequestsOpen] = useState(false)
-  const [page, setPage] = useState(1)
   const [capacityTarget, setCapacityTarget] = useState<Staff | null>(null)
   const [allocation, setAllocation] = useState<{
     projectId: string
@@ -106,24 +141,6 @@ export function WorkloadPage() {
     action: "reassign" | "unassign"
   } | null>(null)
   const [confirmation, setConfirmation] = useState<Assignment | null>(null)
-  useEffect(() => {
-    const controller = new AbortController()
-    apiRequest<Data>(`/api/workload?week=${week}`, {
-      signal: controller.signal,
-    })
-      .then((result) => {
-        setData(result)
-        setError("")
-        setLoading(false)
-      })
-      .catch((e) => {
-        if (!controller.signal.aborted) {
-          setError(e instanceof Error ? e.message : "Unable to load workload")
-          setLoading(false)
-        }
-      })
-    return () => controller.abort()
-  }, [week, revision])
   async function mutate(path: string, method: string, body?: unknown) {
     setBusy(true)
     setActionError("")
@@ -132,12 +149,12 @@ export function WorkloadPage() {
         method,
         ...(body ? { body: JSON.stringify(body) } : {}),
       })
-      setRevision((v) => v + 1)
+      workload.retry()
       setCapacityTarget(null)
       setAllocation(null)
       setConfirmation(null)
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Unable to save")
+      setActionError(errorMessage(e, "Unable to save"))
     } finally {
       setBusy(false)
     }
@@ -225,36 +242,20 @@ export function WorkloadPage() {
       openAssignment(assignment.projectId, person.id, person.id)
     else setConfirmation(assignment)
   }
-  const totalPages = Math.max(1, Math.ceil(filtered.length / 10))
-  const resolvedPage = Math.min(page, totalPages)
-  const visible = useMemo(
-    () => filtered.slice((resolvedPage - 1) * 10, resolvedPage * 10),
-    [filtered, resolvedPage],
-  )
-  const tableResult = useMemo(
-    () => ({
-      page: resolvedPage,
-      total: filtered.length,
-      view: [search, team, availability, week],
-    }),
-    [resolvedPage, filtered.length, search, team, availability, week],
-  )
-  const { footer, onRowsSettled } = useTableFooter(tableResult, loading)
-  const tableViewKey = JSON.stringify([
-    search,
-    team,
-    availability,
-    resolvedPage,
-    week,
-  ])
+  const table = useLocalTable(filtered, {
+    view: [search, team, availability, week],
+    loading,
+  })
+  const teamOptions = [
+    { value: "all", label: "All Teams" },
+    ...teams.map((item) => ({ value: item.id, label: item.name })),
+  ]
   return (
     <main className={cn(contentClass, "p-[clamp(16px,2.1vw,32px)]")}>
-      <header className="-mx-[clamp(16px,2.1vw,32px)] flex items-center justify-between gap-6 border-b border-[#eceef1] px-[clamp(16px,2.1vw,32px)] pt-0.5 pb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-4">
-        <div>
-          <h1 className="m-0 text-[clamp(21px,2vw,25px)] leading-[1.25] font-[650] tracking-[-0.03em] text-foreground">
-            Staff Workload
-          </h1>
-          <p className="mt-[5px] mb-0 text-xs leading-[1.45] text-[#738096]">
+      <PageHeader
+        title="Staff Workload"
+        description={
+          <>
             Monitor capacity, assignments, and availability
             {data
               ? ` for ${data.department.name}`
@@ -262,23 +263,24 @@ export function WorkloadPage() {
                 ? ` for ${account.headOf.name}`
                 : ""}
             .
-          </p>
-        </div>
-        <WorkloadWeekInput
-          week={week}
-          onChange={(value) => {
-            setLoading(true)
-            setData(null)
-            setSelected("")
-            setPage(1)
-            setWeek(value)
-          }}
-        />
-      </header>
+          </>
+        }
+        actions={
+          <WorkloadWeekInput
+            week={week}
+            onChange={(value) => {
+              // Show skeletons for the new week rather than the old rows.
+              workload.setData(() => undefined)
+              setSelected("")
+              setWeek(value)
+            }}
+          />
+        }
+      />
       <div className="mt-[18px] max-[560px]:mt-[14px]">
         <WorkloadKpiCards
           staff={staff}
-          pending={loading && !data}
+          pending={loading}
           unavailable={!!error && !data}
         />
       </div>
@@ -288,63 +290,22 @@ export function WorkloadPage() {
             label="Search staff"
             placeholder="Search staff, role, or skills…"
             value={search}
-            onChange={(e) => {
-              setSearch(e.target.value)
-              setPage(1)
-            }}
+            onChange={(e) => setSearch(e.target.value)}
           />
-          <Select
+          <FilterSelect
+            label="Filter by team"
             value={team}
-            onValueChange={(v) => {
-              setTeam(v)
-              setPage(1)
-            }}
-          >
-            <SelectTrigger
-              aria-label="Filter by team"
-              className="h-[34px] w-[170px] flex-none border-[#e1e4ea] text-xs max-[560px]:w-full"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Teams</SelectItem>
-              {teams.map((t) => (
-                <SelectItem key={t.id} value={t.id}>
-                  {t.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
+            options={teamOptions}
+            triggerClassName="w-[170px]"
+            onChange={setTeam}
+          />
+          <FilterSelect
+            label="Filter by availability"
             value={availability}
-            onValueChange={(v) => {
-              setAvailability(v)
-              setPage(1)
-            }}
-          >
-            <SelectTrigger
-              aria-label="Filter by availability"
-              className="h-[34px] w-[170px] flex-none border-[#e1e4ea] text-xs max-[560px]:w-full"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[
-                "all",
-                "Available",
-                "Near capacity",
-                "Overloaded",
-                "Needs setup",
-                "Unavailable",
-                "On leave",
-                "Inactive",
-              ].map((v) => (
-                <SelectItem key={v} value={v}>
-                  {v === "all" ? "All Availability" : v}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            options={availabilityOptions}
+            triggerClassName="w-[170px]"
+            onChange={setAvailability}
+          />
           <Button
             type="button"
             className={`${panelAssignButton} ml-auto max-[560px]:ml-0`}
@@ -387,25 +348,19 @@ export function WorkloadPage() {
               <TableSkeletonBody label="staff workload" columns={6} />
             ) : (
               <AnimatedTableBody
-                items={visible}
-                viewKey={tableViewKey}
+                items={table.visible}
+                viewKey={table.viewKey}
                 quickKey={search}
                 columns={6}
                 rowClassName="border-t border-[#eceef1]"
-                onRowsSettled={onRowsSettled}
+                onRowsSettled={table.onRowsSettled}
                 emptyContent={
                   <>
                     {" "}
                     {error ? (
                       <div role="alert">
                         {error}
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setLoading(true)
-                            setRevision((v) => v + 1)
-                          }}
-                        >
+                        <Button variant="outline" onClick={workload.retry}>
                           Retry
                         </Button>
                       </div>
@@ -444,42 +399,32 @@ export function WorkloadPage() {
                               : "—"
                             : `${m.utilization}%`}
                         {m.utilization !== null && !m.unknown && (
-                          <div className="mt-2 h-1 w-24 overflow-hidden rounded bg-[#dce2ea]">
-                            <div
-                              className={cn(
-                                "h-full",
+                          <div className="mt-1 w-24">
+                            <ProgressMeter
+                              value={Math.min(m.utilization, 100)}
+                              max={100}
+                              label={`${s.fullName} utilization`}
+                              colorClass={
                                 m.utilization > 100
                                   ? "bg-red-500"
                                   : m.utilization >= 90
                                     ? "bg-amber-500"
-                                    : "bg-[#244993]",
-                              )}
-                              style={{
-                                width: `${Math.min(m.utilization, 100)}%`,
-                              }}
+                                    : "bg-[#244993]"
+                              }
                             />
                           </div>
                         )}
                       </td>
                       <td className="px-4 py-3">
                         <Pill
-                          className={cn(
-                            m.availability === "Available"
-                              ? "bg-[#dcf5e5] text-[#19703a]"
-                              : m.availability === "Near capacity" ||
-                                  m.availability === "On leave"
-                                ? "bg-[#fff3df] text-[#805316]"
-                                : m.availability === "Overloaded" ||
-                                    m.availability === "Inactive"
-                                  ? "bg-[#fde4ea] text-[#b4234d]"
-                                  : "bg-[#eef0f3] text-[#596579]",
-                          )}
+                          tone={availabilityTones[m.availability] ?? "neutral"}
                         >
                           {m.availability}
                         </Pill>
                       </td>
                       <td className="px-4 py-3">
                         <WorkloadRowActions
+                          staffId={s.id}
                           name={s.fullName}
                           canAssign={
                             s.status === "ACTIVE" && !!data?.projects.length
@@ -502,305 +447,163 @@ export function WorkloadPage() {
             )}
           </table>
         </div>
-        {!loading && !error && footer.total > 0 && (
-          <footer className="flex flex-wrap items-center justify-between gap-3 pt-4 text-[11px] text-[#65718a]">
-            <span role="status">
-              Showing {(footer.page - 1) * 10 + 1}–
-              {Math.min(footer.page * 10, footer.total)} of {footer.total}
-            </span>
-            <NumberedPagination
-              page={footer.page}
-              totalPages={Math.max(1, Math.ceil(footer.total / 10))}
-              disabled={loading || footer !== tableResult}
-              label="Staff workload pages"
-              onPageChange={setPage}
-            />
-          </footer>
+        {!loading && !error && table.footer.total > 0 && (
+          <TablePaginationFooter
+            {...table.footer}
+            label="Staff workload pages"
+            onPageChange={table.setPage}
+          />
         )}
       </section>
       {current && (
         <WorkloadDetailsDrawer
-          name={current.fullName}
-          description={`${current.position ?? "Staff"} · Week of ${week}`}
-          onEdit={() => {
+          key={current.id}
+          staff={current}
+          week={week}
+          onClose={() => setSelected("")}
+          onEditCapacity={() => {
             setActionError("")
             setCapacityTarget(current)
           }}
-          onClose={() => setSelected("")}
-        >
-          {" "}
-          {current && (
-            <div className="space-y-4 text-xs">
-              <section className="grid gap-3" aria-label="Weekly capacity">
-                <h3 className="m-0 text-xs font-semibold">Weekly capacity</h3>
-                <dl className="m-0 divide-y divide-[#eceef1] rounded-lg border border-[#e8ebef] px-3">
-                  <div className="grid gap-1.5 py-3">
-                    <dt className="text-[11px] font-medium text-[#738096]">
-                      Scheduled hours
-                    </dt>
-                    <dd className="m-0 min-w-0 break-words text-xs font-medium text-foreground">
-                      {current.capacity?.scheduledHours ?? "Not set"}
-                    </dd>
-                  </div>
-                  <div className="grid gap-1.5 py-3">
-                    <dt className="text-[11px] font-medium text-[#738096]">
-                      Time off / holidays
-                    </dt>
-                    <dd className="m-0 min-w-0 break-words text-xs font-medium text-foreground">
-                      {current.capacity?.timeOffHours ?? "Not set"}
-                    </dd>
-                  </div>
-                  <div className="grid gap-1.5 py-3">
-                    <dt className="text-[11px] font-medium text-[#738096]">
-                      Assigned hours
-                    </dt>
-                    <dd className="m-0 min-w-0 break-words text-xs font-medium text-foreground">
-                      {metrics(current).unknown
-                        ? "Hours need recording"
-                        : metrics(current).assigned}
-                    </dd>
-                  </div>
-                  <div className="grid gap-1.5 py-3">
-                    <dt className="text-[11px] font-medium text-[#738096]">
-                      Remaining capacity
-                    </dt>
-                    <dd className="m-0 min-w-0 break-words text-xs font-medium text-foreground">
-                      {metrics(current).capacity === null ||
-                      metrics(current).unknown
-                        ? "Not available"
-                        : `${Math.max(0, metrics(current).capacity! - metrics(current).assigned)} hrs`}
-                    </dd>
-                  </div>
-                </dl>
-              </section>
-              <section
-                className="mt-6 grid gap-3"
-                aria-label="Current assignments"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="m-0 text-xs font-semibold">
-                    Current assignments
-                  </h3>
-                  <span className="text-[11px] text-[#738096]">
-                    {current.assignments.length}{" "}
-                    {current.assignments.length === 1
-                      ? "Assignment"
-                      : "Assignments"}
-                  </span>
-                </div>
-                <div className="overflow-hidden rounded-lg border border-[#e8ebef]">
-                  {current.assignments.map((a) => (
-                    <div
-                      key={a.id}
-                      className="flex items-center justify-between gap-4 border-b border-[#eceef1] px-4 py-4 last:border-b-0 max-[400px]:flex-wrap"
-                    >
-                      <div className="flex min-w-0 flex-1 items-start gap-3">
-                        <span className="grid size-8 flex-none place-items-center rounded-full bg-[#edf0f4] text-[#738096]">
-                          <BriefcaseBusiness
-                            size={15}
-                            strokeWidth={1.7}
-                            aria-hidden="true"
-                          />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="m-0 break-words text-xs font-medium text-foreground">
-                            {a.project.name}
-                          </p>
-                          <p className="mt-1 mb-0 text-[11px] text-[#738096]">
-                            {a.weeklyHours === null
-                              ? "Hours not recorded"
-                              : a.weeklyHours + " hrs/week"}
-                          </p>
-                          <span className="mt-2 inline-flex rounded bg-[#e4ecfa] px-1.5 py-0.5 text-[10px] text-[#244993]">
-                            {a.project.status === "IN_PROGRESS"
-                              ? "In progress"
-                              : a.project.status === "PLANNED"
-                                ? "Planned"
-                                : a.project.status === "ON_HOLD"
-                                  ? "On hold"
-                                  : a.project.status
-                                      .replaceAll("_", " ")
-                                      .toLowerCase()}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex flex-none items-center gap-2 max-[400px]:ml-11">
-                        <Button
-                          type="button"
-                          className={panelAssignButton}
-                          onClick={() => {
-                            setSelected("")
-                            openAssignment(a.projectId, current.id, current.id)
-                          }}
-                        >
-                          Edit allocation
-                        </Button>
-                        <Button
-                          type="button"
-                          className={panelDangerButton}
-                          aria-label={`Unassign from ${a.project.name}`}
-                          onClick={() => {
-                            setSelected("")
-                            setActionError("")
-                            setConfirmation(a)
-                          }}
-                        >
-                          <Trash2
-                            size={15}
-                            strokeWidth={1.7}
-                            aria-hidden="true"
-                          />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                  {!current.assignments.length && (
-                    <p className="m-0 px-4 py-5 text-xs text-[#738096]">
-                      No assignments this week.
-                    </p>
-                  )}
-                </div>
-              </section>
-              <p className="text-[11px] text-[#738096]">
-                Utilization = assigned hours ÷ (scheduled hours − time off).
-                Missing hours are never treated as free capacity.
-              </p>
-            </div>
-          )}
-        </WorkloadDetailsDrawer>
+          onEditAllocation={(assignment) =>
+            openAssignment(assignment.projectId, current.id, current.id)
+          }
+          onUnassign={(assignment) => {
+            setActionError("")
+            setConfirmation(assignment)
+          }}
+        />
       )}
-      <Dialog open={requestsOpen} onOpenChange={setRequestsOpen}>
-        <WorkloadDialog
+      <Modal open={requestsOpen} onClose={() => setRequestsOpen(false)}>
+        <ModalHeader
           title="Staffing attention"
           description="Assign staff to projects or resolve allocations that no longer match the active department roster."
-          onClose={() => setRequestsOpen(false)}
-        >
-          <div className="grid gap-3 p-5 sm:p-6">
-            {staffingAttention.map((project) => (
-              <div
-                key={project.id}
-                className="grid gap-3 rounded-lg border border-[#e8ebef] p-4"
-              >
-                <div className="flex items-start justify-between gap-3 max-[420px]:flex-col">
-                  <div className="min-w-0">
-                    <p className="m-0 break-words text-xs font-semibold">
-                      {project.request?.service.name ?? project.name}
-                    </p>
-                    <p className="mt-1 mb-0 break-all text-[11px] text-[#738096]">
-                      {project.request?.referenceNumber ??
-                        project.requestId ??
-                        project.id}
-                    </p>
-                  </div>
-                  {project.staff.length === 0 && (
-                    <Button
-                      className={panelAssignButton}
-                      onClick={() => {
-                        setRequestsOpen(false)
-                        openAssignment(project.id)
-                      }}
-                    >
-                      Assign staff
-                    </Button>
-                  )}
-                </div>
-                {project.staff
-                  .filter((assignment) => assignment.eligible === false)
-                  .map((assignment) => (
-                    <div
-                      key={assignment.id}
-                      className="flex flex-wrap items-center justify-between gap-3 border-t border-[#eceef1] pt-3"
-                    >
-                      <div className="min-w-0">
-                        <p className="m-0 break-words text-xs font-medium">
-                          {assignment.employeeName}
-                        </p>
-                        <p className="mt-1 mb-0 text-[11px] text-[#738096]">
-                          {assignment.weeklyHours ?? "Unrecorded"} hrs/week · No
-                          longer eligible for new assignments
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 gap-2">
-                        <Button
-                          variant="outline"
-                          className={panelSecondaryButton}
-                          onClick={() => {
-                            setRequestsOpen(false)
-                            openAssignment(
-                              project.id,
-                              "",
-                              assignment.employeeId,
-                              {
-                                weeklyHours: assignment.weeklyHours,
-                                allocationEnd:
-                                  assignment.allocationEnd &&
-                                  assignment.allocationEnd.slice(0, 10) >= week
-                                    ? assignment.allocationEnd.slice(0, 10)
-                                    : week,
-                              },
-                            )
-                          }}
-                        >
-                          Reassign
-                        </Button>
-                        <Button
-                          variant="outline"
-                          className={panelDangerButton}
-                          onClick={() =>
-                            removeProjectAllocation(project, assignment)
-                          }
-                        >
-                          Remove
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            ))}
-            {!staffingAttention.length && (
-              <p className="m-0 py-6 text-center text-xs text-[#738096]">
-                No projects need staffing attention.
-              </p>
-            )}
-          </div>
-          <footer className="flex justify-end border-t border-[#eceef1] px-5 py-4 sm:px-6">
-            <Button
-              variant="outline"
-              className={panelSecondaryButton}
-              onClick={() => setRequestsOpen(false)}
+          closeLabel="Close form"
+        />
+        <ModalBody className="gap-3">
+          {staffingAttention.map((project) => (
+            <div
+              key={project.id}
+              className="grid gap-3 rounded-lg border border-[#e8ebef] p-4"
             >
-              Close
-            </Button>
-          </footer>
-        </WorkloadDialog>
-      </Dialog>
-      <Dialog
+              <div className="flex items-start justify-between gap-3 max-[420px]:flex-col">
+                <div className="min-w-0">
+                  <p className="m-0 break-words text-xs font-semibold">
+                    {project.request?.service.name ?? project.name}
+                  </p>
+                  <p className="mt-1 mb-0 break-all text-[11px] text-[#738096]">
+                    {project.request?.referenceNumber ??
+                      project.requestId ??
+                      project.id}
+                  </p>
+                </div>
+                {project.staff.length === 0 && (
+                  <Button
+                    className={panelAssignButton}
+                    onClick={() => {
+                      setRequestsOpen(false)
+                      openAssignment(project.id)
+                    }}
+                  >
+                    Assign staff
+                  </Button>
+                )}
+              </div>
+              {project.staff
+                .filter((assignment) => assignment.eligible === false)
+                .map((assignment) => (
+                  <div
+                    key={assignment.id}
+                    className="flex flex-wrap items-center justify-between gap-3 border-t border-[#eceef1] pt-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="m-0 break-words text-xs font-medium">
+                        {assignment.employeeName}
+                      </p>
+                      <p className="mt-1 mb-0 text-[11px] text-[#738096]">
+                        {assignment.weeklyHours ?? "Unrecorded"} hrs/week · No
+                        longer eligible for new assignments
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 gap-2">
+                      <Button
+                        variant="outline"
+                        className={panelSecondaryButton}
+                        onClick={() => {
+                          setRequestsOpen(false)
+                          openAssignment(
+                            project.id,
+                            "",
+                            assignment.employeeId,
+                            {
+                              weeklyHours: assignment.weeklyHours,
+                              allocationEnd:
+                                assignment.allocationEnd &&
+                                assignment.allocationEnd.slice(0, 10) >= week
+                                  ? assignment.allocationEnd.slice(0, 10)
+                                  : week,
+                            },
+                          )
+                        }}
+                      >
+                        Reassign
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className={panelDangerButton}
+                        onClick={() =>
+                          removeProjectAllocation(project, assignment)
+                        }
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          ))}
+          {!staffingAttention.length && (
+            <p className="m-0 py-6 text-center text-xs text-[#738096]">
+              No projects need staffing attention.
+            </p>
+          )}
+        </ModalBody>
+        <ModalFooter>
+          <Button
+            variant="outline"
+            className={panelSecondaryButton}
+            onClick={() => setRequestsOpen(false)}
+          >
+            Close
+          </Button>
+        </ModalFooter>
+      </Modal>
+      <Modal
         open={!!capacityTarget}
-        onOpenChange={(open) => {
-          if (!open && !busy) setCapacityTarget(null)
-        }}
+        onClose={() => setCapacityTarget(null)}
+        busy={busy}
       >
-        <WorkloadDialog
+        <ModalHeader
           title="Edit weekly capacity"
           description={`${capacityTarget?.fullName ?? ""} · Week of ${week}. Include leave and holidays in time off.`}
-          onClose={() => setCapacityTarget(null)}
-          busy={busy}
-        >
-          {capacityTarget && (
-            <Form
-              key={`${capacityTarget.id}:${week}`}
-              onSubmit={(e) => {
-                e.preventDefault()
-                const f = new FormData(e.currentTarget)
-                void mutate("/capacity", "PUT", {
-                  employeeId: capacityTarget.id,
-                  week,
-                  scheduledHours: Number(f.get("scheduledHours")),
-                  timeOffHours: Number(f.get("timeOffHours")),
-                })
-              }}
-              className="grid gap-4 p-5 sm:grid-cols-2 sm:p-6"
-            >
+          closeLabel="Close form"
+          closeDisabled={busy}
+        />
+        {capacityTarget && (
+          <Form
+            key={`${capacityTarget.id}:${week}`}
+            onSubmit={(e) => {
+              e.preventDefault()
+              const f = new FormData(e.currentTarget)
+              void mutate("/capacity", "PUT", {
+                employeeId: capacityTarget.id,
+                week,
+                scheduledHours: Number(f.get("scheduledHours")),
+                timeOffHours: Number(f.get("timeOffHours")),
+              })
+            }}
+          >
+            <ModalBody className="sm:grid-cols-2">
               <CapacityFields
                 scheduledHours={capacityTarget.capacity?.scheduledHours ?? null}
                 timeOffHours={capacityTarget.capacity?.timeOffHours ?? 0}
@@ -808,100 +611,94 @@ export function WorkloadPage() {
                 hasUnrecordedHours={metrics(capacityTarget).unknown}
               />
               {actionError && (
-                <p
-                  role="alert"
-                  className="sm:col-span-2 rounded-lg bg-[#fff0f1] p-3 text-xs text-[#bc3649]"
-                >
-                  {actionError}
-                </p>
+                <Alert className="sm:col-span-2">{actionError}</Alert>
               )}
-              <footer className="-mx-5 -mb-5 flex justify-end gap-2 border-t border-[#eceef1] px-5 py-4 sm:col-span-2 sm:-mx-6 sm:-mb-6 sm:px-6">
-                <Button
-                  variant="outline"
-                  type="button"
-                  className={panelSecondaryButton}
-                  disabled={busy}
-                  onClick={() => setCapacityTarget(null)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  className={panelAssignButton}
-                  disabled={busy}
-                  type="submit"
-                >
-                  {busy ? "Saving…" : "Save capacity"}
-                </Button>
-              </footer>
-            </Form>
-          )}
-        </WorkloadDialog>
-      </Dialog>
-      <Dialog
+            </ModalBody>
+            <ModalFooter>
+              <Button
+                variant="outline"
+                type="button"
+                className={panelSecondaryButton}
+                disabled={busy}
+                onClick={() => setCapacityTarget(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                className={panelAssignButton}
+                disabled={busy}
+                type="submit"
+              >
+                {busy ? "Saving…" : "Save capacity"}
+              </Button>
+            </ModalFooter>
+          </Form>
+        )}
+      </Modal>
+      <Modal
         open={!!allocation}
-        onOpenChange={(open) => {
-          if (!open && !busy) setAllocation(null)
-        }}
+        onClose={() => setAllocation(null)}
+        busy={busy}
       >
-        <WorkloadDialog
+        <ModalHeader
           title={
             allocation?.previousEmployeeId
               ? "Reassign / edit allocation"
               : "Assign staff"
           }
           description={`Allocate weekly hours to an authorized project, starting the week of ${week}.`}
-          onClose={() => setAllocation(null)}
-          busy={busy}
-        >
-          {allocation && (
-            <Form
-              onChange={(event) => {
-                const form = new FormData(event.currentTarget)
-                const target = staff.find(
-                  (person) => person.id === form.get("employeeId"),
-                )
-                if (!target) {
-                  setProjection("")
-                  return
-                }
-                const capacity = metrics(target).capacity
-                const other = target.assignments.filter(
-                  (a) => a.projectId !== form.get("projectId"),
-                )
-                const assignedHours =
-                  other.reduce((total, a) => total + (a.weeklyHours ?? 0), 0) +
-                  Number(form.get("weeklyHours") ?? 0)
-                setProjection(
-                  capacity === null || other.some((a) => a.weeklyHours === null)
-                    ? "Set capacity and record all assignment hours to calculate projected utilization."
-                    : capacity === 0
-                      ? "No available capacity for this week."
-                      : "Projected utilization: " +
-                        assignedHours +
-                        " / " +
-                        capacity +
-                        " hrs (" +
-                        Math.round((assignedHours / capacity) * 100) +
-                        "%) · " +
-                        (assignedHours > capacity
-                          ? assignedHours - capacity + " hrs over capacity"
-                          : capacity - assignedHours + " hrs remaining"),
-                )
-              }}
-              onSubmit={(e) => {
-                e.preventDefault()
-                const f = new FormData(e.currentTarget)
-                void mutate("/assignment", "PUT", {
-                  ...allocation,
-                  week,
-                  employeeId: f.get("employeeId"),
-                  projectId: f.get("projectId"),
-                  weeklyHours: Number(f.get("weeklyHours")),
-                  endDate: f.get("endDate"),
-                })
-              }}
-              className="grid gap-4 p-5 sm:grid-cols-2 sm:p-6"
-            >
+          closeLabel="Close form"
+          closeDisabled={busy}
+        />
+        {allocation && (
+          <Form
+            onChange={(event) => {
+              const form = new FormData(event.currentTarget)
+              const target = staff.find(
+                (person) => person.id === form.get("employeeId"),
+              )
+              if (!target) {
+                setProjection("")
+                return
+              }
+              const capacity = metrics(target).capacity
+              const other = target.assignments.filter(
+                (a) => a.projectId !== form.get("projectId"),
+              )
+              const assignedHours =
+                other.reduce((total, a) => total + (a.weeklyHours ?? 0), 0) +
+                Number(form.get("weeklyHours") ?? 0)
+              setProjection(
+                capacity === null || other.some((a) => a.weeklyHours === null)
+                  ? "Set capacity and record all assignment hours to calculate projected utilization."
+                  : capacity === 0
+                    ? "No available capacity for this week."
+                    : "Projected utilization: " +
+                      assignedHours +
+                      " / " +
+                      capacity +
+                      " hrs (" +
+                      Math.round((assignedHours / capacity) * 100) +
+                      "%) · " +
+                      (assignedHours > capacity
+                        ? assignedHours - capacity + " hrs over capacity"
+                        : capacity - assignedHours + " hrs remaining"),
+              )
+            }}
+            onSubmit={(e) => {
+              e.preventDefault()
+              const f = new FormData(e.currentTarget)
+              void mutate("/assignment", "PUT", {
+                ...allocation,
+                week,
+                employeeId: f.get("employeeId"),
+                projectId: f.get("projectId"),
+                weeklyHours: Number(f.get("weeklyHours")),
+                endDate: f.get("endDate"),
+              })
+            }}
+          >
+            <ModalBody className="sm:grid-cols-2">
               <div
                 className={cn(panelField, "sm:col-span-2")}
                 data-validation-field
@@ -1045,42 +842,35 @@ export function WorkloadPage() {
                 resolve.
               </p>
               {actionError && (
-                <p
-                  role="alert"
-                  className="sm:col-span-2 rounded-lg bg-[#fff0f1] p-3 text-xs text-[#bc3649]"
-                >
-                  {actionError}
-                </p>
+                <Alert className="sm:col-span-2">{actionError}</Alert>
               )}
-              <footer className="-mx-5 -mb-5 flex justify-end gap-2 border-t border-[#eceef1] px-5 py-4 sm:col-span-2 sm:-mx-6 sm:-mb-6 sm:px-6">
-                <Button
-                  variant="outline"
-                  type="button"
-                  className={panelSecondaryButton}
-                  disabled={busy}
-                  onClick={() => setAllocation(null)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  className={panelAssignButton}
-                  type="submit"
-                  disabled={busy}
-                >
-                  {busy ? "Saving…" : "Confirm assignment"}
-                </Button>
-              </footer>
-            </Form>
-          )}
-        </WorkloadDialog>
-      </Dialog>
-      <Dialog
+            </ModalBody>
+            <ModalFooter>
+              <Button
+                variant="outline"
+                type="button"
+                className={panelSecondaryButton}
+                disabled={busy}
+                onClick={() => setAllocation(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                className={panelAssignButton}
+                type="submit"
+                disabled={busy}
+              >
+                {busy ? "Saving…" : "Confirm assignment"}
+              </Button>
+            </ModalFooter>
+          </Form>
+        )}
+      </Modal>
+      <Modal
         open={!!assignmentPicker}
-        onOpenChange={(open) => {
-          if (!open) setAssignmentPicker(null)
-        }}
+        onClose={() => setAssignmentPicker(null)}
       >
-        <WorkloadDialog
+        <ModalHeader
           title={
             assignmentPicker?.action === "reassign"
               ? "Choose assignment to reassign"
@@ -1093,32 +883,31 @@ export function WorkloadPage() {
             week +
             "."
           }
-          onClose={() => setAssignmentPicker(null)}
-        >
-          <div className="grid gap-2 p-5 sm:p-6">
-            {assignmentPicker?.staff.assignments.map((assignment) => (
-              <Button
-                key={assignment.id}
-                type="button"
-                variant="outline"
-                className="h-auto justify-between gap-3 py-3 text-left text-xs"
-                onClick={() =>
-                  applyAssignmentAction(
-                    assignmentPicker.staff,
-                    assignment,
-                    assignmentPicker.action,
-                  )
-                }
-              >
-                <span>{assignment.project.name}</span>
-                <span className="text-[#738096]">
-                  {assignment.weeklyHours ?? "Unrecorded"} hrs/week
-                </span>
-              </Button>
-            ))}
-          </div>
-        </WorkloadDialog>
-      </Dialog>
+          closeLabel="Close form"
+        />
+        <ModalBody className="gap-2">
+          {assignmentPicker?.staff.assignments.map((assignment) => (
+            <Button
+              key={assignment.id}
+              type="button"
+              variant="outline"
+              className="h-auto justify-between gap-3 py-3 text-left text-xs"
+              onClick={() =>
+                applyAssignmentAction(
+                  assignmentPicker.staff,
+                  assignment,
+                  assignmentPicker.action,
+                )
+              }
+            >
+              <span>{assignment.project.name}</span>
+              <span className="text-[#738096]">
+                {assignment.weeklyHours ?? "Unrecorded"} hrs/week
+              </span>
+            </Button>
+          ))}
+        </ModalBody>
+      </Modal>
       {confirmation && (
         <ConfirmationDialog
           title="Unassign staff?"

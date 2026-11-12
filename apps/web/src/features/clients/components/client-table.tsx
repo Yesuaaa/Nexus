@@ -1,17 +1,17 @@
 import { Eye } from "lucide-react"
 import type { ReactNode } from "react"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
-import { Button } from "@/components/ui/button"
+import { Avatar } from "@/components/ui/avatar"
 import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
 import { Pill } from "@/components/ui/pill"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import {
+  DataTableErrorRow,
   ResponsiveDataTable,
   ResponsiveDataTableBody,
   ResponsiveDataTableCell,
   ResponsiveDataTableColumnHeader,
   ResponsiveDataTableHeader,
-  ResponsiveDataTableRow,
 } from "@/components/ui/responsive-data-table"
 import { TableSortButton } from "@/components/ui/table-sort-button"
 import { cn } from "@/lib/utils"
@@ -128,10 +128,7 @@ export function ClientTable({
     <ResponsiveDataTable label="Clients" aria-busy={loading}>
       <ResponsiveDataTableHeader
         className="@max-[1000px]:sr-only"
-        rowClassName={cn(
-          clientGrid,
-          "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground",
-        )}
+        rowClassName={clientGrid}
       >
         {heading("fullName")}
         {heading("email")}
@@ -172,24 +169,7 @@ export function ClientTable({
               ]}
             />
           ) : (
-            <ResponsiveDataTableRow>
-              <ResponsiveDataTableCell
-                aria-colspan={6}
-                className="grid min-h-[150px] place-content-center gap-3 p-6 text-center text-xs text-[#7183a2]"
-              >
-                <div role="alert" className="grid justify-items-center gap-3">
-                  <p className="m-0">{error}</p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-auto min-h-0 border-0 bg-transparent p-0 font-bold text-[#244993] shadow-none hover:bg-transparent"
-                    onClick={onRetry}
-                  >
-                    Try again
-                  </Button>
-                </div>
-              </ResponsiveDataTableCell>
-            </ResponsiveDataTableRow>
+            <DataTableErrorRow message={error} onRetry={onRetry} colSpan={6} />
           )}
         </ResponsiveDataTableBody>
       ) : (
@@ -208,12 +188,10 @@ export function ClientTable({
             <>
               <ResponsiveDataTableCell className="min-w-0 @max-[1000px]:col-start-1 @max-[1000px]:row-start-1">
                 <div className="flex min-w-0 items-center gap-2.5">
-                  <span
-                    aria-hidden="true"
-                    className="grid size-8 flex-none place-items-center rounded-full bg-[#eef0f3] font-medium text-[#52627a]"
-                  >
-                    {(client.fullName?.trim() || client.email)[0].toUpperCase()}
-                  </span>
+                  <Avatar
+                    name={client.fullName?.trim() || client.email}
+                    className="size-8"
+                  />
                   <span className="min-w-0 truncate font-semibold">
                     {client.fullName?.trim() || "Name not provided"}
                   </span>
@@ -229,13 +207,7 @@ export function ClientTable({
                 </span>
               </ResponsiveDataTableCell>
               <ResponsiveDataTableCell className="@max-[1000px]:col-start-2 @max-[1000px]:row-start-4 @max-[1000px]:justify-self-end">
-                <Pill
-                  className={
-                    client.isActive
-                      ? "bg-[#dcf5e5] text-[#19703a]"
-                      : "bg-[#fde4ea] text-[#b4234d]"
-                  }
-                >
+                <Pill tone={client.isActive ? "success" : "danger"}>
                   {client.isActive ? "Active" : "Inactive"}
                 </Pill>
               </ResponsiveDataTableCell>

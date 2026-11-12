@@ -1,54 +1,14 @@
 import assert from "node:assert/strict"
-import { randomBytes, randomUUID } from "node:crypto"
-import { readdir, readFile } from "node:fs/promises"
-import type { Server } from "node:http"
-import type { AddressInfo } from "node:net"
+import { randomUUID } from "node:crypto"
 import { test } from "node:test"
-import { PGlite } from "@electric-sql/pglite"
-import { PGLiteSocketServer } from "@electric-sql/pglite-socket"
-import { createApp } from "./app.js"
-import { getPrisma } from "./lib/db.js"
 import { issueSession } from "./features/auth/auth.service.js"
+import { startPgliteApp } from "./test/pglite-app.js"
 
 test(
   "client specialist choices are scoped to active service departments and expose only directory details",
   { timeout: 120_000 },
   async (t) => {
-    const original = {
-      DATABASE_URL: process.env.DATABASE_URL,
-      DIRECT_URL: process.env.DIRECT_URL,
-      DATABASE_POOL_MAX: process.env.DATABASE_POOL_MAX,
-      JWT_SECRET: process.env.JWT_SECRET,
-    }
-    process.env.JWT_SECRET = randomBytes(32).toString("base64url")
-    const database = new PGlite()
-    const cleanup: {
-      socket?: PGLiteSocketServer
-      server?: Server
-      prisma?: ReturnType<typeof getPrisma>
-    } = {}
-    t.after(async () => {
-      if (cleanup.server)
-        await new Promise<void>((resolve) =>
-          cleanup.server!.close(() => resolve()),
-        )
-      await cleanup.prisma?.$disconnect()
-      await cleanup.socket?.stop()
-      await database.close()
-      for (const [key, value] of Object.entries(original)) {
-        if (value === undefined) delete process.env[key]
-        else process.env[key] = value
-      }
-    })
-    await database.waitReady
-    const migrations = new URL("../prisma/migrations/", import.meta.url)
-    for (const name of (await readdir(migrations))
-      .filter((name) => /^\d/.test(name))
-      .sort()) {
-      await database.exec(
-        await readFile(new URL(`${name}/migration.sql`, migrations), "utf8"),
-      )
-    }
+    const { prisma, db: database, origin } = await startPgliteApp(t)
     const serviceRequestStatuses = await database.query<{ enumlabel: string }>(`
       SELECT e.enumlabel
       FROM pg_type t
@@ -66,18 +26,7 @@ test(
         "UNDER_REVIEW",
       ],
     )
-    const socket = new PGLiteSocketServer({
-      db: database,
-      port: 0,
-      host: "127.0.0.1",
-    })
-    cleanup.socket = socket
-    await socket.start()
-    process.env.DATABASE_URL = `postgresql://postgres:postgres@${socket.getServerConn()}/postgres?sslmode=disable`
-    process.env.DATABASE_POOL_MAX = "1"
-    delete process.env.DIRECT_URL
-    const prisma = getPrisma()!
-    cleanup.prisma = prisma
+    const base = `${origin}/api`
     const client = await prisma.user.create({
       data: {
         email: "client@example.com",
@@ -175,10 +124,6 @@ test(
           },
         })
     }
-    const server = createApp().listen(0, "127.0.0.1")
-    cleanup.server = server
-    await new Promise<void>((resolve) => server!.once("listening", resolve))
-    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`
     const headers = { authorization: `Bearer ${token}` }
     const response = await fetch(`${base}/services/${service.id}/specialists`, {
       headers,

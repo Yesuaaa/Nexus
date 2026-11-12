@@ -17,6 +17,7 @@ import {
   ConsultationLocation,
   getConsultationMeetingUrl,
 } from "./workflow-cards"
+import { humanizeEnum } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { WorkflowControls } from "../hooks/use-request-workflow"
 import type { Workflow, WorkflowAction } from "../model/workflow"
@@ -154,7 +155,7 @@ function InternalWorkspace({
               <p className="mt-1 mb-0 text-[10px] text-[#738096]">
                 {person.position || "Staff"}
                 {person.status !== "ACTIVE" &&
-                  ` · ${person.status.toLowerCase().replaceAll("_", " ")}`}
+                  ` · ${humanizeEnum(person.status, { capitalize: false })}`}
               </p>
             </li>
           ))}
@@ -420,7 +421,8 @@ export function WorkflowContextPanel({
                     <Button
                       type="button"
                       disabled={Boolean(controls?.busy) || !onProjectSetup}
-                      className={`${workflowButton} w-full bg-[#203f8c] text-white hover:bg-[#172f70]`}
+                      variant="brand"
+                      className={`${workflowButton} w-full`}
                       onClick={() => onProjectSetup?.("activation")}
                     >
                       Review and activate

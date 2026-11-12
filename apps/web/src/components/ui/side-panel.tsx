@@ -22,14 +22,16 @@
  */
 
 import {
+  createContext,
+  useContext,
   useId,
-  useRef,
   type ComponentProps,
   type HTMLAttributes,
   type ReactNode,
 } from "react"
 import { CloseIcon } from "@/components/layout/icons"
 import { focusRing } from "@/components/layout/styles"
+import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { EdgeSheetContent } from "@/components/ui/edge-sheet"
 import {
@@ -45,6 +47,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { useAnimatedPanelClose } from "@/components/ui/use-animated-panel-close"
+import { useRestoreFocus } from "@/lib/use-restore-focus"
 import { cn } from "@/lib/utils"
 
 /** Open state for a side panel with an animated close. */
@@ -93,9 +96,7 @@ export function SidePanel({
   overlayClassName?: string
   children: ReactNode
 }) {
-  const openerRef = useRef(
-    typeof document === "undefined" ? null : document.activeElement,
-  )
+  const restoreFocus = useRestoreFocus(fallbackFocus)
 
   return (
     <Sheet
@@ -120,13 +121,7 @@ export function SidePanel({
         onInteractOutside={(event) => {
           if (busy || !dismissible) event.preventDefault()
         }}
-        onCloseAutoFocus={(event) => {
-          event.preventDefault()
-          const opener = openerRef.current
-          if (opener instanceof HTMLElement && opener.isConnected)
-            opener.focus()
-          else fallbackFocus?.()?.focus()
-        }}
+        onCloseAutoFocus={restoreFocus.onCloseAutoFocus}
       >
         {children}
       </EdgeSheetContent>
@@ -334,41 +329,74 @@ export function SidePanelSection({
   )
 }
 
-/** Bordered label/value list. Pair with DetailItem. */
+type DetailLayout = "inline" | "stacked"
+
+const DetailLayoutContext = createContext<DetailLayout>("inline")
+
+/**
+ * Label/value list. Pair with DetailItem.
+ * - `inline` (default): bordered box, label left and value right.
+ * - `stacked`: two-column grid (one column on narrow screens), label above
+ *   value, for longer values such as references and names.
+ */
 export function DetailList({
+  layout = "inline",
   className,
   ...props
-}: HTMLAttributes<HTMLDListElement>) {
+}: HTMLAttributes<HTMLDListElement> & { layout?: DetailLayout }) {
   return (
-    <dl
-      className={cn(
-        "m-0 grid divide-y divide-[#eceef1] rounded-lg border border-[#e8ebef] px-3.5",
-        className,
-      )}
-      {...props}
-    />
+    <DetailLayoutContext.Provider value={layout}>
+      <dl
+        className={cn(
+          layout === "stacked"
+            ? "m-0 grid grid-cols-2 gap-x-5 max-[450px]:grid-cols-1"
+            : "m-0 grid divide-y divide-[#eceef1] rounded-lg border border-[#e8ebef] px-3.5",
+          className,
+        )}
+        {...props}
+      />
+    </DetailLayoutContext.Provider>
   )
 }
 
 export function DetailItem({
   label,
+  className,
   children,
 }: {
   label: string
+  className?: string
   children?: ReactNode
 }) {
+  const layout = useContext(DetailLayoutContext)
   const empty = children === null || children === undefined || children === ""
+  const value = empty ? (
+    <span className="font-normal text-[#94a3b8]">Not provided</span>
+  ) : (
+    children
+  )
+  if (layout === "stacked") {
+    return (
+      <div className={cn("min-w-0 border-b border-[#eceef1] py-3", className)}>
+        <dt className="text-[11px] text-[#52627a]">{label}</dt>
+        <dd className="mt-1.5 ml-0 text-xs font-medium [overflow-wrap:anywhere]">
+          {value}
+        </dd>
+      </div>
+    )
+  }
   return (
-    <div className="flex min-w-0 items-baseline justify-between gap-4 py-2.5">
+    <div
+      className={cn(
+        "flex min-w-0 items-baseline justify-between gap-4 py-2.5",
+        className,
+      )}
+    >
       <dt className="flex-none text-[11px] font-medium text-[#738096]">
         {label}
       </dt>
       <dd className="m-0 min-w-0 text-right text-xs font-medium break-words text-foreground">
-        {empty ? (
-          <span className="font-normal text-[#94a3b8]">Not provided</span>
-        ) : (
-          children
-        )}
+        {value}
       </dd>
     </div>
   )
@@ -402,14 +430,10 @@ export function SidePanelError({
   )
 }
 
-/** Inline error banner (e.g. a failed save) shown at the top of a body. */
+/**
+ * Inline error banner (e.g. a failed save) shown at the top of a body.
+ * Kept for existing callers; new code can use `Alert` directly.
+ */
 export function SidePanelAlert({ children }: { children: ReactNode }) {
-  return (
-    <p
-      role="alert"
-      className="m-0 rounded-lg border border-[#f4d6db] bg-[#fff6f7] p-3 text-xs text-[#bc3649]"
-    >
-      {children}
-    </p>
-  )
+  return <Alert>{children}</Alert>
 }

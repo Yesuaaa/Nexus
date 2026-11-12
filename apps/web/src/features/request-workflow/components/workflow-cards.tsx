@@ -52,7 +52,8 @@ export function ConsultationLocation({
         target="_blank"
         rel="noopener noreferrer"
         className={cn(
-          "inline-flex w-fit items-center justify-center rounded-lg bg-[#203f8c] px-3 py-2 text-[10px] font-semibold text-white no-underline shadow-[0_4px_10px_rgb(32_63_140_/_18%)] transition-colors hover:bg-[#172f70]",
+          "inline-flex w-fit items-center justify-center rounded-lg px-3 py-2 text-[10px] font-semibold no-underline shadow-[0_4px_10px_rgb(32_63_140_/_18%)] transition-colors",
+          buttonTones.brand,
           className,
         )}
       >
@@ -65,14 +66,10 @@ export function ConsultationLocation({
     </span>
   )
 }
+import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog"
+import { buttonTones } from "@/components/ui/button-variants"
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { cn } from "@/lib/utils"
 import { downloadWorkflowFile } from "../api/workflow-api"
@@ -91,13 +88,13 @@ import {
   workflowInput,
   workflowMoney,
 } from "./workflow-primitives"
+import { errorMessage } from "@/lib/error-message"
 
 type CardProps = {
   workflow: Workflow
   controls: WorkflowControls
   onPrepareQuotation?: () => void
 }
-const workflowPrimaryButton = `${workflowButton} bg-[#203f8c] text-white hover:bg-[#172f70]`
 
 function useCurrentTime() {
   const [now, setNow] = useState(() => Date.now())
@@ -184,8 +181,7 @@ export function FileSubmissionCard({
             } catch (reason) {
               sileo.error({
                 title: "Couldn't download file",
-                description:
-                  reason instanceof Error ? reason.message : "Try again.",
+                description: errorMessage(reason, "Try again."),
               })
             } finally {
               setDownloading(false)
@@ -427,7 +423,8 @@ export function RequirementRequestCard({
               <Button
                 name="decision"
                 value="approve"
-                className={workflowPrimaryButton}
+                variant="brand"
+                className={workflowButton}
                 disabled={controls.busy}
               >
                 Mark complete
@@ -613,7 +610,8 @@ export function ConsultationSchedulingCard({
                 <div className="flex flex-wrap gap-2">
                   <Button
                     disabled={controls.busy}
-                    className={`${workflowButton} bg-[#203f8c] text-white hover:bg-[#172f70]`}
+                    variant="brand"
+                    className={workflowButton}
                   >
                     Confirm
                   </Button>
@@ -684,7 +682,8 @@ export function ConsultationSchedulingCard({
             <div className="flex flex-wrap gap-2">
               <Button
                 disabled={controls.busy}
-                className={`${workflowButton} bg-[#203f8c] text-white hover:bg-[#172f70]`}
+                variant="brand"
+                className={workflowButton}
               >
                 Request reschedule
               </Button>
@@ -719,7 +718,8 @@ export function ConsultationSchedulingCard({
         ].includes(workflow.state) && (
           <div className="flex flex-wrap gap-2 border-t border-[#e1e6ee] pt-4">
             <Button
-              className={`${workflowButton} bg-[#203f8c] text-white hover:bg-[#172f70]`}
+              variant="brand"
+              className={workflowButton}
               disabled={
                 controls.busy || new Date(consultation.startsAt).getTime() > now
               }
@@ -857,7 +857,8 @@ export function QuotationProposalCard({
           {workflow.permissions.manage && onPrepareQuotation && (
             <Button
               type="button"
-              className={`${workflowButton} self-start bg-[#203f8c] text-white hover:bg-[#172f70]`}
+              variant="brand"
+              className={`${workflowButton} self-start`}
               disabled={controls.busy}
               onClick={onPrepareQuotation}
             >
@@ -911,7 +912,8 @@ export function QuotationProposalCard({
           <div className="flex flex-wrap gap-2">
             <Button
               value="ACCEPT"
-              className={workflowPrimaryButton}
+              variant="brand"
+              className={workflowButton}
               disabled={controls.busy}
             >
               Accept quotation
@@ -939,59 +941,35 @@ export function QuotationProposalCard({
           </div>
         </Form>
       )}
-      <Dialog
+      <ConfirmationDialog
         open={declineNote !== null}
-        onOpenChange={(open) => {
-          if (!open && !controls.busy) setDeclineNote(null)
+        title="Decline quotation?"
+        description={`This will reject quotation version ${quotation.version} and end this request workflow. Review your decision before continuing.`}
+        confirmLabel="Confirm decline"
+        pendingLabel="Declining…"
+        pending={controls.busy}
+        onClose={() => setDeclineNote(null)}
+        onConfirm={async () => {
+          if (declineNote === null) return
+          if (
+            await controls.act({
+              type: "RESPOND_QUOTATION",
+              quotationId: quotation.id,
+              decision: "DECLINE",
+              note: declineNote,
+            })
+          )
+            setDeclineNote(null)
         }}
-      >
-        <DialogContent
-          showCloseButton={!controls.busy}
-          className="max-w-[calc(100%-2rem)] sm:max-w-md"
-        >
-          <DialogTitle>Decline quotation?</DialogTitle>
-          <DialogDescription>
-            This will reject quotation version {quotation.version} and end this
-            request workflow. Review your decision before continuing.
-          </DialogDescription>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={controls.busy}
-              onClick={() => setDeclineNote(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              className="bg-[#b42318] text-white hover:bg-[#912018]"
-              disabled={controls.busy}
-              onClick={async () => {
-                if (declineNote === null) return
-                if (
-                  await controls.act({
-                    type: "RESPOND_QUOTATION",
-                    quotationId: quotation.id,
-                    decision: "DECLINE",
-                    note: declineNote,
-                  })
-                )
-                  setDeclineNote(null)
-              }}
-            >
-              {controls.busy ? "Declining…" : "Confirm decline"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      />
       {workflow.permissions.approveQuotation &&
         quotation.status === "PENDING_INTERNAL" &&
         latest &&
         valid &&
         workflow.state === "QUOTATION_PENDING" && (
           <Button
-            className={workflowPrimaryButton}
+            variant="brand"
+            className={workflowButton}
             disabled={controls.busy}
             onClick={() =>
               void controls.act({
@@ -1138,7 +1116,11 @@ export function AgreementCard({ workflow, controls }: CardProps) {
                 required
               />
             </WorkflowField>
-            <Button className={workflowPrimaryButton} disabled={controls.busy}>
+            <Button
+              variant="brand"
+              className={workflowButton}
+              disabled={controls.busy}
+            >
               Submit signed agreement
             </Button>
           </Form>
@@ -1167,7 +1149,8 @@ export function AgreementCard({ workflow, controls }: CardProps) {
             <div className="flex flex-wrap gap-2">
               <Button
                 value="approve"
-                className={workflowPrimaryButton}
+                variant="brand"
+                className={workflowButton}
                 disabled={controls.busy}
               >
                 Approve agreement
@@ -1312,13 +1295,14 @@ function SandboxCardPaymentForm({
           </WorkflowField>
         </div>
         {error && (
-          <p role="alert" className="m-0 text-[11px] text-[#b42318]">
+          <Alert variant="text" className="text-[11px]">
             {error}
-          </p>
+          </Alert>
         )}
         <Button
           type="submit"
-          className={workflowPrimaryButton}
+          variant="brand"
+          className={workflowButton}
           disabled={controls.busy}
         >
           {controls.busy
@@ -1504,7 +1488,8 @@ export function PaymentVerificationCard({ workflow, controls }: CardProps) {
                     )}
                   </WorkflowField>
                   <Button
-                    className={workflowPrimaryButton}
+                    variant="brand"
+                    className={workflowButton}
                     disabled={
                       controls.busy || (proofSource === "upload" && !proofDraft)
                     }
@@ -1558,7 +1543,8 @@ export function PaymentVerificationCard({ workflow, controls }: CardProps) {
             <div className="flex flex-wrap gap-2">
               <Button
                 value="approve"
-                className={workflowPrimaryButton}
+                variant="brand"
+                className={workflowButton}
                 disabled={controls.busy}
               >
                 Confirm payment
@@ -1596,7 +1582,7 @@ export function ProjectActivationCard({ workflow }: { workflow: Workflow }) {
         Your consultation history and approved documents remain available in
         this conversation.
       </p>
-      <Button asChild className={workflowPrimaryButton}>
+      <Button asChild variant="brand" className={workflowButton}>
         <Link href={projectHref}>View Project</Link>
       </Button>
     </WorkflowCard>

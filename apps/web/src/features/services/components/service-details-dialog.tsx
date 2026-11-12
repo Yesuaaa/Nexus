@@ -45,11 +45,7 @@ function formatPrice(amount: string | null, currency: string) {
 
 function StatusPill({ active }: { active: boolean }) {
   return (
-    <Pill
-      className={
-        active ? "bg-[#dcf5e5] text-[#19703a]" : "bg-[#fde4ea] text-[#b4234d]"
-      }
-    >
+    <Pill tone={active ? "success" : "danger"}>
       {active ? "Active" : "Inactive"}
     </Pill>
   )
@@ -166,9 +162,7 @@ export function ServiceDetailsDialog({
                     </strong>
                     <span className="flex flex-none gap-1.5">
                       {servicePackage.isRecommended && (
-                        <Pill className="bg-[#e5edff] text-[#2058d4]">
-                          Recommended
-                        </Pill>
+                        <Pill tone="info">Recommended</Pill>
                       )}
                       <StatusPill active={servicePackage.isActive} />
                     </span>

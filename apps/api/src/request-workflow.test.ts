@@ -1,12 +1,7 @@
 import assert from "node:assert/strict"
-import { randomBytes, randomUUID } from "node:crypto"
-import { readdir, readFile } from "node:fs/promises"
-import type { Server } from "node:http"
-import type { AddressInfo } from "node:net"
+import { randomUUID } from "node:crypto"
 import { test } from "node:test"
 import { PGlite } from "@electric-sql/pglite"
-import { PGLiteSocketServer } from "@electric-sql/pglite-socket"
-import { createApp } from "./app.js"
 import { issueSession } from "./features/auth/auth.service.js"
 import type {
   Prisma,
@@ -15,8 +10,12 @@ import type {
   WorkflowFile,
   WorkflowPayment,
 } from "./generated/prisma/client.js"
-import { getPrisma } from "./lib/db.js"
 import { parseAction } from "./features/request-workflow/workflow.validation.js"
+import {
+  migrationNames,
+  readMigration,
+  startPgliteApp,
+} from "./test/pglite-app.js"
 
 test("request information requires nonblank details", () => {
   for (const details of [undefined, "", "   "]) {
@@ -79,15 +78,7 @@ test("attachment migration preserves existing single-file submissions", async ()
       INSERT INTO "WorkflowFile" VALUES ('legacy-file');
       INSERT INTO "WorkflowRequirement" VALUES ('with-file', 'legacy-file'), ('text-only', NULL);
     `)
-    await db.exec(
-      await readFile(
-        new URL(
-          "20261106000000_requirement_attachments/migration.sql",
-          migrationDirectory,
-        ),
-        "utf8",
-      ),
-    )
+    await db.exec(await readMigration("20261106000000_requirement_attachments"))
     assert.deepEqual(
       (await db.query('SELECT * FROM "_RequirementAttachments"')).rows,
       [{ A: "legacy-file", B: "with-file" }],
@@ -141,7 +132,6 @@ type TestWorkflow = {
   }
 }
 
-const migrationDirectory = new URL("../prisma/migrations/", import.meta.url)
 const workflowMigrationName = "20261031010000_request_workflow"
 
 test("quotation acceptance migration releases paid bookings and preserves holds and documents", async () => {
@@ -170,13 +160,7 @@ test("quotation acceptance migration releases paid bookings and preserves holds 
       INSERT INTO "WorkflowRequirement" VALUES ('outstanding', true, 'SUBMITTED');
     `)
     await db.exec(
-      await readFile(
-        new URL(
-          "20261106010000_quotation_acceptance_agreement/migration.sql",
-          migrationDirectory,
-        ),
-        "utf8",
-      ),
+      await readMigration("20261106010000_quotation_acceptance_agreement"),
     )
     const rows = (
       await db.query<{
@@ -261,15 +245,10 @@ test("quotation acceptance migration releases paid bookings and preserves holds 
 test("workflow migration preserves accepted history without granting approvals", async () => {
   const db = new PGlite()
   try {
-    for (const name of (await readdir(migrationDirectory))
-      .filter((name) => /^\d/.test(name) && name < workflowMigrationName)
-      .sort())
-      await db.exec(
-        await readFile(
-          new URL(`${name}/migration.sql`, migrationDirectory),
-          "utf8",
-        ),
-      )
+    for (const name of (await migrationNames()).filter(
+      (name) => name < workflowMigrationName,
+    ))
+      await db.exec(await readMigration(name))
     await db.exec(`
       INSERT INTO "User" ("id", "email", "passwordHash", "role", "updatedAt") VALUES
         ('migration-client', 'migration-client@example.com', 'private', 'USER', CURRENT_TIMESTAMP),
@@ -281,12 +260,7 @@ test("workflow migration preserves accepted history without granting approvals",
         ('migration-accepted', 'migration-client', 'migration-service', 'Accepted request', 'UNDER_REVIEW', 'migration-department', 'migration-head', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
         ('migration-pending', 'migration-client', 'migration-service', 'Pending request', 'SUBMITTED', NULL, NULL, NULL, CURRENT_TIMESTAMP);
     `)
-    await db.exec(
-      await readFile(
-        new URL(`${workflowMigrationName}/migration.sql`, migrationDirectory),
-        "utf8",
-      ),
-    )
+    await db.exec(await readMigration(workflowMigrationName))
     const records = await db.query<{
       requestId: string
       state: string
@@ -337,44 +311,7 @@ test(
   "conversation workflow enforces formal approvals, scoped controls and project gates",
   { timeout: 180_000 },
   async (t) => {
-    const original = {
-      DATABASE_URL: process.env.DATABASE_URL,
-      DIRECT_URL: process.env.DIRECT_URL,
-      DATABASE_POOL_MAX: process.env.DATABASE_POOL_MAX,
-      JWT_SECRET: process.env.JWT_SECRET,
-    }
-    process.env.JWT_SECRET = randomBytes(32).toString("base64url")
-    const db = new PGlite()
-    let socket: PGLiteSocketServer | undefined = undefined
-    let server: Server | undefined = undefined
-    let prisma: ReturnType<typeof getPrisma> | undefined = undefined
-    t.after(async () => {
-      server?.closeAllConnections()
-      if (server)
-        await new Promise<void>((resolve) => server!.close(() => resolve()))
-      await prisma?.$disconnect()
-      await socket?.stop()
-      await db.close()
-      for (const [key, value] of Object.entries(original)) {
-        if (value === undefined) delete process.env[key]
-        else process.env[key] = value
-      }
-    })
-    for (const name of (await readdir(migrationDirectory))
-      .filter((name) => /^\d/.test(name))
-      .sort())
-      await db.exec(
-        await readFile(
-          new URL(`${name}/migration.sql`, migrationDirectory),
-          "utf8",
-        ),
-      )
-    socket = new PGLiteSocketServer({ db, port: 0, host: "127.0.0.1" })
-    await socket.start()
-    process.env.DATABASE_URL = `postgresql://postgres:postgres@${socket.getServerConn()}/postgres?sslmode=disable`
-    process.env.DATABASE_POOL_MAX = "1"
-    delete process.env.DIRECT_URL
-    prisma = getPrisma()!
+    const { prisma, db, origin } = await startPgliteApp(t)
     async function user(name: string, role: Role) {
       const record = await prisma!.user.create({
         data: {
@@ -464,9 +401,7 @@ test(
         title: "Other client's website",
       },
     })
-    server = createApp().listen(0, "127.0.0.1")
-    await new Promise<void>((resolve) => server!.once("listening", resolve))
-    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`
+    const base = `${origin}/api`
     type Actor = typeof client
     const path = (id = request.id) => `${base}/request-workflows/${id}`
     const get = (actor = client, id = request.id) =>

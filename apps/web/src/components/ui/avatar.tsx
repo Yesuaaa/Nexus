@@ -1,28 +1,30 @@
 "use client"
 
 import { useState } from "react"
+import { getInitials } from "@/lib/initials"
 import { cn } from "@/lib/utils"
 
-export function ConversationAvatar({
+/**
+ * Round avatar: the person's photo (HTTPS URLs only) or their initials,
+ * falling back to initials if the image fails to load. Decorative
+ * (`aria-hidden`); put the name in nearby text.
+ */
+export function Avatar({
   name,
   className,
   imageUrl,
+  fallback = "?",
 }: {
-  name: string
+  name: string | null | undefined
   className?: string
   imageUrl?: string | null
+  /** Shown when the name has no letters. */
+  fallback?: string
 }) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null)
   const showImage = Boolean(
     imageUrl?.startsWith("https://") && imageUrl !== failedUrl,
   )
-  const initials = name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => Array.from(part)[0])
-    .join("")
-    .toUpperCase()
 
   return (
     <span
@@ -40,7 +42,7 @@ export function ConversationAvatar({
           onError={() => setFailedUrl(imageUrl!)}
         />
       ) : (
-        initials || "?"
+        getInitials(name) || fallback
       )}
     </span>
   )

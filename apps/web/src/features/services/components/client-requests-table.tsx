@@ -13,6 +13,7 @@ import type { ServiceRequestSummary } from "../api/client-services-api"
 import { serviceRequestStatuses } from "../model/service-request-status"
 import { ServiceIcon } from "./service-icon"
 import type { ServiceIconKey } from "../api/services-api"
+import { errorMessage } from "@/lib/error-message"
 
 type RequestRowVisual = {
   iconClassName: string
@@ -89,11 +90,7 @@ function RequestActions({
       setConfirming(false)
       onCancelled()
     } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Could not cancel this request.",
-      )
+      setError(errorMessage(reason, "Could not cancel this request."))
     } finally {
       setPending(false)
     }
@@ -194,7 +191,7 @@ export function RequestStatus({
   status: ServiceRequestSummary["status"]
 }) {
   const value = serviceRequestStatuses[status]
-  return <Pill className={value.className}>{value.label}</Pill>
+  return <Pill tone={value.tone}>{value.label}</Pill>
 }
 
 const requestKey = (request: ServiceRequestSummary) => request.id

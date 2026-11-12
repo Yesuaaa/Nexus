@@ -164,10 +164,7 @@ export function RequirementResponseForm({
           </span>
         </div>
       </WorkflowField>
-      <Button
-        className={`${workflowButton} bg-[#203f8c] text-white hover:bg-[#172f70]`}
-        disabled={busy}
-      >
+      <Button variant="brand" className={workflowButton} disabled={busy}>
         Submit requirement
       </Button>
     </Form>

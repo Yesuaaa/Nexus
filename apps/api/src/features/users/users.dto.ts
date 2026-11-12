@@ -1,6 +1,22 @@
-import type { User } from "../../generated/prisma/client.js"
+import type { Prisma, User } from "../../generated/prisma/client.js"
+import {
+  departmentSummarySelect,
+  teamSummarySelect,
+} from "../../shared/query/selects.js"
 import { permissionsFor } from "../auth/auth.permissions.js"
-import { profileImagePublicUrl } from "../services/service-image-storage.js"
+import { userImageUrl } from "../services/service-image-storage.js"
+
+/**
+ * Relations every `publicUser()` source should load so that `imageUrl`
+ * (employee image fallback), department, team and `headOf` are the same on
+ * /me, login, profile and account-management responses.
+ */
+export const publicUserInclude = {
+  employee: { select: { profileImageUrl: true } },
+  department: { select: departmentSummarySelect },
+  team: { select: teamSummarySelect },
+  headOf: { select: { id: true, name: true } },
+} as const satisfies Prisma.UserInclude
 
 export function publicUser(
   user: User & {
@@ -19,10 +35,7 @@ export function publicUser(
     id: user.id,
     email: user.email,
     fullName: user.fullName,
-    imageUrl: profileImagePublicUrl(
-      user.profileImagePath,
-      user.employee?.profileImageUrl,
-    ),
+    imageUrl: userImageUrl(user),
     contactNumber: user.contactNumber,
     position: user.position ?? null,
     role: user.role,
@@ -45,7 +58,7 @@ export function publicUser(
         }
       : null,
     permissions: permissionsFor(user.role),
-    headOf: user.headOf ?? null,
+    headOf: user.headOf ? { id: user.headOf.id, name: user.headOf.name } : null,
     createdAt: user.createdAt,
   }
 }

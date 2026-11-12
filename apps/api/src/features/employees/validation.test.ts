@@ -70,10 +70,20 @@ test("employee identity fields match registration and account creation rules", (
   )
   assert.equal("value" in accepted, true)
 
+  // Employee emails follow the shared registration rule: any dotted domain.
+  for (const email of [
+    "jane@example.org",
+    "Jane.Doe+hr@sub.example.io",
+    "jane@company.co.uk",
+  ])
+    assert.deepEqual(validateEmployeeInput({ email }, true), {
+      value: { email: email.toLowerCase() },
+    })
+
   for (const input of [
     { fullName: "Jane123" },
-    { email: "jane@example.org" },
-    { email: "jane..doe@example.com" },
+    { email: "jane@localhost" },
+    { email: "jane doe@example.com" },
     { contactNumber: "+63 912 345 6789" },
     { contactNumber: "07123456789" },
   ]) {

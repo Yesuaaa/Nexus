@@ -1,72 +1,18 @@
 import assert from "node:assert/strict"
-import { randomBytes } from "node:crypto"
-import { readdir, readFile } from "node:fs/promises"
-import type { Server } from "node:http"
-import type { AddressInfo } from "node:net"
 import { test } from "node:test"
-import { PGlite } from "@electric-sql/pglite"
-import { PGLiteSocketServer } from "@electric-sql/pglite-socket"
-import { createApp } from "../../app.js"
-import { getPrisma } from "../../lib/db.js"
 import { Role } from "../../generated/prisma/client.js"
 import { hashPassword } from "../auth/auth.password.js"
 import { usersRepository } from "./users.repository.js"
 import { issueSession } from "../auth/auth.service.js"
 import type { publicUser } from "./users.dto.js"
+import { startPgliteApp } from "../../test/pglite-app.js"
 
 test(
   "Superadmins restore trashed accounts as inactive while preserving their records",
   { timeout: 120_000 },
   async (t) => {
-    const originalJwtSecret = process.env.JWT_SECRET
-    process.env.JWT_SECRET = randomBytes(32).toString("base64url")
-    const originalUrl = process.env.DATABASE_URL
-    const originalDirectUrl = process.env.DIRECT_URL
-    const originalPoolMax = process.env.DATABASE_POOL_MAX
-    const database = new PGlite()
-    const cleanup: {
-      socket?: PGLiteSocketServer
-      server?: Server
-      prisma?: ReturnType<typeof getPrisma>
-    } = {}
-    t.after(async () => {
-      if (cleanup.server)
-        await new Promise<void>((resolve) =>
-          cleanup.server!.close(() => resolve()),
-        )
-      await cleanup.prisma?.$disconnect()
-      await cleanup.socket?.stop()
-      await database.close()
-      if (originalJwtSecret === undefined) delete process.env.JWT_SECRET
-      else process.env.JWT_SECRET = originalJwtSecret
-      if (originalUrl === undefined) delete process.env.DATABASE_URL
-      else process.env.DATABASE_URL = originalUrl
-      if (originalDirectUrl === undefined) delete process.env.DIRECT_URL
-      else process.env.DIRECT_URL = originalDirectUrl
-      if (originalPoolMax === undefined) delete process.env.DATABASE_POOL_MAX
-      else process.env.DATABASE_POOL_MAX = originalPoolMax
-    })
-    await database.waitReady
-    const migrations = new URL("../../../prisma/migrations/", import.meta.url)
-    for (const name of (await readdir(migrations))
-      .filter((name) => /^\d/.test(name))
-      .sort()) {
-      await database.exec(
-        await readFile(new URL(`${name}/migration.sql`, migrations), "utf8"),
-      )
-    }
-    const socket = new PGLiteSocketServer({
-      db: database,
-      port: 0,
-      host: "127.0.0.1",
-    })
-    cleanup.socket = socket
-    await socket.start()
-    process.env.DATABASE_URL = `postgresql://postgres:postgres@${socket.getServerConn()}/postgres?sslmode=disable`
-    process.env.DATABASE_POOL_MAX = "1"
-    delete process.env.DIRECT_URL
-    const prisma = getPrisma()!
-    cleanup.prisma = prisma
+    const { prisma, db: database, origin } = await startPgliteApp(t)
+    const base = `${origin}/api`
     const password = "OriginalPassword123!"
     const passwordHash = await hashPassword(password)
     const tokens = new Map<string, string>()
@@ -106,10 +52,6 @@ test(
     const before = await prisma.user.findUniqueOrThrow({
       where: { id: "target" },
     })
-    const server = createApp().listen(0, "127.0.0.1")
-    cleanup.server = server
-    await new Promise<void>((resolve) => server.once("listening", resolve))
-    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`
     const headers = (actor: string) => ({
       Authorization: `Bearer ${tokens.get(actor)}`,
     })

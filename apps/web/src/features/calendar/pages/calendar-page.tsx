@@ -16,18 +16,14 @@ import {
   clientPageHeaderActionClass,
 } from "@/components/layout/client-page-header"
 import { contentClass } from "@/components/layout/styles"
+import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Calendar, calendarDate } from "@/components/ui/calendar"
 import { KpiCards, type KpiMetric } from "@/components/ui/kpi-cards"
+import { pillToneClass } from "@/components/ui/pill"
 import { apiRequest } from "@/features/auth/api/auth-api"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { FilterSelect } from "@/components/ui/filter-select"
 import { watchVisibleRefresh } from "@/lib/visible-refresh"
 import {
   calendarConflicts,
@@ -35,6 +31,7 @@ import {
   type CalendarEvent,
   type CalendarResponse,
 } from "../model/calendar"
+import { errorMessage } from "@/lib/error-message"
 
 const eventTypes = {
   consultation: { label: "Consultation", color: "#203f8c", Icon: CalendarDays },
@@ -88,7 +85,8 @@ function EventAction({
     return (
       <Button
         asChild
-        className="relative z-10 h-8 shrink-0 bg-[#203f8c] px-3 text-sm text-white hover:bg-[#172f70]"
+        variant="brand"
+        className="relative z-10 h-8 shrink-0 px-3 text-sm"
       >
         <a href={url} target="_blank" rel="noopener noreferrer">
           Join meeting
@@ -129,22 +127,16 @@ function CalendarFilter({
   options: { id: string; name: string }[]
 }) {
   return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger
-        aria-label={label}
-        className="h-[34px] w-[180px] text-xs max-[560px]:h-11 max-[560px]:w-full"
-      >
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="all">All {label.toLowerCase()}</SelectItem>
-        {options.map(({ id, name }) => (
-          <SelectItem key={id} value={id}>
-            {name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <FilterSelect
+      label={label}
+      value={value}
+      onChange={onChange}
+      triggerClassName="w-[180px]"
+      options={[
+        { value: "all", label: `All ${label.toLowerCase()}` },
+        ...options.map(({ id, name }) => ({ value: id, label: name })),
+      ]}
+    />
   )
 }
 
@@ -196,11 +188,7 @@ export function CalendarPage() {
         .catch((reason: unknown) => {
           if (!controller.signal.aborted) {
             setEvents([])
-            setError(
-              reason instanceof Error
-                ? reason.message
-                : "Could not load your calendar.",
-            )
+            setError(errorMessage(reason, "Could not load your calendar."))
           }
         })
         .finally(() => {
@@ -340,7 +328,7 @@ export function CalendarPage() {
         )}
       </ClientPageHeader>
       {error && (
-        <p role="alert" className="mt-4 text-sm text-red-700">
+        <Alert variant="text" className="mt-4 text-sm">
           {error}
           <Button
             variant="outline"
@@ -352,15 +340,21 @@ export function CalendarPage() {
           >
             Try again
           </Button>
-        </p>
+        </Alert>
       )}
       {!isClient && (
         <section className="mt-4 space-y-2" aria-label="Calendar filters">
           <div className="flex flex-wrap items-center gap-2.5">
             {!organization && canViewTeam && (
-              <Select
+              <FilterSelect
+                label="Calendar scope"
                 value={scope}
-                onValueChange={(value) => {
+                triggerClassName="w-[180px]"
+                options={[
+                  { value: "mine", label: "My schedule" },
+                  { value: "team", label: "My team" },
+                ]}
+                onChange={(value) => {
                   setLoading(true)
                   setEvents([])
                   setScope(value)
@@ -368,18 +362,7 @@ export function CalendarPage() {
                   setStaffId("all")
                   setDepartmentId("all")
                 }}
-              >
-                <SelectTrigger
-                  aria-label="Calendar scope"
-                  className="h-[34px] w-[180px] text-xs max-[560px]:h-11 max-[560px]:w-full"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="mine">My schedule</SelectItem>
-                  <SelectItem value="team">My team</SelectItem>
-                </SelectContent>
-              </Select>
+              />
             )}
             <CalendarFilter
               label="Event types"
@@ -530,7 +513,7 @@ export function CalendarPage() {
                         <div className="mt-1 flex flex-wrap gap-1">
                           {status && (
                             <span
-                              className={`inline-flex rounded-full px-1.5 text-[10px] leading-4 font-medium ${status === "Overdue" ? "bg-red-100 text-red-800" : "bg-emerald-100 text-emerald-800"}`}
+                              className={`inline-flex rounded-full px-1.5 text-[10px] leading-4 font-medium ${pillToneClass(status === "Overdue" ? "danger" : "success")}`}
                             >
                               {status}
                             </span>
@@ -631,7 +614,7 @@ export function CalendarPage() {
 
                       {event.pending && (
                         <span
-                          className="rounded-full bg-amber-100 px-1.5 text-[10px] leading-4 font-medium text-amber-800"
+                          className={`rounded-full px-1.5 text-[10px] leading-4 font-medium ${pillToneClass("warning")}`}
                           title="Reschedule pending"
                         >
                           Pending

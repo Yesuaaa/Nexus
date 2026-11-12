@@ -86,36 +86,45 @@ export function listClients(
   })
 }
 
-export async function getClientDetails(id: string): Promise<{
+export async function getClientDetails(
+  id: string,
+  signal?: AbortSignal,
+): Promise<{
   client: ClientDetails
   serviceRequestCount: number
   projectCount: number
 }> {
-  return apiRequest(`/api/clients/${encodeURIComponent(id)}`)
+  return apiRequest(`/api/clients/${encodeURIComponent(id)}`, { signal })
 }
 
 export async function listClientServiceRequests(
   id: string,
   page: number,
+  signal?: AbortSignal,
 ): Promise<ClientPage<ClientServiceRequest>> {
   const result = await apiRequest<{
     serviceRequests: ClientServiceRequest[]
     total: number
     page: number
     pageSize: number
-  }>(`/api/clients/${encodeURIComponent(id)}/service-requests?page=${page}`)
+  }>(`/api/clients/${encodeURIComponent(id)}/service-requests?page=${page}`, {
+    signal,
+  })
   return { ...result, rows: result.serviceRequests }
 }
 
 export async function listClientProjects(
   id: string,
   page: number,
+  signal?: AbortSignal,
 ): Promise<ClientPage<ClientProject>> {
   const result = await apiRequest<{
     projects: ClientProject[]
     total: number
     page: number
     pageSize: number
-  }>(`/api/clients/${encodeURIComponent(id)}/projects?page=${page}`)
+  }>(`/api/clients/${encodeURIComponent(id)}/projects?page=${page}`, {
+    signal,
+  })
   return { ...result, rows: result.projects }
 }

@@ -21,16 +21,18 @@ import {
   X,
 } from "lucide-react"
 import { sileo } from "@/lib/toast"
+import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
+import { EmptyState } from "@/components/ui/empty-state"
+import { FilterSelect } from "@/components/ui/filter-select"
+import {
+  Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+} from "@/components/ui/modal"
 import { SearchField } from "@/components/ui/search-field"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import {
@@ -41,13 +43,15 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetDescription,
-  SheetTitle,
-} from "@/components/ui/sheet"
-import { useAnimatedPanelClose } from "@/components/ui/use-animated-panel-close"
+  DetailItem,
+  DetailList,
+  SidePanel,
+  SidePanelBody,
+  SidePanelFooter,
+  SidePanelHeader,
+  SidePanelSection,
+  useSidePanel,
+} from "@/components/ui/side-panel"
 import { cn } from "@/lib/utils"
 import {
   approveProjectDeliverable,
@@ -65,6 +69,7 @@ import {
   deliverableStatusClass,
   deliverableStatusLabel,
 } from "./deliverable-status"
+import { errorMessage } from "@/lib/error-message"
 
 type DeliverableRow = {
   workspaceId: string
@@ -144,101 +149,72 @@ function EditDeliverableDialog({
   }
 
   return (
-    <Dialog open={!!row} onOpenChange={(open) => !open && !busy && onClose()}>
-      <DialogContent
-        showCloseButton={false}
-        overlayClassName="bg-[#14213d]/40"
-        className="max-w-[520px] gap-0 overflow-hidden rounded-[13px] border-[#dedede] p-0 text-[#182235] shadow-[0_16px_60px_rgb(18_36_73_/_18%)]"
-      >
-        <form onSubmit={submit}>
-          <DialogHeader className="border-b border-[#eceef1] px-6 py-5 text-left">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <DialogTitle className="text-[20px] leading-tight font-[650] tracking-[-0.03em]">
-                  Edit deliverable
-                </DialogTitle>
-                <DialogDescription className="mt-1 text-xs text-[#52627a]">
-                  Update the expected result and submission requirements.
-                </DialogDescription>
-              </div>
-              <button
-                type="button"
-                aria-label="Close edit deliverable"
-                disabled={busy}
-                className={cn(rowActionButton, "max-[560px]:size-10")}
-                onClick={onClose}
-              >
-                <X size={16} aria-hidden="true" />
-              </button>
-            </div>
-          </DialogHeader>
-          <div className="grid gap-4 px-6 py-5">
-            <label className="grid gap-1.5 text-xs font-medium">
-              Deliverable name
-              <input
-                value={title}
-                maxLength={300}
-                onChange={(event) => setTitle(event.currentTarget.value)}
-                className="h-10 rounded-lg border border-[#d7dfe8] bg-[#f8fafc] px-3 text-xs font-normal outline-none focus-visible:ring-2 focus-visible:ring-[#294c96]"
-              />
-            </label>
-            <label className="grid gap-1.5 text-xs font-medium">
-              Description
-              <textarea
-                value={description}
-                maxLength={4000}
-                rows={4}
-                onChange={(event) => setDescription(event.currentTarget.value)}
-                placeholder="Describe what the staff member should prepare."
-                className="min-h-24 resize-y rounded-lg border border-[#d7dfe8] bg-[#f8fafc] px-3 py-2 text-xs leading-5 font-normal outline-none focus-visible:ring-2 focus-visible:ring-[#294c96]"
-              />
-            </label>
-            <label className="grid gap-1.5 text-xs font-medium">
-              Expected attachment
-              <Select
-                value={expectedFileType || "any"}
-                onValueChange={(value) =>
-                  setExpectedFileType(value === "any" ? "" : value)
-                }
-              >
-                <SelectTrigger className="h-10 bg-[#f8fafc] text-xs">
-                  <SelectValue placeholder="Any supported file" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="any">Any supported file</SelectItem>
-                  <SelectItem value="PDF">PDF</SelectItem>
-                  <SelectItem value="Word document">Word document</SelectItem>
-                  <SelectItem value="Image">Image</SelectItem>
-                  <SelectItem value="Plain text">Plain text</SelectItem>
-                </SelectContent>
-              </Select>
-            </label>
-            {error && (
-              <p role="alert" className="m-0 text-xs text-red-700">
-                {error}
-              </p>
-            )}
-          </div>
-          <DialogFooter className="border-t border-[#eceef1] px-6 py-4">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy}
-              onClick={onClose}
+    <Modal open={!!row} size="md" busy={busy} onClose={onClose}>
+      <ModalHeader
+        title="Edit deliverable"
+        description="Update the expected result and submission requirements."
+        closeLabel="Close edit deliverable"
+        closeDisabled={busy}
+      />
+      <form onSubmit={submit}>
+        <ModalBody>
+          <label className="grid gap-1.5 text-xs font-medium">
+            Deliverable name
+            <input
+              value={title}
+              maxLength={300}
+              onChange={(event) => setTitle(event.currentTarget.value)}
+              className="h-10 rounded-lg border border-[#d7dfe8] bg-[#f8fafc] px-3 text-xs font-normal outline-none focus-visible:ring-2 focus-visible:ring-[#294c96]"
+            />
+          </label>
+          <label className="grid gap-1.5 text-xs font-medium">
+            Description
+            <textarea
+              value={description}
+              maxLength={4000}
+              rows={4}
+              onChange={(event) => setDescription(event.currentTarget.value)}
+              placeholder="Describe what the staff member should prepare."
+              className="min-h-24 resize-y rounded-lg border border-[#d7dfe8] bg-[#f8fafc] px-3 py-2 text-xs leading-5 font-normal outline-none focus-visible:ring-2 focus-visible:ring-[#294c96]"
+            />
+          </label>
+          <label className="grid gap-1.5 text-xs font-medium">
+            Expected attachment
+            <Select
+              value={expectedFileType || "any"}
+              onValueChange={(value) =>
+                setExpectedFileType(value === "any" ? "" : value)
+              }
             >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={busy}
-              className="bg-[#203f8c] text-white hover:bg-[#172f70]"
-            >
-              {busy ? "Saving…" : "Save changes"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+              <SelectTrigger className="h-10 bg-[#f8fafc] text-xs">
+                <SelectValue placeholder="Any supported file" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="any">Any supported file</SelectItem>
+                <SelectItem value="PDF">PDF</SelectItem>
+                <SelectItem value="Word document">Word document</SelectItem>
+                <SelectItem value="Image">Image</SelectItem>
+                <SelectItem value="Plain text">Plain text</SelectItem>
+              </SelectContent>
+            </Select>
+          </label>
+          {error && <Alert variant="text">{error}</Alert>}
+        </ModalBody>
+        <ModalFooter>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            onClick={onClose}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" variant="brand" disabled={busy}>
+            {busy ? "Saving…" : "Save changes"}
+          </Button>
+        </ModalFooter>
+      </form>
+    </Modal>
   )
 }
 
@@ -272,142 +248,60 @@ function RejectDeliverableDialog({
   }
 
   return (
-    <Dialog open={!!row} onOpenChange={(open) => !open && !busy && onClose()}>
-      <DialogContent
-        showCloseButton={false}
-        overlayClassName="bg-[#14213d]/40"
-        className="max-w-[440px] gap-0 overflow-hidden rounded-[13px] border-[#dedede] p-0 text-[#182235] shadow-[0_16px_60px_rgb(18_36_73_/_18%)]"
-      >
-        <form onSubmit={submit}>
-          <DialogHeader className="border-b border-[#eceef1] px-6 py-5 text-left">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <DialogTitle className="text-[20px] leading-tight font-[650] tracking-[-0.03em]">
-                  Reject deliverable
-                </DialogTitle>
-                <DialogDescription className="mt-1 text-xs text-[#52627a]">
-                  {row?.deliverable.title}
-                </DialogDescription>
-              </div>
-              <button
-                type="button"
-                aria-label="Close reject deliverable"
-                disabled={busy}
-                className={cn(rowActionButton, "max-[560px]:size-10")}
-                onClick={onClose}
-              >
-                <X size={16} aria-hidden="true" />
-              </button>
-            </div>
-          </DialogHeader>
-          <div className="grid gap-2 px-6 py-5">
-            <label
-              htmlFor="deliverable-rejection-reason"
-              className="text-xs font-medium"
-            >
-              Reason for rejection <span className="text-red-600">*</span>
-            </label>
-            <p className="m-0 text-xs leading-5 text-[#52627a]">
-              Staff will see this note and can submit a revised attachment.
-            </p>
-            <textarea
-              id="deliverable-rejection-reason"
-              value={reason}
-              maxLength={2000}
-              rows={4}
-              required
-              onChange={(event) => setReason(event.currentTarget.value)}
-              placeholder="Describe what needs to change..."
-              className="min-h-24 resize-y rounded-lg border border-[#d7dfe8] bg-[#f8fafc] px-3 py-2 text-xs leading-5 outline-none focus-visible:ring-2 focus-visible:ring-[#294c96]"
-            />
-            {error && (
-              <p role="alert" className="m-0 text-xs text-red-700">
-                {error}
-              </p>
-            )}
-          </div>
-          <DialogFooter className="border-t border-[#eceef1] px-6 py-4">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy}
-              onClick={onClose}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={busy || reason.trim().length < 3}
-              className="bg-[#b3343b] text-white hover:bg-[#962b32]"
-            >
-              {busy ? "Rejecting…" : "Reject deliverable"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function RemoveAttachmentDialog({
-  row,
-  busy,
-  onClose,
-  onRemove,
-}: {
-  row: DeliverableRow | null
-  busy: boolean
-  onClose: () => void
-  onRemove: () => void
-}) {
-  return (
-    <Dialog open={!!row} onOpenChange={(open) => !open && !busy && onClose()}>
-      <DialogContent
-        showCloseButton={false}
-        overlayClassName="bg-[#14213d]/40"
-        className="max-w-[420px] gap-0 overflow-hidden rounded-[13px] border-[#dedede] p-0 text-[#182235]"
-      >
-        <DialogHeader className="border-b border-[#eceef1] px-6 py-5 text-left">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <DialogTitle className="text-[20px] leading-tight font-[650] tracking-[-0.03em]">
-                Remove attachment?
-              </DialogTitle>
-              <DialogDescription className="mt-1 text-xs text-[#52627a]">
-                Remove the file from “{row?.deliverable.title}”?
-              </DialogDescription>
-            </div>
-            <button
-              type="button"
-              aria-label="Close remove attachment confirmation"
-              disabled={busy}
-              className={rowActionButton}
-              onClick={onClose}
-            >
-              <X size={16} aria-hidden="true" />
-            </button>
-          </div>
-        </DialogHeader>
-        <DialogFooter className="px-6 py-4">
-          <Button variant="outline" disabled={busy} onClick={onClose}>
+    <Modal open={!!row} size="sm" busy={busy} onClose={onClose}>
+      <ModalHeader
+        title="Reject deliverable"
+        description={row?.deliverable.title}
+        closeLabel="Close reject deliverable"
+        closeDisabled={busy}
+      />
+      <form onSubmit={submit}>
+        <ModalBody className="gap-2">
+          <label
+            htmlFor="deliverable-rejection-reason"
+            className="text-xs font-medium"
+          >
+            Reason for rejection <span className="text-red-600">*</span>
+          </label>
+          <p className="m-0 text-xs leading-5 text-[#52627a]">
+            Staff will see this note and can submit a revised attachment.
+          </p>
+          <textarea
+            id="deliverable-rejection-reason"
+            value={reason}
+            maxLength={2000}
+            rows={4}
+            required
+            onChange={(event) => setReason(event.currentTarget.value)}
+            placeholder="Describe what needs to change..."
+            className="min-h-24 resize-y rounded-lg border border-[#d7dfe8] bg-[#f8fafc] px-3 py-2 text-xs leading-5 outline-none focus-visible:ring-2 focus-visible:ring-[#294c96]"
+          />
+          {error && <Alert variant="text">{error}</Alert>}
+        </ModalBody>
+        <ModalFooter>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            onClick={onClose}
+          >
             Cancel
           </Button>
           <Button
-            disabled={busy}
-            className="bg-[#b3343b] text-white hover:bg-[#962b32]"
-            onClick={onRemove}
+            type="submit"
+            variant="danger"
+            disabled={busy || reason.trim().length < 3}
           >
-            {busy ? "Removing…" : "Remove attachment"}
+            {busy ? "Rejecting…" : "Reject deliverable"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </ModalFooter>
+      </form>
+    </Modal>
   )
 }
 
 function DeliverableDetailsPanel({
   row,
-  opener,
   busy,
   onClose,
   onUpload,
@@ -417,8 +311,7 @@ function DeliverableDetailsPanel({
   onReject,
   onSend,
 }: {
-  row: DeliverableRow | null
-  opener: HTMLElement | null
+  row: DeliverableRow
   busy: boolean
   onClose: () => void
   onUpload: () => void
@@ -428,212 +321,163 @@ function DeliverableDetailsPanel({
   onReject: () => void
   onSend: () => void
 }) {
-  const { open, handleOpenChange } = useAnimatedPanelClose(onClose)
+  const panel = useSidePanel(onClose)
 
   return (
-    <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent
-        showCloseButton={false}
-        overlayClassName="nexus-panel-overlay bg-[rgb(13_28_57_/_40%)]"
-        className="nexus-side-panel inset-y-auto top-[15px] right-[15px] flex h-[calc(100dvh-30px)] max-h-none w-[min(600px,calc(100vw-30px))] max-w-none flex-col gap-0 overflow-hidden rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_16px_60px_rgb(18_36_73_/_18%)] sm:max-w-none max-[560px]:top-0 max-[560px]:right-0 max-[560px]:h-dvh max-[560px]:w-full max-[560px]:rounded-none max-[560px]:border-0"
-        onCloseAutoFocus={(event) => {
-          event.preventDefault()
-          if (opener?.isConnected) opener.focus()
-          else if (row) {
-            const fallback = document.getElementById(
-              `project-deliverable-view-${row.deliverable.id}`,
-            )
-            if (fallback instanceof HTMLElement) fallback.focus()
-          }
-        }}
-      >
-        {row && (
-          <>
-            <header className="flex flex-none items-start justify-between gap-4 border-b border-[#eceef1] px-6 pt-6 pb-5 max-[560px]:px-5">
-              <div className="min-w-0">
-                <SheetTitle className="m-0 text-[22px] leading-[1.25] font-[650] tracking-[-0.03em]">
-                  Deliverable details
-                </SheetTitle>
-                <SheetDescription className="mt-1 text-xs text-[#52627a]">
-                  {row.stream.serviceName}
-                </SheetDescription>
-              </div>
-              <SheetClose asChild>
-                <button
-                  type="button"
-                  aria-label="Close deliverable details"
-                  className={cn(rowActionButton, "max-[560px]:size-11")}
-                >
-                  <X size={16} aria-hidden="true" />
-                </button>
-              </SheetClose>
-            </header>
-            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 max-[560px]:px-5">
-              <h2 className="m-0 break-words text-base font-semibold">
-                {row.deliverable.title}
-              </h2>
-              <span
-                className={cn(
-                  "mt-3 inline-flex rounded-md px-2.5 py-1 text-[11px] font-medium",
-                  deliverableStatusClass(row.deliverable.deliveryStatus),
-                )}
-              >
-                {deliverableStatusLabel(row.deliverable.deliveryStatus)}
-              </span>
-              <dl className="mt-5 grid grid-cols-2 gap-x-5 max-[450px]:grid-cols-1">
-                {[
-                  ["Service", row.stream.serviceName],
-                  [
-                    "Expected attachment",
-                    row.deliverable.expectedFileType || "Any supported file",
-                  ],
-                ].map(([label, value]) => (
-                  <div
-                    key={label}
-                    className="min-w-0 border-b border-[#eceef1] py-3"
-                  >
-                    <dt className="text-[11px] text-[#52627a]">{label}</dt>
-                    <dd className="mt-1.5 ml-0 text-xs font-medium [overflow-wrap:anywhere]">
-                      {value}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-              <section className="mt-6">
-                <h3 className="m-0 text-xs font-semibold">Description</h3>
-                <p className="mt-2 mb-0 text-xs leading-6 whitespace-pre-wrap text-[#52627a] [overflow-wrap:anywhere]">
-                  {row.deliverable.description ||
-                    "No description has been added yet."}
-                </p>
-              </section>
-              {row.deliverable.rejectionReason && (
-                <section className="mt-5 rounded-lg border border-[#f3c8cb] bg-[#fff5f5] p-3">
-                  <h3 className="m-0 text-xs font-semibold text-[#9f2d35]">
-                    Reason for rejection
-                  </h3>
-                  <p className="mt-2 mb-0 text-xs leading-5 whitespace-pre-wrap text-[#80313a]">
-                    {row.deliverable.rejectionReason}
-                  </p>
-                </section>
-              )}
-              <section className="mt-6">
-                <h3 className="m-0 text-xs font-semibold">Attachment</h3>
-                {row.deliverable.workflowFile &&
-                (row.stream.canAssign || row.stream.canUploadDeliverables) ? (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={onDownload}
-                    className="mt-2 flex w-full items-center gap-3 rounded-lg border border-[#dfe4ec] bg-[#f8fafd] px-3 py-3 text-left hover:bg-[#f1f5fa] disabled:opacity-60"
-                  >
-                    <FileText
-                      size={18}
-                      className="shrink-0 text-[#294c96]"
-                      aria-hidden="true"
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-xs font-medium text-[#203f8c]">
-                        {row.deliverable.workflowFile.name}
-                      </span>
-                      <span className="mt-1 block text-[11px] text-[#738096]">
-                        {formatBytes(row.deliverable.workflowFile.size)}
-                      </span>
-                    </span>
-                    <Download
-                      size={15}
-                      className="shrink-0 text-[#52627a]"
-                      aria-hidden="true"
-                    />
-                  </button>
-                ) : row.deliverable.workflowFile ? (
-                  <p className="mt-2 mb-0 rounded-lg border border-[#dfe4ec] bg-[#f8fafd] px-3 py-3 text-xs text-[#52627a]">
-                    {row.deliverable.workflowFile.name} ·{" "}
-                    {formatBytes(row.deliverable.workflowFile.size)}
-                  </p>
-                ) : (
-                  <p className="mt-2 mb-0 rounded-lg border border-dashed border-[#d7dfe8] px-4 py-5 text-center text-xs text-[#738096]">
-                    No file attached
-                  </p>
-                )}
-              </section>
-            </div>
-            <footer className="flex flex-none flex-wrap items-center justify-between gap-3 border-t border-[#eceef1] px-6 py-4 max-[560px]:px-5">
-              {row.stream.canAssign &&
-              row.deliverable.deliveryStatus === "IN_REVIEW" ? (
-                <div className="flex w-full justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    disabled={busy}
-                    className="text-[#b3343b] hover:bg-[#fff5f5]"
-                    onClick={onReject}
-                  >
-                    <X size={14} aria-hidden="true" />
-                    Reject
-                  </Button>
-                  <Button
-                    disabled={busy}
-                    className="bg-[#13743b] text-white hover:bg-[#0e6030]"
-                    onClick={onApprove}
-                  >
-                    <Check size={14} aria-hidden="true" />
-                    Approve
-                  </Button>
-                </div>
-              ) : row.stream.canAssign &&
-                row.deliverable.deliveryStatus === "APPROVED" ? (
-                <div className="flex w-full justify-end">
-                  <Button
-                    disabled={busy}
-                    className="bg-[#203f8c] text-white hover:bg-[#172f70]"
-                    onClick={onSend}
-                  >
-                    <Send size={14} aria-hidden="true" />
-                    Send to client
-                  </Button>
-                </div>
-              ) : row.stream.canUploadDeliverables &&
-                ["NOT_SUBMITTED", "REJECTED", "IN_REVIEW"].includes(
-                  row.deliverable.deliveryStatus,
-                ) ? (
-                <div className="flex w-full justify-end gap-2">
-                  {row.deliverable.workflowFile && (
-                    <Button
-                      variant="outline"
-                      disabled={busy}
-                      className="text-[#b3343b] hover:bg-[#fff5f5]"
-                      onClick={onRemove}
-                    >
-                      <Trash2 size={14} aria-hidden="true" />
-                      Remove attachment
-                    </Button>
-                  )}
-                  {["NOT_SUBMITTED", "REJECTED"].includes(
-                    row.deliverable.deliveryStatus,
-                  ) && (
-                    <Button
-                      disabled={busy}
-                      className="bg-[#203f8c] text-white hover:bg-[#172f70]"
-                      onClick={onUpload}
-                    >
-                      <Upload size={14} aria-hidden="true" />
-                      {row.deliverable.workflowFile
-                        ? "Replace attachment"
-                        : "Upload attachment"}
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                <span className="text-[11px] text-[#738096]">
-                  {row.deliverable.deliveryStatus === "SENT_TO_CLIENT"
-                    ? "Shared with the client"
-                    : "Review the details and attachment above."}
-                </span>
-              )}
-            </footer>
-          </>
+    <SidePanel
+      open={panel.open}
+      onOpenChange={panel.onOpenChange}
+      fallbackFocus={() =>
+        document.getElementById(
+          `project-deliverable-view-${row.deliverable.id}`,
+        )
+      }
+    >
+      <SidePanelHeader
+        title="Deliverable details"
+        description={row.stream.serviceName}
+        closeLabel="Close deliverable details"
+      />
+      <SidePanelBody>
+        <div className="min-w-0">
+          <h2 className="m-0 text-base font-semibold break-words">
+            {row.deliverable.title}
+          </h2>
+          <span
+            className={cn(
+              "mt-3 inline-flex rounded-md px-2.5 py-1 text-[11px] font-medium",
+              deliverableStatusClass(row.deliverable.deliveryStatus),
+            )}
+          >
+            {deliverableStatusLabel(row.deliverable.deliveryStatus)}
+          </span>
+        </div>
+        <DetailList layout="stacked">
+          <DetailItem label="Service">{row.stream.serviceName}</DetailItem>
+          <DetailItem label="Expected attachment">
+            {row.deliverable.expectedFileType || "Any supported file"}
+          </DetailItem>
+        </DetailList>
+        <SidePanelSection title="Description">
+          <p className="m-0 text-xs leading-6 whitespace-pre-wrap text-[#52627a] [overflow-wrap:anywhere]">
+            {row.deliverable.description ||
+              "No description has been added yet."}
+          </p>
+        </SidePanelSection>
+        {row.deliverable.rejectionReason && (
+          <section className="rounded-lg border border-[#f3c8cb] bg-[#fff5f5] p-3">
+            <h3 className="m-0 text-xs font-semibold text-[#9f2d35]">
+              Reason for rejection
+            </h3>
+            <p className="mt-2 mb-0 text-xs leading-5 whitespace-pre-wrap text-[#80313a]">
+              {row.deliverable.rejectionReason}
+            </p>
+          </section>
         )}
-      </SheetContent>
-    </Sheet>
+        <SidePanelSection title="Attachment">
+          {row.deliverable.workflowFile &&
+          (row.stream.canAssign || row.stream.canUploadDeliverables) ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onDownload}
+              className="flex w-full items-center gap-3 rounded-lg border border-[#dfe4ec] bg-[#f8fafd] px-3 py-3 text-left hover:bg-[#f1f5fa] disabled:opacity-60"
+            >
+              <FileText
+                size={18}
+                className="shrink-0 text-[#294c96]"
+                aria-hidden="true"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-xs font-medium text-[#203f8c]">
+                  {row.deliverable.workflowFile.name}
+                </span>
+                <span className="mt-1 block text-[11px] text-[#738096]">
+                  {formatBytes(row.deliverable.workflowFile.size)}
+                </span>
+              </span>
+              <Download
+                size={15}
+                className="shrink-0 text-[#52627a]"
+                aria-hidden="true"
+              />
+            </button>
+          ) : row.deliverable.workflowFile ? (
+            <p className="m-0 rounded-lg border border-[#dfe4ec] bg-[#f8fafd] px-3 py-3 text-xs text-[#52627a]">
+              {row.deliverable.workflowFile.name} ·{" "}
+              {formatBytes(row.deliverable.workflowFile.size)}
+            </p>
+          ) : (
+            <EmptyState size="sm" description="No file attached" />
+          )}
+        </SidePanelSection>
+      </SidePanelBody>
+      <SidePanelFooter className="flex-wrap justify-between gap-3">
+        {row.stream.canAssign &&
+        row.deliverable.deliveryStatus === "IN_REVIEW" ? (
+          <div className="flex w-full justify-end gap-2">
+            <Button
+              variant="outline"
+              disabled={busy}
+              className="text-[#b3343b] hover:bg-[#fff5f5]"
+              onClick={onReject}
+            >
+              <X size={14} aria-hidden="true" />
+              Reject
+            </Button>
+            <Button
+              disabled={busy}
+              className="bg-[#13743b] text-white hover:bg-[#0e6030]"
+              onClick={onApprove}
+            >
+              <Check size={14} aria-hidden="true" />
+              Approve
+            </Button>
+          </div>
+        ) : row.stream.canAssign &&
+          row.deliverable.deliveryStatus === "APPROVED" ? (
+          <div className="flex w-full justify-end">
+            <Button variant="brand" disabled={busy} onClick={onSend}>
+              <Send size={14} aria-hidden="true" />
+              Send to client
+            </Button>
+          </div>
+        ) : row.stream.canUploadDeliverables &&
+          ["NOT_SUBMITTED", "REJECTED", "IN_REVIEW"].includes(
+            row.deliverable.deliveryStatus,
+          ) ? (
+          <div className="flex w-full justify-end gap-2">
+            {row.deliverable.workflowFile && (
+              <Button
+                variant="outline"
+                disabled={busy}
+                className="text-[#b3343b] hover:bg-[#fff5f5]"
+                onClick={onRemove}
+              >
+                <Trash2 size={14} aria-hidden="true" />
+                Remove attachment
+              </Button>
+            )}
+            {["NOT_SUBMITTED", "REJECTED"].includes(
+              row.deliverable.deliveryStatus,
+            ) && (
+              <Button variant="brand" disabled={busy} onClick={onUpload}>
+                <Upload size={14} aria-hidden="true" />
+                {row.deliverable.workflowFile
+                  ? "Replace attachment"
+                  : "Upload attachment"}
+              </Button>
+            )}
+          </div>
+        ) : (
+          <span className="mr-auto text-[11px] text-[#738096]">
+            {row.deliverable.deliveryStatus === "SENT_TO_CLIENT"
+              ? "Shared with the client"
+              : "Review the details and attachment above."}
+          </span>
+        )}
+      </SidePanelFooter>
+    </SidePanel>
   )
 }
 
@@ -653,7 +497,6 @@ export function WorkspaceDeliverables({
     projectId: string
     deliverableId: string
   } | null>(null)
-  const [detailOpener, setDetailOpener] = useState<HTMLElement | null>(null)
   const [editingIds, setEditingIds] = useState<{
     projectId: string
     deliverableId: string
@@ -683,7 +526,12 @@ export function WorkspaceDeliverables({
       ),
     [workspace.id, workspace.workstreams],
   )
-  const services = [...new Set(rows.map(({ stream }) => stream.serviceName))]
+  const serviceOptions = [
+    { value: "all", label: "All services" },
+    ...[...new Set(rows.map(({ stream }) => stream.serviceName))].map(
+      (service) => ({ value: service, label: service }),
+    ),
+  ]
   const filteredRows = useMemo(
     () =>
       rows.filter(({ stream, deliverable }) => {
@@ -725,10 +573,7 @@ export function WorkspaceDeliverables({
       return true
     } catch (reason) {
       sileo.error({
-        title:
-          reason instanceof Error
-            ? reason.message
-            : "Could not update deliverable.",
+        title: errorMessage(reason, "Could not update deliverable."),
       })
       return false
     } finally {
@@ -773,10 +618,7 @@ export function WorkspaceDeliverables({
       )
     } catch (reason) {
       sileo.error({
-        title:
-          reason instanceof Error
-            ? reason.message
-            : "Could not download attachment.",
+        title: errorMessage(reason, "Could not download attachment."),
       })
     } finally {
       setBusy(false)
@@ -879,35 +721,21 @@ export function WorkspaceDeliverables({
             containerClassName="w-full max-w-[300px] border-[#dfe4ec] bg-transparent px-3 text-[#738096] focus-within:ring-2 focus-within:ring-[#294c96] max-[1050px]:w-full max-[1050px]:max-w-[300px] max-[1050px]:flex-none"
             className="text-[#182235] placeholder:text-[#8090a8]"
           />
-          <Select value={serviceFilter} onValueChange={setServiceFilter}>
-            <SelectTrigger className="h-[34px] w-[190px] bg-transparent text-xs">
-              <SelectValue placeholder="All services" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All services</SelectItem>
-              {services.map((service) => (
-                <SelectItem key={service} value={service}>
-                  {service}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <FilterSelect
+            label="Filter deliverables by service"
+            value={serviceFilter}
+            options={serviceOptions}
+            triggerClassName="w-[190px] bg-transparent"
+            onChange={setServiceFilter}
+          />
         </div>
       )}
       {rows.length === 0 ? (
-        <div className="rounded-xl border border-[#dfe4ec] px-5 py-12 text-center">
-          <FileText
-            size={22}
-            className="mx-auto text-[#738096]"
-            aria-hidden="true"
-          />
-          <h3 className="mt-3 mb-1 text-sm font-semibold">
-            No deliverables yet
-          </h3>
-          <p className="m-0 text-xs text-[#738096]">
-            Expected deliverables from the project plan will appear here.
-          </p>
-        </div>
+        <EmptyState
+          icon={FileText}
+          title="No deliverables yet"
+          description="Expected deliverables from the project plan will appear here."
+        />
       ) : (
         <div className="overflow-x-auto rounded-xl border border-[#dfe4ec]">
           <div
@@ -957,8 +785,7 @@ export function WorkspaceDeliverables({
                     <ActionIcon
                       id={`project-deliverable-view-${deliverable.id}`}
                       label={`View details for ${deliverable.title}`}
-                      onClick={(event) => {
-                        setDetailOpener(event.currentTarget)
+                      onClick={() => {
                         setSelectedIds({
                           projectId: stream.id,
                           deliverableId: deliverable.id,
@@ -1081,8 +908,8 @@ export function WorkspaceDeliverables({
       )}
       {selected && (
         <DeliverableDetailsPanel
+          key={deliverableRowKey(selected)}
           row={selected}
-          opener={detailOpener}
           busy={busy}
           onClose={() => setSelectedIds(null)}
           onUpload={() => startUpload(selected)}
@@ -1117,11 +944,16 @@ export function WorkspaceDeliverables({
         onClose={() => setRejectingIds(null)}
         onReject={(reason) => void handleReject(reason)}
       />
-      <RemoveAttachmentDialog
-        row={removing}
-        busy={busy}
+      <ConfirmationDialog
+        open={!!removing}
+        title="Remove attachment?"
+        subject={removing?.deliverable.title}
+        description="The file will be removed from this deliverable."
+        confirmLabel="Remove attachment"
+        pendingLabel="Removing…"
+        pending={busy}
         onClose={() => setRemovingIds(null)}
-        onRemove={() => void handleRemove()}
+        onConfirm={() => void handleRemove()}
       />
     </section>
   )

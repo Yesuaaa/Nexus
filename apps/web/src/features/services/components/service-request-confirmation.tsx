@@ -86,10 +86,7 @@ export function ServiceRequestConfirmation({
         >
           Back to services
         </Button>
-        <Button
-          asChild
-          className="ml-auto bg-[#203f8c] text-white hover:bg-[#172f70]"
-        >
+        <Button asChild variant="brand" className="ml-auto">
           <Link href="/service-requests">View booked requests</Link>
         </Button>
       </div>

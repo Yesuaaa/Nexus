@@ -44,9 +44,13 @@ export function listBookedServices(filters: {
   })
 }
 
-export async function getBooking(id: string): Promise<BookingDetails> {
+export async function getBooking(
+  id: string,
+  signal?: AbortSignal,
+): Promise<BookingDetails> {
   const result = await apiRequest<{ serviceRequest: BookingDetails }>(
     `/api/service-requests/${encodeURIComponent(id)}`,
+    { signal },
   )
   return result.serviceRequest
 }

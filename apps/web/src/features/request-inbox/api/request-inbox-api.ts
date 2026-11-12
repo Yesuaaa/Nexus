@@ -46,9 +46,13 @@ export function listInbox(filters: {
   })
   return apiRequest(`/api/request-inbox?${query}`, { signal: filters.signal })
 }
-export async function getInboxRequest(id: string): Promise<BookingDetails> {
+export async function getInboxRequest(
+  id: string,
+  signal?: AbortSignal,
+): Promise<BookingDetails> {
   const result = await apiRequest<{ serviceRequest: BookingDetails }>(
     `/api/request-inbox/${encodeURIComponent(id)}`,
+    { signal },
   )
   return result.serviceRequest
 }
