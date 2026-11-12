@@ -1,0 +1,1982 @@
+import assert from "node:assert/strict"
+import { randomUUID } from "node:crypto"
+import { test } from "node:test"
+import { PGlite } from "@electric-sql/pglite"
+import { issueSession } from "../src/features/auth/auth.service.js"
+import type {
+  Prisma,
+  Role,
+  WorkflowEvent,
+  WorkflowFile,
+  WorkflowPayment,
+} from "../src/generated/prisma/client.js"
+import { parseAction } from "../src/features/request-workflow/workflow.validation.js"
+import {
+  migrationNames,
+  readMigration,
+  startPgliteApp,
+} from "./support/pglite-app.js"
+
+test("request information requires nonblank details", () => {
+  for (const details of [undefined, "", "   "]) {
+    assert.throws(
+      () =>
+        parseAction({
+          actionId: randomUUID(),
+          expectedVersion: 1,
+          type: "REQUEST_REQUIREMENT",
+          title: "Documents",
+          mandatory: true,
+          details,
+        }),
+      /Invalid details/,
+    )
+  }
+})
+
+test("requirement attachments accept 1–5 distinct IDs and reject invalid batches", () => {
+  const action = {
+    actionId: randomUUID(),
+    expectedVersion: 1,
+    type: "SUBMIT_REQUIREMENT",
+    requirementId: "requirement-1",
+    submission: "",
+  }
+  for (let count = 1; count <= 5; count++) {
+    const fileIds = Array.from({ length: count }, (_, i) => `file-${i}`)
+    assert.deepEqual(parseAction({ ...action, fileIds }).command, {
+      type: action.type,
+      requirementId: action.requirementId,
+      submission: "",
+      fileIds,
+    })
+  }
+  for (const fileIds of [
+    [],
+    Array.from({ length: 6 }, (_, i) => `file-${i}`),
+    ["file-1", "file-1"],
+    ["file-1", null],
+    ["file-1", "invalid/file"],
+    "file-1",
+    null,
+  ])
+    assert.throws(() => parseAction({ ...action, fileIds }))
+  assert.throws(() =>
+    parseAction({ ...action, fileId: "file-1", fileIds: ["file-2"] }),
+  )
+  assert.throws(() => parseAction(action), /Submit text or a file/)
+  assert.doesNotThrow(() => parseAction({ ...action, submission: "Text only" }))
+  assert.doesNotThrow(() => parseAction({ ...action, fileId: "legacy-file" }))
+})
+
+test("attachment migration preserves existing single-file submissions", async () => {
+  const db = new PGlite()
+  try {
+    await db.exec(`
+      CREATE TABLE "WorkflowFile" ("id" TEXT PRIMARY KEY);
+      CREATE TABLE "WorkflowRequirement" ("id" TEXT PRIMARY KEY, "fileId" TEXT);
+      INSERT INTO "WorkflowFile" VALUES ('legacy-file');
+      INSERT INTO "WorkflowRequirement" VALUES ('with-file', 'legacy-file'), ('text-only', NULL);
+    `)
+    await db.exec(await readMigration("20261106000000_requirement_attachments"))
+    assert.deepEqual(
+      (await db.query('SELECT * FROM "_RequirementAttachments"')).rows,
+      [{ A: "legacy-file", B: "with-file" }],
+    )
+    assert.deepEqual(
+      (
+        await db.query(
+          `SELECT relrowsecurity FROM pg_class WHERE relname = '_RequirementAttachments'`,
+        )
+      ).rows,
+      [{ relrowsecurity: true }],
+    )
+  } finally {
+    await db.close()
+  }
+})
+
+type TestWorkflow = {
+  state: string
+  version: number
+  nextAction: string
+  permissions: {
+    manage: boolean
+    isClient: boolean
+    approveQuotation: boolean
+    verifyPayment: boolean
+  }
+  requirements: {
+    id: string
+    status: string
+    submission: string | null
+    fileId: string | null
+    fileIds: string[]
+  }[]
+  consultations: { id: string; status: string }[]
+  quotations: { id: string; version: number; status: string; total: string }[]
+  approval: {
+    quotationId: string
+    amount: string
+    approvedById: string
+    approvedAt: string
+  } | null
+  agreement: { status: string; mandatory: boolean } | null
+  payment: { status: string; mandatory: boolean } | null
+  project: { id: string; status: string } | null
+  events: { type: string; summary: string; entityId: string | null }[]
+  files: { id: string; name: string; size: number }[]
+  internal?: {
+    staff: { id: string; assigned: boolean; activeProjectCount: number }[]
+    events: { type: string; summary: string }[]
+  }
+}
+
+const workflowMigrationName = "20261031010000_request_workflow"
+
+test("quotation acceptance migration releases paid bookings and preserves holds and documents", async () => {
+  const db = new PGlite()
+  try {
+    await db.exec(`
+      CREATE TYPE "RequestWorkflowState" AS ENUM ('AGREEMENT_PAYMENT_PENDING', 'READY_FOR_ACTIVATION', 'ON_HOLD', 'CANCELLED');
+      CREATE TABLE "RequestWorkflow" ("requestId" TEXT PRIMARY KEY, "state" "RequestWorkflowState", "previousState" "RequestWorkflowState", "paymentRequired" BOOLEAN, "version" INT DEFAULT 1, "updatedAt" TIMESTAMP);
+      CREATE TABLE "WorkflowApproval" ("requestId" TEXT, "approvedById" TEXT, "approvedAt" TIMESTAMP DEFAULT '2026-11-01');
+      CREATE TABLE "WorkflowAgreement" ("requestId" TEXT, "status" TEXT, "reviewedById" TEXT, "reviewedAt" TIMESTAMP, "signedFileId" TEXT);
+      CREATE TABLE "WorkflowPayment" ("requestId" TEXT, "status" TEXT);
+      CREATE TABLE "WorkflowRequirement" ("requestId" TEXT, "mandatory" BOOLEAN, "status" TEXT);
+      INSERT INTO "RequestWorkflow" ("requestId", "state", "previousState", "paymentRequired") VALUES
+        ('paid', 'AGREEMENT_PAYMENT_PENDING', NULL, true),
+        ('unpaid', 'AGREEMENT_PAYMENT_PENDING', NULL, true),
+        ('held', 'ON_HOLD', 'AGREEMENT_PAYMENT_PENDING', true),
+        ('outstanding', 'AGREEMENT_PAYMENT_PENDING', NULL, true),
+        ('cancelled', 'CANCELLED', NULL, true),
+        ('unaccepted', 'AGREEMENT_PAYMENT_PENDING', NULL, true),
+        ('no-payment', 'AGREEMENT_PAYMENT_PENDING', NULL, false);
+      INSERT INTO "WorkflowApproval" ("requestId", "approvedById")
+        SELECT "requestId", 'client' FROM "RequestWorkflow" WHERE "requestId" <> 'unaccepted';
+      INSERT INTO "WorkflowAgreement" ("requestId", "status", "signedFileId")
+        SELECT "requestId", 'PENDING', 'existing-signed-copy' FROM "RequestWorkflow";
+      INSERT INTO "WorkflowPayment" SELECT "requestId", CASE WHEN "requestId" = 'unpaid' THEN 'SUBMITTED' ELSE 'VERIFIED' END FROM "RequestWorkflow";
+      INSERT INTO "WorkflowRequirement" VALUES ('outstanding', true, 'SUBMITTED');
+    `)
+    await db.exec(
+      await readMigration("20261106010000_quotation_acceptance_agreement"),
+    )
+    const rows = (
+      await db.query<{
+        requestId: string
+        state: string
+        previousState: string | null
+        version: number
+      }>(
+        `SELECT "requestId", "state", "previousState", "version" FROM "RequestWorkflow" ORDER BY "requestId"`,
+      )
+    ).rows
+    assert.deepEqual(rows, [
+      {
+        requestId: "cancelled",
+        state: "CANCELLED",
+        previousState: null,
+        version: 1,
+      },
+      {
+        requestId: "held",
+        state: "ON_HOLD",
+        previousState: "READY_FOR_ACTIVATION",
+        version: 2,
+      },
+      {
+        requestId: "no-payment",
+        state: "READY_FOR_ACTIVATION",
+        previousState: null,
+        version: 2,
+      },
+      {
+        requestId: "outstanding",
+        state: "AGREEMENT_PAYMENT_PENDING",
+        previousState: null,
+        version: 1,
+      },
+      {
+        requestId: "paid",
+        state: "READY_FOR_ACTIVATION",
+        previousState: null,
+        version: 2,
+      },
+      {
+        requestId: "unaccepted",
+        state: "AGREEMENT_PAYMENT_PENDING",
+        previousState: null,
+        version: 1,
+      },
+      {
+        requestId: "unpaid",
+        state: "AGREEMENT_PAYMENT_PENDING",
+        previousState: null,
+        version: 1,
+      },
+    ])
+    const agreements = (
+      await db.query<{
+        requestId: string
+        status: string
+        reviewedById: string | null
+        signedFileId: string
+      }>(
+        `SELECT "requestId", "status", "reviewedById", "signedFileId" FROM "WorkflowAgreement"`,
+      )
+    ).rows
+    for (const agreement of agreements) {
+      assert.equal(
+        agreement.status,
+        agreement.requestId === "unaccepted" ? "PENDING" : "APPROVED",
+      )
+      assert.equal(
+        agreement.reviewedById,
+        agreement.requestId === "unaccepted" ? null : "client",
+      )
+      assert.equal(agreement.signedFileId, "existing-signed-copy")
+    }
+  } finally {
+    await db.close()
+  }
+})
+
+test("workflow migration preserves accepted history without granting approvals", async () => {
+  const db = new PGlite()
+  try {
+    for (const name of (await migrationNames()).filter(
+      (name) => name < workflowMigrationName,
+    ))
+      await db.exec(await readMigration(name))
+    await db.exec(`
+      INSERT INTO "User" ("id", "email", "passwordHash", "role", "updatedAt") VALUES
+        ('migration-client', 'migration-client@example.com', 'private', 'USER', CURRENT_TIMESTAMP),
+        ('migration-head', 'migration-head@example.com', 'private', 'STAFF', CURRENT_TIMESTAMP);
+      INSERT INTO "Department" ("id", "name", "headId", "updatedAt") VALUES ('migration-department', 'Migration department', 'migration-head', CURRENT_TIMESTAMP);
+      INSERT INTO "Service" ("id", "name", "description", "clientRequirements", "requiresConsultation", "updatedAt") VALUES
+        ('migration-service', 'Migration service', 'Service', ARRAY['Brand guidelines', 'Project brief'], true, CURRENT_TIMESTAMP);
+      INSERT INTO "ServiceRequest" ("id", "clientId", "serviceId", "title", "status", "acceptedDepartmentId", "acceptedById", "acceptedAt", "updatedAt") VALUES
+        ('migration-accepted', 'migration-client', 'migration-service', 'Accepted request', 'UNDER_REVIEW', 'migration-department', 'migration-head', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+        ('migration-pending', 'migration-client', 'migration-service', 'Pending request', 'SUBMITTED', NULL, NULL, NULL, CURRENT_TIMESTAMP);
+    `)
+    await db.exec(await readMigration(workflowMigrationName))
+    const records = await db.query<{
+      requestId: string
+      state: string
+      consultationRequired: boolean
+      agreementRequired: boolean
+      paymentRequired: boolean
+    }>(
+      'SELECT "requestId", "state", "consultationRequired", "agreementRequired", "paymentRequired" FROM "RequestWorkflow"',
+    )
+    assert.deepEqual(records.rows, [
+      {
+        requestId: "migration-accepted",
+        state: "CONSULTATION",
+        consultationRequired: true,
+        agreementRequired: true,
+        paymentRequired: true,
+      },
+    ])
+    const requirements = await db.query<{ status: string; mandatory: boolean }>(
+      'SELECT "status", "mandatory" FROM "WorkflowRequirement"',
+    )
+    assert.equal(requirements.rows.length, 2)
+    assert.ok(
+      requirements.rows.every(
+        (row) => row.status === "REQUESTED" && row.mandatory,
+      ),
+    )
+    const approvals = await db.query<{ count: number }>(
+      'SELECT count(*)::int AS count FROM "WorkflowApproval"',
+    )
+    assert.equal(approvals.rows[0]!.count, 0)
+    const rls = await db.query<{ enabled: boolean }>(
+      `SELECT relrowsecurity AS enabled FROM pg_class WHERE relname IN ('RequestWorkflow', 'WorkflowFile', 'WorkflowApproval', 'WorkflowEvent', 'ProjectStaff')`,
+    )
+    assert.equal(rls.rows.length, 5)
+    assert.ok(rls.rows.every((row) => row.enabled))
+    await assert.rejects(
+      db.exec('UPDATE "WorkflowEvent" SET "summary" = \'Changed\''),
+      /immutable/,
+    )
+    await assert.rejects(db.exec('DELETE FROM "WorkflowEvent"'), /immutable/)
+  } finally {
+    await db.close()
+  }
+})
+
+test(
+  "conversation workflow enforces formal approvals, scoped controls and project gates",
+  { timeout: 180_000 },
+  async (t) => {
+    const { prisma, db, origin } = await startPgliteApp(t)
+    async function user(name: string, role: Role) {
+      const record = await prisma!.user.create({
+        data: {
+          email: `${name}@example.com`,
+          fullName: name,
+          passwordHash: "private",
+          role,
+        },
+      })
+      const session = await issueSession(record)
+      return {
+        ...record,
+        headers: { authorization: `Bearer ${session.token}` },
+      }
+    }
+    const client = await user("WorkflowClient", "USER")
+    const otherClient = await user("OtherWorkflowClient", "USER")
+    const head = await user("WorkflowHead", "STAFF")
+    const replacement = await user("ReplacementHead", "STAFF")
+    const staff = await user("WorkflowStaff", "STAFF")
+    const admin = await user("WorkflowApprover", "ADMIN")
+    const paymentAdmin = await user("WorkflowPaymentVerifier", "ADMIN")
+    const otherAdmin = await user("OtherWorkflowAdmin", "ADMIN")
+    const superadmin = await user("WorkflowSuperadmin", "SUPERADMIN")
+    const department = await prisma.department.create({
+      data: { name: "Workflow Design", headId: head.id },
+    })
+    const foreignDepartment = await prisma.department.create({
+      data: { name: "Workflow Marketing" },
+    })
+    await prisma.user.updateMany({
+      where: {
+        id: {
+          in: [head.id, replacement.id, staff.id, admin.id, paymentAdmin.id],
+        },
+      },
+      data: { departmentId: department.id },
+    })
+    const employee = await prisma.employee.create({
+      data: {
+        employeeId: "WF-ACTIVE",
+        fullName: "Available Designer",
+        departmentId: department.id,
+        userId: staff.id,
+        profileSpecialties: ["Design", "Accessibility"],
+      },
+    })
+    const inactiveEmployee = await prisma.employee.create({
+      data: {
+        employeeId: "WF-LEAVE",
+        fullName: "Unavailable Designer",
+        departmentId: department.id,
+        status: "ON_LEAVE",
+      },
+    })
+    const foreignEmployee = await prisma.employee.create({
+      data: {
+        employeeId: "WF-FOREIGN",
+        fullName: "Foreign Designer",
+        departmentId: foreignDepartment.id,
+      },
+    })
+    const service = await prisma.service.create({
+      data: {
+        name: "Consultation Website",
+        description: "Custom website",
+        requiresConsultation: true,
+        requiresQuotationApproval: true,
+        clientRequirements: ["Brand guidelines"],
+        departments: { connect: { id: department.id } },
+      },
+    })
+    const request = await prisma.serviceRequest.create({
+      data: {
+        clientId: client.id,
+        serviceId: service.id,
+        title: "Accessible website",
+        pricingModel: "CUSTOM_QUOTE",
+        referenceNumber: "WF-001",
+        expectedTimeline: "Six weeks",
+      },
+    })
+    const anotherRequest = await prisma.serviceRequest.create({
+      data: {
+        clientId: otherClient.id,
+        serviceId: service.id,
+        title: "Other client's website",
+      },
+    })
+    const base = `${origin}/api`
+    type Actor = typeof client
+    const path = (id = request.id) => `${base}/request-workflows/${id}`
+    const get = (actor = client, id = request.id) =>
+      fetch(path(id), { headers: actor.headers })
+    const read = async (actor = client, id = request.id) => {
+      const response = await get(actor, id)
+      assert.equal(response.status, 200, await response.clone().text())
+      return (await response.json()) as TestWorkflow
+    }
+    const send = (
+      actor: Actor,
+      input: Record<string, unknown>,
+      expectedVersion: number,
+      actionId = randomUUID(),
+      id = request.id,
+    ) =>
+      fetch(`${path(id)}/actions`, {
+        method: "POST",
+        headers: { ...actor.headers, "content-type": "application/json" },
+        body: JSON.stringify({ ...input, expectedVersion, actionId }),
+      })
+    const act = async (
+      actor: Actor,
+      input: Record<string, unknown>,
+      id = request.id,
+    ) => {
+      const current = await read(actor, id)
+      const response = await send(
+        actor,
+        input,
+        current.version,
+        randomUUID(),
+        id,
+      )
+      assert.equal(response.status, 200, await response.clone().text())
+      return (await response.json()) as TestWorkflow
+    }
+    const accept = (id = request.id) =>
+      fetch(`${base}/request-inbox/${id}/accept`, {
+        method: "POST",
+        headers: head.headers,
+      })
+    const upload = async (
+      actor: Actor,
+      name = "requirements.txt",
+      content = "Private submitted document",
+      id = request.id,
+      uploadId = randomUUID(),
+    ) => {
+      const response = await fetch(`${path(id)}/files`, {
+        method: "POST",
+        headers: { ...actor.headers, "content-type": "application/json" },
+        body: JSON.stringify({
+          name,
+          mimeType: "text/plain",
+          content: Buffer.from(content).toString("base64"),
+          uploadId,
+        }),
+      })
+      assert.ok(
+        [200, 201].includes(response.status),
+        await response.clone().text(),
+      )
+      return ((await response.json()) as { file: { id: string } }).file
+    }
+    let requirementId = ""
+    let acceptedQuotationId = ""
+    let projectId = ""
+    let submittedFileId = ""
+    const quote = (scope = "Build an accessible website") => ({
+      type: "CREATE_QUOTATION",
+      scope,
+      deliverables: ["Design approval", "Website launch"],
+      lineItems: [
+        {
+          description: "Design and development",
+          quantity: 2,
+          unitPrice: "15000.00",
+        },
+      ],
+      currency: "PHP",
+      timeline: "Six weeks",
+      paymentTerms: "50% before commencement",
+      paymentDue: "15000.00",
+      validUntil: new Date(Date.now() + 86_400_000).toISOString(),
+    })
+
+    await t.test(
+      "acceptance initializes consultation without delivering a service or approving a quotation",
+      async () => {
+        assert.equal((await fetch(path())).status, 401)
+        assert.equal((await get(head)).status, 404)
+        assert.equal((await accept()).status, 200)
+        const workflow = await read()
+        assert.equal(workflow.state, "CONSULTATION")
+        assert.equal(workflow.requirements.length, 0)
+        assert.equal(
+          workflow.events.some(
+            (event) => event.type === "REQUIREMENT_REQUESTED",
+          ),
+          false,
+        )
+        assert.equal(workflow.approval, null)
+        assert.equal(workflow.project, null)
+        assert.ok(workflow.nextAction.length > 0)
+        assert.equal(workflow.internal, undefined)
+        for (const actor of [otherClient, staff, admin, otherAdmin, superadmin])
+          assert.equal((await get(actor)).status, 404)
+        for (const actor of [client, head, admin])
+          assert.equal((await get(actor, anotherRequest.id)).status, 404)
+      },
+    )
+
+    await t.test(
+      "head workflow reads tolerate database latency beyond five seconds",
+      async () => {
+        const originalTransaction = prisma!.$transaction
+        const transaction = prisma!.$transaction.bind(prisma!)
+        Reflect.set(
+          prisma!,
+          "$transaction",
+          async (
+            operation: (tx: Prisma.TransactionClient) => Promise<unknown>,
+            options?: Parameters<typeof transaction>[1],
+          ) =>
+            transaction(async (tx) => {
+              await new Promise<void>((resolve) => setTimeout(resolve, 5200))
+              return operation(tx)
+            }, options),
+        )
+        try {
+          const workflow = await read(head)
+          assert.equal(workflow.permissions.manage, true)
+          assert.ok(
+            workflow.internal?.staff.some((item) => item.id === employee.id),
+          )
+        } finally {
+          Reflect.set(prisma!, "$transaction", originalTransaction)
+        }
+      },
+    )
+
+    await t.test(
+      "requirements and consultations cannot be bypassed; files stay private and retry safely",
+      async () => {
+        const requested = await act(head, {
+          type: "REQUEST_REQUIREMENT",
+          title: "Brand guidelines",
+          details: "Please provide your brand guidelines.",
+          mandatory: true,
+        })
+        requirementId = requested.requirements[0]!.id
+        const current = await read(head)
+        assert.equal(
+          (
+            await send(
+              client,
+              {
+                type: "REQUEST_REQUIREMENT",
+                title: "Forged",
+                details: "Please supply the requested documents.",
+                mandatory: false,
+              },
+              current.version,
+            )
+          ).status,
+          403,
+        )
+        assert.equal(
+          (await send(head, { type: "PREPARE_QUOTATION" }, current.version))
+            .status,
+          409,
+        )
+        const uploadId = randomUUID()
+        const file = await upload(
+          client,
+          "brand.txt",
+          "Brand guidelines",
+          request.id,
+          uploadId,
+        )
+        submittedFileId = file.id
+        assert.equal(
+          (
+            await upload(
+              client,
+              "brand.txt",
+              "Brand guidelines",
+              request.id,
+              uploadId,
+            )
+          ).id,
+          file.id,
+        )
+        assert.equal(
+          await prisma!.workflowFile.count({
+            where: { requestId: request.id },
+          }),
+          1,
+        )
+        const changedUpload = await fetch(`${path()}/files`, {
+          method: "POST",
+          headers: { ...client.headers, "content-type": "application/json" },
+          body: JSON.stringify({
+            uploadId,
+            name: "brand.txt",
+            mimeType: "text/plain",
+            content: Buffer.from("Different document").toString("base64"),
+          }),
+        })
+        assert.equal(changedUpload.status, 409)
+        const privateDownload = await fetch(`${path()}/files/${file.id}`, {
+          headers: client.headers,
+        })
+        assert.equal(privateDownload.status, 200)
+        assert.equal(await privateDownload.text(), "Brand guidelines")
+        assert.match(
+          privateDownload.headers.get("content-disposition") || "",
+          /attachment/,
+        )
+        for (const actor of [otherClient, otherAdmin, staff])
+          assert.equal(
+            (
+              await fetch(`${path()}/files/${file.id}`, {
+                headers: actor.headers,
+              })
+            ).status,
+            404,
+          )
+        const formUpload = await fetch(`${path()}/files`, {
+          method: "POST",
+          headers: { ...client.headers, "content-type": "application/json" },
+          body: JSON.stringify({
+            uploadId: randomUUID(),
+            name: "form.txt",
+            mimeType: "text/plain",
+            content: Buffer.from("Form attachment").toString("base64"),
+            contextual: true,
+          }),
+        })
+        assert.equal(formUpload.status, 201)
+        const formFile = ((await formUpload.json()) as { file: { id: string } })
+          .file
+        assert.equal(
+          (await read(client)).events.some(
+            (event) =>
+              event.type === "FILE_SUBMITTED" && event.entityId === formFile.id,
+          ),
+          false,
+        )
+        const submitted = await act(client, {
+          type: "SUBMIT_REQUIREMENT",
+          requirementId,
+          submission: "Please review our brand standards",
+          fileId: file.id,
+        })
+        assert.equal(submitted.requirements[0]!.status, "SUBMITTED")
+        assert.deepEqual(submitted.requirements[0]!.fileIds, [file.id])
+        await act(head, {
+          type: "REVIEW_REQUIREMENT",
+          requirementId,
+          approve: false,
+          note: "Include the latest logo",
+        })
+        assert.equal((await read()).requirements[0]!.status, "REQUESTED")
+        const headFile = await upload(head, "head-only.txt")
+        assert.equal((await accept(anotherRequest.id)).status, 200)
+        const foreignFile = await upload(
+          otherClient,
+          "other-request.txt",
+          "Other request",
+          anotherRequest.id,
+        )
+        for (const invalidId of [headFile.id, foreignFile.id, "missing-file"]) {
+          const before = await read()
+          const denied = await send(
+            client,
+            {
+              type: "SUBMIT_REQUIREMENT",
+              requirementId,
+              submission: "Invalid attachment",
+              fileIds: [file.id, invalidId],
+            },
+            before.version,
+          )
+          assert.equal(denied.status, 404)
+          const after = await read()
+          assert.equal(after.version, before.version)
+          assert.equal(after.requirements[0]!.status, "REQUESTED")
+          assert.deepEqual(after.requirements[0]!.fileIds, [file.id])
+        }
+        const fileIds = [file.id, formFile.id]
+        for (let i = 0; i < 3; i++)
+          fileIds.push((await upload(client, `support-${i}.txt`)).id)
+        const batch = {
+          type: "SUBMIT_REQUIREMENT",
+          requirementId,
+          submission: "Latest logo included",
+          fileIds,
+        }
+        const beforeBatch = await read()
+        const batchActionId = randomUUID()
+        for (let retry = 0; retry < 2; retry++) {
+          const response = await send(
+            client,
+            batch,
+            beforeBatch.version,
+            batchActionId,
+          )
+          assert.equal(response.status, 200, await response.clone().text())
+          const result = (await response.json()) as TestWorkflow
+          assert.equal(result.version, beforeBatch.version + 1)
+          assert.deepEqual(
+            new Set(result.requirements[0]!.fileIds),
+            new Set(fileIds),
+          )
+        }
+        assert.deepEqual(
+          new Set((await read(head)).requirements[0]!.fileIds),
+          new Set(fileIds),
+        )
+        for (const fileId of fileIds)
+          assert.equal(
+            (
+              await fetch(`${path()}/files/${fileId}`, {
+                headers: head.headers,
+              })
+            ).status,
+            200,
+          )
+        await act(head, {
+          type: "REVIEW_REQUIREMENT",
+          requirementId,
+          approve: false,
+          note: "Replace supporting files",
+        })
+        const replacement = await act(client, {
+          type: "SUBMIT_REQUIREMENT",
+          requirementId,
+          submission: "Updated supporting document",
+          fileIds: [formFile.id],
+        })
+        assert.deepEqual(replacement.requirements[0]!.fileIds, [formFile.id])
+        await act(head, {
+          type: "REVIEW_REQUIREMENT",
+          requirementId,
+          approve: true,
+          note: "Complete",
+        })
+        const afterRequirement = await read(head)
+        assert.equal(
+          (
+            await send(
+              head,
+              { type: "PREPARE_QUOTATION" },
+              afterRequirement.version,
+            )
+          ).status,
+          409,
+        )
+        const scheduled = await act(head, {
+          type: "SCHEDULE_CONSULTATION",
+          startsAt: new Date(Date.now() + 3_600_000).toISOString(),
+          endsAt: new Date(Date.now() + 7_200_000).toISOString(),
+          location: "Video meeting",
+          notes: "Review goals",
+        })
+        const originalStartsAt = (
+          await prisma!.workflowConsultation.findUniqueOrThrow({
+            where: { id: scheduled.consultations[0]!.id },
+          })
+        ).startsAt.toISOString()
+        const reschedule = {
+          type: "REQUEST_CONSULTATION_RESCHEDULE",
+          consultationId: scheduled.consultations[0]!.id,
+          startsAt: new Date(Date.now() + 86_400_000).toISOString(),
+          note: "Please move our meeting to tomorrow.",
+        }
+        assert.equal(
+          (await send(head, reschedule, scheduled.version)).status,
+          403,
+        )
+        assert.equal(
+          (
+            await send(
+              client,
+              {
+                ...reschedule,
+                startsAt: new Date(Date.now() - 1000).toISOString(),
+              },
+              scheduled.version,
+            )
+          ).status,
+          400,
+        )
+        const rescheduled = await act(client, reschedule)
+        assert.equal(rescheduled.consultations[0]!.status, "SCHEDULED")
+        assert.equal(
+          rescheduled.events.at(-1)!.type,
+          "CONSULTATION_RESCHEDULE_REQUESTED",
+        )
+        assert.match(
+          rescheduled.events.at(-1)!.summary,
+          /existing schedule remains/,
+        )
+        assert.equal(
+          (
+            await prisma!.workflowConsultation.findUniqueOrThrow({
+              where: { id: reschedule.consultationId },
+            })
+          ).startsAt.toISOString(),
+          originalStartsAt,
+        )
+        assert.equal(
+          (await send(client, reschedule, rescheduled.version)).status,
+          409,
+        )
+        const response = {
+          type: "RESPOND_CONSULTATION_RESCHEDULE",
+          consultationId: reschedule.consultationId,
+          requestEventId: (rescheduled.events.at(-1) as { id?: string }).id,
+          approve: true,
+          startsAt: reschedule.startsAt,
+          endsAt: new Date(
+            new Date(reschedule.startsAt).getTime() + 3600000,
+          ).toISOString(),
+          location: "https://meet.example.com/replacement",
+          note: "Confirmed your preferred time.",
+        }
+        assert.equal(
+          (await send(client, response, rescheduled.version)).status,
+          403,
+        )
+        const confirmed = await act(head, response)
+        assert.equal(
+          confirmed.events.at(-1)!.type,
+          "CONSULTATION_RESCHEDULE_CONFIRMED",
+        )
+        assert.equal(
+          (
+            await prisma!.workflowConsultation.findUniqueOrThrow({
+              where: { id: reschedule.consultationId },
+            })
+          ).startsAt.toISOString(),
+          reschedule.startsAt,
+        )
+        assert.equal(
+          (await send(head, response, confirmed.version)).status,
+          409,
+        )
+        const secondRequest = await act(client, reschedule)
+        const decline = {
+          ...response,
+          requestEventId: (secondRequest.events.at(-1) as { id?: string }).id,
+          approve: false,
+          note: "The department is unavailable at that time.",
+        }
+        assert.equal(
+          (await send(head, { ...decline, note: "" }, secondRequest.version))
+            .status,
+          400,
+        )
+        const declined = await act(head, decline)
+        assert.equal(
+          declined.events.at(-1)!.type,
+          "CONSULTATION_RESCHEDULE_DECLINED",
+        )
+        assert.equal(
+          (
+            await prisma!.workflowConsultation.findUniqueOrThrow({
+              where: { id: reschedule.consultationId },
+            })
+          ).startsAt.toISOString(),
+          reschedule.startsAt,
+        )
+        await prisma!.workflowConsultation.update({
+          where: { id: scheduled.consultations[0]!.id },
+          data: {
+            startsAt: new Date(Date.now() - 7_200_000),
+            endsAt: new Date(Date.now() - 3_600_000),
+          },
+        })
+        await act(head, {
+          type: "COMPLETE_CONSULTATION",
+          consultationId: scheduled.consultations[0]!.id,
+        })
+        const prepared = await act(head, { type: "PREPARE_QUOTATION" })
+        assert.equal(prepared.state, "QUOTATION_PENDING")
+      },
+    )
+
+    await t.test(
+      "quotation control is scoped and internal data never reaches the client",
+      async () => {
+        await act(head, {
+          type: "ASSIGN_APPROVERS",
+          quotationApproverId: admin.id,
+          paymentVerifierId: paymentAdmin.id,
+        })
+        const created = await act(head, quote())
+        assert.equal(created.quotations.at(-1)!.status, "PENDING_INTERNAL")
+        const unpublishedQuotationId = created.quotations.at(-1)!.id
+        const replacementQuote = await act(
+          head,
+          quote("Corrected internal draft scope"),
+        )
+        const quotationId = replacementQuote.quotations.at(-1)!.id
+        assert.equal(
+          replacementQuote.quotations.find(
+            (row) => row.id === unpublishedQuotationId,
+          )!.status,
+          "SUPERSEDED",
+        )
+        const clientView = await read()
+        assert.ok(
+          !clientView.quotations.some((row) =>
+            [quotationId, unpublishedQuotationId].includes(row.id),
+          ),
+        )
+        assert.equal(clientView.internal, undefined)
+        assert.equal((await get(otherAdmin)).status, 404)
+        const quotationApprover = await read(admin)
+        assert.equal(quotationApprover.permissions.approveQuotation, true)
+        assert.equal(quotationApprover.permissions.verifyPayment, false)
+        assert.equal(quotationApprover.payment, null)
+        assert.equal(quotationApprover.agreement, null)
+        assert.equal(quotationApprover.project, null)
+        const paymentVerifier = await read(paymentAdmin)
+        assert.equal(paymentVerifier.permissions.approveQuotation, false)
+        assert.equal(paymentVerifier.permissions.verifyPayment, true)
+        assert.equal(paymentVerifier.quotations.length, 0)
+        assert.ok(
+          !(await read(admin)).files.some(
+            (file) => file.id === submittedFileId,
+          ),
+        )
+        assert.equal(
+          (
+            await fetch(`${path()}/files/${submittedFileId}`, {
+              headers: admin.headers,
+            })
+          ).status,
+          404,
+        )
+        const current = await read(head)
+        assert.equal(
+          (
+            await send(
+              head,
+              { type: "APPROVE_QUOTATION", quotationId },
+              current.version,
+            )
+          ).status,
+          403,
+        )
+        assert.equal(
+          (
+            await send(
+              paymentAdmin,
+              { type: "APPROVE_QUOTATION", quotationId },
+              current.version,
+            )
+          ).status,
+          403,
+        )
+        const approved = await act(admin, {
+          type: "APPROVE_QUOTATION",
+          quotationId,
+        })
+        assert.equal(approved.state, "CLIENT_APPROVAL")
+        assert.equal((await read()).quotations.at(-1)!.status, "SENT")
+        const financialFile = await upload(
+          paymentAdmin,
+          "finance.txt",
+          "Confidential financial controls",
+        )
+        assert.ok(
+          !(await read()).files.some((file) => file.id === financialFile.id),
+        )
+        assert.equal(
+          (
+            await fetch(`${path()}/files/${financialFile.id}`, {
+              headers: client.headers,
+            })
+          ).status,
+          404,
+        )
+        assert.equal(
+          (
+            await fetch(`${path()}/files/${financialFile.id}`, {
+              headers: paymentAdmin.headers,
+            })
+          ).status,
+          200,
+        )
+        await act(head, {
+          type: "INTERNAL_NOTE",
+          note: "Private staffing cost estimate",
+        })
+        const serialized = JSON.stringify(await read())
+        assert.ok(!serialized.includes("Private staffing cost estimate"))
+        assert.ok(!serialized.includes("payloadHash"))
+        assert.ok(!serialized.includes("sha256"))
+        assert.ok(!serialized.includes("passwordHash"))
+        assert.ok(!serialized.includes("clientVisible"))
+      },
+    )
+
+    await t.test(
+      "only the latest valid quotation can be formally accepted; retries do not duplicate decisions",
+      async () => {
+        const first = (await read()).quotations.at(-1)!
+        const revised = await act(client, {
+          type: "RESPOND_QUOTATION",
+          quotationId: first.id,
+          decision: "REVISE",
+          note: "Include accessibility testing",
+        })
+        assert.equal(revised.state, "REVISION_REQUESTED")
+        const second = await act(
+          head,
+          quote("Build an accessible and tested website"),
+        )
+        const latest = second.quotations.at(-1)!
+        assert.equal(latest.version, first.version + 1)
+        await act(admin, { type: "APPROVE_QUOTATION", quotationId: latest.id })
+        const current = await read()
+        assert.equal(
+          (
+            await send(
+              client,
+              {
+                type: "RESPOND_QUOTATION",
+                quotationId: first.id,
+                decision: "ACCEPT",
+                note: "",
+              },
+              current.version,
+            )
+          ).status,
+          409,
+        )
+        await prisma!.workflowQuotation.update({
+          where: { id: latest.id },
+          data: { validUntil: new Date(Date.now() - 1000) },
+        })
+        assert.equal(
+          (
+            await send(
+              client,
+              {
+                type: "RESPOND_QUOTATION",
+                quotationId: latest.id,
+                decision: "ACCEPT",
+                note: "",
+              },
+              current.version,
+            )
+          ).status,
+          409,
+        )
+        await prisma!.workflowQuotation.update({
+          where: { id: latest.id },
+          data: { validUntil: new Date(Date.now() + 86_400_000) },
+        })
+        const message = await fetch(
+          `${base}/request-conversations/${request.id}/messages`,
+          {
+            method: "POST",
+            headers: { ...client.headers, "content-type": "application/json" },
+            body: JSON.stringify({
+              body: "I approve this quotation",
+              clientMessageId: randomUUID(),
+            }),
+          },
+        )
+        assert.equal(message.status, 201)
+        assert.equal((await read()).approval, null)
+        const actionId = randomUUID()
+        const responseAction = {
+          type: "RESPOND_QUOTATION",
+          quotationId: latest.id,
+          decision: "ACCEPT",
+          note: "",
+        }
+        const accepted = await send(
+          client,
+          responseAction,
+          current.version,
+          actionId,
+        )
+        assert.equal(accepted.status, 200, await accepted.clone().text())
+        const acceptedBody = (await accepted.json()) as TestWorkflow
+        assert.equal(acceptedBody.state, "AGREEMENT_PAYMENT_PENDING")
+        assert.equal(acceptedBody.agreement!.status, "APPROVED")
+        assert.equal(Number(acceptedBody.approval!.amount), 30000)
+        assert.equal(acceptedBody.approval!.approvedById, client.id)
+        assert.ok(acceptedBody.approval!.approvedAt)
+        acceptedQuotationId = latest.id
+        assert.equal(
+          (await send(client, responseAction, current.version, actionId))
+            .status,
+          200,
+        )
+        assert.equal(
+          (
+            await send(
+              client,
+              { ...responseAction, decision: "DECLINE" },
+              current.version,
+              actionId,
+            )
+          ).status,
+          409,
+        )
+        assert.equal(
+          await prisma!.workflowApproval.count({
+            where: { requestId: request.id },
+          }),
+          1,
+        )
+        assert.equal(
+          await prisma!.project.count({ where: { requestId: request.id } }),
+          1,
+        )
+        assert.equal(acceptedBody.project, null)
+        const draft = await prisma!.project.findUniqueOrThrow({
+          where: { requestId: request.id },
+        })
+        assert.equal((await read(admin)).payment, null)
+        assert.equal((await read(admin)).agreement, null)
+        const paymentView = await read(paymentAdmin)
+        assert.equal(paymentView.quotations.length, 1)
+        assert.equal(paymentView.quotations[0]!.status, "ACCEPTED")
+        assert.equal(
+          (
+            await fetch(`${base}/projects/${draft.id}`, {
+              headers: client.headers,
+            })
+          ).status,
+          404,
+        )
+        await assert.rejects(
+          db.query(
+            'UPDATE "WorkflowApproval" SET "amount" = 1 WHERE "requestId" = $1',
+            [request.id],
+          ),
+          /immutable/,
+        )
+        await assert.rejects(
+          db.query('DELETE FROM "WorkflowApproval" WHERE "requestId" = $1', [
+            request.id,
+          ]),
+          /immutable/,
+        )
+      },
+    )
+
+    await t.test(
+      "quotation acceptance satisfies agreement while payment and staffing block premature activation",
+      async () => {
+        const current = await read(head)
+        assert.equal(
+          (await send(head, { type: "ACTIVATE_PROJECT" }, current.version))
+            .status,
+          409,
+        )
+        for (const invalid of [inactiveEmployee.id, foreignEmployee.id])
+          assert.equal(
+            (
+              await send(
+                head,
+                { type: "STAFF_PROJECT", employeeIds: [invalid] },
+                current.version,
+              )
+            ).status,
+            409,
+          )
+        await act(head, { type: "STAFF_PROJECT", employeeIds: [employee.id] })
+        assert.equal((await read(client)).agreement!.status, "APPROVED")
+        const submitted = await act(client, {
+          type: "SUBMIT_PAYMENT",
+          fileId: submittedFileId,
+          reference: "XENDIT-SANDBOX-TEST",
+        })
+        assert.equal(submitted.payment!.status, "SUBMITTED")
+        const proof = await upload(
+          client,
+          "receipt.txt",
+          "Manual bank payment proof",
+        )
+        const beforeVerification = await read(head)
+        assert.equal(
+          (
+            await send(
+              client,
+              { type: "COMPLETE_SANDBOX_PAYMENT" },
+              beforeVerification.version,
+            )
+          ).status,
+          409,
+        )
+        assert.equal(
+          (
+            await send(
+              client,
+              {
+                type: "SUBMIT_PAYMENT",
+                fileId: proof.id,
+                reference: "REPLACEMENT",
+              },
+              beforeVerification.version,
+            )
+          ).status,
+          409,
+        )
+        assert.equal(
+          (
+            await send(
+              admin,
+              {
+                type: "VERIFY_PAYMENT",
+                approve: true,
+                note: "No verifier grant",
+              },
+              beforeVerification.version,
+            )
+          ).status,
+          403,
+        )
+        assert.equal(
+          (
+            await send(
+              head,
+              {
+                type: "VERIFY_PAYMENT",
+                approve: false,
+                note: "",
+              },
+              beforeVerification.version,
+            )
+          ).status,
+          400,
+        )
+        assert.equal(
+          (
+            await send(
+              client,
+              { type: "VERIFY_PAYMENT", approve: true, note: "" },
+              beforeVerification.version,
+            )
+          ).status,
+          403,
+        )
+        assert.equal(
+          (
+            await send(
+              head,
+              { type: "ACTIVATE_PROJECT" },
+              beforeVerification.version,
+            )
+          ).status,
+          409,
+        )
+        const returned = await act(head, {
+          type: "VERIFY_PAYMENT",
+          approve: false,
+          note: "Receipt amount does not match",
+        })
+        assert.equal(returned.payment!.status, "PENDING")
+        assert.ok(
+          (await read(client)).events.some((event) =>
+            event.summary.includes("Receipt amount does not match"),
+          ),
+        )
+        await act(client, {
+          type: "SUBMIT_PAYMENT",
+          fileId: proof.id,
+          reference: "BANK-WF-001",
+        })
+        const ready = await act(head, {
+          type: "VERIFY_PAYMENT",
+          approve: true,
+          note: "Bank deposit confirmed",
+        })
+        assert.equal(ready.payment!.status, "VERIFIED")
+        assert.equal(ready.state, "READY_FOR_ACTIVATION")
+        assert.equal(ready.project!.status, "PLANNED")
+        assert.equal((await read(head)).project!.status, "PLANNED")
+        assert.equal((await read()).project, null)
+        const manager = await read(head)
+        const response = await send(
+          admin,
+          { type: "ACTIVATE_PROJECT" },
+          manager.version,
+        )
+        assert.equal(response.status, 403)
+        const activationId = randomUUID()
+        const activations = await Promise.all([
+          send(
+            head,
+            { type: "ACTIVATE_PROJECT" },
+            manager.version,
+            activationId,
+          ),
+          send(
+            head,
+            { type: "ACTIVATE_PROJECT" },
+            manager.version,
+            activationId,
+          ),
+        ])
+        for (const activation of activations)
+          assert.equal(activation.status, 200, await activation.clone().text())
+        const active = await read()
+        assert.equal(active.state, "ACTIVE_PROJECT")
+        assert.equal(active.project!.status, "IN_PROGRESS")
+        projectId = active.project!.id
+        assert.equal(
+          await prisma!.project.count({ where: { requestId: request.id } }),
+          1,
+        )
+        assert.equal(
+          await prisma!.projectMilestone.count({ where: { projectId } }),
+          2,
+        )
+        const persisted = await prisma!.project.findUniqueOrThrow({
+          where: { id: projectId },
+        })
+        assert.equal(persisted.quotationId, acceptedQuotationId)
+        assert.ok(
+          active.events.some((event) => event.type === "PROJECT_ACTIVATED"),
+        )
+        assert.equal(active.internal, undefined)
+        const workspace = await fetch(`${base}/projects/${projectId}`, {
+          headers: client.headers,
+        })
+        assert.equal(workspace.status, 200)
+        const workspaceJson = await workspace.text()
+        assert.ok(!workspaceJson.includes("Private staffing cost estimate"))
+        assert.ok(!workspaceJson.includes(employee.id))
+        assert.equal(
+          (
+            await fetch(`${base}/projects/${projectId}`, {
+              headers: otherClient.headers,
+            })
+          ).status,
+          404,
+        )
+        const milestones = (
+          JSON.parse(workspaceJson) as {
+            milestones: { id: string; completedAt: string | null }[]
+          }
+        ).milestones
+        const milestoneId = milestones[0]!.id
+        const patchMilestone = (actor: Actor, completed: boolean) =>
+          fetch(`${base}/projects/${projectId}/milestones/${milestoneId}`, {
+            method: "PATCH",
+            headers: { ...actor.headers, "content-type": "application/json" },
+            body: JSON.stringify({ completed }),
+          })
+        assert.equal((await patchMilestone(client, true)).status, 404)
+        const completed = await patchMilestone(staff, true)
+        assert.equal(completed.status, 200, await completed.clone().text())
+        assert.ok(
+          (
+            (await completed.json()) as {
+              milestones: { completedAt: string | null }[]
+            }
+          ).milestones[0]!.completedAt,
+        )
+        const reopened = await patchMilestone(staff, false)
+        assert.equal(reopened.status, 200)
+        assert.equal(
+          (
+            (await reopened.json()) as {
+              milestones: { completedAt: string | null }[]
+            }
+          ).milestones[0]!.completedAt,
+          null,
+        )
+        await prisma!.employee.update({
+          where: { id: employee.id },
+          data: { departmentId: foreignDepartment.id },
+        })
+        assert.equal(
+          (
+            await fetch(`${base}/projects/${projectId}`, {
+              headers: staff.headers,
+            })
+          ).status,
+          404,
+        )
+        assert.equal((await patchMilestone(staff, true)).status, 404)
+        await prisma!.employee.update({
+          where: { id: employee.id },
+          data: { departmentId: department.id },
+        })
+      },
+    )
+
+    await t.test(
+      "department heads can update active service staffing without creating another workspace",
+      async () => {
+        const current = await read(head)
+        assert.equal(current.state, "ACTIVE_PROJECT")
+        for (const actor of [client, paymentAdmin])
+          assert.equal(
+            (
+              await send(
+                actor,
+                { type: "STAFF_PROJECT", employeeIds: [employee.id] },
+                current.version,
+              )
+            ).status,
+            403,
+          )
+        for (const id of [inactiveEmployee.id, foreignEmployee.id])
+          assert.equal(
+            (
+              await send(
+                head,
+                { type: "STAFF_PROJECT", employeeIds: [id] },
+                current.version,
+              )
+            ).status,
+            409,
+          )
+        const newStaff = await user("WorkflowNewContributor", "STAFF")
+        const newEmployee = await prisma!.employee.create({
+          data: {
+            employeeId: "WF-NEW-CONTRIBUTOR",
+            fullName: "New Contributor",
+            departmentId: department.id,
+            userId: newStaff.id,
+          },
+        })
+        const updated = await act(head, {
+          type: "STAFF_PROJECT",
+          employeeIds: [newEmployee.id],
+        })
+        assert.equal(updated.state, "ACTIVE_PROJECT")
+        assert.equal(updated.project!.id, projectId)
+        assert.equal(
+          await prisma!.project.count({ where: { requestId: request.id } }),
+          1,
+        )
+        assert.equal(
+          await prisma!.projectStaff.count({ where: { projectId } }),
+          1,
+        )
+        assert.equal(
+          await prisma!.projectMilestone.count({ where: { projectId } }),
+          2,
+        )
+        assert.equal(
+          (
+            await fetch(`${base}/projects/${projectId}`, {
+              headers: staff.headers,
+            })
+          ).status,
+          404,
+        )
+        assert.equal(
+          (
+            await fetch(`${base}/projects/${projectId}`, {
+              headers: newStaff.headers,
+            })
+          ).status,
+          200,
+        )
+        await act(head, { type: "STAFF_PROJECT", employeeIds: [employee.id] })
+      },
+    )
+
+    await t.test(
+      "sandbox checkout verifies payment once and enables staffing and activation without another agreement",
+      async () => {
+        for (const requiresAgreement of [false, true]) {
+          const sandboxService = await prisma!.service.create({
+            data: {
+              name: `Sandbox checkout ${requiresAgreement ? "with" : "without"} agreement`,
+              description: "Prototype card checkout",
+              requiresConsultation: false,
+              requiresAgreement,
+              requiresPayment: true,
+              requiresQuotationApproval: false,
+              departments: { connect: { id: department.id } },
+            },
+          })
+          const sandboxRequest: { id: string } =
+            await prisma!.serviceRequest.create({
+              data: {
+                clientId: client.id,
+                serviceId: sandboxService.id,
+                title: "Sandbox booking",
+                pricingModel: "FIXED",
+                agreedPrice: "5000.00",
+                currency: "PHP",
+              },
+            })
+          const id: string = sandboxRequest.id
+          assert.equal((await accept(id)).status, 200)
+          const proposed = await act(head, { type: "FIXED_QUOTATION" }, id)
+          const command = { type: "COMPLETE_SANDBOX_PAYMENT" }
+          assert.equal(
+            (await send(client, command, proposed.version, randomUUID(), id))
+              .status,
+            409,
+          )
+          const approved = await act(
+            client,
+            {
+              type: "RESPOND_QUOTATION",
+              quotationId: proposed.quotations[0]!.id,
+              decision: "ACCEPT",
+              note: "",
+            },
+            id,
+          )
+          assert.equal(
+            (await send(head, command, approved.version, randomUUID(), id))
+              .status,
+            403,
+          )
+          assert.equal(
+            (
+              await send(
+                otherClient,
+                command,
+                approved.version,
+                randomUUID(),
+                id,
+              )
+            ).status,
+            404,
+          )
+          const actionId = randomUUID()
+          const attempts = await Promise.all([
+            send(client, command, approved.version, actionId, id),
+            send(client, command, approved.version, actionId, id),
+          ])
+          for (const attempt of attempts)
+            assert.equal(attempt.status, 200, await attempt.clone().text())
+          const paid = await read(client, id)
+          assert.equal(paid.payment!.status, "VERIFIED")
+          assert.equal(paid.state, "READY_FOR_ACTIVATION")
+          assert.equal(paid.agreement!.status, "APPROVED")
+          const payment: WorkflowPayment =
+            await prisma!.workflowPayment.findUniqueOrThrow({
+              where: { requestId: id },
+            })
+          assert.match(payment.reference!, /^XENDIT-SANDBOX-[A-F0-9-]{36}$/)
+          assert.ok(payment.verifiedAt)
+          assert.equal(payment.verifiedById, null)
+          const receipt: WorkflowFile =
+            await prisma!.workflowFile.findUniqueOrThrow({
+              where: { id: payment.proofFileId! },
+            })
+          const receiptText = Buffer.from(receipt.data).toString("utf8")
+          assert.match(receiptText, /Status: Automatically verified/)
+          assert.match(receiptText, /Amount: PHP 5000.00/)
+          assert.ok(receiptText.includes(payment.reference!))
+          assert.ok(!receiptText.includes("4000000000000002"))
+          assert.equal(receipt.clientVisible, true)
+          const download = await fetch(`${path(id)}/files/${receipt.id}`, {
+            headers: client.headers,
+          })
+          assert.equal(download.status, 200)
+          assert.equal(await download.text(), receiptText)
+          const confirmations: WorkflowEvent[] =
+            await prisma!.workflowEvent.findMany({
+              where: { requestId: id, type: "PAYMENT_VERIFIED" },
+            })
+          assert.equal(confirmations.length, 1)
+          assert.equal(confirmations[0]!.actorId, null)
+          assert.equal(
+            await prisma!.workflowFile.count({ where: { requestId: id } }),
+            1,
+          )
+          assert.equal(
+            (await send(client, command, paid.version, randomUUID(), id))
+              .status,
+            409,
+          )
+          assert.equal(
+            (
+              await send(
+                head,
+                { type: "ACTIVATE_PROJECT" },
+                paid.version,
+                randomUUID(),
+                id,
+              )
+            ).status,
+            409,
+          )
+          assert.equal(
+            (
+              await prisma!.project.findUniqueOrThrow({
+                where: { requestId: id },
+              })
+            ).status,
+            "PLANNED",
+          )
+        }
+      },
+    )
+
+    await t.test(
+      "version checks, pause and department head handoffs enforce live authorization",
+      async () => {
+        const heldRequest = await prisma!.serviceRequest.create({
+          data: {
+            clientId: client.id,
+            serviceId: service.id,
+            title: "Paused request",
+          },
+        })
+        assert.equal((await accept(heldRequest.id)).status, 200)
+        const initial = await read(head, heldRequest.id)
+        const concurrent = await Promise.all([
+          send(
+            head,
+            { type: "INTERNAL_NOTE", note: "Version race one" },
+            initial.version,
+            randomUUID(),
+            heldRequest.id,
+          ),
+          send(
+            head,
+            { type: "INTERNAL_NOTE", note: "Version race two" },
+            initial.version,
+            randomUUID(),
+            heldRequest.id,
+          ),
+        ])
+        assert.deepEqual(
+          concurrent.map((response) => response.status).sort(),
+          [200, 409],
+        )
+        const before = await read(head, heldRequest.id)
+        const held = await act(
+          head,
+          { type: "HOLD", note: "Awaiting client availability" },
+          heldRequest.id,
+        )
+        assert.equal(held.state, "ON_HOLD")
+        assert.equal(
+          (
+            await send(
+              head,
+              {
+                type: "REQUEST_REQUIREMENT",
+                title: "Extra",
+                details: "Please supply the requested documents.",
+                mandatory: true,
+              },
+              before.version,
+              randomUUID(),
+              heldRequest.id,
+            )
+          ).status,
+          409,
+        )
+        const resumed = await act(
+          head,
+          { type: "RESUME", note: "Client available" },
+          heldRequest.id,
+        )
+        assert.equal(resumed.state, "CONSULTATION")
+        await prisma!.department.update({
+          where: { id: department.id },
+          data: { headId: replacement.id },
+        })
+        assert.equal((await get(head)).status, 404)
+        assert.equal(
+          (
+            await fetch(`${path()}/files/${submittedFileId}`, {
+              headers: head.headers,
+            })
+          ).status,
+          404,
+        )
+        assert.equal((await get(replacement)).status, 200)
+        const replacementView = await read(replacement)
+        assert.ok(replacementView.internal)
+        assert.equal((await get()).status, 200)
+        await prisma!.department.update({
+          where: { id: department.id },
+          data: { headId: head.id },
+        })
+      },
+    )
+
+    await t.test(
+      "fixed-price requests skip negotiation but retain formal approval and authorized activation",
+      async () => {
+        const fixedService = await prisma!.service.create({
+          data: {
+            name: "Fixed audit",
+            description: "Audit",
+            requiresAgreement: false,
+            requiresPayment: false,
+            departments: { connect: { id: department.id } },
+          },
+        })
+        const fixedRequest = await prisma!.serviceRequest.create({
+          data: {
+            clientId: client.id,
+            serviceId: fixedService.id,
+            title: "Accessibility audit",
+            pricingModel: "FIXED",
+            agreedPrice: "5000.00",
+            currency: "PHP",
+            packageName: "Audit",
+          },
+        })
+        assert.equal((await accept(fixedRequest.id)).status, 200)
+        const fixed = await act(
+          head,
+          { type: "FIXED_QUOTATION" },
+          fixedRequest.id,
+        )
+        const quotation = fixed.quotations.at(-1)!
+        assert.equal(Number(quotation.total), 5000)
+        const approved = await act(
+          client,
+          {
+            type: "RESPOND_QUOTATION",
+            quotationId: quotation.id,
+            decision: "ACCEPT",
+            note: "",
+          },
+          fixedRequest.id,
+        )
+        assert.ok(approved.approval)
+        await act(
+          head,
+          { type: "STAFF_PROJECT", employeeIds: [employee.id] },
+          fixedRequest.id,
+        )
+        const activated = await act(
+          head,
+          { type: "ACTIVATE_PROJECT" },
+          fixedRequest.id,
+        )
+        assert.equal(activated.state, "ACTIVE_PROJECT")
+        assert.equal(
+          await prisma!.workflowApproval.count({
+            where: { requestId: fixedRequest.id },
+          }),
+          1,
+        )
+        const cancelledRequest = await prisma!.serviceRequest.create({
+          data: {
+            clientId: client.id,
+            serviceId: fixedService.id,
+            title: "Cancelled audit",
+            pricingModel: "FIXED",
+            agreedPrice: "5000.00",
+            currency: "PHP",
+          },
+        })
+        assert.equal((await accept(cancelledRequest.id)).status, 200)
+        const cancelledQuote = await act(
+          head,
+          { type: "FIXED_QUOTATION" },
+          cancelledRequest.id,
+        )
+        await act(
+          client,
+          {
+            type: "RESPOND_QUOTATION",
+            quotationId: cancelledQuote.quotations[0]!.id,
+            decision: "ACCEPT",
+            note: "",
+          },
+          cancelledRequest.id,
+        )
+        const cancelledDraft = await prisma!.project.findUniqueOrThrow({
+          where: { requestId: cancelledRequest.id },
+        })
+        await act(
+          head,
+          {
+            type: "CANCEL",
+            note: "Client requested cancellation before commencement",
+          },
+          cancelledRequest.id,
+        )
+        assert.equal(
+          (
+            await fetch(`${base}/projects/${cancelledDraft.id}`, {
+              headers: client.headers,
+            })
+          ).status,
+          404,
+        )
+        const declinedRequest = await prisma!.serviceRequest.create({
+          data: {
+            clientId: client.id,
+            serviceId: fixedService.id,
+            title: "Declined audit",
+            pricingModel: "FIXED",
+            agreedPrice: "5000.00",
+            currency: "PHP",
+          },
+        })
+        assert.equal((await accept(declinedRequest.id)).status, 200)
+        const declinedQuote = await act(
+          head,
+          { type: "FIXED_QUOTATION" },
+          declinedRequest.id,
+        )
+        const declined = await act(
+          client,
+          {
+            type: "RESPOND_QUOTATION",
+            quotationId: declinedQuote.quotations[0]!.id,
+            decision: "DECLINE",
+            note: "Budget changed",
+          },
+          declinedRequest.id,
+        )
+        assert.equal(declined.state, "DECLINED")
+        assert.equal(declined.approval, null)
+        assert.equal(
+          await prisma!.project.count({
+            where: { requestId: declinedRequest.id },
+          }),
+          0,
+        )
+      },
+    )
+
+    await t.test(
+      "events and notifications retain an audit trail without leaking internal notes",
+      async () => {
+        const events = await prisma!.workflowEvent.findMany({
+          where: { requestId: request.id },
+        })
+        assert.ok(
+          events.some(
+            (event) =>
+              event.internal &&
+              event.summary.includes("Private staffing cost estimate"),
+          ),
+        )
+        const clientNotifications = await prisma!.workflowNotification.findMany(
+          {
+            where: { requestId: request.id, userId: client.id },
+            include: { event: true },
+          },
+        )
+        assert.ok(clientNotifications.length > 0)
+        assert.ok(
+          clientNotifications.every(
+            (notification) => !notification.event.internal,
+          ),
+        )
+        assert.equal(
+          await prisma!.project.count({
+            where: { id: projectId, requestId: request.id },
+          }),
+          1,
+        )
+      },
+    )
+
+    await t.test(
+      "mark all as read covers notifications beyond the list limit and preserves recipient access boundaries",
+      async () => {
+        const eventIds = Array.from({ length: 47 }, () => randomUUID())
+        await prisma!.workflowEvent.createMany({
+          data: eventIds.map((id, index) => ({
+            id,
+            requestId: request.id,
+            actorId: head.id,
+            type: "NOTIFICATION_TEST",
+            summary: `Notification ${index + 1}`,
+            internal: index === 46,
+          })),
+        })
+        const earlierReadAt = new Date("2026-10-01T00:00:00Z")
+        await prisma!.workflowNotification.createMany({
+          data: [
+            ...eventIds.map((eventId, index) => ({
+              eventId,
+              requestId: request.id,
+              userId: client.id,
+              readAt: index === 45 ? earlierReadAt : null,
+            })),
+            {
+              eventId: eventIds[0]!,
+              requestId: request.id,
+              userId: otherClient.id,
+              readAt: null,
+            },
+          ],
+        })
+        const endpoint = `${base}/request-workflows/notifications`
+        const list = async () => {
+          const response = await fetch(endpoint, { headers: client.headers })
+          assert.equal(response.status, 200)
+          return (await response.json()) as {
+            notifications: { id: string; readAt: string | null }[]
+            unreadCount: number
+          }
+        }
+        const before = await list()
+        assert.equal(before.notifications.length, 40)
+        assert.ok(before.unreadCount >= 45)
+        await prisma!.user.update({
+          where: { id: client.id },
+          data: { settings: { workflowNotifications: false } },
+        })
+        const muted = await list()
+        assert.deepEqual(muted, { notifications: [], unreadCount: 0 })
+        await prisma!.user.update({
+          where: { id: client.id },
+          data: { settings: {} },
+        })
+        const restored = await list()
+        assert.equal(restored.notifications.length, 40)
+        assert.equal(restored.unreadCount, before.unreadCount)
+
+        assert.equal(
+          (await fetch(`${endpoint}/read-all`, { method: "PATCH" })).status,
+          401,
+        )
+        const markAll = () =>
+          fetch(`${endpoint}/read-all`, {
+            method: "PATCH",
+            headers: client.headers,
+          })
+        assert.equal((await markAll()).status, 200)
+        const after = await list()
+        assert.equal(after.unreadCount, 0)
+        assert.ok(after.notifications.every((item) => item.readAt))
+        const saved = await prisma!.workflowNotification.findMany({
+          where: { eventId: { in: eventIds } },
+          orderBy: { id: "asc" },
+        })
+        assert.ok(
+          saved
+            .filter(
+              (item) =>
+                item.userId === client.id && item.eventId !== eventIds[46],
+            )
+            .every((item) => item.readAt),
+        )
+        assert.equal(
+          saved.find((item) => item.userId === otherClient.id)!.readAt,
+          null,
+        )
+        assert.equal(
+          saved.find((item) => item.eventId === eventIds[46])!.readAt,
+          null,
+        )
+        assert.equal(
+          saved
+            .find((item) => item.eventId === eventIds[45])!
+            .readAt!.toISOString(),
+          earlierReadAt.toISOString(),
+        )
+        assert.equal((await markAll()).status, 200)
+        assert.deepEqual(
+          await prisma!.workflowNotification.findMany({
+            where: { eventId: { in: eventIds } },
+            orderBy: { id: "asc" },
+          }),
+          saved,
+        )
+      },
+    )
+  },
+)
