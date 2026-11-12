@@ -1,10 +1,14 @@
 "use client"
 
+import { PasswordInput } from "@/components/ui/password-input"
+
+import { FormInput } from "@/components/ui/form-input"
+import { formFieldClass } from "@/components/ui/form-control-styles"
+
 import { Form } from "@/components/ui/form"
 
 import { useState } from "react"
 import { Alert } from "@/components/ui/alert"
-import { Input } from "@/components/ui/input"
 import { RequiredMark } from "@/components/ui/required-mark"
 import { focusRing } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
@@ -26,8 +30,7 @@ import {
 } from "@/lib/validation"
 import { errorMessage } from "@/lib/error-message"
 
-const fieldClass =
-  "grid min-w-0 content-start gap-y-[7px] pb-4 text-xs font-semibold text-foreground"
+const fieldClass = `${formFieldClass} content-start pb-4`
 function RequiredLabel({ children }: { children: React.ReactNode }) {
   return (
     <span className="flex h-4 items-center gap-1 leading-4">
@@ -123,10 +126,9 @@ export function ClientFormDialog({
           {error && <Alert className="sm:col-span-2">{error}</Alert>}
           <label className={fieldClass} htmlFor="client-name">
             <RequiredLabel>Full Name</RequiredLabel>
-            <Input
+            <FormInput
               autoFocus
               id="client-name"
-              className={inputClass}
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               required
@@ -137,9 +139,8 @@ export function ClientFormDialog({
           </label>
           <label className={fieldClass} htmlFor="client-email">
             <RequiredLabel>Email Address</RequiredLabel>
-            <Input
+            <FormInput
               id="client-email"
-              className={inputClass}
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -150,9 +151,8 @@ export function ClientFormDialog({
           </label>
           <label className={fieldClass} htmlFor="client-contact">
             <RequiredLabel>Contact Number</RequiredLabel>
-            <Input
+            <FormInput
               id="client-contact"
-              className={inputClass}
               type="tel"
               value={contactNumber}
               onChange={(e) => setContactNumber(e.target.value)}
@@ -190,10 +190,8 @@ export function ClientFormDialog({
               >
                 <RequiredLabel>Initial Password</RequiredLabel>
               </label>
-              <Input
+              <PasswordInput
                 id="client-password"
-                className={inputClass}
-                type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required

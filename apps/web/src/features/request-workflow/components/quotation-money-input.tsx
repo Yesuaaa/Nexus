@@ -1,8 +1,8 @@
 "use client"
 
+import { FormInput } from "@/components/ui/form-input"
+
 import { useState } from "react"
-import { cn } from "@/lib/utils"
-import { workflowInput } from "./workflow-primitives"
 import {
   decimalMoneyValue,
   formatMoneyInput,
@@ -32,7 +32,7 @@ export function QuotationMoneyInput({
         {currency}
       </span>
       <input type="hidden" name={name} value={decimalMoneyValue(raw)} />
-      <input
+      <FormInput
         name={`${name}Display`}
         aria-label={label}
         type="text"
@@ -42,7 +42,7 @@ export function QuotationMoneyInput({
         data-money-min={min}
         placeholder="0.00"
         value={formatMoneyInput(raw)}
-        className={cn(workflowInput, "tabular-nums @[260px]:pl-12")}
+        className="tabular-nums @[260px]:pl-12"
         onChange={(event) => {
           const input = event.currentTarget
           const next = parseMoneyInput(input.value)

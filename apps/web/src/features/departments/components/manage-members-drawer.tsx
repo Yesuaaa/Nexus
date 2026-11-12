@@ -1,3 +1,4 @@
+import { FormInput } from "@/components/ui/form-input"
 import { Form } from "@/components/ui/form"
 import { useEffect, useRef, useState } from "react"
 import {
@@ -25,7 +26,6 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { RowActionsMenu } from "@/components/ui/row-actions-menu"
 import { SheetClose } from "@/components/ui/sheet"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Input } from "@/components/ui/input"
 import { Alert } from "@/components/ui/alert"
 import { Pill } from "@/components/ui/pill"
 import { MemberIdentity } from "@/components/ui/member-identity"
@@ -40,7 +40,6 @@ import {
   panelEmpty,
   panelField,
   panelIconButton,
-  panelInput,
   panelMuted,
   panelSecondaryButton,
 } from "@/components/ui/panel-styles"
@@ -1491,9 +1490,8 @@ export function ManageMembersDrawer({
             {actionError && <SidePanelAlert>{actionError}</SidePanelAlert>}
             <label className={panelField} htmlFor="team-name">
               Team name{" "}
-              <Input
+              <FormInput
                 id="team-name"
-                className={panelInput}
                 placeholder="e.g. Software engineering"
                 value={newTeamName}
                 onChange={(event) => setNewTeamName(event.target.value)}
@@ -1503,9 +1501,8 @@ export function ManageMembersDrawer({
             </label>
             <label className={panelField} htmlFor="team-desc">
               Description <span className="sr-only">(optional)</span>
-              <Input
+              <FormInput
                 id="team-desc"
-                className={panelInput}
                 placeholder="What does this team do? (optional)"
                 value={newTeamDesc}
                 onChange={(event) => setNewTeamDesc(event.target.value)}

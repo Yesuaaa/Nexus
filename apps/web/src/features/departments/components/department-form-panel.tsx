@@ -1,3 +1,5 @@
+import { FormInput, FormTextarea } from "@/components/ui/form-input"
+import { formFieldClass } from "@/components/ui/form-control-styles"
 import { Form } from "@/components/ui/form"
 import { useState } from "react"
 import { focusRing } from "@/components/layout/styles"
@@ -41,7 +43,7 @@ import { useAsyncResource } from "@/lib/use-async-resource"
 
 const noHeads: EligibleHead[] = []
 
-const fieldClass = "grid min-w-0 gap-1.5"
+const fieldClass = formFieldClass
 const labelClass = "text-xs font-semibold"
 const inputClass = `w-full min-w-0 rounded-lg border border-[#d6dfec] bg-background px-3 text-sm text-foreground placeholder:text-[#9aa8bb] ${focusRing}`
 
@@ -206,9 +208,8 @@ export function DepartmentFormPanel({
               <label className={labelClass} htmlFor="dept-name">
                 Department Name <RequiredMark />
               </label>
-              <input
+              <FormInput
                 id="dept-name"
-                className={cn(inputClass, "h-10")}
                 autoFocus
                 placeholder="e.g. Information Technology"
                 value={name}
@@ -225,9 +226,8 @@ export function DepartmentFormPanel({
               <label className={labelClass} htmlFor="dept-code">
                 Department Code
               </label>
-              <input
+              <FormInput
                 id="dept-code"
-                className={cn(inputClass, "h-10")}
                 placeholder="e.g. IT, HR, FIN"
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
@@ -300,9 +300,8 @@ export function DepartmentFormPanel({
               <label className={labelClass} htmlFor="dept-desc">
                 Description
               </label>
-              <textarea
+              <FormTextarea
                 id="dept-desc"
-                className={cn(inputClass, "min-h-20 resize-y py-2.5")}
                 placeholder="Briefly describe what this department manages..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}

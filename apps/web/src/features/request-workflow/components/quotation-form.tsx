@@ -1,5 +1,7 @@
 "use client"
 
+import { FormInput, FormTextarea } from "@/components/ui/form-input"
+
 import { Form, validateFields } from "@/components/ui/form"
 import { useState } from "react"
 import { Check, Plus, Trash2 } from "lucide-react"
@@ -237,24 +239,22 @@ export function QuotationForm({
         </header>
         <div data-quotation-step="0" hidden={step !== 0} className="space-y-3">
           <WorkflowField label="Service scope">
-            <textarea
+            <FormTextarea
               name="scope"
               required
               rows={3}
               maxLength={6000}
               defaultValue={latest?.scope || workflow.request.goals}
-              className={workflowInput}
               placeholder="Describe the work covered by this quotation."
             />
           </WorkflowField>
           <WorkflowField label="Deliverables (one per line)">
-            <textarea
+            <FormTextarea
               name="deliverables"
               required
               rows={3}
               maxLength={8000}
               defaultValue={latest?.deliverables.join("\n") || ""}
-              className={workflowInput}
               placeholder="List the outputs the client will receive, one per line."
             />
           </WorkflowField>
@@ -296,18 +296,17 @@ export function QuotationForm({
                 className="space-y-3 rounded-lg border border-[#d8e1ef] bg-[#f6f8fc] p-3"
               >
                 <WorkflowField label={`Item ${index + 1}`}>
-                  <input
+                  <FormInput
                     name={`description-${key}`}
                     defaultValue={rows[index].description}
                     required
                     maxLength={300}
-                    className={workflowInput}
                     placeholder="e.g. Design and development"
                   />
                 </WorkflowField>
                 <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-end gap-3">
                   <WorkflowField label="Quantity">
-                    <input
+                    <FormInput
                       name={`quantity-${key}`}
                       type="number"
                       required
@@ -315,7 +314,6 @@ export function QuotationForm({
                       max="10000"
                       step="1"
                       defaultValue={rows[index].quantity}
-                      className={workflowInput}
                     />
                   </WorkflowField>
                   <WorkflowField label="Unit price">
@@ -365,7 +363,7 @@ export function QuotationForm({
         </div>
         <div data-quotation-step="2" hidden={step !== 2} className="space-y-3">
           <WorkflowField label="Estimated timeline">
-            <textarea
+            <FormTextarea
               name="timeline"
               required
               maxLength={1000}
@@ -373,17 +371,15 @@ export function QuotationForm({
               defaultValue={
                 latest?.timeline || workflow.request.expectedTimeline
               }
-              className={workflowInput}
             />
           </WorkflowField>
           <WorkflowField label="Payment terms">
-            <textarea
+            <FormTextarea
               name="paymentTerms"
               required
               maxLength={2000}
               rows={2}
               defaultValue={latest?.paymentTerms || ""}
-              className={workflowInput}
             />
           </WorkflowField>
           <div

@@ -1,6 +1,7 @@
+import { FormInput } from "@/components/ui/form-input"
+import { formFieldClass } from "@/components/ui/form-control-styles"
 import { Form } from "@/components/ui/form"
 import { useRef, useState, type FormEvent } from "react"
-import { UserRound } from "lucide-react"
 import { focusRing } from "@/components/layout/styles"
 import {
   SidePanel,
@@ -12,7 +13,6 @@ import {
   SidePanelHeader,
   useSidePanel,
 } from "@/components/ui/side-panel"
-import { Input } from "@/components/ui/input"
 import { PasswordInput } from "@/components/ui/password-input"
 import { RequiredMark } from "@/components/ui/required-mark"
 import { DateInput } from "@/components/ui/date-input"
@@ -23,7 +23,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { getInitials } from "@/lib/initials"
 import { cn } from "@/lib/utils"
 import { getDepartment } from "@/features/departments/api/departments-api"
 import { useDepartments } from "@/features/departments/hooks/use-departments"
@@ -45,8 +44,7 @@ import { employmentTypeOptions } from "../model/employment"
 import { errorMessage } from "@/lib/error-message"
 import { useAsyncResource } from "@/lib/use-async-resource"
 
-const fieldClass =
-  "grid min-w-0 grid-rows-[16px_40px_16px] gap-y-[7px] text-xs font-semibold text-foreground"
+const fieldClass = `${formFieldClass} grid-rows-[16px_40px_16px]`
 const inputClass = `h-10 min-w-0 rounded-lg border-[#d6dfec] bg-background px-[11px] text-sm placeholder:text-[#9aa8bb] ${focusRing}`
 const selectClass = `h-10 min-w-0 rounded-lg border-[#d6dfec] bg-background px-[11px] text-sm ${focusRing}`
 /** Retry action on its own line inside a SidePanelAlert. */
@@ -253,16 +251,6 @@ export function EmployeeFormPanel({
         className="flex min-h-0 flex-1 flex-col"
       >
         <SidePanelHeader
-          leading={
-            <span
-              className="grid size-11 flex-none place-items-center rounded-full bg-[#203f8c] text-sm font-semibold text-white"
-              aria-hidden="true"
-            >
-              {getInitials(draft.fullName) || (
-                <UserRound size={18} aria-hidden="true" />
-              )}
-            </span>
-          }
           title={
             employee?.hasEmployeeRecord === false
               ? "Complete employee details"
@@ -314,12 +302,9 @@ export function EmployeeFormPanel({
                 <span className="flex h-10 items-center rounded-l-lg border border-r-0 border-[#d6dfec] bg-[#eef1f8] px-3 text-sm text-[#52627a]">
                   EXP-
                 </span>{" "}
-                <Input
+                <FormInput
                   id="employee-id"
-                  className={cn(
-                    validatedInputClass("employeeId"),
-                    "rounded-l-none",
-                  )}
+                  className="rounded-l-none"
                   value={draft.employeeId.replace(/^EXP-/, "")}
                   maxLength={36}
                   autoComplete="off"
@@ -346,9 +331,8 @@ export function EmployeeFormPanel({
             </label>
             <label className={fieldClass}>
               <RequiredFieldLabel>Full Name</RequiredFieldLabel>
-              <Input
+              <FormInput
                 id="employee-full-name"
-                className={validatedInputClass("fullName")}
                 value={draft.fullName}
                 maxLength={100}
                 autoComplete="name"
@@ -371,10 +355,9 @@ export function EmployeeFormPanel({
             </label>
             <label className={fieldClass}>
               <RequiredFieldLabel>Email</RequiredFieldLabel>
-              <Input
+              <FormInput
                 type="email"
                 id="employee-email"
-                className={validatedInputClass("email")}
                 value={draft.email}
                 maxLength={254}
                 autoComplete="email"
@@ -395,10 +378,9 @@ export function EmployeeFormPanel({
             </label>
             <label className={fieldClass}>
               <RequiredFieldLabel>Contact Number</RequiredFieldLabel>
-              <Input
+              <FormInput
                 type="tel"
                 id="employee-contact-number"
-                className={validatedInputClass("contactNumber")}
                 value={draft.contactNumber}
                 inputMode="numeric"
                 maxLength={11}
@@ -429,9 +411,8 @@ export function EmployeeFormPanel({
           >
             <label className={cn(fieldClass, "sm:col-span-2")}>
               <RequiredFieldLabel>Position</RequiredFieldLabel>
-              <Input
+              <FormInput
                 id="employee-position"
-                className={validatedInputClass("position")}
                 value={draft.position}
                 maxLength={100}
                 placeholder="Job Title"
@@ -618,7 +599,6 @@ export function EmployeeFormPanel({
                 <PasswordInput
                   id="employee-password"
                   toggleLabel="password"
-                  className={validatedInputClass("password")}
                   value={draft.password}
                   autoComplete="new-password"
                   placeholder="At least 12 characters"
@@ -643,7 +623,6 @@ export function EmployeeFormPanel({
                 <PasswordInput
                   id="employee-password-confirmation"
                   toggleLabel="confirm password"
-                  className={validatedInputClass("passwordConfirmation")}
                   value={draft.passwordConfirmation}
                   autoComplete="new-password"
                   placeholder="Enter the password again"

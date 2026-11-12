@@ -7,6 +7,7 @@ import { SidePanelLoading } from "@/components/ui/panel-loading"
 import { PlusIcon } from "@/components/layout/icons"
 import { PageHeader, PageHeaderButton } from "@/components/layout/page-header"
 import { contentClass, focusRing } from "@/components/layout/styles"
+import { ManagementViewToggle } from "@/components/layout/management-view-toggle"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { FilterSelect } from "@/components/ui/filter-select"
@@ -230,39 +231,17 @@ export function EmployeeManagementPage() {
         aria-label="Employee directory"
       >
         <div className="flex flex-wrap items-center justify-between gap-3 pb-4 max-[560px]:flex-col max-[560px]:items-stretch max-[560px]:pb-3">
-          <div
-            role="group"
-            aria-label="Employee view"
-            className="order-last inline-flex flex-none rounded-lg border border-[#e1e4ea] bg-[#f3f5f8] p-0.5 max-[560px]:order-first max-[560px]:w-full"
-          >
-            {(
-              [
-                { archived: false, label: "Employees", icon: UsersRound },
-                { archived: true, label: "Archive", icon: Archive },
-              ] as const
-            ).map(({ archived, label, icon: Icon }) => {
-              const selected = archiveView === archived
-              return (
-                <button
-                  key={label}
-                  type="button"
-                  aria-pressed={selected}
-                  disabled={loginActionPending}
-                  onClick={() => switchView(archived)}
-                  className={cn(
-                    "inline-flex min-h-[30px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md border-0 px-3 text-xs font-semibold whitespace-nowrap transition-[background-color,color,box-shadow] duration-150 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none",
-                    selected
-                      ? "bg-background text-foreground shadow-[0_1px_2px_rgb(20_45_97_/_12%)]"
-                      : "bg-transparent text-[#65718a] hover:text-foreground",
-                    focusRing,
-                  )}
-                >
-                  <Icon size={14} aria-hidden="true" />
-                  {label}
-                </button>
-              )
-            })}
-          </div>
+          <ManagementViewToggle
+            active={archiveView}
+            ariaLabel="Employee view"
+            views={[
+              { value: false, label: "Employees", icon: UsersRound },
+              { value: true, label: "Archive", icon: Archive },
+            ]}
+            disabled={loginActionPending}
+            className="order-last max-[560px]:order-first max-[560px]:w-full"
+            onChange={switchView}
+          />
           <div className="flex min-w-0 flex-wrap items-center gap-[10px] max-[560px]:w-full max-[560px]:flex-col max-[560px]:items-stretch">
             <SearchField
               label="Search employees"
