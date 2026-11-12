@@ -1,10 +1,19 @@
-import { rowActionButton } from "@/components/ui/row-action-styles"
+import { Eye, KeyRound, Pencil, Trash2, UserCheck, UserX } from "lucide-react"
 import {
+  RowActionLabel,
   RowActionsMenu,
   type RowActionMenuItem,
 } from "@/components/ui/row-actions-menu"
 import type { Employee } from "../api/employees-api"
-import { cn } from "@/lib/utils"
+
+type LoginAction =
+  "create" | "deactivate" | "reactivate" | "delete" | "permanent"
+type EmployeeAction = "view" | "edit" | LoginAction
+
+const dangerItem =
+  "text-[#c33945] hover:bg-[#fff0f1] focus:bg-[#fff0f1] focus:text-[#c33945] focus-visible:bg-[#fff0f1] data-[disabled]:text-[#9aa8bb] data-[disabled]:opacity-60"
+const positiveItem =
+  "text-[#247044] hover:bg-[#edf8f1] focus:bg-[#edf8f1] focus:text-[#247044] focus-visible:bg-[#edf8f1]"
 
 export function EmployeeRowActions({
   employee,
@@ -23,102 +32,81 @@ export function EmployeeRowActions({
   disabled: boolean
   onView: () => void
   onEdit: () => void
-  onManageLogin: (
-    action: "create" | "deactivate" | "reactivate" | "delete" | "permanent",
-  ) => void
+  onManageLogin: (action: LoginAction) => void
 }) {
-  type EmployeeAction =
-    "create" | "deactivate" | "reactivate" | "delete" | "permanent"
   const items: RowActionMenuItem<EmployeeAction>[] = []
+
   if (!archiveView) {
     items.push(
+      {
+        action: "view",
+        label: <RowActionLabel icon={Eye}>View Employee</RowActionLabel>,
+      },
+      {
+        action: "edit",
+        label: <RowActionLabel icon={Pencil}>Edit</RowActionLabel>,
+      },
       !employee.hasAccount
-        ? { action: "create", label: "Create login account" }
-        : {
-            action: employee.accountIsActive ? "deactivate" : "reactivate",
-            label: employee.accountIsActive
-              ? "Deactivate account"
-              : "Reactivate account",
-            className: employee.accountIsActive
-              ? "text-[#c33945] focus:bg-[#fff0f1] focus:text-[#c33945]"
-              : "text-[#247044] focus:bg-[#edf8f1] focus:text-[#247044]",
-          },
+        ? {
+            action: "create",
+            label: (
+              <RowActionLabel icon={KeyRound}>
+                Create login account
+              </RowActionLabel>
+            ),
+            separatorBefore: true,
+          }
+        : employee.accountIsActive
+          ? {
+              action: "deactivate",
+              label: (
+                <RowActionLabel icon={UserX}>Deactivate account</RowActionLabel>
+              ),
+              className: dangerItem,
+              separatorBefore: true,
+            }
+          : {
+              action: "reactivate",
+              label: (
+                <RowActionLabel icon={UserCheck}>
+                  Reactivate account
+                </RowActionLabel>
+              ),
+              className: positiveItem,
+              separatorBefore: true,
+            },
     )
   }
+
   items.push({
     action: archiveView ? "permanent" : "delete",
-    label: archiveView ? "Delete permanently" : "Delete account",
+    label: (
+      <RowActionLabel icon={Trash2}>
+        {archiveView ? "Delete permanently" : "Delete account"}
+      </RowActionLabel>
+    ),
     disabled:
       employee.accountRole === "ADMIN" ||
       (!archiveView &&
         (!employee.hasAccount || employee.accountIsActive !== false)),
-    className:
-      "text-[#c33945] focus:bg-[#fff0f1] focus:text-[#c33945] data-[disabled]:text-[#9aa8bb] data-[disabled]:opacity-60",
+    className: dangerItem,
   })
 
   return (
-    <div className="flex items-center gap-2">
-      {!archiveView && (
-        <>
-          <button
-            type="button"
-            className={rowActionButton}
-            disabled={disabled}
-            aria-label={`View ${employee.fullName}`}
-            onClick={onView}
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.7"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z" />
-              <circle cx="12" cy="12" r="2.5" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            className={cn(
-              rowActionButton,
-              "border-[#203f8c] bg-[#203f8c] text-white hover:enabled:bg-[#172f70] hover:enabled:text-white",
-            )}
-            disabled={disabled}
-            aria-label={`Edit ${employee.fullName}`}
-            onClick={onEdit}
-          >
-            <svg
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.7"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="m16 3 5 5M4 16 17 3a2.1 2.1 0 0 1 3 3L7 19l-5 2 2-5Z" />
-            </svg>
-          </button>
-        </>
-      )}
-      <RowActionsMenu
-        modal={false}
-        open={open}
-        onOpenChange={onOpenChange}
-        triggerId={`employee-actions-${employee.id}`}
-        triggerLabel={`More actions for ${employee.fullName}`}
-        menuLabel={`Actions for ${employee.fullName}`}
-        items={items}
-        disabled={disabled}
-        onAction={onManageLogin}
-      />
-    </div>
+    <RowActionsMenu
+      modal={false}
+      open={open}
+      onOpenChange={onOpenChange}
+      triggerId={`employee-actions-${employee.id}`}
+      triggerLabel={`More actions for ${employee.fullName}`}
+      menuLabel={`Actions for ${employee.fullName}`}
+      items={items}
+      disabled={disabled}
+      onAction={(action) => {
+        if (action === "view") onView()
+        else if (action === "edit") onEdit()
+        else onManageLogin(action)
+      }}
+    />
   )
 }

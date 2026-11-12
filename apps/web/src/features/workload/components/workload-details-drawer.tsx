@@ -13,7 +13,7 @@ import {
   panelIconButton,
   panelSecondaryButton,
   panelAssignButton,
-} from "@/features/departments/styles/member-panel-styles"
+} from "@/components/ui/panel-styles"
 
 export function WorkloadDetailsDrawer({
   name,

@@ -1,6 +1,5 @@
 import { Form } from "@/components/ui/form"
-import { useEffect, useRef, useState } from "react"
-import { CloseIcon } from "@/components/layout/icons"
+import { useEffect, useState } from "react"
 import { focusRing } from "@/components/layout/styles"
 import {
   autoDepartmentColor,
@@ -8,11 +7,17 @@ import {
   getDepartmentColorValue,
   resolveDepartmentColor,
 } from "@/components/ui/department-pill"
-import { EdgeSheetContent } from "@/components/ui/edge-sheet"
 import { Pill } from "@/components/ui/pill"
-import { Sheet, SheetDescription, SheetTitle } from "@/components/ui/sheet"
+import {
+  SidePanel,
+  SidePanelAlert,
+  SidePanelBody,
+  SidePanelButton,
+  SidePanelFooter,
+  SidePanelHeader,
+  useSidePanel,
+} from "@/components/ui/side-panel"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useAnimatedPanelClose } from "@/components/ui/use-animated-panel-close"
 import { cn } from "@/lib/utils"
 import {
   Select,
@@ -34,7 +39,6 @@ import type { DepartmentColor } from "../model/department-color"
 const fieldClass = "grid min-w-0 gap-1.5"
 const labelClass = "text-xs font-semibold"
 const inputClass = `w-full min-w-0 rounded-lg border border-[#d6dfec] bg-background px-3 text-sm text-foreground placeholder:text-[#9aa8bb] ${focusRing}`
-const buttonClass = `inline-flex min-h-[38px] cursor-pointer items-center justify-center rounded-[9px] border border-transparent px-[15px] text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none ${focusRing}`
 
 export function DepartmentFormPanel({
   department,
@@ -45,10 +49,7 @@ export function DepartmentFormPanel({
   onClose: () => void
   onSaved: () => void
 }) {
-  const openerRef = useRef(
-    typeof document === "undefined" ? null : document.activeElement,
-  )
-  const { open, closeAfterTransition } = useAnimatedPanelClose(onClose)
+  const panel = useSidePanel(onClose)
   const isEditing = Boolean(department)
   const [selectedPreset, setSelectedPreset] = useState<string>(
     department
@@ -130,7 +131,7 @@ export function DepartmentFormPanel({
           headId: headId || null,
         })
       }
-      closeAfterTransition(onSaved)
+      panel.close(onSaved)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to save department")
     } finally {
@@ -141,57 +142,28 @@ export function DepartmentFormPanel({
   const previewColor = resolveDepartmentColor(color, name)
 
   return (
-    <Sheet open={open}>
-      <EdgeSheetContent
-        open={open}
-        overlayClassName="bg-[rgb(13_28_57_/_18%)]"
-        className="overflow-hidden"
-        onCloseAutoFocus={(event) => {
-          event.preventDefault()
-          const opener = openerRef.current
-          if (opener instanceof HTMLElement && opener.isConnected)
-            opener.focus()
-        }}
-        // Unsaved form: close only through Cancel or the close button.
-        onInteractOutside={(event) => event.preventDefault()}
-        onEscapeKeyDown={(event) => event.preventDefault()}
-      >
-        <header className="flex flex-none items-start justify-between gap-4 border-b border-[#eceef1] px-6 pt-6 pb-5 max-[560px]:px-5">
-          <div className="min-w-0">
-            <SheetTitle className="m-0 text-[22px] leading-[1.25] font-[650] tracking-[-0.03em]">
-              {isEditing ? "Edit Department" : "Create Department"}
-            </SheetTitle>
-            <SheetDescription className="mt-1 mb-0 text-xs leading-relaxed text-[#738096]">
-              {isEditing
-                ? "Update the department details and assigned head."
-                : "Add a department and assign its head."}
-            </SheetDescription>
-          </div>
-          <button
-            type="button"
-            className={cn(
-              "grid size-8 flex-none cursor-pointer place-items-center rounded-[7px] border-0 bg-background text-[#65718a] hover:enabled:bg-[#f1f5fc] disabled:cursor-not-allowed disabled:opacity-50",
-              focusRing,
-            )}
-            onClick={() => closeAfterTransition()}
-            aria-label="Close panel"
-            disabled={submitting}
-          >
-            <CloseIcon />
-          </button>
-        </header>
-
-        <Form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+    <SidePanel
+      open={panel.open}
+      onOpenChange={panel.onOpenChange}
+      dismissible={false}
+      busy={submitting}
+    >
+      <SidePanelHeader
+        title={isEditing ? "Edit Department" : "Create Department"}
+        description={
+          isEditing
+            ? "Update the department details and assigned head."
+            : "Add a department and assign its head."
+        }
+        closeDisabled={submitting}
+      />
+      <Form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+        <SidePanelBody>
+          {error && <SidePanelAlert>{error}</SidePanelAlert>}
           <fieldset
             disabled={submitting}
-            className="m-0 grid min-h-0 min-w-0 flex-1 content-start gap-4 overflow-y-auto overscroll-contain border-0 px-6 py-5 disabled:opacity-60 max-[560px]:px-5"
+            className="m-0 grid min-w-0 gap-4 border-0 p-0 disabled:opacity-60"
           >
-            {error && (
-              <p className="m-0 text-xs text-[#bc3649]" role="alert">
-                {error}
-              </p>
-            )}
-
             {!isEditing && (
               <div className={fieldClass}>
                 <label className={labelClass} htmlFor="dept-preset">
@@ -335,36 +307,24 @@ export function DepartmentFormPanel({
               />
             </div>
           </fieldset>
-
-          <footer className="flex flex-none justify-end gap-2 border-t border-[#eceef1] px-6 py-4 max-[560px]:px-5">
-            <button
-              type="button"
-              className={cn(
-                buttonClass,
-                "border-[#d7e0ee] bg-background text-[#24437e] hover:enabled:bg-[#f1f5fc]",
-              )}
-              onClick={() => closeAfterTransition()}
-              disabled={submitting}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className={cn(
-                buttonClass,
-                "bg-[#203f8c] text-white hover:enabled:bg-[#172f70]",
-              )}
-              disabled={submitting}
-            >
-              {submitting
-                ? "Saving..."
-                : isEditing
-                  ? "Update Department"
-                  : "Create Department"}
-            </button>
-          </footer>
-        </Form>
-      </EdgeSheetContent>
-    </Sheet>
+        </SidePanelBody>
+        <SidePanelFooter>
+          <SidePanelButton
+            variant="secondary"
+            onClick={() => panel.close()}
+            disabled={submitting}
+          >
+            Cancel
+          </SidePanelButton>
+          <SidePanelButton type="submit" disabled={submitting}>
+            {submitting
+              ? "Saving..."
+              : isEditing
+                ? "Update Department"
+                : "Create Department"}
+          </SidePanelButton>
+        </SidePanelFooter>
+      </Form>
+    </SidePanel>
   )
 }

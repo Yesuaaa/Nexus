@@ -1,21 +1,21 @@
-import { useEffect, useRef, useState } from "react"
-import { CloseIcon } from "@/components/layout/icons"
+import { useEffect, useState } from "react"
 import { ConversationAvatar } from "@/features/request-conversations/components/conversation-avatar"
-import { Button } from "@/components/ui/button"
+import { DepartmentPill } from "@/components/ui/department-pill"
 import { Pill } from "@/components/ui/pill"
-import { useAnimatedPanelClose } from "@/components/ui/use-animated-panel-close"
+import { SheetClose } from "@/components/ui/sheet"
 import {
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetDescription,
-  SheetTitle,
-} from "@/components/ui/sheet"
-import {
-  panelAssignButton,
-  panelIconButton,
-  panelSecondaryButton,
-} from "@/features/departments/styles/member-panel-styles"
+  DetailItem,
+  DetailList,
+  SidePanel,
+  SidePanelBody,
+  SidePanelButton,
+  SidePanelError,
+  SidePanelFooter,
+  SidePanelHeader,
+  SidePanelSection,
+  useSidePanel,
+} from "@/components/ui/side-panel"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   getEmployee,
   type Employee,
@@ -29,27 +29,34 @@ const typeNames: Record<EmploymentType, string> = {
   CONTRACT: "Contract",
   INTERN: "Intern",
 }
-const statusNames: Record<EmploymentStatus, string> = {
-  ACTIVE: "Active",
-  INACTIVE: "Inactive",
-  ON_LEAVE: "On leave",
+const statusStyles: Record<
+  EmploymentStatus,
+  { label: string; className: string }
+> = {
+  ACTIVE: { label: "Active", className: "bg-[#dcf5e5] text-[#19703a]" },
+  ON_LEAVE: { label: "On leave", className: "bg-[#fff3df] text-[#805316]" },
+  INACTIVE: { label: "Inactive", className: "bg-[#fde4ea] text-[#b4234d]" },
 }
 
-function DetailRow({
-  label,
-  children,
-}: {
-  label: string
-  children: React.ReactNode
-}) {
+function DetailsSkeleton() {
   return (
-    <div className="grid gap-1.5 border-b border-[#eceef1] py-3 last:border-b-0">
-      <dt className="text-[11px] font-medium text-[#738096]">{label}</dt>
-      <dd className="m-0 min-w-0 break-words text-xs font-medium text-foreground">
-        {children || (
-          <span className="font-normal text-[#94a3b8]">Not provided</span>
-        )}
-      </dd>
+    <div className="grid gap-5" aria-busy="true">
+      <span role="status" className="sr-only">
+        Loading employee details…
+      </span>
+      {[4, 6].map((rows, section) => (
+        <div key={section} className="grid gap-3">
+          <Skeleton className="h-3.5 w-36" />
+          <div className="divide-y divide-[#eceef1] rounded-lg border border-[#e8ebef] px-3.5">
+            {Array.from({ length: rows }, (_, row) => (
+              <div key={row} className="flex justify-between gap-4 py-3">
+                <Skeleton className="h-2.5 w-20" />
+                <Skeleton className="h-2.5 w-32" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -65,11 +72,7 @@ export function EmployeeDetailsDrawer({
   onEdit: (employee: Employee) => void
   onManageDepartment?: (departmentId: string) => void
 }) {
-  const { open, handleOpenChange, closeAfterTransition } =
-    useAnimatedPanelClose(onClose)
-  const openerRef = useRef(
-    typeof document === "undefined" ? null : document.activeElement,
-  )
+  const panel = useSidePanel(onClose)
   const [employee, setEmployee] = useState<Employee | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState("")
@@ -100,182 +103,136 @@ export function EmployeeDetailsDrawer({
     }
   }, [employeeId, revision])
 
+  const status = employee?.status ? statusStyles[employee.status] : null
+
   return (
-    <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent
-        showCloseButton={false}
-        overlayClassName="nexus-panel-overlay bg-[rgb(13_28_57_/_40%)]"
-        className="nexus-side-panel inset-y-auto top-[15px] right-[15px] flex h-[calc(100dvh-30px)] max-h-none w-[min(600px,calc(100vw-30px))] max-w-none flex-col gap-0 overflow-hidden rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_16px_60px_rgb(18_36_73_/_18%)] sm:max-w-none max-[560px]:top-0 max-[560px]:right-0 max-[560px]:h-dvh max-[560px]:w-full max-[560px]:rounded-none max-[560px]:border-0"
-        onCloseAutoFocus={(event) => {
-          event.preventDefault()
-          const opener = openerRef.current
-          if (opener instanceof HTMLElement && opener.isConnected)
-            opener.focus()
-          else
-            (
-              document.getElementById(`employee-actions-${employeeId}`) ??
-              document.getElementById("employee-directory-heading")
-            )?.focus()
-        }}
-      >
-        <header className="flex flex-none items-start justify-between gap-4 border-b border-[#eceef1] px-6 pt-6 pb-5 max-[560px]:px-5">
-          <div className="min-w-0">
-            <SheetTitle className="m-0 text-[22px] leading-[1.25] font-[650] tracking-[-0.03em]">
-              Employee details
-            </SheetTitle>
-            <SheetDescription className="sr-only">
-              View personal and employment details.
-            </SheetDescription>
-            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2 text-xs">
-              <span className="truncate font-medium">
-                {employee?.fullName ||
-                  (loading ? "Loading employee…" : "Employee")}
-              </span>
-              {employee && <Pill>{employee.employeeId || "Not set"}</Pill>}
-            </div>
-          </div>
-          <SheetClose asChild>
-            <Button
-              variant="outline"
-              type="button"
-              className={panelIconButton}
-              aria-label="Close employee details"
-            >
-              <CloseIcon width="16" height="16" />
-            </Button>
-          </SheetClose>
-        </header>
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 max-[560px]:px-5">
-          {loading ? (
-            <div
-              className="grid min-h-40 place-content-center text-xs text-[#7183a2]"
-              role="status"
-            >
-              Loading employee details…
-            </div>
-          ) : loadError ? (
-            <div
-              className="grid min-h-40 place-content-center gap-3 text-center text-xs text-[#7183a2]"
-              role="alert"
-            >
-              <p className="m-0">{loadError}</p>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-auto min-h-0 border-0 bg-transparent p-0 font-bold text-[#244993] shadow-none hover:bg-transparent"
-                onClick={() => {
-                  setLoading(true)
-                  setRevision((value) => value + 1)
-                }}
-              >
-                Try again
-              </Button>
-            </div>
+    <SidePanel
+      open={panel.open}
+      onOpenChange={panel.onOpenChange}
+      fallbackFocus={() =>
+        document.getElementById(`employee-actions-${employeeId}`) ??
+        document.getElementById("employee-directory-heading")
+      }
+    >
+      <SidePanelHeader
+        leading={
+          employee ? (
+            <ConversationAvatar
+              name={employee.fullName}
+              imageUrl={employee.imageUrl}
+              className="size-11"
+            />
           ) : (
-            employee && (
-              <>
-                <section
-                  aria-label="Personal information"
-                  className="grid gap-3"
-                >
-                  <h3 className="m-0 text-xs font-semibold">
-                    Personal information
-                  </h3>
-                  <div className="flex min-w-0 items-center gap-3">
-                    <ConversationAvatar
-                      name={employee.fullName}
-                      imageUrl={employee.imageUrl}
-                      className="size-12"
-                    />
-                    <span className="min-w-0 break-words text-sm font-semibold">
-                      {employee.fullName}
-                    </span>
-                  </div>
-                  <dl className="m-0 divide-y divide-[#eceef1] rounded-lg border border-[#e8ebef] px-3">
-                    <DetailRow label="Employee ID">
-                      {employee.employeeId}
-                    </DetailRow>
-                    <DetailRow label="Full name">{employee.fullName}</DetailRow>
-                    <DetailRow label="Email">{employee.email}</DetailRow>
-                    <DetailRow label="Contact number">
-                      {employee.contactNumber}
-                    </DetailRow>
-                  </dl>
-                </section>
-                <section
-                  aria-label="Employment information"
-                  className="mt-6 grid gap-3"
-                >
-                  <h3 className="m-0 text-xs font-semibold">
-                    Employment information
-                  </h3>
-                  <dl className="m-0 divide-y divide-[#eceef1] rounded-lg border border-[#e8ebef] px-3">
-                    <DetailRow label="Position">{employee.position}</DetailRow>
-                    <DetailRow label="Employment type">
-                      {employee.employmentType
-                        ? typeNames[employee.employmentType]
-                        : "Not set"}
-                    </DetailRow>
-                    <DetailRow label="Status">
-                      {employee.status
-                        ? statusNames[employee.status]
-                        : "Not set"}
-                    </DetailRow>
-                    <DetailRow label="Start date">
-                      {employee.startDate
-                        ? new Date(employee.startDate).toLocaleDateString(
-                            undefined,
-                            { timeZone: "UTC" },
-                          )
-                        : null}
-                    </DetailRow>
-                    <DetailRow label="Department">
-                      {employee.department?.name}
-                    </DetailRow>
-                    <DetailRow label="Team">{employee.team?.name}</DetailRow>
-                  </dl>
-                  {employee.departmentId && onManageDepartment && (
-                    <Button
+            <Skeleton className="size-11 flex-none rounded-full" />
+          )
+        }
+        title={
+          employee?.fullName || (loading ? "Loading employee…" : "Employee")
+        }
+        titleClassName={!employee && loading ? "sr-only" : undefined}
+        meta={
+          !employee && loading ? (
+            <Skeleton className="h-6 w-40" />
+          ) : (
+            status && <Pill className={status.className}>{status.label}</Pill>
+          )
+        }
+        description={
+          employee
+            ? [employee.employeeId || "No employee ID", employee.position]
+                .filter(Boolean)
+                .join(" · ")
+            : "View personal and employment details."
+        }
+        closeLabel="Close employee details"
+      />
+      <SidePanelBody>
+        {loading ? (
+          <DetailsSkeleton />
+        ) : loadError ? (
+          <SidePanelError
+            message={loadError}
+            onRetry={() => {
+              setLoading(true)
+              setRevision((value) => value + 1)
+            }}
+          />
+        ) : (
+          employee && (
+            <>
+              <SidePanelSection title="Personal information">
+                <DetailList>
+                  <DetailItem label="Employee ID">
+                    {employee.employeeId}
+                  </DetailItem>
+                  <DetailItem label="Full name">{employee.fullName}</DetailItem>
+                  <DetailItem label="Email">{employee.email}</DetailItem>
+                  <DetailItem label="Contact number">
+                    {employee.contactNumber}
+                  </DetailItem>
+                </DetailList>
+              </SidePanelSection>
+              <SidePanelSection
+                title="Employment information"
+                action={
+                  employee.departmentId &&
+                  onManageDepartment && (
+                    <button
                       type="button"
-                      variant="outline"
-                      className={panelSecondaryButton}
+                      className="cursor-pointer rounded border-0 bg-transparent p-0 text-xs font-semibold text-[#294a9b] hover:underline"
                       onClick={() =>
-                        closeAfterTransition(() =>
+                        panel.close(() =>
                           onManageDepartment(employee.departmentId!),
                         )
                       }
                     >
-                      Manage department members &amp; teams
-                    </Button>
-                  )}
-                </section>
-              </>
-            )
-          )}
-        </div>
-        <footer className="flex flex-none justify-between gap-3 border-t border-[#eceef1] px-6 py-4 max-[560px]:px-5">
-          <Button
-            variant="outline"
-            type="button"
-            className={panelSecondaryButton}
-            disabled={!employee || loading}
-            onClick={() =>
-              employee && closeAfterTransition(() => onEdit(employee))
-            }
-          >
-            Edit employee
-          </Button>
-          <SheetClose asChild>
-            <Button
-              type="button"
-              className={panelAssignButton}
-              aria-label="Done viewing employee details"
-            >
-              Done
-            </Button>
-          </SheetClose>
-        </footer>
-      </SheetContent>
-    </Sheet>
+                      Manage department
+                    </button>
+                  )
+                }
+              >
+                <DetailList>
+                  <DetailItem label="Position">{employee.position}</DetailItem>
+                  <DetailItem label="Employment type">
+                    {employee.employmentType
+                      ? typeNames[employee.employmentType]
+                      : null}
+                  </DetailItem>
+                  <DetailItem label="Status">{status?.label}</DetailItem>
+                  <DetailItem label="Start date">
+                    {employee.startDate
+                      ? new Date(employee.startDate).toLocaleDateString(
+                          undefined,
+                          { timeZone: "UTC" },
+                        )
+                      : null}
+                  </DetailItem>
+                  <DetailItem label="Department">
+                    {employee.department && (
+                      <DepartmentPill department={employee.department} />
+                    )}
+                  </DetailItem>
+                  <DetailItem label="Team">{employee.team?.name}</DetailItem>
+                </DetailList>
+              </SidePanelSection>
+            </>
+          )
+        )}
+      </SidePanelBody>
+      <SidePanelFooter className="justify-between">
+        <SidePanelButton
+          variant="secondary"
+          disabled={!employee || loading}
+          onClick={() => employee && panel.close(() => onEdit(employee))}
+        >
+          Edit employee
+        </SidePanelButton>
+        <SheetClose asChild>
+          <SidePanelButton aria-label="Done viewing employee details">
+            Done
+          </SidePanelButton>
+        </SheetClose>
+      </SidePanelFooter>
+    </SidePanel>
   )
 }

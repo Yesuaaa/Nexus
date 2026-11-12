@@ -1,27 +1,12 @@
-import type { ReactNode } from "react"
-import { Eye, Pencil, Trash2, type LucideIcon } from "lucide-react"
+import { Eye, Pencil, Trash2 } from "lucide-react"
 import {
+  RowActionLabel,
   RowActionsMenu,
   type RowActionMenuItem,
 } from "@/components/ui/row-actions-menu"
 import type { Department } from "../api/departments-api"
 
 type DepartmentAction = "view" | "edit" | "delete"
-
-function MenuLabel({
-  icon: Icon,
-  children,
-}: {
-  icon: LucideIcon
-  children: ReactNode
-}) {
-  return (
-    <span className="flex items-center gap-2">
-      <Icon size={14} aria-hidden="true" />
-      {children}
-    </span>
-  )
-}
 
 export function DepartmentRowActions({
   department,
@@ -41,19 +26,19 @@ export function DepartmentRowActions({
   const items: RowActionMenuItem<DepartmentAction>[] = [
     {
       action: "view",
-      label: <MenuLabel icon={Eye}>View Department</MenuLabel>,
+      label: <RowActionLabel icon={Eye}>View Department</RowActionLabel>,
     },
   ]
   if (canManage) {
     items.push({
       action: "edit",
-      label: <MenuLabel icon={Pencil}>Edit</MenuLabel>,
+      label: <RowActionLabel icon={Pencil}>Edit</RowActionLabel>,
     })
   }
   if (canDelete) {
     items.push({
       action: "delete",
-      label: <MenuLabel icon={Trash2}>Delete</MenuLabel>,
+      label: <RowActionLabel icon={Trash2}>Delete</RowActionLabel>,
       className:
         "text-xs text-[#c33945] hover:bg-[#fff0f1] focus:bg-[#fff0f1] focus:text-[#c33945] focus-visible:bg-[#fff0f1]",
     })

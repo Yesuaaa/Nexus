@@ -1,10 +1,11 @@
-import { useRef, useState, type ReactNode } from "react"
-import { MoreHorizontal } from "lucide-react"
+import { Fragment, useRef, useState, type ReactNode } from "react"
+import { MoreHorizontal, type LucideIcon } from "lucide-react"
 import { useExclusiveMenu } from "@/components/ui/dropdown"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -21,6 +22,24 @@ export type RowActionMenuItem<Action extends string> = {
   label: ReactNode
   disabled?: boolean
   className?: string
+  /** Draw a divider above this item to start a new group. */
+  separatorBefore?: boolean
+}
+
+/** Icon + text label for a RowActionsMenu item. */
+export function RowActionLabel({
+  icon: Icon,
+  children,
+}: {
+  icon: LucideIcon
+  children: ReactNode
+}) {
+  return (
+    <span className="flex items-center gap-2">
+      <Icon size={14} aria-hidden="true" />
+      {children}
+    </span>
+  )
 }
 
 export function RowActionsMenu<Action extends string>({
@@ -163,16 +182,20 @@ export function RowActionsMenu<Action extends string>({
         }}
       >
         {items.map((item) => (
-          <DropdownMenuItem
-            key={item.action}
-            disabled={item.disabled}
-            className={cn(dropdownItemClass, "text-xs", item.className)}
-            onSelect={() => {
-              pendingAction.current = item.action
-            }}
-          >
-            {item.label}
-          </DropdownMenuItem>
+          <Fragment key={item.action}>
+            {item.separatorBefore && (
+              <DropdownMenuSeparator className="mx-0 my-1 bg-[#eceef1]" />
+            )}
+            <DropdownMenuItem
+              disabled={item.disabled}
+              className={cn(dropdownItemClass, "text-xs", item.className)}
+              onSelect={() => {
+                pendingAction.current = item.action
+              }}
+            >
+              {item.label}
+            </DropdownMenuItem>
+          </Fragment>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>

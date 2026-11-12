@@ -1,15 +1,18 @@
 import { Form } from "@/components/ui/form"
 import { useEffect, useRef, useState, type FormEvent } from "react"
-import { Eye, EyeOff } from "lucide-react"
-import { CloseIcon } from "@/components/layout/icons"
+import { Eye, EyeOff, UserRound } from "lucide-react"
 import { focusRing } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog"
+  SidePanel,
+  SidePanelAlert,
+  SidePanelBody,
+  SidePanelButton,
+  SidePanelFieldset,
+  SidePanelFooter,
+  SidePanelHeader,
+  useSidePanel,
+} from "@/components/ui/side-panel"
 import { Input } from "@/components/ui/input"
 import { DateInput } from "@/components/ui/date-input"
 import {
@@ -19,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { getInitials } from "@/lib/initials"
 import { cn } from "@/lib/utils"
 import {
   listDepartments,
@@ -109,7 +113,7 @@ function toDraft(employee?: Employee | null): EmployeeDraft {
   }
 }
 
-export function EmployeeFormDialog({
+export function EmployeeFormPanel({
   employee,
   onClose,
   onSaved,
@@ -138,9 +142,7 @@ export function EmployeeFormDialog({
   const [teamError, setTeamError] = useState("")
   const [teamRevision, setTeamRevision] = useState(0)
   const formRef = useRef<HTMLFormElement>(null)
-  const openerRef = useRef(
-    typeof document === "undefined" ? null : document.activeElement,
-  )
+  const panel = useSidePanel(onClose)
 
   useEffect(() => {
     let active = true
@@ -277,7 +279,7 @@ export function EmployeeFormDialog({
           : employee
             ? await updateEmployee(employee.id, input)
             : await createEmployee(input)
-      onSaved(saved)
+      panel.close(() => onSaved(saved))
     } catch (reason: unknown) {
       setError(
         reason instanceof Error
@@ -290,101 +292,90 @@ export function EmployeeFormDialog({
   }
 
   return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open && !pending) onClose()
-      }}
+    <SidePanel
+      open={panel.open}
+      onOpenChange={panel.onOpenChange}
+      dismissible={false}
+      busy={pending}
     >
-      <DialogContent
-        showCloseButton={false}
-        overlayClassName="bg-[rgb(13_28_57_/_48%)]"
-        className="max-h-[calc(100dvh-28px)] w-[min(620px,calc(100vw-28px))] gap-0 overflow-y-auto rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_22px_75px_rgb(18_36_73_/_22%)]"
-        onInteractOutside={(event) => event.preventDefault()}
-        onEscapeKeyDown={(event) => event.preventDefault()}
-        onCloseAutoFocus={(event) => {
-          event.preventDefault()
-          const opener = openerRef.current
-          if (opener instanceof HTMLElement && opener.isConnected)
-            opener.focus()
-        }}
+      <Form
+        ref={formRef}
+        noValidate
+        onSubmit={(event) => void submit(event)}
+        className="flex min-h-0 flex-1 flex-col"
       >
-        <Form ref={formRef} noValidate onSubmit={(event) => void submit(event)}>
-          <header className="flex items-start justify-between gap-4 border-b border-[#eceef1] p-5 sm:px-6 sm:pt-6 sm:pb-5">
-            <div className="min-w-0">
-              <DialogTitle className="m-0 text-[20px] font-[650] tracking-[-0.03em]">
-                {employee?.hasEmployeeRecord === false
-                  ? "Complete employee details"
-                  : isEditing
-                    ? "Edit Employee"
-                    : "Add Employee"}
-              </DialogTitle>
-              <DialogDescription className="mt-1 mb-0 text-xs text-[#738096]">
-                Keep employment details and team placement up to date.
-              </DialogDescription>
-            </div>
-            <Button
-              variant="outline"
-              type="button"
-              className="grid size-8 flex-none place-items-center rounded-[7px] border border-[#e1e4ea] bg-background p-0 text-[#65718a] shadow-none hover:bg-[#f1f5fc] disabled:opacity-50"
-              aria-label="Close employee form"
-              disabled={pending}
-              onClick={onClose}
+        <SidePanelHeader
+          leading={
+            <span
+              className="grid size-11 flex-none place-items-center rounded-full bg-[#203f8c] text-sm font-semibold text-white"
+              aria-hidden="true"
             >
-              <CloseIcon width="16" height="16" />
-            </Button>
-          </header>
-          <div className="grid gap-4 p-5 sm:grid-cols-2 sm:p-6">
-            {error && (
-              <p
-                className="sm:col-span-2 m-0 rounded-lg bg-[#fff0f1] p-3 text-xs text-[#bc3649]"
-                role="alert"
+              {getInitials(draft.fullName) || (
+                <UserRound size={18} aria-hidden="true" />
+              )}
+            </span>
+          }
+          title={
+            employee?.hasEmployeeRecord === false
+              ? "Complete employee details"
+              : isEditing
+                ? "Edit Employee"
+                : "Add Employee"
+          }
+          description={
+            draft.fullName.trim() || "Employment details, placement, and login."
+          }
+          closeLabel="Close employee form"
+          closeDisabled={pending}
+        />
+        <SidePanelBody>
+          {error && <SidePanelAlert>{error}</SidePanelAlert>}
+          {departmentError && (
+            <div
+              className="m-0 rounded-lg border border-[#f4d6db] bg-[#fff6f7] p-3 text-xs text-[#bc3649]"
+              role="alert"
+            >
+              <p className="m-0">{departmentError}</p>
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-2 h-auto min-h-0 border-0 bg-transparent p-0 font-bold text-[#244993] shadow-none hover:bg-transparent"
+                disabled={loadingDepartments || pending}
+                onClick={() => {
+                  setLoadingDepartments(true)
+                  setDepartmentError("")
+                  setDepartmentRevision((value) => value + 1)
+                }}
               >
-                {error}
-              </p>
-            )}
-            {departmentError && (
-              <div
-                className="sm:col-span-2 m-0 rounded-lg bg-[#fff0f1] p-3 text-xs text-[#bc3649]"
-                role="alert"
+                Retry departments
+              </Button>
+            </div>
+          )}
+          {teamError && draft.departmentId && (
+            <div
+              className="m-0 rounded-lg border border-[#f4d6db] bg-[#fff6f7] p-3 text-xs text-[#bc3649]"
+              role="alert"
+            >
+              <p className="m-0">{teamError}</p>
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-2 h-auto min-h-0 border-0 bg-transparent p-0 font-bold text-[#244993] shadow-none hover:bg-transparent"
+                disabled={loadingTeams || pending}
+                onClick={() => {
+                  setLoadingTeams(true)
+                  setTeamError("")
+                  setTeamRevision((value) => value + 1)
+                }}
               >
-                <p className="m-0">{departmentError}</p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="mt-2 h-auto min-h-0 border-0 bg-transparent p-0 font-bold text-[#244993] shadow-none hover:bg-transparent"
-                  disabled={loadingDepartments || pending}
-                  onClick={() => {
-                    setLoadingDepartments(true)
-                    setDepartmentError("")
-                    setDepartmentRevision((value) => value + 1)
-                  }}
-                >
-                  Retry departments
-                </Button>
-              </div>
-            )}
-            {teamError && draft.departmentId && (
-              <div
-                className="m-0 rounded-lg bg-[#fff0f1] p-3 text-xs text-[#bc3649] sm:col-span-2"
-                role="alert"
-              >
-                <p className="m-0">{teamError}</p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="mt-2 h-auto min-h-0 border-0 bg-transparent p-0 font-bold text-[#244993] shadow-none hover:bg-transparent"
-                  disabled={loadingTeams || pending}
-                  onClick={() => {
-                    setLoadingTeams(true)
-                    setTeamError("")
-                    setTeamRevision((value) => value + 1)
-                  }}
-                >
-                  Retry teams
-                </Button>
-              </div>
-            )}
+                Retry teams
+              </Button>
+            </div>
+          )}
+          <SidePanelFieldset
+            title="Basic information"
+            description="Identity and contact details."
+          >
             <label className={fieldClass}>
               <RequiredFieldLabel>Employee ID</RequiredFieldLabel>
               <div className="flex min-w-0">
@@ -499,7 +490,12 @@ export function EmployeeFormDialog({
                 message={fieldError("contactNumber")}
               />
             </label>
-            <label className={fieldClass}>
+          </SidePanelFieldset>
+          <SidePanelFieldset
+            title="Employment"
+            description="Role, contract type, and start date."
+          >
+            <label className={cn(fieldClass, "sm:col-span-2")}>
               <RequiredFieldLabel>Position</RequiredFieldLabel>
               <Input
                 id="employee-position"
@@ -581,6 +577,11 @@ export function EmployeeFormDialog({
                 message={fieldError("startDate")}
               />
             </label>
+          </SidePanelFieldset>
+          <SidePanelFieldset
+            title="Placement"
+            description="Where this employee sits in the organization."
+          >
             <div className={fieldClass}>
               <RequiredFieldLabel>Department</RequiredFieldLabel>
               <Select
@@ -677,148 +678,135 @@ export function EmployeeFormDialog({
                 message={fieldError("teamId")}
               />
             </div>
-            {needsAccount && (
-              <>
-                <label className={fieldClass}>
-                  <RequiredFieldLabel>Password</RequiredFieldLabel>
-                  <div className="relative">
-                    <Input
-                      type={showPassword ? "text" : "password"}
-                      id="employee-password"
-                      className={cn(validatedInputClass("password"), "pr-10")}
-                      value={draft.password}
-                      autoComplete="new-password"
-                      placeholder="At least 12 characters"
-                      disabled={pending}
-                      onChange={(event) =>
-                        change("password", event.target.value)
-                      }
-                      onBlur={() => blur("password")}
-                      aria-invalid={Boolean(fieldError("password"))}
-                      aria-describedby={
-                        fieldError("password")
-                          ? "employee-password-error"
-                          : undefined
-                      }
-                      required
-                    />
-                    <button
-                      type="button"
-                      aria-label={
-                        showPassword ? "Hide password" : "Show password"
-                      }
-                      aria-pressed={showPassword}
-                      className={cn(
-                        "absolute inset-y-0 right-0 grid w-10 place-items-center rounded-r-lg text-[#65718a]",
-                        focusRing,
-                      )}
-                      disabled={pending}
-                      onClick={() => setShowPassword((value) => !value)}
-                    >
-                      {showPassword ? (
-                        <EyeOff size={16} aria-hidden="true" />
-                      ) : (
-                        <Eye size={16} aria-hidden="true" />
-                      )}
-                    </button>
-                  </div>
-                  <FieldError
-                    id="employee-password-error"
-                    message={fieldError("password")}
-                  />
-                </label>
-                <label className={fieldClass}>
-                  <RequiredFieldLabel>Confirm password</RequiredFieldLabel>
-                  <div className="relative">
-                    <Input
-                      type={showConfirmation ? "text" : "password"}
-                      id="employee-password-confirmation"
-                      className={cn(
-                        validatedInputClass("passwordConfirmation"),
-                        "pr-10",
-                      )}
-                      value={draft.passwordConfirmation}
-                      autoComplete="new-password"
-                      placeholder="Enter the password again"
-                      disabled={pending}
-                      onChange={(event) =>
-                        change("passwordConfirmation", event.target.value)
-                      }
-                      onBlur={() => blur("passwordConfirmation")}
-                      aria-invalid={Boolean(fieldError("passwordConfirmation"))}
-                      aria-describedby={
-                        fieldError("passwordConfirmation")
-                          ? "employee-password-confirmation-error"
-                          : undefined
-                      }
-                      required
-                    />
-                    <button
-                      type="button"
-                      aria-label={
-                        showConfirmation
-                          ? "Hide confirm password"
-                          : "Show confirm password"
-                      }
-                      aria-pressed={showConfirmation}
-                      className={cn(
-                        "absolute inset-y-0 right-0 grid w-10 place-items-center rounded-r-lg text-[#65718a]",
-                        focusRing,
-                      )}
-                      disabled={pending}
-                      onClick={() => setShowConfirmation((value) => !value)}
-                    >
-                      {showConfirmation ? (
-                        <EyeOff size={16} aria-hidden="true" />
-                      ) : (
-                        <Eye size={16} aria-hidden="true" />
-                      )}
-                    </button>
-                  </div>
-                  <FieldError
-                    id="employee-password-confirmation-error"
-                    message={fieldError("passwordConfirmation")}
-                  />
-                </label>
-                <p className="m-0 text-[11px] leading-4 font-normal text-[#738096] sm:col-span-2">
-                  Saving creates an active Staff account for this employee.
-                </p>
-              </>
-            )}
-          </div>
-          <footer className="flex justify-end gap-2 border-t border-[#eceef1] px-5 py-4 sm:px-6">
-            <Button
-              variant="outline"
-              type="button"
-              className={cn(
-                "h-auto min-h-[38px] cursor-pointer rounded-[9px] border-[#d7e0ee] bg-background px-[15px] text-xs font-semibold text-[#24437e] shadow-none transition-colors hover:enabled:bg-[#f1f5fc]",
-              )}
-              disabled={pending}
-              onClick={onClose}
+          </SidePanelFieldset>
+          {needsAccount && (
+            <SidePanelFieldset
+              title="Login account"
+              description="Saving creates an active Staff account for this employee."
             >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              className={cn(
-                "h-auto min-h-[38px] cursor-pointer rounded-[9px] border border-transparent bg-[#203f8c] px-[15px] text-xs font-semibold text-white shadow-none transition-colors hover:enabled:bg-[#172f70]",
-              )}
-              disabled={
-                pending ||
-                loadingDepartments ||
-                Boolean(departmentError) ||
-                Boolean(draft.departmentId && (loadingTeams || teamError))
-              }
-            >
-              {pending
-                ? "Saving…"
-                : isEditing
-                  ? "Save Employee"
-                  : "Add Employee"}
-            </Button>
-          </footer>
-        </Form>
-      </DialogContent>
-    </Dialog>
+              <label className={fieldClass}>
+                <RequiredFieldLabel>Password</RequiredFieldLabel>
+                <div className="relative">
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    id="employee-password"
+                    className={cn(validatedInputClass("password"), "pr-10")}
+                    value={draft.password}
+                    autoComplete="new-password"
+                    placeholder="At least 12 characters"
+                    disabled={pending}
+                    onChange={(event) => change("password", event.target.value)}
+                    onBlur={() => blur("password")}
+                    aria-invalid={Boolean(fieldError("password"))}
+                    aria-describedby={
+                      fieldError("password")
+                        ? "employee-password-error"
+                        : undefined
+                    }
+                    required
+                  />
+                  <button
+                    type="button"
+                    aria-label={
+                      showPassword ? "Hide password" : "Show password"
+                    }
+                    aria-pressed={showPassword}
+                    className={cn(
+                      "absolute inset-y-0 right-0 grid w-10 place-items-center rounded-r-lg text-[#65718a]",
+                      focusRing,
+                    )}
+                    disabled={pending}
+                    onClick={() => setShowPassword((value) => !value)}
+                  >
+                    {showPassword ? (
+                      <EyeOff size={16} aria-hidden="true" />
+                    ) : (
+                      <Eye size={16} aria-hidden="true" />
+                    )}
+                  </button>
+                </div>
+                <FieldError
+                  id="employee-password-error"
+                  message={fieldError("password")}
+                />
+              </label>
+              <label className={fieldClass}>
+                <RequiredFieldLabel>Confirm password</RequiredFieldLabel>
+                <div className="relative">
+                  <Input
+                    type={showConfirmation ? "text" : "password"}
+                    id="employee-password-confirmation"
+                    className={cn(
+                      validatedInputClass("passwordConfirmation"),
+                      "pr-10",
+                    )}
+                    value={draft.passwordConfirmation}
+                    autoComplete="new-password"
+                    placeholder="Enter the password again"
+                    disabled={pending}
+                    onChange={(event) =>
+                      change("passwordConfirmation", event.target.value)
+                    }
+                    onBlur={() => blur("passwordConfirmation")}
+                    aria-invalid={Boolean(fieldError("passwordConfirmation"))}
+                    aria-describedby={
+                      fieldError("passwordConfirmation")
+                        ? "employee-password-confirmation-error"
+                        : undefined
+                    }
+                    required
+                  />
+                  <button
+                    type="button"
+                    aria-label={
+                      showConfirmation
+                        ? "Hide confirm password"
+                        : "Show confirm password"
+                    }
+                    aria-pressed={showConfirmation}
+                    className={cn(
+                      "absolute inset-y-0 right-0 grid w-10 place-items-center rounded-r-lg text-[#65718a]",
+                      focusRing,
+                    )}
+                    disabled={pending}
+                    onClick={() => setShowConfirmation((value) => !value)}
+                  >
+                    {showConfirmation ? (
+                      <EyeOff size={16} aria-hidden="true" />
+                    ) : (
+                      <Eye size={16} aria-hidden="true" />
+                    )}
+                  </button>
+                </div>
+                <FieldError
+                  id="employee-password-confirmation-error"
+                  message={fieldError("passwordConfirmation")}
+                />
+              </label>
+            </SidePanelFieldset>
+          )}
+        </SidePanelBody>
+        <SidePanelFooter>
+          <SidePanelButton
+            variant="secondary"
+            disabled={pending}
+            onClick={() => panel.close()}
+          >
+            Cancel
+          </SidePanelButton>
+          <SidePanelButton
+            type="submit"
+            disabled={
+              pending ||
+              loadingDepartments ||
+              Boolean(departmentError) ||
+              Boolean(draft.departmentId && (loadingTeams || teamError))
+            }
+          >
+            {pending ? "Saving…" : isEditing ? "Save Employee" : "Add Employee"}
+          </SidePanelButton>
+        </SidePanelFooter>
+      </Form>
+    </SidePanel>
   )
 }

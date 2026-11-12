@@ -1,9 +1,10 @@
 import type { FormEvent } from "react"
 import { CalendarDays, Mail, Phone } from "lucide-react"
 import { Form } from "@/components/ui/form"
-import { Button } from "@/components/ui/button"
+import { SidePanelButton, SidePanelFooter } from "@/components/ui/side-panel"
 import { Input } from "@/components/ui/input"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
+import { getInitials } from "@/lib/initials"
 import { cn } from "@/lib/utils"
 import {
   Select,
@@ -16,10 +17,8 @@ import type { DepartmentMember, DepartmentTeam } from "../api/departments-api"
 import {
   panelField,
   panelInput,
-  panelPrimaryButton,
-  panelSecondaryButton,
   panelSelectTrigger,
-} from "../styles/member-panel-styles"
+} from "@/components/ui/panel-styles"
 
 const roleLabels = {
   SUPERADMIN: "Superadmin",
@@ -36,15 +35,6 @@ const statusStyles = {
 
 const badge =
   "rounded px-1.5 py-px text-[10px] leading-4 font-semibold whitespace-nowrap"
-
-function initials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  const letters =
-    parts.length > 1
-      ? `${parts[0][0]}${parts[parts.length - 1][0]}`
-      : (parts[0]?.slice(0, 2) ?? "")
-  return letters.toUpperCase() || "E"
-}
 
 function MemberProfileCard({ member }: { member: DepartmentMember }) {
   const { formatDate } = useDatePreferences()
@@ -75,7 +65,7 @@ function MemberProfileCard({ member }: { member: DepartmentMember }) {
           className="-mt-7 grid size-14 place-items-center rounded-full bg-[#203f8c] text-base font-semibold text-white ring-4 ring-background"
           aria-hidden="true"
         >
-          {initials(name)}
+          {getInitials(name) || "E"}
         </span>
         <h3 className="mt-2 mb-0 truncate text-[15px] font-[650] tracking-[-0.02em]">
           {name}
@@ -192,24 +182,18 @@ export function EditMemberForm({
           </Select>
         </div>
       </div>
-      <footer className="flex flex-none justify-end gap-2 border-t border-[#eceef1] px-6 py-4 max-[560px]:px-5">
-        <Button
-          type="button"
-          variant="outline"
-          className={panelSecondaryButton}
+      <SidePanelFooter>
+        <SidePanelButton
+          variant="secondary"
           disabled={submitting}
           onClick={onCancel}
         >
           Cancel
-        </Button>
-        <Button
-          type="submit"
-          className={panelPrimaryButton}
-          disabled={submitting}
-        >
+        </SidePanelButton>
+        <SidePanelButton type="submit" disabled={submitting}>
           {submitting ? "Saving..." : "Save details"}
-        </Button>
-      </footer>
+        </SidePanelButton>
+      </SidePanelFooter>
     </Form>
   )
 }

@@ -14,7 +14,7 @@ import {
   SheetDescription,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { panelIconButton } from "@/features/departments/styles/member-panel-styles"
+import { panelIconButton } from "@/components/ui/panel-styles"
 import {
   getClientDetails,
   listClientProjects,

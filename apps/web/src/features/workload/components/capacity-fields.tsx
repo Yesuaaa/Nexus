@@ -1,8 +1,5 @@
 import { useState } from "react"
-import {
-  panelField,
-  panelInput,
-} from "@/features/departments/styles/member-panel-styles"
+import { panelField, panelInput } from "@/components/ui/panel-styles"
 import { Input } from "@/components/ui/input"
 
 export function CapacityFields({

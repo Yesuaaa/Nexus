@@ -14,7 +14,7 @@ import {
   panelInput,
   panelSecondaryButton,
   panelSelectTrigger,
-} from "@/features/departments/styles/member-panel-styles"
+} from "@/components/ui/panel-styles"
 import { WorkloadDialog } from "../components/workload-dialog"
 import { WorkloadKpiCards } from "../components/workload-kpi-cards"
 import {

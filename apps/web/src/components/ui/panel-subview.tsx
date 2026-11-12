@@ -1,7 +1,7 @@
 import type { ReactNode } from "react"
 import { ArrowLeft } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
-import { panelIconButton } from "@/features/departments/styles/member-panel-styles"
+import { panelIconButton } from "@/components/ui/panel-styles"
 import { cn } from "@/lib/utils"
 
 const variants = {

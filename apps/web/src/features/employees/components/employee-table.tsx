@@ -23,7 +23,7 @@ import { EmployeeRowActions } from "./employee-row-actions"
 import { ConversationAvatar } from "@/features/request-conversations/components/conversation-avatar"
 
 const employeeGrid =
-  "grid grid-cols-[minmax(100px,.75fr)_minmax(180px,1.35fr)_minmax(120px,1fr)_minmax(160px,1.2fr)_minmax(82px,.7fr)_minmax(90px,.7fr)_minmax(78px,.65fr)_112px] items-center gap-3.5 @max-[1000px]:grid-cols-[minmax(0,1fr)_minmax(105px,.65fr)]"
+  "grid grid-cols-[minmax(100px,.75fr)_minmax(180px,1.35fr)_minmax(120px,1fr)_minmax(160px,1.2fr)_minmax(82px,.7fr)_minmax(90px,.7fr)_minmax(78px,.65fr)_56px] items-center gap-3.5 @max-[1000px]:grid-cols-[minmax(0,1fr)_minmax(105px,.65fr)]"
 
 const typeNames: Record<EmploymentType, string> = {
   FULL_TIME: "Full Time",
@@ -168,7 +168,7 @@ export function EmployeeTable({
                 "h-3 w-16",
                 "h-3 w-20",
                 "h-5 w-16 rounded",
-                "h-8 w-24",
+                "size-8 rounded-[7px]",
               ]}
             />
           ) : (
