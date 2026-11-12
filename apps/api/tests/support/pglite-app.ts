@@ -14,12 +14,12 @@ import type { AddressInfo } from "node:net"
 import type { TestContext } from "node:test"
 import { PGlite } from "@electric-sql/pglite"
 import { PGLiteSocketServer } from "@electric-sql/pglite-socket"
-import { createApp } from "../app.js"
-import { getPrisma } from "../lib/db.js"
+import { createApp } from "../../src/app.js"
+import { getPrisma } from "../../src/lib/db.js"
 import {
   setServiceImageStorageForTests,
   type ServiceImageStorage,
-} from "../features/services/service-image-storage.js"
+} from "../../src/features/services/service-image-storage.js"
 
 export const migrationsDirectory = new URL(
   "../../prisma/migrations/",

@@ -1,11 +1,11 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { hashPassword } from "./features/auth/auth.password.js"
-import { issueSession } from "./features/auth/auth.service.js"
-import type { publicUser } from "./features/users/users.dto.js"
-import { PASSWORD_POLICY_MESSAGE } from "./shared/password-policy.js"
-import { safeHttpsUrl } from "./shared/validation.js"
-import { startPgliteApp, testImageStorage } from "./test/pglite-app.js"
+import { hashPassword } from "../src/features/auth/auth.password.js"
+import { issueSession } from "../src/features/auth/auth.service.js"
+import type { publicUser } from "../src/features/users/users.dto.js"
+import { PASSWORD_POLICY_MESSAGE } from "../src/shared/password-policy.js"
+import { safeHttpsUrl } from "../src/shared/validation.js"
+import { startPgliteApp, testImageStorage } from "./support/pglite-app.js"
 
 type PublicUser = ReturnType<typeof publicUser>
 

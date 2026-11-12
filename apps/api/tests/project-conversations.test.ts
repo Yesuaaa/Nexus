@@ -1,9 +1,9 @@
 import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
 import { test } from "node:test"
-import { issueSession } from "./features/auth/auth.service.js"
-import type { Role } from "./generated/prisma/client.js"
-import { startPgliteApp } from "./test/pglite-app.js"
+import { issueSession } from "../src/features/auth/auth.service.js"
+import type { Role } from "../src/generated/prisma/client.js"
+import { startPgliteApp } from "./support/pglite-app.js"
 
 test(
   "project chats enforce current membership, group delivery, unread state and completion archives",

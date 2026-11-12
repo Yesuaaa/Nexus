@@ -43,4 +43,4 @@ If any check fails, resolve the issues immediately before concluding your respon
 - **TypeScript:** Strict typing is required across all packages. The use of `any` is forbidden.
 - **Styling:** Use Tailwind CSS v4 and shadcn/Radix UI primitives. Maintain visual alignment with the EXP navy tokens and Inter typography. Do not introduce legacy Tailwind v3 config files.
 - **File Organization:** Adhere to feature-driven folder structures under `src/features/<feature>/` (`components/`, `api/`, `model/`, `hooks/`, `providers/`, `pages/`).
-- **Tests:** Backend tests must utilize `@electric-sql/pglite` for offline, in-memory PostgreSQL testing without touching live databases.
+- **Tests:** Backend tests must utilize `@electric-sql/pglite` for offline, in-memory PostgreSQL testing without touching live databases. They live in `apps/api/tests/` (never in `src/`) and use `tests/support/pglite-app.ts`; web unit tests live in `apps/web/test/` and Playwright specs in `apps/web/e2e/`. Root runners are in `scripts/tests/` (`pnpm test`, `pnpm test:unit`).

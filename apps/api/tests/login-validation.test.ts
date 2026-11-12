@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { hashPassword } from "./features/auth/auth.password.js"
-import { startPgliteApp } from "./test/pglite-app.js"
+import { hashPassword } from "../src/features/auth/auth.password.js"
+import { startPgliteApp } from "./support/pglite-app.js"
 
 test(
   "Login input boundaries and tampered requests are safe",

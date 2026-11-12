@@ -4,7 +4,7 @@ import {
   approximateSessionLocation,
   publicSessionIp,
   trustedProxyAddresses,
-} from "./session-location.js"
+} from "../../../src/features/auth/session-location.js"
 
 test("location uses only public addresses and explicitly trusted proxy networks", async (t) => {
   const original = process.env.SESSION_GEOLOCATION

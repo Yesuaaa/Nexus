@@ -1,15 +1,15 @@
 import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
 import { test } from "node:test"
-import { issueSession } from "./features/auth/auth.service.js"
-import type { Role } from "./generated/prisma/client.js"
-import { Prisma } from "./generated/prisma/client.js"
-import { authRepository } from "./features/auth/auth.repository.js"
+import { issueSession } from "../src/features/auth/auth.service.js"
+import type { Role } from "../src/generated/prisma/client.js"
+import { Prisma } from "../src/generated/prisma/client.js"
+import { authRepository } from "../src/features/auth/auth.repository.js"
 import {
   migrationNames,
   readMigration,
   startPgliteApp,
-} from "./test/pglite-app.js"
+} from "./support/pglite-app.js"
 
 const sharedConversationMigration =
   "20261102000000_shared_request_conversations"

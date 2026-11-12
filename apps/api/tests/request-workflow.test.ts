@@ -2,20 +2,20 @@ import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
 import { test } from "node:test"
 import { PGlite } from "@electric-sql/pglite"
-import { issueSession } from "./features/auth/auth.service.js"
+import { issueSession } from "../src/features/auth/auth.service.js"
 import type {
   Prisma,
   Role,
   WorkflowEvent,
   WorkflowFile,
   WorkflowPayment,
-} from "./generated/prisma/client.js"
-import { parseAction } from "./features/request-workflow/workflow.validation.js"
+} from "../src/generated/prisma/client.js"
+import { parseAction } from "../src/features/request-workflow/workflow.validation.js"
 import {
   migrationNames,
   readMigration,
   startPgliteApp,
-} from "./test/pglite-app.js"
+} from "./support/pglite-app.js"
 
 test("request information requires nonblank details", () => {
   for (const details of [undefined, "", "   "]) {

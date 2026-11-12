@@ -1,10 +1,10 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import express from "express"
-import { Prisma } from "./generated/prisma/client.js"
-import { issueSession } from "./features/auth/auth.service.js"
-import { handleError } from "./shared/error-handler.js"
-import { closeServer, listen, startPgliteApp } from "./test/pglite-app.js"
+import { Prisma } from "../src/generated/prisma/client.js"
+import { issueSession } from "../src/features/auth/auth.service.js"
+import { handleError } from "../src/shared/error-handler.js"
+import { closeServer, listen, startPgliteApp } from "./support/pglite-app.js"
 
 test(
   "department and employee writes keep head, lead, and history integrity",

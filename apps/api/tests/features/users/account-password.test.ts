@@ -1,10 +1,13 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { Role } from "../../generated/prisma/client.js"
-import { hashPassword, verifyPassword } from "../auth/auth.password.js"
-import { usersRepository } from "./users.repository.js"
-import { issueSession } from "../auth/auth.service.js"
-import { startPgliteApp } from "../../test/pglite-app.js"
+import { Role } from "../../../src/generated/prisma/client.js"
+import {
+  hashPassword,
+  verifyPassword,
+} from "../../../src/features/auth/auth.password.js"
+import { usersRepository } from "../../../src/features/users/users.repository.js"
+import { issueSession } from "../../../src/features/auth/auth.service.js"
+import { startPgliteApp } from "../../support/pglite-app.js"
 
 test(
   "only Superadmins can change other account passwords and revoke their sessions",

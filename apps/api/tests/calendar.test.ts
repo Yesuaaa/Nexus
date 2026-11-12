@@ -1,10 +1,10 @@
 import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
 import { test } from "node:test"
-import { issueSession } from "./features/auth/auth.service.js"
-import { listInternalCalendar } from "./features/projects/calendar.service.js"
-import type { Role } from "./generated/prisma/client.js"
-import { startPgliteApp } from "./test/pglite-app.js"
+import { issueSession } from "../src/features/auth/auth.service.js"
+import { listInternalCalendar } from "../src/features/projects/calendar.service.js"
+import type { Role } from "../src/generated/prisma/client.js"
+import { startPgliteApp } from "./support/pglite-app.js"
 
 test(
   "calendar aggregates existing records with current role, assignment and head boundaries",

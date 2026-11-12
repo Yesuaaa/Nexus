@@ -4,10 +4,14 @@ import {
   PASSWORD_POLICY_MESSAGE,
   isStrongPassword,
   passwordIssue,
-} from "../../shared/password-policy.js"
-import { normalizedEmail } from "../../shared/validation.js"
-import { hashPassword, validPassword, verifyPassword } from "./auth.password.js"
-import { validRegistrationProfile } from "./auth.schema.js"
+} from "../../../src/shared/password-policy.js"
+import { normalizedEmail } from "../../../src/shared/validation.js"
+import {
+  hashPassword,
+  validPassword,
+  verifyPassword,
+} from "../../../src/features/auth/auth.password.js"
+import { validRegistrationProfile } from "../../../src/features/auth/auth.schema.js"
 
 test("passwords are salted and verified", async () => {
   const first = await hashPassword("a long unique password")

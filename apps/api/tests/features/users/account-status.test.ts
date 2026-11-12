@@ -2,11 +2,15 @@ import assert from "node:assert/strict"
 import { randomBytes } from "node:crypto"
 import type { AddressInfo } from "node:net"
 import { test } from "node:test"
-import { createApp } from "../../app.js"
-import { Role, type Prisma, type User } from "../../generated/prisma/client.js"
-import { getPrisma } from "../../lib/db.js"
-import { hashPassword } from "../auth/auth.password.js"
-import { signAccessToken } from "../auth/auth.jwt.js"
+import { createApp } from "../../../src/app.js"
+import {
+  Role,
+  type Prisma,
+  type User,
+} from "../../../src/generated/prisma/client.js"
+import { getPrisma } from "../../../src/lib/db.js"
+import { hashPassword } from "../../../src/features/auth/auth.password.js"
+import { signAccessToken } from "../../../src/features/auth/auth.jwt.js"
 
 test("account status, deletion, and authentication enforce access", async (t) => {
   const previousUrl = process.env.DATABASE_URL

@@ -1,10 +1,10 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { issueSession } from "./features/auth/auth.service.js"
-import { hashPassword } from "./features/auth/auth.password.js"
-import type { getProfile } from "./features/auth/profile.service.js"
-import type { User } from "./generated/prisma/client.js"
-import { startPgliteApp } from "./test/pglite-app.js"
+import { issueSession } from "../src/features/auth/auth.service.js"
+import { hashPassword } from "../src/features/auth/auth.password.js"
+import type { getProfile } from "../src/features/auth/profile.service.js"
+import type { User } from "../src/generated/prisma/client.js"
+import { startPgliteApp } from "./support/pglite-app.js"
 type ProfileResponse = Awaited<ReturnType<typeof getProfile>>
 const readProfile = async (response: Response) =>
   (await response.json()) as ProfileResponse

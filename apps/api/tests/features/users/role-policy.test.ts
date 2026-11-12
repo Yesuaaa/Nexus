@@ -2,19 +2,22 @@ import assert from "node:assert/strict"
 import type { AddressInfo } from "node:net"
 import { test } from "node:test"
 import express from "express"
-import { Role, type User } from "../../generated/prisma/client.js"
+import { Role, type User } from "../../../src/generated/prisma/client.js"
 import {
   hasPermission,
   Permission,
   permissionsFor,
-} from "../auth/auth.permissions.js"
-import { requirePermission, requireRole } from "../auth/auth.middleware.js"
+} from "../../../src/features/auth/auth.permissions.js"
+import {
+  requirePermission,
+  requireRole,
+} from "../../../src/features/auth/auth.middleware.js"
 import {
   canAssignRole,
   canChangeAccountStatus,
   canCreateRole,
-} from "./users.policy.js"
-import { publicUser } from "./users.dto.js"
+} from "../../../src/features/users/users.policy.js"
+import { publicUser } from "../../../src/features/users/users.dto.js"
 
 test("fixed roles have the expected permissions", () => {
   const common = [

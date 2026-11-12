@@ -1,11 +1,11 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { Role } from "../../generated/prisma/client.js"
-import { hashPassword } from "../auth/auth.password.js"
-import { usersRepository } from "./users.repository.js"
-import { issueSession } from "../auth/auth.service.js"
-import type { publicUser } from "./users.dto.js"
-import { startPgliteApp } from "../../test/pglite-app.js"
+import { Role } from "../../../src/generated/prisma/client.js"
+import { hashPassword } from "../../../src/features/auth/auth.password.js"
+import { usersRepository } from "../../../src/features/users/users.repository.js"
+import { issueSession } from "../../../src/features/auth/auth.service.js"
+import type { publicUser } from "../../../src/features/users/users.dto.js"
+import { startPgliteApp } from "../../support/pglite-app.js"
 
 test(
   "Superadmins restore trashed accounts as inactive while preserving their records",

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import type { AddressInfo } from "node:net"
 import { test } from "node:test"
-import { createApp } from "./app.js"
+import { createApp } from "../src/app.js"
 
 test("API routes and error responses remain available", async () => {
   const databaseUrl = process.env.DATABASE_URL

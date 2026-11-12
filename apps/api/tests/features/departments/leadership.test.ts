@@ -1,12 +1,15 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import type { EmployeeStatus, Role } from "../../generated/prisma/client.js"
-import { issueSession } from "../auth/auth.service.js"
-import { startPgliteApp } from "../../test/pglite-app.js"
+import type {
+  EmployeeStatus,
+  Role,
+} from "../../../src/generated/prisma/client.js"
+import { issueSession } from "../../../src/features/auth/auth.service.js"
+import { startPgliteApp } from "../../support/pglite-app.js"
 import {
   DEPARTMENT_HEAD_TITLE_MESSAGE,
   isDepartmentHeadTitle,
-} from "./leadership.policy.js"
+} from "../../../src/features/departments/leadership.policy.js"
 
 test("isDepartmentHeadTitle ignores case and extra whitespace", () => {
   for (const title of [

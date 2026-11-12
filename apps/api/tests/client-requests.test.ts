@@ -6,9 +6,9 @@ import {
   Role,
   ServiceRequestStatus,
   type User,
-} from "./generated/prisma/client.js"
-import { issueSession } from "./features/auth/auth.service.js"
-import { readMigration, startPgliteApp } from "./test/pglite-app.js"
+} from "../src/generated/prisma/client.js"
+import { issueSession } from "../src/features/auth/auth.service.js"
+import { readMigration, startPgliteApp } from "./support/pglite-app.js"
 
 test("request lifecycle migration preserves legacy records and supports already upgraded databases", async () => {
   const db = new PGlite()

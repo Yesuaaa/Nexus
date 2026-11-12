@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { issueSession } from "./features/auth/auth.service.js"
-import { PASSWORD_POLICY_MESSAGE } from "./shared/password-policy.js"
-import { startPgliteApp } from "./test/pglite-app.js"
+import { issueSession } from "../src/features/auth/auth.service.js"
+import { PASSWORD_POLICY_MESSAGE } from "../src/shared/password-policy.js"
+import { startPgliteApp } from "./support/pglite-app.js"
 
 test(
   "client directory reads only client accounts without exposing credentials",

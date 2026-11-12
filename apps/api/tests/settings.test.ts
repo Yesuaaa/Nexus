@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { issueSession } from "./features/auth/auth.service.js"
-import { hashPassword } from "./features/auth/auth.password.js"
-import { startPgliteApp } from "./test/pglite-app.js"
+import { issueSession } from "../src/features/auth/auth.service.js"
+import { hashPassword } from "../src/features/auth/auth.password.js"
+import { startPgliteApp } from "./support/pglite-app.js"
 
 test(
   "settings validate preferences and isolate and revoke sessions",

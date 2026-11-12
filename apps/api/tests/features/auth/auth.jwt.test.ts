@@ -7,7 +7,7 @@ import {
   jwtKey,
   signAccessToken,
   verifyAccessToken,
-} from "./auth.jwt.js"
+} from "../../../src/features/auth/auth.jwt.js"
 
 test("JWT verification enforces signatures, claims, algorithms, and lifetime", async (t) => {
   const original = process.env.JWT_SECRET

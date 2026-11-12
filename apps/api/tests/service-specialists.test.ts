@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
 import { test } from "node:test"
-import { issueSession } from "./features/auth/auth.service.js"
-import { startPgliteApp } from "./test/pglite-app.js"
+import { issueSession } from "../src/features/auth/auth.service.js"
+import { startPgliteApp } from "./support/pglite-app.js"
 
 test(
   "client specialist choices are scoped to active service departments and expose only directory details",

@@ -1,9 +1,12 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { setTimeout as delay } from "node:timers/promises"
-import { Prisma } from "../generated/prisma/client.js"
-import { isTemporaryDatabaseError, readTransaction } from "./database-read.js"
-import { startPgliteDatabase } from "../test/pglite-app.js"
+import { Prisma } from "../../src/generated/prisma/client.js"
+import {
+  isTemporaryDatabaseError,
+  readTransaction,
+} from "../../src/lib/database-read.js"
+import { startPgliteDatabase } from "../support/pglite-app.js"
 
 test(
   "database reads tolerate latency and retry only temporary failures",

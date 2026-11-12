@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { Role } from "../../generated/prisma/client.js"
-import { issueSession } from "../auth/auth.service.js"
-import { startPgliteApp } from "../../test/pglite-app.js"
+import { Role } from "../../../src/generated/prisma/client.js"
+import { issueSession } from "../../../src/features/auth/auth.service.js"
+import { startPgliteApp } from "../../support/pglite-app.js"
 
 test(
   "role changes cannot strand department heads or team leads outside STAFF",

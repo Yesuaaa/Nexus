@@ -1,12 +1,12 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { issueSession } from "./features/auth/auth.service.js"
-import type { Role } from "./generated/prisma/client.js"
+import { issueSession } from "../src/features/auth/auth.service.js"
+import type { Role } from "../src/generated/prisma/client.js"
 import {
   applyMigrations,
   readMigration,
   startPgliteApp,
-} from "./test/pglite-app.js"
+} from "./support/pglite-app.js"
 
 test(
   "department request inbox enforces current head routing and accepts bookings atomically",

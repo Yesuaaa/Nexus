@@ -1,9 +1,9 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { signAccessToken } from "./features/auth/auth.jwt.js"
-import { authRepository } from "./features/auth/auth.repository.js"
-import { tokenHash } from "./features/auth/auth.service.js"
-import { startPgliteApp } from "./test/pglite-app.js"
+import { signAccessToken } from "../src/features/auth/auth.jwt.js"
+import { authRepository } from "../src/features/auth/auth.repository.js"
+import { tokenHash } from "../src/features/auth/auth.service.js"
+import { startPgliteApp } from "./support/pglite-app.js"
 
 test(
   "JWT sessions rotate, reject replay, and preserve immediate revocation",
@@ -171,7 +171,8 @@ test(
         const deleted = await prisma!.user.create({
           data: { email: "deleted-jwt@example.com", passwordHash: "unused" },
         })
-        const { issueSession } = await import("./features/auth/auth.service.js")
+        const { issueSession } =
+          await import("../src/features/auth/auth.service.js")
         const deletedSession = await issueSession(deleted)
         await prisma!.user.delete({ where: { id: deleted.id } })
         assert.equal((await me(deletedSession.token)).status, 401)

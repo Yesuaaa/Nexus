@@ -1,11 +1,11 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { issueSession } from "./features/auth/auth.service.js"
+import { issueSession } from "../src/features/auth/auth.service.js"
 import {
   migrationNames,
   readMigration,
   startPgliteApp,
-} from "./test/pglite-app.js"
+} from "./support/pglite-app.js"
 
 type Payload = {
   employee: { id: string; hasAccount?: boolean }
