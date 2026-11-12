@@ -6,7 +6,7 @@ import type {
   ErrorRequestHandler,
 } from "express"
 import { isTemporaryDatabaseError } from "../lib/database-read.js"
-import { isForeignKeyViolation } from "../lib/errors.js"
+import { HttpError, prismaHttpError } from "./http-error.js"
 
 /**
  * Extracts the file path and line number of the caller or the error source,
@@ -147,8 +147,92 @@ export const devErrorInterceptor = (
   next()
 }
 
+type ResolvedError = {
+  status: number
+  message: string
+  details?: unknown
+  retryAfter?: string
+}
+
+function resolveError(error: unknown): ResolvedError {
+  if (error instanceof HttpError) {
+    return {
+      status: error.status,
+      message: error.message,
+      details: error.details,
+    }
+  }
+
+  // body-parser: malformed JSON
+  if (
+    error instanceof SyntaxError &&
+    "status" in error &&
+    error.status === 400
+  ) {
+    return {
+      status: 400,
+      message: "Invalid JSON",
+      details: "JSON body parsing failed due to invalid syntax",
+    }
+  }
+
+  // body-parser: body over the route's limit
+  if (error instanceof Error && "status" in error && error.status === 413) {
+    return {
+      status: 413,
+      message: "Request payload is too large",
+      details: "Body size exceeded configured limit",
+    }
+  }
+
+  // Known Prisma write failures (P2002/P2003/P2025/P2034) are 409 conflicts on
+  // every route. Checked before the temporary-failure branch so a write
+  // conflict (P2034) is a 409, not a 503.
+  const prismaError = prismaHttpError(error)
+  if (prismaError) {
+    return {
+      status: prismaError.status,
+      message: prismaError.message,
+      details: prismaError.details,
+    }
+  }
+
+  if (isTemporaryDatabaseError(error)) {
+    return {
+      status: 503,
+      message:
+        "The database is temporarily busy or unavailable. Please try again.",
+      details:
+        error instanceof Error ? error.message : "Temporary database failure",
+      retryAfter: "2",
+    }
+  }
+
+  // Other errors carrying an explicit HTTP status (e.g. body-parser 415)
+  if (
+    error instanceof Error &&
+    "status" in error &&
+    typeof error.status === "number"
+  ) {
+    return {
+      status: error.status,
+      message: error.message,
+      details: "details" in error ? error.details : undefined,
+    }
+  }
+
+  return {
+    status: 500,
+    message: "Internal server error",
+    details: error instanceof Error ? error.message : "Internal server error",
+  }
+}
+
 /**
- * Global Error Request Handler for Express
+ * Global Error Request Handler for Express.
+ *
+ * Expected outcomes (4xx, including every 4xx `HttpError`) are normal traffic
+ * and are not logged; only unexpected failures and 5xx responses are.
  */
 export const handleError: ErrorRequestHandler = (
   error: unknown,
@@ -160,142 +244,31 @@ export const handleError: ErrorRequestHandler = (
   ;(response.locals as Record<string, unknown>)._devErrorLogged = true
   const isDev = process.env.NODE_ENV === "development"
 
-  if (
-    error instanceof SyntaxError &&
-    "status" in error &&
-    error.status === 400
-  ) {
-    const location = extractErrorLocation(error)
-    logDevError({
-      status: 400,
-      method: request.method,
-      url: request.originalUrl || request.url,
-      clientMessage: "Invalid JSON",
-      location,
-      devDetails: "JSON body parsing failed due to invalid syntax",
-    })
-    response.status(400).json({
-      error: "Invalid JSON",
-      ...(isDev
-        ? {
-            location,
-            details: "JSON body parsing failed due to invalid syntax",
-          }
-        : {}),
-    })
-    return
+  const { status, message, details, retryAfter } = resolveError(error)
+  if (status >= 500) {
+    console.error("API request failed:", request.method, request.path, error)
   }
 
-  if (error instanceof Error && "status" in error && error.status === 413) {
-    const location = extractErrorLocation(error)
-    logDevError({
-      status: 413,
-      method: request.method,
-      url: request.originalUrl || request.url,
-      clientMessage: "Request payload is too large",
-      location,
-      devDetails: "Body size exceeded configured limit",
-    })
-    response.status(413).json({
-      error: "Request payload is too large",
-      ...(isDev
-        ? { location, details: "Body size exceeded configured limit" }
-        : {}),
-    })
-    return
-  }
-
-  console.error("API request failed:", request.method, request.path, error)
-
-  if (isTemporaryDatabaseError(error)) {
-    const location = extractErrorLocation(error)
-    const clientMessage =
-      "The database is temporarily busy or unavailable. Please try again."
-    const details =
-      error instanceof Error ? error.message : "Temporary database failure"
-    logDevError({
-      status: 503,
-      method: request.method,
-      url: request.originalUrl || request.url,
-      clientMessage,
-      location,
-      devDetails: details,
-    })
-    response.setHeader("Retry-After", "2")
-    response.status(503).json({
-      error: clientMessage,
-      ...(isDev ? { location, details } : {}),
-    })
-    return
-  }
-
-  // Handle errors that carry an explicit HTTP status (e.g. AuthError, ServicesError)
-  if (
-    error instanceof Error &&
-    "status" in error &&
-    typeof (error as { status: unknown }).status === "number"
-  ) {
-    const status = (error as { status: number }).status
-    const location = extractErrorLocation(error)
-    const details =
-      "details" in error ? (error as { details: unknown }).details : undefined
-    logDevError({
-      status,
-      method: request.method,
-      url: request.originalUrl || request.url,
-      clientMessage: error.message,
-      location,
-      devDetails: details,
-    })
-    response.status(status).json({
-      error: error.message,
-      ...(isDev
-        ? { location, ...(details !== undefined ? { details } : {}) }
-        : {}),
-    })
-    return
-  }
-
-  // A write still referenced by (or referencing) other records (Prisma P2003)
-  if (isForeignKeyViolation(error)) {
-    const location = extractErrorLocation(error)
-    const clientMessage =
-      "This record is linked to other data and can't be changed or deleted"
-    const details =
-      error instanceof Error ? error.message : "Foreign key constraint failed"
-    logDevError({
-      status: 409,
-      method: request.method,
-      url: request.originalUrl || request.url,
-      clientMessage,
-      location,
-      devDetails: details,
-    })
-    response.status(409).json({
-      error: clientMessage,
-      ...(isDev ? { location, details } : {}),
-    })
-    return
-  }
-
-  // Generic 500 error
-  const location = extractErrorLocation(error)
-  const message =
-    error instanceof Error ? error.message : "Internal server error"
-  const stack = error instanceof Error ? error.stack : undefined
-
+  const source =
+    error instanceof HttpError && error.cause instanceof Error
+      ? error.cause
+      : error
+  const location = extractErrorLocation(source)
   logDevError({
-    status: 500,
+    status,
     method: request.method,
     url: request.originalUrl || request.url,
-    clientMessage: "Internal server error",
+    clientMessage: message,
     location,
-    devDetails: message,
-    stack,
+    devDetails: details,
+    stack: source instanceof Error ? source.stack : undefined,
   })
 
-  response.status(500).json({
-    error: "Internal server error",
-    ...(isDev ? { location, details: message } : {}),
+  if (retryAfter) response.setHeader("Retry-After", retryAfter)
+  response.status(status).json({
+    error: message,
+    ...(isDev
+      ? { location, ...(details !== undefined ? { details } : {}) }
+      : {}),
   })
 }

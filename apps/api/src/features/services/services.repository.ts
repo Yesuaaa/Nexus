@@ -1,10 +1,12 @@
 import type { Prisma } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
+import { activeStaff } from "../../shared/query/accounts.js"
 import type {
   PricingConfigurationInput,
   ServicePackageInput,
   ServicePersistenceInput,
 } from "./services.schema.js"
+import { lockRows } from "../../shared/db/locks.js"
 
 export const departmentSelect = {
   id: true,
@@ -68,7 +70,7 @@ export const servicesRepository = {
         id: specialistId,
         status: "ACTIVE",
         department: { services: { some: { id: serviceId, isActive: true } } },
-        user: { role: "STAFF", isActive: true, accountDeletedAt: null },
+        user: activeStaff,
       },
       select: {
         id: true,
@@ -109,7 +111,7 @@ export const servicesRepository = {
       where: {
         status: "ACTIVE",
         department: { services: { some: { id: serviceId, isActive: true } } },
-        user: { role: "STAFF", isActive: true, accountDeletedAt: null },
+        user: activeStaff,
       },
       orderBy: [{ fullName: "asc" }, { id: "asc" }],
       select: {
@@ -200,7 +202,7 @@ export const servicesRepository = {
   async deletePricingTemplate(id: string) {
     return getPrisma()!.$transaction(async (tx) => {
       // Lock the template so a concurrent service assignment cannot be detached by deletion.
-      await tx.$queryRaw`SELECT "id" FROM "PricingTemplate" WHERE "id" = ${id} FOR UPDATE`
+      await lockRows(tx, "PricingTemplate", id)
       const template = await tx.pricingTemplate.findUnique({
         where: { id },
         select: { _count: { select: { services: true } } },

@@ -1,6 +1,12 @@
 import { Router } from "express"
+import {
+  isMessageBody,
+  isOptionalRecordId,
+  isRecordId,
+  isUuidV4,
+  recordIdParam,
+} from "../../shared/validation.js"
 import { requireAuth } from "../auth/auth.middleware.js"
-import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 import {
   createInternalConversation,
   getInternalConversation,
@@ -9,10 +15,6 @@ import {
   markInternalConversationRead,
   sendInternalMessage,
 } from "./internal-conversations.service.js"
-
-const idPattern = /^[A-Za-z0-9_-]{1,80}$/
-const uuidPattern =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export const internalConversationsRouter = Router()
 internalConversationsRouter.use(requireAuth)
@@ -23,10 +25,7 @@ internalConversationsRouter.get("/contacts", async (request, response) => {
 
 internalConversationsRouter.get("/", async (request, response) => {
   const before = request.query.before
-  if (
-    before !== undefined &&
-    (typeof before !== "string" || !idPattern.test(before))
-  )
+  if (!isOptionalRecordId(before))
     return response
       .status(400)
       .json({ error: "Invalid internal conversation cursor" })
@@ -39,8 +38,7 @@ internalConversationsRouter.post("/", async (request, response) => {
     !input ||
     typeof input !== "object" ||
     !("recipientId" in input) ||
-    typeof input.recipientId !== "string" ||
-    !idPattern.test(input.recipientId)
+    !isRecordId(input.recipientId)
   )
     return response
       .status(400)
@@ -57,21 +55,12 @@ internalConversationsRouter.post("/", async (request, response) => {
 
 internalConversationsRouter.param(
   "id",
-  (_request, response, next, id: string) => {
-    if (!idPattern.test(id))
-      return response
-        .status(400)
-        .json({ error: "Invalid internal conversation id" })
-    next()
-  },
+  recordIdParam("Invalid internal conversation id"),
 )
 
 internalConversationsRouter.get("/:id", async (request, response) => {
   const before = request.query.before
-  if (
-    before !== undefined &&
-    (typeof before !== "string" || !idPattern.test(before))
-  )
+  if (!isOptionalRecordId(before))
     return response
       .status(400)
       .json({ error: "Invalid internal message cursor" })
@@ -99,13 +88,9 @@ internalConversationsRouter.post("/:id/messages", async (request, response) => {
     !input ||
     typeof input !== "object" ||
     !("body" in input) ||
-    typeof input.body !== "string" ||
-    !input.body.trim() ||
-    input.body.length > 4000 ||
-    input.body.includes("\u0000") ||
+    !isMessageBody(input.body) ||
     !("clientMessageId" in input) ||
-    typeof input.clientMessageId !== "string" ||
-    !uuidPattern.test(input.clientMessageId)
+    !isUuidV4(input.clientMessageId)
   )
     return response.status(400).json({
       error: "Enter a message of 1–4000 characters and a valid message ID",
@@ -118,9 +103,3 @@ internalConversationsRouter.post("/:id/messages", async (request, response) => {
   )
   response.status(201).json({ message })
 })
-
-internalConversationsRouter.use(((error, _request, response, next) => {
-  if (error instanceof ServiceRequestsError)
-    return response.status(error.status).json({ error: error.message })
-  next(error)
-}) satisfies import("express").ErrorRequestHandler)

@@ -1,48 +1,32 @@
 import type { Prisma } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { readDatabase, readTransaction } from "../../lib/database-read.js"
+import {
+  activeAccount,
+  activeDepartmentHead,
+  activeStaff,
+} from "../../shared/query/accounts.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
-import { serviceImagePublicUrl } from "../services/service-image-storage.js"
+import { userImageUrl } from "../services/service-image-storage.js"
 import {
   parseMeeting,
   parseMeetingAction,
 } from "./conversation-meetings.validation.js"
+import { lockRows } from "../../shared/db/locks.js"
 
-const activeUser = { isActive: true, accountDeletedAt: null } as const
 const archivedStatuses = ["CLOSED", "CANCELLED"] as const
 const MESSAGE_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
 
 export type ConversationView = "active" | "archived"
-
-function avatarUrl(user: {
-  profileImagePath: string | null
-  employee?: { profileImageUrl: string | null } | null
-}) {
-  const value =
-    serviceImagePublicUrl(user.profileImagePath) ||
-    user.employee?.profileImageUrl
-  if (!value) return null
-  try {
-    const url = new URL(value)
-    return url.protocol === "https:" && !url.username && !url.password
-      ? url.href
-      : null
-  } catch {
-    return null
-  }
-}
 
 function participantScope(
   userId: string,
 ): Prisma.RequestConversationWhereInput {
   return {
     OR: [
-      { clientId: userId, client: { ...activeUser, role: "USER" } },
+      { clientId: userId, client: { ...activeAccount, role: "USER" } },
       {
-        department: {
-          headId: userId,
-          head: { ...activeUser, role: "STAFF" },
-        },
+        department: activeDepartmentHead(userId),
       },
     ],
   }
@@ -308,7 +292,7 @@ export async function listConversations(
       client: {
         id: row.client.id,
         fullName: row.client.fullName,
-        imageUrl: avatarUrl(row.client),
+        imageUrl: userImageUrl(row.client),
       },
       acceptedDepartment: {
         id: row.department.id,
@@ -318,7 +302,7 @@ export async function listConversations(
           ? {
               id: row.department.head.id,
               fullName: row.department.head.fullName,
-              imageUrl: avatarUrl(row.department.head),
+              imageUrl: userImageUrl(row.department.head),
             }
           : null,
       },
@@ -426,7 +410,7 @@ export async function getConversationAccess(
             id: head.id,
             fullName: head.fullName,
             specialistId: head.employee?.id || null,
-            imageUrl: avatarUrl(head),
+            imageUrl: userImageUrl(head),
           }
         : null,
       bookings: record.bookings.map(serializeBooking),
@@ -439,7 +423,7 @@ export async function getConversationAccess(
               fullName: record.client.fullName,
               email: record.client.email,
               contactNumber: record.client.contactNumber,
-              imageUrl: avatarUrl(record.client),
+              imageUrl: userImageUrl(record.client),
             },
           }),
     },
@@ -498,12 +482,12 @@ async function lockWritableConversation(
   id: string,
 ) {
   const conversation = await resolveConversation(tx, userId, id)
-  await tx.$queryRaw`SELECT "id" FROM "RequestConversation" WHERE "id" = ${conversation.id} FOR UPDATE`
+  await lockRows(tx, "RequestConversation", conversation.id)
   const writable = await tx.requestConversation.findFirst({
     where: {
       id: conversation.id,
       ...participantScope(userId),
-      department: { head: { ...activeUser, role: "STAFF" } },
+      department: { head: activeStaff },
     },
     select: { id: true },
   })
@@ -562,7 +546,7 @@ export async function scheduleConversationMeeting(
     // Match workflow writes' booking-before-conversation lock order. This also
     // prevents a booking from being moved while its meeting link is created.
     for (const bookingId of bookingIds)
-      await tx.$queryRaw`SELECT "id" FROM "ServiceRequest" WHERE "id" = ${bookingId} FOR UPDATE`
+      await lockRows(tx, "ServiceRequest", bookingId)
     const conversationId = await lockWritableConversation(
       tx,
       userId,
@@ -703,7 +687,7 @@ export async function updateConversationMeeting(
 export async function deleteArchivedConversation(userId: string, id: string) {
   return getPrisma()!.$transaction(async (tx) => {
     const conversation = await resolveConversation(tx, userId, id)
-    await tx.$queryRaw`SELECT "id" FROM "RequestConversation" WHERE "id" = ${conversation.id} FOR UPDATE`
+    await lockRows(tx, "RequestConversation", conversation.id)
     if (!isArchived(conversation.bookings))
       throw new ServiceRequestsError(
         409,

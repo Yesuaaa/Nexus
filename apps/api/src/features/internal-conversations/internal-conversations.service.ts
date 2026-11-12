@@ -1,7 +1,7 @@
 import type { Prisma } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
-import { serviceImagePublicUrl } from "../services/service-image-storage.js"
+import { userImageUrl } from "../services/service-image-storage.js"
 
 const internalRoles = ["STAFF", "ADMIN", "SUPERADMIN"] as const
 type InternalRole = (typeof internalRoles)[number]
@@ -30,21 +30,6 @@ type InternalUser = {
   employee?: { profileImageUrl: string | null } | null
 }
 
-function avatarUrl(user: Pick<InternalUser, "profileImagePath" | "employee">) {
-  const value =
-    serviceImagePublicUrl(user.profileImagePath) ||
-    user.employee?.profileImageUrl
-  if (!value) return null
-  try {
-    const url = new URL(value)
-    return url.protocol === "https:" && !url.username && !url.password
-      ? url.href
-      : null
-  } catch {
-    return null
-  }
-}
-
 function participantDto(user: InternalUser) {
   return {
     id: user.id,
@@ -55,7 +40,7 @@ function participantDto(user: InternalUser) {
     isActive: user.isActive,
     accountDeletedAt: user.accountDeletedAt,
     department: user.department,
-    imageUrl: avatarUrl(user),
+    imageUrl: userImageUrl(user),
   }
 }
 

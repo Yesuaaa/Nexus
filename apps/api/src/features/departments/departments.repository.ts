@@ -1,5 +1,7 @@
 import { EmployeeStatus, Prisma, Role } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
+import { lockRows } from "../../shared/db/locks.js"
+import { paginate } from "../../shared/query/pagination.js"
 import {
   employeeInclude,
   syncEmployeeForUser,
@@ -7,6 +9,11 @@ import {
   EmployeeError,
 } from "../employees/employees.service.js"
 import type { DepartmentInput } from "./departments.schema.js"
+import {
+  assertLeadershipCandidate,
+  isDepartmentHeadTitle,
+  leadershipCandidateWhere,
+} from "./leadership.policy.js"
 
 export const departmentMemberSelect = {
   id: true,
@@ -64,12 +71,31 @@ export const departmentsRepository = {
     })
   },
 
-  async listEligibleHeads() {
+  /**
+   * Leadership candidates for `departmentId` (any department when omitted,
+   * unassigned staff only when null, i.e. a department being created), plus
+   * current heads (only that department's head when one is given, none for a
+   * new department) so an edit form can still show the head it already has.
+   */
+  async listEligibleHeads(departmentId?: string | null) {
     const prisma = getPrisma()!
+    const candidates = {
+      ...leadershipCandidateWhere(departmentId),
+      leadOfTeam: null,
+      headOf: { is: null },
+    }
     return prisma.user.findMany({
-      where: {
-        role: Role.STAFF,
-      },
+      where:
+        departmentId === null
+          ? candidates
+          : {
+              OR: [
+                candidates,
+                departmentId
+                  ? { headOf: { is: { id: departmentId } } }
+                  : { headOf: { isNot: null } },
+              ],
+            },
       select: {
         id: true,
         fullName: true,
@@ -83,34 +109,29 @@ export const departmentsRepository = {
     })
   },
 
-  async searchAssignableStaff(
-    where: Prisma.UserWhereInput,
-    page: number,
-    pageSize: number,
-  ) {
-    const prisma = getPrisma()!
-    return prisma.$transaction([
-      prisma.user.findMany({
-        where,
-        select: {
-          id: true,
-          fullName: true,
-          email: true,
-          contactNumber: true,
-          position: true,
-          departmentId: true,
-          isActive: true,
-          role: true,
-          employee: {
-            select: { position: true },
+  async searchAssignableStaff(where: Prisma.UserWhereInput, page: number) {
+    return paginate(page, {
+      rows: (db, window) =>
+        db.user.findMany({
+          where,
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            contactNumber: true,
+            position: true,
+            departmentId: true,
+            isActive: true,
+            role: true,
+            employee: {
+              select: { position: true },
+            },
           },
-        },
-        orderBy: [{ fullName: "asc" }, { email: "asc" }, { id: "asc" }],
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      }),
-      prisma.user.count({ where }),
-    ])
+          orderBy: [{ fullName: "asc" }, { email: "asc" }, { id: "asc" }],
+          ...window,
+        }),
+      count: (db) => db.user.count({ where }),
+    })
   },
 
   async getDepartmentDetailsWithCleanup(departmentId: string) {
@@ -127,21 +148,17 @@ export const departmentsRepository = {
         existing.headId,
         existing.temporaryHeadOriginalId,
       ].filter((id): id is string => Boolean(id))
-      const staleMembers = await tx.user.findMany({
+      const titledMembers = await tx.user.findMany({
         where: {
           departmentId,
           id: { notIn: titleHolderIds },
-          position: {
-            in: [
-              "Dept Head",
-              "dept head",
-              "Department Head",
-              "department head",
-            ],
-          },
+          position: { not: null },
         },
-        select: { id: true },
+        select: { id: true, position: true },
       })
+      const staleMembers = titledMembers.filter((member) =>
+        isDepartmentHeadTitle(member.position),
+      )
       for (const member of staleMembers) {
         await tx.user.update({
           where: { id: member.id },
@@ -207,22 +224,14 @@ export const departmentsRepository = {
     return prisma.department.findUnique({ where: { id } })
   },
 
-  async findUserById(id: string) {
-    const prisma = getPrisma()!
-    return prisma.user.findUnique({ where: { id } })
-  },
-
-  async findTeamLeadByLeadId(leadId: string) {
-    const prisma = getPrisma()!
-    return prisma.team.findFirst({
-      where: { leadId },
-      select: { id: true },
-    })
-  },
-
   async createDepartment(data: DepartmentInput) {
     const prisma = getPrisma()!
     return prisma.$transaction(async (tx) => {
+      if (data.headId)
+        await assertLeadershipCandidate(tx, data.headId, {
+          kind: "head",
+          departmentId: null,
+        })
       const created = await tx.department.create({
         data: {
           name: data.name,
@@ -265,12 +274,15 @@ export const departmentsRepository = {
   ) {
     const prisma = getPrisma()!
     return prisma.$transaction(async (tx) => {
-      await tx.$queryRaw(
-        Prisma.sql`SELECT "id" FROM "Department" WHERE "id" = ${id} FOR UPDATE`,
-      )
+      await lockRows(tx, "Department", id)
       const current = await tx.department.findUniqueOrThrow({ where: { id } })
       const headChanged =
         data.headId !== undefined && current.headId !== data.headId
+      if (headChanged && data.headId)
+        await assertLeadershipCandidate(tx, data.headId, {
+          kind: "head",
+          departmentId: id,
+        })
       const saved = await tx.department.update({
         where: { id },
         data: {
@@ -296,12 +308,7 @@ export const departmentsRepository = {
             where: { id: current.headId },
             select: { id: true, position: true },
           })
-          if (
-            oldHead?.position &&
-            ["dept head", "department head"].includes(
-              oldHead.position.toLowerCase(),
-            )
-          ) {
+          if (oldHead && isDepartmentHeadTitle(oldHead.position)) {
             await tx.user.update({
               where: { id: oldHead.id },
               data: { position: null },

@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto"
 import type { Prisma, ProjectStatus } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
+import { activeStaff } from "../../shared/query/accounts.js"
+import { isRecordId } from "../../shared/validation.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 import { parseWorkflowUpload } from "../request-workflow/workflow.files.js"
 import {
@@ -14,8 +16,7 @@ import {
   type ProjectTaskStatus,
   type ProjectWorkPlan,
 } from "./templates.js"
-
-const activeAccount = { isActive: true, accountDeletedAt: null } as const
+import { lockRows, lockServiceRequest } from "../../shared/db/locks.js"
 
 function validateEditablePlan(input: unknown): ProjectWorkPlan {
   const plan = readWorkPlan(input)
@@ -45,11 +46,7 @@ function validateEditablePlan(input: unknown): ProjectWorkPlan {
     ...phase.tasks.map((task) => task.id),
   ])
   for (const task of plan.phases.flatMap((phase) => phase.tasks)) {
-    if (
-      task.employeeId != null &&
-      (typeof task.employeeId !== "string" ||
-        !/^[A-Za-z0-9_-]{1,80}$/.test(task.employeeId))
-    )
+    if (task.employeeId != null && !isRecordId(task.employeeId))
       throw new ServiceRequestsError(400, "Choose a valid assigned employee")
     if (
       task.dueDate != null &&
@@ -60,10 +57,7 @@ function validateEditablePlan(input: unknown): ProjectWorkPlan {
     )
       throw new ServiceRequestsError(400, "Enter a valid due date")
   }
-  if (
-    new Set(ids).size !== ids.length ||
-    ids.some((id) => !/^[A-Za-z0-9_-]{1,80}$/.test(id))
-  )
+  if (new Set(ids).size !== ids.length || ids.some((id) => !isRecordId(id)))
     throw new ServiceRequestsError(400, "Invalid phase or task identifiers")
   return plan
 }
@@ -91,15 +85,9 @@ export async function saveProjectPlan(
       workspaceId,
       projectId,
     )
-    await tx.$queryRaw`SELECT "id" FROM "ServiceRequest" WHERE "id" = ${project.requestId} FOR UPDATE`
-    const request = await tx.serviceRequest.findUniqueOrThrow({
-      where: { id: project.requestId! },
-      select: { acceptedDepartmentId: true },
-    })
-    if (request.acceptedDepartmentId)
-      await tx.$queryRaw`SELECT "id" FROM "Department" WHERE "id" = ${request.acceptedDepartmentId} FOR SHARE`
+    const acceptedDepartmentId = await lockServiceRequest(tx, project.requestId)
     const head = await tx.department.findFirst({
-      where: { id: request.acceptedDepartmentId ?? "", headId: userId },
+      where: { id: acceptedDepartmentId ?? "", headId: userId },
       select: { id: true },
     })
     const previousTasks = new Map(
@@ -140,9 +128,9 @@ export async function saveProjectPlan(
           projectId,
           employeeId,
           employee: {
-            departmentId: request.acceptedDepartmentId,
+            departmentId: acceptedDepartmentId,
             status: "ACTIVE",
-            user: { role: "STAFF", ...activeAccount },
+            user: activeStaff,
           },
         },
       })
@@ -207,7 +195,7 @@ async function getStaffContext(
   userId: string,
 ): Promise<StaffContext> {
   const user = await tx.user.findFirst({
-    where: { id: userId, role: "STAFF", ...activeAccount },
+    where: { id: userId, ...activeStaff },
     select: {
       id: true,
       departmentId: true,
@@ -541,9 +529,7 @@ function parseCreateWorkspace(input: unknown): CreateWorkspaceInput {
     !Array.isArray(requestIds) ||
     !requestIds.length ||
     requestIds.length > 8 ||
-    requestIds.some(
-      (id) => typeof id !== "string" || !/^[A-Za-z0-9_-]{1,80}$/.test(id),
-    ) ||
+    requestIds.some((id) => !isRecordId(id)) ||
     new Set(requestIds).size !== requestIds.length
   )
     throw new ServiceRequestsError(400, "Choose one to eight approved bookings")
@@ -841,10 +827,8 @@ async function lockWorkspaceProjects(
   groupId: string | null,
   projects: MutableWorkspaceProject[],
 ) {
-  if (groupId)
-    await tx.$queryRaw`SELECT "id" FROM "ProjectWorkspaceGroup" WHERE "id" = ${groupId} FOR UPDATE`
-  for (const project of projects)
-    await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${project.id} FOR UPDATE`
+  if (groupId) await lockRows(tx, "ProjectWorkspaceGroup", groupId)
+  for (const project of projects) await lockRows(tx, "Project", project.id)
   if (!groupId && projects[0]?.id !== workspaceId)
     throw new ServiceRequestsError(404, "Project workspace not found")
 }
@@ -894,7 +878,7 @@ export async function assignProjectTeamLead(
         employee: {
           departmentId: project.request?.acceptedDepartmentId,
           status: "ACTIVE",
-          user: { role: "STAFF", ...activeAccount },
+          user: activeStaff,
         },
       },
       data: { isTeamLead: true },
@@ -1263,7 +1247,7 @@ async function getDeliverableAccess(
             employee: {
               userId,
               status: "ACTIVE",
-              user: { role: "STAFF", ...activeAccount },
+              user: activeStaff,
             },
           },
           select: { id: true },
@@ -1364,8 +1348,8 @@ export async function updateProjectDeliverable(
         403,
         "Only the department head can edit deliverables",
       )
-    await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${project.id} FOR UPDATE`
-    await tx.$queryRaw`SELECT "id" FROM "ProjectMilestone" WHERE "id" = ${deliverableId} FOR UPDATE`
+    await lockRows(tx, "Project", project.id)
+    await lockRows(tx, "ProjectMilestone", deliverableId)
     const current = await tx.projectMilestone.findUniqueOrThrow({
       where: { id: deliverableId },
       select: { deliveryStatus: true, title: true },
@@ -1420,8 +1404,8 @@ export async function uploadProjectDeliverable(
       projectId,
       deliverableId,
     )
-    await tx.$queryRaw`SELECT "id" FROM "ServiceRequest" WHERE "id" = ${initial.project.requestId} FOR SHARE`
-    await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${projectId} FOR UPDATE`
+    await lockRows(tx, "ServiceRequest", initial.project.requestId, "share")
+    await lockRows(tx, "Project", projectId)
     const { project, milestone, isHead, request } = await getDeliverableAccess(
       tx,
       userId,
@@ -1474,7 +1458,7 @@ export async function uploadProjectDeliverable(
         )
       return
     }
-    await tx.$queryRaw`SELECT "id" FROM "ProjectMilestone" WHERE "id" = ${deliverableId} FOR UPDATE`
+    await lockRows(tx, "ProjectMilestone", deliverableId)
     const current = await tx.projectMilestone.findUniqueOrThrow({
       where: { id: deliverableId },
       select: { deliveryStatus: true, workflowFileId: true, title: true },
@@ -1559,8 +1543,8 @@ export async function removeProjectDeliverableAttachment(
       )
     if (!milestone.workflowFileId)
       throw new ServiceRequestsError(409, "This deliverable has no attachment")
-    await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${project.id} FOR UPDATE`
-    await tx.$queryRaw`SELECT "id" FROM "ProjectMilestone" WHERE "id" = ${deliverableId} FOR UPDATE`
+    await lockRows(tx, "Project", project.id)
+    await lockRows(tx, "ProjectMilestone", deliverableId)
     const current = await tx.projectMilestone.findUniqueOrThrow({
       where: { id: deliverableId },
       select: { deliveryStatus: true, workflowFileId: true, title: true },
@@ -1629,8 +1613,8 @@ export async function reviewProjectDeliverable(
       deliverableId,
       true,
     )
-    await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${project.id} FOR UPDATE`
-    await tx.$queryRaw`SELECT "id" FROM "ProjectMilestone" WHERE "id" = ${deliverableId} FOR UPDATE`
+    await lockRows(tx, "Project", project.id)
+    await lockRows(tx, "ProjectMilestone", deliverableId)
     const current = await tx.projectMilestone.findUniqueOrThrow({
       where: { id: deliverableId },
       select: { title: true, deliveryStatus: true, workflowFileId: true },
@@ -1689,7 +1673,7 @@ export async function sendProjectDeliverableToClient(
     )
     if (!request?.workflow)
       throw new ServiceRequestsError(409, "This project has no client workflow")
-    await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${project.id} FOR UPDATE`
+    await lockRows(tx, "Project", project.id)
     const lockedStatus = await tx.project.findUniqueOrThrow({
       where: { id: projectId },
       select: { status: true },
@@ -1699,7 +1683,7 @@ export async function sendProjectDeliverableToClient(
         409,
         "Archived projects cannot share new deliverables",
       )
-    await tx.$queryRaw`SELECT "id" FROM "ProjectMilestone" WHERE "id" = ${deliverableId} FOR UPDATE`
+    await lockRows(tx, "ProjectMilestone", deliverableId)
     const current = await tx.projectMilestone.findUniqueOrThrow({
       where: { id: deliverableId },
       select: { title: true, deliveryStatus: true, workflowFileId: true },
@@ -1801,7 +1785,7 @@ export async function updateProjectTask(
       workspaceId,
       projectId,
     )
-    await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${scoped.id} FOR UPDATE`
+    await lockRows(tx, "Project", scoped.id)
     const project = await tx.project.findUniqueOrThrow({
       where: { id: scoped.id },
     })
@@ -1867,7 +1851,7 @@ export async function addProjectTask(
       workspaceId,
       projectId,
     )
-    await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${scoped.id} FOR UPDATE`
+    await lockRows(tx, "Project", scoped.id)
     const project = await tx.project.findUniqueOrThrow({
       where: { id: scoped.id },
     })

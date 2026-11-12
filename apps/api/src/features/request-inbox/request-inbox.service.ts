@@ -1,5 +1,7 @@
 import type { Prisma } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
+import { activeDepartmentHead } from "../../shared/query/accounts.js"
+import { insensitive, paginate } from "../../shared/query/pagination.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 import { initializeWorkflow } from "../request-workflow/workflow.access.js"
 import type { InboxFilters } from "./request-inbox.schema.js"
@@ -20,19 +22,19 @@ const requestSelect = {
   client: { select: { fullName: true, email: true, contactNumber: true } },
 } as const satisfies Prisma.ServiceRequestSelect
 
-export async function requireDepartmentHead(userId: string) {
-  const department = await getPrisma()!.department.findFirst({
-    where: {
-      headId: userId,
-      head: { role: "STAFF", isActive: true, accountDeletedAt: null },
-    },
+/** The department `userId` currently heads, or a 403 `ServiceRequestsError`. */
+export async function requireDepartmentHead(
+  userId: string,
+  {
+    client = getPrisma()!,
+    message = "Only current department heads can access the request inbox",
+  }: { client?: Prisma.TransactionClient; message?: string } = {},
+) {
+  const department = await client.department.findFirst({
+    where: activeDepartmentHead(userId),
     select: { id: true, name: true },
   })
-  if (!department)
-    throw new ServiceRequestsError(
-      403,
-      "Only current department heads can access the request inbox",
-    )
+  if (!department) throw new ServiceRequestsError(403, message)
   return department
 }
 
@@ -49,14 +51,7 @@ function departmentScope(
             ...(includeAcceptedElsewhere ? {} : { acceptedDepartmentId: null }),
             service: {
               departments: {
-                some: {
-                  headId: userId,
-                  head: {
-                    role: "STAFF",
-                    isActive: true,
-                    accountDeletedAt: null,
-                  },
-                },
+                some: activeDepartmentHead(userId),
               },
             },
           },
@@ -97,71 +92,50 @@ export async function listInbox(userId: string, filters: InboxFilters) {
             labels.some(({ label }) => label === status),
           ),
         },
-        ...(filters.search
-          ? {
-              OR: [
-                { id: { contains: filters.search, mode: "insensitive" } },
-                {
-                  referenceNumber: {
-                    contains: filters.search,
-                    mode: "insensitive",
-                  },
-                },
-                {
-                  service: {
-                    name: { contains: filters.search, mode: "insensitive" },
-                  },
-                },
-                {
-                  packageName: {
-                    contains: filters.search,
-                    mode: "insensitive",
-                  },
-                },
-                {
-                  client: {
-                    fullName: { contains: filters.search, mode: "insensitive" },
-                  },
-                },
-                {
-                  client: {
-                    email: { contains: filters.search, mode: "insensitive" },
-                  },
-                },
+        ...insensitive<Prisma.ServiceRequestWhereInput>(filters.search, [
+          "id",
+          "referenceNumber",
+          (text) => ({ service: { name: text } }),
+          "packageName",
+          (text) => ({ client: { fullName: text } }),
+          (text) => ({ client: { email: text } }),
+        ]),
+      }
+      const { rows: serviceRequests, ...page } = await paginate(
+        filters.page,
+        {
+          rows: (db, window) =>
+            db.serviceRequest.findMany({
+              where,
+              select: requestSelect,
+              ...window,
+              orderBy: [
+                filters.sortBy === "service"
+                  ? { service: { name: filters.sortDir } }
+                  : filters.sortBy === "reference"
+                    ? {
+                        referenceNumber: {
+                          sort: filters.sortDir,
+                          nulls: "last",
+                        },
+                      }
+                    : filters.sortBy === "client"
+                      ? {
+                          client: {
+                            fullName: { sort: filters.sortDir, nulls: "last" },
+                          },
+                        }
+                      : filters.sortBy === "status"
+                        ? { status: filters.sortDir }
+                        : { createdAt: filters.sortDir },
+                { id: "asc" },
               ],
-            }
-          : {}),
-      }
-      const serviceRequests = await tx.serviceRequest.findMany({
-        where,
-        select: requestSelect,
-        orderBy: [
-          filters.sortBy === "service"
-            ? { service: { name: filters.sortDir } }
-            : filters.sortBy === "reference"
-              ? { referenceNumber: { sort: filters.sortDir, nulls: "last" } }
-              : filters.sortBy === "client"
-                ? {
-                    client: {
-                      fullName: { sort: filters.sortDir, nulls: "last" },
-                    },
-                  }
-                : filters.sortBy === "status"
-                  ? { status: filters.sortDir }
-                  : { createdAt: filters.sortDir },
-          { id: "asc" },
-        ],
-        take: 10,
-        skip: (filters.page - 1) * 10,
-      })
-      const total = await tx.serviceRequest.count({ where })
-      return {
-        department,
-        serviceRequests,
-        total,
-        page: filters.page,
-        pageSize: 10,
-      }
+            }),
+          count: (db) => db.serviceRequest.count({ where }),
+        },
+        { tx },
+      )
+      return { department, serviceRequests, ...page }
     },
     { isolationLevel: "RepeatableRead" },
   )
@@ -215,8 +189,7 @@ export async function acceptInboxRequest(userId: string, id: string) {
           departments: {
             some: {
               id: department.id,
-              headId: userId,
-              head: { role: "STAFF", isActive: true, accountDeletedAt: null },
+              ...activeDepartmentHead(userId),
             },
           },
         },

@@ -2,11 +2,13 @@ import {
   EmploymentType,
   EmployeeStatus,
 } from "../../generated/prisma/client.js"
+import {
+  isEmployeeMobileNumber,
+  isPlainObject,
+  normalizedEmail,
+} from "../../shared/validation.js"
 
 const NAME_RE = /^\p{L}[\p{L} .'’-]*$/u
-const EMAIL_RE =
-  /^[A-Za-z0-9]+([._+-][A-Za-z0-9]+)*@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.(com|ph)$/i
-const PHONE_RE = /^0[89]\d{9}$/
 
 export type EmployeeInput = {
   employeeId?: string
@@ -32,11 +34,11 @@ export function validateEmployeeInput(
   input: unknown,
   partial: boolean,
 ): { value: EmployeeInput } | { error: string } {
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
+  if (!isPlainObject(input)) {
     return { error: "Provide a valid employee record" }
   }
 
-  const body = input as Record<string, unknown>
+  const body = input
   if (Object.prototype.hasOwnProperty.call(body, "userId")) {
     return {
       error: "Account associations are managed outside Employee Management",
@@ -77,18 +79,16 @@ export function validateEmployeeInput(
   if (body.email !== undefined || !partial) {
     if (typeof body.email !== "string" || !body.email.trim()) {
       return { error: "Email is required" }
-    } else if (
-      body.email.trim().length > 254 ||
-      !EMAIL_RE.test(body.email.trim())
-    ) {
-      return { error: "Provide a valid email address" }
-    } else value.email = body.email.trim().toLowerCase()
+    }
+    const email = normalizedEmail(body.email)
+    if (!email) return { error: "Provide a valid email address" }
+    value.email = email
   }
 
   if (body.contactNumber !== undefined || !partial) {
     if (typeof body.contactNumber !== "string" || !body.contactNumber.trim()) {
       return { error: "Contact number is required" }
-    } else if (!PHONE_RE.test(body.contactNumber.trim())) {
+    } else if (!isEmployeeMobileNumber(body.contactNumber.trim())) {
       return { error: "Provide 11 digits starting with 09 or 08" }
     } else value.contactNumber = body.contactNumber.trim()
   }

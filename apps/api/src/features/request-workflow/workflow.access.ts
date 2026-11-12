@@ -1,8 +1,9 @@
 import type { Prisma } from "../../generated/prisma/client.js"
+import { lockServiceRequest } from "../../shared/db/locks.js"
+import { activeAccount } from "../../shared/query/accounts.js"
 import { fail } from "./workflow.validation.js"
 
 export type WorkflowTx = Prisma.TransactionClient
-export const activeUser = { isActive: true, accountDeletedAt: null } as const
 
 export async function workflowAccess(
   tx: WorkflowTx,
@@ -10,7 +11,7 @@ export async function workflowAccess(
   requestId: string,
 ) {
   const user = await tx.user.findFirst({
-    where: { id: userId, ...activeUser },
+    where: { id: userId, ...activeAccount },
     select: { id: true, role: true },
   })
   const request = await tx.serviceRequest.findUnique({
@@ -59,15 +60,7 @@ export async function workflowAccess(
 
 export async function lockRequest(tx: WorkflowTx, requestId: string) {
   // Serialize all structured actions (including uploads) for one service request.
-  await tx.$queryRaw`SELECT "id" FROM "ServiceRequest" WHERE "id" = ${requestId} FOR UPDATE`
-  const request = await tx.serviceRequest.findUnique({
-    where: { id: requestId },
-    select: { acceptedDepartmentId: true },
-  })
-  if (request?.acceptedDepartmentId) {
-    // A concurrent head handoff cannot authorize an action using the former head.
-    await tx.$queryRaw`SELECT "id" FROM "Department" WHERE "id" = ${request.acceptedDepartmentId} FOR SHARE`
-  }
+  await lockServiceRequest(tx, requestId)
 }
 
 export async function appendEvent(

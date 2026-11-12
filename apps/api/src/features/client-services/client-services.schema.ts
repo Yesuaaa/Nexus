@@ -1,4 +1,5 @@
-import { parsePage, parseQueryString } from "../../shared/query-helpers.js"
+import { parseQueryString } from "../../shared/query-helpers.js"
+import { parsePage } from "../../shared/query/pagination.js"
 import { ServiceRequestStatus } from "../../generated/prisma/client.js"
 
 export type ClientRequestFilters = {
