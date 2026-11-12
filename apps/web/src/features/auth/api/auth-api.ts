@@ -183,6 +183,8 @@ export async function signIn(
   })
   if (sessionVersion !== version)
     throw new ApiError("Session changed. Please try again.", 409)
+  if (typeof result?.token !== "string" || !result.token.trim())
+    throw new ApiError("Unable to sign in. Please try again.", 502)
   storeTokens(result)
   return result.user
 }
