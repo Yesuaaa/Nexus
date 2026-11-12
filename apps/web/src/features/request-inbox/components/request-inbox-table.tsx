@@ -4,7 +4,6 @@ import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { Button } from "@/components/ui/button"
 import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
 import { TableSortButton } from "@/components/ui/table-sort-button"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import {
   ResponsiveDataTable,
@@ -177,7 +176,6 @@ export function RequestInboxTable({
                     Service
                   </span>
                   {request.service.name}
-                  <HoverTooltip>{request.service.name}</HoverTooltip>
                 </p>
               </div>
               <div
@@ -189,9 +187,6 @@ export function RequestInboxTable({
                     Reference
                   </span>
                   <span>{request.referenceNumber || request.id}</span>
-                  <HoverTooltip>
-                    {request.referenceNumber || request.id}
-                  </HoverTooltip>
                 </p>
               </div>
               <div
@@ -206,7 +201,6 @@ export function RequestInboxTable({
                 </p>
                 <p className="mt-1 mb-0 truncate text-[11px] text-[#738096]">
                   {request.client.email}
-                  <HoverTooltip>{request.client.email}</HoverTooltip>
                 </p>
               </div>
               <div
@@ -241,7 +235,6 @@ export function RequestInboxTable({
                   onClick={() => onView(request)}
                 >
                   <Eye size={16} aria-hidden="true" />
-                  <HoverTooltip>Review request</HoverTooltip>
                 </button>
                 <button
                   type="button"
@@ -253,7 +246,6 @@ export function RequestInboxTable({
                   onClick={() => onGoToChat(request)}
                 >
                   <MessageSquare size={16} aria-hidden="true" />
-                  <HoverTooltip>Go to chat</HoverTooltip>
                 </button>
                 <button
                   type="button"
@@ -265,7 +257,6 @@ export function RequestInboxTable({
                   onClick={() => onDelete(request)}
                 >
                   <Trash2 size={16} aria-hidden="true" />
-                  <HoverTooltip>Delete request</HoverTooltip>
                 </button>
               </div>
             </>

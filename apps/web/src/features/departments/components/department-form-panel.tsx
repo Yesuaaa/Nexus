@@ -1,6 +1,5 @@
 import { Form } from "@/components/ui/form"
-import { useEffect, useRef, useState } from "react"
-import { CloseIcon } from "@/components/layout/icons"
+import { useEffect, useState } from "react"
 import { focusRing } from "@/components/layout/styles"
 import {
   autoDepartmentColor,
@@ -8,13 +7,17 @@ import {
   getDepartmentColorValue,
   resolveDepartmentColor,
 } from "@/components/ui/department-pill"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { Pill } from "@/components/ui/pill"
+import {
+  SidePanel,
+  SidePanelAlert,
+  SidePanelBody,
+  SidePanelButton,
+  SidePanelFooter,
+  SidePanelHeader,
+  useSidePanel,
+} from "@/components/ui/side-panel"
+import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import {
   Select,
@@ -36,9 +39,8 @@ import type { DepartmentColor } from "../model/department-color"
 const fieldClass = "grid min-w-0 gap-1.5"
 const labelClass = "text-xs font-semibold"
 const inputClass = `w-full min-w-0 rounded-lg border border-[#d6dfec] bg-background px-3 text-sm text-foreground placeholder:text-[#9aa8bb] ${focusRing}`
-const buttonClass = `inline-flex min-h-[38px] cursor-pointer items-center justify-center rounded-[9px] border border-transparent px-[15px] text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none ${focusRing}`
 
-export function CreateEditDepartmentDialog({
+export function DepartmentFormPanel({
   department,
   onClose,
   onSaved,
@@ -47,9 +49,7 @@ export function CreateEditDepartmentDialog({
   onClose: () => void
   onSaved: () => void
 }) {
-  const openerRef = useRef(
-    typeof document === "undefined" ? null : document.activeElement,
-  )
+  const panel = useSidePanel(onClose)
   const isEditing = Boolean(department)
   const [selectedPreset, setSelectedPreset] = useState<string>(
     department
@@ -131,7 +131,7 @@ export function CreateEditDepartmentDialog({
           headId: headId || null,
         })
       }
-      onSaved()
+      panel.close(onSaved)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to save department")
     } finally {
@@ -142,61 +142,28 @@ export function CreateEditDepartmentDialog({
   const previewColor = resolveDepartmentColor(color, name)
 
   return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open && !submitting) onClose()
-      }}
+    <SidePanel
+      open={panel.open}
+      onOpenChange={panel.onOpenChange}
+      dismissible={false}
+      busy={submitting}
     >
-      <DialogContent
-        showCloseButton={false}
-        overlayClassName="z-[110] bg-[rgb(13_28_57_/_48%)]"
-        className="z-[110] max-h-[calc(100dvh-28px)] w-[min(440px,calc(100vw-28px))] gap-0 overflow-y-auto rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_22px_75px_rgb(18_36_73_/_22%)]"
-        onCloseAutoFocus={(event) => {
-          event.preventDefault()
-          const opener = openerRef.current
-          if (opener instanceof HTMLElement && opener.isConnected)
-            opener.focus()
-        }}
-        onInteractOutside={(event) => event.preventDefault()}
-        onEscapeKeyDown={(event) => event.preventDefault()}
-      >
-        <div className="flex items-start justify-between gap-4 px-5 pt-5">
-          <div>
-            <DialogTitle className="m-0 text-lg font-[650] tracking-[-0.03em]">
-              {isEditing ? "Edit Department" : "Create Department"}
-            </DialogTitle>
-            <DialogDescription className="mt-2 mb-0 text-xs leading-relaxed text-[#738096]">
-              {isEditing
-                ? "Update the department details and assigned head."
-                : "Add a department and assign its head."}
-            </DialogDescription>
-          </div>
-          <button
-            type="button"
-            className={cn(
-              "grid size-7 flex-none cursor-pointer place-items-center rounded-[7px] border-0 bg-background text-[#65718a] hover:enabled:bg-[#f1f5fc] disabled:cursor-not-allowed disabled:opacity-50",
-              focusRing,
-            )}
-            onClick={onClose}
-            aria-label="Close dialog"
-            disabled={submitting}
-          >
-            <CloseIcon />
-          </button>
-        </div>
-
-        <Form onSubmit={handleSubmit}>
+      <SidePanelHeader
+        title={isEditing ? "Edit Department" : "Create Department"}
+        description={
+          isEditing
+            ? "Update the department details and assigned head."
+            : "Add a department and assign its head."
+        }
+        closeDisabled={submitting}
+      />
+      <Form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+        <SidePanelBody>
+          {error && <SidePanelAlert>{error}</SidePanelAlert>}
           <fieldset
             disabled={submitting}
-            className="m-0 grid min-w-0 gap-4 border-0 p-5 disabled:opacity-60"
+            className="m-0 grid min-w-0 gap-4 border-0 p-0 disabled:opacity-60"
           >
-            {error && (
-              <p className="m-0 text-xs text-[#bc3649]" role="alert">
-                {error}
-              </p>
-            )}
-
             {!isEditing && (
               <div className={fieldClass}>
                 <label className={labelClass} htmlFor="dept-preset">
@@ -286,36 +253,45 @@ export function CreateEditDepartmentDialog({
               <label className={labelClass} htmlFor="dept-head">
                 Department Head
               </label>
-              <Select
-                value={headId || "unassigned"}
-                onValueChange={(value) =>
-                  setHeadId(value === "unassigned" ? "" : value)
-                }
-                disabled={loadingHeads || submitting}
-              >
-                <SelectTrigger
-                  id="dept-head"
-                  className={cn(inputClass, "h-10 shadow-none")}
+              {loadingHeads ? (
+                <>
+                  <span role="status" className="sr-only">
+                    Loading eligible department heads…
+                  </span>
+                  <Skeleton className="h-10 w-full rounded-lg" />
+                </>
+              ) : (
+                <Select
+                  value={headId || "unassigned"}
+                  onValueChange={(value) =>
+                    setHeadId(value === "unassigned" ? "" : value)
+                  }
+                  disabled={submitting}
                 >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent
-                  collisionPadding={24}
-                  className="z-[120] border-[#cbd5e1] bg-white shadow-[0_12px_32px_rgb(20_45_97_/_13%)]"
-                >
-                  <SelectItem value="unassigned">
-                    No Department Head Assigned
-                  </SelectItem>
-                  {eligibleHeads.map((head) => (
-                    <SelectItem key={head.id} value={head.id}>
-                      {head.fullName || head.email}
-                      {head.headOf && head.headOf.id !== department?.id
-                        ? ` [Heads ${head.headOf.name}]`
-                        : ""}
+                  <SelectTrigger
+                    id="dept-head"
+                    className={cn(inputClass, "h-10 shadow-none")}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent
+                    collisionPadding={24}
+                    className="z-[120] border-[#cbd5e1] bg-white shadow-[0_12px_32px_rgb(20_45_97_/_13%)]"
+                  >
+                    <SelectItem value="unassigned">
+                      No Department Head Assigned
                     </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                    {eligibleHeads.map((head) => (
+                      <SelectItem key={head.id} value={head.id}>
+                        {head.fullName || head.email}
+                        {head.headOf && head.headOf.id !== department?.id
+                          ? ` [Heads ${head.headOf.name}]`
+                          : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             <div className={fieldClass}>
@@ -331,36 +307,24 @@ export function CreateEditDepartmentDialog({
               />
             </div>
           </fieldset>
-
-          <footer className="flex justify-end gap-2 border-t border-[#eceef1] px-5 py-4">
-            <button
-              type="button"
-              className={cn(
-                buttonClass,
-                "border-[#d7e0ee] bg-background text-[#24437e] hover:enabled:bg-[#f1f5fc]",
-              )}
-              onClick={onClose}
-              disabled={submitting}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className={cn(
-                buttonClass,
-                "bg-[#203f8c] text-white hover:enabled:bg-[#172f70]",
-              )}
-              disabled={submitting}
-            >
-              {submitting
-                ? "Saving..."
-                : isEditing
-                  ? "Update Department"
-                  : "Create Department"}
-            </button>
-          </footer>
-        </Form>
-      </DialogContent>
-    </Dialog>
+        </SidePanelBody>
+        <SidePanelFooter>
+          <SidePanelButton
+            variant="secondary"
+            onClick={() => panel.close()}
+            disabled={submitting}
+          >
+            Cancel
+          </SidePanelButton>
+          <SidePanelButton type="submit" disabled={submitting}>
+            {submitting
+              ? "Saving..."
+              : isEditing
+                ? "Update Department"
+                : "Create Department"}
+          </SidePanelButton>
+        </SidePanelFooter>
+      </Form>
+    </SidePanel>
   )
 }

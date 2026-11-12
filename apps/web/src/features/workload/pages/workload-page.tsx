@@ -14,8 +14,7 @@ import {
   panelInput,
   panelSecondaryButton,
   panelSelectTrigger,
-} from "@/features/departments/styles/member-panel-styles"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
+} from "@/components/ui/panel-styles"
 import { WorkloadDialog } from "../components/workload-dialog"
 import { WorkloadKpiCards } from "../components/workload-kpi-cards"
 import {
@@ -651,7 +650,6 @@ export function WorkloadPage() {
                             strokeWidth={1.7}
                             aria-hidden="true"
                           />
-                          <HoverTooltip>Unassign</HoverTooltip>
                         </Button>
                       </div>
                     </div>

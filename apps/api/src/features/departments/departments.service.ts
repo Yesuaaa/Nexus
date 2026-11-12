@@ -571,6 +571,15 @@ export const departmentsService = {
       )
     }
 
+    const requestHistoryCount =
+      await departmentsRepository.countDepartmentRequestHistory(id)
+    if (requestHistoryCount > 0) {
+      throw new DepartmentError(
+        409,
+        "This department has client request history and can't be deleted",
+      )
+    }
+
     await departmentsRepository.deleteDepartment(id)
     return { message: "Department deleted successfully" }
   },

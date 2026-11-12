@@ -12,7 +12,6 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Account } from "@/features/auth/model/types"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import {
   canAccessAccountManagement,
   canAccessRequestInbox,
@@ -26,7 +25,6 @@ import {
   canAccessProjectWorkspace,
 } from "@/features/auth/model/permissions"
 import { ProjectWorkspaceSidebarLinks } from "@/features/project-workspace/components/project-workspace-sidebar-links"
-import { ClientProjectSidebarLinks } from "@/features/projects/components/client-project-sidebar-links"
 import { focusRing, iconButtonClass } from "./styles"
 import {
   AccountsIcon,
@@ -46,10 +44,6 @@ const accessLabels: Record<Account["role"], string> = {
 
 const navLinkClass = `group relative flex min-h-10 w-full items-center gap-[13px] rounded-md border-0 bg-transparent px-[13px] text-left font-semibold text-foreground no-underline whitespace-nowrap cursor-pointer transition-colors duration-150 hover:bg-[#e1e3e5] max-[767px]:min-h-10 max-[767px]:w-full max-[767px]:justify-start max-[767px]:gap-[13px] max-[767px]:px-[13px] max-[767px]:aspect-auto motion-reduce:transition-none ${focusRing}`
 
-function CollapsedTooltip({ children }: { children: string }) {
-  return <HoverTooltip side="right">{children}</HoverTooltip>
-}
-
 export function Sidebar({
   account,
   collapsed,
@@ -67,11 +61,6 @@ export function Sidebar({
   const collapsedLabelClass = collapsed
     ? "w-0 overflow-hidden opacity-0 max-[767px]:w-auto max-[767px]:overflow-visible max-[767px]:opacity-100"
     : ""
-  // Project detail pages own their workspace navigation. Keep this check tied
-  // to the URL segment so it updates on client-side navigation as well.
-  const projectRoute = pathname.startsWith("/projects/")
-    ? pathname.split("/")[2] || null
-    : null
 
   return (
     <aside
@@ -126,7 +115,6 @@ export function Sidebar({
             onClick={onToggleCollapse}
           >
             <PanelIcon />
-            {collapsed && <CollapsedTooltip>Expand sidebar</CollapsedTooltip>}
           </button>
           <button
             type="button"
@@ -148,270 +136,199 @@ export function Sidebar({
           )}
           aria-label="Main menu"
         >
-          {projectRoute ? (
-            <ClientProjectSidebarLinks
-              projectId={decodeURIComponent(projectRoute)}
+          <Link
+            href="/dashboard"
+            aria-current={pathname === "/dashboard" ? "page" : undefined}
+            className={cn(
+              navLinkClass,
+              collapsed &&
+                "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
+              pathname === "/dashboard" && "bg-[#e1e3e5]",
+            )}
+            onClick={onCloseDrawer}
+          >
+            <DashboardIcon className="flex-none" />
+            <span className={collapsedLabelClass}>Dashboard</span>
+          </Link>
+          {canAccessAccountManagement(account) && (
+            <Link
+              href="/accounts"
+              aria-current={pathname === "/accounts" ? "page" : undefined}
+              className={cn(
+                navLinkClass,
+                collapsed &&
+                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
+                pathname === "/accounts" && "bg-[#e1e3e5]",
+              )}
+              onClick={onCloseDrawer}
+            >
+              <AccountsIcon className="flex-none" />
+              <span className={collapsedLabelClass}>Account Management</span>
+            </Link>
+          )}
+          {canAccessDepartmentManagement(account) && (
+            <Link
+              href="/departments"
+              aria-current={pathname === "/departments" ? "page" : undefined}
+              className={cn(
+                navLinkClass,
+                collapsed &&
+                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
+                pathname === "/departments" && "bg-[#e1e3e5]",
+              )}
+              onClick={onCloseDrawer}
+            >
+              <DepartmentIcon className="flex-none" />
+              <span className={collapsedLabelClass}>Department Management</span>
+            </Link>
+          )}
+          {canAccessEmployeeManagement(account) && (
+            <Link
+              href="/employees"
+              aria-current={pathname === "/employees" ? "page" : undefined}
+              className={cn(
+                navLinkClass,
+                collapsed &&
+                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
+                pathname === "/employees" && "bg-[#e1e3e5]",
+              )}
+              onClick={onCloseDrawer}
+            >
+              <UsersRound size={20} strokeWidth={1.7} className="flex-none" />
+              <span className={collapsedLabelClass}>Employee Management</span>
+            </Link>
+          )}
+          {(canAccessServiceCatalog(account) ||
+            canAccessServiceManagement(account)) && (
+            <Link
+              href="/services"
+              aria-current={pathname === "/services" ? "page" : undefined}
+              className={cn(
+                navLinkClass,
+                collapsed &&
+                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
+                pathname === "/services" && "bg-[#e1e3e5]",
+              )}
+              onClick={onCloseDrawer}
+            >
+              <ServiceIcon className="flex-none" />
+              <span className={collapsedLabelClass}>
+                {account.role === "USER" ? "Services" : "Service Management"}
+              </span>
+            </Link>
+          )}
+          {canAccessServiceCatalog(account) && (
+            <Link
+              href="/service-requests"
+              aria-current={
+                pathname === "/service-requests" ? "page" : undefined
+              }
+              className={cn(
+                navLinkClass,
+                collapsed &&
+                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
+                pathname === "/service-requests" && "bg-[#e1e3e5]",
+              )}
+              onClick={onCloseDrawer}
+            >
+              <ClipboardList
+                size={20}
+                strokeWidth={1.7}
+                className="flex-none"
+              />
+              <span className={collapsedLabelClass}>Booked Requests</span>
+            </Link>
+          )}
+          {canAccessCalendar(account) && (
+            <Link
+              href="/calendar"
+              aria-current={pathname === "/calendar" ? "page" : undefined}
+              className={cn(
+                navLinkClass,
+                collapsed &&
+                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
+                pathname === "/calendar" && "bg-[#e1e3e5]",
+              )}
+              onClick={onCloseDrawer}
+            >
+              <CalendarDays size={20} strokeWidth={1.7} className="flex-none" />
+              <span className={collapsedLabelClass}>Calendar</span>
+            </Link>
+          )}
+          {account.role === "USER" && canAccessProjects(account) && (
+            <Link
+              href="/projects"
+              aria-current={
+                pathname.startsWith("/projects") ? "page" : undefined
+              }
+              className={cn(
+                navLinkClass,
+                collapsed &&
+                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
+                pathname.startsWith("/projects") && "bg-[#e1e3e5]",
+              )}
+              onClick={onCloseDrawer}
+            >
+              <FolderKanban size={20} strokeWidth={1.7} className="flex-none" />
+              <span className={collapsedLabelClass}>My Projects</span>
+            </Link>
+          )}
+          {canAccessRequestInbox(account) && (
+            <Link
+              href="/staff-workload"
+              aria-current={pathname === "/staff-workload" ? "page" : undefined}
+              className={cn(
+                navLinkClass,
+                pathname === "/staff-workload" && "bg-[#e1e3e5]",
+                collapsed &&
+                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
+              )}
+              onClick={onCloseDrawer}
+            >
+              <UsersRound size={20} strokeWidth={1.7} className="flex-none" />
+              <span className={collapsedLabelClass}>Staff Workload</span>
+            </Link>
+          )}
+          {canAccessRequestInbox(account) && (
+            <Link
+              href="/request-inbox"
+              aria-current={
+                pathname.startsWith("/request-inbox") ? "page" : undefined
+              }
+              className={cn(
+                navLinkClass,
+                collapsed &&
+                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
+                pathname.startsWith("/request-inbox") && "bg-[#e1e3e5]",
+              )}
+              onClick={onCloseDrawer}
+            >
+              <Inbox size={20} strokeWidth={1.7} className="flex-none" />
+              <span className={collapsedLabelClass}>Request Inbox</span>
+            </Link>
+          )}
+          {canAccessProjectWorkspace(account) && (
+            <ProjectWorkspaceSidebarLinks
               collapsed={collapsed}
+              active={pathname.startsWith("/project-workspace")}
               onNavigate={onCloseDrawer}
             />
-          ) : (
-            <>
-              <Link
-                href="/dashboard"
-                aria-current={pathname === "/dashboard" ? "page" : undefined}
-                className={cn(
-                  navLinkClass,
-                  collapsed &&
-                    "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
-                  pathname === "/dashboard" && "bg-[#e1e3e5]",
-                )}
-                onClick={onCloseDrawer}
-              >
-                <DashboardIcon className="flex-none" />
-                <span className={collapsedLabelClass}>Dashboard</span>
-                {collapsed && <CollapsedTooltip>Dashboard</CollapsedTooltip>}
-              </Link>
-              {canAccessAccountManagement(account) && (
-                <Link
-                  href="/accounts"
-                  aria-current={pathname === "/accounts" ? "page" : undefined}
-                  className={cn(
-                    navLinkClass,
-                    collapsed &&
-                      "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
-                    pathname === "/accounts" && "bg-[#e1e3e5]",
-                  )}
-                  onClick={onCloseDrawer}
-                >
-                  <AccountsIcon className="flex-none" />
-                  <span className={collapsedLabelClass}>
-                    Account Management
-                  </span>
-                  {collapsed && (
-                    <CollapsedTooltip>Account Management</CollapsedTooltip>
-                  )}
-                </Link>
+          )}
+          {canAccessClientManagement(account) && (
+            <Link
+              href="/clients"
+              aria-current={pathname === "/clients" ? "page" : undefined}
+              className={cn(
+                navLinkClass,
+                collapsed &&
+                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
+                pathname === "/clients" && "bg-[#e1e3e5]",
               )}
-              {canAccessDepartmentManagement(account) && (
-                <Link
-                  href="/departments"
-                  aria-current={
-                    pathname === "/departments" ? "page" : undefined
-                  }
-                  className={cn(
-                    navLinkClass,
-                    collapsed &&
-                      "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
-                    pathname === "/departments" && "bg-[#e1e3e5]",
-                  )}
-                  onClick={onCloseDrawer}
-                >
-                  <DepartmentIcon className="flex-none" />
-                  <span className={collapsedLabelClass}>
-                    Department Management
-                  </span>
-                  {collapsed && (
-                    <CollapsedTooltip>Department Management</CollapsedTooltip>
-                  )}
-                </Link>
-              )}
-              {canAccessEmployeeManagement(account) && (
-                <Link
-                  href="/employees"
-                  aria-current={pathname === "/employees" ? "page" : undefined}
-                  className={cn(
-                    navLinkClass,
-                    collapsed &&
-                      "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
-                    pathname === "/employees" && "bg-[#e1e3e5]",
-                  )}
-                  onClick={onCloseDrawer}
-                >
-                  <UsersRound
-                    size={20}
-                    strokeWidth={1.7}
-                    className="flex-none"
-                  />
-                  <span className={collapsedLabelClass}>
-                    Employee Management
-                  </span>
-                  {collapsed && (
-                    <CollapsedTooltip>Employee Management</CollapsedTooltip>
-                  )}
-                </Link>
-              )}
-              {(canAccessServiceCatalog(account) ||
-                canAccessServiceManagement(account)) && (
-                <Link
-                  href="/services"
-                  aria-current={pathname === "/services" ? "page" : undefined}
-                  className={cn(
-                    navLinkClass,
-                    collapsed &&
-                      "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
-                    pathname === "/services" && "bg-[#e1e3e5]",
-                  )}
-                  onClick={onCloseDrawer}
-                >
-                  <ServiceIcon className="flex-none" />
-                  <span className={collapsedLabelClass}>
-                    {account.role === "USER"
-                      ? "Services"
-                      : "Service Management"}
-                  </span>
-                  {collapsed && (
-                    <CollapsedTooltip>
-                      {account.role === "USER"
-                        ? "Services"
-                        : "Service Management"}
-                    </CollapsedTooltip>
-                  )}
-                </Link>
-              )}
-              {canAccessServiceCatalog(account) && (
-                <Link
-                  href="/service-requests"
-                  aria-current={
-                    pathname === "/service-requests" ? "page" : undefined
-                  }
-                  className={cn(
-                    navLinkClass,
-                    collapsed &&
-                      "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
-                    pathname === "/service-requests" && "bg-[#e1e3e5]",
-                  )}
-                  onClick={onCloseDrawer}
-                >
-                  <ClipboardList
-                    size={20}
-                    strokeWidth={1.7}
-                    className="flex-none"
-                  />
-                  <span className={collapsedLabelClass}>Booked Requests</span>
-                  {collapsed && (
-                    <CollapsedTooltip>Booked Requests</CollapsedTooltip>
-                  )}
-                </Link>
-              )}
-              {canAccessCalendar(account) && (
-                <Link
-                  href="/calendar"
-                  aria-current={pathname === "/calendar" ? "page" : undefined}
-                  className={cn(
-                    navLinkClass,
-                    collapsed &&
-                      "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
-                    pathname === "/calendar" && "bg-[#e1e3e5]",
-                  )}
-                  onClick={onCloseDrawer}
-                >
-                  <CalendarDays
-                    size={20}
-                    strokeWidth={1.7}
-                    className="flex-none"
-                  />
-                  <span className={collapsedLabelClass}>Calendar</span>
-                  {collapsed && <CollapsedTooltip>Calendar</CollapsedTooltip>}
-                </Link>
-              )}
-              {account.role === "USER" && canAccessProjects(account) && (
-                <Link
-                  href="/projects"
-                  aria-current={
-                    pathname.startsWith("/projects") ? "page" : undefined
-                  }
-                  className={cn(
-                    navLinkClass,
-                    collapsed &&
-                      "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
-                    pathname.startsWith("/projects") && "bg-[#e1e3e5]",
-                  )}
-                  onClick={onCloseDrawer}
-                >
-                  <FolderKanban
-                    size={20}
-                    strokeWidth={1.7}
-                    className="flex-none"
-                  />
-                  <span className={collapsedLabelClass}>My Projects</span>
-                  {collapsed && (
-                    <CollapsedTooltip>My Projects</CollapsedTooltip>
-                  )}
-                </Link>
-              )}
-              {canAccessRequestInbox(account) && (
-                <Link
-                  href="/staff-workload"
-                  aria-current={
-                    pathname === "/staff-workload" ? "page" : undefined
-                  }
-                  className={cn(
-                    navLinkClass,
-                    pathname === "/staff-workload" && "bg-[#e1e3e5]",
-                    collapsed &&
-                      "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
-                  )}
-                  onClick={onCloseDrawer}
-                >
-                  <UsersRound
-                    size={20}
-                    strokeWidth={1.7}
-                    className="flex-none"
-                  />
-                  <span className={collapsedLabelClass}>Staff Workload</span>
-                  {collapsed && (
-                    <CollapsedTooltip>Staff Workload</CollapsedTooltip>
-                  )}
-                </Link>
-              )}
-              {canAccessRequestInbox(account) && (
-                <Link
-                  href="/request-inbox"
-                  aria-current={
-                    pathname.startsWith("/request-inbox") ? "page" : undefined
-                  }
-                  className={cn(
-                    navLinkClass,
-                    collapsed &&
-                      "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
-                    pathname.startsWith("/request-inbox") && "bg-[#e1e3e5]",
-                  )}
-                  onClick={onCloseDrawer}
-                >
-                  <Inbox size={20} strokeWidth={1.7} className="flex-none" />
-                  <span className={collapsedLabelClass}>Request Inbox</span>
-                  {collapsed && (
-                    <CollapsedTooltip>Request Inbox</CollapsedTooltip>
-                  )}
-                </Link>
-              )}
-              {canAccessProjectWorkspace(account) && (
-                <ProjectWorkspaceSidebarLinks
-                  collapsed={collapsed}
-                  active={pathname.startsWith("/project-workspace")}
-                  onNavigate={onCloseDrawer}
-                />
-              )}
-              {canAccessClientManagement(account) && (
-                <Link
-                  href="/clients"
-                  aria-current={pathname === "/clients" ? "page" : undefined}
-                  className={cn(
-                    navLinkClass,
-                    collapsed &&
-                      "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
-                    pathname === "/clients" && "bg-[#e1e3e5]",
-                  )}
-                  onClick={onCloseDrawer}
-                >
-                  <AccountsIcon className="flex-none" />
-                  <span className={collapsedLabelClass}>Client Management</span>
-                  {collapsed && (
-                    <CollapsedTooltip>Client Management</CollapsedTooltip>
-                  )}
-                </Link>
-              )}
-            </>
+              onClick={onCloseDrawer}
+            >
+              <AccountsIcon className="flex-none" />
+              <span className={collapsedLabelClass}>Client Management</span>
+            </Link>
           )}
         </nav>
 
@@ -433,9 +350,6 @@ export function Sidebar({
             >
               <CircleHelp size={20} strokeWidth={1.7} className="flex-none" />
               <span className={collapsedLabelClass}>Help &amp; Support</span>
-              {collapsed && (
-                <CollapsedTooltip>Help &amp; Support</CollapsedTooltip>
-              )}
             </Link>
           </div>
         )}

@@ -36,12 +36,17 @@ export async function requireDepartmentHead(userId: string) {
   return department
 }
 
-function departmentScope(userId: string): Prisma.ServiceRequestWhereInput {
+function departmentScope(
+  userId: string,
+  { includeAcceptedElsewhere = false } = {},
+): Prisma.ServiceRequestWhereInput {
   return {
     AND: [
       {
         OR: [
           {
+            // Linked departments only see a request until one of them accepts it.
+            ...(includeAcceptedElsewhere ? {} : { acceptedDepartmentId: null }),
             service: {
               departments: {
                 some: {
@@ -180,7 +185,12 @@ export async function getInboxRequest(userId: string, id: string) {
 export async function acceptInboxRequest(userId: string, id: string) {
   const department = await requireDepartmentHead(userId)
   return getPrisma()!.$transaction(async (tx) => {
-    const where = { id, ...departmentScope(userId) }
+    // A head who lost the race to another linked department gets a 409, not a
+    // 404; this lookup returns no request details.
+    const where = {
+      id,
+      ...departmentScope(userId, { includeAcceptedElsewhere: true }),
+    }
     const request = await tx.serviceRequest.findFirst({
       where,
       select: { clientId: true, status: true, acceptedDepartmentId: true },

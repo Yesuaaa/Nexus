@@ -3,7 +3,6 @@ import type { ReactNode } from "react"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { Button } from "@/components/ui/button"
 import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Pill } from "@/components/ui/pill"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import {
@@ -57,7 +56,6 @@ function ClientRowActions({
         onClick={() => onView(client)}
       >
         <Eye size={15} aria-hidden="true" />
-        <HoverTooltip>View details</HoverTooltip>
       </button>
     </div>
   )

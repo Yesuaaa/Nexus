@@ -30,7 +30,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { SearchField } from "@/components/ui/search-field"
 import { rowActionButton } from "@/components/ui/row-action-styles"
@@ -105,7 +104,6 @@ function ActionIcon({
       onClick={onClick}
     >
       {children}
-      <HoverTooltip>{label}</HoverTooltip>
     </button>
   )
 }

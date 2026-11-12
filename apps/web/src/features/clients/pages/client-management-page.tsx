@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import dynamic from "next/dynamic"
-import { PanelLoading } from "@/components/ui/panel-loading"
+import { PanelLoading, SidePanelLoading } from "@/components/ui/panel-loading"
 import { Plus } from "lucide-react"
 import { sileo } from "@/lib/toast"
 import { contentClass } from "@/components/layout/styles"
@@ -45,7 +45,7 @@ const ClientDetailsDrawer = dynamic(
     import("../components/client-details-drawer").then(
       (module) => module.ClientDetailsDrawer,
     ),
-  { loading: PanelLoading },
+  { loading: () => <SidePanelLoading /> },
 )
 
 const sortOptions: { value: string; label: string }[] = [

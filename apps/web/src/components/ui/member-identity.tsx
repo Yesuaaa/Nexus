@@ -1,4 +1,4 @@
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
+import type { ReactNode } from "react"
 
 export type MemberIdentityData = {
   fullName: string | null
@@ -9,9 +9,12 @@ export type MemberIdentityData = {
 export function MemberIdentity({
   member,
   secondaryText,
+  nameAdornment,
 }: {
   member: MemberIdentityData
   secondaryText?: string | null
+  /** Small inline element shown after the name, e.g. a "Head" tag. */
+  nameAdornment?: ReactNode
 }) {
   const email = member.email || member.user?.email || null
   const name = member.fullName || email || "Employee"
@@ -27,14 +30,13 @@ export function MemberIdentity({
         {(name[0] || "E").toUpperCase()}
       </span>
       <div className="min-w-0">
-        <p className="m-0 truncate text-xs font-medium">
-          {name}
-          <HoverTooltip>{name}</HoverTooltip>
+        <p className="m-0 flex min-w-0 items-center gap-1.5 text-xs font-medium">
+          <span className="min-w-0 truncate">{name}</span>
+          {nameAdornment}
         </p>
         {secondary && (
           <p className="mt-0.5 mb-0 truncate text-[11px] leading-[1.5] text-[#738096]">
             {secondary}
-            <HoverTooltip>{secondary}</HoverTooltip>
           </p>
         )}
       </div>

@@ -1,13 +1,12 @@
 "use client"
 
-import { Trash2 } from "lucide-react"
+import { Archive, UsersRound, X } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import dynamic from "next/dynamic"
-import { PanelLoading } from "@/components/ui/panel-loading"
+import { SidePanelLoading } from "@/components/ui/panel-loading"
 import { PlusIcon } from "@/components/layout/icons"
 import { contentClass, focusRing } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
-import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { useTableSearch } from "@/components/ui/use-table-search"
 import { TableSearchStatus } from "@/components/ui/table-search-status"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
@@ -28,11 +27,16 @@ import {
 import { sileo } from "@/lib/toast"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { hasPermission, Permissions } from "@/features/auth/model/permissions"
+import {
+  EmployeeKpiCards,
+  type EmployeeKpiSummary,
+} from "../components/employee-kpi-cards"
+import {
+  EmployeeLoginActionDialog,
+  type EmployeeLoginAction,
+} from "../components/employee-login-action-dialog"
 import { EmployeeTable } from "../components/employee-table"
 import {
-  setEmployeeLoginStatus,
-  deleteEmployeeLogin,
-  permanentlyDeleteEmployeeLogin,
   listEmployees,
   type Employee,
   type EmployeeList,
@@ -45,28 +49,28 @@ const ManageMembersDrawer = dynamic(
     import("@/features/departments/components/manage-members-drawer").then(
       (module) => module.ManageMembersDrawer,
     ),
-  { loading: PanelLoading },
+  { loading: () => <SidePanelLoading variant="edge" /> },
 )
 const EmployeeDetailsDrawer = dynamic(
   () =>
     import("../components/employee-details-drawer").then(
       (module) => module.EmployeeDetailsDrawer,
     ),
-  { loading: PanelLoading },
+  { loading: () => <SidePanelLoading variant="edge" /> },
 )
-const EmployeeLoginDialog = dynamic(
+const EmployeeLoginPanel = dynamic(
   () =>
-    import("../components/employee-login-dialog").then(
-      (module) => module.EmployeeLoginDialog,
+    import("../components/employee-login-panel").then(
+      (module) => module.EmployeeLoginPanel,
     ),
-  { loading: PanelLoading },
+  { loading: () => <SidePanelLoading variant="edge" /> },
 )
-const EmployeeFormDialog = dynamic(
+const EmployeeFormPanel = dynamic(
   () =>
-    import("../components/employee-form-dialog").then(
-      (module) => module.EmployeeFormDialog,
+    import("../components/employee-form-panel").then(
+      (module) => module.EmployeeFormPanel,
     ),
-  { loading: PanelLoading },
+  { loading: () => <SidePanelLoading variant="edge" /> },
 )
 const employmentTypes: { value: EmploymentType | ""; label: string }[] = [
   { value: "", label: "All Types" },
@@ -130,12 +134,10 @@ export function EmployeeManagementPage() {
   const [createLoginTarget, setCreateLoginTarget] = useState<Employee | null>(
     null,
   )
-  const [loginAction, setLoginAction] = useState<
-    "deactivate" | "reactivate" | "delete" | "permanent"
-  >("deactivate")
+  const [loginAction, setLoginAction] =
+    useState<EmployeeLoginAction>("deactivate")
   const [loginTarget, setLoginTarget] = useState<Employee | null>(null)
   const [loginActionPending, setLoginActionPending] = useState(false)
-  const [loginActionError, setLoginActionError] = useState("")
   const listRequestKey = JSON.stringify({
     search: query,
     departmentId,
@@ -232,6 +234,31 @@ export function EmployeeManagementPage() {
     acceptRows,
   ])
 
+  // Overview counts: one lightweight list request per status (totals only).
+  const [summary, setSummary] = useState<EmployeeKpiSummary | null>(null)
+  const [summaryError, setSummaryError] = useState(false)
+  useEffect(() => {
+    const controller = new AbortController()
+    const count = (status: EmploymentStatus | "") =>
+      listEmployees({ status, page: 1, signal: controller.signal }).then(
+        (result) => result.total,
+      )
+    Promise.all([
+      count(""),
+      count("ACTIVE"),
+      count("ON_LEAVE"),
+      count("INACTIVE"),
+    ])
+      .then(([total, active, onLeave, inactive]) => {
+        setSummary({ total, active, onLeave, inactive })
+        setSummaryError(false)
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setSummaryError(true)
+      })
+    return () => controller.abort()
+  }, [revision])
+
   const [departmentRevision, setDepartmentRevision] = useState(0)
   useEffect(() => {
     let active = true
@@ -262,6 +289,26 @@ export function EmployeeManagementPage() {
     update()
     setAnimateRows(true)
     setPage(1)
+  }
+
+  function switchView(nextArchiveView: boolean) {
+    if (nextArchiveView === archiveView) return
+    setArchiveView(nextArchiveView)
+    setAnimateRows(true)
+    setPage(1)
+    setSearch("")
+    setDepartmentId("")
+    setEmploymentType("")
+    setStatus("")
+  }
+
+  function clearFilters() {
+    updateFilters(() => {
+      setSearch("")
+      setDepartmentId("")
+      setEmploymentType("")
+      setStatus("")
+    })
   }
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
@@ -299,12 +346,57 @@ export function EmployeeManagementPage() {
         </button>
       </header>
 
+      {!archiveView && (
+        <div className="mt-[18px] max-[560px]:mt-[14px]">
+          <EmployeeKpiCards
+            summary={
+              summary ?? { total: 0, active: 0, onLeave: 0, inactive: 0 }
+            }
+            pending={summary === null && !summaryError}
+            unavailable={summaryError && summary === null}
+          />
+        </div>
+      )}
+
       <section
         className="mt-[18px] min-w-0 max-[767px]:mt-[14px]"
         aria-label="Employee directory"
       >
-        <div className="flex flex-wrap items-start justify-between gap-3 pb-4 max-[560px]:flex-col max-[560px]:pb-3">
-          <div className="flex min-w-0 flex-wrap gap-[10px] max-[560px]:w-full max-[560px]:flex-col">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 max-[560px]:flex-col max-[560px]:items-stretch max-[560px]:pb-3">
+          <div
+            role="group"
+            aria-label="Employee view"
+            className="order-last inline-flex flex-none rounded-lg border border-[#e1e4ea] bg-[#f3f5f8] p-0.5 max-[560px]:order-first max-[560px]:w-full"
+          >
+            {(
+              [
+                { archived: false, label: "Employees", icon: UsersRound },
+                { archived: true, label: "Archive", icon: Archive },
+              ] as const
+            ).map(({ archived, label, icon: Icon }) => {
+              const selected = archiveView === archived
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  aria-pressed={selected}
+                  disabled={loginActionPending}
+                  onClick={() => switchView(archived)}
+                  className={cn(
+                    "inline-flex min-h-[30px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md border-0 px-3 text-xs font-semibold whitespace-nowrap transition-[background-color,color,box-shadow] duration-150 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none",
+                    selected
+                      ? "bg-background text-foreground shadow-[0_1px_2px_rgb(20_45_97_/_12%)]"
+                      : "bg-transparent text-[#65718a] hover:text-foreground",
+                    focusRing,
+                  )}
+                >
+                  <Icon size={14} aria-hidden="true" />
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+          <div className="flex min-w-0 flex-wrap items-center gap-[10px] max-[560px]:w-full max-[560px]:flex-col max-[560px]:items-stretch">
             <SearchField
               label="Search employees"
               placeholder="Search name, ID, email…"
@@ -398,27 +490,20 @@ export function EmployeeManagementPage() {
                 ))}
               </SelectContent>
             </Select>
-          </div>
-          <button
-            type="button"
-            className={cn(
-              "inline-flex min-h-[34px] flex-none cursor-pointer items-center justify-center gap-[7px] rounded-lg border border-red-500 bg-background px-[12px] text-xs leading-[1.2] font-semibold whitespace-nowrap text-red-600 transition-[background-color,border-color,color] duration-150 hover:enabled:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none",
-              focusRing,
+            {hasFilters && (
+              <button
+                type="button"
+                className={cn(
+                  "inline-flex min-h-[34px] flex-none cursor-pointer items-center gap-1.5 rounded-lg border-0 bg-transparent px-2 text-xs font-semibold text-[#294a9b] hover:bg-[#eef2fa]",
+                  focusRing,
+                )}
+                onClick={clearFilters}
+              >
+                <X size={13} aria-hidden="true" />
+                Clear filters
+              </button>
             )}
-            disabled={loginActionPending}
-            aria-pressed={archiveView}
-            onClick={() => {
-              setArchiveView((current) => !current)
-              setPage(1)
-              setSearch("")
-              setDepartmentId("")
-              setEmploymentType("")
-              setStatus("")
-            }}
-          >
-            <Trash2 size={14} aria-hidden="true" />
-            {archiveView ? "Back to Employees" : "Archive"}
-          </button>
+          </div>
           {departmentsError && (
             <div
               className="flex flex-none items-center gap-2 text-[11px] text-[#bc3649] max-[560px]:w-full"
@@ -470,7 +555,6 @@ export function EmployeeManagementPage() {
               return
             }
             setLoginAction(action)
-            setLoginActionError("")
             setLoginTarget(employee)
           }}
           onManageDepartment={
@@ -506,7 +590,7 @@ export function EmployeeManagementPage() {
       </section>
 
       {formState && (
-        <EmployeeFormDialog
+        <EmployeeFormPanel
           employee={formState.employee}
           onClose={() => setFormState(null)}
           onSaved={(saved) => {
@@ -552,7 +636,7 @@ export function EmployeeManagementPage() {
         />
       )}
       {createLoginTarget && (
-        <EmployeeLoginDialog
+        <EmployeeLoginPanel
           employee={createLoginTarget}
           onClose={() => setCreateLoginTarget(null)}
           onSaved={() => {
@@ -563,88 +647,16 @@ export function EmployeeManagementPage() {
         />
       )}
       {loginTarget && (
-        <ConfirmationDialog
-          title={
-            loginAction === "permanent"
-              ? "Permanently delete account?"
-              : loginAction === "delete"
-                ? "Move account to Archive?"
-                : loginAction === "reactivate"
-                  ? "Reactivate account?"
-                  : "Deactivate account?"
-          }
-          subject={loginTarget.fullName}
-          description={
-            loginAction === "permanent"
-              ? "This permanently deletes the login account and its sessions. The employee's HR record, department, and team placement remain. Account-based leadership assignments are cleared. This cannot be undone."
-              : loginAction === "delete"
-                ? "This moves the deactivated account to Archive and ends its sessions. Its employee record and assignments are preserved. Permanent deletion is available only from Archive."
-                : loginAction === "reactivate"
-                  ? "Allow this employee to sign in again using their existing password. Their employment status stays the same."
-                  : "This immediately signs the employee out and prevents login. You can reactivate the login later."
-          }
-          confirmLabel={
-            loginAction === "permanent"
-              ? "Delete permanently"
-              : loginAction === "delete"
-                ? "Move to Archive"
-                : loginAction === "reactivate"
-                  ? "Reactivate account"
-                  : "Deactivate account"
-          }
-          pendingLabel={
-            loginAction === "permanent"
-              ? "Deleting…"
-              : loginAction === "delete"
-                ? "Archiving…"
-                : loginAction === "reactivate"
-                  ? "Reactivating…"
-                  : "Deactivating…"
-          }
-          destructive={loginAction !== "reactivate"}
+        <EmployeeLoginActionDialog
+          key={`${loginAction}-${loginTarget.id}`}
+          action={loginAction}
+          employee={loginTarget}
           pending={loginActionPending}
-          error={loginActionError}
-          onClose={() => {
+          onPendingChange={setLoginActionPending}
+          onClose={() => setLoginTarget(null)}
+          onCompleted={() => {
             setLoginTarget(null)
-            setLoginActionError("")
-          }}
-          onConfirm={() => {
-            if (loginActionPending) return
-            const isDeactivation = loginAction === "deactivate"
-            setLoginActionPending(true)
-            setLoginActionError("")
-            const action =
-              loginAction === "permanent"
-                ? permanentlyDeleteEmployeeLogin(loginTarget.id)
-                : loginAction === "delete"
-                  ? deleteEmployeeLogin(loginTarget.id)
-                  : setEmployeeLoginStatus(
-                      loginTarget.id,
-                      loginAction === "reactivate",
-                    )
-            void action
-              .then(() => {
-                setLoginTarget(null)
-                sileo.success({
-                  title: isDeactivation
-                    ? "Account deactivated"
-                    : loginAction === "reactivate"
-                      ? "Account reactivated"
-                      : loginAction === "delete"
-                        ? "Account moved to Archive"
-                        : "Account permanently deleted",
-                  description: `${loginTarget.fullName}'s employee record was kept.`,
-                })
-                setRevision((value) => value + 1)
-              })
-              .catch((reason: unknown) => {
-                setLoginActionError(
-                  reason instanceof Error
-                    ? reason.message
-                    : "Couldn't update this login account.",
-                )
-              })
-              .finally(() => setLoginActionPending(false))
+            setRevision((value) => value + 1)
           }}
         />
       )}

@@ -1,5 +1,4 @@
 import { ClientRowTable } from "@/components/ui/client-row-table"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Pill } from "@/components/ui/pill"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import type { ServiceIconKey } from "@/features/services/api/services-api"
@@ -102,7 +101,6 @@ function ProjectAction({ project }: { project: ClientProjectSummary }) {
       href={`/projects/${encodeURIComponent(project.id)}`}
     >
       <Eye size={15} aria-hidden="true" />
-      <HoverTooltip>View project</HoverTooltip>
     </Link>
   )
 }

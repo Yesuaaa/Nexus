@@ -6,7 +6,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { panelIconButton } from "@/features/departments/styles/member-panel-styles"
+import { panelIconButton } from "@/components/ui/panel-styles"
 
 export function WorkloadDialog({
   title,

@@ -3,7 +3,6 @@ import { Eye } from "lucide-react"
 import type { ReactNode } from "react"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { Button } from "@/components/ui/button"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import {
   ResponsiveDataTable,
@@ -125,11 +124,9 @@ export function BookedServicesTable({
               >
                 <p className="m-0 truncate font-semibold">
                   {booking.service.name}
-                  <HoverTooltip>{booking.service.name}</HoverTooltip>
                 </p>
                 <p className="mt-1 mb-0 truncate text-[11px] text-[#738096]">
                   {booking.id}
-                  <HoverTooltip>{booking.id}</HoverTooltip>
                 </p>
               </div>
               <div
@@ -140,9 +137,6 @@ export function BookedServicesTable({
                   Package
                 </span>
                 {booking.packageName || "Standard service"}
-                <HoverTooltip>
-                  {booking.packageName || "Standard service"}
-                </HoverTooltip>
               </div>
               <div
                 role="cell"
@@ -171,9 +165,6 @@ export function BookedServicesTable({
                 <span className="line-clamp-2">
                   {booking.expectedTimeline || "Not specified"}
                 </span>
-                <HoverTooltip>
-                  {booking.expectedTimeline || "Not specified"}
-                </HoverTooltip>
               </div>
               <div
                 role="cell"
@@ -190,7 +181,6 @@ export function BookedServicesTable({
                   onClick={() => onView(booking)}
                 >
                   <Eye size={16} aria-hidden="true" />
-                  <HoverTooltip>View booking</HoverTooltip>
                 </button>
               </div>
             </>

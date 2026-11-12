@@ -20,7 +20,6 @@ import {
 } from "@/components/layout/styles"
 import { PanelIcon } from "@/components/layout/icons"
 import { Button } from "@/components/ui/button"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { cn } from "@/lib/utils"
 import {
@@ -574,11 +573,6 @@ function ConversationInbox({
               onClick={() => setConversationRail(!conversationRailCollapsed)}
             >
               <PanelIcon />
-              <HoverTooltip side="top">
-                {railCollapsed
-                  ? "Expand conversations"
-                  : "Collapse conversations"}
-              </HoverTooltip>
             </button>
           )}
         </header>
@@ -608,11 +602,6 @@ function ConversationInbox({
               ) : (
                 <List size={16} aria-hidden="true" />
               )}
-              <HoverTooltip>
-                {nextView === "archived"
-                  ? "Archived conversations"
-                  : "Active conversations"}
-              </HoverTooltip>
             </Button>
           )}
           {canUseInternalChat && mode === "internal" && (
@@ -627,7 +616,6 @@ function ConversationInbox({
                 aria-label="Back to client chats"
               >
                 <MessageSquare size={16} aria-hidden="true" />
-                <HoverTooltip>Back to client chats</HoverTooltip>
               </Link>
             </Button>
           )}
@@ -641,7 +629,6 @@ function ConversationInbox({
               }
             >
               <UsersRound size={16} aria-hidden="true" />
-              <HoverTooltip>Internal staff and admin chats</HoverTooltip>
             </Button>
           )}
         </div>
@@ -882,9 +869,6 @@ function ConversationInbox({
                             "Staff and admin chat"}
                         </span>
                       </span>
-                      {railCollapsed && (
-                        <HoverTooltip side="right">{name}</HoverTooltip>
-                      )}
                     </Link>
                   )
                 })}
@@ -948,11 +932,6 @@ function ConversationInbox({
                           {description}
                         </span>
                       </span>
-                      {railCollapsed && (
-                        <HoverTooltip side="right">
-                          {name} · {description}
-                        </HoverTooltip>
-                      )}
                     </button>
                   )
                 })}

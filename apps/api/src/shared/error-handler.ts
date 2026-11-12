@@ -6,6 +6,7 @@ import type {
   ErrorRequestHandler,
 } from "express"
 import { isTemporaryDatabaseError } from "../lib/database-read.js"
+import { isForeignKeyViolation } from "../lib/errors.js"
 
 /**
  * Extracts the file path and line number of the caller or the error source,
@@ -251,6 +252,28 @@ export const handleError: ErrorRequestHandler = (
       ...(isDev
         ? { location, ...(details !== undefined ? { details } : {}) }
         : {}),
+    })
+    return
+  }
+
+  // A write still referenced by (or referencing) other records (Prisma P2003)
+  if (isForeignKeyViolation(error)) {
+    const location = extractErrorLocation(error)
+    const clientMessage =
+      "This record is linked to other data and can't be changed or deleted"
+    const details =
+      error instanceof Error ? error.message : "Foreign key constraint failed"
+    logDevError({
+      status: 409,
+      method: request.method,
+      url: request.originalUrl || request.url,
+      clientMessage,
+      location,
+      devDetails: details,
+    })
+    response.status(409).json({
+      error: clientMessage,
+      ...(isDev ? { location, details } : {}),
     })
     return
   }

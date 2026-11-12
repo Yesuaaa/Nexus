@@ -23,7 +23,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { apiRequest } from "@/features/auth/api/auth-api"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Pill } from "@/components/ui/pill"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import { downloadWorkflowFile } from "@/features/request-workflow/api/workflow-api"
@@ -298,7 +297,6 @@ export default function BillingLogsPage() {
                         }}
                       >
                         <ChevronRight size={16} aria-hidden="true" />
-                        <HoverTooltip>{actionLabel}</HoverTooltip>
                       </button>
                     </li>
                   )

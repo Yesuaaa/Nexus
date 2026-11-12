@@ -6,7 +6,6 @@ import {
   Users,
 } from "lucide-react"
 import { KpiCards, type KpiMetric } from "@/components/ui/kpi-cards"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { getWorkloadMetrics, type WorkloadStaff } from "../model/workload"
 
 type Segment = { label: string; value: number; color: string }
@@ -30,12 +29,6 @@ function CompactChart({
       className="h-full w-full rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#203f8c]"
     >
       {children}
-      <HoverTooltip
-        align="end"
-        className="max-w-64 text-left leading-relaxed whitespace-normal"
-      >
-        {label}
-      </HoverTooltip>
     </div>
   )
 }

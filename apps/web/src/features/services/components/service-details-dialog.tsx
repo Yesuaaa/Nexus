@@ -1,27 +1,21 @@
 import Image from "next/image"
-import { useRef } from "react"
-import {
-  CalendarDays,
-  Building2,
-  ClipboardList,
-  Clock3,
-  MessagesSquare,
-  Package,
-  PhilippinePeso,
-} from "lucide-react"
-import { CloseIcon } from "@/components/layout/icons"
-import { focusRing } from "@/components/layout/styles"
 import { DepartmentPill } from "@/components/ui/department-pill"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetTitle,
-} from "@/components/ui/sheet"
-import { useAnimatedPanelClose } from "@/components/ui/use-animated-panel-close"
 import { Pill } from "@/components/ui/pill"
-import { cn } from "@/lib/utils"
+import { SheetClose } from "@/components/ui/sheet"
+import {
+  DetailItem,
+  DetailList,
+  SidePanel,
+  SidePanelBody,
+  SidePanelButton,
+  SidePanelFooter,
+  SidePanelHeader,
+  SidePanelSection,
+  useSidePanel,
+} from "@/components/ui/side-panel"
 import type { Service } from "../api/services-api"
+import { ServiceIcon } from "./service-icon"
+import { serviceActionsTriggerId } from "./service-row-actions"
 
 function formatDate(value: string, includeTime = false) {
   return new Intl.DateTimeFormat("en", {
@@ -49,227 +43,180 @@ function formatPrice(amount: string | null, currency: string) {
   }).format(Number(amount))
 }
 
+function StatusPill({ active }: { active: boolean }) {
+  return (
+    <Pill
+      className={
+        active ? "bg-[#dcf5e5] text-[#19703a]" : "bg-[#fde4ea] text-[#b4234d]"
+      }
+    >
+      {active ? "Active" : "Inactive"}
+    </Pill>
+  )
+}
+
 export function ServiceDetailsDialog({
   service,
   onClose,
+  onEdit,
 }: {
   service: Service
   onClose: () => void
+  /** Shown as an "Edit service" action when provided (managers only). */
+  onEdit?: (service: Service) => void
 }) {
-  const { open, handleOpenChange } = useAnimatedPanelClose(onClose)
-  const openerRef = useRef(
-    typeof document === "undefined" ? null : document.activeElement,
-  )
-  const rows = [
-    {
-      label: "Departments",
-      value: (
-        <span className="flex flex-wrap gap-1.5">
-          {service.departments.map((department) => (
-            <DepartmentPill key={department.id} department={department} />
-          ))}
-        </span>
-      ),
-      icon: Building2,
-    },
-    {
-      label: "Pricing",
-      value: service.pricingTemplate
-        ? `${pricingLabels[service.pricingTemplate.pricingModel]} · ${formatPrice(
-            service.pricingTemplate.amount,
-            service.pricingTemplate.currency,
-          )}${service.pricingTemplate.billingInterval ? ` / ${service.pricingTemplate.billingInterval.toLocaleLowerCase()}` : ""}${service.pricingTemplate.isPublic ? "" : " (hidden publicly)"}`
-        : "Not configured",
-      icon: PhilippinePeso,
-    },
-    {
-      label: "Requirements",
-      value:
-        service.clientRequirements.length > 0
-          ? service.clientRequirements.join("; ")
-          : "None specified",
-      icon: ClipboardList,
-    },
-    {
-      label: "Consultation",
-      value: service.requiresConsultation
-        ? service.consultationNotes || "Required before proceeding"
-        : "Not required",
-      icon: MessagesSquare,
-    },
-    {
-      label: "Status",
-      value: (
-        <Pill
-          className={
-            service.isActive
-              ? "bg-[#dcf5e5] text-[#19703a]"
-              : "bg-[#fde4ea] text-[#b4234d]"
-          }
-        >
-          {service.isActive ? "Active" : "Inactive"}
-        </Pill>
-      ),
-      icon: Package,
-    },
-    {
-      label: "Date Created",
-      value: formatDate(service.createdAt, true),
-      icon: CalendarDays,
-    },
-    {
-      label: "Last Updated",
-      value: formatDate(service.updatedAt, true),
-      icon: Clock3,
-    },
-  ]
+  const panel = useSidePanel(onClose)
+  const template = service.pricingTemplate
 
   return (
-    <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent
-        side="right"
-        showCloseButton={false}
-        overlayClassName="nexus-panel-overlay bg-[rgb(13_28_57_/_48%)]"
-        className="nexus-side-panel inset-y-auto top-[15px] right-[15px] flex h-[calc(100dvh-30px)] max-h-none w-[min(560px,calc(100vw-30px))] max-w-none flex-col gap-0 overflow-hidden rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_16px_60px_rgb(18_36_73_/_18%)] sm:max-w-none max-[560px]:top-0 max-[560px]:right-0 max-[560px]:h-dvh max-[560px]:w-full max-[560px]:rounded-none max-[560px]:border-0"
-        onCloseAutoFocus={(event) => {
-          event.preventDefault()
-          const opener = openerRef.current
-          if (opener instanceof HTMLElement && opener.isConnected)
-            opener.focus()
-        }}
-      >
-        <header className="flex flex-none items-start justify-between gap-4 border-b border-[#eceef1] px-6 pt-6 pb-5 max-[560px]:px-5">
-          <div>
-            <SheetTitle className="m-0 text-[22px] leading-[1.25] font-[650] tracking-[-0.03em]">
-              Service Details
-            </SheetTitle>
-            <SheetDescription className="mt-1 text-xs text-[#52627a]">
-              Details for {service.name}
-            </SheetDescription>
-          </div>
-          <button
-            type="button"
-            className={cn(
-              "grid size-7 flex-none cursor-pointer place-items-center rounded-[7px] border-0 bg-background text-[#65718a] hover:bg-[#f1f5fc]",
-              focusRing,
-            )}
-            onClick={onClose}
-            aria-label="Close details"
+    <SidePanel
+      open={panel.open}
+      onOpenChange={panel.onOpenChange}
+      fallbackFocus={() =>
+        document.getElementById(serviceActionsTriggerId(service.id))
+      }
+    >
+      <SidePanelHeader
+        leading={
+          <span
+            className="grid size-11 flex-none place-items-center rounded-xl bg-[#e5edff] text-[#2058d4]"
+            aria-hidden="true"
           >
-            <CloseIcon />
-          </button>
-        </header>
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 max-[560px]:px-5">
-          <div className="relative mb-4 aspect-[16/7] overflow-hidden rounded-xl bg-[#eef2f8]">
-            {service.imageUrl ? (
-              <Image
-                src={service.imageUrl}
-                alt={service.imageAltText ?? service.name}
-                fill
-                className="object-cover"
-              />
-            ) : (
-              <div className="grid size-full place-items-center text-[#7890b2]">
-                <Package size={32} aria-hidden="true" />
-                <span className="sr-only">No service image</span>
-              </div>
-            )}
+            <ServiceIcon iconKey={service.iconKey} size={20} />
+          </span>
+        }
+        title={service.name}
+        meta={<StatusPill active={service.isActive} />}
+        description={
+          service.departments.map((department) => department.name).join(", ") ||
+          "No responsible department"
+        }
+        closeLabel="Close details"
+      />
+      <SidePanelBody>
+        {service.imageUrl && (
+          <div className="relative aspect-[16/7] overflow-hidden rounded-xl bg-[#eef2f8]">
+            <Image
+              src={service.imageUrl}
+              alt={service.imageAltText ?? service.name}
+              fill
+              className="object-cover"
+            />
           </div>
-          <div className="flex items-start gap-3.5">
-            <div className="grid size-12 flex-none place-items-center rounded-xl bg-[#e5edff] text-[#2058d4]">
-              <Package size={22} aria-hidden="true" />
-            </div>
-            <div className="min-w-0">
-              <h2 className="m-0 text-base font-[650] break-words">
-                {service.name}
-              </h2>
-              <p className="mt-1 mb-0 text-xs leading-relaxed break-words text-[#526686]">
-                {service.description}
-              </p>
-            </div>
-          </div>
-          <dl className="mt-5 grid gap-3 border-t border-[#eceef1] pt-5">
-            {rows.map(({ label, value, icon: Icon }) => (
-              <div
-                key={label}
-                className="grid grid-cols-[18px_112px_minmax(0,1fr)] items-center gap-2 text-xs max-[430px]:grid-cols-[18px_minmax(0,1fr)]"
-              >
-                <Icon size={15} className="text-[#65718a]" aria-hidden="true" />
-                <dt className="text-[#65718a]">{label}</dt>
-                <dd className="m-0 min-w-0 font-medium max-[430px]:col-start-2">
-                  {value}
-                </dd>
-              </div>
-            ))}
-          </dl>
-          {service.packages.length > 0 && (
-            <section className="mt-5 border-t border-[#eceef1] pt-5">
-              <h3 className="m-0 text-sm font-[650]">Packages</h3>
-              <div className="mt-3 grid gap-2.5">
-                {service.packages.map((servicePackage) => (
-                  <article
-                    key={servicePackage.id}
-                    className="rounded-lg border border-[#dfe6ef] p-3"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <strong className="text-xs">{servicePackage.name}</strong>
-                      <span className="flex gap-1.5">
-                        {servicePackage.isRecommended && (
-                          <Pill className="bg-[#e5edff] text-[#2058d4]">
-                            Recommended
-                          </Pill>
-                        )}
-                        <Pill
-                          className={
-                            servicePackage.isActive
-                              ? "bg-[#dcf5e5] text-[#19703a]"
-                              : "bg-[#fde4ea] text-[#b4234d]"
-                          }
-                        >
-                          {servicePackage.isActive ? "Active" : "Inactive"}
+        )}
+        <p className="m-0 text-xs leading-relaxed break-words text-[#526686]">
+          {service.description}
+        </p>
+        <SidePanelSection title="Service information">
+          <DetailList>
+            <DetailItem label="Departments">
+              {service.departments.length > 0 ? (
+                <span className="flex flex-wrap justify-end gap-1.5">
+                  {service.departments.map((department) => (
+                    <DepartmentPill
+                      key={department.id}
+                      department={department}
+                    />
+                  ))}
+                </span>
+              ) : null}
+            </DetailItem>
+            <DetailItem label="Pricing">
+              {template
+                ? `${pricingLabels[template.pricingModel]} · ${formatPrice(
+                    template.amount,
+                    template.currency,
+                  )}${template.billingInterval ? ` / ${template.billingInterval.toLocaleLowerCase()}` : ""}${template.isPublic ? "" : " (hidden publicly)"}`
+                : service.packages.length > 0
+                  ? "Set per package"
+                  : "Not configured"}
+            </DetailItem>
+            <DetailItem label="Requirements">
+              {service.clientRequirements.length > 0
+                ? service.clientRequirements.join("; ")
+                : "None specified"}
+            </DetailItem>
+            <DetailItem label="Consultation">
+              {service.requiresConsultation
+                ? service.consultationNotes || "Required before proceeding"
+                : "Not required"}
+            </DetailItem>
+            <DetailItem label="Status">
+              <StatusPill active={service.isActive} />
+            </DetailItem>
+            <DetailItem label="Date created">
+              {formatDate(service.createdAt, true)}
+            </DetailItem>
+            <DetailItem label="Last updated">
+              {formatDate(service.updatedAt, true)}
+            </DetailItem>
+          </DetailList>
+        </SidePanelSection>
+        {service.packages.length > 0 && (
+          <SidePanelSection title="Packages">
+            <div className="grid gap-2.5">
+              {service.packages.map((servicePackage) => (
+                <article
+                  key={servicePackage.id}
+                  className="rounded-lg border border-[#e8ebef] p-3.5"
+                >
+                  <div className="flex min-w-0 items-center justify-between gap-2">
+                    <strong className="min-w-0 truncate text-xs font-[650]">
+                      {servicePackage.name}
+                    </strong>
+                    <span className="flex flex-none gap-1.5">
+                      {servicePackage.isRecommended && (
+                        <Pill className="bg-[#e5edff] text-[#2058d4]">
+                          Recommended
                         </Pill>
-                      </span>
-                    </div>
-                    <p className="mt-1.5 mb-0 text-xs leading-relaxed text-[#526686]">
-                      {servicePackage.description}
-                    </p>
+                      )}
+                      <StatusPill active={servicePackage.isActive} />
+                    </span>
+                  </div>
+                  <p className="mt-1.5 mb-0 text-xs leading-relaxed break-words text-[#526686]">
+                    {servicePackage.description}
+                  </p>
+                  {servicePackage.includedFeatures.length > 0 && (
                     <ul className="mt-2 mb-0 grid gap-1 pl-4 text-[11px] text-[#526686]">
                       {servicePackage.includedFeatures.map((feature) => (
                         <li key={feature}>{feature}</li>
                       ))}
                     </ul>
-                    <p className="mt-2 mb-0 text-xs font-semibold text-[#203f8c]">
-                      {pricingLabels[servicePackage.pricingModel]} ·{" "}
-                      {formatPrice(
-                        servicePackage.amount,
-                        servicePackage.currency,
-                      )}
-                      {servicePackage.billingInterval
-                        ? ` / ${servicePackage.billingInterval.toLocaleLowerCase()}`
-                        : ""}
-                      {!servicePackage.isPricingPublic
-                        ? " (hidden publicly)"
-                        : ""}
-                    </p>
-                  </article>
-                ))}
-              </div>
-            </section>
-          )}
-        </div>
-        <footer className="flex flex-none justify-end border-t border-[#eceef1] px-6 py-4 max-[560px]:px-5">
-          <button
-            type="button"
-            className={cn(
-              "min-h-[38px] cursor-pointer rounded-[9px] border border-[#d7e0ee] bg-background px-[15px] text-xs font-semibold text-[#24437e] hover:bg-[#f1f5fc]",
-              focusRing,
-            )}
-            onClick={onClose}
+                  )}
+                  <p className="mt-2.5 mb-0 border-t border-[#eceef1] pt-2.5 text-xs font-semibold text-[#203f8c]">
+                    {pricingLabels[servicePackage.pricingModel]} ·{" "}
+                    {formatPrice(
+                      servicePackage.amount,
+                      servicePackage.currency,
+                    )}
+                    {servicePackage.billingInterval
+                      ? ` / ${servicePackage.billingInterval.toLocaleLowerCase()}`
+                      : ""}
+                    {!servicePackage.isPricingPublic
+                      ? " (hidden publicly)"
+                      : ""}
+                  </p>
+                </article>
+              ))}
+            </div>
+          </SidePanelSection>
+        )}
+      </SidePanelBody>
+      <SidePanelFooter className={onEdit ? "justify-between" : undefined}>
+        {onEdit && (
+          <SidePanelButton
+            variant="secondary"
+            onClick={() => panel.close(() => onEdit(service))}
           >
-            Close
-          </button>
-        </footer>
-      </SheetContent>
-    </Sheet>
+            Edit service
+          </SidePanelButton>
+        )}
+        <SheetClose asChild>
+          <SidePanelButton aria-label="Done viewing service details">
+            Done
+          </SidePanelButton>
+        </SheetClose>
+      </SidePanelFooter>
+    </SidePanel>
   )
 }

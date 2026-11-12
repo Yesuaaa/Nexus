@@ -4,7 +4,6 @@ import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { Button } from "@/components/ui/button"
 import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
 import { DepartmentPill } from "@/components/ui/department-pill.tsx"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Pill } from "@/components/ui/pill"
 import {
   ResponsiveDataTable,
@@ -24,7 +23,7 @@ import { EmployeeRowActions } from "./employee-row-actions"
 import { ConversationAvatar } from "@/features/request-conversations/components/conversation-avatar"
 
 const employeeGrid =
-  "grid grid-cols-[minmax(100px,.75fr)_minmax(180px,1.35fr)_minmax(120px,1fr)_minmax(160px,1.2fr)_minmax(82px,.7fr)_minmax(90px,.7fr)_minmax(78px,.65fr)_112px] items-center gap-3.5 @max-[1000px]:grid-cols-[minmax(0,1fr)_minmax(105px,.65fr)]"
+  "grid grid-cols-[minmax(100px,.75fr)_minmax(180px,1.35fr)_minmax(120px,1fr)_minmax(160px,1.2fr)_minmax(82px,.7fr)_minmax(90px,.7fr)_minmax(78px,.65fr)_56px] items-center gap-3.5 @max-[1000px]:grid-cols-[minmax(0,1fr)_minmax(105px,.65fr)]"
 
 const typeNames: Record<EmploymentType, string> = {
   FULL_TIME: "Full Time",
@@ -169,7 +168,7 @@ export function EmployeeTable({
                 "h-3 w-16",
                 "h-3 w-20",
                 "h-5 w-16 rounded",
-                "h-8 w-24",
+                "size-8 rounded-[7px]",
               ]}
             />
           ) : (
@@ -215,7 +214,6 @@ export function EmployeeTable({
                   ID{" "}
                 </span>
                 {employee.employeeId || "Not set"}
-                <HoverTooltip>{employee.employeeId || "Not set"}</HoverTooltip>
               </div>
               <div
                 role="cell"
@@ -229,11 +227,9 @@ export function EmployeeTable({
                 <div className="min-w-0">
                   <p className="m-0 truncate font-semibold">
                     {employee.fullName}
-                    <HoverTooltip>{employee.fullName}</HoverTooltip>
                   </p>
                   <p className="mt-0.5 mb-0 truncate text-[11px] text-[#738096]">
                     {employee.email || "No email"}
-                    <HoverTooltip>{employee.email || "No email"}</HoverTooltip>
                   </p>
                 </div>
               </div>
@@ -272,15 +268,11 @@ export function EmployeeTable({
                 {employee.position || employee.team ? (
                   <>
                     {employee.position && (
-                      <p className="m-0 truncate">
-                        {employee.position}
-                        <HoverTooltip>{employee.position}</HoverTooltip>
-                      </p>
+                      <p className="m-0 truncate">{employee.position}</p>
                     )}
                     {employee.team && (
                       <p className="mt-0.5 mb-0 truncate text-[11px] text-[#738096]">
                         {employee.team.name}
-                        <HoverTooltip>{employee.team.name}</HoverTooltip>
                       </p>
                     )}
                   </>

@@ -1,6 +1,5 @@
 import Image from "next/image"
 import { useMemo, useState } from "react"
-import { Eye, Pencil } from "lucide-react"
 import { focusRing } from "@/components/layout/styles"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
@@ -9,11 +8,8 @@ import { SearchEmptyState } from "@/components/ui/search-empty-state"
 import { SearchField } from "@/components/ui/search-field"
 import { Dropdown } from "@/components/ui/dropdown"
 import { Pill } from "@/components/ui/pill"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { useTableFooter } from "@/components/ui/use-table-search"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
-import { rowActionButton } from "@/components/ui/row-action-styles"
-import { RowActionsMenu } from "@/components/ui/row-actions-menu"
 import {
   ResponsiveDataTable,
   ResponsiveDataTableBody,
@@ -26,13 +22,14 @@ import {
 import type { Department } from "@/features/departments/api/departments-api"
 import { cn } from "@/lib/utils"
 import type { Service } from "../api/services-api"
+import { ServiceRowActions } from "./service-row-actions"
 
 type SortKey = "name" | "status" | "createdAt"
 
 const tableRowKey = (item: Service) => item.id
 const pageSize = 10
 const serviceGrid =
-  "grid grid-cols-[minmax(180px,1.25fr)_minmax(220px,1.6fr)_minmax(120px,.8fr)_90px_125px_112px] items-center gap-3.5 @max-[920px]:grid-cols-[minmax(0,1fr)_auto]"
+  "grid grid-cols-[minmax(180px,1.25fr)_minmax(220px,1.6fr)_minmax(120px,.8fr)_90px_125px_56px] items-center gap-3.5 @max-[920px]:grid-cols-[minmax(0,1fr)_auto]"
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en", {
@@ -60,88 +57,9 @@ function DepartmentPills({ service }: { service: Service }) {
             .join(", ")}`}
         >
           +{remainingCount}
-          <HoverTooltip>
-            {remainingDepartments
-              .map((department) => department.name)
-              .join(", ")}
-          </HoverTooltip>
         </Pill>
       )}
     </span>
-  )
-}
-
-function ServiceActions({
-  service,
-  canManage,
-  onView,
-  onEdit,
-  onStatus,
-  onDelete,
-}: {
-  service: Service
-  canManage: boolean
-  onView: (service: Service) => void
-  onEdit: (service: Service) => void
-  onStatus: (service: Service) => void
-  onDelete: (service: Service) => void
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <button
-        type="button"
-        className={rowActionButton}
-        aria-label={`View ${service.name}`}
-        onClick={() => onView(service)}
-      >
-        <Eye size={15} aria-hidden="true" />
-        <HoverTooltip>View details</HoverTooltip>
-      </button>
-      {canManage && (
-        <button
-          type="button"
-          className={cn(
-            rowActionButton,
-            "border-[#203f8c] bg-[#203f8c] text-white hover:enabled:bg-[#172f70] hover:enabled:text-white",
-          )}
-          aria-label={`Edit ${service.name}`}
-          onClick={() => onEdit(service)}
-        >
-          <Pencil size={14} aria-hidden="true" />
-          <HoverTooltip>Edit service</HoverTooltip>
-        </button>
-      )}
-      {canManage && (
-        <RowActionsMenu
-          triggerLabel={`More actions for ${service.name}`}
-          items={[
-            {
-              action: "status",
-              label: service.isActive
-                ? "Deactivate Service"
-                : "Activate Service",
-              className: service.isActive
-                ? "text-[#c33945] focus:bg-[#fff0f1] focus:text-[#c33945]"
-                : "text-[#247044] focus:bg-[#edf8f1] focus:text-[#247044]",
-            },
-            ...(!service.isActive
-              ? [
-                  {
-                    action: "delete" as const,
-                    label: "Delete service",
-                    className:
-                      "text-[#c33945] focus:bg-[#fff0f1] focus:text-[#c33945]",
-                  },
-                ]
-              : []),
-          ]}
-          onAction={(action) => {
-            if (action === "status") onStatus(service)
-            else onDelete(service)
-          }}
-        />
-      )}
-    </div>
   )
 }
 
@@ -363,7 +281,7 @@ export function ServiceTable({
                   "h-5 w-28 rounded",
                   "h-5 w-14 rounded",
                   "h-3 w-20",
-                  "h-8 w-24",
+                  "size-8 rounded-[7px]",
                 ]}
               />
             ) : (
@@ -420,27 +338,31 @@ export function ServiceTable({
             onRowsSettled={onRowsSettled}
             renderRow={(service) => (
               <>
-                <button
-                  type="button"
+                <div
                   role="rowheader"
-                  className={cn(
-                    "flex min-w-0 cursor-pointer items-center gap-2 rounded-sm border-0 bg-transparent p-0 text-left font-semibold hover:underline hover:underline-offset-4 @max-[920px]:col-start-1 @max-[920px]:row-start-1",
-                    focusRing,
-                  )}
-                  onClick={() => onView(service)}
+                  className="min-w-0 @max-[920px]:col-start-1 @max-[920px]:row-start-1"
                 >
-                  <span className="relative size-8 flex-none overflow-hidden rounded-md bg-[#e8eef7]">
-                    {service.imageUrl ? (
-                      <Image
-                        src={service.imageUrl}
-                        alt=""
-                        fill
-                        className="object-cover"
-                      />
-                    ) : null}
-                  </span>
-                  <span className="truncate">{service.name}</span>
-                </button>
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex max-w-full min-w-0 cursor-pointer items-center gap-2 rounded-sm border-0 bg-transparent p-0 text-left font-semibold text-foreground hover:underline hover:underline-offset-4",
+                      focusRing,
+                    )}
+                    onClick={() => onView(service)}
+                  >
+                    <span className="relative size-8 flex-none overflow-hidden rounded-md bg-[#e8eef7]">
+                      {service.imageUrl ? (
+                        <Image
+                          src={service.imageUrl}
+                          alt=""
+                          fill
+                          className="object-cover"
+                        />
+                      ) : null}
+                    </span>
+                    <span className="truncate">{service.name}</span>
+                  </button>
+                </div>
                 <div
                   role="cell"
                   className="min-w-0 truncate text-[#526686] @max-[920px]:col-span-2 @max-[920px]:row-start-2 @max-[920px]:whitespace-normal"
@@ -483,7 +405,7 @@ export function ServiceTable({
                   role="cell"
                   className="@max-[920px]:col-start-2 @max-[920px]:row-start-1 @max-[920px]:justify-self-end"
                 >
-                  <ServiceActions
+                  <ServiceRowActions
                     service={service}
                     canManage={canManage}
                     onView={onView}

@@ -7,7 +7,6 @@ import { useEffect, useRef, useState, type FormEvent } from "react"
 import { Info } from "lucide-react"
 import { sileo } from "@/lib/toast"
 import { Button } from "@/components/ui/button"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { ApiError } from "@/features/auth/api/auth-api"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { focusRing } from "@/components/layout/styles"
@@ -81,7 +80,7 @@ function InternalConversationPanel({
   const sendMessage = transport?.sendMessage ?? sendInternalMessage
   const conversationLabel =
     kind === "project" ? "Project conversation" : "Internal conversation"
-  const { formatDate, formatTime } = useDatePreferences()
+  const { formatDate } = useDatePreferences()
 
   const account = usePortalAccount()
   const [history, setHistory] = useState<InternalConversationHistory | null>(
@@ -317,11 +316,6 @@ function InternalConversationPanel({
                   onClick={() => setContextPanel(!contextPanelOpen)}
                 >
                   <Info size={17} aria-hidden="true" />
-                  <HoverTooltip>
-                    {contextPanelOpen
-                      ? "Hide project details"
-                      : "Show project details"}
-                  </HoverTooltip>
                 </button>
               )
             }
@@ -406,11 +400,7 @@ function InternalConversationPanel({
                             isClient={account.role === "USER"}
                           />
                         ) : (
-                          <ConversationBubble
-                            own={own}
-                            body={message.body}
-                            timestamp={formatTime(date)}
-                          />
+                          <ConversationBubble own={own} body={message.body} />
                         )}
                       </ConversationMessage>
                     </div>

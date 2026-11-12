@@ -6,7 +6,6 @@ import { useState, type ReactNode } from "react"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { cancelClientServiceRequest } from "../api/client-services-api"
 import { Button } from "@/components/ui/button"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Pill } from "@/components/ui/pill"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import { RowActionsMenu } from "@/components/ui/row-actions-menu"
@@ -122,7 +121,6 @@ function RequestActions({
       >
         <Eye size={15} aria-hidden="true" />
         {!compact && "View request"}
-        {compact && <HoverTooltip>View request</HoverTooltip>}
       </Button>
       {chatAvailable ? (
         <Button asChild variant="outline" className={buttonClass}>
@@ -132,7 +130,6 @@ function RequestActions({
           >
             <MessageSquare size={15} aria-hidden="true" />
             {!compact && "Go to chat"}
-            {compact && <HoverTooltip>Go to chat</HoverTooltip>}
           </Link>
         </Button>
       ) : (
@@ -148,9 +145,7 @@ function RequestActions({
           >
             <MessageSquare size={15} aria-hidden="true" />
             {!compact && "Go to chat"}
-            {compact && <HoverTooltip>Go to chat</HoverTooltip>}
           </Button>
-          <HoverTooltip>{chatHint}</HoverTooltip>
           <span className="sr-only">{chatHint}</span>
         </span>
       )}

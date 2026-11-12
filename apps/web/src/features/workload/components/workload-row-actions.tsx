@@ -1,5 +1,4 @@
 import { Eye, Pencil } from "lucide-react"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import { RowActionsMenu } from "@/components/ui/row-actions-menu"
 import { cn } from "@/lib/utils"
@@ -32,7 +31,6 @@ export function WorkloadRowActions({
         onClick={onView}
       >
         <Eye size={16} strokeWidth={1.7} aria-hidden="true" />
-        <HoverTooltip>View details</HoverTooltip>
       </button>
       <button
         type="button"
@@ -44,7 +42,6 @@ export function WorkloadRowActions({
         onClick={onEdit}
       >
         <Pencil size={15} strokeWidth={1.7} aria-hidden="true" />
-        <HoverTooltip>Edit weekly capacity</HoverTooltip>
       </button>
       <RowActionsMenu
         modal={false}
