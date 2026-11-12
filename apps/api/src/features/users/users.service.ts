@@ -17,6 +17,7 @@ import {
   canCreateRole,
 } from "./users.policy.js"
 import {
+  UserLeadershipError,
   UserPromotionError,
   UserRoleConflictError,
   usersRepository,
@@ -419,6 +420,9 @@ export const usersService = {
       return { user: publicUser(updated) }
     } catch (error) {
       if (error instanceof UserPromotionError) {
+        throw new UsersError(409, error.message)
+      }
+      if (error instanceof UserLeadershipError) {
         throw new UsersError(409, error.message)
       }
       if (error instanceof UserRoleConflictError) {

@@ -118,14 +118,19 @@ export const departmentsRepository = {
     return prisma.$transaction(async (tx) => {
       const existing = await tx.department.findUnique({
         where: { id: departmentId },
-        select: { id: true, headId: true },
+        select: { id: true, headId: true, temporaryHeadOriginalId: true },
       })
       if (!existing) return null
 
+      // An on-leave original head keeps their title until they return.
+      const titleHolderIds = [
+        existing.headId,
+        existing.temporaryHeadOriginalId,
+      ].filter((id): id is string => Boolean(id))
       const staleMembers = await tx.user.findMany({
         where: {
           departmentId,
-          id: { not: existing.headId ?? "" },
+          id: { notIn: titleHolderIds },
           position: {
             in: [
               "Dept Head",
@@ -353,6 +358,15 @@ export const departmentsRepository = {
     return prisma.service.count({
       where: { departments: { some: { id } } },
     })
+  },
+
+  async countDepartmentRequestHistory(id: string) {
+    const prisma = getPrisma()!
+    const [acceptedRequests, conversations] = await prisma.$transaction([
+      prisma.serviceRequest.count({ where: { acceptedDepartmentId: id } }),
+      prisma.requestConversation.count({ where: { departmentId: id } }),
+    ])
+    return acceptedRequests + conversations
   },
 
   async assignMembers(

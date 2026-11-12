@@ -416,6 +416,13 @@ async function writeEmployee(
           },
         })
       : null
+  const restoreOriginal = Boolean(
+    returningDepartment &&
+    oldUserId &&
+    nextDepartmentId === returningDepartment.id &&
+    nextUserId === oldUserId &&
+    returningDepartment.headId === returningDepartment.temporaryHeadAssignedId,
+  )
 
   const originalTemporaryDepartment =
     oldUserId &&
@@ -489,7 +496,7 @@ async function writeEmployee(
         where: { id: nextDepartmentId },
         select: { headId: true },
       })
-      if (department?.headId === nextUserId) {
+      if (department?.headId === nextUserId || restoreOriginal) {
         throw new EmployeeError(
           400,
           "The Department Head oversees the entire department and cannot be assigned to a sub-team",
@@ -574,13 +581,15 @@ async function writeEmployee(
     })
   }
 
+  if (statusChanged && input.status !== EmployeeStatus.ACTIVE && oldUserId) {
+    // Teams work without a lead, so a lead going non-active just steps down.
+    await tx.team.updateMany({
+      where: { leadId: oldUserId },
+      data: { leadId: null },
+    })
+  }
+
   if (returningDepartment && oldUserId) {
-    const restoreOriginal = Boolean(
-      nextDepartmentId === returningDepartment.id &&
-      nextUserId === oldUserId &&
-      returningDepartment.headId ===
-        returningDepartment.temporaryHeadAssignedId,
-    )
     await tx.department.update({
       where: { id: returningDepartment.id },
       data: {

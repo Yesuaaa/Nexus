@@ -204,6 +204,28 @@ export const usersRepository = {
       await tx.$queryRaw(
         Prisma.sql`SELECT "id" FROM "User" WHERE "id" = ${targetId} FOR UPDATE`,
       )
+      // Department heads and team leads must stay STAFF; otherwise their
+      // department's requests become unroutable and the roster goes stale.
+      if (nextRole !== Role.STAFF) {
+        const department = await tx.department.findFirst({
+          where: { headId: targetId },
+          select: { name: true },
+        })
+        if (department) {
+          throw new UserLeadershipError(
+            `Reassign the ${department.name} head role before changing this account's role`,
+          )
+        }
+        const team = await tx.team.findFirst({
+          where: { leadId: targetId },
+          select: { name: true },
+        })
+        if (team) {
+          throw new UserLeadershipError(
+            `Reassign the ${team.name} team lead role before changing this account's role`,
+          )
+        }
+      }
       if (
         nextRole === Role.SUPERADMIN &&
         (await tx.employee.findUnique({ where: { userId: targetId } }))
@@ -237,6 +259,13 @@ export class UserPromotionError extends Error {
   constructor(message: string) {
     super(message)
     this.name = "UserPromotionError"
+  }
+}
+
+export class UserLeadershipError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "UserLeadershipError"
   }
 }
 
