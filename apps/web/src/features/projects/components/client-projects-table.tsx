@@ -101,7 +101,7 @@ function ProjectAction({ project }: { project: ClientProjectSummary }) {
       href={`/projects/${encodeURIComponent(project.id)}`}
     >
       <Eye size={15} aria-hidden="true" />
-    </Button>
+    </Link>
   )
 }
 

@@ -11,7 +11,6 @@ import {
   UsersRound,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { focusRing } from "@/components/layout/styles"
 
 const projectNavLinkClass = `group relative flex min-h-10 w-full items-center gap-[13px] rounded-md border-0 bg-transparent px-[13px] text-left font-semibold text-foreground no-underline whitespace-nowrap cursor-pointer transition-colors duration-150 hover:bg-[#e1e3e5] motion-reduce:transition-none ${focusRing}`
@@ -35,6 +34,7 @@ function ProjectNavLink({
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
+      title={collapsed ? label : undefined}
       className={cn(
         projectNavLinkClass,
         collapsed &&
@@ -54,7 +54,6 @@ function ProjectNavLink({
       >
         {label}
       </span>
-      {collapsed && <HoverTooltip side="right">{label}</HoverTooltip>}
     </Link>
   )
 }
@@ -81,6 +80,7 @@ export function ClientProjectSidebarLinks({
       <Link
         href="/projects"
         aria-label="Back to all projects"
+        title={collapsed ? "Back to projects" : undefined}
         className={cn(
           projectNavLinkClass,
           "mb-2 text-[#203f8c] hover:text-[#172f70]",
@@ -90,9 +90,6 @@ export function ClientProjectSidebarLinks({
         onClick={onNavigate}
       >
         <ArrowLeft size={20} strokeWidth={1.7} aria-hidden="true" />
-        {collapsed && (
-          <HoverTooltip side="right">Back to projects</HoverTooltip>
-        )}
       </Link>
       <ProjectNavLink
         href={basePath}

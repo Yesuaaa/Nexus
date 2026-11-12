@@ -25,7 +25,6 @@ import {
   canAccessProjectWorkspace,
 } from "@/features/auth/model/permissions"
 import { ProjectWorkspaceSidebarLinks } from "@/features/project-workspace/components/project-workspace-sidebar-links"
-import { ClientProjectSidebarLinks } from "@/features/projects/components/client-project-sidebar-links"
 import { focusRing, iconButtonClass } from "./styles"
 import {
   AccountsIcon,
@@ -62,11 +61,6 @@ export function Sidebar({
   const collapsedLabelClass = collapsed
     ? "w-0 overflow-hidden opacity-0 max-[767px]:w-auto max-[767px]:overflow-visible max-[767px]:opacity-100"
     : ""
-  // Project detail pages own their workspace navigation. Keep this check tied
-  // to the URL segment so it updates on client-side navigation as well.
-  const projectRoute = pathname.startsWith("/projects/")
-    ? pathname.split("/")[2] || null
-    : null
 
   return (
     <aside
