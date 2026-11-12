@@ -1,13 +1,15 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import dynamic from "next/dynamic"
 import { PanelLoading } from "@/components/ui/panel-loading"
 import { sileo } from "@/lib/toast"
-import { ChevronLeft, ChevronRight } from "lucide-react"
+import { CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { EmptyState } from "@/components/ui/empty-state"
+import { Pill } from "@/components/ui/pill"
 import { ProgressMeter } from "@/components/ui/stat-strip"
+import { serviceRequestStatuses } from "../model/service-request-status"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { contentClass, focusRing } from "@/components/layout/styles"
 import { ClientPageHeader } from "@/components/layout/client-page-header"
@@ -85,6 +87,12 @@ function ServiceCardSkeleton() {
 }
 
 export function ClientServicesPage() {
+  const focusConfirmation = useCallback(
+    (element: HTMLHeadingElement | null) => {
+      element?.focus()
+    },
+    [],
+  )
   const account = usePortalAccount()
   const [services, setServices] = useState<Service[]>([])
   const [loading, setLoading] = useState(true)
@@ -399,30 +407,58 @@ export function ClientServicesPage() {
     <main
       className={cn(contentClass, "p-[clamp(20px,2.1vw,32px)]")}
       aria-label="Services catalog"
+      data-request-submitted={submittedRequest ? "" : undefined}
     >
       <ClientPageHeader
-        eyebrow="Services"
+        headingRef={submittedRequest ? focusConfirmation : undefined}
+        eyebrow={
+          submittedRequest ? (
+            <span className="text-[#203f8c]">Services</span>
+          ) : (
+            "Services"
+          )
+        }
+        actions={
+          submittedRequest ? (
+            <Pill className="rounded-lg bg-[#fff4d6] px-3 py-1 text-sm font-semibold text-[#755400]">
+              {serviceRequestStatuses.SUBMITTED.label}
+            </Pill>
+          ) : undefined
+        }
         title={
-          submittedRequest
-            ? "Request Submitted"
-            : currentStep === 4
-              ? "Preferred Specialist"
-              : currentStep === 3
-                ? "Project Requirements"
-                : currentStep === 2
-                  ? "Choose Your Package"
-                  : "Build Your Brand with EXP"
+          submittedRequest ? (
+            <span className="flex items-center gap-3 text-black">
+              <CheckCircle2
+                size={32}
+                className="shrink-0 text-[#19703a]"
+                aria-hidden="true"
+              />
+              Request submitted
+            </span>
+          ) : currentStep === 4 ? (
+            "Preferred Specialist"
+          ) : currentStep === 3 ? (
+            "Project Requirements"
+          ) : currentStep === 2 ? (
+            "Choose Your Package"
+          ) : (
+            "Build Your Brand with EXP"
+          )
         }
         description={
-          submittedRequest
-            ? "Your service request is pending review."
-            : currentStep === 4
-              ? "Let us know who you’d prefer to work with, subject to availability and Department Manager approval."
-              : currentStep === 3
-                ? "Share your goals, requirements, and expected timeline so we can understand your project."
-                : currentStep === 2
-                  ? "Find the right package for your goals, with clear pricing and everything you need to get started."
-                  : "Discover powerful digital services crafted to amplify your presence, connect with your audience, and turn ideas into real business impact."
+          submittedRequest ? (
+            <span className="text-[#52627a]">
+              Your request is with the department for review.
+            </span>
+          ) : currentStep === 4 ? (
+            "Let us know who you’d prefer to work with, subject to availability and Department Manager approval."
+          ) : currentStep === 3 ? (
+            "Share your goals, requirements, and expected timeline so we can understand your project."
+          ) : currentStep === 2 ? (
+            "Find the right package for your goals, with clear pricing and everything you need to get started."
+          ) : (
+            "Discover powerful digital services crafted to amplify your presence, connect with your audience, and turn ideas into real business impact."
+          )
         }
       />
 
@@ -453,10 +489,15 @@ export function ClientServicesPage() {
             value={currentStep}
             max={4}
             label="Service request progress"
-            colorClass="bg-[#294c96]"
+            colorClass={submittedRequest ? "bg-[#203f8c]" : "bg-[#294c96]"}
           />
         </div>
-        <span className="flex-none text-xs font-bold tracking-[0.04em] text-[#173d8d] uppercase">
+        <span
+          className={cn(
+            "flex-none text-xs font-bold tracking-[0.04em] uppercase",
+            submittedRequest ? "text-[#203f8c]" : "text-[#173d8d]",
+          )}
+        >
           Step {currentStep} of 4
         </span>
       </div>
@@ -493,17 +534,6 @@ export function ClientServicesPage() {
             setRequirementsDraft(createProjectRequirementsDraft())
             setRequirementsSaved(false)
             setPreferredSpecialist(null)
-            submissionKey.current = null
-            setCurrentStep(1)
-          }}
-          onNewRequest={() => {
-            setSubmittedRequest(null)
-            setPackageService(null)
-            setSelectedPackageId(null)
-            setRequirementsDraft(createProjectRequirementsDraft())
-            setRequirementsSaved(false)
-            setPreferredSpecialist(null)
-            setSubmissionError("")
             submissionKey.current = null
             setCurrentStep(1)
           }}

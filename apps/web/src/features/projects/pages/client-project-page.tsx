@@ -10,15 +10,21 @@ import {
   FileText,
   MessageSquare,
   Pencil,
-  Send,
+  Info,
+  Plus,
+  UsersRound,
 } from "lucide-react"
 import { sileo } from "sileo"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
-import { pillToneClass, type PillTone } from "@/components/ui/pill"
+import { Pill, pillToneClass, type PillTone } from "@/components/ui/pill"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
+import {
+  ClientPageHeader,
+  clientPageHeaderActionClass,
+} from "@/components/layout/client-page-header"
 import { rowActionButton } from "@/components/ui/row-action-styles"
-import { ProgressMeter } from "@/components/ui/stat-strip"
 import { contentClass } from "@/components/layout/styles"
 import { useBreadcrumbLabel } from "@/components/layout/breadcrumbs"
 import {
@@ -38,7 +44,7 @@ import { errorMessage } from "@/lib/error-message"
 import { useAsyncResource } from "@/lib/use-async-resource"
 import { statusLabel, statusTone } from "../model/project-status"
 
-type ClientTab = "overview" | "deliverables"
+type ClientTab = "overview" | "deliverables" | "notes" | "team"
 
 function changeStatusTone(request: ProjectChangeRequest): PillTone {
   if (request.kind === "CANCELLATION" && request.status === "ACCEPTED")
@@ -80,20 +86,12 @@ export function ClientProjectPage({
     [projectId],
     { fallbackError: "Couldn't load this project." },
   )
-  const [tab, setTab] = useState<ClientTab>(initialTab)
+  const [tab] = useState<ClientTab>(initialTab)
   const [busy, setBusy] = useState(false)
   const [briefOpen, setBriefOpen] = useState(false)
   const [requestOpen, setRequestOpen] = useState(false)
 
   useBreadcrumbLabel(projectId, project?.name)
-
-  function selectTab(next: ClientTab) {
-    setTab(next)
-    const url = new URL(window.location.href)
-    if (next === "deliverables") url.searchParams.set("tab", next)
-    else url.searchParams.delete("tab")
-    window.history.replaceState(null, "", url)
-  }
 
   const progress = project?.progress ?? { completed: 0, total: 0 }
   const progressPercent = progress.total
@@ -202,160 +200,105 @@ export function ClientProjectPage({
 
   return (
     <main className={`${contentClass} p-6 max-[767px]:p-4`}>
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#e5e9ee] px-7 pt-6 pb-0 max-[767px]:px-4">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <h1 className="m-0 text-[24px] leading-tight font-semibold tracking-[-0.025em]">
-              {project.name}
-            </h1>
-            <span
-              className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-medium ${pillToneClass(statusTone(project.status))}`}
-            >
-              {statusLabel(project.status)}
-            </span>
-          </div>
-          <p className="mt-2 mb-0 text-xs text-[#60718c]">
-            {project.request?.service.name || "Project"}
-            {project.request?.referenceNumber && (
-              <span> · {project.request.referenceNumber}</span>
-            )}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 pt-4 max-[767px]:pt-0">
-          {editable && !pendingCancellation && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setBriefOpen(true)}
-            >
-              <Pencil size={15} aria-hidden="true" /> Edit brief
-            </Button>
-          )}
-          {editable && (
-            <Button
-              type="button"
-              disabled={!canStartProjectRequest || busy}
-              variant="brand"
-              onClick={() => setRequestOpen(true)}
-            >
-              <Send size={15} aria-hidden="true" />
-              {canStartProjectRequest
-                ? "New project request"
-                : "Request under review"}
-            </Button>
-          )}
-          {project.startDate && (
-            <Link
-              href={`/messages?project=${encodeURIComponent(project.id)}`}
-              className={`${rowActionButton} size-9 hover:bg-[#f1f5fc] hover:text-foreground`}
-              aria-label="Open project conversation"
-              title="Chat with project team"
-            >
-              <MessageSquare size={16} aria-hidden="true" />
-            </Link>
-          )}
-        </div>
-        <div className="w-full border-t border-[#e5e9ee]">
-          <div
-            className="flex gap-5"
-            role="tablist"
-            aria-label="Project sections"
+      <ClientPageHeader
+        eyebrow="Project Overview"
+        title={<span className="[overflow-wrap:anywhere]">{project.name}</span>}
+        description={project.request?.service.name || "Project"}
+        actions={
+          <Pill
+            tone={statusTone(project.status)}
+            className="tracking-normal capitalize"
           >
-            {(
-              [
-                ["overview", "Overview"],
+            {statusLabel(project.status)}
+          </Pill>
+        }
+      />
+      <Tabs value={tab}>
+        <TabsContent value="overview" className="mt-5 grid gap-4">
+          <section className="overflow-hidden rounded-xl border border-[#dce3eb] bg-white p-5 md:p-6">
+            <dl className="m-0 grid gap-5 border-b border-[#e5e9ee] pb-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.6fr)]">
+              {[
+                ["Service", project.request?.service.name || "—"],
                 [
-                  "deliverables",
-                  `Deliverables${deliverables.length ? ` (${deliverables.length})` : ""}`,
+                  "Started",
+                  project.startDate
+                    ? formatDate(project.startDate)
+                    : "Not started",
                 ],
-              ] as const
-            ).map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                role="tab"
-                aria-selected={tab === key}
-                aria-controls={`${key}-panel`}
-                onClick={() => selectTab(key)}
-                className={`relative -mb-px min-h-11 border-0 border-b-2 bg-transparent px-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#28468f]/35 ${tab === key ? "border-[#243f8f] text-[#183a85]" : "border-transparent text-[#6b7d96] hover:text-[#203e81]"}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {tab === "overview" ? (
-        <div
-          id="overview-panel"
-          role="tabpanel"
-          className="space-y-5 p-7 max-[767px]:p-4"
-        >
-          <section className="overflow-hidden rounded-xl border border-[#dce3eb] bg-white">
-            <div className="grid md:grid-cols-[minmax(0,1fr)_260px]">
-              <div className="p-5 md:p-6">
-                <h2 className="m-0 text-sm font-semibold">Project details</h2>
-                <dl className="mt-4 grid gap-x-8 gap-y-5 sm:grid-cols-2">
-                  {[
-                    ["Service", project.request?.service.name || "—"],
-                    [
-                      "Request reference",
-                      project.request?.referenceNumber || "—",
-                    ],
-                    ["Status", statusLabel(project.status)],
-                    [
-                      "Started",
-                      project.startDate
-                        ? formatDate(project.startDate)
-                        : "Not started",
-                    ],
-                  ].map(([label, value]) => (
-                    <div key={label} className="border-b border-[#edf0f4] pb-3">
-                      <dt className="text-[11px] text-[#687b96]">{label}</dt>
-                      <dd className="mt-1.5 ml-0 text-xs font-medium text-[#16233a]">
-                        {value}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-              <div className="border-t border-[#e7ecf1] bg-[#f7f9fc] p-5 md:border-t-0 md:border-l md:p-6">
-                <p className="m-0 text-xs text-[#61748f]">Overall progress</p>
-                <p className="mt-2 mb-0 text-[31px] leading-none font-semibold text-[#203f8c]">
-                  {progressPercent}
-                  <span className="text-base">%</span>
-                </p>
-                <p className="mt-2 mb-0 text-[11px] text-[#71839d]">
-                  {progress.completed} of {progress.total} tasks complete
-                </p>
-                <div className="mt-4">
-                  <ProgressMeter
-                    value={progressPercent}
-                    max={100}
-                    label="Overall project progress"
-                    colorClass="bg-[#2c4e9b]"
-                  />
+                ["Reference No.", project.request?.referenceNumber || "—"],
+              ].map(([label, value]) => (
+                <div key={label} className="flex min-w-0 flex-col gap-1">
+                  <dt className="text-xs text-[#52627a]">{label}</dt>
+                  <dd className="m-0 min-w-0 text-xs font-medium [overflow-wrap:anywhere]">
+                    {value}
+                  </dd>
                 </div>
+              ))}
+            </dl>
+            <div className="mt-5 flex flex-wrap items-center gap-4 rounded-lg bg-[#eaeff1] p-4 md:p-5">
+              <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-[#ccd5e2] bg-white text-[#203f8c]">
+                <Clock3 size={18} aria-hidden="true" />
+              </span>
+              <div className="min-w-[145px]">
+                <p className="m-0 text-xs text-[#52627a]">
+                  {progress.total
+                    ? `${progress.completed} of ${progress.total} tasks complete`
+                    : "No tasks scheduled yet"}
+                </p>
+                <p className="mt-1 mb-0 text-2xl leading-none font-semibold tabular-nums text-[#203f8c]">
+                  {progressPercent}%
+                </p>
+              </div>
+              <div
+                className="min-w-[220px] flex-1 overflow-hidden rounded-full bg-[#dfe6ef]"
+                role="progressbar"
+                aria-valuenow={progressPercent}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="Task progress"
+              >
+                <div
+                  className="h-2 rounded-full bg-[#294c96] transition-[width] motion-reduce:transition-none"
+                  style={{ width: `${progressPercent}%` }}
+                />
               </div>
             </div>
           </section>
 
           <section className="rounded-xl border border-[#dce3eb] bg-white p-5 md:p-6">
-            <h2 className="m-0 text-sm font-semibold">Project brief</h2>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e5e9ee] pb-3">
+              <h2 className="m-0 text-base font-semibold">Project brief</h2>
+              {editable && !pendingCancellation && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setBriefOpen(true)}
+                >
+                  <Pencil size={15} aria-hidden="true" /> Edit brief
+                </Button>
+              )}
+            </div>
             <p className="mt-3 mb-0 whitespace-pre-wrap text-xs leading-6 text-[#5f718b] [overflow-wrap:anywhere]">
               {project.description || "No project brief has been added yet."}
             </p>
           </section>
 
           <section className="rounded-xl border border-[#dce3eb] bg-white p-5 md:p-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="m-0 text-sm font-semibold">Project requests</h2>
-                <p className="mt-1 mb-0 text-[11px] text-[#71839d]">
-                  Track scope changes and cancellation requests.
-                </p>
-              </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e5e9ee] pb-3">
+              <h2 className="m-0 text-base font-semibold">Project requests</h2>
+              {editable && (
+                <Button
+                  type="button"
+                  disabled={!canStartProjectRequest || busy}
+                  onClick={() => setRequestOpen(true)}
+                  className={clientPageHeaderActionClass}
+                >
+                  <Plus size={16} aria-hidden="true" />
+                  {canStartProjectRequest
+                    ? "New project request"
+                    : "Request under review"}
+                </Button>
+              )}
             </div>
             {changeRequests.length ? (
               <ul className="mt-4 list-none divide-y divide-[#e9edf2] p-0">
@@ -392,25 +335,170 @@ export function ClientProjectPage({
               </ul>
             ) : (
               <div className="mt-4 flex items-start gap-3 rounded-lg bg-[#f7f9fc] p-4">
-                <Clock3
+                <Info
                   size={17}
                   className="mt-0.5 shrink-0 text-[#58729e]"
                   aria-hidden="true"
                 />
-                <p className="m-0 text-xs leading-5 text-[#687b96]">
-                  {project.request
-                    ? 'No project requests yet. Use "New project request" above to ask the Department Head for a scope change or cancellation.'
-                    : 'No project requests yet. Use "New project request" above to ask the Department Head for a scope change.'}
-                </p>
+                <div>
+                  <p className="m-0 text-xs font-semibold">
+                    No project requests yet
+                  </p>
+                  <p className="mt-1 mb-0 text-xs text-[#52627a]">
+                    {project.request
+                      ? "Scope changes and cancellation requests will appear here."
+                      : "Scope change requests will appear here."}
+                  </p>
+                </div>
               </div>
             )}
           </section>
-        </div>
-      ) : (
-        <div
-          id="deliverables-panel"
-          role="tabpanel"
-          className="space-y-4 p-7 max-[767px]:p-4"
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <section className="rounded-xl border border-[#dce3eb] bg-white p-5 md:p-6">
+              <h2 className="m-0 border-b border-[#e5e9ee] pb-3 text-base font-semibold">
+                Latest notes
+              </h2>
+              <div className="mt-4 flex items-start gap-3 rounded-lg bg-[#eaeff1] p-4">
+                <FileText
+                  size={17}
+                  className="mt-0.5 shrink-0 text-[#58729e]"
+                  aria-hidden="true"
+                />
+                <p className="m-0 text-xs text-[#52627a]">
+                  No notes added yet.
+                </p>
+              </div>
+            </section>
+            <section className="rounded-xl border border-[#dce3eb] bg-white p-5 md:p-6">
+              <h2 className="m-0 border-b border-[#e5e9ee] pb-3 text-base font-semibold">
+                Project team
+              </h2>
+              <div className="mt-4 rounded-lg bg-[#eaeff1] p-4">
+                <p className="m-0 text-xs font-semibold">Team lead</p>
+                <p className="mt-1 mb-0 text-xs text-[#52627a]">
+                  No team lead assigned.
+                </p>
+              </div>
+            </section>
+          </div>
+        </TabsContent>
+        <TabsContent value="notes" className="mt-5">
+          <section aria-label="Project notes">
+            <div className="mb-4 flex items-end justify-between gap-3">
+              <div>
+                <h2 className="m-0 text-base font-semibold">Project notes</h2>
+                <p className="mt-1 mb-0 text-xs text-[#738096]">
+                  Notes and project context shared with you.
+                </p>
+              </div>
+            </div>
+            {project.description ? (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <article className="group relative aspect-[4/5] w-full max-w-[340px] overflow-hidden rounded-2xl bg-[#294c96] p-6 text-white shadow-[0_8px_24px_rgb(26_58_128_/_10%)]">
+                  <span
+                    className="pointer-events-none absolute inset-0 bg-[linear-gradient(145deg,transparent_40%,rgb(20_54_129_/_42%))]"
+                    aria-hidden="true"
+                  />
+                  <div className="relative z-10 flex h-full min-w-0 flex-col">
+                    <span className="grid size-14 shrink-0 place-items-center rounded-2xl border-2 border-current bg-[rgb(22_48_105_/_10%)]">
+                      <FileText
+                        size={24}
+                        strokeWidth={1.8}
+                        aria-hidden="true"
+                      />
+                    </span>
+                    <div className="mt-auto min-w-0">
+                      <h3 className="m-0 text-xl leading-tight font-bold tracking-[-0.025em]">
+                        Project brief
+                      </h3>
+                      <p className="mt-2 mb-0 whitespace-pre-wrap text-sm leading-6 text-white/80 [overflow-wrap:anywhere]">
+                        {project.description}
+                      </p>
+                    </div>
+                  </div>
+                </article>
+              </div>
+            ) : (
+              <section className="grid min-h-[230px] w-full max-w-[340px] place-items-center rounded-2xl border border-dashed border-[#ccd7e8] bg-white px-6 text-center">
+                <div>
+                  <FileText
+                    size={24}
+                    className="mx-auto text-[#58729e]"
+                    aria-hidden="true"
+                  />
+                  <p className="mt-3 mb-0 text-sm font-semibold text-[#243c69]">
+                    No notes added yet
+                  </p>
+                </div>
+              </section>
+            )}
+          </section>
+        </TabsContent>
+        <TabsContent value="team" className="mt-5">
+          <section aria-label="Project team">
+            <div className="mb-4">
+              <h2 className="m-0 text-base font-semibold">Project team</h2>
+              <p className="mt-1 mb-0 text-xs text-[#738096]">
+                People assigned to this project.
+              </p>
+            </div>
+            <div className="mx-auto w-full max-w-4xl">
+              <div className="flex justify-center">
+                <article className="w-full max-w-[360px] rounded-2xl border border-[#dce3eb] bg-white p-5 shadow-[0_4px_14px_rgb(31_55_94_/_5%)]">
+                  <div className="flex items-center gap-3">
+                    <span className="grid size-12 shrink-0 place-items-center rounded-2xl border-2 border-[#245bc4] bg-[#f7f9fc] text-[#245bc4]">
+                      <UsersRound
+                        size={22}
+                        strokeWidth={1.7}
+                        aria-hidden="true"
+                      />
+                    </span>
+                    <div className="min-w-0">
+                      <h3 className="m-0 text-sm font-semibold text-[#17243b]">
+                        Team lead
+                      </h3>
+                      <div className="mt-2 flex items-center gap-2 text-[11px] text-[#738096]">
+                        <Info size={14} aria-hidden="true" />
+                        <span>No team lead assigned.</span>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+              </div>
+              <div className="mx-auto mt-4 grid max-w-3xl gap-4 md:grid-cols-2">
+                {[0, 1].map((memberIndex) => (
+                  <article
+                    key={memberIndex}
+                    className="min-w-0 rounded-2xl border border-dashed border-[#ccd7e8] bg-[#f7f9fc] p-5"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="grid size-12 shrink-0 place-items-center rounded-2xl border-2 border-[#6547d7] bg-white text-[#6547d7]">
+                        <UsersRound
+                          size={22}
+                          strokeWidth={1.7}
+                          aria-hidden="true"
+                        />
+                      </span>
+                      <div className="min-w-0">
+                        <h3 className="m-0 text-sm font-semibold text-[#17243b]">
+                          Team member
+                        </h3>
+                        <div className="mt-2 flex items-center gap-2 text-[11px] text-[#738096]">
+                          <Info size={14} aria-hidden="true" />
+                          <span>No team member assigned yet.</span>
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </section>
+        </TabsContent>
+        <TabsContent
+          value="deliverables"
+          className="mt-5 space-y-4 rounded-xl border border-[#dce3eb] bg-white p-5"
         >
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
@@ -427,70 +515,63 @@ export function ClientProjectPage({
             </span>
           </div>
           {deliverables.length ? (
-            <div className="overflow-hidden rounded-xl border border-[#dce3eb] bg-white">
-              <div className="grid grid-cols-[minmax(0,1fr)_150px_170px_100px] gap-4 bg-[#e9eef3] px-4 py-3 text-[11px] font-semibold text-[#1c2b40] max-[800px]:grid-cols-[minmax(0,1fr)_130px_88px] max-[560px]:grid-cols-[minmax(0,1fr)_36px] max-[560px]:gap-3">
-                <span>Deliverable</span>
-                <span className="max-[800px]:hidden">Shared on</span>
-                <span className="max-[560px]:hidden">Status</span>
-                <span className="text-center">Open</span>
-              </div>
-              <ul className="m-0 list-none divide-y divide-[#e8edf2] p-0">
-                {deliverables.map((deliverable) => {
-                  const review = deliverable.clientReviews.find(
-                    (item) =>
-                      item.workflowFileId === deliverable.workflowFile.id,
-                  )
-                  const reviewLabel = review
-                    ? review.status === "APPROVED"
-                      ? "Approved"
-                      : "Revision requested"
-                    : "Awaiting your review"
-                  return (
-                    <li
-                      key={deliverable.id}
-                      className="grid grid-cols-[minmax(0,1fr)_150px_170px_100px] items-center gap-4 px-4 py-4 hover:bg-[#f9fbfd] max-[800px]:grid-cols-[minmax(0,1fr)_130px_88px] max-[560px]:grid-cols-[minmax(0,1fr)_36px] max-[560px]:gap-3"
-                    >
-                      <div className="flex min-w-0 items-start gap-3">
-                        <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-[#edf2fa] text-[#31518f]">
-                          <FileText size={17} aria-hidden="true" />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="m-0 break-words text-xs font-medium text-[#18263b]">
-                            {deliverable.title}
-                          </p>
-                          <p className="mt-1 mb-0 truncate text-[11px] text-[#71839d]">
-                            {deliverable.workflowFile.name} ·{" "}
-                            {formatBytes(deliverable.workflowFile.size)}
-                          </p>
-                        </div>
+            <ul className="m-0 grid list-none gap-2 p-0">
+              {deliverables.map((deliverable) => {
+                const review = deliverable.clientReviews.find(
+                  (item) => item.workflowFileId === deliverable.workflowFile.id,
+                )
+                const reviewLabel = review
+                  ? review.status === "APPROVED"
+                    ? "Approved"
+                    : "Revision requested"
+                  : "Awaiting your review"
+                return (
+                  <li
+                    key={deliverable.id}
+                    className="grid min-h-[66px] grid-cols-[minmax(0,1fr)_minmax(0,150px)_minmax(0,120px)_32px] items-center gap-x-4 gap-y-2 rounded-xl border border-[#e1e7ef] bg-[#f4f7fb] px-4 py-2 max-[1024px]:grid-cols-[minmax(0,1fr)_minmax(0,130px)_32px] max-[767px]:grid-cols-[minmax(0,1fr)_32px]"
+                  >
+                    <div className="flex min-w-0 items-center gap-3 lg:border-r lg:border-[#e1e7ef] lg:pr-3">
+                      <span className="grid size-11 shrink-0 place-items-center rounded-2xl border-2 border-current text-[#6b46e5]">
+                        <FileText size={17} aria-hidden="true" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="m-0 break-words text-xs font-medium text-[#18263b]">
+                          {deliverable.title}
+                        </p>
+                        <p className="mt-1 mb-0 truncate text-[11px] text-[#71839d]">
+                          {deliverable.workflowFile.name} ·{" "}
+                          {formatBytes(deliverable.workflowFile.size)}
+                        </p>
                       </div>
-                      <span className="text-xs text-[#60718c] max-[800px]:hidden">
-                        {deliverable.sentToClientAt
-                          ? formatDate(deliverable.sentToClientAt)
-                          : formatDate(deliverable.workflowFile.createdAt)}
-                      </span>
-                      <span
-                        className={`justify-self-start rounded-full px-2.5 py-1 text-[10px] font-medium max-[560px]:col-start-1 max-[560px]:row-start-2 ${pillToneClass(review?.status === "APPROVED" ? "success" : review?.status === "REVISION_REQUESTED" ? "danger" : "warning")}`}
-                      >
-                        {reviewLabel}
-                      </span>
-                      <Button
-                        variant="outline"
-                        className="size-9 shrink-0 justify-self-center p-0 text-[#586d8a] max-[560px]:col-start-2 max-[560px]:row-span-2 max-[560px]:row-start-1"
-                        asChild
-                      >
-                        <Link
-                          href={`/projects/${encodeURIComponent(project.id)}/deliverables/${encodeURIComponent(deliverable.id)}`}
-                          aria-label={`View ${deliverable.title}`}
-                        >
-                          <Eye size={16} aria-hidden="true" />
-                        </Link>
-                      </Button>
-                    </li>
-                  )
-                })}
-              </ul>
-            </div>
+                    </div>
+                    <Pill
+                      tone={
+                        review?.status === "APPROVED"
+                          ? "success"
+                          : review?.status === "REVISION_REQUESTED"
+                            ? "danger"
+                            : "warning"
+                      }
+                      className="max-[767px]:col-start-1 max-[767px]:row-start-2"
+                    >
+                      {reviewLabel}
+                    </Pill>
+                    <span className="text-xs text-[#60718c] max-[1024px]:col-start-1 max-[1024px]:row-start-2 max-[767px]:row-start-3">
+                      {deliverable.sentToClientAt
+                        ? formatDate(deliverable.sentToClientAt)
+                        : formatDate(deliverable.workflowFile.createdAt)}
+                    </span>
+                    <Link
+                      href={`/projects/${encodeURIComponent(project.id)}/deliverables/${encodeURIComponent(deliverable.id)}`}
+                      className={`${rowActionButton} justify-self-end max-[1024px]:col-start-3 max-[1024px]:row-start-1 max-[767px]:col-start-2`}
+                      aria-label={`View ${deliverable.title}`}
+                    >
+                      <Eye size={16} aria-hidden="true" />
+                    </Link>
+                  </li>
+                )
+              })}
+            </ul>
           ) : (
             <EmptyState
               as="section"
@@ -501,8 +582,16 @@ export function ClientProjectPage({
               className="bg-white/60"
             />
           )}
-        </div>
-      )}
+        </TabsContent>
+      </Tabs>
+
+      <Link
+        href={`/messages?project=${encodeURIComponent(project.id)}`}
+        aria-label="Open project chat"
+        className="fixed right-6 bottom-6 z-20 grid size-14 place-items-center rounded-full bg-[#203f8c] text-white shadow-[0_10px_26px_rgb(20_30_50_/_18%)] transition-colors hover:bg-[#172f70] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#294a9b] max-[767px]:right-4 max-[767px]:bottom-4"
+      >
+        <MessageSquare size={24} strokeWidth={1.8} aria-hidden="true" />
+      </Link>
 
       {briefOpen && (
         <ClientProjectBriefDrawer

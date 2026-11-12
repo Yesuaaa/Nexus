@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/button"
 import { ClientRowTable } from "@/components/ui/client-row-table"
 import { Pill } from "@/components/ui/pill"
 import { rowActionButton } from "@/components/ui/row-action-styles"
@@ -77,24 +76,16 @@ function projectRowVisual(serviceName?: string): ProjectRowVisual {
   }
 }
 
-function ProjectAction({
-  project,
-  onView,
-}: {
-  project: ClientProjectSummary
-  onView: (project: ClientProjectSummary) => void
-}) {
+function ProjectAction({ project }: { project: ClientProjectSummary }) {
   return (
-    <Button
+    <Link
       id={`project-view-${project.id}`}
-      variant="outline"
       className={rowActionButton}
-      type="button"
       aria-label={`View ${project.name}`}
-      onClick={() => onView(project)}
+      href={`/projects/${encodeURIComponent(project.id)}`}
     >
       <Eye size={15} aria-hidden="true" />
-    </Button>
+    </Link>
   )
 }
 
@@ -104,14 +95,12 @@ export function ClientProjectsTable({
   viewKey,
   quickKey,
   onRowsSettled,
-  onView,
 }: {
   projects: ClientProjectSummary[]
   formatDate: (value: Date | string) => string
   viewKey: string
   quickKey: string
   onRowsSettled?: () => void
-  onView: (project: ClientProjectSummary) => void
 }) {
   return (
     <ClientRowTable
@@ -194,7 +183,7 @@ export function ClientProjectsTable({
               </time>
             </td>
             <td className="rounded-r-xl border-y border-r border-[#e1e7ef] bg-[#f4f7fb] px-3 py-2 align-middle">
-              <ProjectAction project={project} onView={onView} />
+              <ProjectAction project={project} />
             </td>
           </>
         )
@@ -250,7 +239,7 @@ export function ClientProjectsTable({
               >
                 Last updated {formatDate(project.updatedAt)}
               </time>
-              <ProjectAction project={project} onView={onView} />
+              <ProjectAction project={project} />
             </div>
           </article>
         )

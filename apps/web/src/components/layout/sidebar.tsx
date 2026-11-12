@@ -95,7 +95,10 @@ export function Sidebar({
                 alt="EXP"
               />
             </div>
-            <span className="mt-1 text-center text-[10px] leading-[1.3] font-semibold tracking-[0.18em] text-[#46618d]">
+            <span
+              data-portal-access-label
+              className="mt-1 text-center text-[10px] leading-[1.3] font-semibold tracking-[0.18em] text-[#46618d]"
+            >
               {accessLabels[account.role]}
             </span>
           </div>

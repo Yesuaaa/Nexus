@@ -24,7 +24,6 @@ import {
   listClientProjects,
   type ClientProjectSummary,
 } from "../api/projects-api"
-import { ClientProjectDetailsDrawer } from "../components/client-project-details-drawer"
 import { ClientProjectsTable } from "../components/client-projects-table"
 
 type ProjectFilter = "ALL" | "ACTIVE" | "COMPLETED" | "CANCELLED"
@@ -58,8 +57,6 @@ export function ClientProjectsPage() {
   const [query, setQuery] = useState("")
   const [filter, setFilter] = useState<ProjectFilter>("ALL")
   const [sort, setSort] = useState<ProjectSort>("NEWEST")
-  const [selectedProject, setSelectedProject] =
-    useState<ClientProjectSummary | null>(null)
 
   const activeCount = projects.filter((project) =>
     isActive(project.status),
@@ -222,7 +219,6 @@ export function ClientProjectsPage() {
               viewKey={table.viewKey}
               quickKey={`${filter}:${sort}:${query}`}
               onRowsSettled={table.onRowsSettled}
-              onView={setSelectedProject}
             />
             <TablePaginationFooter
               {...table.footer}
@@ -233,14 +229,6 @@ export function ClientProjectsPage() {
           </>
         )}
       </div>
-      {selectedProject && (
-        <ClientProjectDetailsDrawer
-          key={selectedProject.id}
-          project={selectedProject}
-          formatDate={formatDate}
-          onClose={() => setSelectedProject(null)}
-        />
-      )}
     </main>
   )
 }
