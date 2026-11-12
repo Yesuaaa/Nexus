@@ -19,7 +19,7 @@ import {
   getStoredAuthLanguage,
   storeAuthLanguage,
 } from "../content/auth-copy"
-import type { AuthLanguage, AuthMode } from "../model/types"
+import type { AuthLanguage, AuthMode, AuthPortal } from "../model/types"
 
 function subscribeLanguage(onChange: () => void) {
   window.addEventListener("storage", onChange)
@@ -38,7 +38,13 @@ function getServerSession() {
   return false
 }
 
-export function AuthPage({ mode }: { mode: AuthMode }) {
+export function AuthPage({
+  mode,
+  portal = "client",
+}: {
+  mode: AuthMode
+  portal?: AuthPortal
+}) {
   const router = useRouter()
   const hasSession = useSyncExternalStore(
     subscribeLanguage,
@@ -79,11 +85,15 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
 
   // Public content is useful before hydration. Existing sessions still go
   // through the server account check before entering the protected portal.
-  if (guest || !hasSession) return <AuthFormPage mode={mode} />
+  if (guest || !hasSession) return <AuthFormPage mode={mode} portal={portal} />
   return (
     <main className="grid min-h-dvh place-content-center gap-4 bg-[var(--portal-canvas)] px-6 text-center text-sm text-[#5a6f95]">
       <h1 className="m-0 text-xl font-semibold text-[#203f8c]">
-        {mode === "login" ? "Welcome Back" : "Create Account"}
+        {mode === "register"
+          ? "Create Account"
+          : portal === "workforce"
+            ? "Team Portal"
+            : "Welcome Back"}
       </h1>
       {error ? (
         <>
@@ -107,7 +117,13 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
   )
 }
 
-function AuthFormPage({ mode }: { mode: AuthMode }) {
+function AuthFormPage({
+  mode,
+  portal,
+}: {
+  mode: AuthMode
+  portal: AuthPortal
+}) {
   const { beginLoginTransition: onLoggedIn } = useAuthTransition()
   const storedLanguage = useSyncExternalStore(
     subscribeLanguage,
@@ -125,8 +141,18 @@ function AuthFormPage({ mode }: { mode: AuthMode }) {
 
   return (
     <AuthLayout
+      centered={portal === "workforce"}
       language={language}
-      visual={<PhotoPanel mode={mode} copy={copy} language={language} />}
+      visual={
+        portal === "client" && (
+          <PhotoPanel
+            mode={mode}
+            portal={portal}
+            copy={copy}
+            language={language}
+          />
+        )
+      }
       header={
         <AuthHeader
           copy={copy}
@@ -145,10 +171,10 @@ function AuthFormPage({ mode }: { mode: AuthMode }) {
       }
     >
       <AuthContent
-        key={mode}
+        key={`${portal}-${mode}`}
         mode={mode}
+        portal={portal}
         copy={copy}
-        language={language}
         onLoggedIn={onLoggedIn}
       />
     </AuthLayout>

@@ -73,6 +73,7 @@ export function TextField({
         {label}
       </Label>
       <FormInput
+        className="h-12"
         id={id}
         type={type}
         value={value}
@@ -141,6 +142,7 @@ export function PasswordField({
         )}
       </div>
       <PasswordInput
+        className="h-12"
         id={id}
         showLabel={`${copy.showPassword} ${label.toLowerCase()}`}
         hideLabel={`${copy.hidePassword} ${label.toLowerCase()}`}

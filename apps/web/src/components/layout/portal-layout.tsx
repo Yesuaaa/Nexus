@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { sileo } from "@/lib/toast"
 import { signOut } from "@/features/auth/api/auth-api"
 import { useAccount } from "@/features/auth/hooks/use-account"
+import { loginPathForRole } from "@/features/auth/model/auth-portal"
 import {
   canAccessAccountManagement,
   canAccessBookedServices,
@@ -66,9 +67,10 @@ export function PortalLayout({ children }: { children: ReactNode }) {
   }, [denied, router])
 
   async function handleSignOut() {
+    const loginPath = loginPathForRole(account?.role ?? "USER")
     try {
       await signOut()
-      router.replace("/login")
+      router.replace(loginPath)
       sileo.success({
         title: "Signed out",
         description: "See you next time.",

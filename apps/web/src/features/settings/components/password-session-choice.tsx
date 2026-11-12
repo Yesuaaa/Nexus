@@ -10,10 +10,13 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import { ApiError, clearToken } from "@/features/auth/api/auth-api"
+import { loginPathForRole } from "@/features/auth/model/auth-portal"
+import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { revokeAllSessions } from "../api/settings-api"
 import { errorMessage } from "@/lib/error-message"
 export function PasswordSessionChoice({ onClose }: { onClose: () => void }) {
   const router = useRouter()
+  const account = usePortalAccount()
   const [confirm, setConfirm] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
@@ -24,11 +27,11 @@ export function PasswordSessionChoice({ onClose }: { onClose: () => void }) {
     try {
       await revokeAllSessions()
       clearToken()
-      router.replace("/login")
+      router.replace(loginPathForRole(account.role))
     } catch (reason) {
       if (reason instanceof ApiError && reason.status === 401) {
         clearToken()
-        router.replace("/login")
+        router.replace(loginPathForRole(account.role))
         return
       }
       setError(

@@ -112,7 +112,9 @@ test.describe("Authentication and session regression", () => {
       expect((await logout).headers().authorization).toBe(
         `Bearer ${renewedTokens.token}`,
       )
-      await expect(page).toHaveURL(/\/login$/)
+      await expect(page).toHaveURL(
+        role === "USER" ? /\/login$/ : /\/internal\/login$/,
+      )
       expect(await storedTokens(page)).toEqual([null, null])
       await page.goto("/dashboard")
       await expect(page).toHaveURL(/\/login$/)
@@ -348,7 +350,7 @@ test.describe("Authentication and session regression", () => {
     expect(requests).toEqual([])
   })
 
-  for (const path of ["/login", "/register"]) {
+  for (const path of ["/login", "/register", "/internal/login"]) {
     test(`${path} offers email authentication without removed social providers`, async ({
       page,
     }) => {
@@ -372,6 +374,7 @@ test.describe("Authentication and session regression", () => {
     for (const [path, title] of [
       ["/login", "Welcome Back"],
       ["/register", "Create Account"],
+      ["/internal/login", "Team Portal"],
     ]) {
       const response = await request.get(path)
       expect(response.status()).toBe(200)
@@ -406,7 +409,7 @@ test.describe("Authentication and session regression", () => {
     page,
   }) => {
     await mockApi(page, "ADMIN")
-    await page.goto("/login")
+    await page.goto("/internal/login")
     await page
       .getByLabel("Email address", { exact: true })
       .fill(testAccounts.ADMIN.email)
@@ -438,7 +441,7 @@ test.describe("Authentication and session regression", () => {
       ),
     ).toBeNull()
     await page.getByRole("button", { name: "Sign Out", exact: true }).click()
-    await expect(page).toHaveURL(/\/login$/)
+    await expect(page).toHaveURL(/\/internal\/login$/)
     expect(await storedTokens(page)).toEqual([null, null])
     expect(
       await page.evaluate(() => sessionStorage.getItem("nexus.auth.token")),

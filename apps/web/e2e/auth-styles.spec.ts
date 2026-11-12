@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test"
 import { restoreSession } from "./regression-support"
 
-for (const route of ["/login", "/register"]) {
+for (const route of ["/login", "/register", "/internal/login"]) {
   test(`${route} renders with styles allowed by CSP`, async ({ page }) => {
     const stylesheets: string[] = []
     const policyViolations: string[] = []
@@ -71,9 +71,9 @@ test("route utilities stay styled across auth and portal navigation", async ({
     .getByRole("button", { name: "Open account menu", exact: true })
     .click()
   await page.getByRole("menuitem", { name: "Log out", exact: true }).click()
-  await expect(page).toHaveURL(/\/login$/)
-  await expect(page.locator("main[lang]")).toHaveCSS("display", "grid")
+  await expect(page).toHaveURL(/\/internal\/login$/)
+  await expect(page.locator("main[lang]")).toHaveCSS("display", "flex")
   await page.setViewportSize({ width: 390, height: 844 })
-  await expect(page.locator("main[lang]")).toHaveCSS("display", "block")
-  await expect(page.locator("aside")).toBeHidden()
+  await expect(page.locator("main[lang]")).toHaveCSS("display", "flex")
+  await expect(page.locator("aside")).toHaveCount(0)
 })
