@@ -13,18 +13,14 @@ import {
 import { cn } from "@/lib/utils"
 import type { Account } from "@/features/auth/model/types"
 import {
-  canAccessAccountManagement,
-  canAccessRequestInbox,
-  canAccessDepartmentManagement,
-  canAccessEmployeeManagement,
-  canAccessServiceCatalog,
-  canAccessCalendar,
-  canAccessServiceManagement,
-  canAccessClientManagement,
-  canAccessProjects,
-  canAccessProjectWorkspace,
-} from "@/features/auth/model/permissions"
-import { ProjectWorkspaceSidebarLinks } from "@/features/project-workspace/components/project-workspace-sidebar-links"
+  getActiveWorkspaceModuleId,
+  getNavigationLabel,
+  getNavigationPolicies,
+  isNavigationActive,
+  workspaceModuleLabels,
+  type RoutePolicy,
+  type RoutePolicyId,
+} from "@/features/workspaces/model/route-policy"
 import { focusRing, iconButtonClass } from "./styles"
 import {
   AccountsIcon,
@@ -44,6 +40,76 @@ const accessLabels: Record<Account["role"], string> = {
 
 const navLinkClass = `group relative flex min-h-10 w-full items-center gap-[13px] rounded-md border-0 bg-transparent px-[13px] text-left font-semibold text-foreground no-underline whitespace-nowrap cursor-pointer transition-colors duration-150 hover:bg-[#e1e3e5] max-[767px]:min-h-10 max-[767px]:w-full max-[767px]:justify-start max-[767px]:gap-[13px] max-[767px]:px-[13px] max-[767px]:aspect-auto motion-reduce:transition-none ${focusRing}`
 
+function NavigationIcon({ policyId }: { policyId: RoutePolicyId }) {
+  if (policyId === "dashboard") return <DashboardIcon className="flex-none" />
+  if (policyId === "accounts" || policyId === "clients")
+    return <AccountsIcon className="flex-none" />
+  if (policyId === "departments")
+    return <DepartmentIcon className="flex-none" />
+  if (policyId === "services") return <ServiceIcon className="flex-none" />
+  if (policyId === "service-requests")
+    return <ClipboardList size={20} strokeWidth={1.7} className="flex-none" />
+  if (policyId === "calendar")
+    return <CalendarDays size={20} strokeWidth={1.7} className="flex-none" />
+  if (policyId === "projects" || policyId === "project-workspace")
+    return <FolderKanban size={20} strokeWidth={1.7} className="flex-none" />
+  if (policyId === "request-inbox")
+    return <Inbox size={20} strokeWidth={1.7} className="flex-none" />
+  if (policyId === "help")
+    return <CircleHelp size={20} strokeWidth={1.7} className="flex-none" />
+  if (policyId === "employees" || policyId === "staff-workload")
+    return <UsersRound size={20} strokeWidth={1.7} className="flex-none" />
+  return null
+}
+
+function SidebarNavigationLink({
+  policy,
+  account,
+  pathname,
+  collapsed,
+  onNavigate,
+  labelOverride,
+}: {
+  policy: RoutePolicy
+  account: Account
+  pathname: string
+  collapsed: boolean
+  onNavigate: () => void
+  labelOverride?: string
+}) {
+  const navigation = policy.navigation
+  if (!navigation) return null
+  const label = labelOverride ?? getNavigationLabel(policy, account)
+  const active = isNavigationActive(policy, pathname)
+
+  return (
+    <Link
+      href={navigation.href}
+      aria-current={active ? "page" : undefined}
+      title={collapsed ? label : undefined}
+      className={cn(
+        navLinkClass,
+        collapsed &&
+          (navigation.location === "footer"
+            ? "justify-center gap-0 p-0"
+            : "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0"),
+        active && "bg-[#e1e3e5]",
+      )}
+      onClick={onNavigate}
+    >
+      <NavigationIcon policyId={policy.id} />
+      <span
+        className={cn(
+          collapsed &&
+            "w-0 overflow-hidden opacity-0 max-[767px]:w-auto max-[767px]:overflow-visible max-[767px]:opacity-100",
+        )}
+      >
+        {label}
+      </span>
+    </Link>
+  )
+}
+
 export function Sidebar({
   account,
   collapsed,
@@ -58,9 +124,32 @@ export function Sidebar({
   onCloseDrawer: () => void
 }) {
   const pathname = usePathname()
-  const collapsedLabelClass = collapsed
-    ? "w-0 overflow-hidden opacity-0 max-[767px]:w-auto max-[767px]:overflow-visible max-[767px]:opacity-100"
-    : ""
+  const mainNavigation = getNavigationPolicies(account, "main")
+  const isClient = account.role === "USER"
+  const activeModuleId = isClient
+    ? null
+    : getActiveWorkspaceModuleId(account, pathname)
+  const dashboardPolicy = mainNavigation.find(
+    (policy) => policy.id === "dashboard",
+  )
+  const workspaceNavigation = activeModuleId
+    ? mainNavigation.filter((policy) => policy.moduleId === activeModuleId)
+    : []
+  const sharedNavigation = mainNavigation.filter(
+    (policy) =>
+      policy.id !== "dashboard" && (isClient || policy.moduleId === null),
+  )
+  const footerNavigation = getNavigationPolicies(account, "footer").filter(
+    (policy) =>
+      isClient ||
+      policy.moduleId === null ||
+      policy.moduleId === activeModuleId,
+  )
+  const sectionLabelClass = cn(
+    "px-[13px] pt-3 pb-1 text-[10px] leading-4 font-semibold tracking-[0.12em] text-[#71819a] uppercase",
+    collapsed &&
+      "h-0 overflow-hidden p-0 opacity-0 max-[767px]:h-auto max-[767px]:overflow-visible max-[767px]:px-[13px] max-[767px]:pt-3 max-[767px]:pb-1 max-[767px]:opacity-100",
+  )
 
   return (
     <aside
@@ -136,221 +225,69 @@ export function Sidebar({
           )}
           aria-label="Main menu"
         >
-          <Link
-            href="/dashboard"
-            aria-current={pathname === "/dashboard" ? "page" : undefined}
-            className={cn(
-              navLinkClass,
-              collapsed &&
-                "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
-              pathname === "/dashboard" && "bg-[#e1e3e5]",
-            )}
-            onClick={onCloseDrawer}
-          >
-            <DashboardIcon className="flex-none" />
-            <span className={collapsedLabelClass}>Dashboard</span>
-          </Link>
-          {canAccessAccountManagement(account) && (
-            <Link
-              href="/accounts"
-              aria-current={pathname === "/accounts" ? "page" : undefined}
-              className={cn(
-                navLinkClass,
-                collapsed &&
-                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
-                pathname === "/accounts" && "bg-[#e1e3e5]",
-              )}
-              onClick={onCloseDrawer}
-            >
-              <AccountsIcon className="flex-none" />
-              <span className={collapsedLabelClass}>Account Management</span>
-            </Link>
-          )}
-          {canAccessDepartmentManagement(account) && (
-            <Link
-              href="/departments"
-              aria-current={pathname === "/departments" ? "page" : undefined}
-              className={cn(
-                navLinkClass,
-                collapsed &&
-                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
-                pathname === "/departments" && "bg-[#e1e3e5]",
-              )}
-              onClick={onCloseDrawer}
-            >
-              <DepartmentIcon className="flex-none" />
-              <span className={collapsedLabelClass}>Department Management</span>
-            </Link>
-          )}
-          {canAccessEmployeeManagement(account) && (
-            <Link
-              href="/employees"
-              aria-current={pathname === "/employees" ? "page" : undefined}
-              className={cn(
-                navLinkClass,
-                collapsed &&
-                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
-                pathname === "/employees" && "bg-[#e1e3e5]",
-              )}
-              onClick={onCloseDrawer}
-            >
-              <UsersRound size={20} strokeWidth={1.7} className="flex-none" />
-              <span className={collapsedLabelClass}>Employee Management</span>
-            </Link>
-          )}
-          {(canAccessServiceCatalog(account) ||
-            canAccessServiceManagement(account)) && (
-            <Link
-              href="/services"
-              aria-current={pathname === "/services" ? "page" : undefined}
-              className={cn(
-                navLinkClass,
-                collapsed &&
-                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
-                pathname === "/services" && "bg-[#e1e3e5]",
-              )}
-              onClick={onCloseDrawer}
-            >
-              <ServiceIcon className="flex-none" />
-              <span className={collapsedLabelClass}>
-                {account.role === "USER" ? "Services" : "Service Management"}
-              </span>
-            </Link>
-          )}
-          {canAccessServiceCatalog(account) && (
-            <Link
-              href="/service-requests"
-              aria-current={
-                pathname === "/service-requests" ? "page" : undefined
-              }
-              className={cn(
-                navLinkClass,
-                collapsed &&
-                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
-                pathname === "/service-requests" && "bg-[#e1e3e5]",
-              )}
-              onClick={onCloseDrawer}
-            >
-              <ClipboardList
-                size={20}
-                strokeWidth={1.7}
-                className="flex-none"
-              />
-              <span className={collapsedLabelClass}>Booked Requests</span>
-            </Link>
-          )}
-          {canAccessCalendar(account) && (
-            <Link
-              href="/calendar"
-              aria-current={pathname === "/calendar" ? "page" : undefined}
-              className={cn(
-                navLinkClass,
-                collapsed &&
-                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
-                pathname === "/calendar" && "bg-[#e1e3e5]",
-              )}
-              onClick={onCloseDrawer}
-            >
-              <CalendarDays size={20} strokeWidth={1.7} className="flex-none" />
-              <span className={collapsedLabelClass}>Calendar</span>
-            </Link>
-          )}
-          {account.role === "USER" && canAccessProjects(account) && (
-            <Link
-              href="/projects"
-              aria-current={
-                pathname.startsWith("/projects") ? "page" : undefined
-              }
-              className={cn(
-                navLinkClass,
-                collapsed &&
-                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
-                pathname.startsWith("/projects") && "bg-[#e1e3e5]",
-              )}
-              onClick={onCloseDrawer}
-            >
-              <FolderKanban size={20} strokeWidth={1.7} className="flex-none" />
-              <span className={collapsedLabelClass}>My Projects</span>
-            </Link>
-          )}
-          {canAccessRequestInbox(account) && (
-            <Link
-              href="/staff-workload"
-              aria-current={pathname === "/staff-workload" ? "page" : undefined}
-              className={cn(
-                navLinkClass,
-                pathname === "/staff-workload" && "bg-[#e1e3e5]",
-                collapsed &&
-                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
-              )}
-              onClick={onCloseDrawer}
-            >
-              <UsersRound size={20} strokeWidth={1.7} className="flex-none" />
-              <span className={collapsedLabelClass}>Staff Workload</span>
-            </Link>
-          )}
-          {canAccessRequestInbox(account) && (
-            <Link
-              href="/request-inbox"
-              aria-current={
-                pathname.startsWith("/request-inbox") ? "page" : undefined
-              }
-              className={cn(
-                navLinkClass,
-                collapsed &&
-                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
-                pathname.startsWith("/request-inbox") && "bg-[#e1e3e5]",
-              )}
-              onClick={onCloseDrawer}
-            >
-              <Inbox size={20} strokeWidth={1.7} className="flex-none" />
-              <span className={collapsedLabelClass}>Request Inbox</span>
-            </Link>
-          )}
-          {canAccessProjectWorkspace(account) && (
-            <ProjectWorkspaceSidebarLinks
+          {dashboardPolicy && (
+            <SidebarNavigationLink
+              policy={dashboardPolicy}
+              account={account}
+              pathname={pathname}
               collapsed={collapsed}
-              active={pathname.startsWith("/project-workspace")}
               onNavigate={onCloseDrawer}
+              labelOverride={activeModuleId ? "Switch workspace" : undefined}
             />
           )}
-          {canAccessClientManagement(account) && (
-            <Link
-              href="/clients"
-              aria-current={pathname === "/clients" ? "page" : undefined}
-              className={cn(
-                navLinkClass,
-                collapsed &&
-                  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
-                pathname === "/clients" && "bg-[#e1e3e5]",
-              )}
-              onClick={onCloseDrawer}
-            >
-              <AccountsIcon className="flex-none" />
-              <span className={collapsedLabelClass}>Client Management</span>
-            </Link>
+
+          {activeModuleId && (
+            <>
+              <p className={sectionLabelClass}>
+                {workspaceModuleLabels[activeModuleId]}
+              </p>
+              {workspaceNavigation.map((policy) => (
+                <SidebarNavigationLink
+                  key={policy.id}
+                  policy={policy}
+                  account={account}
+                  pathname={pathname}
+                  collapsed={collapsed}
+                  onNavigate={onCloseDrawer}
+                />
+              ))}
+            </>
+          )}
+
+          {sharedNavigation.length > 0 && (
+            <>
+              {activeModuleId && <p className={sectionLabelClass}>Shared</p>}
+              {sharedNavigation.map((policy) => (
+                <SidebarNavigationLink
+                  key={policy.id}
+                  policy={policy}
+                  account={account}
+                  pathname={pathname}
+                  collapsed={collapsed}
+                  onNavigate={onCloseDrawer}
+                />
+              ))}
+            </>
           )}
         </nav>
 
-        {account.role === "USER" && (
+        {footerNavigation.length > 0 && (
           <div
             className={cn(
-              "mt-auto border-t border-[#e2e5e9] px-6 pt-4 pb-[19px] max-[767px]:px-[22px]",
+              "mt-auto grid gap-[5px] border-t border-[#e2e5e9] px-6 pt-4 pb-[19px] max-[767px]:px-[22px]",
               collapsed && "px-3",
             )}
           >
-            <Link
-              href="/help"
-              aria-current={pathname === "/help" ? "page" : undefined}
-              className={cn(
-                navLinkClass,
-                collapsed && "justify-center gap-0 p-0",
-              )}
-              onClick={onCloseDrawer}
-            >
-              <CircleHelp size={20} strokeWidth={1.7} className="flex-none" />
-              <span className={collapsedLabelClass}>Help &amp; Support</span>
-            </Link>
+            {footerNavigation.map((policy) => (
+              <SidebarNavigationLink
+                key={policy.id}
+                policy={policy}
+                account={account}
+                pathname={pathname}
+                collapsed={collapsed}
+                onNavigate={onCloseDrawer}
+              />
+            ))}
           </div>
         )}
       </div>

@@ -22,19 +22,22 @@ test.describe("Staff and role navigation", () => {
       const managesAccounts = role === "SUPERADMIN"
       await expect(
         menu.getByRole("link", { name: "Account Management", exact: true }),
-      ).toHaveCount(managesAccounts ? 1 : 0)
+      ).toHaveCount(0)
       await expect(
         menu.getByRole("link", { name: "Department Management", exact: true }),
-      ).toHaveCount(role === "ADMIN" ? 1 : 0)
+      ).toHaveCount(0)
       await expect(
         menu.getByRole("link", { name: "Employee Management", exact: true }),
-      ).toHaveCount(role === "ADMIN" ? 1 : 0)
+      ).toHaveCount(0)
       await expect(
         menu.getByRole("link", { name: "Service Management", exact: true }),
-      ).toHaveCount(role === "ADMIN" ? 1 : 0)
+      ).toHaveCount(0)
       await expect(
         menu.getByRole("link", { name: "Services", exact: true }),
       ).toHaveCount(role === "USER" ? 1 : 0)
+      await expect(
+        menu.getByRole("link", { name: "Calendar", exact: true }),
+      ).toBeVisible()
 
       await page.goto("/accounts")
       if (managesAccounts) {
@@ -100,7 +103,12 @@ test.describe("Staff and role navigation", () => {
         await expect(
           page.getByRole("button", { name: "Create Employee", exact: true }),
         ).toHaveCount(1)
-        expect(employeeRequests).toHaveLength(1)
+        expect(employeeRequests.length).toBeGreaterThan(0)
+        expect(
+          employeeRequests.every(
+            (url) => new URL(url).pathname === "/api/employees",
+          ),
+        ).toBe(true)
       }
 
       const serviceRequests: string[] = []

@@ -6,23 +6,10 @@ import { sileo } from "@/lib/toast"
 import { signOut } from "@/features/auth/api/auth-api"
 import { useAccount } from "@/features/auth/hooks/use-account"
 import { loginPathForRole } from "@/features/auth/model/auth-portal"
-import {
-  canAccessAccountManagement,
-  canAccessBookedServices,
-  canAccessCalendar,
-  canAccessRequestInbox,
-  canAccessDepartmentManagement,
-  canAccessEmployeeManagement,
-  canAccessServiceCatalog,
-  canAccessServiceManagement,
-  canAccessClientManagement,
-  canAccessMessages,
-  canAccessProjects,
-  canAccessProjectWorkspace,
-} from "@/features/auth/model/permissions"
 import { AccountContext } from "@/features/auth/providers/account-context"
 import { useAuthTransition } from "@/features/auth/providers/auth-provider"
 import { PreferencesProvider } from "@/features/settings/providers/preferences-provider"
+import { isRouteDenied } from "@/features/workspaces/model/route-policy"
 import { BreadcrumbLabelProvider } from "./breadcrumbs"
 import { RoleLayout } from "./role-layout"
 
@@ -34,33 +21,7 @@ export function PortalLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const { markDestinationReady } = useAuthTransition()
   const { account, error } = useAccount(markDestinationReady)
-  const denied =
-    !!account &&
-    ((pathname.startsWith("/accounts") &&
-      !canAccessAccountManagement(account)) ||
-      (pathname.startsWith("/messages") && !canAccessMessages(account)) ||
-      (pathname.startsWith("/projects") && !canAccessProjects(account)) ||
-      (pathname.startsWith("/project-workspace") &&
-        !canAccessProjectWorkspace(account)) ||
-      (pathname === "/departments" &&
-        !canAccessDepartmentManagement(account)) ||
-      (pathname.startsWith("/employees") &&
-        !canAccessEmployeeManagement(account)) ||
-      (pathname === "/services" &&
-        !canAccessServiceCatalog(account) &&
-        !canAccessServiceManagement(account)) ||
-      (pathname === "/calendar" && !canAccessCalendar(account)) ||
-      ((pathname.startsWith("/service-requests") || pathname === "/help") &&
-        !canAccessServiceCatalog(account)) ||
-      (pathname === "/billing-logs" && account.role !== "USER") ||
-      (pathname.startsWith("/clients") &&
-        !canAccessClientManagement(account)) ||
-      (pathname.startsWith("/booked-services") &&
-        !canAccessBookedServices(account)) ||
-      (pathname.startsWith("/staff-workload") &&
-        !canAccessRequestInbox(account)) ||
-      (pathname.startsWith("/request-inbox") &&
-        !canAccessRequestInbox(account)))
+  const denied = !!account && isRouteDenied(account, pathname)
 
   useEffect(() => {
     if (denied) router.replace("/dashboard")

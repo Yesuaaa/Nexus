@@ -23,11 +23,11 @@ import { usePaginatedList } from "@/components/ui/use-paginated-list"
 import { TableSearchStatus } from "@/components/ui/table-search-status"
 import { TablePaginationFooter } from "@/components/ui/table-pagination-footer"
 import { SearchField } from "@/components/ui/search-field"
+import type { ServiceRequestStatus } from "@/features/service-operations/model/service-request-contracts"
 import { cn } from "@/lib/utils"
 import {
   listMyServiceRequests,
   type ClientRequestsResponse,
-  type ServiceRequestStatus,
   type ServiceRequestSummary,
 } from "../api/client-services-api"
 import { ClientRequestsTable } from "../components/client-requests-table"
