@@ -15,6 +15,7 @@ import { CalendarDays } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Calendar, calendarToday } from "./calendar"
 import { TimeInput } from "./time-input"
+import { Alert } from "./alert"
 import { Button } from "./button"
 
 type DateInputProps = Omit<ComponentProps<"input">, "type"> & {
@@ -272,9 +273,9 @@ export const DateInput = forwardRef<HTMLInputElement, DateInputProps>(
                     {Intl.DateTimeFormat().resolvedOptions().timeZone}
                   </p>
                   {!validDraft && (
-                    <p role="alert" className="m-0 text-xs text-[#bc3649]">
+                    <Alert variant="text">
                       Choose a date and time within the allowed range.
-                    </p>
+                    </Alert>
                   )}
                 </section>
                 <div className="mt-3 flex justify-between gap-2 border-t border-[#e8ebef] pt-3">
@@ -289,9 +290,10 @@ export const DateInput = forwardRef<HTMLInputElement, DateInputProps>(
                   </Dialog.Close>
                   <Button
                     type="button"
+                    variant="brand"
+                    size="sm"
                     disabled={!validDraft}
                     onClick={() => choose(draft, true)}
-                    className="h-8 bg-[#203f8c] px-3 text-xs text-white hover:bg-[#172f70]"
                   >
                     Apply date &amp; time
                   </Button>

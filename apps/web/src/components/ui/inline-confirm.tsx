@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, type ReactNode } from "react"
 import { AnimatePresence, motion } from "motion/react"
 import { focusRing } from "@/components/layout/styles"
+import { buttonTones } from "@/components/ui/button-variants"
 import { cn } from "@/lib/utils"
 
 const buttonClass = `inline-flex h-[30px] flex-none cursor-pointer items-center justify-center rounded-md border px-2.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`
@@ -127,10 +128,7 @@ export function InlineConfirm({
         </button>
         <button
           type="button"
-          className={cn(
-            buttonClass,
-            "border-transparent bg-[#bc3649] text-white hover:enabled:bg-[#a42f40]",
-          )}
+          className={cn(buttonClass, "border-transparent", buttonTones.danger)}
           disabled={pending}
           onClick={onConfirm}
         >
