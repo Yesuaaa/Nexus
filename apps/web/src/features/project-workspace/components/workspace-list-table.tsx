@@ -10,6 +10,10 @@ import {
 } from "@/components/ui/responsive-data-table"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 import { cn } from "@/lib/utils"
+import {
+  statusLabel,
+  statusTone,
+} from "@/features/projects/model/project-status"
 import type { ProjectWorkspaceSummary } from "../api/project-workspace-api"
 import { WorkspaceListRowActions } from "./workspace-list-row-actions"
 
@@ -24,14 +28,6 @@ const cells = [
   "min-w-0 @max-[900px]:col-span-2 @max-[900px]:row-start-5",
   "@max-[900px]:col-start-2 @max-[900px]:row-start-1",
 ]
-
-const statuses: Record<string, { label: string; style: string }> = {
-  PLANNED: { label: "Planned", style: "bg-[#eef0f3] text-[#596579]" },
-  IN_PROGRESS: { label: "In progress", style: "bg-[#fff3df] text-[#805316]" },
-  ON_HOLD: { label: "On hold", style: "bg-[#fff3df] text-[#805316]" },
-  COMPLETED: { label: "Completed", style: "bg-[#dcf5e5] text-[#19703a]" },
-  CANCELLED: { label: "Cancelled", style: "bg-[#fde4ea] text-[#b4234d]" },
-}
 
 function workspaceKey(workspace: ProjectWorkspaceSummary) {
   return workspace.id
@@ -69,10 +65,7 @@ export function WorkspaceListTable({
     <ResponsiveDataTable label="Project workspaces" aria-busy={loading}>
       <ResponsiveDataTableHeader
         className="@max-[900px]:sr-only"
-        rowClassName={cn(
-          grid,
-          "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground",
-        )}
+        rowClassName={grid}
       >
         {[
           "Project",
@@ -156,8 +149,8 @@ export function WorkspaceListTable({
                 <span className="mr-2 hidden text-[#738096] @max-[900px]:inline">
                   Status
                 </span>
-                <Pill className={statuses[workspace.status]?.style}>
-                  {statuses[workspace.status]?.label ?? workspace.status}
+                <Pill tone={statusTone(workspace.status)}>
+                  {statusLabel(workspace.status)}
                 </Pill>
               </div>
               <div role="cell" className={cn(cells[4], "text-[#52627a]")}>

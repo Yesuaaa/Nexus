@@ -3,6 +3,7 @@
 import { Form, validateFields } from "@/components/ui/form"
 import { useState } from "react"
 import { Check, Plus, Trash2 } from "lucide-react"
+import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -480,9 +481,9 @@ export function QuotationForm({
           </p>
         )}
         {error && (
-          <p role="alert" className="mt-4 mb-0 text-xs text-[#b42318]">
+          <Alert variant="text" className="mt-4">
             {error}
-          </p>
+          </Alert>
         )}
       </div>
       <WorkflowDraftFooter sticky>
@@ -508,7 +509,11 @@ export function QuotationForm({
             Back
           </Button>
         )}
-        <Button className={draftPrimaryButton} disabled={controls.busy}>
+        <Button
+          variant="brand"
+          className={draftPrimaryButton}
+          disabled={controls.busy}
+        >
           {controls.busy
             ? "Saving…"
             : step < 2

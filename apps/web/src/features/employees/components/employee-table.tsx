@@ -1,50 +1,35 @@
 import { useState, type ReactNode } from "react"
 import { focusRing } from "@/components/layout/styles"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
-import { Button } from "@/components/ui/button"
 import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
 import { DepartmentPill } from "@/components/ui/department-pill.tsx"
 import { Pill } from "@/components/ui/pill"
 import {
+  DataTableErrorRow,
   ResponsiveDataTable,
   ResponsiveDataTableBody,
-  ResponsiveDataTableCell,
   ResponsiveDataTableColumnHeader,
   ResponsiveDataTableHeader,
-  ResponsiveDataTableRow,
 } from "@/components/ui/responsive-data-table"
 import { cn } from "@/lib/utils"
-import type {
-  Employee,
-  EmploymentStatus,
-  EmploymentType,
-} from "../api/employees-api"
+import type { Employee, EmploymentStatus } from "../api/employees-api"
+import {
+  employmentStatusLabels,
+  employmentStatusTones,
+  employmentTypeLabels,
+} from "../model/employment"
 import { EmployeeRowActions } from "./employee-row-actions"
-import { ConversationAvatar } from "@/features/request-conversations/components/conversation-avatar"
+import { Avatar } from "@/components/ui/avatar"
 
 const employeeGrid =
   "grid grid-cols-[minmax(100px,.75fr)_minmax(180px,1.35fr)_minmax(120px,1fr)_minmax(160px,1.2fr)_minmax(82px,.7fr)_minmax(90px,.7fr)_minmax(78px,.65fr)_56px] items-center gap-3.5 @max-[1000px]:grid-cols-[minmax(0,1fr)_minmax(105px,.65fr)]"
 
-const typeNames: Record<EmploymentType, string> = {
-  FULL_TIME: "Full Time",
-  PART_TIME: "Part Time",
-  CONTRACT: "Contract",
-  INTERN: "Intern",
-}
-const statusNames: Record<EmploymentStatus, string> = {
-  ACTIVE: "Active",
-  INACTIVE: "Inactive",
-  ON_LEAVE: "On Leave",
-}
-
 function StatusPill({ status }: { status: EmploymentStatus }) {
-  const style =
-    status === "ACTIVE"
-      ? "bg-[#dcf5e5] text-[#19703a]"
-      : status === "ON_LEAVE"
-        ? "bg-[#fff3df] text-[#805316]"
-        : "bg-[#fde4ea] text-[#b4234d]"
-  return <Pill className={style}>{statusNames[status]}</Pill>
+  return (
+    <Pill tone={employmentStatusTones[status]}>
+      {employmentStatusLabels[status]}
+    </Pill>
+  )
 }
 
 function formatDate(value: string | null) {
@@ -112,10 +97,7 @@ export function EmployeeTable({
     <ResponsiveDataTable label="Employees" aria-busy={loading}>
       <ResponsiveDataTableHeader
         className="@max-[1000px]:sr-only"
-        rowClassName={cn(
-          employeeGrid,
-          "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground",
-        )}
+        rowClassName={employeeGrid}
       >
         <ResponsiveDataTableColumnHeader>
           Employee ID
@@ -172,24 +154,7 @@ export function EmployeeTable({
               ]}
             />
           ) : (
-            <ResponsiveDataTableRow>
-              <ResponsiveDataTableCell
-                aria-colspan={8}
-                className="grid min-h-[150px] place-content-center gap-3 p-6 text-center text-xs text-[#7183a2]"
-              >
-                <div role="alert" className="grid justify-items-center gap-3">
-                  <p className="m-0">{error}</p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-auto min-h-0 border-0 bg-transparent p-0 font-bold text-[#244993] shadow-none hover:bg-transparent"
-                    onClick={onRetry}
-                  >
-                    Try again
-                  </Button>
-                </div>
-              </ResponsiveDataTableCell>
-            </ResponsiveDataTableRow>
+            <DataTableErrorRow message={error} onRetry={onRetry} colSpan={8} />
           )}
         </ResponsiveDataTableBody>
       ) : (
@@ -219,7 +184,7 @@ export function EmployeeTable({
                 role="cell"
                 className="flex min-w-0 items-center gap-2.5 @max-[1000px]:col-span-2 @max-[1000px]:row-start-2"
               >
-                <ConversationAvatar
+                <Avatar
                   name={employee.fullName}
                   imageUrl={employee.imageUrl}
                   className="size-8"
@@ -288,7 +253,7 @@ export function EmployeeTable({
                   Type{" "}
                 </span>
                 {employee.employmentType
-                  ? typeNames[employee.employmentType]
+                  ? employmentTypeLabels[employee.employmentType]
                   : "Not Set"}
               </div>
               <div
@@ -309,7 +274,7 @@ export function EmployeeTable({
                 className="@max-[1000px]:col-start-2 @max-[1000px]:row-start-1 @max-[1000px]:justify-self-end"
               >
                 {archiveView ? (
-                  <Pill className="bg-[#eef0f3] text-[#596579]">Archived</Pill>
+                  <Pill tone="neutral">Archived</Pill>
                 ) : employee.status ? (
                   <StatusPill status={employee.status} />
                 ) : (

@@ -2,7 +2,7 @@
 
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import {
   ArrowLeft,
   Clock3,
@@ -13,8 +13,12 @@ import {
   Send,
 } from "lucide-react"
 import { sileo } from "sileo"
+import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { EmptyState } from "@/components/ui/empty-state"
+import { pillToneClass, type PillTone } from "@/components/ui/pill"
 import { rowActionButton } from "@/components/ui/row-action-styles"
+import { ProgressMeter } from "@/components/ui/stat-strip"
 import { contentClass } from "@/components/layout/styles"
 import { useBreadcrumbLabel } from "@/components/layout/breadcrumbs"
 import {
@@ -30,23 +34,18 @@ import {
   ClientProjectBriefDrawer,
   RequestProjectDialog,
 } from "../components/client-project-forms"
+import { errorMessage } from "@/lib/error-message"
+import { useAsyncResource } from "@/lib/use-async-resource"
+import { statusLabel, statusTone } from "../model/project-status"
 
 type ClientTab = "overview" | "deliverables"
 
-function statusClass(status: string) {
-  if (status === "IN_PROGRESS") return "bg-amber-100 text-amber-800"
-  if (status === "COMPLETED") return "bg-emerald-100 text-emerald-800"
-  if (status === "CANCELLED") return "bg-rose-100 text-rose-700"
-  if (status === "ON_HOLD") return "bg-orange-100 text-orange-800"
-  return "bg-slate-100 text-slate-700"
-}
-
-function changeStatusClass(request: ProjectChangeRequest) {
+function changeStatusTone(request: ProjectChangeRequest): PillTone {
   if (request.kind === "CANCELLATION" && request.status === "ACCEPTED")
-    return "bg-rose-100 text-rose-800"
-  if (request.status === "ACCEPTED") return "bg-emerald-100 text-emerald-800"
-  if (request.status === "NOT_APPROVED") return "bg-rose-100 text-rose-700"
-  return "bg-amber-100 text-amber-800"
+    return "danger"
+  if (request.status === "ACCEPTED") return "success"
+  if (request.status === "NOT_APPROVED") return "danger"
+  return "warning"
 }
 
 function changeStatusLabel(request: ProjectChangeRequest) {
@@ -71,38 +70,22 @@ export function ClientProjectPage({
   initialTab?: ClientTab
 }) {
   const { formatDate } = useDatePreferences()
-  const [project, setProject] = useState<ProjectWorkspace | null>(null)
+  const {
+    data: project,
+    error,
+    loading,
+    setData: setProject,
+  } = useAsyncResource<ProjectWorkspace>(
+    (signal) => getProject(projectId, signal),
+    [projectId],
+    { fallbackError: "Couldn't load this project." },
+  )
   const [tab, setTab] = useState<ClientTab>(initialTab)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
   const [briefOpen, setBriefOpen] = useState(false)
   const [requestOpen, setRequestOpen] = useState(false)
 
   useBreadcrumbLabel(projectId, project?.name)
-
-  useEffect(() => {
-    const controller = new AbortController()
-    getProject(projectId, controller.signal)
-      .then((next) => {
-        if (!controller.signal.aborted) {
-          setProject(next)
-          setError("")
-        }
-      })
-      .catch((reason: unknown) => {
-        if (!controller.signal.aborted)
-          setError(
-            reason instanceof Error
-              ? reason.message
-              : "Couldn't load this project.",
-          )
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false)
-      })
-    return () => controller.abort()
-  }, [projectId])
 
   function selectTab(next: ClientTab) {
     setTab(next)
@@ -143,18 +126,18 @@ export function ClientProjectPage({
     : "CANCELLATION"
 
   async function saveBrief(brief: { name: string; description: string }) {
-    if (busy) return
+    if (busy) return false
     setBusy(true)
     try {
       setProject(await updateProjectBrief(projectId, brief))
-      setBriefOpen(false)
       sileo.success({ title: "Project brief updated" })
+      return true
     } catch (reason) {
       sileo.error({
         title: "Couldn't update the brief",
-        description:
-          reason instanceof Error ? reason.message : "Please try again.",
+        description: errorMessage(reason, "Please try again."),
       })
+      return false
     } finally {
       setBusy(false)
     }
@@ -185,8 +168,7 @@ export function ClientProjectPage({
           kind === "CANCELLATION"
             ? "Couldn't send the cancellation request"
             : "Couldn't send the change request",
-        description:
-          reason instanceof Error ? reason.message : "Please try again.",
+        description: errorMessage(reason, "Please try again."),
       })
     } finally {
       setBusy(false)
@@ -205,12 +187,9 @@ export function ClientProjectPage({
   if (error || !project) {
     return (
       <main className={`${contentClass} p-6 max-[767px]:p-4`}>
-        <div
-          role="alert"
-          className="rounded-xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-800"
-        >
+        <Alert as="div" className="rounded-xl p-5 text-sm">
           {error || "This project could not be found."}
-        </div>
+        </Alert>
         <Button variant="outline" className="mt-4" asChild>
           <Link href="/projects">
             <ArrowLeft size={16} />
@@ -230,9 +209,9 @@ export function ClientProjectPage({
               {project.name}
             </h1>
             <span
-              className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-medium ${statusClass(project.status)}`}
+              className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-medium ${pillToneClass(statusTone(project.status))}`}
             >
-              {project.status.replaceAll("_", " ")}
+              {statusLabel(project.status)}
             </span>
           </div>
           <p className="mt-2 mb-0 text-xs text-[#60718c]">
@@ -256,8 +235,8 @@ export function ClientProjectPage({
             <Button
               type="button"
               disabled={!canStartProjectRequest || busy}
+              variant="brand"
               onClick={() => setRequestOpen(true)}
-              className="bg-[#243f8f] hover:bg-[#1d367d]"
             >
               <Send size={15} aria-hidden="true" />
               {canStartProjectRequest
@@ -324,7 +303,7 @@ export function ClientProjectPage({
                       "Request reference",
                       project.request?.referenceNumber || "—",
                     ],
-                    ["Status", project.status.replaceAll("_", " ")],
+                    ["Status", statusLabel(project.status)],
                     [
                       "Started",
                       project.startDate
@@ -350,17 +329,12 @@ export function ClientProjectPage({
                 <p className="mt-2 mb-0 text-[11px] text-[#71839d]">
                   {progress.completed} of {progress.total} tasks complete
                 </p>
-                <div
-                  className="mt-4 h-2 overflow-hidden rounded-full bg-[#e0e6ef]"
-                  role="progressbar"
-                  aria-valuenow={progressPercent}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-label="Overall project progress"
-                >
-                  <div
-                    className="h-full rounded-full bg-[#2c4e9b] transition-[width]"
-                    style={{ width: `${progressPercent}%` }}
+                <div className="mt-4">
+                  <ProgressMeter
+                    value={progressPercent}
+                    max={100}
+                    label="Overall project progress"
+                    colorClass="bg-[#2c4e9b]"
                   />
                 </div>
               </div>
@@ -389,7 +363,7 @@ export function ClientProjectPage({
                   <li key={request.id} className="py-4 first:pt-0 last:pb-0">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span
-                        className={`rounded-full px-2.5 py-1 text-[10px] font-medium ${changeStatusClass(request)}`}
+                        className={`rounded-full px-2.5 py-1 text-[10px] font-medium ${pillToneClass(changeStatusTone(request))}`}
                       >
                         {changeStatusLabel(request)}
                       </span>
@@ -496,7 +470,7 @@ export function ClientProjectPage({
                           : formatDate(deliverable.workflowFile.createdAt)}
                       </span>
                       <span
-                        className={`justify-self-start rounded-full px-2.5 py-1 text-[10px] font-medium max-[560px]:col-start-1 max-[560px]:row-start-2 ${review?.status === "APPROVED" ? "bg-emerald-100 text-emerald-800" : review?.status === "REVISION_REQUESTED" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-800"}`}
+                        className={`justify-self-start rounded-full px-2.5 py-1 text-[10px] font-medium max-[560px]:col-start-1 max-[560px]:row-start-2 ${pillToneClass(review?.status === "APPROVED" ? "success" : review?.status === "REVISION_REQUESTED" ? "danger" : "warning")}`}
                       >
                         {reviewLabel}
                       </span>
@@ -518,31 +492,27 @@ export function ClientProjectPage({
               </ul>
             </div>
           ) : (
-            <section className="grid justify-items-center rounded-xl border border-dashed border-[#ccd7e5] bg-white/60 px-6 py-14 text-center">
-              <span className="grid size-12 place-items-center rounded-full bg-[#edf2f9] text-[#2b4b97]">
-                <FileText size={22} aria-hidden="true" />
-              </span>
-              <h3 className="mt-4 mb-0 text-base font-semibold">
-                No deliverables shared yet
-              </h3>
-              <p className="mt-2 mb-0 max-w-sm text-xs leading-5 text-[#667894]">
-                When your project team shares a reviewed file, you can open it
-                here and approve it or request a revision.
-              </p>
-            </section>
+            <EmptyState
+              as="section"
+              size="lg"
+              icon={FileText}
+              title="No deliverables shared yet"
+              description="When your project team shares a reviewed file, you can open it here and approve it or request a revision."
+              className="bg-white/60"
+            />
           )}
         </div>
       )}
 
-      <ClientProjectBriefDrawer
-        key={briefOpen ? "brief-open" : "brief-closed"}
-        open={briefOpen}
-        name={project.name}
-        description={project.description ?? ""}
-        busy={busy}
-        onOpenChange={setBriefOpen}
-        onSave={(brief) => void saveBrief(brief)}
-      />
+      {briefOpen && (
+        <ClientProjectBriefDrawer
+          name={project.name}
+          description={project.description ?? ""}
+          busy={busy}
+          onClose={() => setBriefOpen(false)}
+          onSave={saveBrief}
+        />
+      )}
       <RequestProjectDialog
         key={requestOpen ? "request-open" : "request-closed"}
         open={requestOpen}

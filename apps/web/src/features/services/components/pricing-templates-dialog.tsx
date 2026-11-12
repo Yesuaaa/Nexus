@@ -30,6 +30,7 @@ import {
   type PricingTemplate,
 } from "../api/services-api"
 import { needsAmount, PriceFields } from "./service-price-fields"
+import { errorMessage } from "@/lib/error-message"
 
 const inputClass = `h-10 w-full min-w-0 rounded-lg border border-[#d6dfec] bg-background px-3 text-sm ${focusRing}`
 const fieldClass = "grid min-w-0 gap-1.5"
@@ -116,9 +117,10 @@ function TemplateEditor({
       })
     } catch (caught) {
       setError(
-        caught instanceof Error
-          ? caught.message
-          : "Couldn't update the pricing template. Please try again.",
+        errorMessage(
+          caught,
+          "Couldn't update the pricing template. Please try again.",
+        ),
       )
     } finally {
       setBusy(false)
@@ -144,9 +146,10 @@ function TemplateEditor({
       })
     } catch (caught) {
       setDeleteError(
-        caught instanceof Error
-          ? caught.message
-          : "Couldn't delete the pricing template. Please try again.",
+        errorMessage(
+          caught,
+          "Couldn't delete the pricing template. Please try again.",
+        ),
       )
     } finally {
       setBusy(false)

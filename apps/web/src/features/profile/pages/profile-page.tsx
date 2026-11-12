@@ -2,16 +2,11 @@
 
 import { Form } from "@/components/ui/form"
 
-import {
-  useEffect,
-  useId,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from "react"
+import { useId, useState, type FormEvent, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { Plus, Trash2 } from "lucide-react"
 import { sileo } from "@/lib/toast"
+import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -23,6 +18,7 @@ import { ProfileOverview } from "../components/profile-overview"
 import { ProfileImagesEditor } from "../components/profile-images-editor"
 import { ProfileImageUpload } from "../components/profile-image-upload"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
+import { roleLabels } from "@/features/auth/model/roles"
 import {
   getProfile,
   savePersonalProfile,
@@ -31,17 +27,11 @@ import {
   type SpecialistProfile,
   type PortfolioProject,
 } from "../api/profile-api"
+import { errorMessage } from "@/lib/error-message"
+import { useAsyncResource } from "@/lib/use-async-resource"
 
 const inputClass =
   "min-h-11 w-full min-w-0 rounded-lg border border-[#d8e1ef] bg-background px-3 py-2 text-sm text-[#182235] outline-none focus-visible:ring-2 focus-visible:ring-[#294a9b] disabled:opacity-60"
-const primaryClass =
-  "min-h-11 bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
-const roles = {
-  USER: "Client",
-  STAFF: "Staff",
-  ADMIN: "Admin",
-  SUPERADMIN: "Superadmin",
-}
 function Field({
   label,
   children,
@@ -91,15 +81,10 @@ function Section({
 }
 function ErrorMessage({ message }: { message: string }) {
   return message ? (
-    <p role="alert" className="m-0 text-xs leading-5 text-[#bc3649]">
+    <Alert variant="text" className="leading-5">
       {message}
-    </p>
+    </Alert>
   ) : null
-}
-function errorText(reason: unknown) {
-  return reason instanceof Error
-    ? reason.message
-    : "Your changes could not be saved. Try again."
 }
 
 function PersonalDetails({
@@ -126,7 +111,9 @@ function PersonalDetails({
       window.dispatchEvent(new Event("nexus:account-updated"))
       sileo.success({ title: "Personal details updated" })
     } catch (reason) {
-      setError(errorText(reason))
+      setError(
+        errorMessage(reason, "Your changes could not be saved. Try again."),
+      )
     } finally {
       setBusy(false)
     }
@@ -177,14 +164,14 @@ function PersonalDetails({
           <Field label="Account role">
             <input
               readOnly
-              value={roles[profile.user.role]}
+              value={roleLabels[profile.user.role]}
               className={`${inputClass} bg-[#f5f7fa]`}
             />
           </Field>
         </fieldset>
         <ErrorMessage message={error} />
         <div className="flex justify-end border-t border-[#eceef1] pt-4">
-          <Button className={primaryClass} disabled={busy}>
+          <Button variant="brand" size="touch" disabled={busy}>
             {busy ? "Saving…" : "Save personal details"}
           </Button>
         </div>
@@ -244,7 +231,9 @@ function SpecialistEditor({
       }
       sileo.success({ title: "Specialist profile updated" })
     } catch (reason) {
-      setError(errorText(reason))
+      setError(
+        errorMessage(reason, "Your changes could not be saved. Try again."),
+      )
     } finally {
       setBusy(false)
     }
@@ -521,7 +510,11 @@ function SpecialistEditor({
         </fieldset>
         <ErrorMessage message={error} />
         <div className="flex justify-end border-t border-[#eceef1] pt-4">
-          <Button className={primaryClass} disabled={busy || uploadingImage}>
+          <Button
+            variant="brand"
+            size="touch"
+            disabled={busy || uploadingImage}
+          >
             {busy
               ? "Saving…"
               : uploadingImage
@@ -537,27 +530,18 @@ function SpecialistEditor({
 export function ProfilePage() {
   const router = useRouter()
   const account = usePortalAccount()
-  const [profile, setProfile] = useState<Profile | null>(null)
-  const [error, setError] = useState("")
-  const [revision, setRevision] = useState(0)
+  const {
+    data: profile = null,
+    error,
+    retry,
+    setData: setProfile,
+  } = useAsyncResource((signal) => getProfile(signal), [], {
+    fallbackError: "Your changes could not be saved. Try again.",
+  })
   const [uploadingImage, setUploadingImage] = useState(false)
   const [editor, setEditor] = useState<
     "personal" | "specialist" | "images" | null
   >(null)
-  useEffect(() => {
-    const controller = new AbortController()
-    getProfile(controller.signal)
-      .then((data) => {
-        if (!controller.signal.aborted) {
-          setProfile(data)
-          setError("")
-        }
-      })
-      .catch((reason) => {
-        if (!controller.signal.aborted) setError(errorText(reason))
-      })
-    return () => controller.abort()
-  }, [revision])
   const user = profile?.user || account
   const saved = (data: Profile) => {
     setProfile(data)
@@ -569,7 +553,7 @@ export function ProfilePage() {
         user={user}
         profile={profile}
         error={error}
-        onRetry={() => setRevision((value) => value + 1)}
+        onRetry={retry}
         onEditPersonal={() => setEditor("personal")}
         onEditSpecialist={() => setEditor("specialist")}
         onEditSecurity={() => router.push("/settings")}

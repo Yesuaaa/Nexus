@@ -90,18 +90,24 @@ export async function listEmployees(filters: {
   })
 }
 
-export async function getEmployee(id: string): Promise<Employee> {
+export async function getEmployee(
+  id: string,
+  signal?: AbortSignal,
+): Promise<Employee> {
   const result = await apiRequest<{ employee: Employee }>(
     `/api/employees/${encodeURIComponent(id)}`,
+    { signal },
   )
   return result.employee
 }
 
 export async function getEmployeeStatusOptions(
   id: string,
+  signal?: AbortSignal,
 ): Promise<EmployeeStatusOptions> {
   return apiRequest<EmployeeStatusOptions>(
     `/api/employees/${encodeURIComponent(id)}/status-options`,
+    { signal },
   )
 }
 

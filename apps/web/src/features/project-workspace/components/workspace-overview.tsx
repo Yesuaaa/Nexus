@@ -4,7 +4,10 @@ import { TaskRowActions } from "./task-row-actions"
 
 import { CheckCircle2, ChevronRight, Circle, Flag, Layers3 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { pillToneClass } from "@/components/ui/pill"
+import { ProgressMeter } from "@/components/ui/stat-strip"
 import type { ProjectWorkspaceDetail } from "../api/project-workspace-api"
+import { taskStatusLabels, taskStatusTones } from "../model/task-status"
 
 export function WorkspaceOverview({
   workspace,
@@ -134,19 +137,12 @@ export function WorkspaceOverview({
                         >
                           {count} / {phase.tasks.length}
                         </span>
-                        <div
-                          className="h-1.5 w-24 overflow-hidden rounded-full bg-[#e1e6ee]"
-                          role="progressbar"
-                          aria-label={`${phase.title} progress`}
-                          aria-valuenow={percent}
-                          aria-valuemin={0}
-                          aria-valuemax={100}
-                        >
-                          <div
-                            className="h-full rounded-full bg-[#294c96]"
-                            style={{ width: `${percent}%` }}
-                          />
-                        </div>
+                        <ProgressMeter
+                          value={percent}
+                          max={100}
+                          label={`${phase.title} progress`}
+                          colorClass="bg-[#294c96]"
+                        />
                         <span className="w-9 text-right tabular-nums text-[#60718c]">
                           {percent}%
                         </span>
@@ -238,13 +234,9 @@ export function WorkspaceOverview({
                                 </td>
                                 <td className="px-3 py-3 text-center align-middle">
                                   <span
-                                    className={`inline-flex rounded-md px-2 py-1 text-[10px] ${task.status === "DONE" ? "bg-[#e3f5e9] text-[#13743b]" : task.status === "IN_PROGRESS" ? "bg-[#fff1d4] text-[#946000]" : "bg-[#edf1f6] text-[#60718c]"}`}
+                                    className={`inline-flex rounded-md px-2 py-1 text-[10px] ${pillToneClass(taskStatusTones[task.status])}`}
                                   >
-                                    {task.status === "DONE"
-                                      ? "Complete"
-                                      : task.status === "IN_PROGRESS"
-                                        ? "In progress"
-                                        : "Not started"}
+                                    {taskStatusLabels[task.status]}
                                   </span>
                                 </td>
                                 <td className="whitespace-nowrap px-3 py-3 text-center align-middle text-[#738096]">

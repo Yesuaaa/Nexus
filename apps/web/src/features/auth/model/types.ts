@@ -1,4 +1,5 @@
 import type { Permission } from "./permissions"
+import type { Role } from "./roles"
 import type { DepartmentColor } from "@/features/departments/model/department-color"
 
 export type AuthMode = "login" | "register"
@@ -11,7 +12,7 @@ export type Account = {
   fullName: string | null
   imageUrl?: string | null
   contactNumber: string | null
-  role: "SUPERADMIN" | "ADMIN" | "STAFF" | "USER"
+  role: Role
   isActive: boolean
   accountDeletedAt?: string | null
   position?: string | null

@@ -1,10 +1,17 @@
+import { Avatar } from "@/components/ui/avatar"
 import type { FormEvent } from "react"
 import { CalendarDays, Mail, Phone } from "lucide-react"
+import { Alert } from "@/components/ui/alert"
 import { Form } from "@/components/ui/form"
+import { pillToneClass } from "@/components/ui/pill"
 import { SidePanelButton, SidePanelFooter } from "@/components/ui/side-panel"
 import { Input } from "@/components/ui/input"
+import { roleLabels } from "@/features/auth/model/roles"
+import {
+  employmentStatusLabels,
+  employmentStatusTones,
+} from "@/features/employees/model/employment"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
-import { getInitials } from "@/lib/initials"
 import { cn } from "@/lib/utils"
 import {
   Select,
@@ -20,19 +27,6 @@ import {
   panelSelectTrigger,
 } from "@/components/ui/panel-styles"
 
-const roleLabels = {
-  SUPERADMIN: "Superadmin",
-  ADMIN: "Admin",
-  STAFF: "Staff",
-  USER: "Client",
-} as const
-
-const statusStyles = {
-  ACTIVE: { label: "Active", className: "bg-[#e7f6ee] text-[#1f7a4d]" },
-  ON_LEAVE: { label: "On leave", className: "bg-[#fff4e0] text-[#9a5b00]" },
-  INACTIVE: { label: "Inactive", className: "bg-[#eef0f3] text-[#5b6577]" },
-} as const
-
 const badge =
   "rounded px-1.5 py-px text-[10px] leading-4 font-semibold whitespace-nowrap"
 
@@ -40,7 +34,6 @@ function MemberProfileCard({ member }: { member: DepartmentMember }) {
   const { formatDate } = useDatePreferences()
   const email = member.email || member.user?.email || null
   const name = member.fullName || email || "Employee"
-  const status = statusStyles[member.status]
   const details = [
     { icon: Mail, label: "Email", value: email ?? "No account linked" },
     { icon: Phone, label: "Phone", value: member.contactNumber ?? "Not set" },
@@ -61,12 +54,11 @@ function MemberProfileCard({ member }: { member: DepartmentMember }) {
         aria-hidden="true"
       />
       <div className="px-4 pb-4">
-        <span
-          className="-mt-7 grid size-14 place-items-center rounded-full bg-[#203f8c] text-base font-semibold text-white ring-4 ring-background"
-          aria-hidden="true"
-        >
-          {getInitials(name) || "E"}
-        </span>
+        <Avatar
+          name={name}
+          fallback="E"
+          className="-mt-7 size-14 bg-[#203f8c] text-base text-white ring-4 ring-background"
+        />
         <h3 className="mt-2 mb-0 truncate text-[15px] font-[650] tracking-[-0.02em]">
           {name}
         </h3>
@@ -87,7 +79,14 @@ function MemberProfileCard({ member }: { member: DepartmentMember }) {
               {member.team.name}
             </span>
           )}
-          <span className={cn(badge, status.className)}>{status.label}</span>
+          <span
+            className={cn(
+              badge,
+              pillToneClass(employmentStatusTones[member.status]),
+            )}
+          >
+            {employmentStatusLabels[member.status]}
+          </span>
         </div>
         <dl className="mt-4 mb-0 grid gap-2.5 border-t border-[#eceef1] pt-4">
           {details.map(({ icon: Icon, label, value }) => (
@@ -137,14 +136,7 @@ export function EditMemberForm({
     <Form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
       <div className="grid min-h-0 flex-1 content-start gap-4 overflow-y-auto overscroll-contain px-6 py-5 max-[560px]:px-5">
         <MemberProfileCard member={member} />
-        {error && (
-          <p
-            className="m-0 rounded-lg border border-[#f4d6db] bg-[#fff6f7] p-3 text-xs text-[#bc3649]"
-            role="alert"
-          >
-            {error}
-          </p>
-        )}
+        {error && <Alert>{error}</Alert>}
         <label className={panelField} htmlFor="mem-pos">
           Job title / position
           <Input

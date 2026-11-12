@@ -3,15 +3,15 @@
 import { useState } from "react"
 import { TaskDetailsPanel } from "./task-details-panel"
 import { Eye, Pencil } from "lucide-react"
+import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { CloseIcon } from "@/components/layout/icons"
 import { DateInput } from "@/components/ui/date-input"
 import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog"
+  Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+} from "@/components/ui/modal"
 import {
   Select,
   SelectContent,
@@ -21,11 +21,16 @@ import {
 } from "@/components/ui/select"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import {
+  RowActionLabel,
+  RowActionsMenu,
+} from "@/components/ui/row-actions-menu"
+import {
   saveProjectPlan,
   type ProjectTask,
   type ProjectWorkspaceDetail,
   type ProjectWorkspaceWorkstream,
 } from "../api/project-workspace-api"
+import { errorMessage } from "@/lib/error-message"
 
 export function TaskRowActions({
   workspaceId,
@@ -68,96 +73,80 @@ export function TaskRowActions({
       )
       setMode(null)
     } catch (reason) {
-      setError(
-        reason instanceof Error ? reason.message : "Couldn't update task",
-      )
+      setError(errorMessage(reason, "Couldn't update task"))
     } finally {
       setBusy(false)
     }
   }
+  function edit() {
+    setDraft({ ...task })
+    setError("")
+    setMode("edit")
+  }
   return (
     <>
-      <div className="flex justify-center gap-2">
-        {!editOnly && (
+      <div className="flex justify-center">
+        {editOnly ? (
           <button
-            className={rowActionButton}
+            type="button"
+            className={`${rowActionButton} border-transparent! bg-[#203f8c]! text-white! hover:bg-[#172f70]!`}
             disabled={disabled}
-            aria-label={`View ${task.title}`}
-            onClick={() => {
-              setMode("view")
-              setError("")
-            }}
+            aria-label={`Edit ${task.title}`}
+            onClick={edit}
           >
-            <Eye size={16} />
+            <Pencil size={15} aria-hidden="true" />
           </button>
+        ) : (
+          <RowActionsMenu
+            triggerId={`task-actions-${task.id}`}
+            triggerLabel={`More actions for ${task.title}`}
+            menuLabel={`Actions for ${task.title}`}
+            disabled={disabled}
+            items={[
+              {
+                action: "view" as const,
+                label: <RowActionLabel icon={Eye}>View task</RowActionLabel>,
+              },
+              {
+                action: "edit" as const,
+                label: <RowActionLabel icon={Pencil}>Edit task</RowActionLabel>,
+              },
+            ]}
+            onAction={(action) => {
+              if (action === "edit") return edit()
+              setError("")
+              setMode("view")
+            }}
+          />
         )}
-        <button
-          className={`${rowActionButton} border-transparent! bg-[#203f8c]! text-white! hover:bg-[#172f70]!`}
-          disabled={disabled}
-          aria-label={`Edit ${task.title}`}
-          onClick={() => {
-            setDraft({ ...task })
-            setError("")
-            setMode("edit")
-          }}
-        >
-          <Pencil size={15} />
-        </button>
       </div>
       {mode === "view" && (
         <TaskDetailsPanel
           task={task}
           stream={stream}
           onClose={() => setMode(null)}
-          onEdit={() => {
-            setDraft({ ...task })
-            setError("")
-            setMode("edit")
-          }}
+          onEdit={edit}
         />
       )}
-      <Dialog
+      <Modal
         open={mode === "edit"}
-        onOpenChange={(open) => {
-          if (!open && !busy) setMode(null)
-        }}
+        onClose={() => setMode(null)}
+        busy={busy}
+        fallbackFocus={() => document.getElementById(`task-actions-${task.id}`)}
       >
-        <DialogContent
-          showCloseButton={false}
-          overlayClassName="bg-[rgb(13_28_57_/_48%)]"
-          className="max-h-[calc(100dvh-28px)] w-[min(620px,calc(100vw-28px))] max-w-none gap-0 overflow-y-auto rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_22px_75px_rgb(18_36_73_/_22%)]"
-          onInteractOutside={(event) => event.preventDefault()}
-          onEscapeKeyDown={(event) => {
-            if (busy) event.preventDefault()
+        <ModalHeader
+          title="Edit task"
+          description={`Update this task in ${stream.serviceName}.`}
+          closeLabel="Close task editor"
+          closeDisabled={busy}
+        />
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            void save()
           }}
         >
-          <header className="flex items-start justify-between gap-4 border-b border-[#eceef1] p-5 sm:px-6 sm:pt-6 sm:pb-5">
-            <div className="min-w-0">
-              <DialogTitle className="m-0 text-[20px] font-[650] tracking-[-0.03em]">
-                Edit task
-              </DialogTitle>
-              <DialogDescription className="mt-1 mb-0 text-xs leading-5 text-[#738096]">
-                Update this task in {stream.serviceName}.
-              </DialogDescription>
-            </div>
-            <Button
-              variant="outline"
-              type="button"
-              className="grid size-8 flex-none place-items-center rounded-[7px] border border-[#e1e4ea] bg-background p-0 text-[#65718a] shadow-none hover:bg-[#f1f5fc] disabled:opacity-50"
-              aria-label="Close task editor"
-              disabled={busy}
-              onClick={() => setMode(null)}
-            >
-              <CloseIcon width="16" height="16" />
-            </Button>
-          </header>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault()
-              void save()
-            }}
-            className="grid gap-4 p-5 sm:grid-cols-2 sm:p-6"
-          >
+          <ModalBody className="sm:grid-cols-2">
             <fieldset
               disabled={busy}
               className="m-0 grid gap-4 border-0 p-0 sm:col-span-2 sm:grid-cols-2"
@@ -264,34 +253,23 @@ export function TaskRowActions({
                 </Select>
               </div>
             </fieldset>
-            {error && (
-              <p
-                role="alert"
-                className="m-0 rounded-lg bg-[#fff0f1] p-3 text-xs text-[#bc3649] sm:col-span-2"
-              >
-                {error}
-              </p>
-            )}
-            <footer className="-mx-5 -mb-5 flex justify-end gap-2 border-t border-[#eceef1] px-5 py-4 sm:col-span-2 sm:-mx-6 sm:-mb-6 sm:px-6">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={busy}
-                onClick={() => setMode(null)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={busy}
-                className="bg-[#203f8c] text-white hover:bg-[#172f70]"
-              >
-                {busy ? "Saving…" : "Save changes"}
-              </Button>
-            </footer>
-          </form>
-        </DialogContent>
-      </Dialog>
+            {error && <Alert className="sm:col-span-2">{error}</Alert>}
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => setMode(null)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" variant="brand" disabled={busy}>
+              {busy ? "Saving…" : "Save changes"}
+            </Button>
+          </ModalFooter>
+        </form>
+      </Modal>
     </>
   )
 }

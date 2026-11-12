@@ -1,6 +1,7 @@
 "use client"
 
 import { useId, useRef, useState, type FormEvent } from "react"
+import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -26,6 +27,7 @@ import {
   uploadProjectDeliverable,
   type ProjectDeliverable,
 } from "../api/project-workspace-api"
+import { errorMessage } from "@/lib/error-message"
 
 export function ProjectDeliverableSubmissionDialog({
   workspaceId,
@@ -74,10 +76,10 @@ export function ProjectDeliverableSubmissionDialog({
       onSubmitted()
       onClose()
     } catch (reason) {
-      const message =
-        reason instanceof Error
-          ? reason.message
-          : "Couldn't submit this deliverable. Try again."
+      const message = errorMessage(
+        reason,
+        "Couldn't submit this deliverable. Try again.",
+      )
       setError(message)
       sileo.error({ title: "Submission failed", description: message })
     } finally {
@@ -185,11 +187,7 @@ export function ProjectDeliverableSubmissionDialog({
             <p className="text-[11px] text-[#52627a]">
               PDF, Word, PNG, JPEG or plain text · Up to 5 MB
             </p>
-            {error && (
-              <p role="alert" className="text-xs text-red-700">
-                {error}
-              </p>
-            )}
+            {error && <Alert variant="text">{error}</Alert>}
             <DialogFooter>
               <Button
                 type="button"
@@ -201,8 +199,9 @@ export function ProjectDeliverableSubmissionDialog({
               </Button>
               <Button
                 type="submit"
+                variant="brand"
                 disabled={busy || !selected || !file}
-                className="bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
+                className="text-xs"
               >
                 {busy ? "Submitting…" : "Submit for review"}
               </Button>

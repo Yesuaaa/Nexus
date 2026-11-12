@@ -26,6 +26,7 @@ import { RowActionsMenu } from "@/components/ui/row-actions-menu"
 import { SheetClose } from "@/components/ui/sheet"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
+import { Alert } from "@/components/ui/alert"
 import { Pill } from "@/components/ui/pill"
 import { MemberIdentity } from "@/components/ui/member-identity"
 import { SearchField } from "@/components/ui/search-field"
@@ -55,6 +56,9 @@ import {
   type DepartmentMember,
   type DepartmentStaffOption,
 } from "../api/departments-api"
+import { roleLabels } from "@/features/auth/model/roles"
+import { errorMessage } from "@/lib/error-message"
+import { useAsyncResource } from "@/lib/use-async-resource"
 
 const panelDangerIcon = cn(
   panelIconButton,
@@ -63,13 +67,6 @@ const panelDangerIcon = cn(
 
 const nameBadge =
   "flex-none rounded bg-[#e8eef8] px-1.5 py-px text-[10px] leading-4 font-semibold text-[#294a9b]"
-
-const roleLabels = {
-  SUPERADMIN: "Superadmin",
-  ADMIN: "Admin",
-  STAFF: "Staff",
-  USER: "Client",
-} as const
 
 export function ManageMembersDrawer({
   departmentId,
@@ -83,10 +80,19 @@ export function ManageMembersDrawer({
   onChanged: () => void
 }) {
   const panel = useSidePanel(onClose)
-  const [detail, setDetail] = useState<DepartmentDetail | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState("")
   const [actionError, setActionError] = useState("")
+  const [revision, setRevision] = useState(0)
+
+  // 1. Fetch department details (reloaded after every change)
+  const departmentDetail = useAsyncResource<DepartmentDetail>(
+    (signal) => getDepartment(departmentId, signal),
+    [departmentId, revision],
+    { fallbackError: "Couldn't load this department." },
+  )
+  const detail = departmentDetail.data ?? null
+  // Reloads after a change keep the current content instead of skeletons.
+  const loading = departmentDetail.loading && !detail
+  const loadError = departmentDetail.error
 
   // Available staff search state
   const [assignSearch, setAssignSearch] = useState("")
@@ -206,7 +212,6 @@ export function ManageMembersDrawer({
   const [memberTeamId, setMemberTeamId] = useState("")
   const [editMemberError, setEditMemberError] = useState("")
 
-  const [revision, setRevision] = useState(0)
   const candidateRequestKey = `${debouncedAssignSearch}\u0000${candidatePage}\u0000${candidateRetry}\u0000${revision}`
   const candidateResultIsCurrent = candidateResult?.key === candidateRequestKey
   const searchCandidates = candidateResultIsCurrent
@@ -221,32 +226,6 @@ export function ManageMembersDrawer({
   const candidateResultsKey = candidateResultIsCurrent
     ? `${debouncedAssignSearch}\u0000${candidatePage}`
     : ""
-
-  // 1. Fetch department details
-  useEffect(() => {
-    let active = true
-    getDepartment(departmentId)
-      .then((data) => {
-        if (active) {
-          setDetail(data)
-          setLoadError("")
-          setLoading(false)
-        }
-      })
-      .catch((error: unknown) => {
-        if (active) {
-          setLoadError(
-            error instanceof Error
-              ? error.message
-              : "Couldn't load this department.",
-          )
-          setLoading(false)
-        }
-      })
-    return () => {
-      active = false
-    }
-  }, [departmentId, revision])
 
   // 2. Debounced search for available staff
   useEffect(() => {
@@ -279,10 +258,7 @@ export function ManageMembersDrawer({
             candidates: [],
             total: 0,
             pageSize: 10,
-            error:
-              error instanceof Error
-                ? error.message
-                : "Couldn't load employees to assign.",
+            error: errorMessage(error, "Couldn't load employees to assign."),
           })
         }
       })
@@ -405,9 +381,7 @@ export function ManageMembersDrawer({
       setRevision((r) => r + 1)
       onChanged()
       setActionError(
-        error instanceof Error
-          ? error.message
-          : "Couldn't remove the selected members.",
+        errorMessage(error, "Couldn't remove the selected members."),
       )
     } finally {
       setSubmitting(false)
@@ -437,11 +411,7 @@ export function ManageMembersDrawer({
       setRevision((r) => r + 1)
       onChanged()
     } catch (error: unknown) {
-      setActionError(
-        error instanceof Error
-          ? error.message
-          : "Couldn't assign this employee.",
-      )
+      setActionError(errorMessage(error, "Couldn't assign this employee."))
     } finally {
       setSubmitting(false)
     }
@@ -498,11 +468,12 @@ export function ManageMembersDrawer({
       onChanged()
     } catch (error: unknown) {
       setConfirmationError(
-        error instanceof Error
-          ? error.message
-          : confirmation.type === "team"
+        errorMessage(
+          error,
+          confirmation.type === "team"
             ? "Couldn't delete this team."
             : "Couldn't remove this member.",
+        ),
       )
     } finally {
       setSubmitting(false)
@@ -532,9 +503,7 @@ export function ManageMembersDrawer({
       setRevision((r) => r + 1)
       onChanged()
     } catch (error: unknown) {
-      setActionError(
-        error instanceof Error ? error.message : "Couldn't create this team.",
-      )
+      setActionError(errorMessage(error, "Couldn't create this team."))
     } finally {
       setSubmitting(false)
     }
@@ -556,9 +525,7 @@ export function ManageMembersDrawer({
       onChanged()
     } catch (error: unknown) {
       setActionError(
-        error instanceof Error
-          ? error.message
-          : "Couldn't update this team assignment.",
+        errorMessage(error, "Couldn't update this team assignment."),
       )
     } finally {
       setSubmitting(false)
@@ -588,9 +555,7 @@ export function ManageMembersDrawer({
       setRevision((r) => r + 1)
       onChanged()
     } catch (err: unknown) {
-      setEditMemberError(
-        err instanceof Error ? err.message : "Failed to save details",
-      )
+      setEditMemberError(errorMessage(err, "Failed to save details"))
     } finally {
       setSubmitting(false)
     }
@@ -750,10 +715,7 @@ export function ManageMembersDrawer({
           ) : loadError ? (
             <SidePanelError
               message={loadError}
-              onRetry={() => {
-                setLoading(true)
-                setRevision((r) => r + 1)
-              }}
+              onRetry={() => setRevision((r) => r + 1)}
             />
           ) : (
             <>
@@ -1417,11 +1379,12 @@ export function ManageMembersDrawer({
             </div>
           )}
           {candidateError && !isSearching && (
-            <div
-              className="flex items-center justify-between gap-3 text-xs"
-              role="alert"
+            <Alert
+              as="div"
+              variant="text"
+              className="flex items-center justify-between gap-3"
             >
-              <span className="text-[#bc3649]">{candidateError}</span>
+              <span>{candidateError}</span>
               <Button
                 type="button"
                 variant="outline"
@@ -1431,7 +1394,7 @@ export function ManageMembersDrawer({
               >
                 Retry
               </Button>
-            </div>
+            </Alert>
           )}
           {displayedCandidates.length > 0 && !isSearching && (
             <ul

@@ -1,5 +1,5 @@
 import { Form } from "@/components/ui/form"
-import { useEffect, useRef, useState, type FormEvent } from "react"
+import { useRef, useState, type FormEvent } from "react"
 import { UserRound } from "lucide-react"
 import { focusRing } from "@/components/layout/styles"
 import {
@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/side-panel"
 import { Input } from "@/components/ui/input"
 import { PasswordInput } from "@/components/ui/password-input"
+import { RequiredMark } from "@/components/ui/required-mark"
 import { DateInput } from "@/components/ui/date-input"
 import {
   Select,
@@ -24,12 +25,8 @@ import {
 } from "@/components/ui/select"
 import { getInitials } from "@/lib/initials"
 import { cn } from "@/lib/utils"
-import {
-  listDepartments,
-  getDepartment,
-  type Department,
-  type DepartmentTeam,
-} from "@/features/departments/api/departments-api"
+import { getDepartment } from "@/features/departments/api/departments-api"
+import { useDepartments } from "@/features/departments/hooks/use-departments"
 import {
   createEmployee,
   createEmployeeProfile,
@@ -44,6 +41,9 @@ import {
   type EmployeeDraft,
   type EmployeeField,
 } from "../model/validation"
+import { employmentTypeOptions } from "../model/employment"
+import { errorMessage } from "@/lib/error-message"
+import { useAsyncResource } from "@/lib/use-async-resource"
 
 const fieldClass =
   "grid min-w-0 grid-rows-[16px_40px_16px] gap-y-[7px] text-xs font-semibold text-foreground"
@@ -51,21 +51,12 @@ const inputClass = `h-10 min-w-0 rounded-lg border-[#d6dfec] bg-background px-[1
 const selectClass = `h-10 min-w-0 rounded-lg border-[#d6dfec] bg-background px-[11px] text-sm ${focusRing}`
 /** Retry action on its own line inside a SidePanelAlert. */
 const retryButtonClass = `mt-2 block cursor-pointer rounded border-0 bg-transparent p-0 font-semibold text-[#244993] underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`
-const employmentTypes: { value: EmploymentType; label: string }[] = [
-  { value: "FULL_TIME", label: "Full Time" },
-  { value: "PART_TIME", label: "Part Time" },
-  { value: "CONTRACT", label: "Contract" },
-  { value: "INTERN", label: "Intern" },
-]
 
 function RequiredFieldLabel({ children }: { children: React.ReactNode }) {
   return (
     <span className="flex h-4 min-w-0 items-center gap-1 whitespace-nowrap leading-4">
       {children}
-      <span aria-hidden="true" className="text-[#d04b56]">
-        *
-      </span>
-      <span className="sr-only">required</span>
+      <RequiredMark />
     </span>
   )
 }
@@ -127,72 +118,33 @@ export function EmployeeFormPanel({
   const isEditing = Boolean(employee)
   const needsAccount = !isEditing
   const [draft, setDraft] = useState(() => toDraft(employee))
-  const [departments, setDepartments] = useState<Department[]>([])
-  const [teams, setTeams] = useState<DepartmentTeam[]>([])
-  const [loadingDepartments, setLoadingDepartments] = useState(true)
-  const [loadingTeams, setLoadingTeams] = useState(
-    Boolean(employee?.departmentId),
-  )
   const [error, setError] = useState("")
   const [visibleErrorField, setVisibleErrorField] =
     useState<EmployeeField | null>(null)
   const [pending, setPending] = useState(false)
-  const [departmentError, setDepartmentError] = useState("")
-  const [departmentRevision, setDepartmentRevision] = useState(0)
-  const [teamError, setTeamError] = useState("")
-  const [teamRevision, setTeamRevision] = useState(0)
   const formRef = useRef<HTMLFormElement>(null)
   const panel = useSidePanel(onClose)
-
-  useEffect(() => {
-    let active = true
-    listDepartments()
-      .then((items) => {
-        if (active) {
-          setDepartments(items)
-          setDepartmentError("")
-        }
-      })
-      .catch((reason: unknown) => {
-        if (active)
-          setDepartmentError(
-            reason instanceof Error
-              ? reason.message
-              : "Couldn't load departments.",
-          )
-      })
-      .finally(() => {
-        if (active) setLoadingDepartments(false)
-      })
-    return () => {
-      active = false
-    }
-  }, [departmentRevision])
-
-  useEffect(() => {
-    if (!draft.departmentId) return
-    let active = true
-    getDepartment(draft.departmentId)
-      .then((detail) => {
-        if (active) setTeams(detail.teams)
-      })
-      .catch((reason: unknown) => {
-        if (active) {
-          setTeams([])
-          setTeamError(
-            reason instanceof Error
-              ? reason.message
-              : "Couldn't load department teams.",
-          )
-        }
-      })
-      .finally(() => {
-        if (active) setLoadingTeams(false)
-      })
-    return () => {
-      active = false
-    }
-  }, [draft.departmentId, teamRevision])
+  const {
+    departments,
+    loading: loadingDepartments,
+    error: departmentError,
+    retry: retryDepartments,
+  } = useDepartments()
+  const teamList = useAsyncResource(
+    (signal) => getDepartment(draft.departmentId, signal),
+    [draft.departmentId],
+    {
+      enabled: Boolean(draft.departmentId),
+      fallbackError: "Couldn't load department teams.",
+    },
+  )
+  const loadingTeams = teamList.loading
+  const teamError = teamList.error
+  // Only show teams that belong to the selected department.
+  const teams =
+    !draft.departmentId || loadingTeams || teamError
+      ? []
+      : (teamList.data?.teams ?? [])
 
   const errors = validateEmployeeDraft(draft, needsAccount)
 
@@ -281,11 +233,7 @@ export function EmployeeFormPanel({
             : await createEmployee(input)
       panel.close(() => onSaved(saved))
     } catch (reason: unknown) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Couldn't save this employee.",
-      )
+      setError(errorMessage(reason, "Couldn't save this employee."))
     } finally {
       setPending(false)
     }
@@ -337,11 +285,7 @@ export function EmployeeFormPanel({
                 type="button"
                 className={retryButtonClass}
                 disabled={loadingDepartments || pending}
-                onClick={() => {
-                  setLoadingDepartments(true)
-                  setDepartmentError("")
-                  setDepartmentRevision((value) => value + 1)
-                }}
+                onClick={retryDepartments}
               >
                 Retry departments
               </button>
@@ -354,11 +298,7 @@ export function EmployeeFormPanel({
                 type="button"
                 className={retryButtonClass}
                 disabled={loadingTeams || pending}
-                onClick={() => {
-                  setLoadingTeams(true)
-                  setTeamError("")
-                  setTeamRevision((value) => value + 1)
-                }}
+                onClick={teamList.retry}
               >
                 Retry teams
               </button>
@@ -534,7 +474,7 @@ export function EmployeeFormPanel({
                   <SelectValue placeholder="Select employment type" />
                 </SelectTrigger>
                 <SelectContent>
-                  {employmentTypes.map((item) => (
+                  {employmentTypeOptions.map((item) => (
                     <SelectItem key={item.value} value={item.value}>
                       {item.label}
                     </SelectItem>
@@ -580,9 +520,6 @@ export function EmployeeFormPanel({
                 value={draft.departmentId}
                 onValueChange={(value) => {
                   const nextDepartmentId = value
-                  setTeams([])
-                  setLoadingTeams(Boolean(nextDepartmentId))
-                  setTeamError("")
                   change("departmentId", nextDepartmentId)
                   change("teamId", "")
                   setError("")

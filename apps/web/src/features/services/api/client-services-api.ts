@@ -86,9 +86,11 @@ export async function getClientService(id: string): Promise<Service> {
 }
 export async function getClientServiceSpecialists(
   serviceId: string,
+  signal?: AbortSignal,
 ): Promise<ServiceSpecialist[]> {
   const result = await apiRequest<{ specialists: ServiceSpecialist[] }>(
     `/api/client/services/${encodeURIComponent(serviceId)}/specialists`,
+    { signal },
   )
   return result.specialists
 }

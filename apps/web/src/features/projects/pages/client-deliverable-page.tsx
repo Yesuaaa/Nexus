@@ -5,7 +5,9 @@ import Link from "next/link"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ArrowLeft, Check, Download, FileText, RotateCcw } from "lucide-react"
 import { sileo } from "sileo"
+import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { pillToneClass, type PillTone } from "@/components/ui/pill"
 import { contentClass } from "@/components/layout/styles"
 import { useBreadcrumbLabel } from "@/components/layout/breadcrumbs"
 import {
@@ -16,15 +18,14 @@ import {
   type ProjectDeliverable,
   type ProjectWorkspace,
 } from "../api/projects-api"
-import {
-  ApproveDeliverableDialog,
-  RequestDeliverableRevisionDialog,
-} from "../components/client-project-forms"
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
+import { RequestDeliverableRevisionDialog } from "../components/client-project-forms"
+import { errorMessage } from "@/lib/error-message"
 
-function reviewClass(status?: string) {
-  if (status === "APPROVED") return "bg-emerald-100 text-emerald-800"
-  if (status === "REVISION_REQUESTED") return "bg-rose-100 text-rose-700"
-  return "bg-amber-100 text-amber-800"
+function reviewTone(status?: string): PillTone {
+  if (status === "APPROVED") return "success"
+  if (status === "REVISION_REQUESTED") return "danger"
+  return "warning"
 }
 
 function reviewLabel(status?: string) {
@@ -94,11 +95,7 @@ export function ClientDeliverablePage({
       })
       .catch((reason: unknown) => {
         if (!controller.signal.aborted)
-          setError(
-            reason instanceof Error
-              ? reason.message
-              : "Couldn't load this deliverable.",
-          )
+          setError(errorMessage(reason, "Couldn't load this deliverable."))
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false)
@@ -149,8 +146,7 @@ export function ClientDeliverablePage({
     } catch (reason) {
       sileo.error({
         title: "Couldn't save your response",
-        description:
-          reason instanceof Error ? reason.message : "Please try again.",
+        description: errorMessage(reason, "Please try again."),
       })
     } finally {
       setBusy(false)
@@ -165,12 +161,9 @@ export function ClientDeliverablePage({
         </p>
       ) : error || !project || !deliverable ? (
         <>
-          <div
-            role="alert"
-            className="rounded-xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-800"
-          >
+          <Alert as="div" className="rounded-xl p-5 text-sm">
             {error || "This deliverable could not be found."}
-          </div>
+          </Alert>
           <Button variant="outline" className="mt-4" asChild>
             <Link href={`/projects/${encodeURIComponent(projectId)}`}>
               <ArrowLeft size={16} /> Back to project
@@ -196,7 +189,7 @@ export function ClientDeliverablePage({
                 </div>
               </div>
               <span
-                className={`rounded-full px-2.5 py-1 text-[10px] font-medium ${reviewClass(review?.status)}`}
+                className={`rounded-full px-2.5 py-1 text-[10px] font-medium ${pillToneClass(reviewTone(review?.status))}`}
               >
                 {reviewLabel(review?.status)}
               </span>
@@ -245,7 +238,8 @@ export function ClientDeliverablePage({
                     </p>
                     <Button
                       type="button"
-                      className="mt-4 bg-[#243f8f] hover:bg-[#1d367d]"
+                      variant="brand"
+                      className="mt-4"
                       onClick={() =>
                         void downloadClientDeliverable(projectId, deliverable)
                       }
@@ -311,7 +305,8 @@ export function ClientDeliverablePage({
                 <div className="mt-4 grid gap-2 border-t border-[#e9edf2] pt-4">
                   <Button
                     type="button"
-                    className="w-full bg-[#243f8f] hover:bg-[#1d367d]"
+                    variant="brand"
+                    className="w-full"
                     onClick={() => setApproveOpen(true)}
                   >
                     <Check size={16} aria-hidden="true" /> Approve deliverable
@@ -348,13 +343,17 @@ export function ClientDeliverablePage({
       )}
       {deliverable && (
         <>
-          <ApproveDeliverableDialog
-            key={approveOpen ? "approve-open" : "approve-closed"}
+          <ConfirmationDialog
             open={approveOpen}
-            title={deliverable.title}
-            busy={busy}
-            onOpenChange={setApproveOpen}
-            onApprove={() => void submitReview("APPROVED")}
+            title="Approve this deliverable?"
+            description={`This confirms that “${deliverable.title}” meets the agreed expectations.`}
+            confirmLabel="Approve deliverable"
+            pendingLabel="Saving…"
+            cancelLabel="Go back"
+            pending={busy}
+            destructive={false}
+            onClose={() => setApproveOpen(false)}
+            onConfirm={() => void submitReview("APPROVED")}
           />
           <RequestDeliverableRevisionDialog
             key={revisionOpen ? "revision-open" : "revision-closed"}

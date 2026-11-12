@@ -10,5 +10,5 @@ export function BookingStatusPill({
   label?: string
 }) {
   const info = bookingStatuses[status]
-  return <Pill className={info.className}>{label ?? info.label}</Pill>
+  return <Pill tone={info.tone}>{label ?? info.label}</Pill>
 }

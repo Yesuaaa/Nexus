@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import {
   CalendarDays,
   Check,
@@ -27,7 +27,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import type { Workflow } from "@/features/request-workflow/model/workflow"
 import type { WorkflowDraftAction } from "@/features/request-workflow/components/workflow-action-draft"
-import { statusText } from "@/features/request-workflow/components/workflow-primitives"
+import { humanizeEnum } from "@/lib/format"
+import { useAsyncResource } from "@/lib/use-async-resource"
 import { getWorkflow } from "@/features/request-workflow/api/workflow-api"
 import type { ConversationBooking } from "../api/request-conversations-api"
 
@@ -153,7 +154,6 @@ export function ConversationTools({
 }) {
   const [tool, setTool] = useState<Tool | null>(null)
   const [targetId, setTargetId] = useState<string | null>(null)
-  const [optionsRevision, setOptionsRevision] = useState(0)
   const latestWorkflows = new Map(
     workflows.map((snapshot) => [snapshot.request.id, snapshot]),
   )
@@ -172,11 +172,6 @@ export function ConversationTools({
       (!item.stages ||
         currentStages.some((stage) => item.stages?.includes(stage))),
   )
-  const [options, setOptions] = useState<{
-    key: string
-    workflows: Workflow[]
-    failed: boolean
-  } | null>(null)
   const bookingIdsKey = JSON.stringify(
     bookings.length
       ? bookings.map((booking) => booking.id)
@@ -185,33 +180,31 @@ export function ConversationTools({
         : [],
   )
   const toolId = tool?.id
-  const optionsKey = JSON.stringify([toolId, bookingIdsKey, optionsRevision])
-  useEffect(() => {
-    if (!toolId) return
-    const controller = new AbortController()
-    const ids = JSON.parse(bookingIdsKey) as string[]
-    void Promise.all(
-      ids.map(async (id) => {
-        try {
-          return await getWorkflow(id, controller.signal)
-        } catch {
-          return null
-        }
-      }),
-    ).then((results) => {
-      if (controller.signal.aborted) return
-      setOptions({
-        key: optionsKey,
+  // Check every booking's latest workflow before offering it for this tool.
+  const options = useAsyncResource(
+    async (signal) => {
+      const ids = JSON.parse(bookingIdsKey) as string[]
+      const results = await Promise.all(
+        ids.map(async (id) => {
+          try {
+            return await getWorkflow(id, signal)
+          } catch {
+            return null
+          }
+        }),
+      )
+      return {
         workflows: results.filter((item): item is Workflow => item !== null),
         failed: results.some((item) => item === null),
-      })
-    })
-    return () => controller.abort()
-  }, [toolId, bookingIdsKey, optionsKey])
-  const checkingOptions = options?.key !== optionsKey
+      }
+    },
+    [toolId, bookingIdsKey],
+    { enabled: Boolean(toolId) },
+  )
+  const checkingOptions = !toolId || options.loading
   const candidates =
     !checkingOptions && tool
-      ? (options?.workflows ?? [])
+      ? (options.data?.workflows ?? [])
           .map((snapshot) =>
             workflow?.request.id === snapshot.request.id &&
             workflow.version > snapshot.version
@@ -261,7 +254,8 @@ export function ConversationTools({
             aria-label={
               isClient ? "Open attachment options" : "Open request actions"
             }
-            className="size-10 shrink-0 rounded-full bg-[#203f8c] p-0 text-white hover:bg-[#172f70]"
+            variant="brand"
+            className="size-10 shrink-0 rounded-full p-0"
           >
             <Plus size={16} aria-hidden="true" />
           </Button>
@@ -362,12 +356,12 @@ export function ConversationTools({
                 No eligible services for this action.
               </p>
             )}
-            {!checkingOptions && options?.failed && (
+            {!checkingOptions && options.data?.failed && (
               <div role="status" className="text-xs text-[#52627a]">
                 <p>Some services could not be checked.</p>
                 <Button
                   variant="outline"
-                  onClick={() => setOptionsRevision((value) => value + 1)}
+                  onClick={options.retry}
                   className="text-xs"
                 >
                   Retry booking options
@@ -391,7 +385,7 @@ export function ConversationTools({
           {targetWorkflow && !loading && (
             <div className="text-xs text-[#52627a]">
               <p className="m-0">
-                Current stage: {statusText(targetWorkflow.state)}
+                Current stage: {humanizeEnum(targetWorkflow.state)}
               </p>
               {reason && (
                 <p role="status" className="mt-2 mb-0 leading-5">
@@ -411,7 +405,8 @@ export function ConversationTools({
             <Button
               disabled={!ready}
               onClick={proceed}
-              className="bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
+              variant="brand"
+              className="text-xs"
             >
               Continue
             </Button>

@@ -5,7 +5,7 @@ import Link from "next/link"
 import { focusRing } from "@/components/layout/styles"
 import { cn } from "@/lib/utils"
 import { messagePreview } from "../model/conversation-groups"
-import { ConversationAvatar } from "./conversation-avatar"
+import { Avatar } from "@/components/ui/avatar"
 import type { ConversationSummary } from "../api/request-conversations-api"
 import type { ProjectConversationSummary } from "../api/project-conversations-api"
 
@@ -129,7 +129,7 @@ function ConversationRow({
         )}
       >
         <span className="relative shrink-0">
-          <ConversationAvatar name={name} imageUrl={imageUrl} />
+          <Avatar name={name} imageUrl={imageUrl} />
           {Boolean(unreadCount) && railCollapsed && (
             <span
               aria-hidden="true"

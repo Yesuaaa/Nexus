@@ -4,8 +4,9 @@ import { Form } from "@/components/ui/form"
 
 import { useRef, useState, type FormEvent } from "react"
 import { useRouter } from "next/navigation"
-import { Eye, EyeOff, LoaderCircle } from "lucide-react"
+import { LoaderCircle } from "lucide-react"
 import { sileo } from "@/lib/toast"
+import { Alert } from "@/components/ui/alert"
 import {
   Dialog,
   DialogContent,
@@ -13,23 +14,36 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { PasswordInput } from "@/components/ui/password-input"
 import { ApiError, clearToken } from "@/features/auth/api/auth-api"
 import type { Account } from "@/features/auth/model/types"
 import { changeAccountPassword } from "../api/accounts-api"
 import { cn } from "@/lib/utils"
+import { passwordIssue } from "@/lib/validation"
 import {
   accountButton,
   accountButtonPrimary,
   accountButtonSecondary,
   accountField,
-  accountFocusRing,
   accountInput,
 } from "../styles/account-styles"
+import { errorMessage } from "@/lib/error-message"
 
 const fields = [
   { name: "newPassword", label: "New password" },
   { name: "confirmation", label: "Confirm new password" },
 ] as const
+
+const compositionMessage =
+  "Include uppercase, lowercase, a number and a special character."
+const passwordMessages = {
+  short: "Use at least 12 characters.",
+  long: "Use no more than 1,024 bytes.",
+  uppercase: compositionMessage,
+  lowercase: compositionMessage,
+  number: compositionMessage,
+  special: compositionMessage,
+}
 
 type Field = (typeof fields)[number]["name"]
 type Values = Record<Field, string>
@@ -46,7 +60,6 @@ export function ChangePasswordDialog({
     newPassword: "",
     confirmation: "",
   })
-  const [visible, setVisible] = useState<Partial<Record<Field, boolean>>>({})
   const [errors, setErrors] = useState<Partial<Record<Field, string>>>({})
   const [error, setError] = useState("")
   const [saving, setSaving] = useState(false)
@@ -58,19 +71,8 @@ export function ChangePasswordDialog({
     if (savingRef.current) return
     const form = event.currentTarget
     const nextErrors: Partial<Record<Field, string>> = {}
-    const encoder = new TextEncoder()
-    if (values.newPassword.length < 12)
-      nextErrors.newPassword = "Use at least 12 characters."
-    else if (encoder.encode(values.newPassword).length > 1024)
-      nextErrors.newPassword = "Use no more than 1,024 bytes."
-    else if (
-      !/[A-Z]/.test(values.newPassword) ||
-      !/[a-z]/.test(values.newPassword) ||
-      !/[0-9]/.test(values.newPassword) ||
-      !/[^A-Za-z0-9]/.test(values.newPassword)
-    )
-      nextErrors.newPassword =
-        "Include uppercase, lowercase, a number and a special character."
+    const passwordError = passwordIssue(values.newPassword, passwordMessages)
+    if (passwordError) nextErrors.newPassword = passwordError
     if (!values.confirmation)
       nextErrors.confirmation = "Confirm your new password."
     else if (values.newPassword !== values.confirmation)
@@ -105,10 +107,10 @@ export function ChangePasswordDialog({
         router.replace("/login")
         return
       }
-      const message =
-        caught instanceof ApiError
-          ? caught.message
-          : "Couldn't change the account password. Please try again."
+      const message = errorMessage(
+        caught,
+        "Couldn't change the account password. Please try again.",
+      )
       setError(message)
       errorToast.current = await sileo.error({
         title: "Couldn't change password",
@@ -158,62 +160,39 @@ export function ChangePasswordDialog({
                 >
                   {label}
                 </label>
-                <div className="relative">
-                  <input
-                    id={`change-${name}`}
-                    name={name}
-                    type={visible[name] ? "text" : "password"}
-                    autoComplete="new-password"
-                    required
-                    value={values[name]}
-                    onChange={(event) => {
-                      setValues((current) => ({
-                        ...current,
-                        [name]: event.target.value,
-                      }))
-                      setErrors((current) => ({
-                        ...current,
-                        [name]: undefined,
-                      }))
-                      setError("")
-                    }}
-                    aria-invalid={Boolean(errors[name])}
-                    aria-describedby={
-                      [
-                        name === "newPassword" && "change-password-hint",
-                        errors[name] && `change-${name}-error`,
-                      ]
-                        .filter(Boolean)
-                        .join(" ") || undefined
-                    }
-                    className={cn(
-                      accountInput,
-                      "pr-11",
-                      errors[name] && "border-[#d64557]",
-                    )}
-                  />
-                  <button
-                    type="button"
-                    aria-label={`${visible[name] ? "Hide" : "Show"} ${label.toLowerCase()}`}
-                    aria-pressed={Boolean(visible[name])}
-                    onClick={() =>
-                      setVisible((current) => ({
-                        ...current,
-                        [name]: !current[name],
-                      }))
-                    }
-                    className={cn(
-                      "absolute inset-y-0 right-1 flex w-9 items-center justify-center rounded-md text-[#738096]",
-                      accountFocusRing,
-                    )}
-                  >
-                    {visible[name] ? (
-                      <EyeOff size={17} aria-hidden="true" />
-                    ) : (
-                      <Eye size={17} aria-hidden="true" />
-                    )}
-                  </button>
-                </div>
+                <PasswordInput
+                  toggleLabel={label.toLowerCase()}
+                  id={`change-${name}`}
+                  name={name}
+                  autoComplete="new-password"
+                  required
+                  value={values[name]}
+                  onChange={(event) => {
+                    setValues((current) => ({
+                      ...current,
+                      [name]: event.target.value,
+                    }))
+                    setErrors((current) => ({
+                      ...current,
+                      [name]: undefined,
+                    }))
+                    setError("")
+                  }}
+                  aria-invalid={Boolean(errors[name])}
+                  aria-describedby={
+                    [
+                      name === "newPassword" && "change-password-hint",
+                      errors[name] && `change-${name}-error`,
+                    ]
+                      .filter(Boolean)
+                      .join(" ") || undefined
+                  }
+                  className={cn(
+                    accountInput,
+                    "text-sm shadow-none",
+                    errors[name] && "border-[#d64557]",
+                  )}
+                />
                 {name === "newPassword" && (
                   <p
                     id="change-password-hint"
@@ -233,14 +212,7 @@ export function ChangePasswordDialog({
                 )}
               </div>
             ))}
-            {error && (
-              <p
-                role="alert"
-                className="m-0 rounded-lg bg-[#fff0f1] p-3 text-xs text-[#bc3649]"
-              >
-                {error}
-              </p>
-            )}
+            {error && <Alert>{error}</Alert>}
             <div className="mt-2 flex flex-wrap justify-end gap-2">
               <button
                 type="button"
