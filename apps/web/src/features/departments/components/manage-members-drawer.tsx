@@ -13,7 +13,9 @@ import { focusRing } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
 import {
   SidePanel,
+  SidePanelAlert,
   SidePanelButton,
+  SidePanelError,
   SidePanelFooter,
   SidePanelHeader,
   useSidePanel,
@@ -746,31 +748,19 @@ export function ManageMembersDrawer({
               )}
             </div>
           ) : loadError ? (
-            <div className={panelEmpty} role="alert">
-              <p className="m-0">{loadError}</p>
-              <button
-                type="button"
-                className={cn(
-                  "cursor-pointer rounded border-0 bg-transparent p-1 font-semibold text-foreground underline underline-offset-4",
-                  focusRing,
-                )}
-                onClick={() => {
-                  setLoading(true)
-                  setRevision((r) => r + 1)
-                }}
-              >
-                Try again
-              </button>
-            </div>
+            <SidePanelError
+              message={loadError}
+              onRetry={() => {
+                setLoading(true)
+                setRevision((r) => r + 1)
+              }}
+            />
           ) : (
             <>
               {actionError && !subviewOpen && (
-                <p
-                  className="mt-0 mb-4 rounded-lg border border-[#f4d6db] bg-[#fff6f7] p-3 text-xs text-[#bc3649]"
-                  role="alert"
-                >
-                  {actionError}
-                </p>
+                <div className="mb-4">
+                  <SidePanelAlert>{actionError}</SidePanelAlert>
+                </div>
               )}
               <TabsContent value="members" className="mt-0 space-y-5">
                 <section aria-label="Current members">
@@ -1237,12 +1227,9 @@ export function ManageMembersDrawer({
             </div>
             <div className="grid min-h-0 flex-1 content-start gap-2 overflow-y-auto overscroll-contain px-6 py-4 max-[560px]:px-5">
               {actionError && (
-                <p
-                  className="m-0 mb-1 rounded-lg border border-[#f4d6db] bg-[#fff6f7] p-3 text-xs text-[#bc3649]"
-                  role="alert"
-                >
-                  {actionError}
-                </p>
+                <div className="mb-1">
+                  <SidePanelAlert>{actionError}</SidePanelAlert>
+                </div>
               )}
               {filteredRemoveMembers.length === 0 ? (
                 <p className={`${panelEmpty} m-0`} role="status">
@@ -1337,14 +1324,7 @@ export function ManageMembersDrawer({
       >
         {assignTeam && (
           <div className="grid min-h-0 flex-1 content-start gap-3 overflow-y-auto overscroll-contain px-6 py-5 max-[560px]:px-5">
-            {actionError && (
-              <p
-                className="m-0 rounded-lg border border-[#f4d6db] bg-[#fff6f7] p-3 text-xs text-[#bc3649]"
-                role="alert"
-              >
-                {actionError}
-              </p>
-            )}
+            {actionError && <SidePanelAlert>{actionError}</SidePanelAlert>}
             {assignTeamCandidates.length > 0 ? (
               <>
                 <SearchField
@@ -1545,14 +1525,7 @@ export function ManageMembersDrawer({
           className="flex min-h-0 flex-1 flex-col"
         >
           <div className="grid min-h-0 flex-1 content-start gap-4 overflow-y-auto overscroll-contain px-6 py-5 max-[560px]:px-5">
-            {actionError && (
-              <p
-                className="m-0 rounded-lg border border-[#f4d6db] bg-[#fff6f7] p-3 text-xs text-[#bc3649]"
-                role="alert"
-              >
-                {actionError}
-              </p>
-            )}
+            {actionError && <SidePanelAlert>{actionError}</SidePanelAlert>}
             <label className={panelField} htmlFor="team-name">
               Team name{" "}
               <Input

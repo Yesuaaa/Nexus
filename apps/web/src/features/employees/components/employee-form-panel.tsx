@@ -1,8 +1,7 @@
 import { Form } from "@/components/ui/form"
 import { useEffect, useRef, useState, type FormEvent } from "react"
-import { Eye, EyeOff, UserRound } from "lucide-react"
+import { UserRound } from "lucide-react"
 import { focusRing } from "@/components/layout/styles"
-import { Button } from "@/components/ui/button"
 import {
   SidePanel,
   SidePanelAlert,
@@ -14,6 +13,7 @@ import {
   useSidePanel,
 } from "@/components/ui/side-panel"
 import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 import { DateInput } from "@/components/ui/date-input"
 import {
   Select,
@@ -49,6 +49,8 @@ const fieldClass =
   "grid min-w-0 grid-rows-[16px_40px_16px] gap-y-[7px] text-xs font-semibold text-foreground"
 const inputClass = `h-10 min-w-0 rounded-lg border-[#d6dfec] bg-background px-[11px] text-sm placeholder:text-[#9aa8bb] ${focusRing}`
 const selectClass = `h-10 min-w-0 rounded-lg border-[#d6dfec] bg-background px-[11px] text-sm ${focusRing}`
+/** Retry action on its own line inside a SidePanelAlert. */
+const retryButtonClass = `mt-2 block cursor-pointer rounded border-0 bg-transparent p-0 font-semibold text-[#244993] underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`
 const employmentTypes: { value: EmploymentType; label: string }[] = [
   { value: "FULL_TIME", label: "Full Time" },
   { value: "PART_TIME", label: "Part Time" },
@@ -124,8 +126,6 @@ export function EmployeeFormPanel({
 }) {
   const isEditing = Boolean(employee)
   const needsAccount = !isEditing
-  const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmation, setShowConfirmation] = useState(false)
   const [draft, setDraft] = useState(() => toDraft(employee))
   const [departments, setDepartments] = useState<Department[]>([])
   const [teams, setTeams] = useState<DepartmentTeam[]>([])
@@ -331,15 +331,11 @@ export function EmployeeFormPanel({
         <SidePanelBody>
           {error && <SidePanelAlert>{error}</SidePanelAlert>}
           {departmentError && (
-            <div
-              className="m-0 rounded-lg border border-[#f4d6db] bg-[#fff6f7] p-3 text-xs text-[#bc3649]"
-              role="alert"
-            >
-              <p className="m-0">{departmentError}</p>
-              <Button
+            <SidePanelAlert>
+              {departmentError}
+              <button
                 type="button"
-                variant="outline"
-                className="mt-2 h-auto min-h-0 border-0 bg-transparent p-0 font-bold text-[#244993] shadow-none hover:bg-transparent"
+                className={retryButtonClass}
                 disabled={loadingDepartments || pending}
                 onClick={() => {
                   setLoadingDepartments(true)
@@ -348,19 +344,15 @@ export function EmployeeFormPanel({
                 }}
               >
                 Retry departments
-              </Button>
-            </div>
+              </button>
+            </SidePanelAlert>
           )}
           {teamError && draft.departmentId && (
-            <div
-              className="m-0 rounded-lg border border-[#f4d6db] bg-[#fff6f7] p-3 text-xs text-[#bc3649]"
-              role="alert"
-            >
-              <p className="m-0">{teamError}</p>
-              <Button
+            <SidePanelAlert>
+              {teamError}
+              <button
                 type="button"
-                variant="outline"
-                className="mt-2 h-auto min-h-0 border-0 bg-transparent p-0 font-bold text-[#244993] shadow-none hover:bg-transparent"
+                className={retryButtonClass}
                 disabled={loadingTeams || pending}
                 onClick={() => {
                   setLoadingTeams(true)
@@ -369,8 +361,8 @@ export function EmployeeFormPanel({
                 }}
               >
                 Retry teams
-              </Button>
-            </div>
+              </button>
+            </SidePanelAlert>
           )}
           <SidePanelFieldset
             title="Basic information"
@@ -686,45 +678,24 @@ export function EmployeeFormPanel({
             >
               <label className={fieldClass}>
                 <RequiredFieldLabel>Password</RequiredFieldLabel>
-                <div className="relative">
-                  <Input
-                    type={showPassword ? "text" : "password"}
-                    id="employee-password"
-                    className={cn(validatedInputClass("password"), "pr-10")}
-                    value={draft.password}
-                    autoComplete="new-password"
-                    placeholder="At least 12 characters"
-                    disabled={pending}
-                    onChange={(event) => change("password", event.target.value)}
-                    onBlur={() => blur("password")}
-                    aria-invalid={Boolean(fieldError("password"))}
-                    aria-describedby={
-                      fieldError("password")
-                        ? "employee-password-error"
-                        : undefined
-                    }
-                    required
-                  />
-                  <button
-                    type="button"
-                    aria-label={
-                      showPassword ? "Hide password" : "Show password"
-                    }
-                    aria-pressed={showPassword}
-                    className={cn(
-                      "absolute inset-y-0 right-0 grid w-10 place-items-center rounded-r-lg text-[#65718a]",
-                      focusRing,
-                    )}
-                    disabled={pending}
-                    onClick={() => setShowPassword((value) => !value)}
-                  >
-                    {showPassword ? (
-                      <EyeOff size={16} aria-hidden="true" />
-                    ) : (
-                      <Eye size={16} aria-hidden="true" />
-                    )}
-                  </button>
-                </div>
+                <PasswordInput
+                  id="employee-password"
+                  toggleLabel="password"
+                  className={validatedInputClass("password")}
+                  value={draft.password}
+                  autoComplete="new-password"
+                  placeholder="At least 12 characters"
+                  disabled={pending}
+                  onChange={(event) => change("password", event.target.value)}
+                  onBlur={() => blur("password")}
+                  aria-invalid={Boolean(fieldError("password"))}
+                  aria-describedby={
+                    fieldError("password")
+                      ? "employee-password-error"
+                      : undefined
+                  }
+                  required
+                />
                 <FieldError
                   id="employee-password-error"
                   message={fieldError("password")}
@@ -732,52 +703,26 @@ export function EmployeeFormPanel({
               </label>
               <label className={fieldClass}>
                 <RequiredFieldLabel>Confirm password</RequiredFieldLabel>
-                <div className="relative">
-                  <Input
-                    type={showConfirmation ? "text" : "password"}
-                    id="employee-password-confirmation"
-                    className={cn(
-                      validatedInputClass("passwordConfirmation"),
-                      "pr-10",
-                    )}
-                    value={draft.passwordConfirmation}
-                    autoComplete="new-password"
-                    placeholder="Enter the password again"
-                    disabled={pending}
-                    onChange={(event) =>
-                      change("passwordConfirmation", event.target.value)
-                    }
-                    onBlur={() => blur("passwordConfirmation")}
-                    aria-invalid={Boolean(fieldError("passwordConfirmation"))}
-                    aria-describedby={
-                      fieldError("passwordConfirmation")
-                        ? "employee-password-confirmation-error"
-                        : undefined
-                    }
-                    required
-                  />
-                  <button
-                    type="button"
-                    aria-label={
-                      showConfirmation
-                        ? "Hide confirm password"
-                        : "Show confirm password"
-                    }
-                    aria-pressed={showConfirmation}
-                    className={cn(
-                      "absolute inset-y-0 right-0 grid w-10 place-items-center rounded-r-lg text-[#65718a]",
-                      focusRing,
-                    )}
-                    disabled={pending}
-                    onClick={() => setShowConfirmation((value) => !value)}
-                  >
-                    {showConfirmation ? (
-                      <EyeOff size={16} aria-hidden="true" />
-                    ) : (
-                      <Eye size={16} aria-hidden="true" />
-                    )}
-                  </button>
-                </div>
+                <PasswordInput
+                  id="employee-password-confirmation"
+                  toggleLabel="confirm password"
+                  className={validatedInputClass("passwordConfirmation")}
+                  value={draft.passwordConfirmation}
+                  autoComplete="new-password"
+                  placeholder="Enter the password again"
+                  disabled={pending}
+                  onChange={(event) =>
+                    change("passwordConfirmation", event.target.value)
+                  }
+                  onBlur={() => blur("passwordConfirmation")}
+                  aria-invalid={Boolean(fieldError("passwordConfirmation"))}
+                  aria-describedby={
+                    fieldError("passwordConfirmation")
+                      ? "employee-password-confirmation-error"
+                      : undefined
+                  }
+                  required
+                />
                 <FieldError
                   id="employee-password-confirmation-error"
                   message={fieldError("passwordConfirmation")}

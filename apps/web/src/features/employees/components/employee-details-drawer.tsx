@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { ConversationAvatar } from "@/features/request-conversations/components/conversation-avatar"
+import { focusRing } from "@/components/layout/styles"
 import { DepartmentPill } from "@/components/ui/department-pill"
 import { Pill } from "@/components/ui/pill"
 import { SheetClose } from "@/components/ui/sheet"
@@ -16,6 +17,7 @@ import {
   useSidePanel,
 } from "@/components/ui/side-panel"
 import { Skeleton } from "@/components/ui/skeleton"
+import { cn } from "@/lib/utils"
 import {
   getEmployee,
   type Employee,
@@ -179,7 +181,10 @@ export function EmployeeDetailsDrawer({
                   onManageDepartment && (
                     <button
                       type="button"
-                      className="cursor-pointer rounded border-0 bg-transparent p-0 text-xs font-semibold text-[#294a9b] hover:underline"
+                      className={cn(
+                        "cursor-pointer rounded border-0 bg-transparent p-0 text-xs font-semibold text-[#294a9b] hover:underline",
+                        focusRing,
+                      )}
                       onClick={() =>
                         panel.close(() =>
                           onManageDepartment(employee.departmentId!),

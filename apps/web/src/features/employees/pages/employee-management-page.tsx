@@ -7,7 +7,6 @@ import { SidePanelLoading } from "@/components/ui/panel-loading"
 import { PlusIcon } from "@/components/layout/icons"
 import { contentClass, focusRing } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
-import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { useTableSearch } from "@/components/ui/use-table-search"
 import { TableSearchStatus } from "@/components/ui/table-search-status"
 import { NumberedPagination } from "@/components/ui/numbered-pagination"
@@ -32,11 +31,12 @@ import {
   EmployeeKpiCards,
   type EmployeeKpiSummary,
 } from "../components/employee-kpi-cards"
+import {
+  EmployeeLoginActionDialog,
+  type EmployeeLoginAction,
+} from "../components/employee-login-action-dialog"
 import { EmployeeTable } from "../components/employee-table"
 import {
-  setEmployeeLoginStatus,
-  deleteEmployeeLogin,
-  permanentlyDeleteEmployeeLogin,
   listEmployees,
   type Employee,
   type EmployeeList,
@@ -134,12 +134,10 @@ export function EmployeeManagementPage() {
   const [createLoginTarget, setCreateLoginTarget] = useState<Employee | null>(
     null,
   )
-  const [loginAction, setLoginAction] = useState<
-    "deactivate" | "reactivate" | "delete" | "permanent"
-  >("deactivate")
+  const [loginAction, setLoginAction] =
+    useState<EmployeeLoginAction>("deactivate")
   const [loginTarget, setLoginTarget] = useState<Employee | null>(null)
   const [loginActionPending, setLoginActionPending] = useState(false)
-  const [loginActionError, setLoginActionError] = useState("")
   const listRequestKey = JSON.stringify({
     search: query,
     departmentId,
@@ -557,7 +555,6 @@ export function EmployeeManagementPage() {
               return
             }
             setLoginAction(action)
-            setLoginActionError("")
             setLoginTarget(employee)
           }}
           onManageDepartment={
@@ -650,88 +647,16 @@ export function EmployeeManagementPage() {
         />
       )}
       {loginTarget && (
-        <ConfirmationDialog
-          title={
-            loginAction === "permanent"
-              ? "Permanently delete account?"
-              : loginAction === "delete"
-                ? "Move account to Archive?"
-                : loginAction === "reactivate"
-                  ? "Reactivate account?"
-                  : "Deactivate account?"
-          }
-          subject={loginTarget.fullName}
-          description={
-            loginAction === "permanent"
-              ? "This permanently deletes the login account and its sessions. The employee's HR record, department, and team placement remain. Account-based leadership assignments are cleared. This cannot be undone."
-              : loginAction === "delete"
-                ? "This moves the deactivated account to Archive and ends its sessions. Its employee record and assignments are preserved. Permanent deletion is available only from Archive."
-                : loginAction === "reactivate"
-                  ? "Allow this employee to sign in again using their existing password. Their employment status stays the same."
-                  : "This immediately signs the employee out and prevents login. You can reactivate the login later."
-          }
-          confirmLabel={
-            loginAction === "permanent"
-              ? "Delete permanently"
-              : loginAction === "delete"
-                ? "Move to Archive"
-                : loginAction === "reactivate"
-                  ? "Reactivate account"
-                  : "Deactivate account"
-          }
-          pendingLabel={
-            loginAction === "permanent"
-              ? "Deleting…"
-              : loginAction === "delete"
-                ? "Archiving…"
-                : loginAction === "reactivate"
-                  ? "Reactivating…"
-                  : "Deactivating…"
-          }
-          destructive={loginAction !== "reactivate"}
+        <EmployeeLoginActionDialog
+          key={`${loginAction}-${loginTarget.id}`}
+          action={loginAction}
+          employee={loginTarget}
           pending={loginActionPending}
-          error={loginActionError}
-          onClose={() => {
+          onPendingChange={setLoginActionPending}
+          onClose={() => setLoginTarget(null)}
+          onCompleted={() => {
             setLoginTarget(null)
-            setLoginActionError("")
-          }}
-          onConfirm={() => {
-            if (loginActionPending) return
-            const isDeactivation = loginAction === "deactivate"
-            setLoginActionPending(true)
-            setLoginActionError("")
-            const action =
-              loginAction === "permanent"
-                ? permanentlyDeleteEmployeeLogin(loginTarget.id)
-                : loginAction === "delete"
-                  ? deleteEmployeeLogin(loginTarget.id)
-                  : setEmployeeLoginStatus(
-                      loginTarget.id,
-                      loginAction === "reactivate",
-                    )
-            void action
-              .then(() => {
-                setLoginTarget(null)
-                sileo.success({
-                  title: isDeactivation
-                    ? "Account deactivated"
-                    : loginAction === "reactivate"
-                      ? "Account reactivated"
-                      : loginAction === "delete"
-                        ? "Account moved to Archive"
-                        : "Account permanently deleted",
-                  description: `${loginTarget.fullName}'s employee record was kept.`,
-                })
-                setRevision((value) => value + 1)
-              })
-              .catch((reason: unknown) => {
-                setLoginActionError(
-                  reason instanceof Error
-                    ? reason.message
-                    : "Couldn't update this login account.",
-                )
-              })
-              .finally(() => setLoginActionPending(false))
+            setRevision((value) => value + 1)
           }}
         />
       )}

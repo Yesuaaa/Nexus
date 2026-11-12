@@ -1,10 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { Eye, EyeOff, KeyRound } from "lucide-react"
-import { focusRing } from "@/components/layout/styles"
+import { KeyRound } from "lucide-react"
 import { Form } from "@/components/ui/form"
-import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 import {
   DetailItem,
   DetailList,
@@ -17,7 +16,6 @@ import {
   SidePanelHeader,
   useSidePanel,
 } from "@/components/ui/side-panel"
-import { cn } from "@/lib/utils"
 import { createEmployeeLogin, type Employee } from "../api/employees-api"
 
 const passwordRule =
@@ -35,10 +33,6 @@ export function EmployeeLoginPanel({
   const panel = useSidePanel(onClose)
   const [password, setPassword] = useState("")
   const [confirmation, setConfirmation] = useState("")
-  const [visible, setVisible] = useState({
-    password: false,
-    confirmation: false,
-  })
   const [pending, setPending] = useState(false)
   const [error, setError] = useState("")
 
@@ -118,43 +112,24 @@ export function EmployeeLoginPanel({
                     *
                   </span>
                 </label>
-                <div className="relative">
-                  <Input
-                    id={`login-${key}`}
-                    type={visible[key] ? "text" : "password"}
-                    value={key === "password" ? password : confirmation}
-                    onChange={(event) =>
-                      (key === "password" ? setPassword : setConfirmation)(
-                        event.target.value,
-                      )
-                    }
-                    className="h-10 rounded-lg border-[#d6dfec] pr-10 text-sm"
-                    required
-                    minLength={12}
-                    maxLength={256}
-                    autoComplete="new-password"
-                    disabled={pending}
-                  />
-                  <button
-                    type="button"
-                    aria-label={`${visible[key] ? "Hide" : "Show"} ${key === "password" ? "password" : "confirm password"}`}
-                    aria-pressed={visible[key]}
-                    className={cn(
-                      "absolute inset-y-0 right-0 grid w-10 place-items-center rounded-r-lg text-[#65718a]",
-                      focusRing,
-                    )}
-                    disabled={pending}
-                    onClick={() =>
-                      setVisible((value) => ({ ...value, [key]: !value[key] }))
-                    }
-                  >
-                    {visible[key] ? (
-                      <EyeOff size={16} aria-hidden="true" />
-                    ) : (
-                      <Eye size={16} aria-hidden="true" />
-                    )}
-                  </button>
-                </div>
+                <PasswordInput
+                  id={`login-${key}`}
+                  toggleLabel={
+                    key === "password" ? "password" : "confirm password"
+                  }
+                  value={key === "password" ? password : confirmation}
+                  onChange={(event) =>
+                    (key === "password" ? setPassword : setConfirmation)(
+                      event.target.value,
+                    )
+                  }
+                  className="h-10 rounded-lg border-[#d6dfec] text-sm"
+                  required
+                  minLength={12}
+                  maxLength={256}
+                  autoComplete="new-password"
+                  disabled={pending}
+                />
               </div>
             ))}
           </SidePanelFieldset>
