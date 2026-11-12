@@ -66,7 +66,7 @@ export function Sidebar({
     <aside
       id="app-sidebar"
       className={cn(
-        "fixed top-[15px] bottom-[15px] left-[15px] z-30 h-[calc(100dvh-30px)] min-w-0 rounded-[14px] border border-[#dedede] bg-background shadow-[2px_0_4px_rgb(20_30_50_/_11%)] transition-[width,transform] duration-[240ms] max-[767px]:invisible max-[767px]:top-0 max-[767px]:bottom-0 max-[767px]:left-0 max-[767px]:h-dvh max-[767px]:w-[min(296px,calc(100vw-48px))] max-[767px]:-translate-x-[105%] max-[767px]:rounded-l-none max-[767px]:rounded-r-[14px] max-[767px]:shadow-[5px_0_24px_rgb(20_30_50_/_13%)] motion-reduce:transition-none",
+        "fixed top-[15px] bottom-[15px] left-[15px] z-30 h-[calc(100dvh-30px)] min-w-0 rounded-[14px] border border-[#dedede] bg-background transition-[width,transform] duration-[240ms] max-[767px]:invisible max-[767px]:top-0 max-[767px]:bottom-0 max-[767px]:left-0 max-[767px]:h-dvh max-[767px]:w-[min(296px,calc(100vw-48px))] max-[767px]:-translate-x-[105%] max-[767px]:rounded-l-none max-[767px]:rounded-r-[14px] motion-reduce:transition-none",
         collapsed ? "w-[80px]" : "w-[296px]",
         drawerOpen && "max-[767px]:visible max-[767px]:translate-x-0",
       )}

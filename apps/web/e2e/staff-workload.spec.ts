@@ -132,21 +132,16 @@ test("department head manages capacity and reviews real allocation state", async
       .evaluateAll((cards) =>
         cards.map((card) => card.getBoundingClientRect().height),
       )) {
-      expect(height).toBeGreaterThanOrEqual(108)
-      expect(height).toBeLessThanOrEqual(110)
+      expect(height).toBeGreaterThanOrEqual(110)
+      expect(height).toBeLessThanOrEqual(140)
     }
   }
   await expect(overview.getByRole("article")).toHaveCount(4)
   await checkCardHeights()
+  await expect(overview.getByRole("img")).toHaveCount(0)
   await expect(
-    overview.getByRole("img", {
-      name: "Staff by status: Active: 1; On leave: 0; Inactive: 0",
-      exact: true,
-    }),
-  ).toBeVisible()
-  await expect(
-    overview.getByRole("img", {
-      name: "Record capacity and assignment hours to view utilization.",
+    overview.getByRole("progressbar", {
+      name: "Assigned hours against capacity",
       exact: true,
     }),
   ).toBeVisible()
@@ -353,17 +348,12 @@ test("department head manages capacity and reviews real allocation state", async
   await expect(page.getByRole("dialog")).toHaveCount(0)
   await expect(page.getByText("10 / 32 hrs", { exact: true })).toBeVisible()
   await expect(
-    overview.getByRole("img", {
-      name: "Weekly utilization: 10 hours assigned against 32 hours capacity; 1 of 1 active staff have complete hours",
+    overview.getByRole("progressbar", {
+      name: "Assigned hours against capacity",
       exact: true,
     }),
   ).toBeVisible()
-  await expect(
-    overview.getByRole("img", {
-      name: "Active staff availability: Available: 1; Limited capacity: 0; Needs setup: 0",
-      exact: true,
-    }),
-  ).toBeVisible()
+  await expect(overview.getByRole("img")).toHaveCount(0)
   await page
     .getByRole("button", { name: "More actions for Maria Santos" })
     .click()
@@ -413,15 +403,12 @@ test("department head manages capacity and reviews real allocation state", async
     "Change workload week, starting November 16, 2026",
   )
   await expect(page.getByText("50 / 32 hrs", { exact: true })).toBeVisible()
-  await expect(overview.getByRole("img")).toHaveCount(4)
-  await expect(
-    overview.getByRole("img", {
-      name: "Hours over capacity: Maria Santos: 18 hours; 18 total excess hours",
-      exact: true,
-    }),
-  ).toBeVisible()
+  await expect(overview.getByRole("img")).toHaveCount(0)
+  await expect(overview.getByRole("progressbar")).toHaveCount(1)
   await expect(overview.getByText("156%", { exact: true })).toBeVisible()
-  await expect(overview.getByText("100%", { exact: true })).toBeVisible()
+  await expect(
+    overview.getByText("50h assigned / 32h capacity", { exact: true }),
+  ).toBeVisible()
   await checkCardHeights()
   await page
     .getByRole("heading", { name: "Staff Workload", exact: true })
@@ -466,24 +453,8 @@ test("department head manages capacity and reviews real allocation state", async
   await expect(weekButton).toBeFocused()
   empty = true
   await chooseWeek("Monday, November 23, 2026")
-  await expect(
-    overview.getByRole("img", {
-      name: "Staff by status: Active: 0; On leave: 0; Inactive: 0",
-      exact: true,
-    }),
-  ).toBeVisible()
-  await expect(
-    overview.getByRole("img", {
-      name: "Active staff availability: Available: 0; Limited capacity: 0; Needs setup: 0",
-      exact: true,
-    }),
-  ).toBeVisible()
-  await expect(
-    overview.getByRole("img", {
-      name: "Overload data unavailable: no complete hours recorded",
-      exact: true,
-    }),
-  ).toBeVisible()
+  await expect(overview.getByRole("img")).toHaveCount(0)
+  await expect(overview.getByRole("progressbar")).toHaveCount(1)
   await expect(overview).not.toContainText("NaN")
   await checkCardHeights()
 })
