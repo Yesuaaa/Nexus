@@ -23,7 +23,6 @@ import {
   listClientProjects,
   type ClientProjectSummary,
 } from "../api/projects-api"
-import { ClientProjectDetailsDrawer } from "../components/client-project-details-drawer"
 import { ClientProjectsTable } from "../components/client-projects-table"
 
 type ProjectFilter = "ALL" | "ACTIVE" | "COMPLETED" | "CANCELLED"
@@ -43,8 +42,6 @@ export function ClientProjectsPage() {
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
-  const [selectedProject, setSelectedProject] =
-    useState<ClientProjectSummary | null>(null)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -268,7 +265,6 @@ export function ClientProjectsPage() {
               formatDate={formatDate}
               viewKey={`${filter}:${sort}:${query}:${currentPage}`}
               quickKey={`${filter}:${sort}:${query}`}
-              onView={setSelectedProject}
             />
             <footer className="flex flex-wrap items-center justify-between gap-3 pt-4 text-[11px] text-[#52627a]">
               <span role="status" aria-live="polite" aria-atomic="true">
@@ -284,14 +280,6 @@ export function ClientProjectsPage() {
           </>
         )}
       </div>
-      {selectedProject && (
-        <ClientProjectDetailsDrawer
-          key={selectedProject.id}
-          project={selectedProject}
-          formatDate={formatDate}
-          onClose={() => setSelectedProject(null)}
-        />
-      )}
     </main>
   )
 }
