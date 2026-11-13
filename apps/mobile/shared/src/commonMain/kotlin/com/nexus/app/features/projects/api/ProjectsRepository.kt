@@ -1,6 +1,7 @@
 package com.nexus.app.features.projects.api
 
 import com.nexus.app.core.files.SelectedFile
+import com.nexus.app.core.network.ApiEndpoints
 import com.nexus.app.features.conversations.api.CommunicationException
 import com.nexus.app.features.projects.model.*
 import io.ktor.client.HttpClient
@@ -19,8 +20,9 @@ class ProjectsRepository(private val client: HttpClient) {
         }
         return body()
     }
-    suspend fun list(): List<ClientProjectSummary> = client.get("/api/projects").checked()
-    suspend fun calendar(): List<CalendarEvent> = client.get("/api/projects/calendar").checked()
+    suspend fun listClientProjects(): List<ClientProjectSummary> = client.get(ApiEndpoints.CLIENT_PROJECTS).checked()
+    suspend fun list(): List<ClientProjectSummary> = listClientProjects()
+    suspend fun calendar(): List<CalendarEvent> = client.get(ApiEndpoints.CLIENT_CALENDAR).checked()
     suspend fun get(id: String): ClientProject = client.get("/api/projects/$id").checked()
     suspend fun brief(id: String, name: String, description: String): ClientProject = client.patch("/api/projects/$id/brief") {
         setBody(buildJsonObject { put("name", name.trim()); put("description", description.trim()) })

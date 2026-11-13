@@ -9,9 +9,9 @@ enum class BottomTab(
 ) {
     DASHBOARD("Dashboard", NexusNavIcons.Dashboard),
     SERVICES("Services", NexusNavIcons.Services),
-    BOOKED_REQUESTS("Booked Requests", NexusNavIcons.BookedRequests),
     CALENDAR("Calendar", NexusNavIcons.Calendar),
-    PROJECTS("My Projects", NexusNavIcons.Projects)
+    BOOKED_REQUESTS("Requests", NexusNavIcons.BookedRequests),
+    PROJECTS("Projects", NexusNavIcons.Projects)
 }
 
 sealed class Screen(val route: String) {
