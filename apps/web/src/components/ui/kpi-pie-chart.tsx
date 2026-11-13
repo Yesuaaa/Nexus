@@ -1,4 +1,3 @@
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import type { KpiDistributionSegment } from "./kpi-distribution-chart"
 
 export function KpiPieChart({
@@ -32,9 +31,6 @@ export function KpiPieChart({
           background: total ? `conic-gradient(${gradient})` : "#e3e9ef",
         }}
       />
-      <HoverTooltip align="end" className="max-w-64 text-left leading-relaxed">
-        {label}
-      </HoverTooltip>
     </div>
   )
 }

@@ -1,21 +1,26 @@
 "use client"
 
+import { FormInput } from "@/components/ui/form-input"
+
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useState } from "react"
-import { Eye, Pencil } from "lucide-react"
+import { Ban, Eye, Pencil } from "lucide-react"
+import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
-import { Input } from "@/components/ui/input"
+  Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+} from "@/components/ui/modal"
 import { rowActionButton } from "@/components/ui/row-action-styles"
-import { RowActionsMenu } from "@/components/ui/row-actions-menu"
+import {
+  RowActionLabel,
+  RowActionsMenu,
+  type RowActionMenuItem,
+} from "@/components/ui/row-actions-menu"
 import { cn } from "@/lib/utils"
 import {
   cancelProjectWorkspace,
@@ -23,6 +28,12 @@ import {
   renameProjectWorkspace,
   type ProjectWorkspaceSummary,
 } from "../api/project-workspace-api"
+import { errorMessage } from "@/lib/error-message"
+
+type WorkspaceAction = "view" | "edit" | "cancel"
+
+const dangerItem =
+  "text-[#c33945] hover:bg-[#fff0f1] focus:bg-[#fff0f1] focus:text-[#c33945] focus-visible:bg-[#fff0f1]"
 
 export function WorkspaceListRowActions({
   workspace,
@@ -31,11 +42,14 @@ export function WorkspaceListRowActions({
   workspace: ProjectWorkspaceSummary
   onChanged: () => void
 }) {
+  const router = useRouter()
   const [dialog, setDialog] = useState<"edit" | "cancel" | null>(null)
   const [name, setName] = useState(workspace.name)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const isArchived = ["COMPLETED", "CANCELLED"].includes(workspace.status)
+  const href = `/project-workspace/${encodeURIComponent(workspace.id)}`
+  const triggerId = `workspace-actions-${workspace.id}`
 
   async function saveName(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -48,9 +62,7 @@ export function WorkspaceListRowActions({
       notifyProjectWorkspaceListChanged()
       onChanged()
     } catch (reason) {
-      setError(
-        reason instanceof Error ? reason.message : "Couldn't rename project.",
-      )
+      setError(errorMessage(reason, "Couldn't rename project."))
     } finally {
       setBusy(false)
     }
@@ -66,9 +78,7 @@ export function WorkspaceListRowActions({
       notifyProjectWorkspaceListChanged()
       onChanged()
     } catch (reason) {
-      setError(
-        reason instanceof Error ? reason.message : "Couldn't cancel project.",
-      )
+      setError(errorMessage(reason, "Couldn't cancel project."))
     } finally {
       setBusy(false)
     }
@@ -80,75 +90,72 @@ export function WorkspaceListRowActions({
     setDialog(mode)
   }
 
+  // Read-only rows keep a single view link; manageable rows use the menu.
+  if (!workspace.canManage || isArchived)
+    return (
+      <Link
+        href={href}
+        className={cn(rowActionButton, "max-[560px]:size-11")}
+        aria-label={`View ${workspace.name}`}
+      >
+        <Eye size={16} strokeWidth={1.7} aria-hidden="true" />
+      </Link>
+    )
+
+  const items: RowActionMenuItem<WorkspaceAction>[] = [
+    {
+      action: "view",
+      label: <RowActionLabel icon={Eye}>View project</RowActionLabel>,
+    },
+    {
+      action: "edit",
+      label: <RowActionLabel icon={Pencil}>Edit project</RowActionLabel>,
+    },
+    {
+      action: "cancel",
+      label: <RowActionLabel icon={Ban}>Cancel project</RowActionLabel>,
+      className: dangerItem,
+      separatorBefore: true,
+    },
+  ]
+
   return (
     <>
-      <div className="flex items-center justify-start gap-2">
-        <Link
-          href={`/project-workspace/${encodeURIComponent(workspace.id)}`}
-          className={cn(rowActionButton, "max-[560px]:size-11")}
-          aria-label={`View ${workspace.name}`}
-        >
-          <Eye size={16} strokeWidth={1.7} aria-hidden="true" />
-          <HoverTooltip>View project</HoverTooltip>
-        </Link>
-        {workspace.canManage && !isArchived && (
-          <>
-            <button
-              type="button"
-              className={cn(
-                rowActionButton,
-                "border-[#203f8c] bg-[#203f8c] text-white hover:enabled:bg-[#172f70] hover:enabled:text-white max-[560px]:size-11",
-              )}
-              aria-label={`Edit ${workspace.name}`}
-              onClick={() => openDialog("edit")}
-            >
-              <Pencil size={15} strokeWidth={1.8} aria-hidden="true" />
-              <HoverTooltip>Edit project</HoverTooltip>
-            </button>
-            <RowActionsMenu
-              triggerLabel={`More actions for ${workspace.name}`}
-              triggerClassName="max-[560px]:size-11"
-              items={[
-                {
-                  action: "cancel" as const,
-                  label: "Cancel project",
-                  className:
-                    "text-[#c33945] focus:bg-[#fff0f1] focus:text-[#c33945]",
-                },
-              ]}
-              disabled={busy}
-              onAction={(action) => {
-                if (action === "cancel") openDialog("cancel")
-              }}
-            />
-          </>
-        )}
-      </div>
-
-      <Dialog
-        open={dialog === "edit"}
-        onOpenChange={(open) => {
-          if (!open && !busy) setDialog(null)
+      <RowActionsMenu
+        triggerId={triggerId}
+        triggerLabel={`More actions for ${workspace.name}`}
+        menuLabel={`Actions for ${workspace.name}`}
+        triggerClassName="max-[560px]:size-11"
+        items={items}
+        disabled={busy}
+        onAction={(action) => {
+          if (action === "view") router.push(href)
+          else openDialog(action)
         }}
+      />
+
+      <Modal
+        open={dialog === "edit"}
+        size="sm"
+        busy={busy}
+        onClose={() => setDialog(null)}
+        fallbackFocus={() => document.getElementById(triggerId)}
       >
-        <DialogContent className="max-w-md rounded-[13px] border-[#dfe4ec] p-6">
-          <DialogHeader>
-            <DialogTitle className="text-left">Edit project</DialogTitle>
-            <DialogDescription className="text-left">
-              Change the name shown in Project Workspace.
-            </DialogDescription>
-          </DialogHeader>
-          <form
-            onSubmit={(event) => void saveName(event)}
-            className="space-y-4"
-          >
+        <ModalHeader
+          title="Edit project"
+          description="Change the name shown in Project Workspace."
+          closeLabel="Close edit project"
+          closeDisabled={busy}
+        />
+        <form onSubmit={(event) => void saveName(event)}>
+          <ModalBody className="gap-1.5">
             <label
               className="block text-xs font-medium"
               htmlFor={`workspace-name-${workspace.id}`}
             >
               Project name
             </label>
-            <Input
+            <FormInput
               id={`workspace-name-${workspace.id}`}
               autoFocus
               required
@@ -156,72 +163,47 @@ export function WorkspaceListRowActions({
               maxLength={120}
               value={name}
               onChange={(event) => setName(event.target.value)}
-              className="mt-1.5 text-sm"
               disabled={busy}
             />
             {error && (
-              <p role="alert" className="m-0 text-xs text-[#b3343b]">
+              <Alert variant="text" className="mt-2">
                 {error}
-              </p>
+              </Alert>
             )}
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={busy}
-                onClick={() => setDialog(null)}
-              >
-                Close
-              </Button>
-              <Button type="submit" disabled={busy || name.trim().length < 2}>
-                {busy ? "Saving…" : "Save name"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={dialog === "cancel"}
-        onOpenChange={(open) => {
-          if (!open && !busy) setDialog(null)
-        }}
-      >
-        <DialogContent className="max-w-md rounded-[13px] border-[#dfe4ec] p-6">
-          <DialogHeader>
-            <DialogTitle className="text-left">
-              Cancel this project?
-            </DialogTitle>
-            <DialogDescription className="text-left">
-              “{workspace.name}” will move to Archive. Its assignments will no
-              longer count toward active workload.
-            </DialogDescription>
-          </DialogHeader>
-          {error && (
-            <p role="alert" className="m-0 text-xs text-[#b3343b]">
-              {error}
-            </p>
-          )}
-          <DialogFooter>
+          </ModalBody>
+          <ModalFooter>
             <Button
               type="button"
-              variant="outline"
+              variant="brandOutline"
               disabled={busy}
               onClick={() => setDialog(null)}
             >
-              Keep project
+              Close
             </Button>
             <Button
-              type="button"
-              disabled={busy}
-              onClick={() => void cancelWorkspace()}
-              className="bg-[#b3343b] text-white hover:bg-[#982a31]"
+              type="submit"
+              variant="brand"
+              disabled={busy || name.trim().length < 2}
             >
-              {busy ? "Cancelling…" : "Cancel project"}
+              {busy ? "Saving…" : "Save name"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ModalFooter>
+        </form>
+      </Modal>
+
+      <ConfirmationDialog
+        open={dialog === "cancel"}
+        title="Cancel this project?"
+        subject={workspace.name}
+        description="It will move to Archive. Its assignments will no longer count toward active workload."
+        confirmLabel="Cancel project"
+        pendingLabel="Cancelling…"
+        cancelLabel="Keep project"
+        pending={busy}
+        error={error}
+        onClose={() => setDialog(null)}
+        onConfirm={() => void cancelWorkspace()}
+      />
     </>
   )
 }

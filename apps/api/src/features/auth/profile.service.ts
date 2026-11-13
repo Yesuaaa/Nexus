@@ -1,7 +1,13 @@
 import { getPrisma } from "../../lib/db.js"
-import { publicUser } from "../users/users.dto.js"
+import { activeAccount, activeStaff } from "../../shared/query/accounts.js"
+import {
+  isContactNumber,
+  isPlainObject,
+  safeHttpsUrl,
+} from "../../shared/validation.js"
+import { publicUser, publicUserInclude } from "../users/users.dto.js"
 import { AuthError } from "./auth.service.js"
-import { serviceImagePublicUrl } from "../services/service-image-storage.js"
+import { profileImagePublicUrl } from "../services/service-image-storage.js"
 
 const employeeInclude = {
   department: { select: { id: true, name: true } },
@@ -14,8 +20,8 @@ export async function getProfile(userId: string) {
   const prisma = getPrisma()
   if (!prisma) throw new AuthError(503, "Database unavailable")
   const user = await prisma.user.findFirst({
-    where: { id: userId, isActive: true, accountDeletedAt: null },
-    include: { department: true, team: true, headOf: true },
+    where: { id: userId, ...activeAccount },
+    include: publicUserInclude,
   })
   if (!user) throw new AuthError(404, "Account unavailable")
   const employee =
@@ -27,14 +33,14 @@ export async function getProfile(userId: string) {
       : null
   return {
     user: publicUser(user),
-    imageUrl:
-      serviceImagePublicUrl(user.profileImagePath) ||
-      (user.role === "STAFF" ? employee?.profileImageUrl : null) ||
-      null,
-    bannerUrl:
-      serviceImagePublicUrl(user.profileBannerPath) ||
-      (user.role === "STAFF" ? employee?.profileBannerUrl : null) ||
-      null,
+    imageUrl: profileImagePublicUrl(
+      user.profileImagePath,
+      user.role === "STAFF" ? employee?.profileImageUrl : null,
+    ),
+    bannerUrl: profileImagePublicUrl(
+      user.profileBannerPath,
+      user.role === "STAFF" ? employee?.profileBannerUrl : null,
+    ),
     employee: employee
       ? {
           employeeId: employee.employeeId,
@@ -80,9 +86,9 @@ export async function getProfile(userId: string) {
 }
 
 function object(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value))
+  if (!isPlainObject(value))
     throw new AuthError(400, "Provide valid profile details")
-  return value as Record<string, unknown>
+  return value
 }
 function text(
   value: unknown,
@@ -105,13 +111,8 @@ function text(
 function url(value: unknown, label: string, required = false) {
   const clean = text(value, label, 2048, required)
   if (!clean) return ""
-  try {
-    const parsed = new URL(clean)
-    if (parsed.protocol === "https:" && !parsed.username && !parsed.password)
-      return parsed.href
-  } catch {
-    /* Validation below provides the field-specific error. */
-  }
+  const safe = safeHttpsUrl(clean)
+  if (safe) return safe
   throw new AuthError(400, `${label} must be an HTTPS URL`)
 }
 function list(value: unknown, label: string, limit: number): unknown[] {
@@ -126,13 +127,13 @@ export async function updateProfile(userId: string, input: unknown) {
   if (fullName.length < 2)
     throw new AuthError(400, "Full name must contain at least two characters")
   const contactNumber = text(body.contactNumber, "contact number", 21)
-  if (contactNumber && !/^\+?[0-9][0-9\s-]{6,19}$/.test(contactNumber))
+  if (contactNumber && !isContactNumber(contactNumber))
     throw new AuthError(400, "Provide a valid contact number")
   const prisma = getPrisma()
   if (!prisma) throw new AuthError(503, "Database unavailable")
   await prisma.$transaction(async (tx) => {
     const changed = await tx.user.updateMany({
-      where: { id: userId, isActive: true, accountDeletedAt: null },
+      where: { id: userId, ...activeAccount },
       data: { fullName, contactNumber: contactNumber || null },
     })
     if (!changed.count) throw new AuthError(404, "Account unavailable")
@@ -191,9 +192,7 @@ export async function updateSpecialistProfile(userId: string, input: unknown) {
     const user = await tx.user.findFirst({
       where: {
         id: userId,
-        role: "STAFF",
-        isActive: true,
-        accountDeletedAt: null,
+        ...activeStaff,
       },
       select: { id: true },
     })

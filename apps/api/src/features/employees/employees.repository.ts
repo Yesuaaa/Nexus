@@ -5,13 +5,16 @@ import {
   type EmployeeStatus,
 } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
+import { insensitive, paginate } from "../../shared/query/pagination.js"
+import {
+  departmentSummarySelect,
+  teamSummarySelect,
+} from "../../shared/query/selects.js"
 import { profileImagePublicUrl } from "../services/service-image-storage.js"
 
 export const employeeInclude = {
-  department: {
-    select: { id: true, name: true, code: true, color: true },
-  },
-  team: { select: { id: true, name: true } },
+  department: { select: departmentSummarySelect },
+  team: { select: teamSummarySelect },
   user: {
     select: {
       id: true,
@@ -109,51 +112,24 @@ export const employeesRepository = {
       role: { in: [Role.ADMIN, Role.STAFF] },
       accountDeletedAt: filters.archived ? { not: null } : null,
       ...(Object.keys(hr).length ? { employee: { is: hr } } : {}),
-      ...(filters.search
-        ? {
-            OR: [
-              { fullName: { contains: filters.search, mode: "insensitive" } },
-              { email: { contains: filters.search, mode: "insensitive" } },
-              {
-                contactNumber: {
-                  contains: filters.search,
-                  mode: "insensitive",
-                },
-              },
-              {
-                employee: {
-                  is: {
-                    employeeId: {
-                      contains: filters.search,
-                      mode: "insensitive",
-                    },
-                  },
-                },
-              },
-            ],
-          }
-        : {}),
+      ...insensitive<Prisma.UserWhereInput>(filters.search, [
+        "fullName",
+        "email",
+        "contactNumber",
+        (text) => ({ employee: { is: { employeeId: text } } }),
+      ]),
     }
-    const prisma = getPrisma()!
-    const [accounts, total] = await prisma.$transaction(
-      [
-        prisma.user.findMany({
+    const { rows, ...page } = await paginate(filters.page, {
+      rows: (db, window) =>
+        db.user.findMany({
           where,
           select: directoryAccountSelect,
           orderBy: [{ fullName: "asc" }, { email: "asc" }, { id: "asc" }],
-          skip: (filters.page - 1) * 10,
-          take: 10,
+          ...window,
         }),
-        prisma.user.count({ where }),
-      ],
-      { isolationLevel: "RepeatableRead" },
-    )
-    return {
-      employees: accounts.map(directoryEmployee),
-      total,
-      page: filters.page,
-      pageSize: 10,
-    }
+      count: (db) => db.user.count({ where }),
+    })
+    return { employees: rows.map(directoryEmployee), ...page }
   },
   async findById(id: string) {
     const account = await getPrisma()!.user.findFirst({

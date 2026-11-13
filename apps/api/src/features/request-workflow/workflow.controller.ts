@@ -1,6 +1,6 @@
-import { json, Router, type ErrorRequestHandler } from "express"
+import { json, Router } from "express"
+import { recordIdParam } from "../../shared/validation.js"
 import { requireAuth } from "../auth/auth.middleware.js"
-import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 import { uploadWorkflowFile, downloadWorkflowFile } from "./workflow.files.js"
 import {
   listWorkflowApprovals,
@@ -45,11 +45,7 @@ requestWorkflowRouter.get("/approvals", async (request, response) => {
   response.json(await listWorkflowApprovals(request.auth!.user.id))
 })
 for (const param of ["id", "fileId"])
-  requestWorkflowRouter.param(param, (_request, response, next, id: string) => {
-    if (!/^[A-Za-z0-9_-]{1,80}$/.test(id))
-      return response.status(400).json({ error: "Invalid record ID" })
-    next()
-  })
+  requestWorkflowRouter.param(param, recordIdParam("Invalid record ID"))
 requestWorkflowRouter.get("/:id", async (request, response) => {
   response.json(
     await getWorkflow(request.auth!.user.id, String(request.params.id)),
@@ -96,8 +92,3 @@ requestWorkflowRouter.get("/:id/files/:fileId", async (request, response) => {
   })
   response.send(Buffer.from(file.data))
 })
-requestWorkflowRouter.use(((error, _request, response, next) => {
-  if (error instanceof ServiceRequestsError)
-    return response.status(error.status).json({ error: error.message })
-  next(error)
-}) satisfies ErrorRequestHandler)

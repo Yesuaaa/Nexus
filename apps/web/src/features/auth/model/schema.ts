@@ -1,3 +1,10 @@
+import {
+  NAME_PATTERN,
+  PASSWORD_MAX_BYTES,
+  PH_MOBILE_PATTERN,
+  isValidEmail,
+  passwordIssue,
+} from "../../../lib/validation.ts"
 import type { AuthCopy } from "../content/auth-copy"
 import type { AuthMode } from "./types"
 
@@ -41,38 +48,36 @@ export function validateAuth(
     if (!name) errors.fullName = copy.nameRequired
     else if (name.length < 2 || name.length > 100)
       errors.fullName = copy.nameLength
-    else if (!/^\p{L}[\p{L} .'’-]*$/u.test(name))
-      errors.fullName = copy.nameInvalid
+    else if (!NAME_PATTERN.test(name)) errors.fullName = copy.nameInvalid
 
     if (!contact) errors.contactNumber = copy.contactRequired
-    else if (!/^0[89]\d{9}$/.test(contact))
+    else if (!PH_MOBILE_PATTERN.test(contact))
       errors.contactNumber = copy.contactInvalid
   }
 
   if (!email) errors.email = copy.emailRequired
   else if (
-    email.length > 254 ||
-    !(
-      mode === "register"
-        ? /^[A-Za-z0-9]+([._+-][A-Za-z0-9]+)*@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.(com|ph)$/i
-        : /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    ).test(email)
+    mode === "register"
+      ? !isValidEmail(email)
+      : email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
   )
     errors.email = copy.emailInvalid
 
   if (!values.password) errors.password = copy.passwordRequired
-  else if (mode === "register" && values.password.length < 12)
-    errors.password = copy.passwordShort
-  else if (new TextEncoder().encode(values.password).length > 1024)
+  else if (mode === "register") {
+    const issue = passwordIssue(values.password, {
+      short: copy.passwordShort,
+      long: copy.passwordLong,
+      uppercase: copy.passwordCapital,
+      lowercase: copy.passwordLowercase,
+      number: copy.passwordNumber,
+      special: copy.passwordSpecial,
+    })
+    if (issue) errors.password = issue
+  } else if (
+    new TextEncoder().encode(values.password).length > PASSWORD_MAX_BYTES
+  )
     errors.password = copy.passwordLong
-  else if (mode === "register" && !/[A-Z]/.test(values.password))
-    errors.password = copy.passwordCapital
-  else if (mode === "register" && !/[a-z]/.test(values.password))
-    errors.password = copy.passwordLowercase
-  else if (mode === "register" && !/[0-9]/.test(values.password))
-    errors.password = copy.passwordNumber
-  else if (mode === "register" && !/[^A-Za-z0-9]/.test(values.password))
-    errors.password = copy.passwordSpecial
 
   if (mode === "register") {
     if (!values.confirmPassword) errors.confirmPassword = copy.confirmRequired

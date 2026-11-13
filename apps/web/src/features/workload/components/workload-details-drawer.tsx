@@ -1,96 +1,163 @@
-import { useRef, type ReactNode } from "react"
-import { CloseIcon } from "@/components/layout/icons"
+import { BriefcaseBusiness, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetDescription,
-  SheetTitle,
-} from "@/components/ui/sheet"
-import { useAnimatedPanelClose } from "@/components/ui/use-animated-panel-close"
-import {
-  panelIconButton,
-  panelSecondaryButton,
   panelAssignButton,
-} from "@/features/departments/styles/member-panel-styles"
+  panelDangerButton,
+} from "@/components/ui/panel-styles"
+import { Pill } from "@/components/ui/pill"
+import { SheetClose } from "@/components/ui/sheet"
+import {
+  DetailItem,
+  DetailList,
+  SidePanel,
+  SidePanelBody,
+  SidePanelButton,
+  SidePanelFooter,
+  SidePanelHeader,
+  SidePanelSection,
+  useSidePanel,
+} from "@/components/ui/side-panel"
+import { statusLabel as projectStatusLabel } from "@/features/projects/model/project-status"
+import {
+  getWorkloadMetrics,
+  type WorkloadAssignment,
+  type WorkloadStaff,
+} from "../model/workload"
 
 export function WorkloadDetailsDrawer({
-  name,
-  description,
+  staff,
+  week,
   onClose,
-  onEdit,
-  children,
+  onEditCapacity,
+  onEditAllocation,
+  onUnassign,
 }: {
-  name: string
-  description: string
+  staff: WorkloadStaff
+  week: string
   onClose: () => void
-  onEdit: () => void
-  children: ReactNode
+  onEditCapacity: () => void
+  onEditAllocation: (assignment: WorkloadAssignment) => void
+  onUnassign: (assignment: WorkloadAssignment) => void
 }) {
-  const { open, handleOpenChange, closeAfterTransition } =
-    useAnimatedPanelClose(onClose)
-  const openerRef = useRef(
-    typeof document !== "undefined" ? document.activeElement : null,
-  )
+  const panel = useSidePanel(onClose)
+  const metrics = getWorkloadMetrics(staff)
+  const count = staff.assignments.length
+
   return (
-    <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent
-        showCloseButton={false}
-        overlayClassName="nexus-panel-overlay bg-[rgb(13_28_57_/_40%)]"
-        className="nexus-side-panel inset-y-auto top-[15px] right-[15px] flex h-[calc(100dvh-30px)] max-h-none w-[min(600px,calc(100vw-30px))] max-w-none flex-col gap-0 overflow-hidden rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_16px_60px_rgb(18_36_73_/_18%)] sm:max-w-none max-[560px]:top-0 max-[560px]:right-0 max-[560px]:h-dvh max-[560px]:w-full max-[560px]:rounded-none max-[560px]:border-0"
-        onCloseAutoFocus={(event) => {
-          event.preventDefault()
-          const opener = openerRef.current
-          if (opener instanceof HTMLElement && opener.isConnected)
-            opener.focus()
-        }}
-      >
-        <header className="flex flex-none items-start justify-between gap-4 border-b border-[#eceef1] px-6 pt-6 pb-5 max-[560px]:px-5">
-          <div className="min-w-0">
-            <SheetTitle className="m-0 text-[22px] leading-[1.25] font-[650] tracking-[-0.03em]">
-              Workload details
-            </SheetTitle>
-            <SheetDescription className="sr-only">
-              {description}
-            </SheetDescription>
-            <div className="mt-2 text-xs font-medium">{name}</div>
+    <SidePanel
+      open={panel.open}
+      onOpenChange={panel.onOpenChange}
+      fallbackFocus={() =>
+        document.getElementById(`workload-actions-${staff.id}`)
+      }
+    >
+      <SidePanelHeader
+        eyebrow="Workload details"
+        title={staff.fullName}
+        description={`${staff.position ?? "Staff"} · Week of ${week}`}
+        closeLabel="Close workload details"
+      />
+      <SidePanelBody>
+        <SidePanelSection title="Weekly capacity">
+          <DetailList>
+            <DetailItem label="Scheduled hours">
+              {staff.capacity?.scheduledHours ?? "Not set"}
+            </DetailItem>
+            <DetailItem label="Time off / holidays">
+              {staff.capacity?.timeOffHours ?? "Not set"}
+            </DetailItem>
+            <DetailItem label="Assigned hours">
+              {metrics.unknown ? "Hours need recording" : metrics.assigned}
+            </DetailItem>
+            <DetailItem label="Remaining capacity">
+              {metrics.capacity === null || metrics.unknown
+                ? "Not available"
+                : `${Math.max(0, metrics.capacity - metrics.assigned)} hrs`}
+            </DetailItem>
+          </DetailList>
+        </SidePanelSection>
+        <SidePanelSection
+          title="Current assignments"
+          action={
+            <span className="text-[11px] text-[#738096]">
+              {count} {count === 1 ? "Assignment" : "Assignments"}
+            </span>
+          }
+        >
+          <div className="overflow-hidden rounded-lg border border-[#e8ebef]">
+            {staff.assignments.map((assignment) => (
+              <div
+                key={assignment.id}
+                className="flex items-center justify-between gap-4 border-b border-[#eceef1] px-4 py-4 last:border-b-0 max-[400px]:flex-wrap"
+              >
+                <div className="flex min-w-0 flex-1 items-start gap-3">
+                  <span className="grid size-8 flex-none place-items-center rounded-full bg-[#edf0f4] text-[#738096]">
+                    <BriefcaseBusiness
+                      size={15}
+                      strokeWidth={1.7}
+                      aria-hidden="true"
+                    />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="m-0 text-xs font-medium break-words text-foreground">
+                      {assignment.project.name}
+                    </p>
+                    <p className="mt-1 mb-0 text-[11px] text-[#738096]">
+                      {assignment.weeklyHours === null
+                        ? "Hours not recorded"
+                        : `${assignment.weeklyHours} hrs/week`}
+                    </p>
+                    <Pill tone="info" className="mt-2">
+                      {projectStatusLabel(assignment.project.status)}
+                    </Pill>
+                  </div>
+                </div>
+                <div className="flex flex-none items-center gap-2 max-[400px]:ml-11">
+                  <Button
+                    type="button"
+                    className={panelAssignButton}
+                    onClick={() =>
+                      panel.close(() => onEditAllocation(assignment))
+                    }
+                  >
+                    Edit allocation
+                  </Button>
+                  <Button
+                    type="button"
+                    className={panelDangerButton}
+                    aria-label={`Unassign from ${assignment.project.name}`}
+                    onClick={() => panel.close(() => onUnassign(assignment))}
+                  >
+                    <Trash2 size={15} strokeWidth={1.7} aria-hidden="true" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {!count && (
+              <p className="m-0 px-4 py-5 text-xs text-[#738096]">
+                No assignments this week.
+              </p>
+            )}
           </div>
-          <SheetClose asChild>
-            <Button
-              variant="outline"
-              type="button"
-              className={panelIconButton}
-              aria-label="Close workload details"
-            >
-              <CloseIcon width="16" height="16" />
-            </Button>
-          </SheetClose>
-        </header>
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 max-[560px]:px-5">
-          <p className="mb-4 text-xs text-[#738096]">{description}</p>
-          {children}
-        </div>
-        <footer className="flex flex-none justify-between gap-3 border-t border-[#eceef1] px-6 py-4 max-[560px]:px-5">
-          <Button
-            type="button"
-            variant="outline"
-            className={panelSecondaryButton}
-            onClick={() => closeAfterTransition(onEdit)}
-          >
-            Edit capacity
-          </Button>
-          <SheetClose asChild>
-            <Button
-              type="button"
-              className={panelAssignButton}
-              aria-label="Done viewing workload details"
-            >
-              Done
-            </Button>
-          </SheetClose>
-        </footer>
-      </SheetContent>
-    </Sheet>
+        </SidePanelSection>
+        <p className="m-0 text-[11px] text-[#738096]">
+          Utilization = assigned hours ÷ (scheduled hours − time off). Missing
+          hours are never treated as free capacity.
+        </p>
+      </SidePanelBody>
+      <SidePanelFooter className="justify-between">
+        <SidePanelButton
+          variant="secondary"
+          onClick={() => panel.close(onEditCapacity)}
+        >
+          Edit capacity
+        </SidePanelButton>
+        <SheetClose asChild>
+          <SidePanelButton aria-label="Done viewing workload details">
+            Done
+          </SidePanelButton>
+        </SheetClose>
+      </SidePanelFooter>
+    </SidePanel>
   )
 }

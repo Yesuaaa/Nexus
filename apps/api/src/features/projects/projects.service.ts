@@ -1,13 +1,17 @@
 import type { Prisma } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
+import {
+  activeAccount,
+  activeDepartmentHead,
+  activeStaff,
+} from "../../shared/query/accounts.js"
 import { appendEvent } from "../request-workflow/workflow.access.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
-
-const active = { isActive: true, accountDeletedAt: null } as const
+import { lockRows } from "../../shared/db/locks.js"
 
 const clientProjectScope = (userId: string): Prisma.ProjectWhereInput => ({
   clientId: userId,
-  client: { ...active, role: "USER" },
+  client: { ...activeAccount, role: "USER" },
   OR: [
     { requestId: { not: null }, startDate: { not: null } },
     { requestId: null, status: { not: "PLANNED" } },
@@ -22,10 +26,7 @@ function contributorScope(
     OR: [
       {
         request: {
-          acceptedDepartment: {
-            headId: userId,
-            head: { ...active, role: "STAFF" },
-          },
+          acceptedDepartment: activeDepartmentHead(userId),
         },
       },
       {
@@ -34,7 +35,7 @@ function contributorScope(
             employee: {
               userId,
               status: "ACTIVE",
-              user: { ...active, role: "STAFF" },
+              user: activeStaff,
               department: {
                 acceptedServiceRequests: {
                   some: { project: { id: projectId } },
@@ -56,7 +57,7 @@ function visibleScope(
     OR: [
       {
         clientId: userId,
-        client: { ...active, role: "USER" },
+        client: { ...activeAccount, role: "USER" },
         OR: [
           { requestId: null, status: { not: "PLANNED" } },
           { requestId: { not: null }, startDate: { not: null } },
@@ -132,10 +133,7 @@ export async function getProject(userId: string, id: string) {
           where: {
             id,
             request: {
-              acceptedDepartment: {
-                headId: userId,
-                head: { ...active, role: "STAFF" },
-              },
+              acceptedDepartment: activeDepartmentHead(userId),
             },
           },
         }),
@@ -228,7 +226,7 @@ export async function listClientProjects(userId: string) {
   return getPrisma()!.$transaction(
     async (tx) => {
       const account = await tx.user.findFirst({
-        where: { id: userId, ...active, role: "USER" },
+        where: { id: userId, ...activeAccount, role: "USER" },
         select: { id: true },
       })
       if (!account)
@@ -304,7 +302,7 @@ export async function updateClientProjectBrief(
 ) {
   const brief = projectBriefInput(input)
   await getPrisma()!.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${projectId} FOR UPDATE`
+    await lockRows(tx, "Project", projectId)
     const current = await tx.project.findFirst({
       where: { id: projectId, ...clientProjectScope(userId) },
       select: { id: true, status: true },
@@ -351,7 +349,7 @@ export async function createProjectChangeRequest(
       "Describe the change in 10 to 4,000 characters",
     )
   await getPrisma()!.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${projectId} FOR UPDATE`
+    await lockRows(tx, "Project", projectId)
     const project = await tx.project.findFirst({
       where: { id: projectId, ...clientProjectScope(userId) },
       select: { id: true, status: true },
@@ -417,7 +415,7 @@ export async function createProjectCancellationRequest(
       "Give a reason between 10 and 2,000 characters",
     )
   await getPrisma()!.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${projectId} FOR UPDATE`
+    await lockRows(tx, "Project", projectId)
     const project = await tx.project.findFirst({
       where: { id: projectId, ...clientProjectScope(userId) },
       select: { id: true, name: true, status: true, requestId: true },
@@ -496,15 +494,12 @@ export async function reviewProjectChangeRequest(
       "Response must be 2,000 characters or fewer",
     )
   await getPrisma()!.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${projectId} FOR UPDATE`
+    await lockRows(tx, "Project", projectId)
     const head = await tx.project.findFirst({
       where: {
         id: projectId,
         request: {
-          acceptedDepartment: {
-            headId: userId,
-            head: { ...active, role: "STAFF" },
-          },
+          acceptedDepartment: activeDepartmentHead(userId),
         },
       },
       select: { id: true, status: true },
@@ -571,15 +566,12 @@ export async function reviewProjectCancellationRequest(
       "Response must be 2,000 characters or fewer",
     )
   await getPrisma()!.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${projectId} FOR UPDATE`
+    await lockRows(tx, "Project", projectId)
     const project = await tx.project.findFirst({
       where: {
         id: projectId,
         request: {
-          acceptedDepartment: {
-            headId: userId,
-            head: { ...active, role: "STAFF" },
-          },
+          acceptedDepartment: activeDepartmentHead(userId),
         },
       },
       select: { id: true, name: true, status: true, requestId: true },
@@ -698,7 +690,7 @@ export async function reviewClientDeliverable(
       "Note must be 2,000 characters or fewer",
     )
   await getPrisma()!.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${projectId} FOR UPDATE`
+    await lockRows(tx, "Project", projectId)
     const project = await tx.project.findFirst({
       where: { id: projectId, ...clientProjectScope(userId) },
       select: { id: true, status: true },

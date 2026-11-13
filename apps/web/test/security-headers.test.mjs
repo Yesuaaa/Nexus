@@ -47,3 +47,25 @@ test("page CSP permits dynamic presentation styles without weakening scripts", (
   assert.doesNotMatch(productionCsp, /script-src[^;]*'unsafe-inline'/)
   assert.match(productionCsp, /img-src[^;]*https:\/\/\*\.supabase\.co/)
 })
+
+test("development CSP allows DevTools styles without weakening production styles or scripts", () => {
+  const developmentCsp = buildContentSecurityPolicy("test-nonce", "", true)
+  const productionCsp = buildContentSecurityPolicy("test-nonce", "", false)
+
+  assert.equal(
+    developmentCsp
+      .split("; ")
+      .find((directive) => directive.startsWith("style-src ")),
+    "style-src 'self' 'unsafe-inline'",
+  )
+  assert.equal(
+    productionCsp
+      .split("; ")
+      .find((directive) => directive.startsWith("style-src ")),
+    "style-src 'self' 'nonce-test-nonce'",
+  )
+  for (const policy of [developmentCsp, productionCsp]) {
+    assert.match(policy, /script-src[^;]*'nonce-test-nonce'/)
+    assert.doesNotMatch(policy, /script-src[^;]*'unsafe-inline'/)
+  }
+})

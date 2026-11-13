@@ -1,4 +1,10 @@
 import type { EmploymentType } from "../api/employees-api"
+import {
+  NAME_PATTERN,
+  PH_MOBILE_PATTERN,
+  isValidEmail,
+  passwordIssue,
+} from "../../../lib/validation.ts"
 
 export type EmployeeDraft = {
   employeeId: string
@@ -33,10 +39,6 @@ type EmployeeFieldInteraction =
   | { type: "focus"; field: EmployeeField }
   | { type: "blur"; field: EmployeeField; invalid: boolean }
 
-const NAME_RE = /^\p{L}[\p{L} .'’-]*$/u
-const EMAIL_RE =
-  /^[A-Za-z0-9]+([._+-][A-Za-z0-9]+)*@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.(com|ph)$/i
-const PHONE_RE = /^0[89]\d{9}$/
 const EMPLOYEE_ID_RE = /^EXP-[A-Za-z0-9_-]+$/
 
 function isValidDate(value: string) {
@@ -69,15 +71,14 @@ export function validateEmployeeDraft(
   if (!fullName) errors.fullName = "Full name is required."
   else if (fullName.length < 2 || fullName.length > 100)
     errors.fullName = "Full name must be between 2 and 100 characters."
-  else if (!NAME_RE.test(fullName))
+  else if (!NAME_PATTERN.test(fullName))
     errors.fullName = "Letters, spaces, hyphens, apostrophes and periods only."
 
   if (!email) errors.email = "Email is required."
-  else if (email.length > 254 || !EMAIL_RE.test(email))
-    errors.email = "Enter a valid .com or .ph email address."
+  else if (!isValidEmail(email)) errors.email = "Enter a valid email address."
 
   if (!contactNumber) errors.contactNumber = "Contact number is required."
-  else if (!PHONE_RE.test(contactNumber))
+  else if (!PH_MOBILE_PATTERN.test(contactNumber))
     errors.contactNumber = "Enter 11 digits starting with 09 or 08."
 
   if (!position) errors.position = "Position is required."
@@ -96,17 +97,10 @@ export function validateEmployeeDraft(
   if (!draft.teamId) errors.teamId = "Select a team or No team."
 
   if (requireAccountCredentials) {
-    if (!draft.password) errors.password = "Password is required."
-    else if (draft.password.length < 12)
-      errors.password = "Use at least 12 characters."
-    else if (!/[A-Z]/.test(draft.password))
-      errors.password = "Include at least one capital letter."
-    else if (!/[a-z]/.test(draft.password))
-      errors.password = "Include at least one lowercase letter."
-    else if (!/[0-9]/.test(draft.password))
-      errors.password = "Include at least one number."
-    else if (!/[^A-Za-z0-9]/.test(draft.password))
-      errors.password = "Include at least one special character."
+    const passwordError = draft.password
+      ? passwordIssue(draft.password)
+      : "Password is required."
+    if (passwordError) errors.password = passwordError
 
     if (!draft.passwordConfirmation)
       errors.passwordConfirmation = "Please confirm the password."

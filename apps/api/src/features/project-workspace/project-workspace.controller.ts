@@ -1,6 +1,7 @@
-import { json, Router, type ErrorRequestHandler } from "express"
+import { json, Router } from "express"
+import { recordIdParam } from "../../shared/validation.js"
 import { requireAuth } from "../auth/auth.middleware.js"
-import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
+import { fail } from "../../shared/http-error.js"
 import {
   addProjectTask,
   assignProjectTeamLead,
@@ -25,18 +26,11 @@ import {
 export const projectWorkspaceRouter = Router()
 projectWorkspaceRouter.use(requireAuth)
 
-for (const parameter of ["id", "projectId", "taskId", "deliverableId"]) {
+for (const parameter of ["id", "projectId", "taskId", "deliverableId"])
   projectWorkspaceRouter.param(
     parameter,
-    (_request, response, next, value: string) => {
-      if (!/^[A-Za-z0-9_-]{1,80}$/.test(value))
-        return response
-          .status(400)
-          .json({ error: "Invalid project workspace ID" })
-      next()
-    },
+    recordIdParam("Invalid project workspace ID"),
   )
-}
 
 projectWorkspaceRouter.get("/", async (request, response) => {
   const limit = Number(request.query.limit)
@@ -97,7 +91,7 @@ projectWorkspaceRouter.post("/:id/status", async (request, response) => {
   const action =
     body && typeof body === "object" && "action" in body ? body.action : null
   if (action !== "ON_HOLD" && action !== "RESUME" && action !== "COMPLETE")
-    throw new ServiceRequestsError(400, "Choose a valid project status action")
+    fail(400, "Choose a valid project status action")
   response.json(
     await updateProjectWorkspaceStatus(
       request.auth!.user.id,
@@ -295,9 +289,3 @@ projectWorkspaceRouter.get(
     response.send(Buffer.from(file.data))
   },
 )
-
-projectWorkspaceRouter.use(((error, _request, response, next) => {
-  if (error instanceof ServiceRequestsError)
-    return response.status(error.status).json({ error: error.message })
-  next(error)
-}) satisfies ErrorRequestHandler)

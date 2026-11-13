@@ -2,10 +2,12 @@
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { CheckCircle2, Circle, FolderKanban } from "lucide-react"
 import { sileo } from "@/lib/toast"
+import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { pillToneClass } from "@/components/ui/pill"
 import { contentClass } from "@/components/layout/styles"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import {
@@ -21,12 +23,22 @@ import {
   type ProjectWorkspace,
 } from "../api/projects-api"
 import { ReviewProjectChangeDialog } from "../components/client-project-forms"
+import { errorMessage } from "@/lib/error-message"
+import { useAsyncResource } from "@/lib/use-async-resource"
+import { statusLabel, statusTone } from "../model/project-status"
 
 export function ProjectPage({ projectId }: { projectId: string }) {
   const { formatDate } = useDatePreferences()
   const account = usePortalAccount()
-  const [project, setProject] = useState<ProjectWorkspace | null>(null)
-  const [error, setError] = useState("")
+  const {
+    data: project,
+    error,
+    setData: setProject,
+  } = useAsyncResource<ProjectWorkspace>(
+    (signal) => getProject(projectId, signal),
+    [projectId],
+    { fallbackError: "Couldn't load this project." },
+  )
   const [pending, setPending] = useState<string | null>(null)
   const [reviewItem, setReviewItem] = useState<ProjectChangeRequest | null>(
     null,
@@ -36,23 +48,6 @@ export function ProjectPage({ projectId }: { projectId: string }) {
   >("ACCEPTED")
   const [reviewBusy, setReviewBusy] = useState(false)
   const [reviewOpen, setReviewOpen] = useState(false)
-  useEffect(() => {
-    const controller = new AbortController()
-    getProject(projectId, controller.signal)
-      .then((result) => {
-        if (!controller.signal.aborted) setProject(result)
-      })
-      .catch((reason: unknown) => {
-        if (!controller.signal.aborted)
-          setError(
-            reason instanceof Error
-              ? reason.message
-              : "Couldn't load this project.",
-          )
-      })
-    return () => controller.abort()
-  }, [projectId])
-
   async function complete(id: string, completed: boolean) {
     if (pending) return
     setPending(id)
@@ -64,8 +59,7 @@ export function ProjectPage({ projectId }: { projectId: string }) {
     } catch (reason) {
       sileo.error({
         title: "Couldn't update milestone",
-        description:
-          reason instanceof Error ? reason.message : "Please try again.",
+        description: errorMessage(reason, "Please try again."),
       })
     } finally {
       setPending(null)
@@ -106,8 +100,7 @@ export function ProjectPage({ projectId }: { projectId: string }) {
     } catch (reason) {
       sileo.error({
         title: "Couldn't review the request",
-        description:
-          reason instanceof Error ? reason.message : "Please try again.",
+        description: errorMessage(reason, "Please try again."),
       })
     } finally {
       setReviewBusy(false)
@@ -120,9 +113,9 @@ export function ProjectPage({ projectId }: { projectId: string }) {
       aria-label="Project workspace"
     >
       {error ? (
-        <p role="alert" className="text-sm text-red-700">
+        <Alert variant="text" className="text-sm">
           {error}
-        </p>
+        </Alert>
       ) : !project ? (
         <p role="status" className="text-sm text-muted-foreground">
           Loading project…
@@ -142,9 +135,9 @@ export function ProjectPage({ projectId }: { projectId: string }) {
                   {project.name}
                 </h1>
                 <span
-                  className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-medium ${project.status === "CANCELLED" ? "bg-rose-100 text-rose-800" : project.status === "IN_PROGRESS" ? "bg-amber-100 text-amber-800" : project.status === "COMPLETED" ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-700"}`}
+                  className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-medium ${pillToneClass(statusTone(project.status))}`}
                 >
-                  {project.status.replaceAll("_", " ")}
+                  {statusLabel(project.status)}
                 </span>
               </div>
             </div>
@@ -191,7 +184,7 @@ export function ProjectPage({ projectId }: { projectId: string }) {
                           {formatDate(changeRequest.createdAt)}
                         </div>
                         <span
-                          className={`rounded-full px-2.5 py-1 text-[10px] font-medium ${changeRequest.kind === "CANCELLATION" && changeRequest.status === "ACCEPTED" ? "bg-rose-100 text-rose-800" : changeRequest.status === "ACCEPTED" ? "bg-emerald-100 text-emerald-800" : changeRequest.status === "NOT_APPROVED" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-800"}`}
+                          className={`rounded-full px-2.5 py-1 text-[10px] font-medium ${pillToneClass(changeRequest.status === "ACCEPTED" ? (changeRequest.kind === "CANCELLATION" ? "danger" : "success") : changeRequest.status === "NOT_APPROVED" ? "danger" : "warning")}`}
                         >
                           {changeRequest.kind === "CANCELLATION" &&
                           changeRequest.status === "ACCEPTED"
@@ -219,7 +212,12 @@ export function ProjectPage({ projectId }: { projectId: string }) {
                           <div className="mt-3 flex flex-wrap gap-2">
                             <Button
                               type="button"
-                              className={`h-8 px-3 text-xs ${changeRequest.kind === "CANCELLATION" ? "bg-[#b53244] hover:bg-[#982a3a]" : "bg-[#243f8f] hover:bg-[#1d367d]"}`}
+                              variant={
+                                changeRequest.kind === "CANCELLATION"
+                                  ? "danger"
+                                  : "brand"
+                              }
+                              className="h-8 px-3 text-xs"
                               onClick={() => {
                                 setReviewItem(changeRequest)
                                 setReviewDecision("ACCEPTED")

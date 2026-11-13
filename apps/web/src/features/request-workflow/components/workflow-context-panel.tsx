@@ -1,5 +1,7 @@
 "use client"
 
+import { FormInput, FormTextarea } from "@/components/ui/form-input"
+
 import { Form } from "@/components/ui/form"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 
@@ -13,11 +15,11 @@ import {
   Video,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import {
   ConsultationLocation,
   getConsultationMeetingUrl,
 } from "./workflow-cards"
+import { humanizeEnum } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { WorkflowControls } from "../hooks/use-request-workflow"
 import type { Workflow, WorkflowAction } from "../model/workflow"
@@ -25,7 +27,6 @@ import {
   WorkflowBadge,
   WorkflowField,
   workflowButton,
-  workflowInput,
 } from "./workflow-primitives"
 
 export function WorkflowDisclosure({
@@ -155,7 +156,7 @@ function InternalWorkspace({
               <p className="mt-1 mb-0 text-[10px] text-[#738096]">
                 {person.position || "Staff"}
                 {person.status !== "ACTIVE" &&
-                  ` · ${person.status.toLowerCase().replaceAll("_", " ")}`}
+                  ` · ${humanizeEnum(person.status, { capitalize: false })}`}
               </p>
             </li>
           ))}
@@ -421,7 +422,8 @@ export function WorkflowContextPanel({
                     <Button
                       type="button"
                       disabled={Boolean(controls?.busy) || !onProjectSetup}
-                      className={`${workflowButton} w-full bg-[#203f8c] text-white hover:bg-[#172f70]`}
+                      variant="brand"
+                      className={`${workflowButton} w-full`}
                       onClick={() => onProjectSetup?.("activation")}
                     >
                       Review and activate
@@ -512,9 +514,6 @@ export function WorkflowContextPanel({
                                     className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white p-0 text-[#203f8c] transition-colors hover:bg-blue-50"
                                   >
                                     <Video size={12} aria-hidden="true" />
-                                    <HoverTooltip>
-                                      Join consultation
-                                    </HoverTooltip>
                                   </a>
                                 )}
                                 <a
@@ -735,12 +734,7 @@ export function WorkflowContextPanel({
                           })}
                         >
                           <WorkflowField label="Resume note">
-                            <input
-                              name="note"
-                              required
-                              maxLength={2000}
-                              className={workflowInput}
-                            />
+                            <FormInput name="note" required maxLength={2000} />
                           </WorkflowField>
                         </ActionForm>
                       ) : (
@@ -753,12 +747,7 @@ export function WorkflowContextPanel({
                           })}
                         >
                           <WorkflowField label="Reason for hold">
-                            <input
-                              name="note"
-                              required
-                              maxLength={2000}
-                              className={workflowInput}
-                            />
+                            <FormInput name="note" required maxLength={2000} />
                           </WorkflowField>
                         </ActionForm>
                       ))}
@@ -772,12 +761,11 @@ export function WorkflowContextPanel({
                       })}
                     >
                       <WorkflowField label="Cancellation reason">
-                        <textarea
+                        <FormTextarea
                           name="note"
                           required
                           maxLength={2000}
                           rows={2}
-                          className={workflowInput}
                         />
                       </WorkflowField>
                       <label className="flex items-start gap-2 text-[10px]">

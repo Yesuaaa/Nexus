@@ -8,6 +8,15 @@ export default async function Page({
   searchParams: Promise<{ tab?: string }>
 }) {
   const [{ id }, { tab }] = await Promise.all([params, searchParams])
-  const initialTab = tab === "deliverables" ? "deliverables" : "overview"
-  return <ProjectAccessPage key={id} projectId={id} initialTab={initialTab} />
+  const initialTab =
+    tab === "deliverables" || tab === "notes" || tab === "team"
+      ? tab
+      : "overview"
+  return (
+    <ProjectAccessPage
+      key={`${id}:${initialTab}`}
+      projectId={id}
+      initialTab={initialTab}
+    />
+  )
 }
