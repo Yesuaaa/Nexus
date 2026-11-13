@@ -11,7 +11,6 @@ import { cn } from "@/lib/utils"
 import { deleteDepartment, type Department } from "../api/departments-api"
 import { DepartmentFormPanel } from "../components/department-form-panel"
 import { DeleteDepartmentDialog } from "../components/delete-department-dialog"
-import { DepartmentKpiCards } from "../components/department-kpi-cards"
 import { DepartmentTable } from "../components/department-table"
 import { ManageMembersDrawer } from "../components/manage-members-drawer"
 import { useDepartments } from "../hooks/use-departments"
@@ -90,15 +89,10 @@ export function DepartmentManagementPage() {
         }
       />
 
-      <div className="mt-[18px] max-[560px]:mt-[14px]">
-        <DepartmentKpiCards
-          departments={departments}
-          loading={loading}
-          unavailable={Boolean(error)}
-        />
-      </div>
-
-      <section className="mt-4 min-w-0" aria-label="Departments">
+      <section
+        className="mt-[18px] min-w-0 max-[560px]:mt-[14px]"
+        aria-label="Departments"
+      >
         <DepartmentTable
           departments={departments}
           loading={loading}

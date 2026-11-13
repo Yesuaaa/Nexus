@@ -41,12 +41,15 @@ export function PortalLayout({ children }: { children: ReactNode }) {
       (pathname.startsWith("/projects") && !canAccessProjects(account)) ||
       (pathname.startsWith("/project-workspace") &&
         !canAccessProjectWorkspace(account)) ||
-      (pathname === "/departments" &&
+      ((pathname === "/departments" || pathname.startsWith("/departments/")) &&
         !canAccessDepartmentManagement(account)) ||
       (pathname.startsWith("/employees") &&
         !canAccessEmployeeManagement(account)) ||
       (pathname === "/services" &&
         !canAccessServiceCatalog(account) &&
+        !canAccessServiceManagement(account)) ||
+      // The catalog is shared with clients; its overview is admin-only.
+      (pathname.startsWith("/services/") &&
         !canAccessServiceManagement(account)) ||
       (pathname === "/calendar" && !canAccessCalendar(account)) ||
       ((pathname.startsWith("/service-requests") || pathname === "/help") &&

@@ -23,15 +23,28 @@ test.describe("Staff and role navigation", () => {
       await expect(
         menu.getByRole("link", { name: "Account Management", exact: true }),
       ).toHaveCount(managesAccounts ? 1 : 0)
-      await expect(
-        menu.getByRole("link", { name: "Department Management", exact: true }),
-      ).toHaveCount(role === "ADMIN" ? 1 : 0)
-      await expect(
-        menu.getByRole("link", { name: "Employee Management", exact: true }),
-      ).toHaveCount(role === "ADMIN" ? 1 : 0)
-      await expect(
-        menu.getByRole("link", { name: "Service Management", exact: true }),
-      ).toHaveCount(role === "ADMIN" ? 1 : 0)
+      // Admin modules are sidebar groups: Overview (cards) + Management (table).
+      for (const [group, singular] of [
+        ["Departments", "Department"],
+        ["Employees", "Employee"],
+        ["Services", "Service"],
+      ] as const) {
+        const toggle = menu.getByRole("button", { name: group, exact: true })
+        await expect(toggle).toHaveCount(role === "ADMIN" ? 1 : 0)
+        if (role !== "ADMIN") continue
+        if ((await toggle.getAttribute("aria-expanded")) === "false")
+          await toggle.click()
+        const base = `/${group.toLowerCase()}`
+        await expect(
+          menu.getByRole("link", { name: `${singular} overview`, exact: true }),
+        ).toHaveAttribute("href", `${base}/overview`)
+        await expect(
+          menu.getByRole("link", {
+            name: `${singular} Management`,
+            exact: true,
+          }),
+        ).toHaveAttribute("href", base)
+      }
       await expect(
         menu.getByRole("link", { name: "Services", exact: true }),
       ).toHaveCount(role === "USER" ? 1 : 0)
