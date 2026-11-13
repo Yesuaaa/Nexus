@@ -1,5 +1,5 @@
 import { apiRequest, apiStreamRequest } from "@/features/auth/api/auth-api"
-import type { ServiceRequestStatus } from "@/features/services/api/services-api"
+import type { ServiceRequestStatus } from "@/features/service-operations/model/service-request-contracts"
 import type { WorkflowState } from "@/features/request-workflow/model/workflow"
 import { withUnreadCount } from "../model/unread-messages"
 

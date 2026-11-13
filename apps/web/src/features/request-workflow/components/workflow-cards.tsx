@@ -1,5 +1,7 @@
 "use client"
 
+import { FormInput, FormTextarea } from "@/components/ui/form-input"
+
 import { useWorkflowFilePreview } from "@/features/request-workflow/hooks/use-workflow-file-preview"
 import { Form, validateFields } from "@/components/ui/form"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
@@ -417,7 +419,7 @@ export function RequirementRequestCard({
             }}
           >
             <WorkflowField label="Review note">
-              <input name="note" maxLength={2000} className={workflowInput} />
+              <FormInput name="note" maxLength={2000} />
             </WorkflowField>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -591,21 +593,15 @@ export function ConsultationSchedulingCard({
                   </WorkflowField>
                 </div>
                 <WorkflowField label="Meeting link or location">
-                  <input
+                  <FormInput
                     name="location"
                     required
                     maxLength={1000}
                     defaultValue={consultation.location}
-                    className={workflowInput}
                   />
                 </WorkflowField>
                 <WorkflowField label="Response to client (required when declining)">
-                  <textarea
-                    name="note"
-                    rows={2}
-                    maxLength={2000}
-                    className={workflowInput}
-                  />
+                  <FormTextarea name="note" rows={2} maxLength={2000} />
                 </WorkflowField>
                 <div className="flex flex-wrap gap-2">
                   <Button
@@ -667,13 +663,7 @@ export function ConsultationSchedulingCard({
               />
             </WorkflowField>
             <WorkflowField label="Reason for rescheduling">
-              <textarea
-                name="note"
-                required
-                maxLength={2000}
-                rows={2}
-                className={workflowInput}
-              />
+              <FormTextarea name="note" required maxLength={2000} rows={2} />
             </WorkflowField>
             <p className="m-0 text-xs">
               Your current schedule remains until the department confirms a
@@ -890,12 +880,7 @@ export function QuotationProposalCard({
           }}
         >
           <WorkflowField label="Decision note or requested revisions">
-            <textarea
-              name="note"
-              rows={2}
-              maxLength={2000}
-              className={workflowInput}
-            />
+            <FormTextarea name="note" rows={2} maxLength={2000} />
           </WorkflowField>
           <label className="flex items-start gap-2 text-[11px]">
             <input
@@ -1144,7 +1129,7 @@ export function AgreementCard({ workflow, controls }: CardProps) {
             }}
           >
             <WorkflowField label="Agreement review note">
-              <input name="note" maxLength={2000} className={workflowInput} />
+              <FormInput name="note" maxLength={2000} />
             </WorkflowField>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -1251,38 +1236,35 @@ function SandboxCardPaymentForm({
         onSubmit={(event) => void submit(event)}
       >
         <WorkflowField label="Cardholder name">
-          <input
+          <FormInput
             autoComplete="cc-name"
             value={cardholder}
             onChange={(event) => setCardholder(event.currentTarget.value)}
-            className={workflowInput}
           />
         </WorkflowField>
         <WorkflowField label="Card number">
-          <input
+          <FormInput
             inputMode="numeric"
             autoComplete="cc-number"
             value={cardNumber}
             onChange={(event) =>
               setCardNumber(formatSandboxCardNumber(event.currentTarget.value))
             }
-            className={workflowInput}
           />
         </WorkflowField>
         <div className="grid grid-cols-2 gap-3">
           <WorkflowField label="Expiry">
-            <input
+            <FormInput
               inputMode="numeric"
               autoComplete="cc-exp"
               value={expiry}
               onChange={(event) =>
                 setExpiry(formatSandboxExpiry(event.currentTarget.value))
               }
-              className={workflowInput}
             />
           </WorkflowField>
           <WorkflowField label="CVC">
-            <input
+            <FormInput
               inputMode="numeric"
               autoComplete="cc-csc"
               value={cvc}
@@ -1290,7 +1272,6 @@ function SandboxCardPaymentForm({
               onChange={(event) =>
                 setCvc(event.currentTarget.value.replace(/\D/g, "").slice(0, 3))
               }
-              className={workflowInput}
             />
           </WorkflowField>
         </div>
@@ -1424,12 +1405,7 @@ export function PaymentVerificationCard({ workflow, controls }: CardProps) {
                   }}
                 >
                   <WorkflowField label="Payment reference">
-                    <input
-                      name="reference"
-                      required
-                      maxLength={300}
-                      className={workflowInput}
-                    />
+                    <FormInput name="reference" required maxLength={300} />
                   </WorkflowField>
                   <WorkflowField label="Proof of payment">
                     <input
@@ -1532,12 +1508,11 @@ export function PaymentVerificationCard({ workflow, controls }: CardProps) {
             }}
           >
             <WorkflowField label="Verification note">
-              <input
+              <FormInput
                 name="note"
                 placeholder="Required when rejecting payment"
                 onChange={(event) => event.currentTarget.setCustomValidity("")}
                 maxLength={2000}
-                className={workflowInput}
               />
             </WorkflowField>
             <div className="flex flex-wrap gap-2">

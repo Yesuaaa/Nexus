@@ -1,5 +1,7 @@
 "use client"
 
+import { FormInput, FormTextarea } from "@/components/ui/form-input"
+
 import { Form } from "@/components/ui/form"
 
 import {
@@ -166,11 +168,6 @@ export function ServiceRequirementsStep({
                 onChange: (
                   event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
                 ) => onChange({ ...value, [field.name]: event.target.value }),
-                className: cn(
-                  "w-full rounded-xl border bg-white px-3.5 py-3 text-sm leading-6 text-[#17233a] placeholder:text-[#8da0bd]",
-                  error ? "border-[#b4234d]" : "border-[#dce3ee]",
-                  focusRing,
-                ),
               }
               return (
                 <div key={field.name} className="min-w-0">
@@ -196,13 +193,9 @@ export function ServiceRequirementsStep({
                     {field.hint}
                   </p>
                   {field.rows ? (
-                    <textarea
-                      {...inputProps}
-                      rows={field.rows}
-                      className={cn(inputProps.className, "block resize-y")}
-                    />
+                    <FormTextarea {...inputProps} rows={field.rows} />
                   ) : (
-                    <input {...inputProps} type="text" />
+                    <FormInput {...inputProps} type="text" />
                   )}
                   <div className="mt-1.5 flex items-start justify-between gap-3">
                     {error && (

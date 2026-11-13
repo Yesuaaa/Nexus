@@ -1,3 +1,4 @@
+import { FormInput } from "@/components/ui/form-input"
 import { Avatar } from "@/components/ui/avatar"
 import type { FormEvent } from "react"
 import { CalendarDays, Mail, Phone } from "lucide-react"
@@ -5,7 +6,6 @@ import { Alert } from "@/components/ui/alert"
 import { Form } from "@/components/ui/form"
 import { pillToneClass } from "@/components/ui/pill"
 import { SidePanelButton, SidePanelFooter } from "@/components/ui/side-panel"
-import { Input } from "@/components/ui/input"
 import { roleLabels } from "@/features/auth/model/roles"
 import {
   employmentStatusLabels,
@@ -21,11 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import type { DepartmentMember, DepartmentTeam } from "../api/departments-api"
-import {
-  panelField,
-  panelInput,
-  panelSelectTrigger,
-} from "@/components/ui/panel-styles"
+import { panelField, panelSelectTrigger } from "@/components/ui/panel-styles"
 
 const badge =
   "rounded px-1.5 py-px text-[10px] leading-4 font-semibold whitespace-nowrap"
@@ -139,9 +135,8 @@ export function EditMemberForm({
         {error && <Alert>{error}</Alert>}
         <label className={panelField} htmlFor="mem-pos">
           Job title / position
-          <Input
+          <FormInput
             id="mem-pos"
-            className={panelInput}
             placeholder="e.g. Specialist, Analyst, Coordinator"
             value={position}
             onChange={(event) => onPositionChange(event.target.value)}

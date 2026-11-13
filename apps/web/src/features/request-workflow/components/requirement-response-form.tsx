@@ -1,5 +1,7 @@
 "use client"
 
+import { FormTextarea } from "@/components/ui/form-input"
+
 import { Form } from "@/components/ui/form"
 
 import { useRef, useState } from "react"
@@ -9,11 +11,7 @@ import { Button } from "@/components/ui/button"
 import type { WorkflowControls } from "../hooks/use-request-workflow"
 import type { WorkflowRequirement } from "../model/workflow"
 import { AttachmentPreview, attachmentAccept } from "./attachment-preview"
-import {
-  WorkflowField,
-  workflowButton,
-  workflowInput,
-} from "./workflow-primitives"
+import { WorkflowField, workflowButton } from "./workflow-primitives"
 
 export function RequirementResponseForm({
   requirement,
@@ -74,12 +72,11 @@ export function RequirementResponseForm({
       }}
     >
       <WorkflowField label="Your response">
-        <textarea
+        <FormTextarea
           name="submission"
           rows={2}
           maxLength={4000}
           defaultValue={requirement.submission || ""}
-          className={workflowInput}
           disabled={busy}
         />
       </WorkflowField>

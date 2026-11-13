@@ -1,5 +1,6 @@
 import { apiUrl } from "../../../lib/api-url.ts"
-import type { Account, RegistrationData } from "../model/types"
+import { canSignInToPortal } from "../model/auth-portal.ts"
+import type { Account, AuthPortal, RegistrationData } from "../model/types"
 
 type TokenResult = { token: string; refreshToken: string; expiresIn: number }
 type AuthResult = TokenResult & { user: Account }
@@ -15,6 +16,15 @@ export class ApiError extends Error {
   constructor(message: string, status: number) {
     super(message)
     this.status = status
+  }
+}
+
+export class PortalAccessError extends Error {
+  readonly portal: AuthPortal
+
+  constructor(portal: AuthPortal) {
+    super("This account cannot use the selected sign-in portal.")
+    this.portal = portal
   }
 }
 
@@ -185,6 +195,25 @@ export async function signIn(
     throw new ApiError("Session changed. Please try again.", 409)
   storeTokens(result)
   return result.user
+}
+
+export async function signInToPortal(
+  email: string,
+  password: string,
+  portal: AuthPortal,
+): Promise<Account> {
+  const account = await signIn(email, password)
+  if (canSignInToPortal(account.role, portal)) return account
+
+  // The shared API authenticates credentials before the client knows the role.
+  // Revoke a session created through the wrong portal and always remove its
+  // local bearer tokens, even if the revocation request cannot reach the API.
+  try {
+    await signOut()
+  } catch {
+    clearToken()
+  }
+  throw new PortalAccessError(portal)
 }
 
 export async function register(data: RegistrationData): Promise<Account> {

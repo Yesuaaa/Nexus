@@ -1,5 +1,5 @@
 import type { PillTone } from "@/components/ui/pill"
-import type { ServiceRequestStatus } from "@/features/services/api/services-api"
+import type { ServiceRequestStatus } from "@/features/service-operations/model/service-request-contracts"
 
 export const bookingStatuses: Record<
   ServiceRequestStatus,

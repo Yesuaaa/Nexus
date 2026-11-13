@@ -14,11 +14,13 @@ export function ConversationListItem({
   isClient,
   requestId,
   railCollapsed,
+  listHref = "/messages",
 }: {
   conversation: ConversationSummary
   isClient: boolean
   requestId: string | null
   railCollapsed: boolean
+  listHref?: string
 }) {
   const selected =
     requestId === conversation.id ||
@@ -36,7 +38,7 @@ export function ConversationListItem({
   return (
     <ConversationRow
       id={conversation.id}
-      href={`/messages?request=${encodeURIComponent(conversation.id)}`}
+      href={`${listHref}${listHref.includes("?") ? "&" : "?"}request=${encodeURIComponent(conversation.id)}`}
       name={name}
       subtitle={`${department} · ${bookingsLabel}`}
       imageUrl={participant?.imageUrl}
@@ -56,12 +58,14 @@ export function ProjectConversationListItem({
   projectId,
   view,
   railCollapsed,
+  listHref = "/messages",
 }: {
   conversation: ProjectConversationSummary
   accountId: string
   projectId: string | null
   view: "active" | "archived"
   railCollapsed: boolean
+  listHref?: string
 }) {
   const members = conversation.participants
     .filter((person) => person.id !== accountId)
@@ -72,7 +76,7 @@ export function ProjectConversationListItem({
   return (
     <ConversationRow
       id={conversation.id}
-      href={`/messages?project=${encodeURIComponent(conversation.id)}${view === "archived" ? "&view=archived" : ""}`}
+      href={`${listHref}${listHref.includes("?") ? "&" : "?"}project=${encodeURIComponent(conversation.id)}${view === "archived" ? "&view=archived" : ""}`}
       name={conversation.name}
       subtitle={subtitle}
       label={`${conversation.name}, ${subtitle}. ${preview}${conversation.unreadCount ? `. ${conversation.unreadCount} unread messages` : ""}`}

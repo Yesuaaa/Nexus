@@ -1,5 +1,8 @@
 "use client"
 
+import { FormInput } from "@/components/ui/form-input"
+import { formFieldClass } from "@/components/ui/form-control-styles"
+
 import { Form } from "@/components/ui/form"
 
 import { useState, type FormEvent, type ReactNode } from "react"
@@ -33,7 +36,7 @@ import { needsAmount, PriceFields } from "./service-price-fields"
 import { errorMessage } from "@/lib/error-message"
 
 const inputClass = `h-10 w-full min-w-0 rounded-lg border border-[#d6dfec] bg-background px-3 text-sm ${focusRing}`
-const fieldClass = "grid min-w-0 gap-1.5"
+const fieldClass = formFieldClass
 const labelClass = "text-xs font-semibold"
 const selectionId = "managed-template-selection"
 const deleteButtonId = "managed-template-delete"
@@ -173,9 +176,8 @@ function TemplateEditor({
               <label className={labelClass} htmlFor="managed-template-name">
                 Template Name
               </label>
-              <input
+              <FormInput
                 id="managed-template-name"
-                className={inputClass}
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 minLength={2}
@@ -187,9 +189,8 @@ function TemplateEditor({
               <label className={labelClass} htmlFor="managed-template-currency">
                 Currency
               </label>
-              <input
+              <FormInput
                 id="managed-template-currency"
-                className={inputClass}
                 value={currency}
                 onChange={(event) =>
                   setCurrency(event.target.value.toUpperCase())

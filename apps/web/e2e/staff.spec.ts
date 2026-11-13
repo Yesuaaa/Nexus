@@ -16,24 +16,34 @@ test.describe("Staff and role navigation", () => {
     }) => {
       await restoreSession(page, role)
       await page.goto("/")
-      await expect(page).toHaveURL(/\/dashboard$/)
-      await expect(page.locator(`[data-role="${role}"]`)).toBeVisible()
+      const landing = role === "USER" ? /\/dashboard$/ : /\/module$/
+      await expect(page).toHaveURL(landing)
+      if (role === "USER")
+        await expect(page.locator(`[data-role="${role}"]`)).toBeVisible()
+      else
+        await expect(
+          page.getByRole("complementary", { name: "Primary navigation" }),
+        ).toHaveCount(0)
       const menu = page.getByRole("navigation", { name: "Main menu" })
       const managesAccounts = role === "SUPERADMIN"
       await expect(
         menu.getByRole("link", { name: "Account Management", exact: true }),
-      ).toHaveCount(managesAccounts ? 1 : 0)
+      ).toHaveCount(0)
       await expect(
         menu.getByRole("link", { name: "Department Management", exact: true }),
-      ).toHaveCount(role === "ADMIN" ? 1 : 0)
+      ).toHaveCount(0)
       await expect(
         menu.getByRole("link", { name: "Employee Management", exact: true }),
-      ).toHaveCount(role === "ADMIN" ? 1 : 0)
+      ).toHaveCount(0)
       await expect(
         menu.getByRole("link", { name: "Service Management", exact: true }),
-      ).toHaveCount(role === "ADMIN" ? 1 : 0)
+      ).toHaveCount(0)
+
       await expect(
         menu.getByRole("link", { name: "Services", exact: true }),
+      ).toHaveCount(role === "USER" ? 1 : 0)
+      await expect(
+        menu.getByRole("link", { name: "Calendar", exact: true }),
       ).toHaveCount(role === "USER" ? 1 : 0)
 
       await page.goto("/accounts")
@@ -48,7 +58,7 @@ test.describe("Staff and role navigation", () => {
           menu.getByRole("link", { name: "Account Management", exact: true }),
         ).toHaveAttribute("aria-current", "page")
       } else {
-        await expect(page).toHaveURL(/\/dashboard$/)
+        await expect(page).toHaveURL(landing)
       }
 
       const departmentRequests: string[] = []
@@ -59,7 +69,7 @@ test.describe("Staff and role navigation", () => {
       })
       await page.goto("/departments")
       if (role !== "ADMIN") {
-        await expect(page).toHaveURL(/\/dashboard$/)
+        await expect(page).toHaveURL(landing)
         await expect(
           page.getByRole("heading", { name: "Department Management" }),
         ).toHaveCount(0)
@@ -71,6 +81,15 @@ test.describe("Staff and role navigation", () => {
         await expect(
           page.getByRole("button", { name: "Create Department", exact: true }),
         ).toHaveCount(1)
+        await expect(
+          menu.getByRole("button", { name: "Departments", exact: true }),
+        ).toBeVisible()
+        await expect(
+          menu.getByRole("link", { name: "Department overview", exact: true }),
+        ).toHaveAttribute("href", "/departments/overview")
+        await expect(
+          menu.getByRole("button", { name: "Services", exact: true }),
+        ).toHaveCount(0)
         await page.reload()
         await expect(
           page.getByRole("heading", { name: "Department Management" }),
@@ -85,7 +104,7 @@ test.describe("Staff and role navigation", () => {
       })
       await page.goto("/employees")
       if (role !== "ADMIN") {
-        await expect(page).toHaveURL(/\/dashboard$/)
+        await expect(page).toHaveURL(landing)
         await expect(
           page.getByRole("heading", { name: "Employee Management" }),
         ).toHaveCount(0)
@@ -100,7 +119,18 @@ test.describe("Staff and role navigation", () => {
         await expect(
           page.getByRole("button", { name: "Create Employee", exact: true }),
         ).toHaveCount(1)
-        expect(employeeRequests).toHaveLength(1)
+        await expect(
+          menu.getByRole("button", { name: "Employees", exact: true }),
+        ).toBeVisible()
+        await expect(
+          menu.getByRole("link", { name: "Employee overview", exact: true }),
+        ).toHaveAttribute("href", "/employees/overview")
+        expect(employeeRequests.length).toBeGreaterThan(0)
+        expect(
+          employeeRequests.every(
+            (url) => new URL(url).pathname === "/api/employees",
+          ),
+        ).toBe(true)
       }
 
       const serviceRequests: string[] = []
@@ -115,7 +145,7 @@ test.describe("Staff and role navigation", () => {
       })
       await page.goto("/services")
       if (role === "SUPERADMIN" || role === "STAFF") {
-        await expect(page).toHaveURL(/\/dashboard$/)
+        await expect(page).toHaveURL(landing)
         await expect(
           page.getByRole("heading", { name: "Service Management" }),
         ).toHaveCount(0)
@@ -130,6 +160,15 @@ test.describe("Staff and role navigation", () => {
         await expect(
           page.getByRole("button", { name: "Create Service", exact: true }),
         ).toHaveCount(1)
+        await expect(
+          menu.getByRole("button", { name: "Services", exact: true }),
+        ).toBeVisible()
+        await expect(
+          menu.getByRole("link", { name: "Service overview", exact: true }),
+        ).toHaveAttribute("href", "/services/overview")
+        await expect(
+          menu.getByRole("button", { name: "Departments", exact: true }),
+        ).toHaveCount(0)
         expect(
           serviceRequests.map((url) => new URL(url).pathname).sort(),
         ).toEqual(["/api/services", "/api/services/pricing-templates"])

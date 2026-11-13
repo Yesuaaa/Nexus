@@ -1,5 +1,7 @@
 "use client"
 
+import { FormInput } from "@/components/ui/form-input"
+
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, ChevronRight } from "lucide-react"
@@ -7,7 +9,6 @@ import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { DialogStepProgress } from "@/components/ui/dialog-step-progress"
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/modal"
-import { Input } from "@/components/ui/input"
 import { PlanEditor, emptyPlan } from "../components/plan-editor"
 import type { ProjectWorkPlan } from "../api/project-workspace-api"
 import {
@@ -446,13 +447,13 @@ function StructureStep({
       {structure === "MULTI_WORKSTREAM" && (
         <label className="mt-5 block max-w-lg text-xs font-medium">
           Project name
-          <Input
+          <FormInput
             value={name}
             onChange={(event) => onNameChange(event.target.value)}
             minLength={2}
             maxLength={120}
             placeholder="e.g. Summer campaign"
-            className="mt-1.5 text-sm"
+            className="mt-1.5"
           />
         </label>
       )}

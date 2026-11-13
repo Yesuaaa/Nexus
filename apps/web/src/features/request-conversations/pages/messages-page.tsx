@@ -10,7 +10,6 @@ import {
   List,
   LoaderCircle,
   MessageSquare,
-  UsersRound,
 } from "lucide-react"
 import { sileo } from "@/lib/toast"
 import {
@@ -41,9 +40,16 @@ import {
   listInternalConversations,
   type InternalConversationList,
 } from "../api/internal-conversations-api"
-import { orderConversations } from "../model/conversation-groups"
+import {
+  orderConversations,
+  messagePreview,
+} from "../model/conversation-groups"
+import { matchesConversationSearch } from "../model/conversation-search"
+import { ConversationSearch } from "../components/conversation-search"
 import { errorMessage } from "@/lib/error-message"
 import { watchVisibleRefresh } from "@/lib/visible-refresh"
+import { useWorkspaceModuleId } from "@/features/workspaces/providers/workspace-provider"
+import { getMessagesView } from "../model/messages-view"
 
 const conversationRailStorageKey = "nexus.messages.conversation-rail-collapsed"
 
@@ -80,10 +86,29 @@ type MessagesPageProps = {
   projectId?: string | null
   view?: "active" | "archived"
   mode: "requests" | "internal"
+  serviceOnly?: boolean
+  projectOnly?: boolean
 }
 export function MessagesPage(props: MessagesPageProps) {
-  const mode = props.mode === "internal" ? "internal" : "requests"
-  return <ConversationInbox key={mode} {...props} mode={mode} />
+  const account = usePortalAccount()
+  const moduleId = useWorkspaceModuleId()
+  const inboxView = getMessagesView(account, moduleId, {
+    internal: props.mode === "internal" || !!props.internalId,
+    project: !!props.projectId || (!!props.projectOnly && !props.requestId),
+    service: !!props.requestId || !!props.serviceOnly,
+  })
+  const mode = inboxView === "internal" ? "internal" : "requests"
+  const serviceOnly = inboxView === "service"
+  const projectOnly = inboxView === "project"
+  return (
+    <ConversationInbox
+      key={`${mode}:${serviceOnly}:${projectOnly}`}
+      {...props}
+      mode={mode}
+      serviceOnly={serviceOnly}
+      projectOnly={projectOnly}
+    />
+  )
 }
 
 function ConversationInbox({
@@ -92,6 +117,8 @@ function ConversationInbox({
   projectId = null,
   view = "active",
   mode,
+  serviceOnly = false,
+  projectOnly = false,
 }: MessagesPageProps) {
   const router = useRouter()
   const account = usePortalAccount()
@@ -103,6 +130,7 @@ function ConversationInbox({
   >([])
   const [error, setError] = useState("")
   const [internalError, setInternalError] = useState("")
+  const [search, setSearch] = useState("")
   useEffect(() => {
     if (error)
       sileo.error({ title: "Couldn't load conversations", description: error })
@@ -135,7 +163,13 @@ function ConversationInbox({
   )
   const isClient = account.role === "USER"
   const canUseInternalChat = !isClient
-  const canUseProjectChat = isClient || account.role === "STAFF"
+  const canUseProjectChat =
+    !serviceOnly && (isClient || account.role === "STAFF")
+  const listHref = serviceOnly
+    ? "/messages?scope=service"
+    : projectOnly
+      ? "/messages?scope=project"
+      : "/messages"
   const projectChats = useProjectConversations(
     mode === "requests" && canUseProjectChat,
     view,
@@ -298,7 +332,7 @@ function ConversationInbox({
         return
       if (mode === "internal")
         void refreshInternalConversations(controller.signal)
-      else void refreshConversations(controller.signal)
+      else if (!projectOnly) void refreshConversations(controller.signal)
     }
     const initialRefresh = window.setTimeout(refreshVisible, 0)
     const stopRefresh = watchVisibleRefresh(refreshVisible, {
@@ -309,7 +343,7 @@ function ConversationInbox({
       controller.abort()
       stopRefresh()
     }
-  }, [mode, refreshConversations, refreshInternalConversations])
+  }, [mode, projectOnly, refreshConversations, refreshInternalConversations])
 
   const updateUnreadCounts = useCallback(
     (id: string, unreadCount: number, conversationUnreadCount: number) => {
@@ -482,7 +516,69 @@ function ConversationInbox({
       conversation,
     })),
   ])
-  const conversationsLoading = loading || projectChats.loading
+  const conversationsLoading = (!projectOnly && loading) || projectChats.loading
+  const visibleConversations = sharedConversations.filter((entry) => {
+    const conversation = entry.conversation
+    return entry.kind === "request"
+      ? matchesConversationSearch(search, [
+          entry.conversation.client.fullName,
+          entry.conversation.acceptedDepartment?.name,
+          entry.conversation.acceptedDepartment?.head?.fullName,
+          entry.conversation.title,
+          entry.conversation.referenceNumber,
+          entry.conversation.service.name,
+          ...(entry.conversation.bookings ?? []).flatMap((booking) => [
+            booking.title,
+            booking.referenceNumber,
+            booking.serviceName,
+          ]),
+          messagePreview(conversation.lastMessage),
+        ])
+      : matchesConversationSearch(search, [
+          entry.conversation.name,
+          ...entry.conversation.participants.map((person) => person.fullName),
+          messagePreview(conversation.lastMessage),
+        ])
+  })
+  const visibleInternalConversations = (
+    internalResult?.conversations ?? []
+  ).filter((conversation) =>
+    matchesConversationSearch(search, [
+      conversation.participant.fullName,
+      conversation.participant.email,
+      conversation.participant.position,
+      conversation.participant.department?.name,
+      messagePreview(conversation.lastMessage),
+    ]),
+  )
+  const visibleContacts = internalContacts.filter(
+    (contact) =>
+      !internalResult?.conversations.some(
+        (conversation) => conversation.participant.id === contact.id,
+      ) &&
+      matchesConversationSearch(search, [
+        contact.fullName,
+        contact.email,
+        contact.position,
+        contact.department?.name,
+      ]),
+  )
+  const searching = !!search.trim()
+  const searchEmpty =
+    searching &&
+    (mode === "internal"
+      ? !internalLoading &&
+        !internalError &&
+        !visibleInternalConversations.length &&
+        !visibleContacts.length
+      : !conversationsLoading &&
+        !error &&
+        !projectChats.error &&
+        !visibleConversations.length)
+  const hasMore =
+    mode === "internal"
+      ? internalResult?.nextCursor
+      : result?.nextCursor || projectChats.result?.nextCursor
   const moreConversationsLoading = loadingMore || projectChats.loadingMore
   const nextView = view === "active" ? "archived" : "active"
   return (
@@ -490,7 +586,7 @@ function ConversationInbox({
       aria-label="Messages"
       className={cn(
         contentClass,
-        "grid h-[calc(100dvh-116px)] min-h-[480px] overflow-hidden rounded-[20px] transition-[grid-template-columns] duration-[240ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none max-[767px]:h-[calc(100dvh-98px)] max-[767px]:min-h-[420px] max-[767px]:grid-cols-1",
+        "grid h-[calc(100dvh-94px)] min-h-[480px] overflow-hidden rounded-[20px] transition-[grid-template-columns] duration-[240ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none max-[767px]:h-[calc(100dvh-80px)] max-[767px]:min-h-[420px] max-[767px]:grid-cols-1",
         railCollapsed
           ? "grid-cols-[76px_minmax(0,1fr)]"
           : "grid-cols-[clamp(220px,20vw,360px)_minmax(0,1fr)]",
@@ -519,16 +615,12 @@ function ConversationInbox({
             )}
           >
             <h1 className="m-0 min-w-0 overflow-hidden text-sm font-semibold whitespace-nowrap">
-              Messages
+              {serviceOnly
+                ? "Service Messages"
+                : projectOnly
+                  ? "Project Messages"
+                  : "Messages"}
             </h1>
-            <span
-              aria-label={
-                mode === "internal" ? "Internal chats" : "Client chats"
-              }
-              className="inline-flex shrink-0 items-center rounded-full border border-[#dbe3ef] bg-[#f3f6fb] px-2 py-1 text-[10px] leading-none font-medium text-[#52627a]"
-            >
-              {mode === "internal" ? "Internal" : "Client"}
-            </span>
           </div>
           {mode === "requests" && Boolean(unreadCount) && (
             <span
@@ -561,66 +653,67 @@ function ConversationInbox({
             </button>
           )}
         </header>
-        <div
-          className={cn(
-            "mb-3 flex flex-wrap gap-1 px-3",
-            railCollapsed &&
-              "flex-col items-center max-[767px]:flex-row max-[767px]:items-start",
-          )}
-        >
-          {mode === "requests" && canUseProjectChat && (
-            <Button
-              type="button"
-              variant="outline"
-              aria-label={
-                nextView === "archived"
-                  ? "Archived conversations"
-                  : "Active conversations"
-              }
-              onClick={() =>
-                router.push(`/messages?view=${nextView}`, { scroll: false })
-              }
-              className="size-11 shrink-0 cursor-pointer border-transparent p-0"
-            >
-              {nextView === "archived" ? (
-                <Archive size={16} aria-hidden="true" />
-              ) : (
-                <List size={16} aria-hidden="true" />
-              )}
-            </Button>
-          )}
-          {canUseInternalChat && mode === "internal" && (
-            <Button
-              asChild
-              variant="outline"
-              className="size-11 shrink-0 cursor-pointer border-transparent p-0"
-            >
-              <Link
-                href="/messages"
-                scroll={false}
-                aria-label="Back to client chats"
+        <ConversationSearch
+          value={search}
+          onChange={setSearch}
+          collapsed={railCollapsed}
+          onExpand={() => setConversationRail(false)}
+          trailingAction={
+            mode === "requests" && canUseProjectChat ? (
+              <Button
+                type="button"
+                variant="outline"
+                aria-label={
+                  nextView === "archived"
+                    ? "Archived conversations"
+                    : "Active conversations"
+                }
+                onClick={() =>
+                  router.push(
+                    `${listHref}${listHref.includes("?") ? "&" : "?"}view=${nextView}`,
+                    { scroll: false },
+                  )
+                }
+                className={cn(
+                  "size-11 shrink-0 cursor-pointer border-transparent p-0",
+                  railCollapsed && "self-center",
+                )}
               >
-                <MessageSquare size={16} aria-hidden="true" />
-              </Link>
-            </Button>
-          )}
-          {canUseInternalChat && mode === "requests" && (
-            <Button
-              variant="outline"
-              aria-label="Open internal conversations"
-              className="size-11 shrink-0 cursor-pointer border-transparent p-0"
-              onClick={() =>
-                router.push("/messages?mode=internal", { scroll: false })
-              }
-            >
-              <UsersRound size={16} aria-hidden="true" />
-            </Button>
-          )}
-        </div>
+                {nextView === "archived" ? (
+                  <Archive size={16} aria-hidden="true" />
+                ) : (
+                  <List size={16} aria-hidden="true" />
+                )}
+              </Button>
+            ) : undefined
+          }
+        />
         <div
           id="conversation-list"
-          className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2 pb-3"
+          className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 pb-3"
         >
+          {searchEmpty && (
+            <p
+              role="status"
+              className={cn(
+                "px-3 py-6 text-center text-xs text-muted-foreground",
+                railCollapsed && "hidden max-[767px]:block",
+              )}
+            >
+              No conversations found.
+            </p>
+          )}
+          {searching && hasMore && (
+            <p
+              className={cn(
+                "px-3 pb-3 text-xs leading-5 text-muted-foreground",
+                railCollapsed && "hidden max-[767px]:block",
+              )}
+            >
+              Search covers loaded conversations. Load more to search older
+              conversations.
+            </p>
+          )}
           {mode === "requests" && conversationsLoading && (
             <p
               role="status"
@@ -662,6 +755,7 @@ function ConversationInbox({
             !conversationsLoading &&
             !error &&
             !projectChats.error &&
+            !searching &&
             !sharedConversations.length && (
               <div
                 className={cn(
@@ -693,12 +787,16 @@ function ConversationInbox({
                 >
                   {view === "archived"
                     ? "Completed project chats will appear here."
-                    : "Conversations appear here when a service request is accepted or an assigned project starts."}
+                    : serviceOnly
+                      ? "Client conversations appear here when a service request is accepted by your department. Bookings with the same client share one conversation."
+                      : projectOnly
+                        ? "Conversations appear here when your assigned projects start."
+                        : "Conversations appear here when a service request is accepted or an assigned project starts."}
                 </p>
               </div>
             )}
           {mode === "requests" &&
-            sharedConversations.map((entry) =>
+            visibleConversations.map((entry) =>
               entry.kind === "request" ? (
                 <ConversationListItem
                   key={`request:${entry.id}`}
@@ -706,6 +804,7 @@ function ConversationInbox({
                   isClient={isClient}
                   requestId={projectId ? null : requestId}
                   railCollapsed={railCollapsed}
+                  listHref={listHref}
                 />
               ) : (
                 <ProjectConversationListItem
@@ -715,6 +814,7 @@ function ConversationInbox({
                   projectId={projectId}
                   view={view}
                   railCollapsed={railCollapsed}
+                  listHref={listHref}
                 />
               ),
             )}
@@ -741,7 +841,7 @@ function ConversationInbox({
                 )}
                 disabled={moreConversationsLoading}
                 onClick={() => {
-                  void loadMore()
+                  if (!projectOnly) void loadMore()
                   void projectChats.loadMore()
                 }}
               >
@@ -781,7 +881,7 @@ function ConversationInbox({
                 >
                   Internal chats
                 </p>
-                {internalResult?.conversations.map((conversation) => {
+                {visibleInternalConversations.map((conversation) => {
                   const selected = internalId === conversation.id
                   const name =
                     conversation.participant.fullName?.trim() ||
@@ -872,12 +972,7 @@ function ConversationInbox({
                 >
                   Start a chat
                 </p>
-                {internalContacts.map((contact) => {
-                  const existing = internalResult?.conversations.some(
-                    (conversation) =>
-                      conversation.participant.id === contact.id,
-                  )
-                  if (existing) return null
+                {visibleContacts.map((contact) => {
                   const name = contact.fullName?.trim() || contact.email
                   const description =
                     creatingInternal === contact.id
@@ -971,7 +1066,9 @@ function ConversationInbox({
             onLatestMessage={projectChats.onMessage}
             onConversationRead={projectChats.onRead}
             listHref={
-              view === "archived" ? "/messages?view=archived" : "/messages"
+              view === "archived"
+                ? `${listHref}${listHref.includes("?") ? "&" : "?"}view=archived`
+                : listHref
             }
           />
         ) : mode === "requests" && requestId ? (
@@ -981,7 +1078,7 @@ function ConversationInbox({
             requestTitle={selected?.title}
             onLatestMessage={updatePreview}
             onConversationRead={updateUnreadCounts}
-            listHref="/messages"
+            listHref={listHref}
           />
         ) : mode === "internal" && internalId ? (
           <InternalConversation
@@ -1008,7 +1105,11 @@ function ConversationInbox({
                 ? "Choose a staff member or administrator to start a private chat."
                 : isClient
                   ? "Choose a conversation to discuss your bookings or projects."
-                  : "Choose a client or project team conversation."}
+                  : serviceOnly
+                    ? "Choose a client conversation to discuss their service bookings."
+                    : projectOnly
+                      ? "Choose an assigned project to message its client and project participants."
+                      : "Choose a client or project team conversation."}
             </p>
           </div>
         )}

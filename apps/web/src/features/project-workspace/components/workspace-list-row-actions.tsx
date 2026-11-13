@@ -1,5 +1,7 @@
 "use client"
 
+import { FormInput } from "@/components/ui/form-input"
+
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
@@ -7,7 +9,6 @@ import { Ban, Eye, Pencil } from "lucide-react"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
-import { Input } from "@/components/ui/input"
 import {
   Modal,
   ModalBody,
@@ -154,7 +155,7 @@ export function WorkspaceListRowActions({
             >
               Project name
             </label>
-            <Input
+            <FormInput
               id={`workspace-name-${workspace.id}`}
               autoFocus
               required
@@ -162,7 +163,6 @@ export function WorkspaceListRowActions({
               maxLength={120}
               value={name}
               onChange={(event) => setName(event.target.value)}
-              className="text-sm"
               disabled={busy}
             />
             {error && (

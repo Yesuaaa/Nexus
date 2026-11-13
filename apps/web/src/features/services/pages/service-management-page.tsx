@@ -25,7 +25,6 @@ import {
   type Service,
 } from "../api/services-api"
 import { DeleteServiceDialog } from "../components/delete-service-dialog"
-import { ServiceKpiCards } from "../components/service-kpi-cards"
 import { ServiceStatusDialog } from "../components/service-status-dialog"
 import { ServiceTable } from "../components/service-table"
 import { errorMessage } from "@/lib/error-message"
@@ -236,15 +235,10 @@ export function ServiceManagementPage() {
         }
       />
 
-      <div className="mt-[18px] max-[560px]:mt-[14px]">
-        <ServiceKpiCards
-          services={services}
-          loading={loading}
-          unavailable={Boolean(error)}
-        />
-      </div>
-
-      <section className="mt-4 min-w-0" aria-label="Services">
+      <section
+        className="mt-[18px] min-w-0 max-[560px]:mt-[14px]"
+        aria-label="Services"
+      >
         <ServiceTable
           services={services}
           departments={departments}

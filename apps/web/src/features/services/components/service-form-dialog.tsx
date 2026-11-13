@@ -15,7 +15,8 @@ import {
 } from "lucide-react"
 import { focusRing } from "@/components/layout/styles"
 import { EmptyState } from "@/components/ui/empty-state"
-import { FormInput } from "@/components/ui/form-input"
+import { FormInput, FormTextarea } from "@/components/ui/form-input"
+import { formFieldClass } from "@/components/ui/form-control-styles"
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -57,7 +58,7 @@ import { serviceActionsTriggerId } from "./service-row-actions"
 import { errorMessage } from "@/lib/error-message"
 import { RequiredMark } from "@/components/ui/required-mark"
 
-const fieldClass = "grid min-w-0 gap-1.5"
+const fieldClass = formFieldClass
 const labelClass = "text-xs font-semibold"
 const inputClass = `w-full min-w-0 rounded-lg border border-[#d6dfec] bg-background px-3 text-sm text-foreground placeholder:text-[#9aa8bb] ${focusRing}`
 const secondaryButtonClass = `inline-flex h-[34px] flex-none cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-[#e1e4ea] bg-background px-3 text-xs font-semibold whitespace-nowrap text-foreground transition-colors hover:bg-[#f1f5fc] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none ${focusRing}`
@@ -677,9 +678,8 @@ export function ServiceFormDialog({
                       >
                         Description <RequiredMark />
                       </label>
-                      <textarea
+                      <FormTextarea
                         id="service-description"
-                        className={cn(inputClass, "min-h-24 resize-y py-2.5")}
                         value={description}
                         onChange={(event) => setDescription(event.target.value)}
                         maxLength={500}
@@ -874,9 +874,8 @@ export function ServiceFormDialog({
                       >
                         Benefit Description
                       </label>
-                      <textarea
+                      <FormTextarea
                         id={`${benefit.id}-description`}
-                        className={cn(inputClass, "min-h-20 resize-y py-2.5")}
                         value={benefit.description}
                         onChange={(event) =>
                           updateBenefit(benefit.id, {
@@ -910,9 +909,8 @@ export function ServiceFormDialog({
                       (one per line)
                     </span>
                   </label>
-                  <textarea
+                  <FormTextarea
                     id="client-requirements"
-                    className={cn(inputClass, "min-h-24 resize-y py-2.5")}
                     value={clientRequirements}
                     onChange={(event) =>
                       setClientRequirements(event.target.value)
@@ -935,9 +933,8 @@ export function ServiceFormDialog({
                     <label className={labelClass} htmlFor="consultation-notes">
                       Consultation Notes
                     </label>
-                    <textarea
+                    <FormTextarea
                       id="consultation-notes"
-                      className={cn(inputClass, "min-h-20 resize-y py-2.5")}
                       value={consultationNotes}
                       onChange={(event) =>
                         setConsultationNotes(event.target.value)
@@ -1260,9 +1257,8 @@ export function ServiceFormDialog({
                       >
                         Description
                       </label>
-                      <textarea
+                      <FormTextarea
                         id={`${servicePackage.id}-description`}
-                        className={cn(inputClass, "min-h-20 resize-y py-2.5")}
                         value={servicePackage.description}
                         onChange={(event) =>
                           updatePackage(servicePackage.id, {
@@ -1283,9 +1279,8 @@ export function ServiceFormDialog({
                           (one per line)
                         </span>
                       </label>
-                      <textarea
+                      <FormTextarea
                         id={`${servicePackage.id}-features`}
-                        className={cn(inputClass, "min-h-24 resize-y py-2.5")}
                         value={servicePackage.featuresText}
                         onChange={(event) =>
                           updatePackage(servicePackage.id, {

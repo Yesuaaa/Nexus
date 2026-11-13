@@ -1,5 +1,7 @@
 "use client"
 
+import { FormInput, FormTextarea } from "@/components/ui/form-input"
+
 import { Form } from "@/components/ui/form"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 
@@ -90,13 +92,12 @@ function ScheduleFields({ meeting }: { meeting?: ConversationMeeting }) {
         </WorkflowField>
       </div>
       <WorkflowField label="Meeting link or location">
-        <input
+        <FormInput
           name="location"
           required
           maxLength={1000}
           defaultValue={meeting?.location}
           placeholder="Meeting link or office address"
-          className={workflowInput}
         />
       </WorkflowField>
     </>
@@ -171,12 +172,11 @@ export function ScheduleConversationMeeting({
           className="m-0 min-w-0 space-y-3 border-0 p-0"
         >
           <WorkflowField label="Meeting topic">
-            <textarea
+            <FormTextarea
               name="notes"
               maxLength={2000}
               rows={2}
               placeholder="What would you like to discuss?"
-              className={workflowInput}
             />
           </WorkflowField>
           <ScheduleFields />
@@ -439,12 +439,11 @@ export function ConversationMeetingCard({
                       />
                     </WorkflowField>
                     <WorkflowField label="Reason for rescheduling">
-                      <textarea
+                      <FormTextarea
                         name="note"
                         required
                         maxLength={2000}
                         rows={2}
-                        className={workflowInput}
                       />
                     </WorkflowField>
                   </>

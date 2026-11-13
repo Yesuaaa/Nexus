@@ -14,10 +14,18 @@ import {
   listInternalConversations,
   markInternalConversationRead,
   sendInternalMessage,
+  isInternalRole,
 } from "./internal-conversations.service.js"
 
 export const internalConversationsRouter = Router()
 internalConversationsRouter.use(requireAuth)
+internalConversationsRouter.use((request, response, next) => {
+  if (!isInternalRole(request.auth!.user.role))
+    return response
+      .status(403)
+      .json({ error: "Only staff and administrators can use internal chat." })
+  next()
+})
 
 internalConversationsRouter.get("/contacts", async (request, response) => {
   response.json(await listInternalContacts(request.auth!.user.id))

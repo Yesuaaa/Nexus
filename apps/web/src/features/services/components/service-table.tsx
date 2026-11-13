@@ -1,4 +1,3 @@
-import Image from "next/image"
 import { useMemo, useState } from "react"
 import { focusRing } from "@/components/layout/styles"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
@@ -293,21 +292,11 @@ export function ServiceTable({
                   <button
                     type="button"
                     className={cn(
-                      "flex max-w-full min-w-0 cursor-pointer items-center gap-2 rounded-sm border-0 bg-transparent p-0 text-left font-semibold text-foreground hover:underline hover:underline-offset-4",
+                      "flex max-w-full min-w-0 cursor-pointer rounded-sm border-0 bg-transparent p-0 text-left font-semibold text-foreground hover:underline hover:underline-offset-4",
                       focusRing,
                     )}
                     onClick={() => onView(service)}
                   >
-                    <span className="relative size-8 flex-none overflow-hidden rounded-md bg-[#e8eef7]">
-                      {service.imageUrl ? (
-                        <Image
-                          src={service.imageUrl}
-                          alt=""
-                          fill
-                          className="object-cover"
-                        />
-                      ) : null}
-                    </span>
                     <span className="truncate">{service.name}</span>
                   </button>
                 </div>

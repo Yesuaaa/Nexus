@@ -1,5 +1,7 @@
 "use client"
 
+import { FormInput, FormTextarea } from "@/components/ui/form-input"
+
 import { Form } from "@/components/ui/form"
 
 import type { ReactNode } from "react"
@@ -100,16 +102,15 @@ export function WorkflowActionDraft({
           })}
         >
           <WorkflowField label="Requirement title">
-            <input
+            <FormInput
               name="title"
               required
               maxLength={200}
               placeholder="e.g. Site access details"
-              className={workflowInput}
             />
           </WorkflowField>
           <WorkflowField label="Request detail information (required)">
-            <textarea
+            <FormTextarea
               name="details"
               required
               onChange={(event) =>
@@ -122,7 +123,6 @@ export function WorkflowActionDraft({
               rows={3}
               maxLength={4000}
               placeholder="e.g. Please provide site address, access instructions, and any induction requirements."
-              className={workflowInput}
             />
           </WorkflowField>
           <label className="flex min-h-8 items-center gap-2 text-[11px] font-medium text-[#203047]">
@@ -300,13 +300,12 @@ export function WorkflowActionDraft({
           })}
         >
           <WorkflowField label="Note for your team">
-            <textarea
+            <FormTextarea
               name="note"
               required
               rows={4}
               maxLength={2000}
               placeholder="Add context for staff working on this request…"
-              className={workflowInput}
             />
           </WorkflowField>
           <p className="m-0 text-[10px] leading-5 text-[#52627a]">

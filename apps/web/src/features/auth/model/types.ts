@@ -4,6 +4,8 @@ import type { DepartmentColor } from "@/features/departments/model/department-co
 
 export type AuthMode = "login" | "register"
 
+export type AuthPortal = "client" | "workforce"
+
 export type AuthLanguage = "en" | "fil"
 
 export type Account = {

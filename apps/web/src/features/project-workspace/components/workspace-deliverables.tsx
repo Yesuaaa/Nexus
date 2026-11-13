@@ -1,5 +1,7 @@
 "use client"
 
+import { FormInput, FormTextarea } from "@/components/ui/form-input"
+
 import {
   useMemo,
   useRef,
@@ -160,22 +162,20 @@ function EditDeliverableDialog({
         <ModalBody>
           <label className="grid gap-1.5 text-xs font-medium">
             Deliverable name
-            <input
+            <FormInput
               value={title}
               maxLength={300}
               onChange={(event) => setTitle(event.currentTarget.value)}
-              className="h-10 rounded-lg border border-[#d7dfe8] bg-[#f8fafc] px-3 text-xs font-normal outline-none focus-visible:ring-2 focus-visible:ring-[#294c96]"
             />
           </label>
           <label className="grid gap-1.5 text-xs font-medium">
             Description
-            <textarea
+            <FormTextarea
               value={description}
               maxLength={4000}
               rows={4}
               onChange={(event) => setDescription(event.currentTarget.value)}
               placeholder="Describe what the staff member should prepare."
-              className="min-h-24 resize-y rounded-lg border border-[#d7dfe8] bg-[#f8fafc] px-3 py-2 text-xs leading-5 font-normal outline-none focus-visible:ring-2 focus-visible:ring-[#294c96]"
             />
           </label>
           <label className="grid gap-1.5 text-xs font-medium">
@@ -266,7 +266,7 @@ function RejectDeliverableDialog({
           <p className="m-0 text-xs leading-5 text-[#52627a]">
             Staff will see this note and can submit a revised attachment.
           </p>
-          <textarea
+          <FormTextarea
             id="deliverable-rejection-reason"
             value={reason}
             maxLength={2000}
@@ -274,7 +274,6 @@ function RejectDeliverableDialog({
             required
             onChange={(event) => setReason(event.currentTarget.value)}
             placeholder="Describe what needs to change..."
-            className="min-h-24 resize-y rounded-lg border border-[#d7dfe8] bg-[#f8fafc] px-3 py-2 text-xs leading-5 outline-none focus-visible:ring-2 focus-visible:ring-[#294c96]"
           />
           {error && <Alert variant="text">{error}</Alert>}
         </ModalBody>

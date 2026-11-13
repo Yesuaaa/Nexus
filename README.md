@@ -119,6 +119,9 @@ Deploy `apps/api` to a Node.js host with its production dependencies, built `dis
 | `pnpm dev`                          | Run both apps                                       |
 | `pnpm build`                        | Build both apps                                     |
 | `pnpm typecheck`                    | Typecheck both apps                                 |
+| `pnpm test`                         | Run every suite: API, web unit, then Playwright     |
+| `pnpm test:unit`                    | Run the API and web unit suites (no browser)        |
+| `pnpm test:api` / `pnpm test:web`   | Run one suite (runners live in `scripts/tests/`)    |
 | `pnpm --filter @nexus/web test`     | Test frontend auth behavior                         |
 | `pnpm --filter @nexus/web test:e2e` | Test migration routes, auth, and roles in a browser |
 | `pnpm --filter @nexus/api test`     | Test API routes, passwords, and roles               |

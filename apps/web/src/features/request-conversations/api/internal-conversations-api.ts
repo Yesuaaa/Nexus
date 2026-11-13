@@ -1,8 +1,8 @@
 import { apiRequest } from "@/features/auth/api/auth-api"
 import type { InternalRole } from "@/features/auth/model/roles"
+import type { ManagedProjectDeliverable } from "@/features/project-management/model/project-contracts"
 import type { RequestMessage } from "./request-conversations-api"
 import type { ProjectConversationDetails } from "../model/project-conversation"
-import type { ProjectDeliverable } from "@/features/project-workspace/api/project-workspace-api"
 import { withUnreadCount } from "../model/unread-messages"
 
 export type InternalParticipant = {
@@ -40,7 +40,7 @@ export type InternalConversationHistory = {
   project?: ProjectConversationDetails
   canSubmitDeliverables?: boolean
   deliverables?: Pick<
-    ProjectDeliverable,
+    ManagedProjectDeliverable,
     "id" | "title" | "description" | "expectedFileType" | "deliveryStatus"
   >[]
   archived?: boolean
