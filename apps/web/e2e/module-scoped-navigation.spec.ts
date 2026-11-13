@@ -100,6 +100,82 @@ for (const role of ["ADMIN", "SUPERADMIN"] as const) {
   })
 }
 
+const topbarActors = [
+  { label: "Admin", role: "ADMIN", path: "/project-management" },
+  {
+    label: "Superadmin Administration",
+    role: "SUPERADMIN",
+    path: "/accounts",
+  },
+  {
+    label: "Superadmin Project Management",
+    role: "SUPERADMIN",
+    path: "/project-management",
+  },
+  { label: "Staff", role: "STAFF", path: "/project-workspace" },
+  {
+    label: "Department Head",
+    role: "STAFF",
+    path: "/project-workspace",
+    account: { headOf: { id: "design", name: "Design" } },
+  },
+  { label: "Client", role: "USER", path: "/dashboard" },
+] as const
+
+for (const actor of topbarActors) {
+  for (const viewport of [
+    { label: "desktop", width: 1440, expectedHeight: 60 },
+    { label: "tablet", width: 900, expectedHeight: 60 },
+    { label: "mobile", width: 390, expectedHeight: 58 },
+  ]) {
+    test(`${actor.label} topbar stays compact and aligned on ${viewport.label}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: viewport.width, height: 844 })
+      await restoreSession(page, actor.role, {
+        account: "account" in actor ? actor.account : undefined,
+      })
+      await page.goto(actor.path)
+
+      const topbar = page.locator("[data-portal-topbar]")
+      const topbarBox = await topbar.boundingBox()
+      expect(topbarBox).not.toBeNull()
+      if (!topbarBox) throw new Error("Topbar is not visible")
+      expect(topbarBox.height).toBe(viewport.expectedHeight)
+
+      const childCenterOffsets = await topbar.evaluate((element) => {
+        const bounds = element.getBoundingClientRect()
+        return Array.from(element.children)
+          .filter((child) => child.getBoundingClientRect().height > 0)
+          .map((child) => {
+            const childBounds = child.getBoundingClientRect()
+            return Math.abs(
+              childBounds.top +
+                childBounds.height / 2 -
+                (bounds.top + bounds.height / 2),
+            )
+          })
+      })
+      expect(childCenterOffsets.every((offset) => offset < 1)).toBe(true)
+
+      if (viewport.width >= 768) {
+        const sidebarBox = await page.locator("#app-sidebar").boundingBox()
+        expect(sidebarBox).not.toBeNull()
+        if (!sidebarBox) throw new Error("Sidebar is not visible")
+        expect(topbarBox.x - sidebarBox.x - sidebarBox.width).toBeCloseTo(8, 1)
+        expect(topbarBox.y + topbarBox.height).toBeCloseTo(
+          sidebarBox.y + viewport.expectedHeight,
+          1,
+        )
+      } else {
+        await expect(
+          page.getByRole("button", { name: "Open navigation menu" }),
+        ).toBeVisible()
+      }
+    })
+  }
+}
+
 test("Staff cannot access the Admin Project Management shell routes", async ({
   page,
 }) => {

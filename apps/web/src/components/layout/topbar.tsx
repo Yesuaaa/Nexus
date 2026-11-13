@@ -23,7 +23,7 @@ export function Topbar({
   return (
     <header
       data-portal-topbar
-      className="flex h-[70px] min-w-0 items-center rounded-[13px] border border-[#dedede] bg-background px-4 max-[767px]:h-[62px] max-[767px]:gap-[9px] max-[767px]:px-[10px]"
+      className="flex h-[60px] min-w-0 items-center rounded-[13px] border border-[#dedede] bg-background px-4 max-[767px]:h-[58px] max-[767px]:gap-[9px] max-[767px]:px-[10px]"
     >
       {!minimal && (
         <>

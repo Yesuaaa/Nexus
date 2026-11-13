@@ -529,12 +529,11 @@ export function Sidebar({
       data-drawer-open={drawerOpen}
     >
       <div className="flex h-full min-h-0 flex-col">
-        {/* Header spans the topbar's band (70px minus this aside's 1px top
-            border); the menu's pt-2 mirrors the 8px gap above the main panel,
-            so the first link lines up with the panel's top edge. */}
+        {/* Header spans the global 60px topbar band minus the aside's 1px top
+            border. The mobile drawer keeps its taller header. */}
         <div
           className={cn(
-            "flex h-[69px] flex-none items-center gap-2 pr-3 pl-5",
+            "flex h-[59px] flex-none items-center gap-2 pr-3 pl-5 max-[767px]:h-[69px]",
             collapsed &&
               "justify-center px-0 max-[767px]:justify-start max-[767px]:pr-3 max-[767px]:pl-5",
           )}
