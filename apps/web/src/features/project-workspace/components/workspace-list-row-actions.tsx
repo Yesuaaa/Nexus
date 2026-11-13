@@ -108,16 +108,18 @@ export function WorkspaceListRowActions({
       label: <RowActionLabel icon={Eye}>View project</RowActionLabel>,
     },
     {
-      action: "edit",
-      label: <RowActionLabel icon={Pencil}>Edit project</RowActionLabel>,
-    },
-    {
       action: "cancel",
       label: <RowActionLabel icon={Ban}>Cancel project</RowActionLabel>,
       className: dangerItem,
       separatorBefore: true,
     },
   ]
+  if (workspace.canRename) {
+    items.splice(1, 0, {
+      action: "edit",
+      label: <RowActionLabel icon={Pencil}>Edit project</RowActionLabel>,
+    })
+  }
 
   return (
     <>

@@ -70,6 +70,21 @@ function account(
   }
 }
 
+test("project workspace overview is a static Department Head route", () => {
+  const overview = "/project-workspace/overview"
+  const head = account("STAFF", { headOf: { id: "design", name: "Design" } })
+  assert.equal(findRoutePolicy(overview)?.id, "project-workspace-overview")
+  assert.equal(getActiveWorkspaceModuleId(head, overview), "project-management")
+  assert.equal(canAccessRoute(head, overview), true)
+  for (const role of ["STAFF", "ADMIN", "SUPERADMIN", "USER"]) {
+    assert.equal(canAccessRoute(account(role), overview), false)
+  }
+  for (const path of ["/project-workspace", "/project-workspace/project-1"]) {
+    assert.equal(canAccessRoute(account("STAFF"), path), true)
+    assert.equal(canAccessRoute(head, path), true)
+  }
+})
+
 const routeMatrix = {
   USER: [
     "/dashboard",

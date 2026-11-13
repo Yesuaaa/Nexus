@@ -91,7 +91,10 @@ export function Breadcrumbs() {
   const { labels } = useContext(BreadcrumbLabelContext)
   const segments = pathname.split("/").filter(Boolean)
   const projectId =
-    segments[0] === "project-workspace" && segments[1] !== "new"
+    segments.length === 2 &&
+    segments[0] === "project-workspace" &&
+    segments[1] !== "new" &&
+    segments[1] !== "overview"
       ? segments[1]
       : undefined
   const [projectLabel, setProjectLabel] = useState<{

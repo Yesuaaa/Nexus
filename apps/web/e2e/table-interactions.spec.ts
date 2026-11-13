@@ -51,6 +51,7 @@ function workspaceFixture(name: string, id: string): ProjectWorkspaceDetail {
     activityCount: 0,
     canCreate: false,
     canManage: false,
+    canRename: false,
     activity: [],
     workstreams: [
       {

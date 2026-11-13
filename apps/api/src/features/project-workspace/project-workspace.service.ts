@@ -235,6 +235,41 @@ function scopedProjectWhere(context: StaffContext): Prisma.ProjectWhereInput {
   }
 }
 
+function workspaceReadWhere(context: StaffContext): Prisma.ProjectWhereInput {
+  if (!context.canCreate) return scopedProjectWhere(context)
+  return {
+    request: { acceptedDepartmentId: { in: context.headDepartmentIds } },
+  }
+}
+
+async function mixedWorkspaceGroupIds(
+  tx: Prisma.TransactionClient,
+  groupIds: string[],
+  context: StaffContext,
+) {
+  if (!context.canCreate || !groupIds.length) return new Set<string>()
+  const groups = await tx.projectWorkspaceGroup.findMany({
+    where: {
+      id: { in: groupIds },
+      projects: {
+        some: {
+          OR: [
+            { request: null },
+            { request: { acceptedDepartmentId: null } },
+            {
+              request: {
+                acceptedDepartmentId: { notIn: context.headDepartmentIds },
+              },
+            },
+          ],
+        },
+      },
+    },
+    select: { id: true },
+  })
+  return new Set(groups.map(({ id }) => id))
+}
+
 const projectInclude = {
   client: { select: { id: true, fullName: true } },
   request: {
@@ -367,6 +402,7 @@ function workspaceRows(
   projects: WorkspaceProject[],
   counts: Map<string, number>,
   context: StaffContext,
+  mixedGroupIds: Set<string>,
   includePlan = false,
 ) {
   const buckets = new Map<string, WorkspaceProject[]>()
@@ -379,6 +415,7 @@ function workspaceRows(
   return [...buckets.values()].map((groupProjects) => {
     const first = groupProjects[0]
     const group = first.workspaceGroup
+    const mixed = Boolean(group && mixedGroupIds.has(group.id))
     const requestIds = groupProjects.flatMap(({ requestId }) =>
       requestId ? [requestId] : [],
     )
@@ -389,7 +426,13 @@ function workspaceRows(
     const updatedAt = groupProjects.reduce(
       (latest, project) =>
         project.updatedAt > latest ? project.updatedAt : latest,
-      group?.updatedAt ?? first.updatedAt,
+      (mixed ? undefined : group?.updatedAt) ?? first.updatedAt,
+    )
+    const canManage = groupProjects.every(({ request }) =>
+      Boolean(
+        request?.acceptedDepartmentId &&
+        context.headDepartmentIds.includes(request.acceptedDepartmentId),
+      ),
     )
     return {
       id: group?.id ?? first.id,
@@ -400,12 +443,13 @@ function workspaceRows(
       updatedAt,
       activityCount,
       canCreate: context.canCreate,
-      canManage: groupProjects.every(({ request }) =>
-        Boolean(
-          request?.acceptedDepartmentId &&
-          context.headDepartmentIds.includes(request.acceptedDepartmentId),
+      canManage,
+      canRename:
+        canManage &&
+        !mixed &&
+        groupProjects.some(
+          ({ status }) => !["COMPLETED", "CANCELLED"].includes(status),
         ),
-      ),
       workstreams: groupProjects.map((project) => ({
         ...projectWorkstream(project, includePlan, context.id),
         canAssign: Boolean(
@@ -423,27 +467,37 @@ export async function listProjectWorkspaces(
   userId: string,
   options: { sort?: string; limit?: number } = {},
 ) {
-  return getPrisma()!.$transaction(async (tx) => {
-    const context = await getStaffContext(tx, userId)
-    const projects = await tx.project.findMany({
-      where: scopedProjectWhere(context),
-      include: projectInclude,
-      orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-      take: Math.min(Math.max(options.limit ?? 200, 1), 250),
-    })
-    const counts = await activityCounts(tx, projects)
-    const rows = workspaceRows(projects, counts, context)
-    if (options.sort === "most-active")
-      rows.sort(
-        (left, right) =>
-          right.activityCount - left.activityCount ||
-          right.updatedAt.getTime() - left.updatedAt.getTime(),
+  return getPrisma()!.$transaction(
+    async (tx) => {
+      const context = await getStaffContext(tx, userId)
+      const projects = await tx.project.findMany({
+        where: workspaceReadWhere(context),
+        include: projectInclude,
+        orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+        take: Math.min(Math.max(options.limit ?? 200, 1), 250),
+      })
+      const counts = await activityCounts(tx, projects)
+      const mixedGroupIds = await mixedWorkspaceGroupIds(
+        tx,
+        projects.flatMap(({ workspaceGroupId }) =>
+          workspaceGroupId ? [workspaceGroupId] : [],
+        ),
+        context,
       )
-    return {
-      workspaces: rows,
-      canCreate: context.canCreate,
-    }
-  })
+      const rows = workspaceRows(projects, counts, context, mixedGroupIds)
+      if (options.sort === "most-active")
+        rows.sort(
+          (left, right) =>
+            right.activityCount - left.activityCount ||
+            right.updatedAt.getTime() - left.updatedAt.getTime(),
+        )
+      return {
+        workspaces: rows,
+        canCreate: context.canCreate,
+      }
+    },
+    { isolationLevel: "RepeatableRead" },
+  )
 }
 
 export async function listProjectWorkspaceTemplates(userId: string) {
@@ -691,71 +745,86 @@ export async function createProjectWorkspaces(userId: string, input: unknown) {
 }
 
 export async function getProjectWorkspace(userId: string, id: string) {
-  return getPrisma()!.$transaction(async (tx) => {
-    const context = await getStaffContext(tx, userId)
-    const scope = scopedProjectWhere(context)
-    const group = await tx.projectWorkspaceGroup.findUnique({
-      where: { id },
-      include: {
-        projects: {
-          where: scope,
-          include: projectInclude,
-          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-        },
-      },
-    })
-    let projects = group?.projects ?? []
-    if (!projects.length) {
-      const single = await tx.project.findFirst({
-        where: { id, ...scope },
-        include: projectInclude,
-      })
-      if (!single)
-        throw new ServiceRequestsError(404, "Project workspace not found")
-      projects = [single]
-    }
-    const counts = await activityCounts(tx, projects)
-    const workspace = workspaceRows(projects, counts, context, true)[0]
-    const requestIds = projects.flatMap(({ requestId }) =>
-      requestId ? [requestId] : [],
-    )
-    const events = requestIds.length
-      ? await tx.workflowEvent.findMany({
-          where: {
-            requestId: { in: requestIds },
-            type: { in: [...activityTypes] },
+  return getPrisma()!.$transaction(
+    async (tx) => {
+      const context = await getStaffContext(tx, userId)
+      const scope = workspaceReadWhere(context)
+      const group = await tx.projectWorkspaceGroup.findUnique({
+        where: { id },
+        include: {
+          projects: {
+            where: scope,
+            include: projectInclude,
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
           },
-          select: {
-            id: true,
-            type: true,
-            summary: true,
-            createdAt: true,
-            actor: { select: { fullName: true } },
-            workflow: {
-              select: {
-                request: { select: { project: { select: { name: true } } } },
+        },
+      })
+      let projects = group?.projects ?? []
+      if (!projects.length) {
+        const single = await tx.project.findFirst({
+          where: { id, ...scope },
+          include: projectInclude,
+        })
+        if (!single)
+          throw new ServiceRequestsError(404, "Project workspace not found")
+        projects = [single]
+      }
+      const counts = await activityCounts(tx, projects)
+      const groupId = projects[0].workspaceGroupId
+      const mixedGroupIds = await mixedWorkspaceGroupIds(
+        tx,
+        groupId ? [groupId] : [],
+        context,
+      )
+      const workspace = workspaceRows(
+        projects,
+        counts,
+        context,
+        mixedGroupIds,
+        true,
+      )[0]
+      const requestIds = projects.flatMap(({ requestId }) =>
+        requestId ? [requestId] : [],
+      )
+      const events = requestIds.length
+        ? await tx.workflowEvent.findMany({
+            where: {
+              requestId: { in: requestIds },
+              type: { in: [...activityTypes] },
+            },
+            select: {
+              id: true,
+              type: true,
+              summary: true,
+              createdAt: true,
+              actor: { select: { fullName: true } },
+              workflow: {
+                select: {
+                  request: { select: { project: { select: { name: true } } } },
+                },
               },
             },
-          },
-          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-          take: 100,
-        })
-      : []
-    return {
-      ...workspace,
-      activity: events.map(({ workflow, ...event }) => ({
-        ...event,
-        summary:
-          event.type === "STAFFING_APPROVED" &&
-          event.summary.startsWith(
-            "The department head approved project staffing. Employee records: ",
-          )
-            ? "The department head updated the project team."
-            : event.summary,
-        projectName: workflow.request.project?.name ?? workspace.name,
-      })),
-    }
-  })
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            take: 100,
+          })
+        : []
+      return {
+        ...workspace,
+        activity: events.map(({ workflow, ...event }) => ({
+          ...event,
+          summary:
+            event.type === "STAFFING_APPROVED" &&
+            event.summary.startsWith(
+              "The department head approved project staffing. Employee records: ",
+            )
+              ? "The department head updated the project team."
+              : event.summary,
+          projectName: workflow.request.project?.name ?? workspace.name,
+        })),
+      }
+    },
+    { isolationLevel: "RepeatableRead" },
+  )
 }
 
 type MutableWorkspaceProject = {
@@ -769,8 +838,8 @@ async function getMutableWorkspace(
   tx: Prisma.TransactionClient,
   context: StaffContext,
   workspaceId: string,
+  scope = scopedProjectWhere(context),
 ) {
-  const scope = scopedProjectWhere(context)
   const group = await tx.projectWorkspaceGroup.findFirst({
     where: { id: workspaceId, projects: { some: scope } },
     select: {
@@ -912,16 +981,84 @@ export async function renameProjectWorkspace(
 
   await getPrisma()!.$transaction(async (tx) => {
     const context = await getStaffContext(tx, userId)
-    const current = await getMutableWorkspace(tx, context, workspaceId)
-    requireWorkspaceManager(context, current.projects)
-    await lockWorkspaceProjects(
+    const current = await getMutableWorkspace(
       tx,
+      context,
       workspaceId,
-      current.groupId,
-      current.projects,
+      workspaceReadWhere(context),
     )
-    const workspace = await getMutableWorkspace(tx, context, workspaceId)
-    requireWorkspaceManager(context, workspace.projects)
+    requireWorkspaceManager(context, current.projects)
+    const targetProjectId = current.groupId ? undefined : current.projects[0].id
+    const groupId =
+      current.groupId ??
+      (
+        await tx.project.findUniqueOrThrow({
+          where: { id: targetProjectId },
+          select: { workspaceGroupId: true },
+        })
+      ).workspaceGroupId
+    // The group lock also conflicts with foreign-key checks for new members.
+    await lockRows(tx, "ProjectWorkspaceGroup", groupId)
+    const membership = groupId
+      ? { workspaceGroupId: groupId }
+      : { id: targetProjectId }
+    const members = await tx.project.findMany({
+      where: membership,
+      select: { id: true, requestId: true },
+      orderBy: { id: "asc" },
+    })
+    await lockRows(
+      tx,
+      "ServiceRequest",
+      members.map(({ requestId }) => requestId),
+      "share",
+    )
+    await lockRows(tx, "Department", context.headDepartmentIds, "share")
+    await lockRows(tx, "User", userId, "share")
+    await lockRows(
+      tx,
+      "Project",
+      members.map(({ id }) => id),
+    )
+    const lockedMembers = await tx.project.findMany({
+      where: membership,
+      select: { id: true, requestId: true, workspaceGroupId: true },
+      orderBy: { id: "asc" },
+    })
+    if (
+      lockedMembers.length !== members.length ||
+      lockedMembers.some(
+        (member, index) =>
+          member.id !== members[index].id ||
+          member.requestId !== members[index].requestId ||
+          member.workspaceGroupId !== groupId,
+      ) ||
+      (targetProjectId &&
+        !lockedMembers.some(({ id }) => id === targetProjectId))
+    ) {
+      throw new ServiceRequestsError(
+        409,
+        "Workspace membership changed. Refresh and try again.",
+      )
+    }
+    const lockedContext = await getStaffContext(tx, userId)
+    if (lockedContext.headDepartmentIds[0] !== context.headDepartmentIds[0])
+      throw new ServiceRequestsError(403, "Department leadership changed")
+    const workspace = await getMutableWorkspace(
+      tx,
+      lockedContext,
+      workspaceId,
+      workspaceReadWhere(lockedContext),
+    )
+    requireWorkspaceManager(lockedContext, workspace.projects)
+    if (
+      groupId &&
+      (await mixedWorkspaceGroupIds(tx, [groupId], lockedContext)).has(groupId)
+    )
+      throw new ServiceRequestsError(
+        403,
+        "Only the department head for every project can rename this workspace",
+      )
     if (
       workspace.projects.every(({ status }) =>
         ["COMPLETED", "CANCELLED"].includes(status),

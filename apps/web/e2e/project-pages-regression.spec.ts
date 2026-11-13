@@ -14,6 +14,7 @@ const workspace: ProjectWorkspaceDetail = {
   activityCount: 0,
   canCreate: false,
   canManage: false,
+  canRename: false,
   workstreams: [],
   activity: [],
 }

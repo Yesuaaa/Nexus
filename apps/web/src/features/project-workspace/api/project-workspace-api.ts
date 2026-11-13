@@ -98,6 +98,7 @@ export type ProjectWorkspaceSummary = {
   activityCount: number
   canCreate: boolean
   canManage: boolean
+  canRename: boolean
   workstreams: Omit<
     ProjectWorkspaceWorkstream,
     "plan" | "milestones" | "staff"

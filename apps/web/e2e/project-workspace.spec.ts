@@ -1,8 +1,81 @@
 import { expect, test, type Page } from "@playwright/test"
 import type { ProjectWorkspace } from "../src/features/projects/api/projects-api"
-import { accountFor, configureRegressionTest } from "./regression-support"
+import {
+  accountFor,
+  configureRegressionTest,
+  restoreSession,
+} from "./regression-support"
 
 configureRegressionTest()
+
+test("department heads can navigate between workspace Overview and Management", async ({
+  page,
+}) => {
+  const detailRequests: string[] = []
+  page.on("request", (request) => {
+    const { pathname } = new URL(request.url())
+    if (pathname.startsWith("/api/project-workspace/"))
+      detailRequests.push(pathname)
+  })
+  await restoreSession(page, "STAFF", {
+    account: { headOf: { id: "design", name: "Design" } },
+  })
+  await page.goto("/project-workspace/overview")
+  await expect(
+    page.getByRole("heading", { name: "Project Workspace Overview" }),
+  ).toBeVisible()
+  const sidebar = page.getByRole("complementary", {
+    name: "Primary navigation",
+  })
+  await expect(
+    sidebar.getByRole("link", { name: "Project Workspace overview" }),
+  ).toHaveAttribute("aria-current", "page")
+  await expect(
+    sidebar.getByRole("link", { name: "Project Messages" }),
+  ).toBeVisible()
+  await sidebar
+    .getByRole("link", { name: "Project Workspace Management" })
+    .click()
+  await expect(page).toHaveURL(/\/project-workspace$/)
+  await expect(
+    sidebar.getByRole("link", { name: "Project Workspace Management" }),
+  ).toHaveAttribute("aria-current", "page")
+  await sidebar.getByRole("button", { name: "Collapse sidebar" }).click()
+  await sidebar
+    .getByRole("button", { name: "Project Workspace", exact: true })
+    .click()
+  await page
+    .getByRole("menuitem", { name: "Project Workspace overview" })
+    .click()
+  await expect(page).toHaveURL(/\/project-workspace\/overview$/)
+  await expect(
+    page
+      .getByRole("navigation", { name: "Breadcrumb" })
+      .getByText("Overview", { exact: true }),
+  ).toBeVisible()
+  expect(detailRequests).toEqual([])
+})
+
+test("ordinary Staff keep their Project Workspace link and cannot open Overview", async ({
+  page,
+}) => {
+  await restoreSession(page, "STAFF")
+  await page.goto("/project-workspace")
+  const sidebar = page.getByRole("complementary", {
+    name: "Primary navigation",
+  })
+  await expect(
+    sidebar.getByRole("link", { name: "Project Workspace", exact: true }),
+  ).toBeVisible()
+  await expect(
+    sidebar.getByRole("link", { name: "Project Workspace overview" }),
+  ).toHaveCount(0)
+  await expect(
+    sidebar.getByRole("link", { name: "Project Messages" }),
+  ).toBeVisible()
+  await page.goto("/project-workspace/overview")
+  await expect(page).toHaveURL(/\/module$/)
+})
 
 async function mockProject(page: Page, contributor: boolean) {
   const project: ProjectWorkspace = {

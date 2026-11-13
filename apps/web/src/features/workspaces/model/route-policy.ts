@@ -11,6 +11,7 @@ import {
   canAccessRequestInbox,
   canAccessServiceCatalog,
   canAccessServiceManagement,
+  canCreateProjectWorkspace,
 } from "../../auth/model/permissions.ts"
 import type { Account } from "../../auth/model/types.ts"
 
@@ -33,6 +34,7 @@ export type RoutePolicyId =
   | "projects-detail"
   | "projects"
   | "projects-fallback"
+  | "project-workspace-overview"
   | "project-workspace-new"
   | "project-workspace-detail"
   | "project-workspace"
@@ -148,6 +150,12 @@ export const routePolicies: readonly RoutePolicy[] = [
     match: { kind: "prefix", path: "/projects" },
     moduleId: "project-management",
     canAccess: canAccessProjects,
+  },
+  {
+    id: "project-workspace-overview",
+    match: { kind: "exact", path: "/project-workspace/overview" },
+    moduleId: "project-management",
+    canAccess: canCreateProjectWorkspace,
   },
   {
     id: "project-workspace-new",
