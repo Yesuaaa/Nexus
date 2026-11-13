@@ -9,11 +9,16 @@ export function buildContentSecurityPolicy(
     "'strict-dynamic'",
     ...(isDevelopment ? ["'unsafe-eval'"] : []),
   ].join(" ")
+  // DevTools injects style tags without a nonce. Do not include a style nonce
+  // in development: browsers ignore unsafe-inline when a nonce is present.
+  const styleSources = isDevelopment
+    ? "'self' 'unsafe-inline'"
+    : `'self' 'nonce-${nonce}'`
 
   return [
     "default-src 'self'",
     `script-src ${scriptSources}`,
-    `style-src 'self' 'nonce-${nonce}'`,
+    `style-src ${styleSources}`,
     "style-src-attr 'unsafe-inline'",
     "img-src 'self' data: blob: https://*.supabase.co https://*.supabase.com",
     "font-src 'self' data:",

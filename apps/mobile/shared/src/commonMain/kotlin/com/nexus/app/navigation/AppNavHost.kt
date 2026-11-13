@@ -38,7 +38,7 @@ import com.nexus.app.core.components.ToastKind
 import com.nexus.app.core.session.SessionManager
 import com.nexus.app.core.theme.NexusColors
 import com.nexus.app.features.auth.api.AuthRepository
-import com.nexus.app.features.auth.api.AuthRequestException
+import com.nexus.app.features.auth.api.SessionRestoration
 import com.nexus.app.features.auth.screens.LoginScreen
 import com.nexus.app.features.auth.screens.RegisterScreen
 import com.nexus.app.features.booked_requests.screens.BookedRequestsScreen
@@ -46,6 +46,7 @@ import com.nexus.app.features.dashboard.screens.DashboardScreen
 import com.nexus.app.features.profile.screens.ProfileScreen
 import com.nexus.app.features.services.screens.ServicesScreen
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.awaitCancellation
 import org.koin.compose.koinInject
 
 import com.nexus.app.features.conversations.screens.*
@@ -57,6 +58,8 @@ import kotlinx.coroutines.isActive
 import org.koin.compose.viewmodel.koinViewModel
 import com.nexus.app.features.notifications.viewmodel.NotificationsViewModel
 
+import com.nexus.app.features.projects.screens.*
+
 object Routes {
     const val CHECKING = "checking"
     const val LOGIN = "login"
@@ -64,6 +67,13 @@ object Routes {
     const val DASHBOARD = "dashboard"
     const val SERVICES = "services"
     const val BOOKED_REQUESTS = "booked_requests"
+    const val CALENDAR = "calendar"
+    const val PROJECTS = "projects"
+    const val PROJECT_DETAILS = "projects/{projectId}/details"
+    const val PROJECT_OVERVIEW = "projects/{projectId}/overview?tab={tab}"
+    const val PROJECT_BRIEF = "projects/{projectId}/brief"
+    const val PROJECT_REQUEST = "projects/{projectId}/request"
+    const val PROJECT_CHAT = "projects/{projectId}/chat"
     const val NOTIFICATIONS = "notifications"
     const val MESSAGES = "messages"
     const val CHAT = "chat/{conversationId}"
@@ -72,19 +82,23 @@ object Routes {
     const val SETTINGS = "settings"
     const val REQUEST_DETAIL = "request/{requestId}"
 
-    val main = setOf(NOTIFICATIONS, MESSAGES, CHAT, WORKFLOW, DASHBOARD, SERVICES, BOOKED_REQUESTS, PROFILE, SETTINGS, REQUEST_DETAIL)
+    val main = setOf(NOTIFICATIONS, MESSAGES, CHAT, WORKFLOW, DASHBOARD, SERVICES, BOOKED_REQUESTS, PROFILE, SETTINGS, REQUEST_DETAIL, CALENDAR, PROJECTS, PROJECT_DETAILS, PROJECT_OVERVIEW, PROJECT_BRIEF, PROJECT_REQUEST, PROJECT_CHAT)
 }
 
 private fun BottomTab.route() = when (this) {
     BottomTab.DASHBOARD -> Routes.DASHBOARD
     BottomTab.SERVICES -> Routes.SERVICES
+    BottomTab.CALENDAR -> Routes.CALENDAR
     BottomTab.BOOKED_REQUESTS -> Routes.BOOKED_REQUESTS
+    BottomTab.PROJECTS -> Routes.PROJECTS
 }
 
 private fun routeToTab(route: String?): BottomTab? = when (route) {
     Routes.DASHBOARD -> BottomTab.DASHBOARD
     Routes.SERVICES -> BottomTab.SERVICES
+    Routes.CALENDAR -> BottomTab.CALENDAR
     Routes.BOOKED_REQUESTS, Routes.REQUEST_DETAIL -> BottomTab.BOOKED_REQUESTS
+    Routes.PROJECTS, Routes.PROJECT_DETAILS, Routes.PROJECT_OVERVIEW, Routes.PROJECT_BRIEF, Routes.PROJECT_REQUEST, Routes.PROJECT_CHAT -> BottomTab.PROJECTS
     else -> null
 }
 
@@ -128,14 +142,15 @@ fun AppNavHost(modifier: Modifier = Modifier) {
     val notificationViewModel: NotificationsViewModel = koinViewModel()
     val notificationState by notificationViewModel.state.collectAsState()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val user by session.user.collectAsState()
-    LaunchedEffect(user?.id, lifecycle) {
+    val sessionState by session.state.collectAsState()
+    val user = sessionState.user
+    LaunchedEffect(user?.id, sessionState.generation, lifecycle) {
         notificationViewModel.reset()
         if (user != null) lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (isActive) { notificationViewModel.refresh(); delay(30_000) }
         }
     }
-    val notice by session.notice.collectAsState()
+    val notice = sessionState.notice
     val pendingLink by DeepLinks.pending.collectAsState()
     var restorationAttempt by rememberSaveable { mutableStateOf(0) }
     var restorationError by remember { mutableStateOf<String?>(null) }
@@ -148,26 +163,24 @@ fun AppNavHost(modifier: Modifier = Modifier) {
     val route = backStackEntry?.destination?.route
     routeToTab(route)?.let { lastTab = it }
 
-    // Session restoration (also runs after process death).
-    LaunchedEffect(restorationAttempt) {
-        restorationError = null
-        authRepository.restoreSession()
-            .onSuccess { restored ->
-                if (restored == null) {
-                    navController.resetTo(Routes.LOGIN)
-                } else {
-                    session.setUser(restored)
-                    navController.restoreAuthenticatedDestination()
+    // Revalidate on every resume and explicit retry. Cancellation never discards credentials.
+    LaunchedEffect(restorationAttempt, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            restorationError = null
+            when (authRepository.restoreClientSession()) {
+                SessionRestoration.SignedOut -> {
+                    if (session.state.value.signedOut) navController.resetTo(Routes.LOGIN)
                 }
-            }
-            .onFailure { error ->
-                if (error is AuthRequestException && error.status in setOf(401, 403)) {
-                    navController.resetTo(Routes.LOGIN)
-                } else {
+                is SessionRestoration.VerifiedClient, is SessionRestoration.CachedOfflineClient -> {
+                    if (session.state.value.user != null) navController.restoreAuthenticatedDestination()
+                }
+                is SessionRestoration.TemporarilyUnavailable -> {
                     restorationError = "Can't restore your session right now. Check your connection and retry."
                     navController.navigate(Routes.CHECKING) { launchSingleTop = true }
                 }
             }
+            awaitCancellation()
+        }
     }
 
     // Deep links: wait until restore has finished (route is a main screen or Login/Register).
@@ -184,13 +197,17 @@ fun AppNavHost(modifier: Modifier = Modifier) {
         }
     }
 
-    // Refresh token rejected: back to Login.
-    LaunchedEffect(session) {
-        session.expired.collect { navController.resetTo(Routes.LOGIN) }
+    // Durable state also handles expiry while no event collector is present.
+    LaunchedEffect(sessionState.signedOut, sessionState.generation, route) {
+        if (sessionState.signedOut && route != Routes.LOGIN && route != Routes.REGISTER) {
+            navController.resetTo(Routes.LOGIN)
+        }
     }
 
     fun signedIn() {
-        navController.resetTo(Routes.DASHBOARD)
+        if (session.state.value.user != null && !session.state.value.signedOut) {
+            navController.resetTo(Routes.DASHBOARD)
+        }
     }
 
     fun logout() {
@@ -199,20 +216,12 @@ fun AppNavHost(modifier: Modifier = Modifier) {
         coroutineScope.launch {
             try {
                 val result = authRepository.logout()
-                session.clear(
-                    if (result.isFailure) {
-                        "You are signed out on this device. We couldn't confirm sign-out with the server."
-                    } else {
-                        null
-                    }
-                )
-                toast.show(
+                if (session.state.value.signedOut) toast.show(
                     if (result.isSuccess) "Signed out" else "Signed out on this device",
                     if (result.isSuccess) "You can sign in again at any time." else "Server sign-out could not be confirmed.",
                     if (result.isSuccess) ToastKind.SUCCESS else ToastKind.INFO
                 )
             } finally {
-                navController.resetTo(Routes.LOGIN)
                 loggingOut = false
             }
         }
@@ -234,6 +243,13 @@ fun AppNavHost(modifier: Modifier = Modifier) {
         Routes.DASHBOARD -> "Dashboard"
         Routes.SERVICES -> "Services"
         Routes.BOOKED_REQUESTS -> "Booked Requests"
+        Routes.CALENDAR -> "Calendar"
+        Routes.PROJECTS -> "My Projects"
+        Routes.PROJECT_DETAILS -> "Project details"
+        Routes.PROJECT_OVERVIEW -> "Project overview"
+        Routes.PROJECT_BRIEF -> "Edit project brief"
+        Routes.PROJECT_REQUEST -> "Project change"
+        Routes.PROJECT_CHAT -> "Project chat"
         Routes.REQUEST_DETAIL -> "Request details"
         Routes.NOTIFICATIONS -> "Notifications"
         Routes.MESSAGES -> "Messages"
@@ -242,7 +258,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
         Routes.PROFILE, Routes.SETTINGS -> accountTitle
         else -> ""
     }
-    val showBars = route in Routes.main
+    val showBars = user != null && !sessionState.signedOut && route in Routes.main
 
     Scaffold(
         topBar = {
@@ -256,18 +272,18 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                     },
                     onSettingsClick = { if (route != Routes.SETTINGS) navController.navigate(Routes.SETTINGS) { launchSingleTop = true } },
                     onLogoutClick = { logout() },
-                    accountName = user?.fullName ?: "Your account",
-                    accountEmail = user?.email ?: "",
+                    accountName = user.fullName ?: "Your account",
+                    accountEmail = user.email,
                     accountPageOpen = route in setOf(Routes.PROFILE, Routes.SETTINGS),
                     onCloseAccountPage = { closeHeaderPage() },
                     onAccountMenuChange = { accountMenuOpen = it },
-                    notificationUnread = if (user != null) notificationState.feed.unreadCount else 0,
+                    notificationUnread = notificationState.feed.unreadCount,
                     accountActionsEnabled = !loggingOut
                 )
             }
         },
         bottomBar = {
-            if (showBars && !editingAccount && route !in setOf(Routes.CHAT, Routes.WORKFLOW)) {
+            if (showBars && !editingAccount && route !in setOf(Routes.CHAT, Routes.WORKFLOW, Routes.PROJECT_CHAT)) {
                 NexusBottomBar(
                     currentTab = if (accountMenuOpen) null else routeToTab(route),
                     onTabSelected = { tab ->
@@ -292,9 +308,16 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 .background(NexusColors.Background),
             contentAlignment = Alignment.TopCenter
         ) {
-            Box(Modifier.widthIn(max = 1120.dp).fillMaxSize()) {
+            Column(Modifier.widthIn(max = 1120.dp).fillMaxSize()) {
+                if (sessionState.offline && route in Routes.main) {
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        Text("Offline session. Your identity was previously verified. Connect to refresh your session.", color = NexusColors.TextSecondary)
+                        Button(shape = NexusButtonShape, onClick = { restorationAttempt++ }) { Text("Retry connection") }
+                    }
+                }
                 NavHost(
                     navController = navController,
+                    modifier = Modifier.weight(1f),
                     startDestination = Routes.CHECKING
                 ) {
                     composable(Routes.CHECKING) {
@@ -316,7 +339,6 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                     composable(Routes.LOGIN) {
                         LoginScreen(
                             onLoggedIn = {
-                                session.setUser(it)
                                 signedIn()
                                 toast.show("Signed in", "Welcome back to EXP.", ToastKind.SUCCESS)
                             },
@@ -327,7 +349,6 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                     composable(Routes.REGISTER) {
                         RegisterScreen(
                             onRegistered = {
-                                session.setUser(it)
                                 signedIn()
                                 toast.show("Account created", "Welcome to your client portal.", ToastKind.SUCCESS)
                             },
@@ -357,6 +378,60 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                                 navController.previousBackStackEntry?.takeIf { it.destination.route == Routes.CHAT }
                                     ?.savedStateHandle?.set("selectedBookingId", bookingId)
                             })
+                    }
+                    composable(Routes.CALENDAR) {
+                        CalendarScreen(
+                            onBooking = { navController.switchTab(Routes.SERVICES) },
+                            onEvent = { event ->
+                                val targetId = event.href.substringAfterLast('/').substringAfter("request=")
+                                if (targetId.matches(Regex("[A-Za-z0-9_-]{1,80}"))) {
+                                    when (event.type) {
+                                        "milestone" -> navController.navigate("projects/$targetId/overview")
+                                        "meeting" -> navController.navigate("chat/$targetId")
+                                        else -> navController.navigate("workflow/$targetId")
+                                    }
+                                }
+                            }
+                        )
+                    }
+                    composable(Routes.PROJECTS) {
+                        com.nexus.app.features.projects.screens.ClientProjectsScreen(
+                            onNewRequest = { navController.switchTab(Routes.SERVICES) },
+                            onOpenProject = { navController.navigate("projects/$it/details") },
+                            onProjectChat = { navController.navigate("projects/$it/chat") }
+                        )
+                    }
+                    composable(Routes.PROJECT_DETAILS) { entry ->
+                        val id = entry.arguments?.getString("projectId") ?: return@composable
+                        ProjectScreen(id, overview = false,
+                            onBack = { navController.popBackStack() },
+                            onOpen = { navController.navigate("projects/$id/overview") },
+                            onEdit = { navController.navigate("projects/$id/brief") },
+                            onRequest = { navController.navigate("projects/$id/request") },
+                            onChat = { navController.navigate("projects/$id/chat") })
+                    }
+                    composable(Routes.PROJECT_OVERVIEW, arguments = listOf(navArgument("tab") { defaultValue = "OVERVIEW" })) { entry ->
+                        val id = entry.arguments?.getString("projectId") ?: return@composable
+                        ProjectScreen(id, overview = true,
+                            onBack = { navController.navigate(Routes.PROJECTS) { popUpTo(Routes.DASHBOARD); launchSingleTop = true } },
+                            onOpen = {},
+                            onEdit = { navController.navigate("projects/$id/brief") },
+                            onRequest = { navController.navigate("projects/$id/request") },
+                            onChat = { navController.navigate("projects/$id/chat") },
+                            initialTab = entry.arguments?.getString("tab") ?: "OVERVIEW")
+                    }
+                    composable(Routes.PROJECT_BRIEF) { entry ->
+                        val id = entry.arguments?.getString("projectId") ?: return@composable
+                        ProjectFormScreen(id, edit = true, onBack = { navController.popBackStack() })
+                    }
+                    composable(Routes.PROJECT_REQUEST) { entry ->
+                        val id = entry.arguments?.getString("projectId") ?: return@composable
+                        ProjectFormScreen(id, edit = false, onBack = { navController.popBackStack() })
+                    }
+                    composable(Routes.PROJECT_CHAT) { entry ->
+                        val id = entry.arguments?.getString("projectId") ?: return@composable
+                        ProjectChatScreen(id, user?.id.orEmpty(), onBack = { navController.popBackStack() },
+                            onDeliverables = { navController.navigate("projects/$id/overview?tab=DELIVERABLES") })
                     }
                     composable(Routes.DASHBOARD) { DashboardScreen() }
                     composable(Routes.SERVICES) {

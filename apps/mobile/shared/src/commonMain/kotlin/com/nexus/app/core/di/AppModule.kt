@@ -1,6 +1,7 @@
 package com.nexus.app.core.di
 
 import com.nexus.app.core.network.HttpClientFactory
+import com.nexus.app.core.session.SessionCoordinator
 import com.nexus.app.core.session.SessionManager
 import com.nexus.app.core.storage.SettingsTokenStorage
 import com.nexus.app.features.auth.api.AuthRepository
@@ -10,6 +11,10 @@ import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
 val appModule = module {
+    single { com.nexus.app.features.projects.api.ProjectsRepository(get()) }
+    viewModel { com.nexus.app.features.projects.viewmodel.ProjectsViewModel(get()) }
+    viewModel { com.nexus.app.features.projects.viewmodel.ClientProjectsViewModel(get()) }
+    viewModel { com.nexus.app.features.projects.viewmodel.ProjectChatViewModel(get()) }
     single { com.nexus.app.features.profile.api.ProfileRepository(get()) }
     viewModel { com.nexus.app.features.profile.viewmodel.ProfileViewModel(get(), get()) }
     single { com.nexus.app.features.workflow.api.WorkflowRepository(get()) }
@@ -30,11 +35,11 @@ val appModule = module {
 
     single { SessionManager() }
     single { SettingsTokenStorage() }
+    single { SessionCoordinator(get<SettingsTokenStorage>(), get()) }
     single {
-        val session = get<SessionManager>()
         HttpClientFactory.create(
             tokenStorage = get<SettingsTokenStorage>(),
-            onSessionExpired = { session.expire() }
+            coordinator = get()
         )
     }
     single { AuthRepository(get(), get<SettingsTokenStorage>()) }

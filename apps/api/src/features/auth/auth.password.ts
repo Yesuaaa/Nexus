@@ -3,6 +3,10 @@ import {
   scrypt as scryptCallback,
   timingSafeEqual,
 } from "node:crypto"
+import {
+  PASSWORD_MIN_LENGTH,
+  withinPasswordByteLimit,
+} from "../../shared/password-policy.js"
 
 const keyLength = 64
 const cost = 16384
@@ -51,14 +55,15 @@ export async function verifyPassword(
   return timingSafeEqual(actual, expected)
 }
 
+/**
+ * Length/size-only check kept for the env-driven bootstrap seed
+ * (prisma/seed.ts). Passwords set through the API must pass
+ * `isStrongPassword` / `assertStrongPassword` from shared/password-policy.
+ */
 export function validPassword(value: unknown): value is string {
   return (
     typeof value === "string" &&
-    value.length >= 12 &&
-    Buffer.byteLength(value) <= 1024 &&
-    /[A-Z]/.test(value) &&
-    /[a-z]/.test(value) &&
-    /\d/.test(value) &&
-    /[^A-Za-z0-9]/.test(value)
+    value.length >= PASSWORD_MIN_LENGTH &&
+    withinPasswordByteLimit(value)
   )
 }

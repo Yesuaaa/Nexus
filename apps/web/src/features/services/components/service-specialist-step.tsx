@@ -5,13 +5,18 @@ import { Form } from "@/components/ui/form"
 import { useEffect, useRef, useState } from "react"
 import { ArrowLeft, ShieldCheck, UsersRound } from "lucide-react"
 import { focusRing } from "@/components/layout/styles"
+import { Alert } from "@/components/ui/alert"
+import { buttonTones } from "@/components/ui/button-variants"
+import { useAsyncResource } from "@/lib/use-async-resource"
 import { cn } from "@/lib/utils"
 import { type Service, type ServiceSpecialist } from "../api/services-api"
 import { getClientServiceSpecialists } from "../api/client-services-api"
 import type { ServicePricingOption } from "../model/service-pricing"
 import type { ProjectRequirementsDraft } from "../model/project-requirements"
 import { SpecialistProfileDialog } from "./specialist-profile-dialog"
-import { ConversationAvatar } from "@/features/request-conversations/components/conversation-avatar"
+import { Avatar } from "@/components/ui/avatar"
+
+const noSpecialists: ServiceSpecialist[] = []
 
 export function ServiceSpecialistStep({
   service,
@@ -39,36 +44,24 @@ export function ServiceSpecialistStep({
   onBack: () => void
 }) {
   const headingRef = useRef<HTMLHeadingElement>(null)
-  const [specialists, setSpecialists] = useState<ServiceSpecialist[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
-  const [revision, setRevision] = useState(0)
+  const {
+    data: specialists = noSpecialists,
+    loading,
+    error: loadError,
+    retry,
+  } = useAsyncResource(
+    (signal) => getClientServiceSpecialists(service.id, signal),
+    [service.id],
+  )
+  const error = loadError
+    ? "We couldn’t load the specialists. Try again, or let the department assign one."
+    : ""
   const [viewedSpecialist, setViewedSpecialist] =
     useState<ServiceSpecialist | null>(null)
 
   useEffect(() => {
     headingRef.current?.focus()
   }, [])
-
-  useEffect(() => {
-    let active = true
-    getClientServiceSpecialists(service.id)
-      .then((items) => {
-        if (active) setSpecialists(items)
-      })
-      .catch(() => {
-        if (active)
-          setError(
-            "We couldn’t load the specialists. Try again, or let the department assign one.",
-          )
-      })
-      .finally(() => {
-        if (active) setLoading(false)
-      })
-    return () => {
-      active = false
-    }
-  }, [service.id, revision])
 
   const selectionValid =
     value === null ||
@@ -151,19 +144,12 @@ export function ServiceSpecialistStep({
                 </p>
               ) : error ? (
                 <div className="mt-5 rounded-xl border border-[#efd1d9] p-4">
-                  <p
-                    role="alert"
-                    className="m-0 text-sm leading-6 text-[#9b2244]"
-                  >
+                  <Alert variant="text" className="text-sm leading-6">
                     {error}
-                  </p>
+                  </Alert>
                   <button
                     type="button"
-                    onClick={() => {
-                      setError("")
-                      setLoading(true)
-                      setRevision((current) => current + 1)
-                    }}
+                    onClick={retry}
                     className={cn(
                       "mt-2 min-h-10 cursor-pointer rounded-lg border border-[#dce3ee] bg-white px-4 text-sm font-semibold text-[#294c96]",
                       focusRing,
@@ -203,7 +189,7 @@ export function ServiceSpecialistStep({
                             focusRing,
                           )}
                         />
-                        <ConversationAvatar
+                        <Avatar
                           name={specialist.fullName}
                           imageUrl={specialist.imageUrl}
                           className="size-10 text-xs font-bold"
@@ -240,10 +226,10 @@ export function ServiceSpecialistStep({
               )}
             </fieldset>
             {!selectionValid && !loading && (
-              <p role="alert" className="mt-4 text-sm text-[#9b2244]">
+              <Alert variant="text" className="mt-4 text-sm">
                 Your preferred specialist could not be confirmed. Choose another
                 option or retry loading the list.
-              </p>
+              </Alert>
             )}
             <div
               id="specialist-review-note"
@@ -275,7 +261,8 @@ export function ServiceSpecialistStep({
                 : "Submit service request for review"
             }
             className={cn(
-              "mt-auto ml-auto inline-flex min-h-11 cursor-pointer items-center justify-center rounded-lg border-0 bg-[#294c96] px-5 text-sm font-bold text-white hover:enabled:bg-[#203f80] disabled:cursor-not-allowed disabled:opacity-45 max-[560px]:w-full",
+              "mt-auto ml-auto inline-flex min-h-11 cursor-pointer items-center justify-center rounded-lg border-0 px-5 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-45 max-[560px]:w-full",
+              buttonTones.brand,
               focusRing,
             )}
           >
@@ -401,12 +388,9 @@ export function ServiceSpecialistStep({
             Review your project details before submitting your request.
           </p>
           {submissionError && (
-            <p
-              role="alert"
-              className="m-0 w-full rounded-lg border border-[#efd1d9] bg-[#fff5f7] p-3 text-sm leading-6 text-[#9b2244]"
-            >
+            <Alert className="w-full text-sm leading-6">
               {submissionError}
-            </p>
+            </Alert>
           )}
         </footer>
       </Form>

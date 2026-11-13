@@ -51,4 +51,12 @@ object NexusNavIcons {
         strokeLineCap = StrokeCap.Round
     ).build()
 
+    val Calendar: ImageVector = navigationIcon("Calendar", "M4.16667 4.16699H15.8333C16.7538 4.16699 17.5 4.91318 17.5 5.83366V16.667C17.5 17.5875 16.7538 18.3337 15.8333 18.3337H4.16667C3.24619 18.3337 2.5 17.5875 2.5 16.667V5.83366C2.5 4.91318 3.24619 4.16699 4.16667 4.16699Z M5.83333 1.66699V6.66699M14.1667 1.66699V6.66699M2.5 9.16699H17.5M5.83333 12.5003H6.66667M10 12.5003H10.8333M14.1667 12.5003H15M5.83333 15.0003H6.66667M10 15.0003H10.8333")
+    val Projects: ImageVector = navigationIcon("Projects", "M6.66667 9.16634V13.333M10 8.33301V13.333M13.3333 9.99967V13.333M2.5 4.99967C2.5 4.55765 2.67559 4.13372 2.98816 3.82116C3.30072 3.5086 3.72464 3.33301 4.16667 3.33301H8.33333L10 5.83301H15.8333C16.2754 5.83301 16.6993 6.0086 17.0118 6.32116C17.3244 6.63372 17.5 7.05765 17.5 7.49967V16.6663H2.5V4.99967Z")
+
+    private fun navigationIcon(name: String, path: String): ImageVector = ImageVector.Builder(
+        name = name, defaultWidth = 20.dp, defaultHeight = 20.dp, viewportWidth = 20f, viewportHeight = 20f,
+    ).addPath(pathData = addPathNodes(path), fill = null, stroke = SolidColor(Color(0xFF52627A)),
+        strokeLineWidth = 1.6f, strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round).build()
 }

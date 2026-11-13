@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto"
 import type { ServiceRequestStatus } from "../../generated/prisma/client.js"
 import {
   hasStructuredFilters,
-  parsePage,
   parseQueryString,
 } from "../../shared/query-helpers.js"
+import { parsePage } from "../../shared/query/pagination.js"
 
 export type ServiceRequestFilters = {
   page: number
@@ -31,7 +31,6 @@ export function parseServiceRequestFilters(
   const selectedStatus = statuses.find((value) => value === status)
   if (
     page === null ||
-    page > 100_000 ||
     search === null ||
     search.length > 100 ||
     status === null ||
@@ -77,7 +76,6 @@ export function validateServiceRequestInput(
       return { error: "Invalid package selection" }
     }
   }
-
   for (const field of ["preferredSpecialistId", "specialistId"] as const) {
     if (
       input[field] !== undefined &&
@@ -156,7 +154,6 @@ export function validateServiceRequestInput(
       error: "Project goals, requirements, and expected timeline are required",
     }
   }
-
   const limits = {
     goals: 2000,
     requirements: 5000,

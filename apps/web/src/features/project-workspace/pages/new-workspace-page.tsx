@@ -1,19 +1,14 @@
 "use client"
 
+import { FormInput } from "@/components/ui/form-input"
+
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, ChevronRight, X } from "lucide-react"
-import { focusRing } from "@/components/layout/styles"
+import { ArrowLeft, ChevronRight } from "lucide-react"
+import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { DialogStepProgress } from "@/components/ui/dialog-step-progress"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
+import { Modal, ModalFooter, ModalHeader } from "@/components/ui/modal"
 import { PlanEditor, emptyPlan } from "../components/plan-editor"
 import type { ProjectWorkPlan } from "../api/project-workspace-api"
 import {
@@ -24,6 +19,7 @@ import {
   type ProjectWorkspaceBooking,
   type ProjectWorkspaceTemplate,
 } from "../api/project-workspace-api"
+import { errorMessage } from "@/lib/error-message"
 
 const steps = [
   {
@@ -85,9 +81,7 @@ export function NewWorkspaceDialog({
       })
       .catch((reason: unknown) => {
         if (!controller.signal.aborted)
-          setError(
-            reason instanceof Error ? reason.message : "Couldn't load bookings",
-          )
+          setError(errorMessage(reason, "Couldn't load bookings"))
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false)
@@ -170,9 +164,7 @@ export function NewWorkspaceDialog({
       onOpenChange(false)
       router.push(`/project-workspace/${result.workspaces[0].id}`)
     } catch (reason) {
-      setError(
-        reason instanceof Error ? reason.message : "Couldn't create workspace",
-      )
+      setError(errorMessage(reason, "Couldn't create workspace"))
     } finally {
       setBusy(false)
     }
@@ -202,147 +194,121 @@ export function NewWorkspaceDialog({
   }
 
   return (
-    <Dialog
+    <Modal
       open={open}
-      onOpenChange={(nextOpen) => {
-        if (busy) return
-        if (!nextOpen) resetWizard()
-        onOpenChange(nextOpen)
-      }}
+      onClose={close}
+      busy={busy}
+      closeOnEscape={false}
+      size="xl"
+      className="flex flex-col overflow-hidden"
     >
-      <DialogContent
-        showCloseButton={false}
-        overlayClassName="bg-[rgb(13_28_57_/_48%)]"
-        className="flex max-h-[calc(100dvh-28px)] w-[min(900px,calc(100vw-28px))] max-w-[900px] flex-col gap-0 overflow-hidden rounded-[13px] border border-[#dedede] bg-background p-0 text-foreground shadow-[0_22px_75px_rgb(18_36_73_/_22%)]"
-        onInteractOutside={(event) => event.preventDefault()}
-        onEscapeKeyDown={(event) => event.preventDefault()}
-      >
-        <DialogHeader className="flex shrink-0 flex-row items-start justify-between gap-4 px-5 pt-5">
-          <div>
-            <DialogTitle className="m-0 text-lg font-[650] tracking-[-0.03em] text-[#111827]">
-              Start project from approved booking
-            </DialogTitle>
-            <DialogDescription className="mt-2 mb-0 text-xs leading-relaxed text-[#738096]">
-              {steps[step].description}
-            </DialogDescription>
-          </div>
-          <button
-            type="button"
-            className={`grid size-7 flex-none place-items-center rounded-[7px] border-0 bg-background text-[#65718a] hover:bg-[#f1f5fc] ${focusRing}`}
-            onClick={close}
-            aria-label="Close dialog"
+      <ModalHeader
+        title="Start project from approved booking"
+        description={steps[step].description}
+        closeLabel="Close dialog"
+        closeDisabled={busy}
+      />
+
+      <DialogStepProgress
+        steps={steps}
+        currentStep={step}
+        label="Project setup progress"
+      />
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        {loading ? (
+          <p role="status" className="py-12 text-center text-sm text-[#738096]">
+            Loading approved bookings…
+          </p>
+        ) : error && !bookings.length ? (
+          <Alert as="div" className="p-4 text-sm">
+            {error}
+          </Alert>
+        ) : step === 0 ? (
+          <BookingStep
+            bookings={bookings}
+            selected={selected}
+            selectedClientId={selectedClientId}
+            onSelectionChange={setSelected}
+          />
+        ) : step === 1 ? (
+          <StructureStep
+            structure={structure}
+            name={name}
+            onStructureChange={setStructure}
+            onNameChange={setName}
+          />
+        ) : step === 2 ? (
+          <TemplateStep
+            bookings={selectedBookings}
+            templates={templates}
+            keys={keys}
+            customPlans={customPlans}
             disabled={busy}
-          >
-            <X size={17} aria-hidden="true" />
-          </button>
-        </DialogHeader>
+            onTemplateChange={(requestId, key) => {
+              if (key === "blank-custom" && !customPlans[requestId])
+                setCustomPlans((current) => ({
+                  ...current,
+                  [requestId]: emptyPlan(),
+                }))
+              setKeys((current) => ({ ...current, [requestId]: key }))
+            }}
+            onCustomPlanChange={(requestId, plan) =>
+              setCustomPlans((current) => ({ ...current, [requestId]: plan }))
+            }
+          />
+        ) : (
+          <ReviewStep
+            bookings={selectedBookings}
+            structure={structure}
+            projectName={name}
+            templates={templates}
+            keys={keys}
+            customPlans={customPlans}
+          />
+        )}
+        {error && bookings.length > 0 && (
+          <Alert variant="text" className="mt-4">
+            {error}
+          </Alert>
+        )}
+      </div>
 
-        <DialogStepProgress
-          steps={steps}
-          currentStep={step}
-          label="Project setup progress"
-        />
-
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-          {loading ? (
-            <p
-              role="status"
-              className="py-12 text-center text-sm text-[#738096]"
-            >
-              Loading approved bookings…
-            </p>
-          ) : error && !bookings.length ? (
-            <div
-              className="rounded-lg border border-[#f0d1d3] bg-[#fff9f9] p-4 text-sm text-[#9c343b]"
-              role="alert"
-            >
-              {error}
-            </div>
-          ) : step === 0 ? (
-            <BookingStep
-              bookings={bookings}
-              selected={selected}
-              selectedClientId={selectedClientId}
-              onSelectionChange={setSelected}
-            />
-          ) : step === 1 ? (
-            <StructureStep
-              structure={structure}
-              name={name}
-              onStructureChange={setStructure}
-              onNameChange={setName}
-            />
-          ) : step === 2 ? (
-            <TemplateStep
-              bookings={selectedBookings}
-              templates={templates}
-              keys={keys}
-              customPlans={customPlans}
+      <ModalFooter className="items-center justify-between gap-3">
+        <div>
+          {step > 0 && (
+            <Button
+              type="button"
+              variant="brandOutline"
               disabled={busy}
-              onTemplateChange={(requestId, key) => {
-                if (key === "blank-custom" && !customPlans[requestId])
-                  setCustomPlans((current) => ({
-                    ...current,
-                    [requestId]: emptyPlan(),
-                  }))
-                setKeys((current) => ({ ...current, [requestId]: key }))
-              }}
-              onCustomPlanChange={(requestId, plan) =>
-                setCustomPlans((current) => ({ ...current, [requestId]: plan }))
-              }
-            />
-          ) : (
-            <ReviewStep
-              bookings={selectedBookings}
-              structure={structure}
-              projectName={name}
-              templates={templates}
-              keys={keys}
-              customPlans={customPlans}
-            />
-          )}
-          {error && bookings.length > 0 && (
-            <p role="alert" className="mt-4 mb-0 text-xs text-[#b3343b]">
-              {error}
-            </p>
+              onClick={back}
+              className="min-h-9 gap-1 text-xs"
+            >
+              <ArrowLeft size={14} aria-hidden="true" />
+              Back
+            </Button>
           )}
         </div>
-
-        <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-[#eceef1] bg-white px-5 py-4">
-          <div>
-            {step > 0 && (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={busy}
-                onClick={back}
-                className="min-h-9 gap-1 border-[#d7e0ee] bg-background text-xs text-[#24437e] hover:bg-[#f1f5fc]"
-              >
-                <ArrowLeft size={14} aria-hidden="true" />
-                Back
-              </Button>
-            )}
-          </div>
-          <Button
-            type="button"
-            disabled={busy || loading || (step === 0 && !bookings.length)}
-            onClick={() => (step < steps.length - 1 ? next() : void create())}
-            className="min-h-9 gap-1 bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
-          >
-            {busy
-              ? "Creating…"
-              : step === steps.length - 1
-                ? "Create workspace"
-                : step === steps.length - 2
-                  ? "Review"
-                  : "Continue"}
-            {step < steps.length - 1 && (
-              <ChevronRight size={14} aria-hidden="true" />
-            )}
-          </Button>
-        </footer>
-      </DialogContent>
-    </Dialog>
+        <Button
+          type="button"
+          disabled={busy || loading || (step === 0 && !bookings.length)}
+          variant="brand"
+          onClick={() => (step < steps.length - 1 ? next() : void create())}
+          className="min-h-9 gap-1 text-xs"
+        >
+          {busy
+            ? "Creating…"
+            : step === steps.length - 1
+              ? "Create workspace"
+              : step === steps.length - 2
+                ? "Review"
+                : "Continue"}
+          {step < steps.length - 1 && (
+            <ChevronRight size={14} aria-hidden="true" />
+          )}
+        </Button>
+      </ModalFooter>
+    </Modal>
   )
 }
 
@@ -481,13 +447,13 @@ function StructureStep({
       {structure === "MULTI_WORKSTREAM" && (
         <label className="mt-5 block max-w-lg text-xs font-medium">
           Project name
-          <Input
+          <FormInput
             value={name}
             onChange={(event) => onNameChange(event.target.value)}
             minLength={2}
             maxLength={120}
             placeholder="e.g. Summer campaign"
-            className="mt-1.5 text-sm"
+            className="mt-1.5"
           />
         </label>
       )}

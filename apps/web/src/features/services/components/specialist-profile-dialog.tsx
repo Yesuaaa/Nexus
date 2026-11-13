@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react"
 import { focusRing } from "@/components/layout/styles"
+import { buttonTones } from "@/components/ui/button-variants"
 import {
   Dialog,
   DialogContent,
@@ -18,6 +19,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { useAnimatedPanelClose } from "@/components/ui/use-animated-panel-close"
+import { getInitials } from "@/lib/initials"
+import { useAsyncResource } from "@/lib/use-async-resource"
+import { useRestoreFocus } from "@/lib/use-restore-focus"
 import { cn } from "@/lib/utils"
 import {
   getServiceSpecialistProfile,
@@ -25,16 +29,6 @@ import {
   type ServiceSpecialistProfile,
   type SpecialistPortfolioProject,
 } from "../api/services-api"
-
-function initials(name: string) {
-  return name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase()
-}
 
 function safeHttpsUrl(value: string | null) {
   if (!value) return null
@@ -107,22 +101,24 @@ export function SpecialistProfileDialog({
 }) {
   const { open, handleOpenChange, closeAfterTransition } =
     useAnimatedPanelClose(onClose)
-  const [profile, setProfile] = useState<ServiceSpecialistProfile | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
-  const [revision, setRevision] = useState(0)
+  const {
+    data: profile,
+    loading,
+    error,
+    retry,
+  } = useAsyncResource<ServiceSpecialistProfile>(
+    (signal) => getServiceSpecialistProfile(serviceId, specialist.id, signal),
+    [serviceId, specialist.id],
+  )
   const [activeProject, setActiveProject] =
     useState<SpecialistPortfolioProject | null>(null)
   const projectHeadingRef = useRef<HTMLHeadingElement>(null)
   const projectTriggersRef = useRef(new Map<string, HTMLButtonElement>())
   const lastProjectIdRef = useRef<string | null>(null)
-  const [avatarFailed, setAvatarFailed] = useState(false)
-  const openerRef = useRef<HTMLElement | null>(
-    typeof document === "undefined"
-      ? null
-      : (document.activeElement as HTMLElement),
-  )
+  const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null)
+  const restoreFocus = useRestoreFocus()
   const imageUrl = safeHttpsUrl(profile?.imageUrl ?? null)
+  const avatarFailed = imageUrl !== null && imageUrl === failedAvatarUrl
   const bannerUrl = safeHttpsUrl(profile?.bannerUrl ?? null)
   const socialLinks =
     profile?.socialLinks?.flatMap((link) => {
@@ -132,27 +128,6 @@ export function SpecialistProfileDialog({
   const departmentName =
     profile?.department?.name || specialist.department?.name
   const displayName = profile?.fullName || specialist.fullName
-
-  useEffect(() => {
-    let active = true
-    getServiceSpecialistProfile(serviceId, specialist.id)
-      .then((result) => {
-        if (active) {
-          setProfile(result)
-          setError(false)
-          setAvatarFailed(false)
-        }
-      })
-      .catch(() => {
-        if (active) setError(true)
-      })
-      .finally(() => {
-        if (active) setLoading(false)
-      })
-    return () => {
-      active = false
-    }
-  }, [serviceId, specialist.id, revision])
 
   useEffect(() => {
     if (activeProject) {
@@ -181,10 +156,7 @@ export function SpecialistProfileDialog({
         showCloseButton={false}
         overlayClassName="nexus-panel-overlay z-[110] bg-[rgb(13_28_57_/_58%)]"
         className="nexus-detail-dialog z-[110] flex max-h-[calc(100dvh-32px)] w-[min(1000px,calc(100vw-32px))] max-w-[1000px] flex-col gap-0 overflow-hidden rounded-2xl border border-[#dce3ee] bg-white p-0 text-[#17243a] shadow-[0_24px_80px_rgb(7_20_48_/_28%)] max-[560px]:max-h-[calc(100dvh-20px)] max-[560px]:w-[calc(100vw-20px)]"
-        onCloseAutoFocus={(event) => {
-          event.preventDefault()
-          if (openerRef.current?.isConnected) openerRef.current.focus()
-        }}
+        onCloseAutoFocus={restoreFocus.onCloseAutoFocus}
       >
         <header className="relative flex h-36 shrink-0 items-end gap-4 bg-[#203f80] px-6 py-4 text-white sm:h-44 max-[560px]:px-4">
           {bannerUrl && (
@@ -211,10 +183,10 @@ export function SpecialistProfileDialog({
                 sizes="92px"
                 unoptimized
                 className="size-full object-cover"
-                onError={() => setAvatarFailed(true)}
+                onError={() => setFailedAvatarUrl(imageUrl)}
               />
             ) : (
-              initials(displayName)
+              getInitials(displayName)
             )}
           </div>
           <div className="relative min-w-0 flex-1 self-start pt-1">
@@ -362,11 +334,7 @@ export function SpecialistProfileDialog({
                   </p>
                   <button
                     type="button"
-                    onClick={() => {
-                      setError(false)
-                      setLoading(true)
-                      setRevision((current) => current + 1)
-                    }}
+                    onClick={retry}
                     className={cn(
                       "mt-3 inline-flex min-h-11 cursor-pointer items-center rounded-lg border border-[#dce3ee] bg-white px-4 text-sm font-semibold text-[#294c96] hover:bg-[#f5f8fd]",
                       focusRing,
@@ -500,10 +468,13 @@ export function SpecialistProfileDialog({
             {allowSelection && !activeProject && (
               <button
                 type="button"
-                disabled={!profile || loading || error || disabled || selected}
+                disabled={
+                  !profile || loading || Boolean(error) || disabled || selected
+                }
                 onClick={chooseSpecialist}
                 className={cn(
-                  "inline-flex min-h-11 cursor-pointer items-center justify-center rounded-lg border-0 bg-[#294c96] px-5 text-sm font-bold text-white hover:enabled:bg-[#203f80] disabled:cursor-not-allowed disabled:opacity-50 max-[560px]:w-full",
+                  "inline-flex min-h-11 cursor-pointer items-center justify-center rounded-lg border-0 px-5 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50 max-[560px]:w-full",
+                  buttonTones.brand,
                   focusRing,
                 )}
               >

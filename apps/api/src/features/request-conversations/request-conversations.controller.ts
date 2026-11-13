@@ -1,8 +1,16 @@
 import { Router } from "express"
 import { getPrisma } from "../../lib/db.js"
+import { activeAccount } from "../../shared/query/accounts.js"
+import {
+  isMessageBody,
+  isOptionalRecordId,
+  isRecordId,
+  isUuidV4,
+  recordIdParam,
+} from "../../shared/validation.js"
 import { requireAuth } from "../auth/auth.middleware.js"
 import { verifyAccessToken } from "../auth/auth.jwt.js"
-import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
+import { HttpError } from "../../shared/http-error.js"
 import {
   conversationRealtime,
   type ConversationRealtime,
@@ -31,36 +39,19 @@ export function createRequestConversationsRouter(
     const view = request.query.view ?? "active"
     if (view !== "active" && view !== "archived")
       return response.status(400).json({ error: "Invalid conversation view" })
-    if (
-      before !== undefined &&
-      (typeof before !== "string" || !/^[A-Za-z0-9_-]{1,80}$/.test(before))
-    )
+    if (!isOptionalRecordId(before))
       return response.status(400).json({ error: "Invalid conversation cursor" })
     response.json(await listConversations(request.auth!.user.id, before, view))
   })
-  router.param("id", (_request, response, next, id: string) => {
-    if (!/^[A-Za-z0-9_-]{1,80}$/.test(id))
-      return response.status(400).json({ error: "Invalid request id" })
-    next()
-  })
-  router.param("messageId", (_request, response, next, id: string) => {
-    if (!/^[A-Za-z0-9_-]{1,80}$/.test(id))
-      return response.status(400).json({ error: "Invalid message id" })
-    next()
-  })
+  router.param("id", recordIdParam("Invalid request id"))
+  router.param("messageId", recordIdParam("Invalid message id"))
   router.get("/:id", async (request, response) => {
     const id = String(request.params.id)
     const before = request.query.before
     const booking = request.query.booking
-    if (
-      before !== undefined &&
-      (typeof before !== "string" || !/^[A-Za-z0-9_-]{1,80}$/.test(before))
-    )
+    if (!isOptionalRecordId(before))
       return response.status(400).json({ error: "Invalid message cursor" })
-    if (
-      booking !== undefined &&
-      (typeof booking !== "string" || !/^[A-Za-z0-9_-]{1,80}$/.test(booking))
-    )
+    if (!isOptionalRecordId(booking))
       return response.status(400).json({ error: "Invalid booking id" })
     const access = await getConversationAccess(
       request.auth!.user.id,
@@ -84,7 +75,7 @@ export function createRequestConversationsRouter(
   })
   router.patch("/:id/meetings/:meetingId", async (request, response) => {
     const meetingId = String(request.params.meetingId)
-    if (!/^[A-Za-z0-9_-]{1,80}$/.test(meetingId))
+    if (!isRecordId(meetingId))
       return response.status(400).json({ error: "Invalid meeting id" })
     const meeting = await updateConversationMeeting(
       request.auth!.user.id,
@@ -117,19 +108,12 @@ export function createRequestConversationsRouter(
       !input ||
       typeof input !== "object" ||
       !("body" in input) ||
-      typeof input.body !== "string" ||
-      !input.body.trim() ||
-      input.body.length > 4000 ||
-      input.body.includes("\u0000") ||
+      !isMessageBody(input.body) ||
       !("clientMessageId" in input) ||
-      typeof input.clientMessageId !== "string" ||
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-        input.clientMessageId,
-      ) ||
+      !isUuidV4(input.clientMessageId) ||
       ("bookingId" in input &&
         input.bookingId !== null &&
-        (typeof input.bookingId !== "string" ||
-          !/^[A-Za-z0-9_-]{1,80}$/.test(input.bookingId)))
+        !isRecordId(input.bookingId))
     )
       return response.status(400).json({
         error: "Enter a message of 1–4000 characters and a valid message ID",
@@ -155,10 +139,7 @@ export function createRequestConversationsRouter(
       !input ||
       typeof input !== "object" ||
       !("body" in input) ||
-      typeof input.body !== "string" ||
-      !input.body.trim() ||
-      input.body.length > 4000 ||
-      input.body.includes("\u0000")
+      !isMessageBody(input.body)
     )
       return response.status(400).json({
         error: "Enter a message of 1–4000 characters",
@@ -225,7 +206,7 @@ export function createRequestConversationsRouter(
             id: sessionId,
             userId: user.id,
             expiresAt: { gt: new Date() },
-            user: { isActive: true, accountDeletedAt: null },
+            user: activeAccount,
           },
           select: { id: true },
         })
@@ -237,10 +218,7 @@ export function createRequestConversationsRouter(
         await getConversationStreamAccess(user.id, id)
         event(name)
       } catch (error) {
-        if (
-          error instanceof ServiceRequestsError &&
-          [403, 404].includes(error.status)
-        )
+        if (error instanceof HttpError && [403, 404].includes(error.status))
           event("access-revoked")
         else {
           event("reconnecting")
@@ -311,10 +289,5 @@ export function createRequestConversationsRouter(
       throw error
     }
   })
-  router.use(((error, _request, response, next) => {
-    if (error instanceof ServiceRequestsError)
-      return response.status(error.status).json({ error: error.message })
-    next(error)
-  }) satisfies import("express").ErrorRequestHandler)
   return router
 }

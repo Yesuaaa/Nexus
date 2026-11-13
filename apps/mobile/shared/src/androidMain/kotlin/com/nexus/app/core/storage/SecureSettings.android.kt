@@ -20,5 +20,5 @@ actual fun createSecureSettings(): Settings {
         EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
     )
-    return SharedPreferencesSettings(prefs)
+    return SharedPreferencesSettings(prefs, commit = true)
 }

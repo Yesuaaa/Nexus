@@ -1,6 +1,6 @@
-import { Router, type ErrorRequestHandler } from "express"
+import { Router } from "express"
+import { recordIdParam } from "../../shared/validation.js"
 import { requireAuth } from "../auth/auth.middleware.js"
-import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 import { listClientCalendar } from "./client-calendar.service.js"
 import { listInternalCalendar } from "./calendar.service.js"
 import {
@@ -23,15 +23,11 @@ for (const parameter of [
   "milestoneId",
   "changeRequestId",
   "cancellationRequestId",
-]) {
-  projectsRouter.param(parameter, (_request, response, next, value: string) => {
-    if (!/^[A-Za-z0-9_-]{1,80}$/.test(value))
-      return response
-        .status(400)
-        .json({ error: "Invalid project or milestone ID" })
-    next()
-  })
-}
+])
+  projectsRouter.param(
+    parameter,
+    recordIdParam("Invalid project or milestone ID"),
+  )
 projectsRouter.get("/", async (request, response) => {
   response.json(await listClientProjects(request.auth!.user.id))
 })
@@ -162,8 +158,3 @@ projectsRouter.patch(
     )
   },
 )
-projectsRouter.use(((error, _request, response, next) => {
-  if (error instanceof ServiceRequestsError)
-    return response.status(error.status).json({ error: error.message })
-  next(error)
-}) satisfies ErrorRequestHandler)

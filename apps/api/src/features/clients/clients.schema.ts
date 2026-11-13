@@ -1,19 +1,18 @@
-import { parsePage, parseQueryString } from "../../shared/query-helpers.js"
-import {
-  normalizedEmail,
-  validRegistrationProfile,
-} from "../auth/auth.schema.js"
-import { validPassword } from "../auth/auth.password.js"
+import { isStrongPassword } from "../../shared/password-policy.js"
+import { parseQueryString } from "../../shared/query-helpers.js"
+import { parsePage } from "../../shared/query/pagination.js"
+import { isPlainObject, normalizedEmail } from "../../shared/validation.js"
+import { validRegistrationProfile } from "../auth/auth.schema.js"
 
 export function parseClientInput(value: unknown, creating: boolean) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null
-  const input = value as Record<string, unknown>
+  if (!isPlainObject(value)) return null
+  const input = value
   const email = normalizedEmail(input.email)
   if (
     !email ||
     !validRegistrationProfile(input.fullName, input.contactNumber) ||
     typeof input.isActive !== "boolean" ||
-    (creating && !validPassword(input.password))
+    (creating && !isStrongPassword(input.password))
   )
     return null
   return {

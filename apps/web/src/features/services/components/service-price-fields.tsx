@@ -1,5 +1,7 @@
 "use client"
 
+import { FormInput } from "@/components/ui/form-input"
+
 import { focusRing } from "@/components/layout/styles"
 import {
   Select,
@@ -82,13 +84,12 @@ export function PriceFields({
           >
             {model === "HOURLY" ? "Hourly Rate" : "Amount"} ({currency})
           </label>
-          <input
+          <FormInput
             id={`${idPrefix}-amount`}
             type="number"
             min="0.01"
             max="99999999999.99"
             step="0.01"
-            className={cn(inputClass, "h-10")}
             value={amount}
             onChange={(event) => onAmountChange(event.target.value)}
             placeholder="0.00"

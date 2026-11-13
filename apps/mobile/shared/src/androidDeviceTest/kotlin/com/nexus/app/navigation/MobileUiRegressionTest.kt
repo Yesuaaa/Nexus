@@ -79,7 +79,7 @@ class MobileUiRegressionTest {
 
     @Test fun headerExposesChatBetweenNotificationAndProfile() {
         var chats = 0
-        compose.setContent { MaterialTheme { NexusTopAppBar(onChatClick = { chats++ }, notificationUnread = 6) } }
+        compose.setContent { MaterialTheme { NexusTopAppBar(title = "Dashboard", onChatClick = { chats++ }, notificationUnread = 6) } }
         val notification = compose.onNodeWithContentDescription("Notifications").fetchSemanticsNode().boundsInRoot
         val chat = compose.onNodeWithContentDescription("Messages").fetchSemanticsNode().boundsInRoot
         val profile = compose.onNodeWithContentDescription("Open account menu").fetchSemanticsNode().boundsInRoot
@@ -234,7 +234,7 @@ class MobileUiRegressionTest {
     @Test fun accountMenuShowsIdentityAndDispatchesSettingsAndLogout() {
         var settings = 0
         var logouts = 0
-        compose.setContent { MaterialTheme { NexusTopAppBar(accountName = "Test Client", accountEmail = "mobile@example.com", onSettingsClick = { settings++ }, onLogoutClick = { logouts++ }) } }
+        compose.setContent { MaterialTheme { NexusTopAppBar(title = "Dashboard", accountName = "Test Client", accountEmail = "mobile@example.com", onSettingsClick = { settings++ }, onLogoutClick = { logouts++ }) } }
         compose.onNodeWithContentDescription("Open account menu").performClick()
         compose.onNodeWithText("mobile@example.com").assertIsDisplayed()
         screenshot("account-menu")
