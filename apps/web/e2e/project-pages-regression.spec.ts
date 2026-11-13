@@ -199,9 +199,13 @@ for (const width of [1440, 390]) {
       })
       await page.goto(`/${kind}/workspace-1`)
       const main = page.getByRole("main")
-      await expect(main.getByRole("alert")).toHaveText(
+      await expect(main.getByRole("alert")).toContainText(
         "Project temporarily unavailable",
       )
+      if (kind === "project-workspace")
+        await expect(
+          main.getByRole("alert").getByRole("button", { name: "Try again" }),
+        ).toBeVisible()
       await expect(
         main.getByRole("heading", { name: workspace.name, exact: true }),
       ).toHaveCount(0)
@@ -214,7 +218,7 @@ for (const width of [1440, 390]) {
       await expect(main.getByRole("alert")).toHaveCount(0)
       expect(reads).toBeGreaterThan(failedReads)
       if (kind === "project-workspace") {
-        const navigation = main.getByRole("navigation", {
+        const tabs = main.getByRole("tablist", {
           name: "Project sections",
         })
         for (const [section, content] of [
@@ -223,11 +227,11 @@ for (const width of [1440, 390]) {
           ["Activity", "No activity yet"],
           ["Overview", "Project details"],
         ]) {
-          const button = navigation.getByRole("button", {
+          const tab = tabs.getByRole("tab", {
             name: section,
             exact: true,
           })
-          await button.click()
+          await tab.click()
           await expect(
             main.getByRole("heading", { name: content, exact: true }),
           ).toBeVisible()

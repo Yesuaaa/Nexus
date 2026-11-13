@@ -13,6 +13,7 @@ import { WorkspaceOverview } from "../components/workspace-overview"
 import { PlanEditor, emptyPlan } from "../components/plan-editor"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { pillToneClass } from "@/components/ui/pill"
 import { statusTone } from "@/features/projects/model/project-status"
 import { humanizeEnum } from "@/lib/format"
@@ -38,25 +39,56 @@ import {
 } from "../api/project-workspace-api"
 import { errorMessage } from "@/lib/error-message"
 import { useAsyncResource } from "@/lib/use-async-resource"
+import { useBreadcrumbLabel } from "@/components/layout/breadcrumbs"
+
+const detailTabs = [
+  "Overview",
+  "Work",
+  "Deliverables",
+  "Team",
+  "Activity",
+] as const
+type DetailTab = (typeof detailTabs)[number]
 
 export function WorkspaceDetailPage({ id }: { id: string }) {
   const searchParams = useSearchParams()
-  const project = useAsyncResource<ProjectWorkspaceDetail>(
-    (signal) => getProjectWorkspace(id, signal),
+  const project = useAsyncResource<{
+    workspace: ProjectWorkspaceDetail | null
+    error: string
+  }>(
+    async (signal) => {
+      try {
+        return { workspace: await getProjectWorkspace(id, signal), error: "" }
+      } catch (reason) {
+        return {
+          workspace: null,
+          error: errorMessage(reason, "Couldn't load project"),
+        }
+      }
+    },
     [id],
     { fallbackError: "Couldn't load project" },
   )
-  const workspace = project.data
-    ? { ...project.data, id: id.includes(":") ? id : project.data.id }
+  const workspace = project.data?.workspace
+    ? {
+        ...project.data.workspace,
+        id: id.includes(":") ? id : project.data.workspace.id,
+      }
     : null
-  const setWorkspace = project.setData
+  useBreadcrumbLabel(id, workspace?.name)
+  const setWorkspace = (updated: ProjectWorkspaceDetail) => {
+    project.setData((current) =>
+      current ? { ...current, workspace: updated } : current,
+    )
+  }
   function updateWorkspaceAndNotify(updated: ProjectWorkspaceDetail) {
     setWorkspace(updated)
     notifyProjectWorkspaceListChanged()
   }
   const [actionError, setError] = useState("")
-  const error = actionError || project.error
-  const [tab, setTab] = useState(
+  const loadError = project.data?.error || project.error
+  const error = actionError || (project.loading ? "" : loadError)
+  const [tab, setTab] = useState<DetailTab>(
     searchParams.get("tab") === "deliverables" ? "Deliverables" : "Overview",
   )
   const [busy, setBusy] = useState(false)
@@ -144,14 +176,28 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
           ? "Send every deliverable to the client first."
           : "This workspace has no active services to complete."
   return (
-    <main className={`${contentClass} p-8`}>
+    <main className={`${contentClass} p-[clamp(16px,2.1vw,32px)]`}>
       {error && (
         <Alert variant="text" className="text-base">
           {error}
+          {!workspace && loadError && (
+            <Button
+              className="ml-2"
+              variant="outline"
+              size="sm"
+              onClick={project.retry}
+            >
+              Try again
+            </Button>
+          )}
         </Alert>
       )}
       {!workspace ? (
-        <p role="status">Loading project…</p>
+        project.loading ? (
+          <p role="status">Loading project…</p>
+        ) : loadError ? null : (
+          <p role="status">Project workspace not found.</p>
+        )
       ) : (
         <>
           <header className="min-w-0">
@@ -168,15 +214,16 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
                 {workspace.canManage && !terminal && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <button
+                      <Button
                         type="button"
+                        variant="brandOutline"
+                        size="sm"
                         disabled={statusBusy}
                         aria-label="Manage project status"
-                        className="inline-flex h-8 items-center gap-2 rounded-md border border-[#ccd5e2] bg-white px-3 text-xs font-medium text-[#203f8c] shadow-sm hover:bg-[#f7f9fc] focus-visible:ring-2 focus-visible:ring-[#294c96] focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
                       >
                         Manage status{" "}
                         <ChevronDown size={14} aria-hidden="true" />
-                      </button>
+                      </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent
                       align="end"
@@ -257,94 +304,100 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
                 ))}
             </div>
           )}
-          <nav
-            aria-label="Project sections"
-            className="my-6 flex gap-6 border-b border-[#e1e4ea]"
+          <Tabs
+            value={tab}
+            onValueChange={(value) => setTab(value as DetailTab)}
           >
-            {["Overview", "Work", "Deliverables", "Team", "Activity"].map(
-              (item) => (
-                <button
+            <TabsList
+              aria-label="Project sections"
+              className="my-6 h-auto max-w-full justify-start gap-6 overflow-x-auto rounded-none border-b border-[#e1e4ea] bg-transparent p-0"
+            >
+              {detailTabs.map((item) => (
+                <TabsTrigger
                   key={item}
-                  onClick={() => setTab(item)}
-                  className={`border-b-2 px-1 pb-3 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-[#294c96] focus-visible:ring-offset-2 ${tab === item ? "border-[#203f8c] font-semibold text-[#203f8c]" : "border-transparent text-[#738096]"}`}
+                  value={item}
+                  className="h-auto shrink-0 rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 text-xs text-[#738096] shadow-none data-[state=active]:border-[#203f8c] data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-[#203f8c] data-[state=active]:shadow-none"
                 >
                   {item}
-                </button>
-              ),
-            )}
-          </nav>
-          {tab === "Work" && editing && (
-            <section className="mb-5 rounded-xl border border-[#dfe4ec] p-5">
-              <h2 className="text-sm font-semibold">
-                Edit plan · {editing.name}
-              </h2>
-              <p className="text-xs text-[#738096]">
-                Rename phases and tasks, add work, or remove items. Removing a
-                phase also removes its tasks when you save.
-              </p>
-              <PlanEditor
-                plan={editing.plan}
-                onChange={(plan) =>
-                  setEditing((current) =>
-                    current ? { ...current, plan } : null,
-                  )
-                }
-                disabled={busy}
-              />
-              <div className="mt-4 flex justify-end gap-2">
-                <Button
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() => setEditing(null)}
-                >
-                  Discard changes
-                </Button>
-                <Button
-                  variant="brand"
-                  disabled={busy}
-                  onClick={() => void savePlan()}
-                >
-                  {busy ? "Saving…" : "Save plan"}
-                </Button>
-              </div>
-            </section>
-          )}
-          {tab === "Overview" ? (
-            <ProjectSummary
-              workspace={workspace}
-              onViewTeam={() => setTab("Team")}
-              onViewDeliverables={() => setTab("Deliverables")}
-            />
-          ) : tab === "Work" ? (
-            !editing && (
-              <WorkspaceOverview
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            <TabsContent value="Overview" className="m-0 outline-none">
+              <ProjectSummary
                 workspace={workspace}
-                busy={busy}
-                onUpdated={updateWorkspaceAndNotify}
-                onEditPlan={(stream) =>
-                  setEditing({
-                    projectId: stream.id,
-                    name: stream.serviceName,
-                    updatedAt: stream.updatedAt,
-                    plan: structuredClone(stream.plan ?? emptyPlan()),
-                  })
-                }
+                onViewTeam={() => setTab("Team")}
+                onViewDeliverables={() => setTab("Deliverables")}
               />
-            )
-          ) : tab === "Deliverables" ? (
-            <WorkspaceDeliverables
-              workspace={workspace}
-              onUpdated={setWorkspace}
-            />
-          ) : tab === "Activity" ? (
-            <WorkspaceActivity workspace={workspace} />
-          ) : (
-            <WorkspaceTeam
-              workspace={workspace}
-              onUpdated={setWorkspace}
-              onChanged={project.retry}
-            />
-          )}
+            </TabsContent>
+            <TabsContent value="Work" className="m-0 outline-none">
+              {editing ? (
+                <section className="mb-5 rounded-xl border border-[#dfe4ec] p-5">
+                  <h2 className="text-sm font-semibold">
+                    Edit plan · {editing.name}
+                  </h2>
+                  <p className="text-xs text-[#738096]">
+                    Rename phases and tasks, add work, or remove items. Removing
+                    a phase also removes its tasks when you save.
+                  </p>
+                  <PlanEditor
+                    plan={editing.plan}
+                    onChange={(plan) =>
+                      setEditing((current) =>
+                        current ? { ...current, plan } : null,
+                      )
+                    }
+                    disabled={busy}
+                  />
+                  <div className="mt-4 flex justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => setEditing(null)}
+                    >
+                      Discard changes
+                    </Button>
+                    <Button
+                      variant="brand"
+                      disabled={busy}
+                      onClick={() => void savePlan()}
+                    >
+                      {busy ? "Saving…" : "Save plan"}
+                    </Button>
+                  </div>
+                </section>
+              ) : (
+                <WorkspaceOverview
+                  workspace={workspace}
+                  busy={busy}
+                  onUpdated={updateWorkspaceAndNotify}
+                  onEditPlan={(stream) =>
+                    setEditing({
+                      projectId: stream.id,
+                      name: stream.serviceName,
+                      updatedAt: stream.updatedAt,
+                      plan: structuredClone(stream.plan ?? emptyPlan()),
+                    })
+                  }
+                />
+              )}
+            </TabsContent>
+            <TabsContent value="Deliverables" className="m-0 outline-none">
+              <WorkspaceDeliverables
+                workspace={workspace}
+                onUpdated={setWorkspace}
+              />
+            </TabsContent>
+            <TabsContent value="Team" className="m-0 outline-none">
+              <WorkspaceTeam
+                workspace={workspace}
+                onUpdated={setWorkspace}
+                onChanged={project.retry}
+              />
+            </TabsContent>
+            <TabsContent value="Activity" className="m-0 outline-none">
+              <WorkspaceActivity workspace={workspace} />
+            </TabsContent>
+          </Tabs>
         </>
       )}
     </main>

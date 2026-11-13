@@ -4,6 +4,10 @@ import type {
   ProjectStatus,
   ProjectTaskStatus,
 } from "@/features/project-management/model/project-contracts"
+import {
+  serializeWorkspaceDirectoryState,
+  type WorkspaceDirectoryState,
+} from "../model/workspace-directory-state"
 
 export type {
   ProjectDeliverableStatus,
@@ -194,17 +198,15 @@ export type ProjectWorkspaceOverview = {
   overdueTaskList: ProjectWorkspaceOverviewTask[]
 }
 
-export function projectWorkspaceHref(identity: string) {
-  return `/project-workspace/${encodeURIComponent(identity)}`
+export function projectWorkspaceHref(
+  identity: string,
+  returnState?: WorkspaceDirectoryState,
+) {
+  const query = returnState ? serializeWorkspaceDirectoryState(returnState) : ""
+  return `/project-workspace/${encodeURIComponent(identity)}${query ? `?${query}` : ""}`
 }
 
-export type WorkspaceDirectoryQuery = {
-  page: number
-  search: string
-  status: string
-  sort: "recent" | "name" | "client" | "projects"
-  view: "active" | "archive"
-}
+export type WorkspaceDirectoryQuery = WorkspaceDirectoryState
 
 export function listWorkspaceDirectory(
   query: WorkspaceDirectoryQuery,

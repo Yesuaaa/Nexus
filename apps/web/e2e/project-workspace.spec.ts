@@ -41,7 +41,17 @@ test("directory links and cancel distinguish a group and project with the same I
     canRename: false,
   }
   const writes: string[] = []
+  const detailRequests: string[] = []
   let cancelled = false
+  page.on("request", (request) => {
+    const path = decodeURIComponent(new URL(request.url()).pathname)
+    if (
+      request.method() === "GET" &&
+      path.startsWith("/api/project-workspace/") &&
+      !path.endsWith("/directory")
+    )
+      detailRequests.push(path)
+  })
   await page.route("**/api/project-workspace/**", (route) => {
     const path = decodeURIComponent(new URL(route.request().url()).pathname)
     if (path.endsWith("/directory")) {
@@ -86,6 +96,28 @@ test("directory links and cancel distinguish a group and project with the same I
     await expect(
       page.getByRole("heading", { name: target.name, exact: true }),
     ).toBeVisible()
+    await expect(
+      page.getByRole("tablist", { name: "Project sections" }),
+    ).toBeVisible()
+    const tablist = page.getByRole("tablist", { name: "Project sections" })
+    const overviewTab = tablist.getByRole("tab", { name: "Overview" })
+    await overviewTab.focus()
+    await page.keyboard.press("ArrowRight")
+    await expect(tablist.getByRole("tab", { name: "Work" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    )
+    await page.keyboard.press("ArrowLeft")
+    await expect(overviewTab).toHaveAttribute("aria-selected", "true")
+    await page.setViewportSize({ width: 390, height: 844 })
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true)
+    expect(
+      detailRequests.filter((path) => path.endsWith(`/${target.rowId}`)),
+    ).toHaveLength(1)
     await page.goBack()
   }
   await page
@@ -501,6 +533,8 @@ test("department workspace directory paginates, resets filters, and recovers fro
     .getByRole("navigation", { name: "Workspace pages" })
     .getByRole("button", { name: /page 2/i })
     .click()
+  await expect(page).toHaveURL(/page=2/)
+  await expect.poll(() => requests.at(-1)?.get("page")).toBe("2")
   await expect(
     page.getByRole("link", { name: "Project on page 2" }),
   ).toBeVisible()
@@ -514,6 +548,403 @@ test("department workspace directory paginates, resets filters, and recovers fro
   await page.getByRole("searchbox", { name: "Search workspaces" }).clear()
   await page.getByRole("button", { name: "Archive", exact: true }).click()
   await expect(page.getByText("Archive is empty")).toBeVisible()
+})
+
+test("directory state survives typed detail and breadcrumb return navigation", async ({
+  page,
+}) => {
+  await restoreSession(page, "STAFF", {
+    account: { headOf: { id: "design", name: "Design" } },
+  })
+  const row: WorkspaceDirectoryRow = {
+    rowId: "group:shared-id",
+    id: "shared-id",
+    kind: "group",
+    name: "Completed workspace",
+    clientName: "Client Name",
+    statuses: ["COMPLETED"],
+    projectCount: 1,
+    updatedAt: "2026-11-09T00:00:00Z",
+    progress: { completed: 2, total: 2 },
+    canManage: false,
+    canRename: false,
+  }
+  const directoryRequests: URLSearchParams[] = []
+  const detailRequests: string[] = []
+  await page.route("**/api/project-workspace/**", (route) => {
+    const url = new URL(route.request().url())
+    const path = decodeURIComponent(url.pathname)
+    if (path.endsWith("/directory")) {
+      directoryRequests.push(url.searchParams)
+      const currentPage = Number(url.searchParams.get("page"))
+      return route.fulfill({
+        json: {
+          rows: [row],
+          page: currentPage,
+          pageSize: 10,
+          total: 11,
+          totalPages: 2,
+          hasWorkspaces: true,
+        },
+      })
+    }
+    if (path.endsWith("/group:shared-id")) {
+      detailRequests.push(path)
+      return route.fulfill({
+        json: {
+          ...row,
+          status: "COMPLETED",
+          structure: "SEPARATE",
+          client: { id: "client", fullName: "Client Name" },
+          activityCount: 0,
+          canCreate: true,
+          workstreams: [],
+          activity: [],
+        },
+      })
+    }
+    return route.fallback()
+  })
+
+  await page.goto(
+    "/project-workspace?search=client-name&status=COMPLETED&sort=client&view=archive&page=2&ignored=value",
+  )
+  await expect(
+    page.getByRole("searchbox", { name: "Search workspaces" }),
+  ).toHaveValue("client-name")
+  await expect(
+    page.getByRole("link", { name: row.name, exact: true }).first(),
+  ).toBeVisible()
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get("ignored"))
+    .toBeNull()
+  const initialQuery = directoryRequests.at(-1)
+  expect(initialQuery?.get("search")).toBe("client-name")
+  expect(initialQuery?.get("status")).toBe("COMPLETED")
+  expect(initialQuery?.get("sort")).toBe("client")
+  expect(initialQuery?.get("view")).toBe("archive")
+  expect(initialQuery?.get("page")).toBe("2")
+
+  await page.getByRole("link", { name: row.name, exact: true }).click()
+  await expect(page).toHaveURL(/\/project-workspace\/group%3Ashared-id\?/)
+  await expect(
+    page.getByRole("heading", { name: row.name, exact: true }),
+  ).toBeVisible()
+  expect(detailRequests).toHaveLength(1)
+  await page
+    .getByRole("navigation", { name: "Breadcrumb" })
+    .getByRole("link", { name: "Project Workspace" })
+    .click()
+  await expect(page).toHaveURL(/\/project-workspace\?/)
+  const returned = new URL(page.url()).searchParams
+  expect(returned.get("search")).toBe("client-name")
+  expect(returned.get("status")).toBe("COMPLETED")
+  expect(returned.get("sort")).toBe("client")
+  expect(returned.get("view")).toBe("archive")
+  expect(returned.get("page")).toBe("2")
+  await page.goBack()
+  await expect(page).toHaveURL(
+    /\/project-workspace\/group%3Ashared-id\?search=client-name&status=COMPLETED&sort=client&view=archive&page=2$/,
+  )
+  await expect(
+    page.getByRole("heading", { name: row.name, exact: true }),
+  ).toBeVisible()
+  await page.goForward()
+  await expect(page).toHaveURL(
+    /\/project-workspace\?search=client-name&status=COMPLETED&sort=client&view=archive&page=2$/,
+  )
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true)
+})
+
+test("workspace setup transitions a virtual project into a persisted group", async ({
+  page,
+}) => {
+  await restoreSession(page, "STAFF", {
+    account: { headOf: { id: "design", name: "Design" } },
+  })
+  const common: Omit<
+    WorkspaceDirectoryRow,
+    "rowId" | "kind" | "name" | "canRename"
+  > = {
+    id: "project-1",
+    clientName: "Client Name",
+    statuses: ["PLANNED"],
+    projectCount: 1,
+    updatedAt: "2026-11-09T00:00:00Z",
+    progress: null,
+    canManage: true,
+  }
+  const virtualProject: WorkspaceDirectoryRow = {
+    ...common,
+    rowId: "ungrouped-project:project-1",
+    kind: "ungrouped-project",
+    name: "Campaign project",
+    canRename: false,
+  }
+  const persistedGroup: WorkspaceDirectoryRow = {
+    ...common,
+    id: "group-1",
+    rowId: "group:group-1",
+    kind: "group",
+    name: "Campaign project",
+    canRename: true,
+  }
+  const directoryRequests: URLSearchParams[] = []
+  const detailRequests: string[] = []
+  let created = false
+  let createCount = 0
+  await page.route("**/api/project-workspace**", (route) => {
+    const url = new URL(route.request().url())
+    const path = decodeURIComponent(url.pathname)
+    if (path.endsWith("/directory")) {
+      directoryRequests.push(url.searchParams)
+      const row = created ? persistedGroup : virtualProject
+      return route.fulfill({
+        json: {
+          rows: [row],
+          page: 1,
+          pageSize: 10,
+          total: 1,
+          totalPages: 1,
+          hasWorkspaces: true,
+        },
+      })
+    }
+    if (path.endsWith("/approved-bookings"))
+      return route.fulfill({
+        json: [
+          {
+            projectId: "project-1",
+            requestId: "request-1",
+            name: "Campaign project",
+            serviceName: "Campaign design",
+            referenceNumber: "REQ-1",
+            workflowState: "APPROVED",
+            conversationId: null,
+            client: { id: "client-1", fullName: "Client Name" },
+          },
+        ],
+      })
+    if (path.endsWith("/templates"))
+      return route.fulfill({
+        json: [
+          {
+            key: "starter",
+            name: "Starter plan",
+            type: "Basic",
+            description: "A simple first plan.",
+            recommendedFor: [],
+            phases: [
+              { title: "Plan", tasks: [{ title: "Scope", role: "Lead" }] },
+            ],
+          },
+        ],
+      })
+    if (
+      path === "/api/project-workspace" &&
+      route.request().method() === "POST"
+    ) {
+      created = true
+      createCount += 1
+      return route.fulfill({
+        status: 201,
+        json: { workspaces: [{ id: "group-1", name: "Campaign project" }] },
+      })
+    }
+    if (path.endsWith("/group:group-1")) {
+      detailRequests.push(path)
+      return route.fulfill({
+        json: {
+          id: "group:group-1",
+          name: "Campaign project",
+          status: "PLANNED",
+          structure: "SEPARATE",
+          client: { id: "client-1", fullName: "Client Name" },
+          updatedAt: "2026-11-09T00:00:00Z",
+          activityCount: 0,
+          canCreate: true,
+          canManage: true,
+          canRename: true,
+          workstreams: [],
+          activity: [],
+        },
+      })
+    }
+    return route.fallback()
+  })
+
+  await page.goto("/project-workspace?search=Campaign&sort=name")
+  await expect(
+    page.getByRole("link", { name: "Campaign project", exact: true }),
+  ).toBeVisible()
+  await page.getByRole("button", { name: "Set up workspace" }).click()
+  await page.getByRole("checkbox").check()
+  await page.getByRole("button", { name: "Continue" }).click()
+  await page.getByRole("button", { name: "Continue" }).click()
+  await page.getByRole("button", { name: /Starter plan/ }).click()
+  await page.getByRole("button", { name: "Review" }).click()
+  await page.getByRole("button", { name: "Create workspace" }).click()
+
+  await expect(page).toHaveURL(
+    /\/project-workspace\/group%3Agroup-1\?search=Campaign&sort=name/,
+  )
+  await expect(
+    page.getByRole("heading", { name: "Campaign project", exact: true }),
+  ).toBeVisible()
+  expect(createCount).toBe(1)
+  expect(detailRequests).toEqual(["/api/project-workspace/group:group-1"])
+  await page
+    .getByRole("navigation", { name: "Breadcrumb" })
+    .getByRole("link", { name: "Project Workspace" })
+    .click()
+  await expect(page).toHaveURL(/\/project-workspace\?search=Campaign&sort=name/)
+  await expect(
+    page.getByRole("link", { name: "Campaign project", exact: true }),
+  ).toBeVisible()
+  expect(directoryRequests.at(-1)?.get("search")).toBe("Campaign")
+  expect(directoryRequests.at(-1)?.get("sort")).toBe("name")
+  await expect(
+    page.getByRole("button", { name: "More actions for Campaign project" }),
+  ).toBeVisible()
+  expect(persistedGroup.kind).toBe("group")
+  expect(virtualProject.kind).toBe("ungrouped-project")
+})
+
+test("supported overview KPIs drill into the matching Management status filter", async ({
+  page,
+}) => {
+  await restoreSession(page, "STAFF", {
+    account: { headOf: { id: "design", name: "Design" } },
+  })
+  const directoryRequests: URLSearchParams[] = []
+  await page.route("**/api/project-workspace/**", (route) => {
+    const url = new URL(route.request().url())
+    const path = decodeURIComponent(url.pathname)
+    if (path.endsWith("/overview"))
+      return route.fulfill({
+        json: {
+          totals: {
+            totalProjects: 4,
+            inProgress: 1,
+            completed: 1,
+            onHold: 1,
+            planned: 1,
+            cancelled: 0,
+            workspaceGroups: 2,
+            projectsWithTasks: 2,
+            projectsWithoutTasks: 2,
+            totalTasks: 2,
+            completedTasks: 1,
+            outstandingTasks: 1,
+            upcomingTasks: 0,
+            overdueTasks: 0,
+          },
+          statusDistribution: [
+            { status: "PLANNED", count: 1 },
+            { status: "IN_PROGRESS", count: 1 },
+            { status: "ON_HOLD", count: 1 },
+            { status: "COMPLETED", count: 1 },
+            { status: "CANCELLED", count: 0 },
+          ],
+          clientDistribution: [],
+          workspaceProgress: [],
+          upcomingDeadlines: [],
+          overdueTaskList: [],
+        },
+      })
+    if (path.endsWith("/directory")) {
+      directoryRequests.push(url.searchParams)
+      return route.fulfill({
+        json: {
+          rows: [],
+          page: 1,
+          pageSize: 10,
+          total: 0,
+          totalPages: 0,
+          hasWorkspaces: true,
+        },
+      })
+    }
+    return route.fallback()
+  })
+
+  await page.goto("/project-workspace/overview")
+  await expect(
+    page.getByRole("heading", { name: "Project Overview" }),
+  ).toBeVisible()
+  await expect(page.getByRole("link", { name: /Total Projects/ })).toHaveCount(
+    0,
+  )
+  await expect(page.getByRole("link", { name: /Completed/ })).toHaveCount(0)
+  await page.getByRole("link", { name: /in progress/i }).click()
+  await expect(page).toHaveURL(/\/project-workspace\?status=IN_PROGRESS/)
+  await expect
+    .poll(() => directoryRequests.at(-1)?.get("status"))
+    .toBe("IN_PROGRESS")
+  expect(directoryRequests.at(-1)?.get("view")).toBe("active")
+
+  await page.goBack()
+  await page.getByRole("link", { name: /on hold/i }).click()
+  await expect(page).toHaveURL(/\/project-workspace\?status=ON_HOLD/)
+  await expect
+    .poll(() => directoryRequests.at(-1)?.get("status"))
+    .toBe("ON_HOLD")
+})
+
+test("workspace detail errors stop loading and can be retried", async ({
+  page,
+}) => {
+  await restoreSession(page, "STAFF", {
+    account: { headOf: { id: "design", name: "Design" } },
+  })
+  let attempts = 0
+  await page.route("**/api/project-workspace/**", (route) => {
+    const path = decodeURIComponent(new URL(route.request().url()).pathname)
+    if (path.endsWith("/group:retry-id")) {
+      attempts += 1
+      if (attempts === 1)
+        return route.fulfill({
+          status: 503,
+          json: { error: "Workspace unavailable" },
+        })
+      return route.fulfill({
+        json: {
+          id: "group:retry-id",
+          rowId: "group:retry-id",
+          kind: "group",
+          name: "Recovered workspace",
+          status: "IN_PROGRESS",
+          structure: "SEPARATE",
+          client: { id: "client", fullName: "Client" },
+          updatedAt: "2026-11-09T00:00:00Z",
+          activityCount: 0,
+          canCreate: true,
+          canManage: true,
+          canRename: true,
+          workstreams: [],
+          activity: [],
+        },
+      })
+    }
+    return route.fallback()
+  })
+
+  await page.goto("/project-workspace/group%3Aretry-id")
+  await expect(
+    page.locator('[role="alert"]').filter({ hasText: "Workspace unavailable" }),
+  ).toBeVisible()
+  await expect(page.getByRole("status")).toHaveCount(0)
+  await page.getByRole("button", { name: "Try again" }).click()
+  await expect(
+    page.getByRole("heading", { name: "Recovered workspace", exact: true }),
+  ).toBeVisible()
+  expect(attempts).toBe(2)
 })
 
 test("ordinary Staff keep their Project Workspace link and cannot open Overview", async ({

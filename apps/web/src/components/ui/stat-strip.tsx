@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react"
 import type { ReactNode } from "react"
+import Link from "next/link"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 
@@ -14,6 +15,8 @@ export type StatStripItem = {
   tone: string
   /** Optional bar under the value, e.g. <ProgressMeter /> or <SegmentMeter />. */
   meter?: ReactNode
+  /** Optional destination for a supported KPI drill-down. */
+  href?: string
 }
 
 /**
@@ -45,11 +48,9 @@ export function StatStrip({
     >
       {items.map((item) => {
         const Icon = item.icon
-        return (
-          <article
-            key={item.label}
-            className="flex min-w-0 flex-col gap-3 bg-background px-5 py-4"
-          >
+        const href = !pending && !unavailable ? item.href : undefined
+        const content = (
+          <>
             <div className="flex min-w-0 items-center gap-2.5">
               <span
                 className={cn(
@@ -60,7 +61,12 @@ export function StatStrip({
               >
                 <Icon size={15} strokeWidth={1.9} />
               </span>
-              <h2 className="m-0 truncate text-xs font-medium text-[#65718a]">
+              <h2
+                className={cn(
+                  "m-0 truncate text-xs font-medium text-[#65718a]",
+                  href && "group-hover:text-[#203f8c]",
+                )}
+              >
                 {item.label}
               </h2>
             </div>
@@ -87,6 +93,26 @@ export function StatStrip({
                   {unavailable ? "Data unavailable" : item.caption}
                 </p>
               </div>
+            )}
+          </>
+        )
+        const surfaceClass =
+          "flex min-w-0 flex-col gap-3 bg-background px-5 py-4"
+        return (
+          <article key={item.label}>
+            {href ? (
+              <Link
+                href={href}
+                aria-label={`View ${item.label.toLowerCase()} projects in Project Workspace Management`}
+                className={cn(
+                  surfaceClass,
+                  "group min-h-full rounded-[10px] no-underline hover:bg-[#f8fafb] focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-[#203f8c]",
+                )}
+              >
+                {content}
+              </Link>
+            ) : (
+              <div className={surfaceClass}>{content}</div>
             )}
           </article>
         )

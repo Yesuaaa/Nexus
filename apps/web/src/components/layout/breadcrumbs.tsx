@@ -11,7 +11,11 @@ import {
   useState,
   type ReactNode,
 } from "react"
-import { getProjectWorkspace } from "@/features/project-workspace/api/project-workspace-api"
+import { useSearchParams } from "next/navigation"
+import {
+  parseWorkspaceDirectoryState,
+  serializeWorkspaceDirectoryState,
+} from "@/features/project-workspace/model/workspace-directory-state"
 import { ChevronRightIcon, HomeIcon } from "./icons"
 import { focusRing } from "./styles"
 
@@ -88,33 +92,22 @@ function labelFor(segment: string) {
 
 export function Breadcrumbs() {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const { labels } = useContext(BreadcrumbLabelContext)
   const segments = pathname.split("/").filter(Boolean)
-  const projectId =
-    segments.length === 2 &&
-    segments[0] === "project-workspace" &&
-    segments[1] !== "new" &&
-    segments[1] !== "overview"
-      ? decodeURIComponent(segments[1])
-      : undefined
-  const [projectLabel, setProjectLabel] = useState<{
-    id: string
-    name: string
-  } | null>(null)
-
-  useEffect(() => {
-    if (!projectId) return
-    const controller = new AbortController()
-    getProjectWorkspace(projectId, controller.signal)
-      .then((project) => {
-        if (!controller.signal.aborted)
-          setProjectLabel({ id: projectId, name: project.name })
-      })
-      .catch(() => {
-        // Keep the breadcrumb readable when the page reports a load error.
-      })
-    return () => controller.abort()
-  }, [projectId])
+  const decodedSegments = segments.map(decodeURIComponent)
+  const isWorkspaceDetail =
+    decodedSegments.length === 2 &&
+    decodedSegments[0] === "project-workspace" &&
+    decodedSegments[1] !== "new" &&
+    decodedSegments[1] !== "overview"
+  const directoryQuery = isWorkspaceDetail
+    ? serializeWorkspaceDirectoryState(
+        parseWorkspaceDirectoryState(
+          new URLSearchParams(searchParams.toString()),
+        ),
+      )
+    : ""
 
   return (
     <nav className="min-w-0 overflow-hidden" aria-label="Breadcrumb">
@@ -129,16 +122,21 @@ export function Breadcrumbs() {
           </Link>
         </li>
         {segments.map((segment, index) => {
+          const decodedSegment = decodedSegments[index]
           const label =
             labels[segment] ??
-            (index === 1 && projectId
-              ? projectLabel?.id === projectId
-                ? projectLabel.name
-                : "Project"
+            labels[decodedSegment] ??
+            (index === 1 && isWorkspaceDetail
+              ? "Project"
               : index === 1 && segments[0] === "projects"
                 ? "Project"
                 : labelFor(segment))
           const isCurrent = index === segments.length - 1
+          const baseHref = `/${segments.slice(0, index + 1).join("/")}`
+          const href =
+            index === 0 && directoryQuery
+              ? `${baseHref}?${directoryQuery}`
+              : baseHref
           return (
             <li
               key={`${index}-${segment}`}
@@ -156,7 +154,7 @@ export function Breadcrumbs() {
                 </span>
               ) : (
                 <Link
-                  href={`/${segments.slice(0, index + 1).join("/")}`}
+                  href={href}
                   className={`block min-w-0 truncate text-[#647a9c] no-underline hover:text-[#203a78] ${focusRing}`}
                 >
                   {label}

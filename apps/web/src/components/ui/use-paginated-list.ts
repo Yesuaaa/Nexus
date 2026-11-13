@@ -48,6 +48,8 @@ export function usePaginatedList<R extends PageInfo, T>({
   rows: getRows,
   matches,
   initial,
+  controlledPage,
+  onPageChange,
   refresh = false,
   fallbackError = "Couldn't load this list.",
   viewKeyFrom = "result",
@@ -66,6 +68,10 @@ export function usePaginatedList<R extends PageInfo, T>({
   matches: (item: T, query: string) => boolean
   /** Shown before the first response (use `null` if there is no sensible empty value). */
   initial: R | null
+  /** Optional URL-backed page value. */
+  controlledPage?: number
+  /** Called instead of local state when `controlledPage` is supplied. */
+  onPageChange?: (page: number) => void
   /**
    * Re-request the current page while the tab is visible: `"poll"` on an
    * interval and on focus, `"focus"` only on focus/visibility/reconnect.
@@ -83,7 +89,16 @@ export function usePaginatedList<R extends PageInfo, T>({
   /** Runs after each accepted response (initial, retry, or refresh). */
   onLoaded?: (result: R) => void
 }) {
-  const [page, setPage] = useState(1)
+  const [localPage, setLocalPage] = useState(1)
+  const page = controlledPage ?? localPage
+  const setPage = useCallback(
+    (next: number | ((current: number) => number)) => {
+      const value = typeof next === "function" ? next(page) : next
+      if (controlledPage === undefined) setLocalPage(value)
+      else onPageChange?.(value)
+    },
+    [controlledPage, onPageChange, page],
+  )
   const [revision, setRevision] = useState(0)
   const [data, setData] = useState<R | null>(initial)
   const [resolved, setResolved] = useState({ requestKey: "", viewKey: "" })
@@ -164,7 +179,7 @@ export function usePaginatedList<R extends PageInfo, T>({
       controller.abort()
       stopRefresh?.()
     }
-  }, [requestKey, viewKey, page, refresh])
+  }, [requestKey, viewKey, page, refresh, setPage])
 
   const retry = useCallback(() => setRevision((value) => value + 1), [])
 

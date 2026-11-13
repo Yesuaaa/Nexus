@@ -26,6 +26,7 @@ import {
   type ProjectWorkspaceBooking,
   type ProjectWorkspaceTemplate,
 } from "../api/project-workspace-api"
+import type { WorkspaceDirectoryState } from "../model/workspace-directory-state"
 import { errorMessage } from "@/lib/error-message"
 
 const steps = [
@@ -50,9 +51,11 @@ const steps = [
 export function NewWorkspacePanel({
   onClose,
   onCreated,
+  returnState,
 }: {
   onClose: () => void
   onCreated: () => void
+  returnState: WorkspaceDirectoryState
 }) {
   const router = useRouter()
   const panel = useSidePanel(onClose)
@@ -153,7 +156,9 @@ export function NewWorkspacePanel({
       notifyProjectWorkspaceListChanged()
       panel.close(() => {
         onCreated()
-        router.push(projectWorkspaceHref(`group:${result.workspaces[0].id}`))
+        router.push(
+          projectWorkspaceHref(`group:${result.workspaces[0].id}`, returnState),
+        )
       })
     } catch (reason) {
       setError(errorMessage(reason, "Couldn't create workspace"))

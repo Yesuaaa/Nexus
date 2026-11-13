@@ -42,6 +42,10 @@ import { taskStatusLabels } from "../model/task-status"
 import { errorMessage } from "@/lib/error-message"
 import { useAsyncResource } from "@/lib/use-async-resource"
 import { cn } from "@/lib/utils"
+import {
+  defaultWorkspaceDirectoryState,
+  workspaceDirectoryHref,
+} from "../model/workspace-directory-state"
 
 const projectStatusOrder: ProjectStatus[] = [
   "PLANNED",
@@ -166,6 +170,13 @@ export function ProjectWorkspaceOverviewPage() {
       label: "In Progress",
       value: (totals?.inProgress ?? 0).toLocaleString("en-US"),
       caption: "Projects in progress",
+      href:
+        (totals?.inProgress ?? 0) > 0
+          ? workspaceDirectoryHref({
+              ...defaultWorkspaceDirectoryState,
+              status: "IN_PROGRESS",
+            })
+          : undefined,
       icon: Activity,
       tone: "bg-[#e6f4ee] text-[#25745b]",
       meter: (
@@ -196,6 +207,13 @@ export function ProjectWorkspaceOverviewPage() {
       label: "On Hold",
       value: (totals?.onHold ?? 0).toLocaleString("en-US"),
       caption: "Projects on hold",
+      href:
+        (totals?.onHold ?? 0) > 0
+          ? workspaceDirectoryHref({
+              ...defaultWorkspaceDirectoryState,
+              status: "ON_HOLD",
+            })
+          : undefined,
       icon: PauseCircle,
       tone: "bg-[#fbf0e2] text-[#a45b12]",
       meter: (

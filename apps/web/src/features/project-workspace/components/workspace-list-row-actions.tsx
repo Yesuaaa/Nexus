@@ -29,6 +29,7 @@ import {
   renameProjectWorkspace,
   type ProjectWorkspaceSummary,
 } from "../api/project-workspace-api"
+import type { WorkspaceDirectoryState } from "../model/workspace-directory-state"
 import { errorMessage } from "@/lib/error-message"
 
 type WorkspaceAction = "view" | "edit" | "cancel"
@@ -39,11 +40,13 @@ const dangerItem =
 export function WorkspaceListRowActions({
   workspace,
   identity,
+  returnState,
   onChanged,
   isArchived = false,
 }: {
   workspace: Pick<ProjectWorkspaceSummary, "name" | "canManage" | "canRename">
   identity: string
+  returnState?: WorkspaceDirectoryState
   onChanged: () => void
   isArchived?: boolean
 }) {
@@ -52,7 +55,7 @@ export function WorkspaceListRowActions({
   const [name, setName] = useState(workspace.name)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
-  const href = projectWorkspaceHref(identity)
+  const href = projectWorkspaceHref(identity, returnState)
   const triggerId = `workspace-actions-${identity}`
 
   async function saveName(event: React.FormEvent<HTMLFormElement>) {

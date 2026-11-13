@@ -19,6 +19,7 @@ import {
   type ProjectWorkspaceSummary,
   type WorkspaceDirectoryRow,
 } from "../api/project-workspace-api"
+import type { WorkspaceDirectoryState } from "../model/workspace-directory-state"
 import { WorkspaceListRowActions } from "./workspace-list-row-actions"
 
 const grid =
@@ -55,6 +56,7 @@ export function WorkspaceListTable({
   archiveView,
   onChanged,
   directory = false,
+  directoryState,
 }: {
   workspaces: WorkspaceRow[]
   loading: boolean
@@ -63,6 +65,7 @@ export function WorkspaceListTable({
   archiveView: boolean
   onChanged: () => void
   directory?: boolean
+  directoryState?: WorkspaceDirectoryState
 }) {
   const { formatDate } = useDatePreferences()
   return (
@@ -114,7 +117,10 @@ export function WorkspaceListTable({
             <>
               <div role="cell" className={cells[0]}>
                 <Link
-                  href={projectWorkspaceHref(workspaceKey(workspace))}
+                  href={projectWorkspaceHref(
+                    workspaceKey(workspace),
+                    directory ? directoryState : undefined,
+                  )}
                   className="block truncate font-semibold text-foreground no-underline hover:underline focus-visible:outline-2 focus-visible:outline-ring"
                 >
                   {workspace.name}
@@ -200,6 +206,7 @@ export function WorkspaceListTable({
                 <WorkspaceListRowActions
                   workspace={workspace}
                   identity={workspaceKey(workspace)}
+                  returnState={directory ? directoryState : undefined}
                   onChanged={onChanged}
                   isArchived={
                     "status" in workspace &&

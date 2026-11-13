@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Archive, FolderKanban, Plus } from "lucide-react"
 import { PageHeader, PageHeaderButton } from "@/components/layout/page-header"
 import { ManagementViewToggle } from "@/components/layout/management-view-toggle"
@@ -8,7 +9,10 @@ import { contentClass } from "@/components/layout/styles"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
-import { Dropdown } from "@/components/ui/dropdown"
+import {
+  FilterSelect,
+  filterSelectTriggerClass,
+} from "@/components/ui/filter-select"
 import { SearchField } from "@/components/ui/search-field"
 import {
   pageRange,
@@ -23,6 +27,10 @@ import {
 } from "../api/project-workspace-api"
 import { WorkspaceListTable } from "../components/workspace-list-table"
 import { NewWorkspacePanel } from "./new-workspace-page"
+import {
+  parseWorkspaceDirectoryState,
+  serializeWorkspaceDirectoryState,
+} from "../model/workspace-directory-state"
 
 const statuses: ProjectStatus[] = [
   "PLANNED",
@@ -40,48 +48,112 @@ const sortOptions: { value: WorkspaceDirectoryQuery["sort"]; label: string }[] =
     { value: "projects", label: "Most projects first" },
   ]
 
-const dropdownTriggerClass =
-  "h-[34px] rounded-md border-[#e1e4ea] bg-transparent text-xs font-normal shadow-sm"
-
 export function WorkspaceDirectoryPage() {
-  const [search, setSearch] = useState("")
-  const [appliedSearch, setAppliedSearch] = useState("")
-  const [status, setStatus] = useState("")
-  const [sort, setSort] = useState<WorkspaceDirectoryQuery["sort"]>("recent")
-  const [archive, setArchive] = useState(false)
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const rawSearchParams = searchParams.toString()
+  const directoryState = useMemo(
+    () => parseWorkspaceDirectoryState(new URLSearchParams(rawSearchParams)),
+    [rawSearchParams],
+  )
+  const canonicalSearchParams = serializeWorkspaceDirectoryState(directoryState)
+  const [searchDraft, setSearchDraft] = useState({
+    source: directoryState.search,
+    value: directoryState.search,
+  })
+  const search =
+    searchDraft.source === directoryState.search
+      ? searchDraft.value
+      : directoryState.search
+  const searchTimer = useRef<number | null>(null)
   const [setupOpen, setSetupOpen] = useState(false)
-  const query = {
-    search: appliedSearch,
-    status,
-    sort,
-    view: archive ? "archive" : "active",
-  } as const
+  const query = useMemo(
+    () => ({
+      search: directoryState.search,
+      status: directoryState.status,
+      sort: directoryState.sort,
+      view: directoryState.view,
+    }),
+    [
+      directoryState.search,
+      directoryState.status,
+      directoryState.sort,
+      directoryState.view,
+    ],
+  )
+  const updateDirectoryState = useCallback(
+    (patch: Partial<typeof directoryState>) => {
+      if (searchTimer.current !== null) {
+        window.clearTimeout(searchTimer.current)
+        searchTimer.current = null
+      }
+      const draftSearch = search.trim()
+      const searchChanged =
+        patch.search === undefined && draftSearch !== directoryState.search
+      const next = {
+        ...directoryState,
+        ...(searchChanged ? { search: draftSearch } : {}),
+        ...patch,
+      }
+      if (searchChanged) next.page = 1
+      const params = serializeWorkspaceDirectoryState(next)
+      const href = params
+        ? `/project-workspace?${params}`
+        : "/project-workspace"
+      router.replace(href, { scroll: false })
+    },
+    [directoryState, router, search],
+  )
+  const changePage = useCallback(
+    (page: number) => {
+      const next = { ...directoryState, page }
+      const params = serializeWorkspaceDirectoryState(next)
+      const href = params
+        ? `/project-workspace?${params}`
+        : "/project-workspace"
+      router.replace(href, { scroll: false })
+    },
+    [directoryState, router],
+  )
+  useEffect(() => {
+    if (rawSearchParams === canonicalSearchParams) return
+    const href = canonicalSearchParams
+      ? `/project-workspace?${canonicalSearchParams}`
+      : "/project-workspace"
+    router.replace(href, { scroll: false })
+  }, [canonicalSearchParams, rawSearchParams, router])
   const list = usePaginatedList({
     params: query,
     load: ({ page, signal }) =>
       listWorkspaceDirectory({ ...query, page }, signal),
+    controlledPage: directoryState.page,
+    onPageChange: changePage,
     rows: (result) => result.rows,
     matches: () => false,
     initial: null,
     fallbackError: "Couldn't load project workspaces.",
   })
-  const { setPage } = list
   function sortBy(value: WorkspaceDirectoryQuery["sort"]) {
-    setSort(value)
-    setPage(1)
+    updateDirectoryState({ sort: value, page: 1 })
   }
   const trimmedSearch = search.trim()
   useEffect(() => {
-    if (trimmedSearch === appliedSearch) return
-    const timer = window.setTimeout(() => {
-      setAppliedSearch(trimmedSearch)
-      setPage(1)
+    if (trimmedSearch === directoryState.search) return
+    searchTimer.current = window.setTimeout(() => {
+      searchTimer.current = null
+      updateDirectoryState({ search: trimmedSearch, page: 1 })
     }, 200)
-    return () => window.clearTimeout(timer)
-  }, [trimmedSearch, appliedSearch, setPage])
+    return () => {
+      if (searchTimer.current !== null) {
+        window.clearTimeout(searchTimer.current)
+        searchTimer.current = null
+      }
+    }
+  }, [directoryState.search, trimmedSearch, updateDirectoryState])
+  const archive = directoryState.view === "archive"
   const data = list.loading || list.error ? null : list.data
   const noResults = data?.hasWorkspaces
-    ? query.search || status
+    ? query.search || query.status
       ? "No workspaces match these filters"
       : archive
         ? "Archive is empty"
@@ -112,14 +184,17 @@ export function WorkspaceDirectoryPage() {
             placeholder="Search workspace, project, or client"
             maxLength={200}
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) =>
+              setSearchDraft({
+                source: directoryState.search,
+                value: event.target.value,
+              })
+            }
           />
           <div className="flex min-w-0 flex-wrap gap-[10px] max-[560px]:w-full max-[560px]:flex-col">
-            <Dropdown
-              className="w-[140px] max-[560px]:w-full"
-              triggerClassName={dropdownTriggerClass}
+            <FilterSelect
               label="Filter workspaces by status"
-              value={status}
+              value={directoryState.status}
               options={[
                 { value: "", label: "All statuses" },
                 ...statuses.map((value) => ({
@@ -127,17 +202,16 @@ export function WorkspaceDirectoryPage() {
                   label: statusLabel(value),
                 })),
               ]}
-              onChange={(value) => {
-                setStatus(value)
-                list.setPage(1)
-              }}
+              triggerClassName={`${filterSelectTriggerClass} w-[140px]`}
+              onChange={(value) =>
+                updateDirectoryState({ status: value, page: 1 })
+              }
             />
-            <Dropdown
-              className="w-[190px] max-[560px]:w-full"
-              triggerClassName={dropdownTriggerClass}
+            <FilterSelect
               label="Sort workspaces"
-              value={sort}
+              value={directoryState.sort}
               options={sortOptions}
+              triggerClassName={`${filterSelectTriggerClass} w-[190px]`}
               onChange={sortBy}
             />
           </div>
@@ -150,9 +224,11 @@ export function WorkspaceDirectoryPage() {
               { value: false, label: "Archive", icon: Archive },
             ]}
             onChange={(active) => {
-              setArchive(!active)
-              setStatus("")
-              list.setPage(1)
+              updateDirectoryState({
+                view: active ? "active" : "archive",
+                status: "",
+                page: 1,
+              })
             }}
           />
         </div>
@@ -173,6 +249,7 @@ export function WorkspaceDirectoryPage() {
             viewKey={list.tableViewKey}
             quickKey=""
             archiveView={archive}
+            directoryState={directoryState}
             onChanged={list.retry}
           />
         )}
@@ -192,6 +269,7 @@ export function WorkspaceDirectoryPage() {
         <NewWorkspacePanel
           onClose={() => setSetupOpen(false)}
           onCreated={list.retry}
+          returnState={directoryState}
         />
       )}
     </main>
