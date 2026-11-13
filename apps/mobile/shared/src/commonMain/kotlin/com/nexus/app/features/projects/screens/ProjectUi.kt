@@ -1,5 +1,6 @@
 package com.nexus.app.features.projects.screens
 
+import com.nexus.app.core.components.LocalNexusBottomPadding
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -24,7 +25,7 @@ import com.nexus.app.features.projects.viewmodel.ProjectsState
 @Composable
 internal fun ProjectPage(content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxSize().background(NexusColors.SurfaceLight).imePadding()
-        .verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(18.dp), content = content)
+        .verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp + LocalNexusBottomPadding.current), verticalArrangement = Arrangement.spacedBy(18.dp), content = content)
 }
 @Composable
 internal fun ProjectCard(content: @Composable ColumnScope.() -> Unit) {
@@ -56,13 +57,13 @@ internal fun ProjectStatus(status: String) {
 @Composable
 internal fun ProjectProgressBar(completed: Int, total: Int) {
     val fraction = progressFraction(completed, total)
-    Surface(color = NexusColors.SurfaceLight, shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, NexusColors.Border)) {
+    Surface(color = Color(0xFFE2ECFF), shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, Color(0xFFACC8F5))) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Overall progress", fontSize = 12.sp, color = NexusColors.TextPrimary)
                 Text("${(fraction * 100).toInt()}%", fontSize = 12.sp, color = NexusColors.PrimaryBlue)
             }
-            LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth().height(5.dp), color = NexusColors.PrimaryBlue, trackColor = NexusColors.Border)
+            NexusProgressBar(fraction)
             ProjectCopy("$completed of $total tasks complete")
         }
     }

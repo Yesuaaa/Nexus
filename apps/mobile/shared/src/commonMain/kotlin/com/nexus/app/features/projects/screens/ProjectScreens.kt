@@ -3,7 +3,6 @@ package com.nexus.app.features.projects.screens
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -53,18 +52,9 @@ fun MyProjectsScreen(onNewRequest: () -> Unit, onProject: (String) -> Unit, view
                 }
             }
         }
-        OutlinedTextField(
-            query, { query = it; page = 0 },
-            placeholder = { Text("Search project, service or reference", fontSize = 13.sp) },
-            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = "Search projects", tint = NexusColors.TextSecondary) },
-            singleLine = true, modifier = Modifier.fillMaxWidth(), shape = NexusButtonShape,
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = Color.White, unfocusedContainerColor = Color.White,
-                focusedBorderColor = NexusColors.PrimaryBlue, unfocusedBorderColor = NexusColors.Border,
-            ),
-        )
+        NexusSearchField(query, { query = it; page = 0 }, "Search project, service or reference")
         NexusDropdown(statuses.first { it.first == status }.second, statuses, status, { status = it; page = 0 }, scrollable = false)
-        NexusDropdown(if (sort == "NAME") "Project name" else "Most recently updated", listOf("UPDATED" to "Most recently updated", "NAME" to "Project name"), sort, { sort = it; page = 0 })
+        NexusDropdown(if (sort == "NAME") "Project name" else "Latest", listOf("UPDATED" to "Latest", "NAME" to "Project name"), sort, { sort = it; page = 0 })
         ProjectFeedback(state, viewModel::list)
         if (!state.loading && state.error == null && filtered.isEmpty()) ProjectCard {
             ProjectTitle(if (state.projects.isEmpty()) "No projects yet" else "No matching projects")
@@ -79,7 +69,7 @@ fun MyProjectsScreen(onNewRequest: () -> Unit, onProject: (String) -> Unit, view
                 ProjectCopy("${project.deliverableCount} shared deliverable${if (project.deliverableCount == 1) "" else "s"}")
                 ProjectProgressBar(project.completedTasks, project.taskCount)
                 ProjectCopy("Updated ${displayDate(project.updatedAt)}")
-                NexusButton("View project  ›", { onProject(project.id) }, variant = NexusButtonVariant.OUTLINE)
+                NexusButton("View project  ›", { onProject(project.id) }, variant = NexusButtonVariant.OUTLINE, compact = true)
             }
         }
         if (filtered.isNotEmpty()) {
@@ -113,7 +103,7 @@ fun ProjectScreen(id: String, overview: Boolean, onBack: () -> Unit, onOpen: () 
                 ProjectCopy(listOfNotNull(project.request?.service?.name, project.request?.referenceNumber).joinToString(" · "))
                 OutlinedButton(
                     onClick = onEdit, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), shape = NexusButtonShape,
-                    border = BorderStroke(1.dp, NexusColors.PrimaryBlue.copy(alpha = 0.45f)),
+                    border = BorderStroke(1.dp, NexusColors.PrimaryBlue),
                     colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent, contentColor = NexusColors.PrimaryBlue),
                 ) { Text("Edit brief", fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
                 NexusButton("+  New project request", onRequest, enabled = project.editable)
@@ -164,9 +154,11 @@ private fun DeliverableCard(project: ClientProject, deliverable: ClientDeliverab
     var note by rememberSaveable(deliverable.id) { mutableStateOf("") }
     val review = deliverable.clientReviews.firstOrNull()?.takeIf { it.workflowFileId == deliverable.workflowFile.id }
     ProjectCard {
-        ProjectTitle(deliverable.title)
+        Text(deliverable.title, Modifier.fillMaxWidth(), fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+            color = NexusColors.TextPrimary, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         deliverable.description?.let { ProjectCopy(it) }
-        ProjectCopy(deliverable.workflowFile.name)
+        Text(deliverable.workflowFile.name, Modifier.fillMaxWidth(), fontSize = 13.sp,
+            color = NexusColors.TextSecondary, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         ProjectCopy("Shared ${displayDate(deliverable.sentToClientAt)}")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             NexusButton("Preview", { platform?.let { viewModel.file(project.id, deliverable, it, true) } }, Modifier.weight(1f), variant = NexusButtonVariant.OUTLINE, enabled = platform != null && !busy)

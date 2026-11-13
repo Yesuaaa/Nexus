@@ -173,8 +173,8 @@ class MobileUiRegressionTest {
         screenshot("personal-details")
         compose.onAllNodes(hasSetTextAction()).onFirst().performTextReplacement("Updated Client")
         compose.onNodeWithText("Save personal details").performScrollTo().performClick()
-        compose.waitUntil(10_000) { backend.personalSaves == 1 && compose.onAllNodesWithText("My profile").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("My profile").assertIsDisplayed()
+        compose.waitUntil(10_000) { backend.personalSaves == 1 && compose.onAllNodesWithText("Updated Client").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Edit profile").assertIsDisplayed()
         compose.onNodeWithText("Updated Client").assertIsDisplayed()
         backend.client.close()
     }
@@ -188,7 +188,7 @@ class MobileUiRegressionTest {
         screenshot("profile-images")
         compose.onNodeWithText("Save changes").performScrollTo().assertIsNotEnabled()
         compose.onNodeWithContentDescription("Close editor").performScrollTo().performClick()
-        compose.onNodeWithText("My profile").assertIsDisplayed()
+        compose.onNodeWithText("Edit profile").assertIsDisplayed()
         backend.client.close()
     }
 

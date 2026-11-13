@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nexus.app.core.components.NexusProgressBar
 import com.nexus.app.core.components.NexusButton
 import com.nexus.app.core.components.NexusButtonVariant
 import com.nexus.app.core.theme.NexusButtonShape
@@ -124,8 +125,8 @@ fun ClientProjectDetailsSheet(
                 // Progress Card
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFFF8FAFD),
-                    border = BorderStroke(1.dp, Color(0xFFE4E9F0)),
+                    color = Color(0xFFE2ECFF),
+                    border = BorderStroke(1.dp, Color(0xFFACC8F5)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
@@ -150,15 +151,7 @@ fun ClientProjectDetailsSheet(
                                 color = NexusColors.PrimaryBlue
                             )
                         }
-                        LinearProgressIndicator(
-                            progress = { fraction },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(6.dp),
-                            color = NexusColors.PrimaryBlue,
-                            trackColor = Color(0xFFDFE6EF),
-                            gapSize = 0.dp
-                        )
+                        NexusProgressBar(fraction)
                         Text(
                             text = "${project.completedTasks} of ${project.taskCount} tasks complete",
                             fontSize = 11.sp,
@@ -187,16 +180,20 @@ fun ClientProjectDetailsSheet(
                                     BorderStroke(0.5.dp, Color(0xFFECEEF1))
                                 )
                                 .padding(vertical = 10.dp, horizontal = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            verticalAlignment = Alignment.Top
                         ) {
                             Text(
                                 text = label,
+                                modifier = Modifier.weight(1f),
                                 fontSize = 12.sp,
                                 color = NexusColors.TextSecondary
                             )
                             Text(
                                 text = value,
+                                modifier = Modifier.weight(1.8f),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                                softWrap = true,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = NexusColors.TextPrimary
@@ -240,6 +237,7 @@ fun ClientProjectDetailsSheet(
                                 onProjectChat(project.id)
                             },
                             variant = NexusButtonVariant.OUTLINE,
+                            compact = true,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -252,6 +250,7 @@ fun ClientProjectDetailsSheet(
                             onOpenProject(project.id)
                         },
                         variant = NexusButtonVariant.PRIMARY,
+                        compact = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
