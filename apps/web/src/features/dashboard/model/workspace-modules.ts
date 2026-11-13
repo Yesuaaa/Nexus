@@ -79,5 +79,14 @@ export function getWorkspaceModules(account: Account): WorkspaceModule[] {
     })
   }
 
+  if (canAccessRoute(account, "/project-management")) {
+    modules.push({
+      id: "project-management",
+      title: "Project Management",
+      description: "Oversee projects and progress across departments.",
+      href: "/project-management",
+    })
+  }
+
   return modules
 }

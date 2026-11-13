@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils"
 import type { Account } from "@/features/auth/model/types"
 import {
   canAccessRequestInbox,
+  canAccessProjectManagementModule,
   canAccessProjectWorkspace,
   canCreateProjectWorkspace,
 } from "@/features/auth/model/permissions"
@@ -423,6 +424,20 @@ export function Sidebar({
   }
 
   function renderPolicy(policy: RoutePolicy) {
+    if (
+      policy.id === "admin-project-management" &&
+      canAccessProjectManagementModule(account)
+    ) {
+      return renderGroup(
+        moduleGroup(
+          "Project Workspace",
+          "Project Workspace",
+          FolderKanban,
+          "/project-management",
+          canAccessProjectManagementModule,
+        ),
+      )
+    }
     if (
       policy.id === "project-workspace" &&
       canCreateProjectWorkspace(account)

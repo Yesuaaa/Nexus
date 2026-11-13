@@ -34,6 +34,7 @@ const permissionsByRole = {
     Permissions.SERVICES_READ,
     Permissions.SERVICES_MANAGE,
     Permissions.CLIENTS_READ,
+    Permissions.PROJECT_MANAGEMENT_READ,
   ],
   SUPERADMIN: [
     Permissions.DASHBOARD_READ,
@@ -50,6 +51,7 @@ const permissionsByRole = {
     Permissions.ACCOUNTS_ASSIGN_PRIVILEGED,
     Permissions.ACCOUNTS_STATUS_BASIC,
     Permissions.ACCOUNTS_STATUS_PRIVILEGED,
+    Permissions.PROJECT_MANAGEMENT_READ,
   ],
 }
 
@@ -83,6 +85,35 @@ test("project workspace overview is a static Department Head route", () => {
     assert.equal(canAccessRoute(account("STAFF"), path), true)
     assert.equal(canAccessRoute(head, path), true)
   }
+})
+
+test("Admin Project Management routes require the dedicated module permission", () => {
+  const admin = account("ADMIN")
+  const superadmin = account("SUPERADMIN")
+  const staff = account("STAFF")
+  const limitedAdmin = account("ADMIN", {
+    permissions: [Permissions.SERVICES_READ],
+  })
+  const paths = ["/project-management", "/project-management/overview"]
+
+  for (const pathname of paths) {
+    assert.ok(findRoutePolicy(pathname))
+    assert.equal(canAccessRoute(admin, pathname), true)
+    assert.equal(canAccessRoute(superadmin, pathname), true)
+    assert.equal(canAccessRoute(staff, pathname), false)
+    assert.equal(canAccessRoute(limitedAdmin, pathname), false)
+    assert.equal(
+      getActiveWorkspaceModuleId(admin, pathname),
+      "project-management",
+    )
+    assert.equal(
+      getActiveWorkspaceModuleId(superadmin, pathname),
+      "project-management",
+    )
+  }
+
+  assert.equal(canAccessRoute(admin, "/project-workspace"), false)
+  assert.equal(canAccessRoute(superadmin, "/project-workspace"), false)
 })
 
 const routeMatrix = {
@@ -231,6 +262,8 @@ test("route policies record the approved module ownership without claiming share
     "/clients": "service-operations",
     "/projects/project-1": "project-management",
     "/project-workspace/project-1": "project-management",
+    "/project-management": "project-management",
+    "/project-management/overview": "project-management",
     "/staff-workload": "project-management",
     "/employees": "people-hr",
     "/departments": "people-hr",
@@ -322,8 +355,14 @@ test("navigation is generated from the same policies without changing role visib
       "Service Management",
       "Calendar",
       "Client Management",
+      "Project Workspace",
     ],
-    SUPERADMIN: ["Module", "Account Management", "Calendar"],
+    SUPERADMIN: [
+      "Module",
+      "Account Management",
+      "Calendar",
+      "Project Workspace",
+    ],
   }
 
   for (const [actor, labels] of Object.entries(expectedLabels)) {

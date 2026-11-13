@@ -84,10 +84,12 @@ export function accountFor(
       Permissions.EMPLOYEES_MANAGE,
       Permissions.SERVICES_READ,
       Permissions.SERVICES_MANAGE,
+      Permissions.PROJECT_MANAGEMENT_READ,
     )
   }
   if (role === "SUPERADMIN") {
     permissions.push(
+      Permissions.PROJECT_MANAGEMENT_READ,
       Permissions.ACCOUNTS_READ,
       Permissions.ACCOUNTS_RESET_PASSWORD,
       Permissions.ACCOUNTS_CREATE_BASIC,

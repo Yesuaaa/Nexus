@@ -20,6 +20,7 @@ export const Permissions = {
   SERVICES_READ: "services:read",
   SERVICES_MANAGE: "services:manage",
   CLIENTS_READ: "clients:read",
+  PROJECT_MANAGEMENT_READ: "project-management:read",
 } as const
 
 export type Permission = (typeof Permissions)[keyof typeof Permissions]
@@ -96,6 +97,13 @@ export function canAccessProjects(account: Account): boolean {
 
 export function canAccessProjectWorkspace(account: Account): boolean {
   return account.role === "STAFF"
+}
+
+export function canAccessProjectManagementModule(account: Account): boolean {
+  return (
+    (account.role === "ADMIN" || account.role === "SUPERADMIN") &&
+    hasPermission(account, Permissions.PROJECT_MANAGEMENT_READ)
+  )
 }
 
 export function canCreateProjectWorkspace(account: Account): boolean {

@@ -13,6 +13,107 @@ function mainMenu(page: Page) {
   return page.getByRole("navigation", { name: "Main menu", exact: true })
 }
 
+for (const role of ["ADMIN", "SUPERADMIN"] as const) {
+  test(`${role} enters Project Management without opening Staff project data`, async ({
+    page,
+  }) => {
+    const projectDataRequests: string[] = []
+    page.on("request", (request) => {
+      const pathname = new URL(request.url()).pathname
+      if (
+        pathname.startsWith("/api/project-workspace") ||
+        pathname.startsWith("/api/project-conversations") ||
+        pathname.startsWith("/api/projects")
+      )
+        projectDataRequests.push(pathname)
+    })
+
+    await restoreSession(page, role)
+    await page.goto("/module")
+    await page
+      .getByRole("link", {
+        name: "Open Project Management workspace",
+        exact: true,
+      })
+      .click()
+    await expect(page).toHaveURL(/\/project-management$/)
+
+    const menu = mainMenu(page)
+    await expect(
+      menu.getByRole("link", {
+        name: "Project Workspace Management",
+        exact: true,
+      }),
+    ).toHaveAttribute("aria-current", "page")
+    await expect(
+      menu.getByRole("link", {
+        name: "Project Workspace overview",
+        exact: true,
+      }),
+    ).toBeVisible()
+    await expect(
+      menu.getByRole("link", { name: "Project Messages", exact: true }),
+    ).toHaveCount(0)
+    await expect(
+      menu.getByRole("link", { name: "Calendar", exact: true }),
+    ).toBeVisible()
+    await expect(
+      menu.getByRole("link", { name: "Internal Messages", exact: true }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole("heading", {
+        name: "Project Workspace Management",
+        exact: true,
+      }),
+    ).toBeVisible()
+    await expect(
+      page.getByText("Project records are not included in Phase 1."),
+    ).toBeVisible()
+
+    await menu
+      .getByRole("link", {
+        name: "Project Workspace overview",
+        exact: true,
+      })
+      .click()
+    await expect(page).toHaveURL(/\/project-management\/overview$/)
+    await expect(
+      page.getByRole("heading", {
+        name: "Project Workspace Overview",
+        exact: true,
+      }),
+    ).toBeVisible()
+    await expect(
+      page
+        .getByRole("navigation", { name: "Breadcrumb" })
+        .getByText("Overview"),
+    ).toBeVisible()
+    await expect(
+      page.getByText("Project metrics are not included in Phase 1."),
+    ).toBeVisible()
+
+    await menu
+      .getByRole("link", { name: "Switch Workspace", exact: true })
+      .click()
+    await expect(page).toHaveURL(/\/module$/)
+    expect(projectDataRequests).toEqual([])
+  })
+}
+
+test("Staff cannot access the Admin Project Management shell routes", async ({
+  page,
+}) => {
+  await restoreSession(page, "STAFF")
+  await page.goto("/project-management")
+  await expect(page).toHaveURL(/\/module$/)
+  await expect(
+    page.getByRole("link", {
+      name: "Open Project Management workspace",
+      exact: true,
+    }),
+  ).toHaveAttribute("href", "/project-workspace")
+})
+
 test("Client moves directly between services and projects without switching workspaces", async ({
   page,
 }) => {

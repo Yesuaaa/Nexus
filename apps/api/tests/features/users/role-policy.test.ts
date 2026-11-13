@@ -32,6 +32,7 @@ test("fixed roles have the expected permissions", () => {
     Permission.DEPARTMENTS_DELETE,
     Permission.SERVICES_READ,
     Permission.SERVICES_MANAGE,
+    Permission.PROJECT_MANAGEMENT_READ,
   ]
   assert.deepEqual(permissionsFor(Role.USER), common)
   assert.deepEqual(permissionsFor(Role.STAFF), staff)
@@ -59,6 +60,22 @@ test("fixed roles have the expected permissions", () => {
   assert.equal(hasPermission(Role.USER, Permission.ACCOUNTS_READ), false)
   assert.equal(hasPermission(Role.ADMIN, Permission.ACCOUNTS_READ), false)
   assert.equal(hasPermission(Role.SUPERADMIN, Permission.ACCOUNTS_READ), true)
+  assert.equal(
+    hasPermission(Role.USER, Permission.PROJECT_MANAGEMENT_READ),
+    false,
+  )
+  assert.equal(
+    hasPermission(Role.STAFF, Permission.PROJECT_MANAGEMENT_READ),
+    false,
+  )
+  assert.equal(
+    hasPermission(Role.ADMIN, Permission.PROJECT_MANAGEMENT_READ),
+    true,
+  )
+  assert.equal(
+    hasPermission(Role.SUPERADMIN, Permission.PROJECT_MANAGEMENT_READ),
+    true,
+  )
   assert.deepEqual(
     publicUser({ role: Role.ADMIN } as User).permissions,
     permissionsFor(Role.ADMIN),

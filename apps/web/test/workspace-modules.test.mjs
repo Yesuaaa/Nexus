@@ -11,8 +11,9 @@ const permissionsByRole = {
     Permissions.EMPLOYEES_READ,
     Permissions.SERVICES_READ,
     Permissions.CLIENTS_READ,
+    Permissions.PROJECT_MANAGEMENT_READ,
   ],
-  SUPERADMIN: [Permissions.ACCOUNTS_READ],
+  SUPERADMIN: [Permissions.ACCOUNTS_READ, Permissions.PROJECT_MANAGEMENT_READ],
 }
 
 function account(
@@ -63,16 +64,18 @@ test("a current department head receives Service Operations without changing Sta
   )
 })
 
-test("the selector returns only the Admin operational workspaces", () => {
+test("the selector returns Admin's existing modules and Project Management", () => {
   assert.deepEqual(moduleEntries(account("ADMIN")), [
     ["Service Operations", "/services"],
     ["People & HR", "/employees"],
+    ["Project Management", "/project-management"],
   ])
 })
 
-test("the selector returns only Administration for an authorized Superadmin", () => {
+test("the selector preserves Superadmin's Administration access and adds Project Management", () => {
   assert.deepEqual(moduleEntries(account("SUPERADMIN")), [
     ["Administration", "/accounts"],
+    ["Project Management", "/project-management"],
   ])
 })
 
@@ -92,5 +95,11 @@ test("permission-limited accounts never receive a denied module entry route", ()
   assert.deepEqual(
     moduleEntries(account("SUPERADMIN", { permissions: [] })),
     [],
+  )
+  assert.deepEqual(
+    moduleEntries(
+      account("SUPERADMIN", { permissions: [Permissions.ACCOUNTS_READ] }),
+    ),
+    [["Administration", "/accounts"]],
   )
 })

@@ -68,6 +68,7 @@ const routeLabels: Record<string, string> = {
   messages: "Messages",
   projects: "Projects",
   "project-workspace": "Project Workspace",
+  "project-management": "Project Workspace",
   accounts: "Account Management",
   departments: "Department Management",
   employees: "Employee Management",

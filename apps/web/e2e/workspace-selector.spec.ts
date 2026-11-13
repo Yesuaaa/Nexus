@@ -52,12 +52,16 @@ const scenarios = [
     expected: [
       ["Service Operations", "/services"],
       ["People & HR", "/employees"],
+      ["Project Management", "/project-management"],
     ],
   },
   {
     label: "Superadmin",
     role: "SUPERADMIN",
-    expected: [["Administration", "/accounts"]],
+    expected: [
+      ["Administration", "/accounts"],
+      ["Project Management", "/project-management"],
+    ],
   },
 ] as const
 

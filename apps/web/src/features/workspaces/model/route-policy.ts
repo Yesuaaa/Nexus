@@ -7,6 +7,7 @@ import {
   canAccessEmployeeManagement,
   canAccessMessages,
   canAccessProjects,
+  canAccessProjectManagementModule,
   canAccessProjectWorkspace,
   canAccessRequestInbox,
   canAccessServiceCatalog,
@@ -39,6 +40,9 @@ export type RoutePolicyId =
   | "project-workspace-detail"
   | "project-workspace"
   | "project-workspace-fallback"
+  | "admin-project-management"
+  | "admin-project-management-overview"
+  | "admin-project-management-fallback"
   | "departments"
   | "departments-overview"
   | "employees"
@@ -187,6 +191,31 @@ export const routePolicies: readonly RoutePolicy[] = [
     match: { kind: "prefix", path: "/project-workspace" },
     moduleId: "project-management",
     canAccess: canAccessProjectWorkspace,
+  },
+  {
+    id: "admin-project-management-overview",
+    match: { kind: "exact", path: "/project-management/overview" },
+    moduleId: "project-management",
+    canAccess: canAccessProjectManagementModule,
+  },
+  {
+    id: "admin-project-management",
+    match: { kind: "exact", path: "/project-management" },
+    moduleId: "project-management",
+    canAccess: canAccessProjectManagementModule,
+    navigation: {
+      href: "/project-management",
+      label: "Project Workspace",
+      location: "main",
+      order: 120,
+      activeMatch: { kind: "prefix", path: "/project-management" },
+    },
+  },
+  {
+    id: "admin-project-management-fallback",
+    match: { kind: "prefix", path: "/project-management" },
+    moduleId: "project-management",
+    canAccess: canAccessProjectManagementModule,
   },
   {
     id: "departments-overview",
