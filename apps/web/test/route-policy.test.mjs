@@ -196,9 +196,12 @@ test("dynamic project routes select explicit policies before compatibility fallb
   )
 })
 
-test("route policies retain exact and existing starts-with matching behavior", () => {
-  assert.equal(findRoutePolicy("/departments/team-1"), undefined)
-  assert.equal(findRoutePolicy("/services/custom"), undefined)
+test("route policies protect management subroutes and retain legacy prefix matching", () => {
+  assert.equal(
+    findRoutePolicy("/departments/team-1")?.id,
+    "departments-overview",
+  )
+  assert.equal(findRoutePolicy("/services/custom")?.id, "services-overview")
   assert.equal(findRoutePolicy("/accounts-legacy")?.id, "accounts")
   assert.equal(
     findRoutePolicy("/booked-services/legacy-1")?.id,
@@ -373,4 +376,18 @@ test("Module route and launcher links remain internal-only", () => {
     ).navigation
     assert.equal(navigation.href(actor), "/module")
   }
+})
+
+test("management overviews retain authorization and module context", () => {
+  for (const [path, moduleId] of [
+    ["/departments/overview", "people-hr"],
+    ["/employees/overview", "people-hr"],
+    ["/services/overview", "service-operations"],
+  ]) {
+    assert.equal(canAccessRoute(account("ADMIN"), path), true)
+    assert.equal(getActiveWorkspaceModuleId(account("ADMIN"), path), moduleId)
+    for (const role of ["USER", "STAFF", "SUPERADMIN"])
+      assert.equal(canAccessRoute(account(role), path), false)
+  }
+  assert.equal(canAccessRoute(account("USER"), "/services"), true)
 })

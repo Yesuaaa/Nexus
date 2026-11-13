@@ -22,10 +22,6 @@ import { sileo } from "@/lib/toast"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { hasPermission, Permissions } from "@/features/auth/model/permissions"
 import {
-  EmployeeKpiCards,
-  type EmployeeKpiSummary,
-} from "../components/employee-kpi-cards"
-import {
   EmployeeLoginActionDialog,
   type EmployeeLoginAction,
 } from "../components/employee-login-action-dialog"
@@ -40,7 +36,6 @@ import {
   employmentStatusOptions,
   employmentTypeOptions,
 } from "../model/employment"
-import { useAsyncResource } from "@/lib/use-async-resource"
 
 const ManageMembersDrawer = dynamic(
   () =>
@@ -139,24 +134,6 @@ export function EmployeeManagementPage() {
   })
   const { setPage } = list
 
-  // Overview counts: one lightweight list request per status (totals only).
-  const summary = useAsyncResource<EmployeeKpiSummary>(
-    async (signal) => {
-      const count = (status: EmploymentStatus | "") =>
-        listEmployees({ status, page: 1, signal }).then(
-          (result) => result.total,
-        )
-      const [total, active, onLeave, inactive] = await Promise.all([
-        count(""),
-        count("ACTIVE"),
-        count("ON_LEAVE"),
-        count("INACTIVE"),
-      ])
-      return { total, active, onLeave, inactive }
-    },
-    [list.revision],
-  )
-
   const departmentList = useDepartments()
   const departmentOptions = [
     { value: "", label: "All Departments" },
@@ -213,18 +190,6 @@ export function EmployeeManagementPage() {
           </PageHeaderButton>
         }
       />
-
-      {!archiveView && (
-        <div className="mt-[18px] max-[560px]:mt-[14px]">
-          <EmployeeKpiCards
-            summary={
-              summary.data ?? { total: 0, active: 0, onLeave: 0, inactive: 0 }
-            }
-            pending={!summary.data && !summary.error}
-            unavailable={Boolean(summary.error) && !summary.data}
-          />
-        </div>
-      )}
 
       <section
         className="mt-[18px] min-w-0 max-[767px]:mt-[14px]"

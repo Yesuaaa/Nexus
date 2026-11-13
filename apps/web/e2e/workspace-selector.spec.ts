@@ -16,7 +16,7 @@ async function expectLauncher(page: Page) {
     page.getByRole("main", { name: "Workspace selector" }),
   ).toBeVisible()
   await expect(page.locator("#app-sidebar")).toHaveCount(0)
-  await expect(page.locator("[data-portal-topbar]")).toHaveCount(0)
+  await expect(page.locator("[data-portal-topbar]")).toHaveCount(1)
   await expect(
     page.getByRole("navigation", { name: "Breadcrumb" }),
   ).toHaveCount(0)

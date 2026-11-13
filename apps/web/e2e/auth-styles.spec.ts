@@ -65,7 +65,7 @@ test("route utilities stay styled across auth and portal navigation", async ({
   await expect(page).toHaveURL(/\/module$/)
   const launcher = page.getByRole("group", { name: "Account controls" })
   await expect(launcher).toHaveCSS("display", "flex")
-  await expect(page.locator("[data-portal-topbar]")).toHaveCount(0)
+  await expect(page.locator("[data-portal-topbar]")).toHaveCount(1)
   await expect(
     page.getByRole("main", { name: "Workspace selector" }),
   ).toBeVisible()

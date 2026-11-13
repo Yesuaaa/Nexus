@@ -154,7 +154,7 @@ for (const workspace of [
       .click()
     await expect(page).toHaveURL(/\/module$/)
     await expect(page.locator("#app-sidebar")).toHaveCount(0)
-    await expect(page.locator("[data-portal-topbar]")).toHaveCount(0)
+    await expect(page.locator("[data-portal-topbar]")).toHaveCount(1)
     await expect
       .poll(() =>
         page.evaluate(() => sessionStorage.getItem("nexus.workspace.actor")),
@@ -203,7 +203,7 @@ test("module context is revalidated when permissions change on a shared page", a
   await page.goto("/employees")
   await expect(page).toHaveURL(/\/module$/)
   await expect(page.locator("#app-sidebar")).toHaveCount(0)
-  await expect(page.locator("[data-portal-topbar]")).toHaveCount(0)
+  await expect(page.locator("[data-portal-topbar]")).toHaveCount(1)
 })
 
 test("remembered module context is isolated by account", async ({ page }) => {

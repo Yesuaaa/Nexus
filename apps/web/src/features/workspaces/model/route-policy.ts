@@ -38,8 +38,10 @@ export type RoutePolicyId =
   | "project-workspace"
   | "project-workspace-fallback"
   | "departments"
+  | "departments-overview"
   | "employees"
   | "services"
+  | "services-overview"
   | "calendar"
   | "service-requests"
   | "help"
@@ -179,6 +181,12 @@ export const routePolicies: readonly RoutePolicy[] = [
     canAccess: canAccessProjectWorkspace,
   },
   {
+    id: "departments-overview",
+    match: { kind: "prefix", path: "/departments/" },
+    moduleId: "people-hr",
+    canAccess: canAccessDepartmentManagement,
+  },
+  {
     id: "departments",
     match: { kind: "exact", path: "/departments" },
     moduleId: "people-hr",
@@ -201,6 +209,12 @@ export const routePolicies: readonly RoutePolicy[] = [
       location: "main",
       order: 30,
     },
+  },
+  {
+    id: "services-overview",
+    match: { kind: "prefix", path: "/services/" },
+    moduleId: "service-operations",
+    canAccess: canAccessServiceManagement,
   },
   {
     id: "services",

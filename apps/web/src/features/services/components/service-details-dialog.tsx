@@ -14,6 +14,7 @@ import {
   useSidePanel,
 } from "@/components/ui/side-panel"
 import type { Service } from "../api/services-api"
+import { pricingModelLabels } from "../model/service-pricing"
 import { ServiceIcon } from "./service-icon"
 import { serviceActionsTriggerId } from "./service-row-actions"
 
@@ -26,13 +27,7 @@ function formatDate(value: string, includeTime = false) {
   }).format(new Date(value))
 }
 
-const pricingLabels = {
-  FIXED: "Fixed Price",
-  STARTING: "Starting At",
-  CUSTOM_QUOTE: "Custom Quotation",
-  RECURRING: "Recurring",
-  HOURLY: "Hourly Rate",
-} as const
+const pricingLabels = pricingModelLabels
 
 function formatPrice(amount: string | null, currency: string) {
   if (amount === null) return "Price on Request"
