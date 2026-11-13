@@ -115,16 +115,50 @@ test("department heads can navigate between workspace Overview and Management", 
     const { pathname } = new URL(request.url())
     if (
       pathname.startsWith("/api/project-workspace/") &&
-      pathname !== "/api/project-workspace/directory"
+      pathname !== "/api/project-workspace/directory" &&
+      pathname !== "/api/project-workspace/overview"
     )
       detailRequests.push(pathname)
   })
   await restoreSession(page, "STAFF", {
     account: { headOf: { id: "design", name: "Design" } },
   })
+  await page.route("**/api/project-workspace/overview", (route) =>
+    route.fulfill({
+      json: {
+        totals: {
+          totalProjects: 0,
+          inProgress: 0,
+          completed: 0,
+          onHold: 0,
+          planned: 0,
+          cancelled: 0,
+          workspaceGroups: 0,
+          projectsWithTasks: 0,
+          projectsWithoutTasks: 0,
+          totalTasks: 0,
+          completedTasks: 0,
+          outstandingTasks: 0,
+          upcomingTasks: 0,
+          overdueTasks: 0,
+        },
+        statusDistribution: [
+          { status: "PLANNED", count: 0 },
+          { status: "IN_PROGRESS", count: 0 },
+          { status: "ON_HOLD", count: 0 },
+          { status: "COMPLETED", count: 0 },
+          { status: "CANCELLED", count: 0 },
+        ],
+        clientDistribution: [],
+        workspaceProgress: [],
+        upcomingDeadlines: [],
+        overdueTaskList: [],
+      },
+    }),
+  )
   await page.goto("/project-workspace/overview")
   await expect(
-    page.getByRole("heading", { name: "Project Workspace Overview" }),
+    page.getByRole("heading", { name: "Project Overview" }),
   ).toBeVisible()
   const sidebar = page.getByRole("complementary", {
     name: "Primary navigation",
@@ -156,6 +190,246 @@ test("department heads can navigate between workspace Overview and Management", 
       .getByText("Overview", { exact: true }),
   ).toBeVisible()
   expect(detailRequests).toEqual([])
+})
+
+test("department heads see department project analytics and can open Management", async ({
+  page,
+}) => {
+  await restoreSession(page, "STAFF", {
+    account: { headOf: { id: "design", name: "Design" } },
+  })
+  const requestPaths: string[] = []
+  let preferencesLoaded = false
+  await page.route("**/api/auth/settings", (route) => {
+    preferencesLoaded = true
+    return route.fulfill({
+      json: {
+        preferences: {
+          timeZone: "UTC",
+          dateFormat: "MM/DD/YYYY",
+          timeFormat: "12h",
+          workflowNotifications: true,
+        },
+        sessions: [],
+      },
+    })
+  })
+  let releaseOverview: () => void = () => {}
+  const overviewResponseGate = new Promise<void>((resolve) => {
+    releaseOverview = resolve
+  })
+  const overviewRequest = page.waitForRequest(
+    (request) =>
+      new URL(request.url()).pathname === "/api/project-workspace/overview",
+  )
+  await page.route("**/api/project-workspace/overview", async (route) => {
+    expect(preferencesLoaded).toBe(true)
+    requestPaths.push(new URL(route.request().url()).pathname)
+    await overviewResponseGate
+    return route.fulfill({
+      json: {
+        totals: {
+          totalProjects: 6,
+          inProgress: 2,
+          completed: 1,
+          onHold: 1,
+          planned: 1,
+          cancelled: 1,
+          workspaceGroups: 2,
+          projectsWithTasks: 4,
+          projectsWithoutTasks: 2,
+          totalTasks: 10,
+          completedTasks: 6,
+          outstandingTasks: 4,
+          upcomingTasks: 1,
+          overdueTasks: 1,
+        },
+        statusDistribution: [
+          { status: "PLANNED", count: 1 },
+          { status: "IN_PROGRESS", count: 2 },
+          { status: "ON_HOLD", count: 1 },
+          { status: "COMPLETED", count: 1 },
+          { status: "CANCELLED", count: 1 },
+        ],
+        clientDistribution: [
+          { id: "client-1", name: "Acme", projectCount: 4 },
+          { id: "client-2", name: "Northwind", projectCount: 2 },
+        ],
+        workspaceProgress: [
+          {
+            identity: "group:group-1",
+            kind: "group",
+            name: "Website workspace",
+            projectCount: 2,
+            completedTasks: 4,
+            totalTasks: 8,
+          },
+          {
+            identity: "ungrouped-project:project-1",
+            kind: "ungrouped-project",
+            name: "Brand refresh",
+            projectCount: 1,
+            completedTasks: 0,
+            totalTasks: 0,
+          },
+        ],
+        upcomingDeadlines: [
+          {
+            id: "task-upcoming",
+            title: "Approve wireframes",
+            projectId: "project-1",
+            projectName: "Brand refresh",
+            dueDate: "2026-11-20",
+            status: "IN_PROGRESS",
+          },
+        ],
+        overdueTaskList: [
+          {
+            id: "task-overdue",
+            title: "Review content",
+            projectId: "project-2",
+            projectName: "Website workspace",
+            dueDate: "2026-11-12",
+            status: "NOT_STARTED",
+          },
+        ],
+      },
+    })
+  })
+  await page.goto("/project-workspace/overview")
+  await expect(
+    page.getByRole("heading", { name: "Project Overview", exact: true }),
+  ).toBeVisible()
+  await overviewRequest
+  await expect(
+    page.getByRole("region", { name: "Project overview", exact: true }),
+  ).toHaveAttribute("aria-busy", "true")
+  releaseOverview()
+  await expect(
+    page.getByRole("heading", { name: "Project status distribution" }),
+  ).toBeVisible()
+  await expect(
+    page.getByText("6 / 10 tasks · 60%", { exact: true }),
+  ).toBeVisible()
+  const completionChart = page.getByRole("group", {
+    name: "Workspace completion by workspace",
+  })
+  await expect(completionChart.getByText("0%", { exact: true })).toBeVisible()
+  await expect(completionChart.getByText("50%", { exact: true })).toBeVisible()
+  await expect(completionChart.getByText("100%", { exact: true })).toBeVisible()
+  await expect(
+    completionChart.getByRole("progressbar", {
+      name: "Website workspace task progress",
+    }),
+  ).toHaveAttribute("aria-valuenow", "4")
+  await expect(page.getByText("Cancelled", { exact: true })).toBeVisible()
+  await expect(page.getByText("Northwind", { exact: true })).toBeVisible()
+  const unplannedSummary = page.getByRole("region", {
+    name: "Projects without work plans",
+  })
+  await expect(unplannedSummary).toContainText("2 unplanned")
+  await expect(unplannedSummary).toContainText(
+    "Unplanned projects are excluded from task-weighted completion.",
+  )
+  await expect(
+    page.getByText("Approve wireframes", { exact: true }),
+  ).toBeVisible()
+  await expect(page.getByText("Review content", { exact: true })).toBeVisible()
+  const requestsBeforeRefresh = requestPaths.length
+  const refreshedOverview = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === "/api/project-workspace/overview",
+  )
+  await page.evaluate(() =>
+    window.dispatchEvent(new Event("project-workspace-list-changed")),
+  )
+  await refreshedOverview
+  expect(requestPaths).toHaveLength(requestsBeforeRefresh + 1)
+  await page.getByRole("link", { name: "Manage projects" }).click()
+  await expect(page).toHaveURL(/\/project-workspace$/)
+  expect(requestPaths.length).toBeGreaterThan(0)
+  expect(new Set(requestPaths)).toEqual(
+    new Set(["/api/project-workspace/overview"]),
+  )
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto("/project-workspace/overview")
+  await expect(
+    page.getByRole("heading", { name: "Project status distribution" }),
+  ).toBeVisible()
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true)
+  await page.setViewportSize({ width: 768, height: 1024 })
+  await page.goto("/project-workspace/overview")
+  await expect(
+    page.getByRole("heading", { name: "Project status distribution" }),
+  ).toBeVisible()
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true)
+})
+
+test("workspace overview recovers from errors and shows empty department data", async ({
+  page,
+}) => {
+  await restoreSession(page, "STAFF", {
+    account: { headOf: { id: "design", name: "Design" } },
+  })
+  let fail = true
+  await page.route("**/api/project-workspace/overview", (route) =>
+    fail
+      ? route.fulfill({ status: 503, json: { error: "Overview unavailable" } })
+      : route.fulfill({
+          json: {
+            totals: {
+              totalProjects: 0,
+              inProgress: 0,
+              completed: 0,
+              onHold: 0,
+              planned: 0,
+              cancelled: 0,
+              workspaceGroups: 0,
+              projectsWithTasks: 0,
+              projectsWithoutTasks: 0,
+              totalTasks: 0,
+              completedTasks: 0,
+              outstandingTasks: 0,
+              upcomingTasks: 0,
+              overdueTasks: 0,
+            },
+            statusDistribution: [
+              { status: "PLANNED", count: 0 },
+              { status: "IN_PROGRESS", count: 0 },
+              { status: "ON_HOLD", count: 0 },
+              { status: "COMPLETED", count: 0 },
+              { status: "CANCELLED", count: 0 },
+            ],
+            clientDistribution: [],
+            workspaceProgress: [],
+            upcomingDeadlines: [],
+            overdueTaskList: [],
+          },
+        }),
+  )
+  await page.goto("/project-workspace/overview")
+  await expect(
+    page.getByRole("main", { name: "Project overview" }).getByRole("alert"),
+  ).toContainText("Overview unavailable")
+  fail = false
+  await page.getByRole("button", { name: "Try again" }).click()
+  await expect(
+    page.getByText("No projects yet.", { exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.getByText("No client projects yet.", { exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.getByText("No task deadlines in the next 14 days.", { exact: true }),
+  ).toBeVisible()
 })
 
 test("department workspace directory paginates, resets filters, and recovers from errors", async ({

@@ -154,6 +154,46 @@ export type WorkspaceDirectoryRow = {
   canRename: boolean
 }
 
+export type ProjectWorkspaceOverviewTask = {
+  id: string
+  title: string
+  projectId: string
+  projectName: string
+  dueDate: string
+  status: ProjectTaskStatus
+}
+
+export type ProjectWorkspaceOverview = {
+  totals: {
+    totalProjects: number
+    inProgress: number
+    completed: number
+    onHold: number
+    planned: number
+    cancelled: number
+    workspaceGroups: number
+    projectsWithTasks: number
+    projectsWithoutTasks: number
+    totalTasks: number
+    completedTasks: number
+    outstandingTasks: number
+    upcomingTasks: number
+    overdueTasks: number
+  }
+  statusDistribution: { status: ProjectStatus; count: number }[]
+  clientDistribution: { id: string; name: string; projectCount: number }[]
+  workspaceProgress: {
+    identity: string
+    kind: "group" | "ungrouped-project"
+    name: string
+    projectCount: number
+    completedTasks: number
+    totalTasks: number
+  }[]
+  upcomingDeadlines: ProjectWorkspaceOverviewTask[]
+  overdueTaskList: ProjectWorkspaceOverviewTask[]
+}
+
 export function projectWorkspaceHref(identity: string) {
   return `/project-workspace/${encodeURIComponent(identity)}`
 }
@@ -180,6 +220,11 @@ export function listWorkspaceDirectory(
     hasWorkspaces: boolean
   }>(`/api/project-workspace/directory?${params}`, { signal })
 }
+
+export const getProjectWorkspaceOverview = (signal?: AbortSignal) =>
+  apiRequest<ProjectWorkspaceOverview>("/api/project-workspace/overview", {
+    signal,
+  })
 
 export const listProjectWorkspaceTemplates = (signal?: AbortSignal) =>
   apiRequest<ProjectWorkspaceTemplate[]>("/api/project-workspace/templates", {

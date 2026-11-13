@@ -27,6 +27,7 @@ import {
   dropdownMenuClass,
 } from "@/components/ui/dropdown-styles"
 import {
+  notifyProjectWorkspaceListChanged,
   saveProjectPlan,
   updateProjectWorkspaceStatus,
   type ProjectWorkPlan,
@@ -49,6 +50,10 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
     ? { ...project.data, id: id.includes(":") ? id : project.data.id }
     : null
   const setWorkspace = project.setData
+  function updateWorkspaceAndNotify(updated: ProjectWorkspaceDetail) {
+    setWorkspace(updated)
+    notifyProjectWorkspaceListChanged()
+  }
   const [actionError, setError] = useState("")
   const error = actionError || project.error
   const [tab, setTab] = useState(
@@ -66,7 +71,7 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
     if (!editing || busy) return
     setBusy(true)
     try {
-      setWorkspace(
+      updateWorkspaceAndNotify(
         await saveProjectPlan(
           id,
           editing.projectId,
@@ -89,7 +94,7 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
     setStatusBusy(true)
     setError("")
     try {
-      setWorkspace(await updateProjectWorkspaceStatus(id, action))
+      updateWorkspaceAndNotify(await updateProjectWorkspaceStatus(id, action))
     } catch (reason) {
       setError(errorMessage(reason, "Couldn't update project status"))
     } finally {
@@ -315,7 +320,7 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
               <WorkspaceOverview
                 workspace={workspace}
                 busy={busy}
-                onUpdated={setWorkspace}
+                onUpdated={updateWorkspaceAndNotify}
                 onEditPlan={(stream) =>
                   setEditing({
                     projectId: stream.id,

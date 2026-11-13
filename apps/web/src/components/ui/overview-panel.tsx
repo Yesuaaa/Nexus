@@ -71,7 +71,12 @@ function EmptyText({ children }: { children: ReactNode }) {
   return <p className="m-0 text-xs leading-5 text-[#8a94a6]">{children}</p>
 }
 
-export type BreakdownRow = { id: string; label: string; value: number }
+export type BreakdownRow = {
+  id: string
+  label: string
+  value: number
+  colorClass?: string
+}
 
 /**
  * Ranked rows with a proportional meter. Without `total` bars are relative
@@ -120,7 +125,7 @@ export function BreakdownList({
               value={row.value}
               max={max}
               label={`${row.label}: ${row.value} ${unit}`}
-              colorClass={colorClass}
+              colorClass={row.colorClass ?? colorClass}
             />
           </li>
         )

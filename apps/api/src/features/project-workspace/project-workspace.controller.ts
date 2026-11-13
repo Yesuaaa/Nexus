@@ -25,6 +25,7 @@ import {
   downloadProjectDeliverable,
   updateProjectWorkspaceStatus,
 } from "./project-workspace.service.js"
+import { getProjectWorkspaceOverview } from "./project-workspace-overview.service.js"
 
 export const projectWorkspaceRouter = Router()
 projectWorkspaceRouter.use(requireAuth)
@@ -91,6 +92,10 @@ projectWorkspaceRouter.get("/directory", async (request, response) => {
       view,
     }),
   )
+})
+
+projectWorkspaceRouter.get("/overview", async (request, response) => {
+  response.json(await getProjectWorkspaceOverview(request.auth!.user.id))
 })
 
 projectWorkspaceRouter.get("/templates", async (request, response) => {
