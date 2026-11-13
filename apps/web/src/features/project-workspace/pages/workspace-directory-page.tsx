@@ -2,10 +2,22 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Archive, FolderKanban, Plus } from "lucide-react"
-import { PageHeader, PageHeaderButton } from "@/components/layout/page-header"
+import {
+  Archive,
+  FolderKanban,
+  Plus,
+  UserRound,
+  UsersRound,
+} from "lucide-react"
+import { ClientPageHeader } from "@/components/layout/client-page-header"
+import {
+  pageHeaderFrameClass,
+  PageHeader,
+  PageHeaderButton,
+} from "@/components/layout/page-header"
 import { ManagementViewToggle } from "@/components/layout/management-view-toggle"
 import { contentClass } from "@/components/layout/styles"
+import { useBreadcrumbLabel } from "@/components/layout/breadcrumbs"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
@@ -19,6 +31,7 @@ import {
   TablePaginationFooter,
 } from "@/components/ui/table-pagination-footer"
 import { usePaginatedList } from "@/components/ui/use-paginated-list"
+import { useDepartments } from "@/features/departments/hooks/use-departments"
 import { statusLabel } from "@/features/projects/model/project-status"
 import {
   listWorkspaceDirectory,
@@ -30,6 +43,7 @@ import { NewWorkspacePanel } from "./new-workspace-page"
 import {
   parseWorkspaceDirectoryState,
   serializeWorkspaceDirectoryState,
+  workspaceDirectoryHref,
 } from "../model/workspace-directory-state"
 
 const statuses: ProjectStatus[] = [
@@ -48,13 +62,25 @@ const sortOptions: { value: WorkspaceDirectoryQuery["sort"]; label: string }[] =
     { value: "projects", label: "Most projects first" },
   ]
 
-export function WorkspaceDirectoryPage() {
+export function WorkspaceDirectoryPage({
+  scopedDepartmentId,
+}: {
+  scopedDepartmentId?: string
+}) {
+  const departmentProjectDirectory = Boolean(scopedDepartmentId)
+  const pathname = departmentProjectDirectory
+    ? `/project-management/departments/${encodeURIComponent(scopedDepartmentId!)}/projects`
+    : "/project-workspace"
   const router = useRouter()
   const searchParams = useSearchParams()
   const rawSearchParams = searchParams.toString()
-  const directoryState = useMemo(
+  const parsedDirectoryState = useMemo(
     () => parseWorkspaceDirectoryState(new URLSearchParams(rawSearchParams)),
     [rawSearchParams],
+  )
+  const directoryState = useMemo(
+    () => ({ ...parsedDirectoryState, departmentId: "" }),
+    [parsedDirectoryState],
   )
   const canonicalSearchParams = serializeWorkspaceDirectoryState(directoryState)
   const [searchDraft, setSearchDraft] = useState({
@@ -70,12 +96,14 @@ export function WorkspaceDirectoryPage() {
   const query = useMemo(
     () => ({
       search: directoryState.search,
+      departmentId: scopedDepartmentId ?? "",
       status: directoryState.status,
       sort: directoryState.sort,
       view: directoryState.view,
     }),
     [
       directoryState.search,
+      scopedDepartmentId,
       directoryState.status,
       directoryState.sort,
       directoryState.view,
@@ -96,32 +124,24 @@ export function WorkspaceDirectoryPage() {
         ...patch,
       }
       if (searchChanged) next.page = 1
-      const params = serializeWorkspaceDirectoryState(next)
-      const href = params
-        ? `/project-workspace?${params}`
-        : "/project-workspace"
+      const href = workspaceDirectoryHref(next, pathname)
       router.replace(href, { scroll: false })
     },
-    [directoryState, router, search],
+    [directoryState, pathname, router, search],
   )
   const changePage = useCallback(
     (page: number) => {
       const next = { ...directoryState, page }
-      const params = serializeWorkspaceDirectoryState(next)
-      const href = params
-        ? `/project-workspace?${params}`
-        : "/project-workspace"
+      const href = workspaceDirectoryHref(next, pathname)
       router.replace(href, { scroll: false })
     },
-    [directoryState, router],
+    [directoryState, pathname, router],
   )
   useEffect(() => {
     if (rawSearchParams === canonicalSearchParams) return
-    const href = canonicalSearchParams
-      ? `/project-workspace?${canonicalSearchParams}`
-      : "/project-workspace"
+    const href = workspaceDirectoryHref(directoryState, pathname)
     router.replace(href, { scroll: false })
-  }, [canonicalSearchParams, rawSearchParams, router])
+  }, [canonicalSearchParams, directoryState, pathname, rawSearchParams, router])
   const list = usePaginatedList({
     params: query,
     load: ({ page, signal }) =>
@@ -151,31 +171,108 @@ export function WorkspaceDirectoryPage() {
     }
   }, [directoryState.search, trimmedSearch, updateDirectoryState])
   const archive = directoryState.view === "archive"
+  const departmentList = useDepartments({
+    enabled: departmentProjectDirectory,
+    projectManagement: departmentProjectDirectory,
+  })
+  const selectedDepartment = departmentList.departments.find(
+    (department) => department.id === scopedDepartmentId,
+  )
+  useBreadcrumbLabel(scopedDepartmentId ?? "", selectedDepartment?.name)
   const data = list.loading || list.error ? null : list.data
-  const noResults = data?.hasWorkspaces
-    ? query.search || query.status
+  const noResults =
+    query.search || query.status
       ? "No workspaces match these filters"
-      : archive
-        ? "Archive is empty"
-        : "No active workspaces"
-    : "No project workspaces yet"
+      : data?.hasWorkspaces
+        ? archive
+          ? "Archive is empty"
+          : "No active workspaces"
+        : "No project workspaces yet"
+  const departmentProjectCount = selectedDepartment?.projectCount ?? 0
+  const departmentMemberCount = selectedDepartment?.memberCount ?? 0
+  const departmentHead =
+    selectedDepartment?.head?.fullName ||
+    selectedDepartment?.head?.email ||
+    "Unassigned"
+  const departmentMetadata = [
+    {
+      icon: FolderKanban,
+      label: `${departmentProjectCount} total ${departmentProjectCount === 1 ? "project" : "projects"}`,
+    },
+    {
+      icon: UsersRound,
+      label: `${departmentMemberCount} ${departmentMemberCount === 1 ? "member" : "members"}`,
+    },
+    { icon: UserRound, label: `Head: ${departmentHead}` },
+  ]
 
   return (
     <main
       className={`${contentClass} p-[clamp(16px,2.1vw,32px)]`}
-      aria-label="Project workspace"
+      aria-label={
+        departmentProjectDirectory
+          ? "Department project workspaces"
+          : "Project workspace"
+      }
     >
-      <PageHeader
-        headingId="project-workspace-management-heading"
-        title="Project Workspace Management"
-        description="Find and manage the projects your department is responsible for."
-        actions={
-          <PageHeaderButton onClick={() => setSetupOpen(true)}>
-            <Plus aria-hidden="true" />
-            Set up workspace
-          </PageHeaderButton>
-        }
-      />
+      {departmentProjectDirectory ? (
+        <ClientPageHeader
+          className={pageHeaderFrameClass}
+          eyebrow={
+            selectedDepartment
+              ? `${selectedDepartment.name} Department`
+              : "Department"
+          }
+          title="Project Workspaces"
+          description={
+            selectedDepartment ? (
+              <>
+                <span className="block">
+                  Browse and monitor projects managed by this department.
+                </span>
+                <span
+                  role="group"
+                  aria-label="Department project summary"
+                  className="mt-1.5 flex flex-wrap items-center text-xs leading-5 text-[#738096]"
+                >
+                  {departmentMetadata.map(({ icon: Icon, label }, index) => (
+                    <span
+                      key={label}
+                      className={`inline-flex items-center gap-1.5 py-0.5 ${
+                        index > 0 ? "ml-3 border-l border-[#dce3ee] pl-3" : ""
+                      }`}
+                    >
+                      <Icon
+                        size={14}
+                        strokeWidth={1.7}
+                        className="shrink-0"
+                        aria-hidden="true"
+                      />
+                      <span>{label}</span>
+                    </span>
+                  ))}
+                </span>
+              </>
+            ) : departmentList.error ? (
+              "Department details are unavailable."
+            ) : (
+              "Loading department details…"
+            )
+          }
+        />
+      ) : (
+        <PageHeader
+          headingId="project-workspace-management-heading"
+          title="Project Workspace Management"
+          description="Find and manage the projects your department is responsible for."
+          actions={
+            <PageHeaderButton onClick={() => setSetupOpen(true)}>
+              <Plus aria-hidden="true" />
+              Set up workspace
+            </PageHeaderButton>
+          }
+        />
+      )}
       <section className="mt-5" aria-label="Workspace directory">
         <div className="flex flex-wrap items-start gap-[10px] pb-4 max-[560px]:flex-col max-[560px]:pb-3">
           <SearchField
@@ -232,7 +329,23 @@ export function WorkspaceDirectoryPage() {
             }}
           />
         </div>
-        {list.error ? (
+        {departmentProjectDirectory && departmentList.error && (
+          <Alert
+            as="div"
+            variant="text"
+            className="mb-3 flex items-center gap-2"
+          >
+            {departmentList.error}{" "}
+            <Button variant="outline" onClick={departmentList.retry}>
+              Retry department list
+            </Button>
+          </Alert>
+        )}
+        {departmentProjectDirectory &&
+        departmentList.data &&
+        !selectedDepartment ? (
+          <Alert as="div">Department not found.</Alert>
+        ) : list.error ? (
           <Alert as="div">
             {list.error}{" "}
             <Button variant="outline" onClick={list.retry}>
@@ -250,6 +363,7 @@ export function WorkspaceDirectoryPage() {
             quickKey=""
             archiveView={archive}
             directoryState={directoryState}
+            departmentScopedDirectory={departmentProjectDirectory}
             onChanged={list.retry}
           />
         )}
@@ -265,7 +379,7 @@ export function WorkspaceDirectoryPage() {
           />
         )}
       </section>
-      {setupOpen && (
+      {!departmentProjectDirectory && setupOpen && (
         <NewWorkspacePanel
           onClose={() => setSetupOpen(false)}
           onCreated={list.retry}

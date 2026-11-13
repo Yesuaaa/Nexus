@@ -2,6 +2,7 @@ import Link from "next/link"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
 import { Pill } from "@/components/ui/pill"
+import { ProgressMeter } from "@/components/ui/stat-strip"
 import {
   ResponsiveDataTable,
   ResponsiveDataTableBody,
@@ -24,6 +25,8 @@ import { WorkspaceListRowActions } from "./workspace-list-row-actions"
 
 const grid =
   "grid grid-cols-[minmax(140px,1.4fr)_minmax(100px,1fr)_minmax(120px,1.2fr)_minmax(90px,.8fr)_minmax(100px,.9fr)_112px] items-center gap-3.5 @max-[900px]:grid-cols-[minmax(0,1fr)_auto]"
+const departmentScopedGrid =
+  "grid grid-cols-[minmax(140px,1.4fr)_minmax(100px,1fr)_minmax(120px,1.2fr)_minmax(90px,.8fr)_minmax(100px,.9fr)] items-center gap-3.5 @max-[900px]:grid-cols-[minmax(0,1fr)_auto]"
 
 const cells = [
   "min-w-0 @max-[900px]:col-start-1 @max-[900px]:row-start-1",
@@ -33,6 +36,13 @@ const cells = [
   "min-w-0 @max-[900px]:col-span-2 @max-[900px]:row-start-5",
   "@max-[900px]:col-start-2 @max-[900px]:row-start-1",
 ]
+const departmentScopedCells = [
+  "min-w-0 @max-[900px]:col-start-1 @max-[900px]:row-start-1",
+  "min-w-0 @max-[900px]:col-span-2 @max-[900px]:row-start-2",
+  "min-w-0 @max-[900px]:col-span-2 @max-[900px]:row-start-3",
+  "min-w-0 @max-[900px]:col-span-2 @max-[900px]:row-start-4",
+  "min-w-0 @max-[900px]:col-span-2 @max-[900px]:row-start-5",
+]
 
 type WorkspaceRow = ProjectWorkspaceSummary | WorkspaceDirectoryRow
 
@@ -40,9 +50,14 @@ function workspaceKey(workspace: WorkspaceRow) {
   return "rowId" in workspace ? workspace.rowId : workspace.id
 }
 
-function rowClass(_workspace: WorkspaceRow, _index: number, isLast: boolean) {
+function rowClass(
+  _workspace: WorkspaceRow,
+  _index: number,
+  isLast: boolean,
+  departmentScopedDirectory = false,
+) {
   return cn(
-    grid,
+    departmentScopedDirectory ? departmentScopedGrid : grid,
     "h-[58px] border-b border-[#eceef1] bg-background px-4 py-[7px] text-xs text-foreground transition-colors hover:bg-[#e8eef2] @max-[900px]:h-[210px] @max-[900px]:gap-y-2",
     isLast && "rounded-b-[7px] border-b-0",
   )
@@ -56,6 +71,7 @@ export function WorkspaceListTable({
   archiveView,
   onChanged,
   directory = false,
+  departmentScopedDirectory = false,
   directoryState,
 }: {
   workspaces: WorkspaceRow[]
@@ -65,23 +81,35 @@ export function WorkspaceListTable({
   archiveView: boolean
   onChanged: () => void
   directory?: boolean
+  departmentScopedDirectory?: boolean
   directoryState?: WorkspaceDirectoryState
 }) {
   const { formatDate } = useDatePreferences()
+  const rowGrid = departmentScopedDirectory ? departmentScopedGrid : grid
   return (
-    <ResponsiveDataTable label="Project workspaces" aria-busy={loading}>
+    <ResponsiveDataTable
+      label={
+        departmentScopedDirectory
+          ? "Department project workspaces"
+          : "Project workspaces"
+      }
+      aria-busy={loading}
+    >
       <ResponsiveDataTableHeader
         className="@max-[900px]:sr-only"
-        rowClassName={grid}
+        rowClassName={rowGrid}
       >
-        {[
-          directory ? "Workspace" : "Project",
-          "Client",
-          directory ? "Progress" : "Services",
-          "Status",
-          "Last updated",
-          "Actions",
-        ].map((label) => (
+        {(departmentScopedDirectory
+          ? ["Workspace", "Client", "Progress", "Status", "Last updated"]
+          : [
+              directory ? "Workspace" : "Project",
+              "Client",
+              directory ? "Progress" : "Services",
+              "Status",
+              "Last updated",
+              "Actions",
+            ]
+        ).map((label) => (
           <ResponsiveDataTableColumnHeader key={label}>
             {label}
           </ResponsiveDataTableColumnHeader>
@@ -92,17 +120,21 @@ export function WorkspaceListTable({
           <DataTableSkeletonRows
             label="projects"
             rowClassName={cn(
-              grid,
+              rowGrid,
               "h-[58px] px-4 py-[7px] @max-[900px]:h-[210px] @max-[900px]:gap-y-2",
             )}
-            cellClassNames={cells}
+            cellClassNames={
+              departmentScopedDirectory ? departmentScopedCells : cells
+            }
           />
         </ResponsiveDataTableBody>
       ) : (
         <AnimatedSlotGridBody
           items={workspaces}
           getKey={workspaceKey}
-          rowClassName={rowClass}
+          rowClassName={(workspace, index, isLast) =>
+            rowClass(workspace, index, isLast, departmentScopedDirectory)
+          }
           viewKey={viewKey}
           quickKey={quickKey}
           animateRows
@@ -116,15 +148,21 @@ export function WorkspaceListTable({
           renderRow={(workspace) => (
             <>
               <div role="cell" className={cells[0]}>
-                <Link
-                  href={projectWorkspaceHref(
-                    workspaceKey(workspace),
-                    directory ? directoryState : undefined,
-                  )}
-                  className="block truncate font-semibold text-foreground no-underline hover:underline focus-visible:outline-2 focus-visible:outline-ring"
-                >
-                  {workspace.name}
-                </Link>
+                {departmentScopedDirectory ? (
+                  <span className="block truncate font-semibold text-foreground">
+                    {workspace.name}
+                  </span>
+                ) : (
+                  <Link
+                    href={projectWorkspaceHref(
+                      workspaceKey(workspace),
+                      directory ? directoryState : undefined,
+                    )}
+                    className="block truncate font-semibold text-foreground no-underline hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+                  >
+                    {workspace.name}
+                  </Link>
+                )}
               </div>
               <div
                 role="cell"
@@ -137,13 +175,29 @@ export function WorkspaceListTable({
                   ? workspace.clientName
                   : workspace.client.fullName) || "Client"}
               </div>
-              <div role="cell" className={cells[2]}>
+              <div
+                role="cell"
+                className={
+                  (departmentScopedDirectory ? departmentScopedCells : cells)[2]
+                }
+              >
                 <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
                   <span className="hidden shrink-0 text-[#738096] @max-[900px]:inline">
                     {directory ? "Progress" : "Services"}
                   </span>
                   {"projectCount" in workspace ? (
-                    workspace.progress ? (
+                    departmentScopedDirectory && workspace.progress ? (
+                      <div className="w-24 shrink-0">
+                        <ProgressMeter
+                          value={workspace.progress.completed}
+                          max={workspace.progress.total}
+                          label={`${workspace.name} task progress`}
+                          colorClass="bg-[#244993]"
+                        />
+                      </div>
+                    ) : departmentScopedDirectory ? (
+                      <span className="shrink-0 text-[#738096]">Unplanned</span>
+                    ) : workspace.progress ? (
                       <span className="shrink-0 tabular-nums text-[#52627a]">
                         {workspace.progress.total > 0
                           ? `${Math.round((workspace.progress.completed / workspace.progress.total) * 100)}%`
@@ -167,7 +221,12 @@ export function WorkspaceListTable({
                   )}
                 </div>
               </div>
-              <div role="cell" className={cells[3]}>
+              <div
+                role="cell"
+                className={
+                  (departmentScopedDirectory ? departmentScopedCells : cells)[3]
+                }
+              >
                 <span className="mr-2 hidden text-[#738096] @max-[900px]:inline">
                   Status
                 </span>
@@ -195,7 +254,15 @@ export function WorkspaceListTable({
                   </Pill>
                 )}
               </div>
-              <div role="cell" className={cn(cells[4], "text-[#52627a]")}>
+              <div
+                role="cell"
+                className={cn(
+                  (departmentScopedDirectory
+                    ? departmentScopedCells
+                    : cells)[4],
+                  "text-[#52627a]",
+                )}
+              >
                 <span className="mr-2 hidden text-[#738096] @max-[900px]:inline">
                   Updated
                 </span>
@@ -203,18 +270,20 @@ export function WorkspaceListTable({
                   {formatDate(workspace.updatedAt)}
                 </time>
               </div>
-              <div role="cell" className={cells[5]}>
-                <WorkspaceListRowActions
-                  workspace={workspace}
-                  identity={workspaceKey(workspace)}
-                  returnState={directory ? directoryState : undefined}
-                  onChanged={onChanged}
-                  isArchived={
-                    "status" in workspace &&
-                    ["COMPLETED", "CANCELLED"].includes(workspace.status)
-                  }
-                />
-              </div>
+              {!departmentScopedDirectory && (
+                <div role="cell" className={cells[5]}>
+                  <WorkspaceListRowActions
+                    workspace={workspace}
+                    identity={workspaceKey(workspace)}
+                    returnState={directory ? directoryState : undefined}
+                    onChanged={onChanged}
+                    isArchived={
+                      "status" in workspace &&
+                      ["COMPLETED", "CANCELLED"].includes(workspace.status)
+                    }
+                  />
+                </div>
+              )}
             </>
           )}
         />

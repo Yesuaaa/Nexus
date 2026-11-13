@@ -1,5 +1,5 @@
 import { json, Router } from "express"
-import { recordIdParam } from "../../shared/validation.js"
+import { isRecordId, recordIdParam } from "../../shared/validation.js"
 import { requireAuth } from "../auth/auth.middleware.js"
 import { fail } from "../../shared/http-error.js"
 import { parsePage } from "../../shared/query/pagination.js"
@@ -55,6 +55,11 @@ projectWorkspaceRouter.get("/", async (request, response) => {
 })
 
 projectWorkspaceRouter.get("/directory", async (request, response) => {
+  const rawDepartmentId = request.query.departmentId ?? ""
+  const departmentId =
+    typeof rawDepartmentId === "string"
+      ? rawDepartmentId.trim()
+      : rawDepartmentId
   const {
     page: inputPage,
     search = "",
@@ -67,6 +72,8 @@ projectWorkspaceRouter.get("/directory", async (request, response) => {
     !page ||
     typeof search !== "string" ||
     search.length > 200 ||
+    typeof departmentId !== "string" ||
+    (departmentId !== "" && !isRecordId(departmentId)) ||
     typeof status !== "string" ||
     ![
       "",
@@ -87,6 +94,7 @@ projectWorkspaceRouter.get("/directory", async (request, response) => {
     await listWorkspaceDirectory(request.auth!.user.id, {
       page,
       search: search.trim(),
+      departmentId,
       status,
       sort,
       view,

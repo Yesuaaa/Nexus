@@ -97,6 +97,11 @@ export function Breadcrumbs() {
   const { labels } = useContext(BreadcrumbLabelContext)
   const segments = pathname.split("/").filter(Boolean)
   const decodedSegments = segments.map(decodeURIComponent)
+  const isProjectManagementDepartmentProjects =
+    decodedSegments.length === 4 &&
+    decodedSegments[0] === "project-management" &&
+    decodedSegments[1] === "departments" &&
+    decodedSegments[3] === "projects"
   const isWorkspaceDetail =
     decodedSegments.length === 2 &&
     decodedSegments[0] === "project-workspace" &&
@@ -127,15 +132,24 @@ export function Breadcrumbs() {
           const label =
             labels[segment] ??
             labels[decodedSegment] ??
-            (index === 1 && isWorkspaceDetail
-              ? "Project"
-              : index === 1 && segments[0] === "projects"
-                ? "Project"
-                : labelFor(segment))
+            (isProjectManagementDepartmentProjects && index === 1
+              ? "Management"
+              : isProjectManagementDepartmentProjects && index === 3
+                ? "Project Workspaces"
+                : index === 1 && isWorkspaceDetail
+                  ? "Project"
+                  : index === 1 && segments[0] === "projects"
+                    ? "Project"
+                    : labelFor(segment))
           const isCurrent = index === segments.length - 1
+          const isDepartmentContext =
+            isProjectManagementDepartmentProjects && index === 2
           const baseHref = `/${segments.slice(0, index + 1).join("/")}`
-          const href =
-            index === 0 && directoryQuery
+          const href = isProjectManagementDepartmentProjects
+            ? index === 0
+              ? "/project-management/overview"
+              : "/project-management"
+            : index === 0 && directoryQuery
               ? `${baseHref}?${directoryQuery}`
               : baseHref
           return (
@@ -151,6 +165,10 @@ export function Breadcrumbs() {
                   aria-current="page"
                   className="min-w-0 truncate font-semibold text-[#253f8c]"
                 >
+                  {label}
+                </span>
+              ) : isDepartmentContext ? (
+                <span className="block min-w-0 truncate text-[#647a9c]">
                   {label}
                 </span>
               ) : (

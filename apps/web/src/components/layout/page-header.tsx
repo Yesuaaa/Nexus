@@ -10,6 +10,9 @@ const descriptionTones = {
   client: "text-[#52627a]",
 } as const
 
+export const pageHeaderFrameClass =
+  "-mx-[clamp(16px,2.1vw,32px)] flex items-center justify-between gap-6 border-b border-[#eceef1] px-[clamp(16px,2.1vw,32px)] pt-0.5 pb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-4 max-[560px]:pb-[18px]"
+
 /**
  * Standard page header: an `<h1>` and description on the left, optional
  * actions on the right, separated from the content by a full-bleed rule.
@@ -32,12 +35,7 @@ export function PageHeader({
   className?: string
 }) {
   return (
-    <header
-      className={cn(
-        "-mx-[clamp(16px,2.1vw,32px)] flex items-center justify-between gap-6 border-b border-[#eceef1] px-[clamp(16px,2.1vw,32px)] pt-0.5 pb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-4 max-[560px]:pb-[18px]",
-        className,
-      )}
-    >
+    <header className={cn(pageHeaderFrameClass, className)}>
       <div className="min-w-0">
         <h1
           id={headingId}

@@ -4,6 +4,7 @@ export type WorkspaceDirectoryStatus =
 export type WorkspaceDirectoryState = {
   page: number
   search: string
+  departmentId: string
   status: WorkspaceDirectoryStatus | ""
   sort: "recent" | "name" | "client" | "projects"
   view: "active" | "archive"
@@ -12,6 +13,7 @@ export type WorkspaceDirectoryState = {
 export const defaultWorkspaceDirectoryState: WorkspaceDirectoryState = {
   page: 1,
   search: "",
+  departmentId: "",
   status: "",
   sort: "recent",
   view: "active",
@@ -41,6 +43,7 @@ export function parseWorkspaceDirectoryState(
   params: URLSearchParams,
 ): WorkspaceDirectoryState {
   const search = oneValue(params, "search")
+  const departmentId = oneValue(params, "departmentId")
   const status = oneValue(params, "status")
   const sort = oneValue(params, "sort")
   const view = oneValue(params, "view")
@@ -58,6 +61,10 @@ export function parseWorkspaceDirectoryState(
       typeof search === "string" && search.trim().length <= 200
         ? search.trim()
         : defaultWorkspaceDirectoryState.search,
+    departmentId:
+      typeof departmentId === "string" && departmentId.length <= 100
+        ? departmentId.trim()
+        : defaultWorkspaceDirectoryState.departmentId,
     status:
       status === "" ||
       (typeof status === "string" &&
@@ -81,6 +88,7 @@ export function serializeWorkspaceDirectoryState(
 ) {
   const params = new URLSearchParams()
   if (state.search) params.set("search", state.search)
+  if (state.departmentId) params.set("departmentId", state.departmentId)
   if (state.status) params.set("status", state.status)
   if (state.sort !== defaultWorkspaceDirectoryState.sort)
     params.set("sort", state.sort)
@@ -91,7 +99,10 @@ export function serializeWorkspaceDirectoryState(
   return params.toString()
 }
 
-export function workspaceDirectoryHref(state = defaultWorkspaceDirectoryState) {
+export function workspaceDirectoryHref(
+  state = defaultWorkspaceDirectoryState,
+  pathname = "/project-workspace",
+) {
   const query = serializeWorkspaceDirectoryState(state)
-  return query ? `/project-workspace?${query}` : "/project-workspace"
+  return query ? `${pathname}?${query}` : pathname
 }

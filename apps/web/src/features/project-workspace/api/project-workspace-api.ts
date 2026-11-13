@@ -152,6 +152,7 @@ export type WorkspaceDirectoryRow = {
   clientName: string | null
   statuses: ProjectStatus[]
   projectCount: number
+  departmentNames: string[]
   updatedAt: string
   progress: { completed: number; total: number } | null
   canManage: boolean

@@ -1,8 +1,13 @@
 import { randomUUID } from "node:crypto"
-import { Prisma, type ProjectStatus } from "../../generated/prisma/client.js"
+import {
+  Prisma,
+  Role,
+  type ProjectStatus,
+} from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
-import { activeStaff } from "../../shared/query/accounts.js"
+import { activeAccount, activeStaff } from "../../shared/query/accounts.js"
 import { isRecordId } from "../../shared/validation.js"
+import { hasPermission, Permission } from "../auth/auth.permissions.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 import { parseWorkflowUpload } from "../request-workflow/workflow.files.js"
 import {
@@ -506,6 +511,7 @@ export async function listProjectWorkspaces(
 type DirectoryOptions = {
   page: number
   search: string
+  departmentId: string
   status: string
   sort: "recent" | "name" | "client" | "projects"
   view: "active" | "archive"
@@ -517,9 +523,39 @@ type DirectoryRecord = {
   kind: "group" | "ungrouped-project"
   name: string
   clientName: string | null
+  departmentNames: string[]
   statuses: ProjectStatus[]
   projectCount: number
   canManage: boolean
+}
+
+type WorkspaceDirectoryAccess =
+  | { kind: "company"; canReadDepartments: boolean }
+  | { kind: "department-head"; context: StaffContext }
+
+async function workspaceDirectoryAccess(
+  tx: Prisma.TransactionClient,
+  userId: string,
+): Promise<WorkspaceDirectoryAccess> {
+  const user = await tx.user.findFirst({
+    where: { id: userId, ...activeAccount },
+    select: { role: true },
+  })
+  if (!user) throw new ServiceRequestsError(403, "Project access is required")
+
+  if (
+    (user.role === Role.ADMIN || user.role === Role.SUPERADMIN) &&
+    hasPermission(user.role, Permission.PROJECT_MANAGEMENT_READ)
+  )
+    return {
+      kind: "company",
+      canReadDepartments: hasPermission(user.role, Permission.DEPARTMENTS_READ),
+    }
+
+  const context = await getStaffContext(tx, userId)
+  if (!context.canCreate)
+    throw new ServiceRequestsError(403, "Project directory access is required")
+  return { kind: "department-head", context }
 }
 
 export async function listWorkspaceDirectory(
@@ -528,13 +564,28 @@ export async function listWorkspaceDirectory(
 ) {
   return getPrisma()!.$transaction(
     async (tx) => {
-      const context = await getStaffContext(tx, userId)
-      if (!context.canCreate)
-        throw new ServiceRequestsError(
-          403,
-          "Department head access is required",
-        )
-      const departmentId = context.headDepartmentIds[0]
+      const access = await workspaceDirectoryAccess(tx, userId)
+      if (access.kind === "company" && options.departmentId) {
+        if (!access.canReadDepartments)
+          throw new ServiceRequestsError(403, "Department access is required")
+        const department = await tx.department.findUnique({
+          where: { id: options.departmentId },
+          select: { id: true },
+        })
+        if (!department)
+          throw new ServiceRequestsError(404, "Department not found")
+      }
+      const headDepartmentId =
+        access.kind === "department-head"
+          ? access.context.headDepartmentIds[0]
+          : null
+      const departmentConstraint =
+        access.kind === "company"
+          ? options.departmentId
+            ? Prisma.sql`r."acceptedDepartmentId" = ${options.departmentId}`
+            : Prisma.sql`TRUE`
+          : Prisma.sql`r."acceptedDepartmentId" = ${headDepartmentId}
+              AND (${options.departmentId} = '' OR r."acceptedDepartmentId" = ${options.departmentId})`
       const { skip, take } = pageWindow(options.page)
       const search = `%${options.search.replace(/[\\%_]/g, "\\$&")}%`
       const order = {
@@ -548,10 +599,18 @@ export async function listWorkspaceDirectory(
         { rows: DirectoryRecord[]; total: number; hasWorkspaces: boolean }[]
       >`
       WITH authorized AS (
-        SELECT p.id, p."workspaceGroupId", p.name, p.status, p."updatedAt", p."clientId"
+        SELECT
+          p.id,
+          p."workspaceGroupId",
+          p.name,
+          p.status,
+          p."updatedAt",
+          p."clientId",
+          COALESCE(d.name, 'Unassigned') AS "departmentName"
         FROM "Project" p
-        JOIN "ServiceRequest" r ON r.id = p."requestId"
-        WHERE r."acceptedDepartmentId" = ${departmentId}
+        LEFT JOIN "ServiceRequest" r ON r.id = p."requestId"
+        LEFT JOIN "Department" d ON d.id = r."acceptedDepartmentId"
+        WHERE ${departmentConstraint}
       ), grouped AS (
         SELECT
           CASE WHEN a."workspaceGroupId" IS NULL THEN 'ungrouped-project:' ELSE 'group:' END ||
@@ -563,6 +622,7 @@ export async function listWorkspaceDirectory(
             DISTINCT NULLIF(u."fullName", ''),
             ', ' ORDER BY NULLIF(u."fullName", '')
           ) AS "clientName",
+          array_agg(DISTINCT a."departmentName" ORDER BY a."departmentName") AS "departmentNames",
           array_agg(DISTINCT a.status ORDER BY a.status) AS statuses,
           count(*)::int AS "projectCount",
           max(a."updatedAt") AS "updatedAt",
@@ -583,8 +643,8 @@ export async function listWorkspaceDirectory(
         EXISTS (SELECT 1 FROM grouped) AS "hasWorkspaces",
         COALESCE((
           SELECT json_agg(to_jsonb(page) - 'ordinal' ORDER BY ordinal) FROM (
-            SELECT "rowId", id, kind, name, "clientName", statuses, "projectCount",
-              active AS "canManage",
+            SELECT "rowId", id, kind, name, "clientName", "departmentNames", statuses, "projectCount",
+              (${access.kind === "department-head"} AND active) AS "canManage",
               row_number() OVER (ORDER BY ${order}, "rowId") AS ordinal
             FROM filtered
             ORDER BY ${order}, "rowId"
@@ -601,7 +661,10 @@ export async function listWorkspaceDirectory(
       const projects = await tx.project.findMany({
         where: {
           AND: [
-            workspaceReadWhere(context),
+            access.kind === "company" ? {} : workspaceReadWhere(access.context),
+            options.departmentId
+              ? { request: { acceptedDepartmentId: options.departmentId } }
+              : {},
             {
               OR: [
                 { workspaceGroupId: { in: groupIds } },
@@ -617,7 +680,10 @@ export async function listWorkspaceDirectory(
           updatedAt: true,
         },
       })
-      const mixed = await mixedWorkspaceGroupIds(tx, groupIds, context)
+      const mixed =
+        access.kind === "department-head"
+          ? await mixedWorkspaceGroupIds(tx, groupIds, access.context)
+          : new Set<string>()
       const progressByRow = new Map<
         string,
         { completed: number; total: number; updatedAt: Date }

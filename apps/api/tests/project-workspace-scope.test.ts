@@ -20,6 +20,18 @@ test(
         }),
       ),
     )
+    const [admin, superadmin] = await Promise.all(
+      (["ADMIN", "SUPERADMIN"] as const).map((role, index) =>
+        prisma.user.create({
+          data: {
+            email: `${role.toLowerCase()}@example.com`,
+            fullName: role,
+            role,
+            passwordHash: `test-only-${index}`,
+          },
+        }),
+      ),
+    )
     const own = await prisma.department.create({
       data: { name: "Design", headId: head.id },
     })
@@ -176,6 +188,8 @@ test(
     }
     const headApi = await apiFor(head)
     const staffApi = await apiFor(staff)
+    const adminApi = await apiFor(admin)
+    const superadminApi = await apiFor(superadmin)
     const staffTaskUpdate = await staffApi(
       `/group%3A${mixed.id}/projects/${unowned.id}/tasks/staff-task`,
       "PATCH",
@@ -363,6 +377,7 @@ test(
           id: string
           rowId: string
           kind: string
+          name: string
           statuses: string[]
           projectCount: number
           clientName: string | null
@@ -372,7 +387,109 @@ test(
         }[]
       }
     }
+    async function companyDirectory(
+      api: Awaited<ReturnType<typeof apiFor>>,
+      query = "",
+    ) {
+      const response = await api(`/directory?${query}`)
+      assert.equal(response.status, 200)
+      return (await response.json()) as {
+        total: number
+        page: number
+        pageSize: number
+        totalPages: number
+        rows: {
+          id: string
+          rowId: string
+          kind: string
+          name: string
+          statuses: string[]
+          projectCount: number
+          clientName: string | null
+          departmentNames: string[]
+          canManage: boolean
+          canRename: boolean
+          progress: { completed: number; total: number } | null
+        }[]
+      }
+    }
     assert.equal((await staffApi("/directory")).status, 403)
+    const companyMixed = (await companyDirectory(adminApi, "search=Shared"))
+      .rows[0]
+    assert.equal(companyMixed.rowId, `group:${mixed.id}`)
+    assert.equal(companyMixed.name, "Shared workspace")
+    assert.equal(companyMixed.projectCount, 3)
+    assert.deepEqual(companyMixed.departmentNames, [
+      "Design",
+      "Operations",
+      "Unassigned",
+    ])
+    assert.deepEqual(companyMixed.statuses, ["PLANNED", "IN_PROGRESS"])
+    assert.equal(companyMixed.canManage, false)
+    assert.equal(companyMixed.canRename, false)
+
+    const designMixed = (
+      await companyDirectory(adminApi, `departmentId=${own.id}&search=Shared`)
+    ).rows[0]
+    assert.equal(designMixed.projectCount, 1)
+    assert.deepEqual(designMixed.departmentNames, ["Design"])
+    assert.deepEqual(designMixed.statuses, ["PLANNED"])
+    assert.equal(
+      (
+        await companyDirectory(
+          adminApi,
+          `departmentId=${own.id}&search=Operations%20brief`,
+        )
+      ).total,
+      0,
+    )
+    const operationsMixed = (
+      await companyDirectory(adminApi, `departmentId=${other.id}&search=Shared`)
+    ).rows[0]
+    assert.equal(operationsMixed.projectCount, 1)
+    assert.equal(operationsMixed.clientName, otherClient.fullName)
+    assert.deepEqual(operationsMixed.departmentNames, ["Operations"])
+
+    const operationsStandalone = (
+      await companyDirectory(adminApi, "search=Operations%20standalone")
+    ).rows[0]
+    assert.equal(
+      operationsStandalone.rowId,
+      `ungrouped-project:${otherStandalone.id}`,
+    )
+    assert.deepEqual(operationsStandalone.departmentNames, ["Operations"])
+    assert.equal(operationsStandalone.canManage, false)
+    assert.equal(operationsStandalone.canRename, false)
+    assert.equal(
+      (await companyDirectory(adminApi, "search=Operations%20workspace"))
+        .rows[0].progress,
+      null,
+    )
+
+    const adminGroupIdentity = `/group%3A${mixed.id}`
+    assert.equal((await adminApi(adminGroupIdentity)).status, 403)
+    assert.equal(
+      (await adminApi(adminGroupIdentity, "PATCH", { name: "Admin rename" }))
+        .status,
+      403,
+    )
+    assert.equal(
+      (await adminApi(`${adminGroupIdentity}/cancel`, "POST")).status,
+      403,
+    )
+    const superadminMixed = (
+      await companyDirectory(superadminApi, "search=Shared")
+    ).rows[0]
+    assert.equal(superadminMixed.canManage, false)
+    assert.equal(superadminMixed.canRename, false)
+    assert.equal(
+      (
+        await superadminApi(adminGroupIdentity, "PATCH", {
+          name: "Superadmin rename",
+        })
+      ).status,
+      403,
+    )
     assert.equal((await directory("search=Operations")).total, 0)
     assert.equal((await directory("status=IN_PROGRESS")).total, 0)
     assert.equal((await directory("view=archive")).total, 0)
@@ -403,6 +520,68 @@ test(
       ({ rowId }) => rowId,
     )
     assert.deepEqual(rowIds, [...new Set(rowIds)].sort())
+    const companyFirstPage = await companyDirectory(adminApi, "sort=recent")
+    const companySecondPage = await companyDirectory(
+      adminApi,
+      "sort=recent&page=2",
+    )
+    assert.equal(companyFirstPage.total, 14)
+    assert.equal(companyFirstPage.pageSize, 10)
+    assert.equal(companyFirstPage.totalPages, 2)
+    assert.equal(companyFirstPage.rows.length, 10)
+    assert.equal(companySecondPage.rows.length, 4)
+    assert.equal(
+      new Set(
+        [...companyFirstPage.rows, ...companySecondPage.rows].map(
+          ({ rowId }) => rowId,
+        ),
+      ).size,
+      14,
+    )
+    assert.equal(
+      (
+        await companyDirectory(
+          adminApi,
+          `departmentId=${own.id}&search=Shared&status=IN_PROGRESS`,
+        )
+      ).total,
+      0,
+    )
+
+    const archivedCompanyGroup = await prisma.projectWorkspaceGroup.create({
+      data: {
+        name: "Archived Operations workspace",
+        clientId: otherClient.id,
+        createdById: admin.id,
+        structure: "SEPARATE",
+      },
+    })
+    const archivedCompanyProject = await project(
+      "Archived Operations delivery",
+      other.id,
+      archivedCompanyGroup.id,
+      otherClient.id,
+    )
+    await prisma.project.update({
+      where: { id: archivedCompanyProject.id },
+      data: { status: "CANCELLED" },
+    })
+    const companyArchive = await companyDirectory(
+      adminApi,
+      `departmentId=${other.id}&view=archive&status=CANCELLED&search=Archived%20Operations`,
+    )
+    assert.equal(companyArchive.total, 1)
+    assert.deepEqual(companyArchive.rows[0].statuses, ["CANCELLED"])
+    assert.deepEqual(companyArchive.rows[0].departmentNames, ["Operations"])
+    assert.equal(
+      (
+        await companyDirectory(
+          adminApi,
+          `departmentId=${other.id}&view=active&status=CANCELLED&search=Archived%20Operations`,
+        )
+      ).total,
+      0,
+    )
     const quotation = await prisma.workflowQuotation.create({
       data: {
         requestId: booking.requestId,

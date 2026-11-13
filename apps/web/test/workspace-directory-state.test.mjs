@@ -10,12 +10,13 @@ import {
 test("workspace directory URL state parses and serializes one canonical filter set", () => {
   const state = parseWorkspaceDirectoryState(
     new URLSearchParams(
-      "search=%20Acme%20&status=IN_PROGRESS&sort=client&view=archive&page=2&ignored=drop",
+      "search=%20Acme%20&status=IN_PROGRESS&sort=client&view=archive&page=2&departmentId=design-1&ignored=drop",
     ),
   )
 
   assert.deepEqual(state, {
     page: 2,
+    departmentId: "design-1",
     search: "Acme",
     status: "IN_PROGRESS",
     sort: "client",
@@ -23,7 +24,20 @@ test("workspace directory URL state parses and serializes one canonical filter s
   })
   assert.equal(
     serializeWorkspaceDirectoryState(state),
-    "search=Acme&status=IN_PROGRESS&sort=client&view=archive&page=2",
+    "search=Acme&departmentId=design-1&status=IN_PROGRESS&sort=client&view=archive&page=2",
+  )
+})
+
+test("company directory links keep the department filter on its own route", () => {
+  const state = {
+    ...defaultWorkspaceDirectoryState,
+    departmentId: "design-1",
+    page: 2,
+  }
+
+  assert.equal(
+    workspaceDirectoryHref(state, "/project-management"),
+    "/project-management?departmentId=design-1&page=2",
   )
 })
 

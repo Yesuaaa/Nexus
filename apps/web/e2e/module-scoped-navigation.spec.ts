@@ -14,7 +14,7 @@ function mainMenu(page: Page) {
 }
 
 for (const role of ["ADMIN", "SUPERADMIN"] as const) {
-  test(`${role} enters Project Management without opening Staff project data`, async ({
+  test(`${role} enters the read-only Project Management directory`, async ({
     page,
   }) => {
     const projectDataRequests: string[] = []
@@ -66,9 +66,13 @@ for (const role of ["ADMIN", "SUPERADMIN"] as const) {
         exact: true,
       }),
     ).toBeVisible()
-    await expect(
-      page.getByText("Project records are not included in Phase 1."),
-    ).toBeVisible()
+    await expect(page.getByText("No project workspaces yet")).toBeVisible()
+    expect(projectDataRequests).toContain("/api/project-workspace/directory")
+    expect(
+      projectDataRequests.every(
+        (path) => path === "/api/project-workspace/directory",
+      ),
+    ).toBe(true)
 
     await menu
       .getByRole("link", {
@@ -96,7 +100,11 @@ for (const role of ["ADMIN", "SUPERADMIN"] as const) {
       .getByRole("link", { name: "Switch Workspace", exact: true })
       .click()
     await expect(page).toHaveURL(/\/module$/)
-    expect(projectDataRequests).toEqual([])
+    expect(
+      projectDataRequests.every(
+        (path) => path === "/api/project-workspace/directory",
+      ),
+    ).toBe(true)
   })
 }
 

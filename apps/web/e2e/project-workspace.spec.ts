@@ -20,12 +20,14 @@ test("directory links and cancel distinguish a group and project with the same I
     clientName: "Client",
     statuses: ["PLANNED"],
     projectCount: 1,
+    departmentNames: ["Design"],
     updatedAt: "2026-11-09T00:00:00Z",
     progress: null,
     canManage: true,
   } as const
   const group: WorkspaceDirectoryRow = {
     ...shared,
+    departmentNames: ["Design"],
     statuses: ["PLANNED"],
     projectCount: 3,
     progress: { completed: 3, total: 8 },
@@ -36,6 +38,7 @@ test("directory links and cancel distinguish a group and project with the same I
   }
   const project: WorkspaceDirectoryRow = {
     ...shared,
+    departmentNames: ["Design"],
     statuses: ["PLANNED"],
     rowId: "ungrouped-project:shared-id",
     kind: "ungrouped-project",
@@ -162,6 +165,291 @@ test("directory links and cancel distinguish a group and project with the same I
   expect(writes).toEqual([
     "/api/project-workspace/ungrouped-project:shared-id/cancel",
   ])
+})
+
+test("Admin Project Management is department-first and opens read-only scoped workspaces", async ({
+  page,
+}) => {
+  await restoreSession(page, "ADMIN")
+  const departments = [
+    {
+      id: "dept-1",
+      name: "Engineering",
+      color: "blue",
+      code: "ENG",
+      description: "Engineering department",
+      headId: "head-1",
+      head: {
+        id: "head-1",
+        email: "head@example.com",
+        fullName: "Chris John Albert Bagacina",
+        role: "STAFF",
+      },
+      memberCount: 5,
+      teamCount: 1,
+      serviceCount: 2,
+      projectCount: 7,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    },
+    {
+      id: "dept-2",
+      name: "Graphic Design and Creative Services",
+      color: "blue",
+      code: "MKT",
+      description: null,
+      headId: null,
+      head: null,
+      memberCount: 1,
+      teamCount: 0,
+      serviceCount: 0,
+      projectCount: 1,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    },
+  ]
+  await page.route("**/api/departments/project-management-directory", (route) =>
+    route.fulfill({ json: { departments } }),
+  )
+  await page.route(
+    "**/api/departments/project-management-directory/dept-1",
+    (route) =>
+      route.fulfill({
+        json: {
+          department: {
+            ...departments[0],
+            head: {
+              id: "head-1",
+              fullName: "Chris John Albert Bagacina",
+              role: "STAFF",
+              position: "Department Head",
+            },
+            members: [
+              {
+                id: "member-1",
+                userId: "member-user-1",
+                fullName: "Alex Member",
+                position: "Designer",
+                user: {
+                  id: "member-user-1",
+                  fullName: "Alex Member",
+                  role: "STAFF",
+                },
+              },
+            ],
+          },
+        },
+      }),
+  )
+
+  const workspaceRow: WorkspaceDirectoryRow = {
+    rowId: "group:shared-company-workspace",
+    id: "shared-company-workspace",
+    kind: "group",
+    name: "Shared design and marketing workspace",
+    clientName: "Acme Client",
+    departmentNames: ["Engineering"],
+    statuses: ["IN_PROGRESS"],
+    projectCount: 1,
+    updatedAt: "2026-11-09T00:00:00Z",
+    progress: { completed: 1, total: 2 },
+    canManage: false,
+    canRename: false,
+  }
+  const directoryQueries: URLSearchParams[] = []
+  await page.route("**/api/project-workspace/directory**", async (route) => {
+    const url = new URL(route.request().url())
+    directoryQueries.push(url.searchParams)
+    await route.fulfill({
+      json: {
+        rows: [workspaceRow],
+        page: 1,
+        pageSize: 10,
+        total: 1,
+        totalPages: 1,
+        hasWorkspaces: true,
+      },
+    })
+  })
+
+  await page.goto("/project-management")
+  const table = page.getByRole("table", {
+    name: "Project Management departments",
+  })
+  await expect(
+    page.getByRole("heading", { name: "Project Management" }),
+  ).toBeVisible()
+  const departmentColumns = [
+    "Department",
+    "Department Head",
+    "Members",
+    "No. of Projects",
+    "Actions",
+  ]
+  for (const [index, column] of departmentColumns.entries()) {
+    await expect(table.getByRole("columnheader").nth(index)).toContainText(
+      column,
+    )
+  }
+  const departmentRow = table.getByRole("row", { name: /Engineering/ })
+  await expect(departmentRow).toContainText("Chris John Albert Bagacina")
+  await expect(departmentRow.getByRole("cell").nth(1)).toContainText("5")
+  await expect(departmentRow.getByRole("cell").nth(2)).toContainText("7")
+  await page
+    .getByRole("searchbox", { name: "Search departments" })
+    .fill("Engineering")
+  const filteredRow = table.getByRole("row", { name: /Engineering/ })
+  await expect(filteredRow).toBeVisible()
+  await expect(
+    table.getByRole("row", { name: /Graphic Design and Creative Services/ }),
+  ).toHaveCount(0)
+
+  await filteredRow
+    .getByRole("button", { name: "Actions for Engineering" })
+    .click()
+  const actions = page.getByRole("menu")
+  await expect(actions.getByRole("menuitem")).toHaveCount(2)
+  await expect(
+    actions.getByRole("menuitem", { name: "View Workspaces" }),
+  ).toBeVisible()
+  await expect(
+    actions.getByRole("menuitem", { name: "View Department Details" }),
+  ).toBeVisible()
+  await expect(
+    actions.getByRole("menuitem", { name: /Edit|Delete|Add|Remove/ }),
+  ).toHaveCount(0)
+  await actions
+    .getByRole("menuitem", { name: "View Department Details" })
+    .click()
+  await expect(page).toHaveURL(/\/project-management\?search=Engineering$/)
+  const panel = page.getByRole("dialog")
+  await expect(
+    panel.getByRole("heading", { name: "Engineering" }),
+  ).toBeVisible()
+  await expect(panel).toContainText("Chris John Albert Bagacina")
+  await expect(panel).toContainText("Alex Member")
+  await expect(panel).toContainText("Designer")
+  await expect(
+    panel.getByRole("button", { name: /Edit|Delete|Assign|Remove/ }),
+  ).toHaveCount(0)
+  await panel.getByRole("button", { name: "Close department details" }).click()
+  await expect(panel).toHaveCount(0)
+
+  await filteredRow
+    .getByRole("button", { name: "Actions for Engineering" })
+    .click()
+  await page.getByRole("menuitem", { name: "View Workspaces" }).click()
+  await expect(page).toHaveURL(
+    /\/project-management\/departments\/dept-1\/projects$/,
+  )
+  await expect(
+    page.getByRole("heading", {
+      name: "Project Workspaces",
+      exact: true,
+    }),
+  ).toBeVisible()
+  const departmentHeader = page
+    .getByRole("main", { name: "Department project workspaces" })
+    .locator("header")
+  const departmentEyebrow = departmentHeader.locator("p").first()
+  await expect(departmentEyebrow).toHaveText("Engineering Department")
+  await expect(departmentEyebrow).toHaveCSS("text-transform", "uppercase")
+  await expect(
+    departmentHeader.getByText(
+      "Browse and monitor projects managed by this department.",
+      { exact: true },
+    ),
+  ).toBeVisible()
+  await expect(
+    departmentHeader.getByRole("group", {
+      name: "Department project summary",
+    }),
+  ).toBeVisible()
+  const metadataRow = departmentHeader.getByRole("group", {
+    name: "Department project summary",
+  })
+  await expect(metadataRow).toHaveCSS("display", "flex")
+  await expect(metadataRow).toHaveCSS("flex-wrap", "wrap")
+  await expect(metadataRow.locator("svg")).toHaveCount(3)
+  await expect(metadataRow).toContainText("7 total projects")
+  await expect(metadataRow).toContainText("5 members")
+  await expect(metadataRow).toContainText("Head: Chris John Albert Bagacina")
+  await expect(departmentHeader).not.toContainText("—")
+  await page.setViewportSize({ width: 390, height: 844 })
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true)
+  await page.setViewportSize({ width: 1280, height: 720 })
+  const workspaces = page.getByRole("table", {
+    name: "Department project workspaces",
+  })
+  await expect(
+    workspaces.getByRole("columnheader", { name: "Department" }),
+  ).toHaveCount(0)
+  await expect(
+    workspaces.getByRole("columnheader", { name: "Actions" }),
+  ).toHaveCount(0)
+  const scopedWorkspace = workspaces.getByRole("row", {
+    name: /Shared design and marketing workspace/,
+  })
+  await expect(scopedWorkspace.getByRole("link")).toHaveCount(0)
+  const progressCell = scopedWorkspace.getByRole("cell").nth(2)
+  await expect(progressCell.getByRole("progressbar")).toHaveCount(1)
+  await expect(progressCell).not.toContainText(/%|\d+ tasks/i)
+  await expect
+    .poll(() =>
+      directoryQueries.some((query) => query.get("departmentId") === "dept-1"),
+    )
+    .toBe(true)
+  await expect(
+    page.getByRole("link", { name: "Management", exact: true }),
+  ).toHaveAttribute("href", "/project-management")
+
+  await page.goBack()
+  await expect(page).toHaveURL(/\/project-management\?search=Engineering$/)
+  await expect(
+    page.getByRole("searchbox", { name: "Search departments" }),
+  ).toHaveValue("Engineering")
+  await page.goForward()
+  await expect(page).toHaveURL(
+    /\/project-management\/departments\/dept-1\/projects$/,
+  )
+
+  await page.goto("/project-management/departments/dept-2/projects")
+  const longNameHeader = page
+    .getByRole("main", { name: "Department project workspaces" })
+    .locator("header")
+  const longNameEyebrow = longNameHeader.locator("p").first()
+  await expect(longNameEyebrow).toHaveText(
+    "Graphic Design and Creative Services Department",
+  )
+  await expect(longNameEyebrow).toHaveCSS("text-transform", "uppercase")
+  await expect(
+    longNameHeader.getByRole("heading", {
+      name: "Project Workspaces",
+      exact: true,
+    }),
+  ).toBeVisible()
+  await expect(
+    longNameHeader.getByText(
+      "Browse and monitor projects managed by this department.",
+      { exact: true },
+    ),
+  ).toBeVisible()
+  const unassignedMetadata = longNameHeader.getByRole("group", {
+    name: "Department project summary",
+  })
+  await expect(unassignedMetadata).toContainText("1 total project")
+  await expect(unassignedMetadata).toContainText("1 member")
+  await expect(unassignedMetadata).toContainText("Head: Unassigned")
+  await page.setViewportSize({ width: 390, height: 844 })
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true)
 })
 
 test("department heads can navigate between workspace Overview and Management", async ({
@@ -635,6 +923,7 @@ test("directory state survives typed detail and breadcrumb return navigation", a
     clientName: "Client Name",
     statuses: ["COMPLETED"],
     projectCount: 1,
+    departmentNames: ["Design"],
     updatedAt: "2026-11-09T00:00:00Z",
     progress: { completed: 2, total: 2 },
     canManage: false,
@@ -747,6 +1036,7 @@ test("workspace setup transitions a virtual project into a persisted group", asy
     clientName: "Client Name",
     statuses: ["PLANNED"],
     projectCount: 1,
+    departmentNames: ["Design"],
     updatedAt: "2026-11-09T00:00:00Z",
     progress: null,
     canManage: true,

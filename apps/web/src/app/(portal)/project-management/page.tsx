@@ -1,5 +1,5 @@
-import { ProjectManagementPlaceholderPage } from "@/features/admin-project-management/pages/project-management-placeholder-page"
+import { ProjectManagementDepartmentsPage } from "@/features/admin-project-management/pages/project-management-departments-page"
 
 export default function Page() {
-  return <ProjectManagementPlaceholderPage view="management" />
+  return <ProjectManagementDepartmentsPage />
 }
