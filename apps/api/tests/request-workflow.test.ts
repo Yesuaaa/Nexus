@@ -1860,7 +1860,7 @@ test(
         assert.ok(clientNotifications.length > 0)
         assert.ok(
           clientNotifications.every(
-            (notification) => !notification.event.internal,
+            (notification) => notification.event?.internal === false,
           ),
         )
         assert.equal(

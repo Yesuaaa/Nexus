@@ -1,13 +1,16 @@
 import { getPrisma } from "../../lib/db.js"
+import {
+  consultationCalendarWhere,
+  meetingCalendarWhere,
+} from "./calendar.queries.js"
 
 export async function listClientCalendar(clientId: string) {
   const prisma = getPrisma()!
   const [consultations, meetings, milestones] = await Promise.all([
     prisma.workflowConsultation.findMany({
-      where: {
-        status: { not: "CANCELLED" },
-        workflow: { request: { clientId, status: { not: "CANCELLED" } } },
-      },
+      where: consultationCalendarWhere({
+        scope: { kind: "CLIENT", userId: clientId },
+      }),
       select: {
         id: true,
         startsAt: true,
@@ -31,7 +34,9 @@ export async function listClientCalendar(clientId: string) {
       },
     }),
     prisma.conversationMeeting.findMany({
-      where: { status: { not: "CANCELLED" }, conversation: { clientId } },
+      where: meetingCalendarWhere({
+        scope: { kind: "CLIENT", userId: clientId },
+      }),
       select: {
         id: true,
         conversationId: true,

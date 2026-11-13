@@ -57,6 +57,10 @@ export function useBreadcrumbLabel(key: string, label: string | undefined) {
 }
 
 const routeLabels: Record<string, string> = {
+  attendance: "Attendance",
+  my: "Check-Ins",
+  adjustments: "OT & Agreements",
+  records: "Time Logs",
   dashboard: "Dashboard",
   profile: "My Profile",
   "billing-logs": "Billing Logs",
@@ -76,9 +80,21 @@ const routeLabels: Record<string, string> = {
   clients: "Client Management",
 }
 
-function labelFor(segment: string) {
+const contextualRouteLabels: Record<string, Record<string, string>> = {
+  attendance: {
+    my: "Check-Ins",
+    records: "Time Logs",
+    adjustments: "OT & Agreements",
+    settings: "Policies",
+  },
+}
+
+function labelFor(segment: string, parentSegment?: string) {
   const decoded = decodeURIComponent(segment)
   return (
+    contextualRouteLabels[parentSegment?.toLowerCase() ?? ""]?.[
+      decoded.toLowerCase()
+    ] ??
     routeLabels[decoded.toLowerCase()] ??
     decoded
       .replace(/[-_]/g, " ")
@@ -134,7 +150,7 @@ export function Breadcrumbs() {
                 : "Project"
               : index === 1 && segments[0] === "projects"
                 ? "Project"
-                : labelFor(segment))
+                : labelFor(segment, segments[index - 1]))
           const isCurrent = index === segments.length - 1
           return (
             <li

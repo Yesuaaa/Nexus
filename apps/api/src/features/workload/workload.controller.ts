@@ -5,6 +5,7 @@ import { activeStaff } from "../../shared/query/accounts.js"
 import type { Prisma } from "../../generated/prisma/client.js"
 import { fail } from "../../shared/http-error.js"
 import { requireDepartmentHead } from "../request-inbox/request-inbox.service.js"
+import { workloadPlanningContext } from "./workload-availability.service.js"
 
 export const workloadRouter = Router()
 workloadRouter.use(requireAuth)
@@ -54,6 +55,7 @@ workloadRouter.get("/", async (req, res) => {
         where: staffAccountWhere(department.id),
         select: {
           id: true,
+          userId: true,
           fullName: true,
           position: true,
           status: true,
@@ -76,6 +78,12 @@ workloadRouter.get("/", async (req, res) => {
         staff
           .filter((employee) => employee.status === "ACTIVE")
           .map((employee) => employee.id),
+      )
+      const planning = await workloadPlanningContext(
+        tx,
+        { id: department.id, headId: req.auth!.user.id },
+        week,
+        staff,
       )
       const capacities = await tx.workloadCapacity.findMany({
         where: { week, employeeId: { in: staff.map((s) => s.id) } },
@@ -131,6 +139,8 @@ workloadRouter.get("/", async (req, res) => {
         })),
         staff: staff.map((employee) => ({
           ...employee,
+          userId: undefined,
+          planning: planning.get(employee.id),
           capacity:
             capacities.find((c) => c.employeeId === employee.id) ?? null,
           assignments: employee.projectAssignments.filter(

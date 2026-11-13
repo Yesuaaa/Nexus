@@ -23,6 +23,7 @@ type DateInputProps = Omit<ComponentProps<"input">, "type"> & {
   selectionMode?: "date" | "week"
   iconOnly?: boolean
   triggerLabel?: string
+  triggerClassName?: string
   onDateSelect?: (value: string) => void
 }
 
@@ -34,6 +35,7 @@ export const DateInput = forwardRef<HTMLInputElement, DateInputProps>(
       selectionMode = "date",
       iconOnly = false,
       triggerLabel,
+      triggerClassName,
       onDateSelect,
       onChange,
       onClick,
@@ -189,6 +191,7 @@ export const DateInput = forwardRef<HTMLInputElement, DateInputProps>(
                   : iconOnly
                     ? "size-[34px] rounded-lg border border-[#dfe5ee] bg-background hover:bg-[#eaf0fb]"
                     : "absolute inset-y-0 right-0 w-9 rounded-r-lg",
+                triggerClassName,
               )}
             >
               <CalendarDays

@@ -174,7 +174,7 @@ for (const workspace of [
   })
 }
 
-test("module context is revalidated when permissions change on a shared page", async ({
+test("management links are revalidated while personal attendance keeps People & HR accessible", async ({
   page,
 }) => {
   await restoreSession(page, "ADMIN")
@@ -193,7 +193,10 @@ test("module context is revalidated when permissions change on a shared page", a
   await page.evaluate(() =>
     window.dispatchEvent(new Event("nexus:account-updated")),
   )
-  await expect(menu.getByText("People & HR", { exact: true })).toHaveCount(0)
+  await expect(menu.getByText("People & HR", { exact: true })).toBeVisible()
+  await expect(
+    menu.getByRole("button", { name: "Attendance", exact: true }),
+  ).toBeVisible()
   await expect(
     menu.getByRole("link", { name: "Employee Management" }),
   ).toHaveCount(0)
