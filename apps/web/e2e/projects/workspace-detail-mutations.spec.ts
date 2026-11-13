@@ -132,7 +132,10 @@ test("[NEX-008] plan and task edits reflect saved reads and preserve data after 
   ).toBeVisible()
   expect(writes).toHaveLength(2)
 
-  await page.getByRole("button", { name: "Edit Prepare launch" }).click()
+  await page
+    .getByRole("button", { name: "More actions for Prepare launch" })
+    .click()
+  await page.getByRole("menuitem", { name: "Edit task", exact: true }).click()
   const taskDialog = page.getByRole("dialog", { name: "Edit task" })
   const taskName = taskDialog.getByLabel("Task name")
   await taskName.fill("")

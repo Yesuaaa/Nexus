@@ -165,7 +165,7 @@ for (const role of ["STAFF", "ADMIN", "SUPERADMIN"] as const) {
       return route.fulfill({ json: [] })
     })
     await page.goto("/billing-logs")
-    await expect(page).toHaveURL(/\/dashboard$/)
+    await expect(page).toHaveURL(/\/module$/)
     await expect(
       page.getByRole("heading", { name: "Billing Logs", exact: true }),
     ).toHaveCount(0)

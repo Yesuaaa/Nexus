@@ -286,7 +286,7 @@ for (const role of ["ADMIN", "STAFF", "SUPERADMIN"]) {
       if (request.url().includes("/api/client/")) calls.push(request.url())
     })
     await page.goto("/service-requests")
-    await expect(page).toHaveURL(/\/dashboard$/)
+    await expect(page).toHaveURL(/\/module$/)
     await expect(
       page.getByRole("link", { name: "Booked Requests", exact: true }),
     ).toHaveCount(0)

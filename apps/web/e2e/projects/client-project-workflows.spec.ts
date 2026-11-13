@@ -184,24 +184,24 @@ test("[NEX-017] client browses projects and edits brief and submits validated ch
   await page.goto("/projects")
   const main = page.getByRole("main", { name: "My projects" })
   await expect(
-    main.getByRole("button", { name: "View Website launch", exact: true }),
+    main.getByRole("link", { name: "View Website launch", exact: true }),
   ).toBeVisible()
   await main
     .getByRole("navigation", { name: "My Projects pages" })
     .getByRole("button", { name: "Page 2", exact: true })
     .click()
   await expect(
-    main.getByRole("button", { name: "View Project 11", exact: true }),
+    main.getByRole("link", { name: "View Project 11", exact: true }),
   ).toBeVisible()
   await main
     .getByRole("combobox", { name: "Filter projects by status" })
     .click()
   await page.getByRole("option", { name: "Completed", exact: true }).click()
   await expect(
-    main.getByRole("button", { name: "View Project 11", exact: true }),
+    main.getByRole("link", { name: "View Project 11", exact: true }),
   ).toBeVisible()
   await expect(
-    main.getByRole("button", { name: "View Website launch", exact: true }),
+    main.getByRole("link", { name: "View Website launch", exact: true }),
   ).toHaveCount(0)
   await main.getByRole("searchbox", { name: "Search projects" }).fill("missing")
   await expect(
@@ -213,7 +213,7 @@ test("[NEX-017] client browses projects and edits brief and submits validated ch
     .click()
   await page.getByRole("option", { name: "All Statuses", exact: true }).click()
   await main
-    .getByRole("button", { name: "View Website launch", exact: true })
+    .getByRole("link", { name: "View Website launch", exact: true })
     .click()
   await page
     .getByRole("dialog", { name: "Project details", exact: true })
@@ -409,7 +409,7 @@ test("[NEX-017] project list and deliverable routes expose loading empty and err
   state.listMode = "ready"
   await page.reload()
   await expect(
-    page.getByRole("button", { name: "View Website launch", exact: true }),
+    page.getByRole("link", { name: "View Website launch", exact: true }),
   ).toBeVisible()
   state.failDetail = true
   await page.goto(`/projects/${state.project.id}/deliverables/delivery-0`)

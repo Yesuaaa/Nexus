@@ -488,7 +488,7 @@ test("internal roles cannot open client bookings or fetch their data", async ({
     await page.unroute("**/api/**")
     const state = await mockBookings(page, { role })
     await page.goto("/booked-services?booking=request-1")
-    await expect(page).toHaveURL(/\/dashboard$/)
+    await expect(page).toHaveURL(/\/module$/)
     await expect(
       page.getByRole("main", { name: "Workspace selector", exact: true }),
     ).toBeVisible()

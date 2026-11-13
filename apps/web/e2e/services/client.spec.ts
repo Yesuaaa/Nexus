@@ -543,10 +543,9 @@ test.describe("Client service requests", () => {
       expect(submissions[1]).not.toHaveProperty("clientId")
       releaseSubmission!()
       await expect(
-        page.getByRole("heading", {
-          name: "Service request submitted for review",
-          exact: true,
-        }),
+        page
+          .locator('[data-sileo-viewport][aria-live="polite"]')
+          .getByText("Service request submitted for review", { exact: true }),
       ).toBeVisible()
       await expect(page.getByText("request-123", { exact: true })).toBeVisible()
       await expect(
@@ -565,7 +564,7 @@ test.describe("Client service requests", () => {
         path: testInfo.outputPath("request-submitted.png"),
       })
       await page
-        .getByRole("button", { name: "Start another request", exact: true })
+        .getByRole("button", { name: "Back to services", exact: true })
         .click()
       await expect(page.getByRole("progressbar")).toHaveAttribute(
         "aria-valuenow",

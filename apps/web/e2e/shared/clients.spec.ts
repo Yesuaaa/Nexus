@@ -127,7 +127,7 @@ test.describe("Client management", () => {
       ).toBeVisible()
       await expect(
         page.getByRole("heading", {
-          name: "Service request submitted for review",
+          name: "Request submitted",
           exact: true,
         }),
       ).toHaveCount(0)
@@ -136,7 +136,7 @@ test.describe("Client management", () => {
       await submit.click()
       await expect(
         page.getByRole("heading", {
-          name: "Service request submitted for review",
+          name: "Request submitted",
           exact: true,
         }),
       ).toBeFocused()
@@ -220,13 +220,13 @@ test.describe("Client management", () => {
           .click()
         await expect(
           page.getByRole("heading", {
-            name: "Service request submitted for review",
+            name: "Request submitted",
             exact: true,
           }),
         ).toBeFocused()
         await expect(
           page.getByRole("link", {
-            name: "View my booked requests",
+            name: "View booked requests",
             exact: true,
           }),
         ).toHaveAttribute("href", "/service-requests")
@@ -240,7 +240,7 @@ test.describe("Client management", () => {
         })
         expect(submissions[attempt - 1]).not.toHaveProperty("clientId")
         await page
-          .getByRole("button", { name: "Start another request", exact: true })
+          .getByRole("button", { name: "Back to services", exact: true })
           .click()
       }
       expect(submissions[0].submissionKey).toEqual(expect.any(String))

@@ -65,7 +65,12 @@ test("[NEX-007] manager can rename and archive a workspace with confirmation and
   await page.goto("/project-workspace")
   await expect(page.getByText("Website launch", { exact: true })).toBeVisible()
 
-  await page.getByRole("button", { name: "Edit Website launch" }).click()
+  await page
+    .getByRole("button", { name: "More actions for Website launch" })
+    .click()
+  await page
+    .getByRole("menuitem", { name: "Edit project", exact: true })
+    .click()
   const editDialog = page.getByRole("dialog", { name: "Edit project" })
   await editDialog.getByLabel("Project name").fill("Client portal")
   await editDialog.getByRole("button", { name: "Save name" }).click()
