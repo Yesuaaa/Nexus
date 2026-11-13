@@ -26,6 +26,14 @@ test(
     const other = await prisma.department.create({
       data: { name: "Operations" },
     })
+    const otherClient = await prisma.user.create({
+      data: {
+        email: "other-client@example.com",
+        fullName: "Other Client",
+        role: "USER",
+        passwordHash: "test-only",
+      },
+    })
     await prisma.user.update({
       where: { id: head.id },
       data: { departmentId: other.id },
@@ -44,7 +52,7 @@ test(
     const mixed = await prisma.projectWorkspaceGroup.create({
       data: {
         name: "Shared workspace",
-        clientId: client.id,
+        clientId: otherClient.id,
         createdById: head.id,
         structure: "MULTI_WORKSTREAM",
         updatedAt: new Date("2030-01-01T00:00:00Z"),
@@ -63,10 +71,11 @@ test(
       name: string,
       departmentId: string | null,
       workspaceGroupId?: string,
+      clientId = client.id,
     ) {
       const request = await prisma.serviceRequest.create({
         data: {
-          clientId: client.id,
+          clientId,
           serviceId: service.id,
           title: name,
           acceptedDepartmentId: departmentId,
@@ -75,9 +84,9 @@ test(
       })
       return prisma.project.create({
         data: {
-          clientId: client.id,
           requestId: request.id,
           workspaceGroupId,
+          clientId,
           name,
           status: departmentId === own.id ? "PLANNED" : "IN_PROGRESS",
           updatedAt: projectUpdatedAt,
@@ -92,8 +101,34 @@ test(
       })
     }
     const visible = await project("Design brief", own.id, mixed.id)
-    const hidden = await project("Operations brief", other.id, mixed.id)
+    const hidden = await project(
+      "Operations brief",
+      other.id,
+      mixed.id,
+      otherClient.id,
+    )
     const unowned = await project("Assigned legacy project", null, mixed.id)
+    await prisma.project.update({
+      where: { id: unowned.id },
+      data: {
+        workPlan: {
+          phases: [
+            {
+              id: "staff-phase",
+              title: "Assigned work",
+              tasks: [
+                {
+                  id: "staff-task",
+                  title: "Assigned task",
+                  role: "Staff",
+                  status: "NOT_STARTED",
+                },
+              ],
+            },
+          ],
+        },
+      },
+    })
     await project("Design delivery", own.id, singleDepartment.id)
     const otherOnly = await prisma.projectWorkspaceGroup.create({
       data: {
@@ -104,6 +139,28 @@ test(
       },
     })
     await project("Operations delivery", other.id, otherOnly.id)
+    const otherStandalone = await project("Operations standalone", other.id)
+    await prisma.project.update({
+      where: { id: otherStandalone.id },
+      data: {
+        workPlan: {
+          phases: [
+            {
+              id: "operations-phase",
+              title: "Operations",
+              tasks: [
+                {
+                  id: "operations-task",
+                  title: "Operations task",
+                  role: "Operations",
+                  status: "NOT_STARTED",
+                },
+              ],
+            },
+          ],
+        },
+      },
+    })
 
     async function apiFor(user: typeof head) {
       const { token } = await issueSession(user)
@@ -119,6 +176,72 @@ test(
     }
     const headApi = await apiFor(head)
     const staffApi = await apiFor(staff)
+    const staffTaskUpdate = await staffApi(
+      `/group%3A${mixed.id}/projects/${unowned.id}/tasks/staff-task`,
+      "PATCH",
+      { status: "DONE" },
+    )
+    assert.equal(staffTaskUpdate.status, 200)
+    const staffPlanAfterUpdate = await prisma.project.findUniqueOrThrow({
+      where: { id: unowned.id },
+      select: { workPlan: true },
+    })
+    assert.equal(
+      (
+        staffPlanAfterUpdate.workPlan as {
+          phases: { tasks: { status: string }[] }[]
+        }
+      ).phases[0]!.tasks[0]!.status,
+      "DONE",
+    )
+    const foreignTaskUpdate = await headApi(
+      `/${otherStandalone.id}/projects/${otherStandalone.id}/tasks/operations-task`,
+      "PATCH",
+      { status: "DONE" },
+    )
+    assert.equal(foreignTaskUpdate.status, 404)
+    const unchangedForeignPlan = await prisma.project.findUniqueOrThrow({
+      where: { id: otherStandalone.id },
+      select: { workPlan: true },
+    })
+    assert.equal(
+      (
+        unchangedForeignPlan.workPlan as {
+          phases: { tasks: { status: string }[] }[]
+        }
+      ).phases[0]!.tasks[0]!.status,
+      "NOT_STARTED",
+    )
+    const foreignProjectBeforePlanEdit = await prisma.project.findUniqueOrThrow(
+      { where: { id: otherStandalone.id } },
+    )
+    const foreignPlan = foreignProjectBeforePlanEdit.workPlan as {
+      phases: {
+        id: string
+        title: string
+        tasks: { id: string; title: string; role: string; status: string }[]
+      }[]
+    }
+    const foreignPlanEdit = await headApi(
+      `/${otherStandalone.id}/projects/${otherStandalone.id}/plan`,
+      "PUT",
+      {
+        plan: {
+          phases: foreignPlan.phases.map((phase) => ({
+            ...phase,
+            tasks: phase.tasks.map((task) => ({ ...task, title: "Changed" })),
+          })),
+        },
+        expectedUpdatedAt: foreignProjectBeforePlanEdit.updatedAt.toISOString(),
+      },
+    )
+    assert.equal(foreignPlanEdit.status, 404)
+    const unchangedForeignPlanAfterEdit =
+      await prisma.project.findUniqueOrThrow({
+        where: { id: otherStandalone.id },
+        select: { workPlan: true },
+      })
+    assert.deepEqual(unchangedForeignPlanAfterEdit.workPlan, foreignPlan)
     const list = await headApi()
     assert.equal(list.status, 200)
     type Workspace = {
@@ -242,6 +365,7 @@ test(
           kind: string
           statuses: string[]
           projectCount: number
+          clientName: string | null
           canRename: boolean
           updatedAt: string
           progress: { completed: number; total: number } | null
@@ -255,6 +379,8 @@ test(
     const mixedDirectoryRow = (await directory("search=Shared")).rows[0]
     assert.equal(mixedDirectoryRow.canRename, false)
     assert.equal(mixedDirectoryRow.projectCount, 1)
+    assert.equal(mixedDirectoryRow.clientName, client.fullName)
+    assert.equal((await directory("search=Other%20Client")).total, 0)
     assert.deepEqual(mixedDirectoryRow.statuses, ["PLANNED"])
     assert.equal(mixedDirectoryRow.updatedAt, projectUpdatedAt.toISOString())
     const before = (await directory("search=approved%20design")).rows[0]
@@ -323,6 +449,66 @@ test(
     assert.equal(after.kind, "group")
     assert.equal(after.canRename, true)
     assert.ok(after.progress && after.progress.total > 0)
+    const createdProject = await prisma.project.findFirstOrThrow({
+      where: { workspaceGroupId: created.workspaces[0].id },
+      select: { id: true, updatedAt: true },
+    })
+    const savedHeadPlan = await headApi(
+      `/group%3A${created.workspaces[0].id}/projects/${createdProject.id}/plan`,
+      "PUT",
+      {
+        plan: {
+          phases: [
+            {
+              id: "department-phase",
+              title: "Department work",
+              tasks: [
+                {
+                  id: "department-task",
+                  title: "Authorized task",
+                  role: "Designer",
+                  status: "NOT_STARTED",
+                },
+              ],
+            },
+          ],
+        },
+        expectedUpdatedAt: createdProject.updatedAt.toISOString(),
+      },
+    )
+    assert.equal(savedHeadPlan.status, 200)
+    const headTaskUpdate = await headApi(
+      `/group%3A${created.workspaces[0].id}/projects/${createdProject.id}/tasks/department-task`,
+      "PATCH",
+      { status: "DONE" },
+    )
+    assert.equal(headTaskUpdate.status, 200)
+    const addedHeadTask = await headApi(
+      `/group%3A${created.workspaces[0].id}/projects/${createdProject.id}/tasks`,
+      "POST",
+      { phaseId: "department-phase", title: "Another authorized task" },
+    )
+    assert.equal(addedHeadTask.status, 200)
+    const authorizedPlan = await prisma.project.findUniqueOrThrow({
+      where: { id: createdProject.id },
+      select: { workPlan: true },
+    })
+    assert.equal(
+      (
+        authorizedPlan.workPlan as {
+          phases: { tasks: { status: string }[] }[]
+        }
+      ).phases[0]!.tasks[0]!.status,
+      "DONE",
+    )
+    assert.equal(
+      (
+        authorizedPlan.workPlan as {
+          phases: { tasks: { id: string }[] }[]
+        }
+      ).phases[0]!.tasks.length,
+      2,
+    )
     const completed = await project("Completed design", own.id, mixed.id)
     await prisma.project.update({
       where: { id: completed.id },
@@ -363,6 +549,8 @@ test(
     )
     const groupPath = `/group%3A${collision.id}`
     const projectPath = `/ungrouped-project%3A${collision.id}`
+    assert.equal((await headApi(`/unknown%3A${collision.id}`)).status, 400)
+    assert.equal((await headApi(`/group%253A${collision.id}`)).status, 400)
     const collidingRows = (await directory("search=colli")).rows
     assert.deepEqual(
       new Set(collidingRows.map(({ rowId }) => rowId)),

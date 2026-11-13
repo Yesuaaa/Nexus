@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useEffectEvent, useState } from "react"
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react"
 import { errorMessage } from "@/lib/error-message"
 
 /** Values that can key a resource; compared by value, not identity. */
@@ -44,7 +44,11 @@ export function useAsyncResource<T>(
   })
   const requestKey = JSON.stringify([deps, revision])
   const run = useEffectEvent((signal: AbortSignal) => load(signal))
-  const fallback = useEffectEvent(() => fallbackError)
+  const fallbackRef = useRef(fallbackError)
+
+  useEffect(() => {
+    fallbackRef.current = fallbackError
+  }, [fallbackError])
 
   useEffect(() => {
     if (!enabled) return
@@ -59,7 +63,7 @@ export function useAsyncResource<T>(
         setSettled((current) => ({
           key: requestKey,
           data: current.data,
-          error: errorMessage(reason, fallback()),
+          error: errorMessage(reason, fallbackRef.current),
         }))
       },
     )

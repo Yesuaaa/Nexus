@@ -467,6 +467,16 @@ test("workspace overview recovers from errors and shows empty department data", 
 test("department workspace directory paginates, resets filters, and recovers from errors", async ({
   page,
 }) => {
+  const pageErrors: string[] = []
+  const effectEventErrors: string[] = []
+  page.on("pageerror", (error) => pageErrors.push(error.message))
+  page.on("console", (message) => {
+    if (
+      message.type() === "error" &&
+      /useEffectEvent|Effect Event/i.test(message.text())
+    )
+      effectEventErrors.push(message.text())
+  })
   await restoreSession(page, "STAFF", {
     account: { headOf: { id: "design", name: "Design" } },
   })
@@ -519,6 +529,8 @@ test("department workspace directory paginates, resets filters, and recovers fro
   await expect(
     page.getByRole("link", { name: "Project on page 1" }),
   ).toHaveAttribute("href", "/project-workspace/ungrouped-project%3Aproject-1")
+  expect(pageErrors).toEqual([])
+  expect(effectEventErrors).toEqual([])
   await page
     .getByRole("button", { name: "More actions for Project on page 1" })
     .click()
@@ -548,6 +560,42 @@ test("department workspace directory paginates, resets filters, and recovers fro
   await page.getByRole("searchbox", { name: "Search workspaces" }).clear()
   await page.getByRole("button", { name: "Archive", exact: true }).click()
   await expect(page.getByText("Archive is empty")).toBeVisible()
+})
+
+test("ordinary Staff workspace list retries after a failed request", async ({
+  page,
+}) => {
+  const pageErrors: string[] = []
+  const effectEventErrors: string[] = []
+  page.on("pageerror", (error) => pageErrors.push(error.message))
+  page.on("console", (message) => {
+    if (
+      message.type() === "error" &&
+      /useEffectEvent|Effect Event/i.test(message.text())
+    )
+      effectEventErrors.push(message.text())
+  })
+  await restoreSession(page, "STAFF")
+  let failRequests = true
+  await page.route("**/api/project-workspace**", (route) => {
+    if (failRequests)
+      return route.fulfill({
+        status: 503,
+        json: { error: "Staff workspaces unavailable" },
+      })
+    return route.fulfill({ json: { workspaces: [], canCreate: false } })
+  })
+  await page.goto("/project-workspace")
+  await expect(page.getByRole("main").getByRole("alert")).toContainText(
+    "Staff workspaces unavailable",
+  )
+  failRequests = false
+  await page.getByRole("button", { name: "Try again" }).click()
+  await expect(
+    page.getByRole("heading", { name: "No project workspaces yet" }),
+  ).toBeVisible()
+  expect(pageErrors).toEqual([])
+  expect(effectEventErrors).toEqual([])
 })
 
 test("directory state survives typed detail and breadcrumb return navigation", async ({

@@ -255,6 +255,37 @@ export async function getProjectWorkspaceOverview(userId: string) {
                       )
                   )
               )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM (
+                  SELECT phase.value->>'id' AS id
+                  FROM jsonb_array_elements(
+                    CASE
+                      WHEN jsonb_typeof(p."workPlan"->'phases') = 'array'
+                        THEN p."workPlan"->'phases'
+                      ELSE '[]'::jsonb
+                    END
+                  ) AS phase(value)
+                  UNION ALL
+                  SELECT task.value->>'id' AS id
+                  FROM jsonb_array_elements(
+                    CASE
+                      WHEN jsonb_typeof(p."workPlan"->'phases') = 'array'
+                        THEN p."workPlan"->'phases'
+                      ELSE '[]'::jsonb
+                    END
+                  ) AS phase(value)
+                  CROSS JOIN LATERAL jsonb_array_elements(
+                    CASE
+                      WHEN jsonb_typeof(phase.value->'tasks') = 'array'
+                        THEN phase.value->'tasks'
+                      ELSE '[]'::jsonb
+                    END
+                  ) AS task(value)
+                ) AS plan_ids
+                GROUP BY id
+                HAVING COUNT(*) > 1
+              )
           ),
           tasks AS (
             SELECT

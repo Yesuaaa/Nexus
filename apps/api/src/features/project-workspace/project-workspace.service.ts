@@ -80,14 +80,15 @@ export async function saveProjectPlan(
   )
     throw new ServiceRequestsError(400, "Reload the project before editing")
   await getPrisma()!.$transaction(async (tx) => {
-    const context = await getStaffContext(tx, userId)
-    const project = await scopedProjectForEdit(
-      tx,
-      context,
-      workspaceId,
-      projectId,
-    )
-    const acceptedDepartmentId = await lockServiceRequest(tx, project.requestId)
+    const initialContext = await getStaffContext(tx, userId)
+    const { project, acceptedDepartmentId } =
+      await lockAndRevalidateProjectForEdit(
+        tx,
+        userId,
+        initialContext,
+        workspaceId,
+        projectId,
+      )
     const head = await tx.department.findFirst({
       where: { id: acceptedDepartmentId ?? "", headId: userId },
       select: { id: true },
@@ -558,7 +559,10 @@ export async function listWorkspaceDirectory(
           COALESCE(a."workspaceGroupId", a.id) AS id,
           CASE WHEN a."workspaceGroupId" IS NULL THEN 'ungrouped-project' ELSE 'group' END AS kind,
           COALESCE(g.name, min(a.name)) AS name,
-          u."fullName" AS "clientName",
+          string_agg(
+            DISTINCT NULLIF(u."fullName", ''),
+            ', ' ORDER BY NULLIF(u."fullName", '')
+          ) AS "clientName",
           array_agg(DISTINCT a.status ORDER BY a.status) AS statuses,
           count(*)::int AS "projectCount",
           max(a."updatedAt") AS "updatedAt",
@@ -566,8 +570,8 @@ export async function listWorkspaceDirectory(
           bool_or(a.name ILIKE ${search}) AS "projectMatch"
         FROM authorized a
         LEFT JOIN "ProjectWorkspaceGroup" g ON g.id = a."workspaceGroupId"
-        JOIN "User" u ON u.id = COALESCE(g."clientId", a."clientId")
-        GROUP BY a."workspaceGroupId", COALESCE(a."workspaceGroupId", a.id), g.name, u."fullName"
+        LEFT JOIN "User" u ON u.id = a."clientId"
+        GROUP BY a."workspaceGroupId", COALESCE(a."workspaceGroupId", a.id), g.name
       ), filtered AS (
         SELECT * FROM grouped
         WHERE active = ${options.view === "active"}
@@ -1078,16 +1082,72 @@ function requireWorkspaceManager(
     )
 }
 
-async function lockWorkspaceProjects(
+async function lockAndRevalidateManagedWorkspace(
   tx: Prisma.TransactionClient,
+  userId: string,
   workspaceId: string,
-  groupId: string | null,
-  projects: MutableWorkspaceProject[],
+  initial: Awaited<ReturnType<typeof getMutableWorkspace>>,
 ) {
+  const { groupId } = initial
   if (groupId) await lockRows(tx, "ProjectWorkspaceGroup", groupId)
-  for (const project of projects) await lockRows(tx, "Project", project.id)
-  if (!groupId && projects[0]?.id !== parseWorkspaceIdentity(workspaceId).id)
-    throw new ServiceRequestsError(404, "Project workspace not found")
+  const membership = groupId
+    ? { workspaceGroupId: groupId }
+    : { id: initial.projects[0]?.id ?? "no-project-access" }
+  const members = await tx.project.findMany({
+    where: membership,
+    select: { id: true, requestId: true, workspaceGroupId: true },
+    orderBy: { id: "asc" },
+  })
+  const requestIds = members.flatMap(({ requestId }) =>
+    requestId ? [requestId] : [],
+  )
+  await lockRows(tx, "ServiceRequest", requestIds)
+  const requests = requestIds.length
+    ? await tx.serviceRequest.findMany({
+        where: { id: { in: requestIds } },
+        select: { acceptedDepartmentId: true },
+      })
+    : []
+  await lockRows(
+    tx,
+    "Department",
+    requests.map(({ acceptedDepartmentId }) => acceptedDepartmentId),
+    "share",
+  )
+  await lockRows(tx, "User", userId, "share")
+  await lockRows(
+    tx,
+    "Project",
+    members.map(({ id }) => id),
+  )
+  const lockedMembers = await tx.project.findMany({
+    where: membership,
+    select: { id: true, requestId: true, workspaceGroupId: true },
+    orderBy: { id: "asc" },
+  })
+  if (
+    lockedMembers.length !== members.length ||
+    lockedMembers.some(
+      (member, index) =>
+        member.id !== members[index]?.id ||
+        member.requestId !== members[index]?.requestId ||
+        member.workspaceGroupId !== groupId,
+    )
+  )
+    throw new ServiceRequestsError(
+      409,
+      "Workspace membership changed. Refresh and try again.",
+    )
+
+  const context = await getStaffContext(tx, userId)
+  const workspace = await getMutableWorkspace(
+    tx,
+    context,
+    workspaceId,
+    workspaceReadWhere(context),
+  )
+  requireWorkspaceManager(context, workspace.projects)
+  return { context, workspace }
 }
 
 export async function assignProjectTeamLead(
@@ -1103,14 +1163,12 @@ export async function assignProjectTeamLead(
     const context = await getStaffContext(tx, userId)
     const current = await getMutableWorkspace(tx, context, workspaceId)
     requireWorkspaceManager(context, current.projects)
-    await lockWorkspaceProjects(
+    const { workspace } = await lockAndRevalidateManagedWorkspace(
       tx,
+      userId,
       workspaceId,
-      current.groupId,
-      current.projects,
+      current,
     )
-    const workspace = await getMutableWorkspace(tx, context, workspaceId)
-    requireWorkspaceManager(context, workspace.projects)
     const project = workspace.projects.find(({ id }) => id === projectId)
     if (!project || !["PLANNED", "IN_PROGRESS"].includes(project.status))
       throw new ServiceRequestsError(409, "Choose a planned or active project")
@@ -1290,14 +1348,12 @@ export async function cancelProjectWorkspace(
     const context = await getStaffContext(tx, userId)
     const current = await getMutableWorkspace(tx, context, workspaceId)
     requireWorkspaceManager(context, current.projects)
-    await lockWorkspaceProjects(
+    const { workspace } = await lockAndRevalidateManagedWorkspace(
       tx,
+      userId,
       workspaceId,
-      current.groupId,
-      current.projects,
+      current,
     )
-    const workspace = await getMutableWorkspace(tx, context, workspaceId)
-    requireWorkspaceManager(context, workspace.projects)
     const cancellable = workspace.projects.filter(({ status }) =>
       ["PLANNED", "IN_PROGRESS", "ON_HOLD"].includes(status),
     )
@@ -1340,14 +1396,12 @@ export async function updateProjectWorkspaceStatus(
     const context = await getStaffContext(tx, userId)
     const current = await getMutableWorkspace(tx, context, workspaceId)
     requireWorkspaceManager(context, current.projects)
-    await lockWorkspaceProjects(
+    const { workspace } = await lockAndRevalidateManagedWorkspace(
       tx,
+      userId,
       workspaceId,
-      current.groupId,
-      current.projects,
+      current,
     )
-    const workspace = await getMutableWorkspace(tx, context, workspaceId)
-    requireWorkspaceManager(context, workspace.projects)
 
     let affected: MutableWorkspaceProject[]
     let status: ProjectStatus
@@ -1475,10 +1529,13 @@ async function scopedProjectForEdit(
   projectId: string,
 ) {
   const { id, kind } = parseWorkspaceIdentity(workspaceId)
+  const projectScope = context.canCreate
+    ? workspaceReadWhere(context)
+    : scopedProjectWhere(context)
   const project = await tx.project.findFirst({
     where: {
       id: projectId,
-      ...(kind ? workspaceReadWhere(context) : scopedProjectWhere(context)),
+      ...projectScope,
       OR: [
         ...(kind === "ungrouped-project" ? [] : [{ workspaceGroupId: id }]),
         ...(kind === "group" ? [] : [{ id, workspaceGroupId: null }]),
@@ -1488,6 +1545,43 @@ async function scopedProjectForEdit(
   if (!project || !project.requestId)
     throw new ServiceRequestsError(404, "Project workstream not found")
   return project
+}
+
+async function lockAndRevalidateProjectForEdit(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  initialContext: StaffContext,
+  workspaceId: string,
+  projectId: string,
+) {
+  const initialProject = await scopedProjectForEdit(
+    tx,
+    initialContext,
+    workspaceId,
+    projectId,
+  )
+  const acceptedDepartmentId = await lockServiceRequest(
+    tx,
+    initialProject.requestId,
+  )
+  await lockRows(tx, "User", userId, "share")
+  await lockRows(tx, "Project", initialProject.id)
+  const context = await getStaffContext(tx, userId)
+  const project = await scopedProjectForEdit(
+    tx,
+    context,
+    workspaceId,
+    projectId,
+  )
+  if (
+    project.id !== initialProject.id ||
+    project.requestId !== initialProject.requestId
+  )
+    throw new ServiceRequestsError(
+      409,
+      "Project ownership changed. Reload before editing again.",
+    )
+  return { context, project, acceptedDepartmentId }
 }
 
 async function writeWorkspaceEvent(
@@ -2106,14 +2200,14 @@ export async function updateProjectTask(
   if (!["NOT_STARTED", "IN_PROGRESS", "DONE"].includes(status))
     throw new ServiceRequestsError(400, "Choose a valid task status")
   await getPrisma()!.$transaction(async (tx) => {
-    const context = await getStaffContext(tx, userId)
-    const scoped = await scopedProjectForEdit(
+    const initialContext = await getStaffContext(tx, userId)
+    const { project: scoped } = await lockAndRevalidateProjectForEdit(
       tx,
-      context,
+      userId,
+      initialContext,
       workspaceId,
       projectId,
     )
-    await lockRows(tx, "Project", scoped.id)
     const project = await tx.project.findUniqueOrThrow({
       where: { id: scoped.id },
     })
@@ -2172,14 +2266,14 @@ export async function addProjectTask(
       "Enter a task title between 2 and 180 characters",
     )
   await getPrisma()!.$transaction(async (tx) => {
-    const context = await getStaffContext(tx, userId)
-    const scoped = await scopedProjectForEdit(
+    const initialContext = await getStaffContext(tx, userId)
+    const { project: scoped } = await lockAndRevalidateProjectForEdit(
       tx,
-      context,
+      userId,
+      initialContext,
       workspaceId,
       projectId,
     )
-    await lockRows(tx, "Project", scoped.id)
     const project = await tx.project.findUniqueOrThrow({
       where: { id: scoped.id },
     })

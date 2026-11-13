@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useEffectEvent, useState } from "react"
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react"
 import { ApiError } from "@/features/auth/api/auth-api"
 import { errorMessage } from "@/lib/error-message"
 import { watchVisibleRefresh } from "@/lib/visible-refresh"
@@ -129,7 +129,11 @@ export function usePaginatedList<R extends PageInfo, T>({
     setData(result)
     onLoaded?.(result)
   })
-  const fallback = useEffectEvent(() => fallbackError)
+  const fallbackRef = useRef(fallbackError)
+
+  useEffect(() => {
+    fallbackRef.current = fallbackError
+  }, [fallbackError])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -163,7 +167,10 @@ export function usePaginatedList<R extends PageInfo, T>({
             (!(reason instanceof ApiError) || reason.status >= 500)
           )
             return
-          setFailure({ requestKey, message: errorMessage(reason, fallback()) })
+          setFailure({
+            requestKey,
+            message: errorMessage(reason, fallbackRef.current),
+          })
           setResolved((current) => ({ ...current, requestKey }))
         })
         .finally(() => {

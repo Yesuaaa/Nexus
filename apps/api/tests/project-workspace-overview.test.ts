@@ -261,6 +261,26 @@ test(
       tasks: [],
     })
     await project({
+      name: "Design project with duplicate task IDs",
+      departmentId: own.id,
+      status: "PLANNED",
+      workspaceGroupId: group.id,
+      tasks: [
+        {
+          id: "duplicate-deadline",
+          title: "Duplicate deadline one",
+          status: "NOT_STARTED",
+          dueDate: today,
+        },
+        {
+          id: "duplicate-deadline",
+          title: "Duplicate deadline two",
+          status: "NOT_STARTED",
+          dueDate: today,
+        },
+      ],
+    })
+    await project({
       name: "Operations confidential project",
       departmentId: other.id,
       status: "COMPLETED",
@@ -328,15 +348,15 @@ test(
     const overview = (await response.json()) as OverviewResponse
 
     assert.deepEqual(overview.totals, {
-      totalProjects: 6,
+      totalProjects: 7,
       inProgress: 1,
       completed: 1,
       onHold: 1,
-      planned: 2,
+      planned: 3,
       cancelled: 1,
       workspaceGroups: 1,
       projectsWithTasks: 3,
-      projectsWithoutTasks: 3,
+      projectsWithoutTasks: 4,
       totalTasks: 8,
       completedTasks: 2,
       outstandingTasks: 6,
@@ -348,7 +368,7 @@ test(
         overview.statusDistribution.map(({ status, count }) => [status, count]),
       ),
       {
-        PLANNED: 2,
+        PLANNED: 3,
         IN_PROGRESS: 1,
         ON_HOLD: 1,
         COMPLETED: 1,
@@ -365,7 +385,7 @@ test(
         projectCount,
       ]),
       [
-        ["Client One", 3],
+        ["Client One", 4],
         ["Client Two", 3],
       ],
     )
@@ -377,7 +397,7 @@ test(
         identity: `group:${group.id}`,
         kind: "group",
         name: group.name,
-        projectCount: 2,
+        projectCount: 3,
         completedTasks: 1,
         totalTasks: 7,
       },
