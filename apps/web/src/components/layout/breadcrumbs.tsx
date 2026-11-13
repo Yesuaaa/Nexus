@@ -95,7 +95,7 @@ export function Breadcrumbs() {
     segments[0] === "project-workspace" &&
     segments[1] !== "new" &&
     segments[1] !== "overview"
-      ? segments[1]
+      ? decodeURIComponent(segments[1])
       : undefined
   const [projectLabel, setProjectLabel] = useState<{
     id: string

@@ -45,7 +45,9 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
     [id],
     { fallbackError: "Couldn't load project" },
   )
-  const workspace = project.data ?? null
+  const workspace = project.data
+    ? { ...project.data, id: id.includes(":") ? id : project.data.id }
+    : null
   const setWorkspace = project.setData
   const [actionError, setError] = useState("")
   const error = actionError || project.error

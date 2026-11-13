@@ -5,10 +5,16 @@ import { FormInput } from "@/components/ui/form-input"
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, ChevronRight } from "lucide-react"
-import { Alert } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
 import { DialogStepProgress } from "@/components/ui/dialog-step-progress"
-import { Modal, ModalFooter, ModalHeader } from "@/components/ui/modal"
+import {
+  SidePanel,
+  SidePanelAlert,
+  SidePanelBody,
+  SidePanelButton,
+  SidePanelFooter,
+  SidePanelHeader,
+  useSidePanel,
+} from "@/components/ui/side-panel"
 import { PlanEditor, emptyPlan } from "../components/plan-editor"
 import type { ProjectWorkPlan } from "../api/project-workspace-api"
 import {
@@ -16,6 +22,7 @@ import {
   listApprovedProjectBookings,
   listProjectWorkspaceTemplates,
   notifyProjectWorkspaceListChanged,
+  projectWorkspaceHref,
   type ProjectWorkspaceBooking,
   type ProjectWorkspaceTemplate,
 } from "../api/project-workspace-api"
@@ -40,16 +47,15 @@ const steps = [
   },
 ] as const
 
-export function NewWorkspaceDialog({
-  open,
-  onOpenChange,
+export function NewWorkspacePanel({
+  onClose,
   onCreated,
 }: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+  onClose: () => void
   onCreated: () => void
 }) {
   const router = useRouter()
+  const panel = useSidePanel(onClose)
   const [bookings, setBookings] = useState<ProjectWorkspaceBooking[]>([])
   const [templates, setTemplates] = useState<ProjectWorkspaceTemplate[]>([])
   const [selected, setSelected] = useState<string[]>([])
@@ -67,7 +73,6 @@ export function NewWorkspaceDialog({
   const [error, setError] = useState("")
 
   useEffect(() => {
-    if (!open) return
     const controller = new AbortController()
     Promise.all([
       listApprovedProjectBookings(controller.signal),
@@ -87,20 +92,7 @@ export function NewWorkspaceDialog({
         if (!controller.signal.aborted) setLoading(false)
       })
     return () => controller.abort()
-  }, [open])
-
-  function resetWizard() {
-    setBookings([])
-    setTemplates([])
-    setStep(0)
-    setSelected([])
-    setKeys({})
-    setCustomPlans({})
-    setStructure("SEPARATE")
-    setName("")
-    setError("")
-    setLoading(true)
-  }
+  }, [])
 
   const selectedBookings = useMemo(
     () => bookings.filter(({ requestId }) => selected.includes(requestId)),
@@ -159,10 +151,10 @@ export function NewWorkspaceDialog({
         customPlans,
       })
       notifyProjectWorkspaceListChanged()
-      onCreated()
-      resetWizard()
-      onOpenChange(false)
-      router.push(`/project-workspace/${result.workspaces[0].id}`)
+      panel.close(() => {
+        onCreated()
+        router.push(projectWorkspaceHref(`group:${result.workspaces[0].id}`))
+      })
     } catch (reason) {
       setError(errorMessage(reason, "Couldn't create workspace"))
     } finally {
@@ -187,25 +179,20 @@ export function NewWorkspaceDialog({
     setStep((current) => Math.max(current - 1, 0))
   }
 
-  function close() {
-    if (busy) return
-    resetWizard()
-    onOpenChange(false)
-  }
-
   return (
-    <Modal
-      open={open}
-      onClose={close}
+    <SidePanel
+      open={panel.open}
+      onOpenChange={panel.onOpenChange}
       busy={busy}
-      closeOnEscape={false}
-      size="xl"
-      className="flex flex-col overflow-hidden"
+      dismissible={false}
+      fallbackFocus={() =>
+        document.getElementById("project-workspace-management-heading")
+      }
     >
-      <ModalHeader
+      <SidePanelHeader
         title="Start project from approved booking"
-        description={steps[step].description}
-        closeLabel="Close dialog"
+        description={`Step ${step + 1} of ${steps.length} · ${steps[step].description}`}
+        closeLabel="Close workspace setup"
         closeDisabled={busy}
       />
 
@@ -215,15 +202,13 @@ export function NewWorkspaceDialog({
         label="Project setup progress"
       />
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+      <SidePanelBody key={step}>
         {loading ? (
           <p role="status" className="py-12 text-center text-sm text-[#738096]">
             Loading approved bookings…
           </p>
         ) : error && !bookings.length ? (
-          <Alert as="div" className="p-4 text-sm">
-            {error}
-          </Alert>
+          <SidePanelAlert>{error}</SidePanelAlert>
         ) : step === 0 ? (
           <BookingStep
             bookings={bookings}
@@ -268,33 +253,22 @@ export function NewWorkspaceDialog({
           />
         )}
         {error && bookings.length > 0 && (
-          <Alert variant="text" className="mt-4">
-            {error}
-          </Alert>
+          <SidePanelAlert>{error}</SidePanelAlert>
         )}
-      </div>
+      </SidePanelBody>
 
-      <ModalFooter className="items-center justify-between gap-3">
+      <SidePanelFooter className="justify-between">
         <div>
           {step > 0 && (
-            <Button
-              type="button"
-              variant="brandOutline"
-              disabled={busy}
-              onClick={back}
-              className="min-h-9 gap-1 text-xs"
-            >
+            <SidePanelButton variant="secondary" disabled={busy} onClick={back}>
               <ArrowLeft size={14} aria-hidden="true" />
               Back
-            </Button>
+            </SidePanelButton>
           )}
         </div>
-        <Button
-          type="button"
+        <SidePanelButton
           disabled={busy || loading || (step === 0 && !bookings.length)}
-          variant="brand"
           onClick={() => (step < steps.length - 1 ? next() : void create())}
-          className="min-h-9 gap-1 text-xs"
         >
           {busy
             ? "Creating…"
@@ -306,9 +280,9 @@ export function NewWorkspaceDialog({
           {step < steps.length - 1 && (
             <ChevronRight size={14} aria-hidden="true" />
           )}
-        </Button>
-      </ModalFooter>
-    </Modal>
+        </SidePanelButton>
+      </SidePanelFooter>
+    </SidePanel>
   )
 }
 

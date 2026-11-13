@@ -140,6 +140,47 @@ export const getProjectWorkspace = (id: string, signal?: AbortSignal) =>
     { signal },
   )
 
+export type WorkspaceDirectoryRow = {
+  rowId: string
+  id: string
+  kind: "group" | "ungrouped-project"
+  name: string
+  clientName: string | null
+  statuses: ProjectStatus[]
+  projectCount: number
+  updatedAt: string
+  progress: { completed: number; total: number } | null
+  canManage: boolean
+  canRename: boolean
+}
+
+export function projectWorkspaceHref(identity: string) {
+  return `/project-workspace/${encodeURIComponent(identity)}`
+}
+
+export type WorkspaceDirectoryQuery = {
+  page: number
+  search: string
+  status: string
+  sort: "recent" | "name" | "client" | "projects"
+  view: "active" | "archive"
+}
+
+export function listWorkspaceDirectory(
+  query: WorkspaceDirectoryQuery,
+  signal: AbortSignal,
+) {
+  const params = new URLSearchParams({ ...query, page: String(query.page) })
+  return apiRequest<{
+    rows: WorkspaceDirectoryRow[]
+    page: number
+    pageSize: number
+    total: number
+    totalPages: number
+    hasWorkspaces: boolean
+  }>(`/api/project-workspace/directory?${params}`, { signal })
+}
+
 export const listProjectWorkspaceTemplates = (signal?: AbortSignal) =>
   apiRequest<ProjectWorkspaceTemplate[]>("/api/project-workspace/templates", {
     signal,

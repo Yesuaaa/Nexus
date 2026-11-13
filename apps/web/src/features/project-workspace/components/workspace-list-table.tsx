@@ -14,7 +14,11 @@ import {
   statusLabel,
   statusTone,
 } from "@/features/projects/model/project-status"
-import type { ProjectWorkspaceSummary } from "../api/project-workspace-api"
+import {
+  projectWorkspaceHref,
+  type ProjectWorkspaceSummary,
+  type WorkspaceDirectoryRow,
+} from "../api/project-workspace-api"
 import { WorkspaceListRowActions } from "./workspace-list-row-actions"
 
 const grid =
@@ -29,15 +33,13 @@ const cells = [
   "@max-[900px]:col-start-2 @max-[900px]:row-start-1",
 ]
 
-function workspaceKey(workspace: ProjectWorkspaceSummary) {
-  return workspace.id
+type WorkspaceRow = ProjectWorkspaceSummary | WorkspaceDirectoryRow
+
+function workspaceKey(workspace: WorkspaceRow) {
+  return "rowId" in workspace ? workspace.rowId : workspace.id
 }
 
-function rowClass(
-  _workspace: ProjectWorkspaceSummary,
-  _index: number,
-  isLast: boolean,
-) {
+function rowClass(_workspace: WorkspaceRow, _index: number, isLast: boolean) {
   return cn(
     grid,
     "h-[58px] border-b border-[#eceef1] bg-background px-4 py-[7px] text-xs text-foreground transition-colors hover:bg-[#e8eef2] @max-[900px]:h-[210px] @max-[900px]:gap-y-2",
@@ -52,13 +54,15 @@ export function WorkspaceListTable({
   quickKey,
   archiveView,
   onChanged,
+  directory = false,
 }: {
-  workspaces: ProjectWorkspaceSummary[]
+  workspaces: WorkspaceRow[]
   loading: boolean
   viewKey: string
   quickKey: string
   archiveView: boolean
   onChanged: () => void
+  directory?: boolean
 }) {
   const { formatDate } = useDatePreferences()
   return (
@@ -68,9 +72,9 @@ export function WorkspaceListTable({
         rowClassName={grid}
       >
         {[
-          "Project",
+          directory ? "Workspace" : "Project",
           "Client",
-          "Services",
+          directory ? "Projects / Progress" : "Services",
           "Status",
           "Last updated",
           "Actions",
@@ -110,7 +114,7 @@ export function WorkspaceListTable({
             <>
               <div role="cell" className={cells[0]}>
                 <Link
-                  href={`/project-workspace/${encodeURIComponent(workspace.id)}`}
+                  href={projectWorkspaceHref(workspaceKey(workspace))}
                   className="block truncate font-semibold text-foreground no-underline hover:underline focus-visible:outline-2 focus-visible:outline-ring"
                 >
                   {workspace.name}
@@ -123,14 +127,25 @@ export function WorkspaceListTable({
                 <span className="mr-2 hidden text-[#738096] @max-[900px]:inline">
                   Client
                 </span>
-                {workspace.client.fullName || "Client"}
+                {("clientName" in workspace
+                  ? workspace.clientName
+                  : workspace.client.fullName) || "Client"}
               </div>
               <div role="cell" className={cells[2]}>
                 <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
                   <span className="hidden shrink-0 text-[#738096] @max-[900px]:inline">
-                    Services
+                    {directory ? "Projects / Progress" : "Services"}
                   </span>
-                  {workspace.workstreams.length ? (
+                  {"projectCount" in workspace ? (
+                    <span className="text-[#52627a]">
+                      {workspace.projectCount}{" "}
+                      {workspace.projectCount === 1 ? "project" : "projects"}
+                      {" · "}
+                      {workspace.progress
+                        ? `${workspace.progress.completed}/${workspace.progress.total} tasks`
+                        : "Unplanned"}
+                    </span>
+                  ) : workspace.workstreams.length ? (
                     workspace.workstreams.map((workstream) => (
                       <Pill
                         key={workstream.id}
@@ -149,9 +164,29 @@ export function WorkspaceListTable({
                 <span className="mr-2 hidden text-[#738096] @max-[900px]:inline">
                   Status
                 </span>
-                <Pill tone={statusTone(workspace.status)}>
-                  {statusLabel(workspace.status)}
-                </Pill>
+                {"statuses" in workspace && workspace.statuses.length > 1 ? (
+                  <Pill title={workspace.statuses.map(statusLabel).join(", ")}>
+                    Mixed statuses
+                    <span className="sr-only">
+                      {" "}
+                      ({workspace.statuses.map(statusLabel).join(", ")})
+                    </span>
+                  </Pill>
+                ) : (
+                  <Pill
+                    tone={statusTone(
+                      "statuses" in workspace
+                        ? workspace.statuses[0]
+                        : workspace.status,
+                    )}
+                  >
+                    {statusLabel(
+                      "statuses" in workspace
+                        ? workspace.statuses[0]
+                        : workspace.status,
+                    )}
+                  </Pill>
+                )}
               </div>
               <div role="cell" className={cn(cells[4], "text-[#52627a]")}>
                 <span className="mr-2 hidden text-[#738096] @max-[900px]:inline">
@@ -164,7 +199,12 @@ export function WorkspaceListTable({
               <div role="cell" className={cells[5]}>
                 <WorkspaceListRowActions
                   workspace={workspace}
+                  identity={workspaceKey(workspace)}
                   onChanged={onChanged}
+                  isArchived={
+                    "status" in workspace &&
+                    ["COMPLETED", "CANCELLED"].includes(workspace.status)
+                  }
                 />
               </div>
             </>

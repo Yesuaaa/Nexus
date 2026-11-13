@@ -26,6 +26,9 @@ import {
 } from "../api/project-workspace-api"
 import { WorkspaceListTable } from "../components/workspace-list-table"
 import { useAsyncResource } from "@/lib/use-async-resource"
+import { usePortalAccount } from "@/features/auth/providers/account-context"
+import { canCreateProjectWorkspace } from "@/features/auth/model/permissions"
+import { WorkspaceDirectoryPage } from "./workspace-directory-page"
 
 type WorkspaceSort = "recent" | "most-active"
 
@@ -48,6 +51,15 @@ const sortOptions: { value: WorkspaceSort; label: string }[] = [
 ]
 
 export function ProjectWorkspacePage() {
+  const account = usePortalAccount()
+  return canCreateProjectWorkspace(account) ? (
+    <WorkspaceDirectoryPage key={account.id} />
+  ) : (
+    <StaffProjectWorkspacePage key={account.id} />
+  )
+}
+
+function StaffProjectWorkspacePage() {
   const [sort, setSort] = useState<WorkspaceSort>("recent")
   const [view, setView] = useState<"active" | "archive">("active")
   const [status, setStatus] = useState("all")

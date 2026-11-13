@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils"
 import {
   cancelProjectWorkspace,
   notifyProjectWorkspaceListChanged,
+  projectWorkspaceHref,
   renameProjectWorkspace,
   type ProjectWorkspaceSummary,
 } from "../api/project-workspace-api"
@@ -37,19 +38,22 @@ const dangerItem =
 
 export function WorkspaceListRowActions({
   workspace,
+  identity,
   onChanged,
+  isArchived = false,
 }: {
-  workspace: ProjectWorkspaceSummary
+  workspace: Pick<ProjectWorkspaceSummary, "name" | "canManage" | "canRename">
+  identity: string
   onChanged: () => void
+  isArchived?: boolean
 }) {
   const router = useRouter()
   const [dialog, setDialog] = useState<"edit" | "cancel" | null>(null)
   const [name, setName] = useState(workspace.name)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
-  const isArchived = ["COMPLETED", "CANCELLED"].includes(workspace.status)
-  const href = `/project-workspace/${encodeURIComponent(workspace.id)}`
-  const triggerId = `workspace-actions-${workspace.id}`
+  const href = projectWorkspaceHref(identity)
+  const triggerId = `workspace-actions-${identity}`
 
   async function saveName(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -57,7 +61,7 @@ export function WorkspaceListRowActions({
     setBusy(true)
     setError("")
     try {
-      await renameProjectWorkspace(workspace.id, name.trim())
+      await renameProjectWorkspace(identity, name.trim())
       setDialog(null)
       notifyProjectWorkspaceListChanged()
       onChanged()
@@ -73,7 +77,7 @@ export function WorkspaceListRowActions({
     setBusy(true)
     setError("")
     try {
-      await cancelProjectWorkspace(workspace.id)
+      await cancelProjectWorkspace(identity)
       setDialog(null)
       notifyProjectWorkspaceListChanged()
       onChanged()
@@ -153,12 +157,12 @@ export function WorkspaceListRowActions({
           <ModalBody className="gap-1.5">
             <label
               className="block text-xs font-medium"
-              htmlFor={`workspace-name-${workspace.id}`}
+              htmlFor={`workspace-name-${identity}`}
             >
               Project name
             </label>
             <FormInput
-              id={`workspace-name-${workspace.id}`}
+              id={`workspace-name-${identity}`}
               autoFocus
               required
               minLength={2}

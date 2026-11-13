@@ -320,6 +320,20 @@ export async function mockApi(
       return
     }
 
+    if (pathname === "/api/project-workspace/directory" && method === "GET") {
+      await route.fulfill({
+        json: {
+          rows: [],
+          total: 0,
+          page: 1,
+          pageSize: 10,
+          totalPages: 0,
+          hasWorkspaces: false,
+        },
+      })
+      return
+    }
+
     if (pathname === "/api/project-workspace" && method === "GET") {
       await route.fulfill({
         json: {

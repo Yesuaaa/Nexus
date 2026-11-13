@@ -2,6 +2,8 @@ import { json, Router } from "express"
 import { recordIdParam } from "../../shared/validation.js"
 import { requireAuth } from "../auth/auth.middleware.js"
 import { fail } from "../../shared/http-error.js"
+import { parsePage } from "../../shared/query/pagination.js"
+import { parseWorkspaceIdentity } from "./workspace-identity.js"
 import {
   addProjectTask,
   assignProjectTeamLead,
@@ -11,6 +13,7 @@ import {
   listApprovedBookings,
   listProjectWorkspaceTemplates,
   listProjectWorkspaces,
+  listWorkspaceDirectory,
   renameProjectWorkspace,
   updateProjectTask,
   saveProjectPlan,
@@ -26,7 +29,15 @@ import {
 export const projectWorkspaceRouter = Router()
 projectWorkspaceRouter.use(requireAuth)
 
-for (const parameter of ["id", "projectId", "taskId", "deliverableId"])
+projectWorkspaceRouter.param(
+  "id",
+  (_request, _response, next, value: string) => {
+    parseWorkspaceIdentity(value)
+    next()
+  },
+)
+
+for (const parameter of ["projectId", "taskId", "deliverableId"])
   projectWorkspaceRouter.param(
     parameter,
     recordIdParam("Invalid project workspace ID"),
@@ -38,6 +49,46 @@ projectWorkspaceRouter.get("/", async (request, response) => {
     await listProjectWorkspaces(request.auth!.user.id, {
       sort: request.query.sort === "most-active" ? "most-active" : "recent",
       limit: Number.isInteger(limit) && limit > 0 ? limit : undefined,
+    }),
+  )
+})
+
+projectWorkspaceRouter.get("/directory", async (request, response) => {
+  const {
+    page: inputPage,
+    search = "",
+    status = "",
+    sort = "recent",
+    view = "active",
+  } = request.query
+  const page = parsePage(inputPage)
+  if (
+    !page ||
+    typeof search !== "string" ||
+    search.length > 200 ||
+    typeof status !== "string" ||
+    ![
+      "",
+      "PLANNED",
+      "IN_PROGRESS",
+      "ON_HOLD",
+      "COMPLETED",
+      "CANCELLED",
+    ].includes(status) ||
+    (sort !== "recent" &&
+      sort !== "name" &&
+      sort !== "client" &&
+      sort !== "projects") ||
+    (view !== "active" && view !== "archive")
+  )
+    fail(400, "Invalid workspace directory filters")
+  response.json(
+    await listWorkspaceDirectory(request.auth!.user.id, {
+      page,
+      search: search.trim(),
+      status,
+      sort,
+      view,
     }),
   )
 })
