@@ -1,5 +1,8 @@
 import { createHash, randomUUID } from "node:crypto"
-import type { RequestWorkflowState } from "../../generated/prisma/client.js"
+import type {
+  RequestWorkflowState,
+  ServiceRequestStatus,
+} from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { activeStaff } from "../../shared/query/accounts.js"
 import {
@@ -113,6 +116,8 @@ async function runAction(
       where: { requestId },
       data: { state: nextState },
     })
+  const setRequestStatus = (status: ServiceRequestStatus) =>
+    tx.serviceRequest.update({ where: { id: requestId }, data: { status } })
   const event = (
     type: string,
     summary: string,
@@ -278,6 +283,7 @@ async function runAction(
         })
         await setState("CONSULTATION")
       }
+      await setRequestStatus("AWAITING_CLIENT_INFO")
       await event(
         "REQUIREMENT_REQUESTED",
         `Additional information requested: ${command.title}`,
@@ -328,6 +334,14 @@ async function runAction(
           reviewNote: command.note || null,
         },
       })
+      if (
+        command.approve &&
+        request.status === "AWAITING_CLIENT_INFO" &&
+        !(await tx.workflowRequirement.count({
+          where: { requestId, status: { not: "COMPLETED" } },
+        }))
+      )
+        await setRequestStatus("UNDER_REVIEW")
       await event(
         "REQUIREMENT_REVIEWED",
         `${command.approve ? "Completed" : "Changes requested"}: ${requirement.title}${command.note ? `. ${command.note}` : ""}`,
@@ -489,6 +503,7 @@ async function runAction(
         },
       })
       await setState(pending ? "QUOTATION_PENDING" : "CLIENT_APPROVAL")
+      if (!pending) await setRequestStatus("READY_FOR_QUOTATION")
       await event(
         pending ? "QUOTATION_INTERNAL_REVIEW" : "QUOTATION_SENT",
         pending
@@ -528,6 +543,7 @@ async function runAction(
         },
       })
       await setState("CLIENT_APPROVAL")
+      await setRequestStatus("READY_FOR_QUOTATION")
       await event(
         "QUOTATION_SENT",
         `Quotation v${latest.version} is ready for the client's formal decision.`,
@@ -581,11 +597,9 @@ async function runAction(
         await setState(
           command.decision === "DECLINE" ? "DECLINED" : "REVISION_REQUESTED",
         )
-        if (command.decision === "DECLINE")
-          await tx.serviceRequest.update({
-            where: { id: requestId },
-            data: { status: "CLOSED" },
-          })
+        await setRequestStatus(
+          command.decision === "DECLINE" ? "CLOSED" : "UNDER_REVIEW",
+        )
         await event(
           `QUOTATION_${status}`,
           `The client ${command.decision === "DECLINE" ? "declined" : "requested revisions to"} quotation v${quote.version}.${command.note ? ` ${command.note}` : ""}`,
