@@ -616,5 +616,107 @@ test(
         }
       },
     )
+    await t.test(
+      "client cancellation updates only owner-held requests in cancellable states",
+      async () => {
+        const cancellableStatuses = [
+          ServiceRequestStatus.SUBMITTED,
+          ServiceRequestStatus.UNDER_REVIEW,
+          ServiceRequestStatus.AWAITING_CLIENT_INFO,
+          ServiceRequestStatus.READY_FOR_QUOTATION,
+        ]
+        for (const status of cancellableStatuses) {
+          const eligible = await prisma.serviceRequest.create({
+            data: {
+              clientId: users.get("USER")!.id,
+              serviceId: activeService.id,
+              title: "Eligible cancellation " + status,
+              status,
+            },
+          })
+          const response = await request(
+            "/service-requests/" + eligible.id + "/cancel",
+            "USER",
+            "POST",
+          )
+          assert.equal(response.status, 200)
+          assert.deepEqual(await response.json(), { success: true })
+          const updated = await prisma.serviceRequest.findUniqueOrThrow({
+            where: { id: eligible.id },
+          })
+          assert.equal(updated.status, ServiceRequestStatus.CANCELLED)
+        }
+
+        const otherClientRequest = await prisma.serviceRequest.create({
+          data: {
+            clientId: clientB.id,
+            serviceId: activeService.id,
+            title: "Other client's request",
+            status: ServiceRequestStatus.SUBMITTED,
+          },
+        })
+        const foreignResponse = await request(
+          "/service-requests/" + otherClientRequest.id + "/cancel",
+          "USER",
+          "POST",
+        )
+        assert.equal(foreignResponse.status, 409)
+        assert.equal(
+          (
+            await prisma.serviceRequest.findUniqueOrThrow({
+              where: { id: otherClientRequest.id },
+            })
+          ).status,
+          ServiceRequestStatus.SUBMITTED,
+        )
+
+        const acceptedRequest = await prisma.serviceRequest.create({
+          data: {
+            clientId: users.get("USER")!.id,
+            serviceId: activeService.id,
+            acceptedDepartmentId: departmentA.id,
+            title: "Accepted request",
+            status: ServiceRequestStatus.UNDER_REVIEW,
+          },
+        })
+        const acceptedResponse = await request(
+          "/service-requests/" + acceptedRequest.id + "/cancel",
+          "USER",
+          "POST",
+        )
+        assert.equal(acceptedResponse.status, 409)
+        assert.equal(
+          (
+            await prisma.serviceRequest.findUniqueOrThrow({
+              where: { id: acceptedRequest.id },
+            })
+          ).status,
+          ServiceRequestStatus.UNDER_REVIEW,
+        )
+
+        const closedRequest = await prisma.serviceRequest.create({
+          data: {
+            clientId: users.get("USER")!.id,
+            serviceId: activeService.id,
+            title: "Closed request",
+            status: ServiceRequestStatus.CLOSED,
+          },
+        })
+        const closedResponse = await request(
+          "/service-requests/" + closedRequest.id + "/cancel",
+          "USER",
+          "POST",
+        )
+        assert.equal(closedResponse.status, 409)
+        assert.equal(
+          (
+            await prisma.serviceRequest.findUniqueOrThrow({
+              where: { id: closedRequest.id },
+            })
+          ).status,
+          ServiceRequestStatus.CLOSED,
+        )
+      },
+    )
   },
 )
