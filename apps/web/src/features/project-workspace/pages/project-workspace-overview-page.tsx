@@ -2,18 +2,11 @@
 
 import { useEffect } from "react"
 import Link from "next/link"
-import {
-  Activity,
-  CheckCircle2,
-  ClipboardList,
-  FolderKanban,
-  PauseCircle,
-} from "lucide-react"
+import { Activity, CheckCircle2, FolderKanban, PauseCircle } from "lucide-react"
 import { PageHeader, PageHeaderButton } from "@/components/layout/page-header"
 import { contentClass } from "@/components/layout/styles"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { KpiCards } from "@/components/ui/kpi-cards"
 import {
   BreakdownList,
   ItemList,
@@ -423,23 +416,15 @@ export function ProjectWorkspaceOverviewPage() {
                   </div>
                 )}
                 {(totals?.projectsWithoutTasks ?? 0) > 0 && (
-                  <KpiCards
-                    label="Projects without work plans"
-                    pending={false}
-                    unavailable={false}
-                    showCharts={false}
-                    metrics={[
-                      {
-                        label: "Projects without work plans",
-                        value: totals?.projectsWithoutTasks ?? 0,
-                        formattedValue: `${totals?.projectsWithoutTasks.toLocaleString("en-US")} unplanned`,
-                        description:
-                          "Unplanned projects are excluded from task-weighted completion.",
-                        icon: ClipboardList,
-                        iconClassName: "text-[#738096]",
-                      },
-                    ]}
-                  />
+                  <div
+                    title="Projects without work plans aren't counted in overall completion."
+                    className="flex items-center justify-between gap-3 border-t border-[#eceef1] pt-3 text-xs"
+                  >
+                    <span className="text-[#8a94a6]">Unplanned projects</span>
+                    <span className="shrink-0 font-medium tabular-nums text-[#738096]">
+                      {totals?.projectsWithoutTasks.toLocaleString("en-US")}
+                    </span>
+                  </div>
                 )}
               </div>
             ) : loading ? (

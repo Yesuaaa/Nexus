@@ -77,7 +77,7 @@ export function WorkspaceListTable({
         {[
           directory ? "Workspace" : "Project",
           "Client",
-          directory ? "Projects / Progress" : "Services",
+          directory ? "Progress" : "Services",
           "Status",
           "Last updated",
           "Actions",
@@ -140,17 +140,18 @@ export function WorkspaceListTable({
               <div role="cell" className={cells[2]}>
                 <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
                   <span className="hidden shrink-0 text-[#738096] @max-[900px]:inline">
-                    {directory ? "Projects / Progress" : "Services"}
+                    {directory ? "Progress" : "Services"}
                   </span>
                   {"projectCount" in workspace ? (
-                    <span className="text-[#52627a]">
-                      {workspace.projectCount}{" "}
-                      {workspace.projectCount === 1 ? "project" : "projects"}
-                      {" · "}
-                      {workspace.progress
-                        ? `${workspace.progress.completed}/${workspace.progress.total} tasks`
-                        : "Unplanned"}
-                    </span>
+                    workspace.progress ? (
+                      <span className="shrink-0 tabular-nums text-[#52627a]">
+                        {workspace.progress.total > 0
+                          ? `${Math.round((workspace.progress.completed / workspace.progress.total) * 100)}%`
+                          : "0%"}
+                      </span>
+                    ) : (
+                      <span className="shrink-0 text-[#738096]">Unplanned</span>
+                    )
                   ) : workspace.workstreams.length ? (
                     workspace.workstreams.map((workstream) => (
                       <Pill

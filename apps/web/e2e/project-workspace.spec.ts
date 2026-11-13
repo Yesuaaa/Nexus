@@ -27,6 +27,8 @@ test("directory links and cancel distinguish a group and project with the same I
   const group: WorkspaceDirectoryRow = {
     ...shared,
     statuses: ["PLANNED"],
+    projectCount: 3,
+    progress: { completed: 3, total: 8 },
     rowId: "group:shared-id",
     kind: "group",
     name: "Grouped workspace",
@@ -88,6 +90,24 @@ test("directory links and cancel distinguish a group and project with the same I
     })
   })
   await page.goto("/project-workspace")
+  const directoryTable = page.getByRole("table", { name: "Project workspaces" })
+  await expect(
+    directoryTable.getByRole("columnheader", { name: "Progress", exact: true }),
+  ).toBeVisible()
+  const groupedProgressCell = directoryTable
+    .getByRole("row", { name: /Grouped workspace/ })
+    .getByRole("cell")
+    .nth(2)
+  await expect(groupedProgressCell.getByRole("progressbar")).toHaveCount(0)
+  await expect(groupedProgressCell).toContainText("38%")
+  await expect(groupedProgressCell).not.toContainText(/3 projects|tasks/i)
+  const unplannedProgressCell = directoryTable
+    .getByRole("row", { name: /Standalone project/ })
+    .getByRole("cell")
+    .nth(2)
+  await expect(unplannedProgressCell).toContainText("Unplanned")
+  await expect(unplannedProgressCell.getByRole("progressbar")).toHaveCount(0)
+  await expect(unplannedProgressCell).not.toContainText(/1 project|tasks|%/i)
   for (const target of [group, project]) {
     await page.getByRole("link", { name: target.name, exact: true }).click()
     await expect(page).toHaveURL(
@@ -120,6 +140,11 @@ test("directory links and cancel distinguish a group and project with the same I
     ).toHaveLength(1)
     await page.goBack()
   }
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true)
   await page
     .getByRole("button", { name: "More actions for Standalone project" })
     .click()
@@ -356,13 +381,11 @@ test("department heads see department project analytics and can open Management"
   ).toHaveAttribute("aria-valuenow", "4")
   await expect(page.getByText("Cancelled", { exact: true })).toBeVisible()
   await expect(page.getByText("Northwind", { exact: true })).toBeVisible()
-  const unplannedSummary = page.getByRole("region", {
-    name: "Projects without work plans",
-  })
-  await expect(unplannedSummary).toContainText("2 unplanned")
-  await expect(unplannedSummary).toContainText(
-    "Unplanned projects are excluded from task-weighted completion.",
+  const unplannedSummary = page.getByTitle(
+    "Projects without work plans aren't counted in overall completion.",
   )
+  await expect(unplannedSummary.getByText("Unplanned projects")).toBeVisible()
+  await expect(unplannedSummary.getByText("2", { exact: true })).toBeVisible()
   await expect(
     page.getByText("Approve wireframes", { exact: true }),
   ).toBeVisible()
