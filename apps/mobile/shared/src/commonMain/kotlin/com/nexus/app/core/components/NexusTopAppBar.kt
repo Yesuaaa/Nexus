@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.material3.*
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
@@ -44,6 +45,7 @@ fun NexusTopAppBar(
     notificationUnread: Int = 0,
     accountActionsEnabled: Boolean = true,
     onSettingsClick: () -> Unit = {},
+    onBillingLogsClick: () -> Unit = {},
     onLogoutClick: () -> Unit = {},
     accountName: String = "Your account",
     accountEmail: String = "",
@@ -115,6 +117,7 @@ fun NexusTopAppBar(
                         }
                         HorizontalDivider(color = NexusColors.Border)
                         DropdownMenuItem(text = { Text("Profile", fontSize = 14.sp) }, leadingIcon = { Icon(Icons.Outlined.PersonOutline, null, Modifier.size(18.dp), tint = NexusColors.PrimaryBlue) }, onClick = { accountMenu = false; onProfileClick() })
+                        DropdownMenuItem(text = { Text("Billing Logs", fontSize = 14.sp) }, leadingIcon = { Icon(Icons.AutoMirrored.Outlined.ReceiptLong, null, Modifier.size(18.dp), tint = NexusColors.PrimaryBlue) }, onClick = { accountMenu = false; onBillingLogsClick() })
                         DropdownMenuItem(text = { Text("Settings", fontSize = 14.sp) }, leadingIcon = { Icon(Icons.Outlined.Settings, null, Modifier.size(18.dp), tint = NexusColors.PrimaryBlue) }, onClick = { accountMenu = false; onSettingsClick() })
                         HorizontalDivider(color = NexusColors.Border)
                         DropdownMenuItem(text = { Text("Log out", fontSize = 14.sp, color = NexusColors.ErrorRed) }, leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Logout, null, Modifier.size(18.dp), tint = NexusColors.ErrorRed) }, onClick = { accountMenu = false; onLogoutClick() })
