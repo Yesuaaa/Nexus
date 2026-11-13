@@ -32,8 +32,35 @@ function participantScope(
   }
 }
 
-function lifecycleScope(): Prisma.RequestConversationWhereInput {
-  return {}
+function lifecycleScope(
+  userId: string,
+  view?: ConversationView,
+): Prisma.RequestConversationWhereInput {
+  const deletionFilter: Prisma.RequestConversationWhereInput = {
+    deletions: { none: { userId } },
+  }
+  if (view === "active") {
+    return {
+      AND: [
+        deletionFilter,
+        { bookings: { some: { status: { notIn: [...archivedStatuses] } } } },
+      ],
+    }
+  }
+  if (view === "archived") {
+    return {
+      AND: [
+        deletionFilter,
+        {
+          bookings: {
+            some: {},
+            every: { status: { in: [...archivedStatuses] } },
+          },
+        },
+      ],
+    }
+  }
+  return deletionFilter
 }
 
 function visibleScope(
@@ -41,7 +68,7 @@ function visibleScope(
   view?: ConversationView,
 ): Prisma.RequestConversationWhereInput {
   return {
-    AND: [participantScope(userId), ...(view ? [lifecycleScope()] : [])],
+    AND: [participantScope(userId), lifecycleScope(userId, view)],
   }
 }
 
@@ -173,11 +200,14 @@ async function resolveConversation(
 }
 
 function isArchived(bookings: readonly { status: string }[]) {
-  return !bookings.some(
-    (booking) =>
-      !archivedStatuses.includes(
-        booking.status as (typeof archivedStatuses)[number],
-      ),
+  return (
+    bookings.length > 0 &&
+    !bookings.some(
+      (booking) =>
+        !archivedStatuses.includes(
+          booking.status as (typeof archivedStatuses)[number],
+        ),
+    )
   )
 }
 
@@ -280,7 +310,7 @@ export async function listConversations(
   const conversations = await Promise.all(
     rows.slice(0, 30).map(async ({ messages, ...row }) => ({
       id: row.id,
-      status: "ACTIVE",
+      status: isArchived(row.bookings) ? "ARCHIVED" : "ACTIVE",
       title:
         row.bookings.length === 1
           ? row.bookings[0]!.title
@@ -385,7 +415,7 @@ export async function getConversationAccess(
   const head = record.department.head
   const activeHead =
     head?.role === "STAFF" && head.isActive && !head.accountDeletedAt
-  const archived = false
+  const archived = isArchived(record.bookings)
   const aliasBooking = record.bookings.find((booking) => booking.id === id)?.id
   const selectedBookingId =
     record.bookings.find((booking) => booking.id === requestedBookingId)?.id ??
@@ -427,7 +457,7 @@ export async function getConversationAccess(
             },
           }),
     },
-    canSend: Boolean(activeHead),
+    canSend: Boolean(activeHead) && !archived,
   }
 }
 
@@ -489,12 +519,20 @@ async function lockWritableConversation(
       ...participantScope(userId),
       department: { head: activeStaff },
     },
-    select: { id: true },
+    select: {
+      id: true,
+      bookings: { select: { status: true } },
+    },
   })
   if (!writable)
     throw new ServiceRequestsError(
       409,
       "Messaging is unavailable without an active department manager.",
+    )
+  if (isArchived(writable.bookings))
+    throw new ServiceRequestsError(
+      409,
+      "This conversation is archived and read-only.",
     )
   return conversation.id
 }
