@@ -148,31 +148,34 @@ test("[NEX-011] admin creates a team, assigns an employee, and removes the assig
   await page.getByRole("button", { name: "Engineering", exact: true }).click()
   await page.getByRole("tab", { name: /Teams/ }).click()
   await page.getByRole("button", { name: "Create Team", exact: true }).click()
-  const createDialog = page.getByRole("dialog", { name: "Create team" })
-  await createDialog.getByLabel("Team name").fill("Design team")
-  const availableMembers = createDialog.getByRole("list", {
+  await expect(
+    page.getByRole("heading", { name: "Create team", exact: true }),
+  ).toBeVisible()
+  await page.getByLabel("Team name", { exact: true }).fill("Design team")
+  const availableMembers = page.getByRole("list", {
     name: "Available team members",
   })
   await availableMembers
     .getByRole("button", { name: "Add", exact: true })
     .first()
     .click()
-  await createDialog.getByRole("button", { name: "Save team" }).click()
+  await page.getByRole("button", { name: "Save team" }).click()
 
-  const team = page.getByRole("region", { name: "Design team" })
+  const team = page.getByRole("region", { name: "Design team team" })
   await expect(team).toContainText("Avery Designer")
   expect(writes[0]).toMatchObject({
     method: "POST",
     body: { name: "Design team", memberIds: ["employee-1"] },
   })
 
-  await team
-    .getByRole("button", { name: "Assign member to Design team" })
-    .click()
+  await team.getByRole("button", { name: "Manage Design team team" }).click()
+  await page.getByRole("menuitem", { name: "Assign members" }).click()
   await page
     .getByRole("button", { name: "Assign Blake Engineer to Design team" })
     .click()
-  const teamMembers = page.getByRole("list", { name: "Design team members" })
+  const teamMembers = page
+    .getByRole("tabpanel", { name: "Teams" })
+    .getByRole("list", { name: "Design team members" })
   await expect(teamMembers).toContainText("Blake Engineer")
   expect(writes[1]).toMatchObject({
     method: "PATCH",
@@ -180,15 +183,16 @@ test("[NEX-011] admin creates a team, assigns an employee, and removes the assig
     body: { teamId: "team-nex011" },
   })
 
-  await teamMembers
-    .getByRole("button", { name: "Remove Blake Engineer from Design team" })
+  await team.getByRole("button", { name: "Manage Design team team" }).click()
+  await page.getByRole("menuitem", { name: "Remove members" }).click()
+  await expect(
+    page.getByRole("heading", { name: "Remove members", exact: true }),
+  ).toBeVisible()
+  await page
+    .getByRole("checkbox", { name: /Blake Engineer/ })
+    .locator("xpath=..")
     .click()
-  const removeDialog = page.getByRole("dialog", {
-    name: "Remove employee from team?",
-  })
-  await removeDialog
-    .getByRole("button", { name: "Remove", exact: true })
-    .click()
+  await page.getByRole("button", { name: "Remove 1", exact: true }).click()
   await expect(teamMembers).not.toContainText("Blake Engineer")
   await expect(team).toContainText("Avery Designer")
   await expect(team).not.toContainText("Blake Engineer")

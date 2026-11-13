@@ -24,7 +24,7 @@ test(
     const token = (await issueSession(admin)).token
 
     await prisma.department.create({
-      data: { id: "dept-a", name: "Product" },
+      data: { id: "dept-a", name: "Product", code: "PROD" },
     })
     await prisma.team.create({
       data: { id: "team-a", name: "Design", departmentId: "dept-a" },
@@ -156,6 +156,178 @@ test(
         assert.equal(after.headId, "head")
         assert.equal(after.temporaryHeadOriginalId, null)
         assert.equal(after.temporaryHeadAssignedId, null)
+      },
+    )
+
+    await t.test(
+      "department name and code uniqueness reject conflicting writes without persistence",
+      async () => {
+        const created = await request("/departments", "POST", {
+          name: "Sales",
+          code: "SALES",
+        })
+        assert.equal(created.status, 201, JSON.stringify(created.payload))
+        const createdDepartment = created.payload as typeof created.payload & {
+          department?: { id: string; code: string | null }
+        }
+        const departmentId = createdDepartment.department?.id
+        assert.ok(departmentId)
+        assert.equal(createdDepartment.department?.code, "SALES")
+
+        const duplicateName = await request("/departments", "POST", {
+          name: " Product ",
+          code: "OTHER",
+        })
+        assert.equal(duplicateName.status, 409)
+        assert.equal(
+          await prisma.department.count({ where: { code: "OTHER" } }),
+          0,
+        )
+
+        const duplicateCode = await request("/departments", "POST", {
+          name: "Support",
+          code: " prod ",
+        })
+        assert.equal(duplicateCode.status, 409)
+        assert.equal(
+          await prisma.department.count({ where: { name: "Support" } }),
+          0,
+        )
+
+        const updateDuplicateCode = await request(
+          `/departments/${departmentId}`,
+          "PUT",
+          { code: " prod " },
+        )
+        assert.equal(updateDuplicateCode.status, 409)
+        const persisted = await prisma.department.findUniqueOrThrow({
+          where: { id: departmentId },
+        })
+        assert.equal(persisted.name, "Sales")
+        assert.equal(persisted.code, "SALES")
+      },
+    )
+
+    await t.test(
+      "department API enforces name and code length boundaries and normalizes fields",
+      async () => {
+        const belowMinimumName = await request("/departments", "POST", {
+          name: "A",
+        })
+        assert.equal(belowMinimumName.status, 400)
+
+        const minimum = await request("/departments", "POST", {
+          name: "  HR  ",
+          code: " it ",
+          description: "  People operations  ",
+        })
+        assert.equal(minimum.status, 201, JSON.stringify(minimum.payload))
+        const minimumDepartment = minimum.payload as typeof minimum.payload & {
+          department?: { id: string; name: string; code: string | null }
+        }
+        assert.equal(minimumDepartment.department?.name, "HR")
+        assert.equal(minimumDepartment.department?.code, "IT")
+        assert.equal(
+          (
+            await prisma.department.findUniqueOrThrow({
+              where: { id: minimumDepartment.department!.id },
+            })
+          ).description,
+          "People operations",
+        )
+
+        const maximum = await request("/departments", "POST", {
+          name: "N".repeat(80),
+          code: "C".repeat(20),
+        })
+        assert.equal(maximum.status, 201, JSON.stringify(maximum.payload))
+
+        const aboveMaximumName = await request("/departments", "POST", {
+          name: "N".repeat(81),
+        })
+        assert.equal(aboveMaximumName.status, 400)
+        const belowMinimumCode = await request("/departments", "POST", {
+          name: "Short code",
+          code: "C",
+        })
+        assert.equal(belowMinimumCode.status, 400)
+        const aboveMaximumCode = await request("/departments", "POST", {
+          name: "Long code",
+          code: "C".repeat(21),
+        })
+        assert.equal(aboveMaximumCode.status, 400)
+
+        const emptyOptionalFields = await request("/departments", "POST", {
+          name: "No code",
+          code: "   ",
+          description: "   ",
+        })
+        assert.equal(
+          emptyOptionalFields.status,
+          201,
+          JSON.stringify(emptyOptionalFields.payload),
+        )
+        const noCode = await prisma.department.findUniqueOrThrow({
+          where: { name: "No code" },
+        })
+        assert.equal(noCode.code, null)
+        assert.equal(noCode.description, null)
+      },
+    )
+
+    await t.test(
+      "team lead reassignment updates the lead and synchronizes employee placement",
+      async () => {
+        const assignDeputy = await request(
+          "/departments/dept-a/teams/team-a",
+          "PUT",
+          { leadId: "deputy" },
+        )
+        assert.equal(
+          assignDeputy.status,
+          200,
+          JSON.stringify(assignDeputy.payload),
+        )
+        const reassigned = await prisma.team.findUniqueOrThrow({
+          where: { id: "team-a" },
+        })
+        assert.equal(reassigned.leadId, "deputy")
+        const deputy = await prisma.user.findUniqueOrThrow({
+          where: { id: "deputy" },
+        })
+        const deputyEmployee = await prisma.employee.findUniqueOrThrow({
+          where: { userId: "deputy" },
+        })
+        assert.equal(deputy.departmentId, "dept-a")
+        assert.equal(deputy.teamId, "team-a")
+        assert.equal(deputyEmployee.departmentId, "dept-a")
+        assert.equal(deputyEmployee.teamId, "team-a")
+
+        const reassignLead = await request(
+          "/departments/dept-a/teams/team-a",
+          "PUT",
+          { leadId: "lead" },
+        )
+        assert.equal(
+          reassignLead.status,
+          200,
+          JSON.stringify(reassignLead.payload),
+        )
+        assert.equal(
+          (await prisma.team.findUniqueOrThrow({ where: { id: "team-a" } }))
+            .leadId,
+          "lead",
+        )
+        const lead = await prisma.user.findUniqueOrThrow({
+          where: { id: "lead" },
+        })
+        const leadEmployee = await prisma.employee.findUniqueOrThrow({
+          where: { userId: "lead" },
+        })
+        assert.equal(lead.departmentId, "dept-a")
+        assert.equal(lead.teamId, "team-a")
+        assert.equal(leadEmployee.departmentId, "dept-a")
+        assert.equal(leadEmployee.teamId, "team-a")
       },
     )
 
