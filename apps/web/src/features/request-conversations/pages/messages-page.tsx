@@ -490,7 +490,7 @@ function ConversationInbox({
       aria-label="Messages"
       className={cn(
         contentClass,
-        "grid h-[calc(100dvh-116px)] min-h-[480px] overflow-hidden rounded-[20px] transition-[grid-template-columns] duration-[240ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none max-[767px]:h-[calc(100dvh-98px)] max-[767px]:min-h-[420px] max-[767px]:grid-cols-1",
+        "grid h-[calc(100dvh-94px)] min-h-[480px] overflow-hidden rounded-[20px] transition-[grid-template-columns] duration-[240ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none max-[767px]:h-[calc(100dvh-80px)] max-[767px]:min-h-[420px] max-[767px]:grid-cols-1",
         railCollapsed
           ? "grid-cols-[76px_minmax(0,1fr)]"
           : "grid-cols-[clamp(220px,20vw,360px)_minmax(0,1fr)]",
