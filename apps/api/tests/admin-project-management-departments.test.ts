@@ -280,6 +280,31 @@ test(
     assert.equal(stale.position, "Department Head")
     assert.equal(stale.employee?.position, "Department Head")
 
+    for (const path of [
+      "/departments/project-management-directory",
+      `/departments/project-management-directory/${design.id}`,
+      `/project-workspace/directory?departmentId=${design.id}`,
+    ]) {
+      const unauthenticated = await fetch(`${origin}/api${path}`)
+      assert.equal(unauthenticated.status, 401, `GET ${path}`)
+    }
+
+    const malformedDepartmentId = await request(
+      admin,
+      "/departments/project-management-directory/invalid%20id",
+    )
+    assert.equal(malformedDepartmentId.status, 400)
+    const malformedStatus = await request(
+      admin,
+      `/project-workspace/directory?departmentId=${design.id}&status=UNKNOWN`,
+    )
+    assert.equal(malformedStatus.status, 400)
+    const repeatedDepartmentFilter = await request(
+      admin,
+      `/project-workspace/directory?departmentId=${design.id}&departmentId=${marketing.id}`,
+    )
+    assert.equal(repeatedDepartmentFilter.status, 400)
+
     const staffProjectDirectory = await request(
       staff,
       "/departments/project-management-directory",

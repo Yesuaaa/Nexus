@@ -272,7 +272,8 @@ test("Admin Project Management is department-first and opens read-only scoped wo
     })
   })
 
-  await page.goto("/project-management")
+  await page.goto("/project-management?page=4")
+  await expect(page).toHaveURL(/\/project-management$/)
   const table = page.getByRole("table", {
     name: "Project Management departments",
   })
@@ -342,6 +343,20 @@ test("Admin Project Management is department-first and opens read-only scoped wo
   await expect(page).toHaveURL(
     /\/project-management\/departments\/dept-1\/projects$/,
   )
+  const projectManagementSidebar = page.getByRole("complementary", {
+    name: "Primary navigation",
+  })
+  await expect(
+    projectManagementSidebar.getByRole("button", {
+      name: "Project Workspace",
+      exact: true,
+    }),
+  ).toHaveAttribute("aria-expanded", "true")
+  await expect(
+    projectManagementSidebar.getByRole("link", {
+      name: "Project Workspace Management",
+    }),
+  ).toHaveAttribute("aria-current", "location")
   await expect(
     page.getByRole("heading", {
       name: "Project Workspaces",
@@ -1265,11 +1280,12 @@ test("workspace detail errors stop loading and can be retried", async ({
     account: { headOf: { id: "design", name: "Design" } },
   })
   let attempts = 0
+  let retryAllowed = false
   await page.route("**/api/project-workspace/**", (route) => {
     const path = decodeURIComponent(new URL(route.request().url()).pathname)
     if (path.endsWith("/group:retry-id")) {
       attempts += 1
-      if (attempts === 1)
+      if (!retryAllowed)
         return route.fulfill({
           status: 503,
           json: { error: "Workspace unavailable" },
@@ -1301,11 +1317,13 @@ test("workspace detail errors stop loading and can be retried", async ({
     page.locator('[role="alert"]').filter({ hasText: "Workspace unavailable" }),
   ).toBeVisible()
   await expect(page.getByRole("status")).toHaveCount(0)
+  const attemptsBeforeRetry = attempts
+  retryAllowed = true
   await page.getByRole("button", { name: "Try again" }).click()
   await expect(
     page.getByRole("heading", { name: "Recovered workspace", exact: true }),
   ).toBeVisible()
-  expect(attempts).toBe(2)
+  expect(attempts).toBe(attemptsBeforeRetry + 1)
 })
 
 test("ordinary Staff keep their Project Workspace link and cannot open Overview", async ({

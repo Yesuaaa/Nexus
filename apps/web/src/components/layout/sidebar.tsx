@@ -428,15 +428,17 @@ export function Sidebar({
       policy.id === "admin-project-management" &&
       canAccessProjectManagementModule(account)
     ) {
-      return renderGroup(
-        moduleGroup(
-          "Project Workspace",
-          "Project Workspace",
-          FolderKanban,
-          "/project-management",
-          canAccessProjectManagementModule,
-        ),
+      const group = moduleGroup(
+        "Project Workspace",
+        "Project Workspace",
+        FolderKanban,
+        "/project-management",
+        canAccessProjectManagementModule,
       )
+      group.links[1].match = (path) =>
+        path !== "/project-management/overview" &&
+        isNavigationActive(policy, path)
+      return renderGroup(group)
     }
     if (
       policy.id === "project-workspace" &&

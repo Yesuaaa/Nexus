@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { focusRing } from "@/components/layout/styles"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
@@ -129,6 +129,16 @@ export function DepartmentTable({
     controlledPage: directoryState?.page,
     onPageChange: (page) => onDirectoryStateChange?.({ page }),
   })
+  useEffect(() => {
+    if (
+      !directoryState ||
+      loading ||
+      error ||
+      directoryState.page <= table.totalPages
+    )
+      return
+    onDirectoryStateChange?.({ page: table.totalPages })
+  }, [directoryState, error, loading, onDirectoryStateChange, table.totalPages])
   const rowGrid =
     variant === "project-management" ? projectManagementGrid : departmentGrid
   const directionFor = (key: SortKey) =>

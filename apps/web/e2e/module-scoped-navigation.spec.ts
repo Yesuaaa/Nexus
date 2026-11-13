@@ -18,6 +18,7 @@ for (const role of ["ADMIN", "SUPERADMIN"] as const) {
     page,
   }) => {
     const projectDataRequests: string[] = []
+    const departmentDirectoryRequests: string[] = []
     page.on("request", (request) => {
       const pathname = new URL(request.url()).pathname
       if (
@@ -27,8 +28,16 @@ for (const role of ["ADMIN", "SUPERADMIN"] as const) {
       )
         projectDataRequests.push(pathname)
     })
-
     await restoreSession(page, role)
+    await page.route(
+      "**/api/departments/project-management-directory",
+      (route) => {
+        departmentDirectoryRequests.push(
+          new URL(route.request().url()).pathname,
+        )
+        return route.fulfill({ json: { departments: [] } })
+      },
+    )
     await page.goto("/module")
     await page
       .getByRole("link", {
@@ -62,17 +71,15 @@ for (const role of ["ADMIN", "SUPERADMIN"] as const) {
     ).toBeVisible()
     await expect(
       page.getByRole("heading", {
-        name: "Project Workspace Management",
+        name: "Project Management",
         exact: true,
       }),
     ).toBeVisible()
-    await expect(page.getByText("No project workspaces yet")).toBeVisible()
-    expect(projectDataRequests).toContain("/api/project-workspace/directory")
-    expect(
-      projectDataRequests.every(
-        (path) => path === "/api/project-workspace/directory",
-      ),
-    ).toBe(true)
+    await expect(page.getByText("No departments created yet.")).toBeVisible()
+    expect(departmentDirectoryRequests).toContain(
+      "/api/departments/project-management-directory",
+    )
+    expect(projectDataRequests).toEqual([])
 
     await menu
       .getByRole("link", {
@@ -100,11 +107,7 @@ for (const role of ["ADMIN", "SUPERADMIN"] as const) {
       .getByRole("link", { name: "Switch Workspace", exact: true })
       .click()
     await expect(page).toHaveURL(/\/module$/)
-    expect(
-      projectDataRequests.every(
-        (path) => path === "/api/project-workspace/directory",
-      ),
-    ).toBe(true)
+    expect(projectDataRequests).toEqual([])
   })
 }
 
@@ -518,7 +521,13 @@ test("department head keeps request and workload navigation in their approved mo
     .click()
   await expect(page).toHaveURL(/\/project-workspace$/)
   await expect(
-    menu.getByRole("link", { name: "Project Workspace", exact: true }),
+    menu.getByRole("button", { name: "Project Workspace", exact: true }),
+  ).toHaveAttribute("aria-expanded", "true")
+  await expect(
+    menu.getByRole("link", {
+      name: "Project Workspace Management",
+      exact: true,
+    }),
   ).toHaveAttribute("aria-current", "page")
   await expect(
     menu.getByRole("link", { name: "Staff Workload", exact: true }),
