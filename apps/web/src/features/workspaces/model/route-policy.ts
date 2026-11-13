@@ -26,6 +26,7 @@ export const workspaceModuleLabels: Record<WorkspaceModuleId, string> = {
 
 export type RoutePolicyId =
   | "dashboard"
+  | "module"
   | "accounts"
   | "messages"
   | "projects-deliverable"
@@ -56,7 +57,7 @@ export type RouteMatch =
 type NavigationLocation = "main" | "footer"
 
 type RouteNavigation = {
-  href: string
+  href: string | ((account: Account) => string)
   label: string | ((account: Account) => string)
   location: NavigationLocation
   order: number
@@ -81,11 +82,17 @@ export const routePolicies: readonly RoutePolicy[] = [
     moduleId: null,
     canAccess: alwaysAccessible,
     navigation: {
-      href: "/dashboard",
-      label: "Dashboard",
+      href: (account) => (account.role === "USER" ? "/dashboard" : "/module"),
+      label: (account) => (account.role === "USER" ? "Dashboard" : "Module"),
       location: "main",
       order: 0,
     },
+  },
+  {
+    id: "module",
+    match: { kind: "exact", path: "/module" },
+    moduleId: null,
+    canAccess: (account) => account.role !== "USER",
   },
   {
     id: "accounts",

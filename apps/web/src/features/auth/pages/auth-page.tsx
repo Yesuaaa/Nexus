@@ -67,7 +67,10 @@ export function AuthPage({
         return await getCurrentAccount()
       })
       .then((session) => {
-        if (active && session) router.replace("/dashboard")
+        if (active && session)
+          router.replace(
+            session.user.role === "USER" ? "/dashboard" : "/module",
+          )
       })
       .catch((reason: unknown) => {
         if (!active) return

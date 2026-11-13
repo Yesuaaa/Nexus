@@ -1,19 +1,24 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useSearchParams } from "next/navigation"
 import {
   CalendarDays,
   CircleHelp,
   ClipboardList,
   FolderKanban,
   Inbox,
+  MessageSquareText,
+  MessagesSquare,
   UsersRound,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Account } from "@/features/auth/model/types"
 import {
-  getActiveWorkspaceModuleId,
+  canAccessRequestInbox,
+  canAccessProjectWorkspace,
+} from "@/features/auth/model/permissions"
+import {
   getNavigationLabel,
   getNavigationPolicies,
   isNavigationActive,
@@ -21,6 +26,8 @@ import {
   type RoutePolicy,
   type RoutePolicyId,
 } from "@/features/workspaces/model/route-policy"
+import { useWorkspaceModuleId } from "@/features/workspaces/providers/workspace-provider"
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { focusRing, iconButtonClass } from "./styles"
 import {
   AccountsIcon,
@@ -39,6 +46,12 @@ const accessLabels: Record<Account["role"], string> = {
 }
 
 const navLinkClass = `group relative flex min-h-10 w-full items-center gap-[13px] rounded-md border-0 bg-transparent px-[13px] text-left font-semibold text-foreground no-underline whitespace-nowrap cursor-pointer transition-colors duration-150 hover:bg-[#e1e3e5] max-[767px]:min-h-10 max-[767px]:w-full max-[767px]:justify-start max-[767px]:gap-[13px] max-[767px]:px-[13px] max-[767px]:aspect-auto motion-reduce:transition-none ${focusRing}`
+const collapsedNavLinkClass =
+  "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0"
+
+function CollapsedTooltip({ children }: { children: string }) {
+  return <HoverTooltip side="right">{children}</HoverTooltip>
+}
 
 function NavigationIcon({ policyId }: { policyId: RoutePolicyId }) {
   if (policyId === "dashboard") return <DashboardIcon className="flex-none" />
@@ -84,15 +97,18 @@ function SidebarNavigationLink({
 
   return (
     <Link
-      href={navigation.href}
+      href={
+        typeof navigation.href === "function"
+          ? navigation.href(account)
+          : navigation.href
+      }
       aria-current={active ? "page" : undefined}
-      title={collapsed ? label : undefined}
       className={cn(
         navLinkClass,
         collapsed &&
           (navigation.location === "footer"
             ? "justify-center gap-0 p-0"
-            : "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0"),
+            : collapsedNavLinkClass),
         active && "bg-[#e1e3e5]",
       )}
       onClick={onNavigate}
@@ -106,6 +122,7 @@ function SidebarNavigationLink({
       >
         {label}
       </span>
+      {collapsed && <CollapsedTooltip>{label}</CollapsedTooltip>}
     </Link>
   )
 }
@@ -124,11 +141,10 @@ export function Sidebar({
   onCloseDrawer: () => void
 }) {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const mainNavigation = getNavigationPolicies(account, "main")
   const isClient = account.role === "USER"
-  const activeModuleId = isClient
-    ? null
-    : getActiveWorkspaceModuleId(account, pathname)
+  const activeModuleId = useWorkspaceModuleId()
   const dashboardPolicy = mainNavigation.find(
     (policy) => policy.id === "dashboard",
   )
@@ -204,6 +220,7 @@ export function Sidebar({
             onClick={onToggleCollapse}
           >
             <PanelIcon />
+            {collapsed && <CollapsedTooltip>Expand sidebar</CollapsedTooltip>}
           </button>
           <button
             type="button"
@@ -220,8 +237,10 @@ export function Sidebar({
 
         <nav
           className={cn(
-            "grid min-h-0 content-start gap-[5px] overflow-y-auto px-6 max-[767px]:px-[22px]",
-            collapsed && "overflow-visible px-3",
+            "grid min-h-0 content-start gap-[5px] px-6 max-[767px]:px-[22px]",
+            collapsed
+              ? "overflow-visible px-3"
+              : "overflow-x-hidden overflow-y-auto",
           )}
           aria-label="Main menu"
         >
@@ -232,7 +251,7 @@ export function Sidebar({
               pathname={pathname}
               collapsed={collapsed}
               onNavigate={onCloseDrawer}
-              labelOverride={activeModuleId ? "Switch workspace" : undefined}
+              labelOverride={isClient ? undefined : "Switch Workspace"}
             />
           )}
 
@@ -251,6 +270,78 @@ export function Sidebar({
                   onNavigate={onCloseDrawer}
                 />
               ))}
+              {activeModuleId === "project-management" &&
+                canAccessProjectWorkspace(account) && (
+                  <Link
+                    href="/messages?scope=project"
+                    aria-current={
+                      pathname === "/messages" &&
+                      searchParams.get("scope") === "project" &&
+                      searchParams.get("mode") !== "internal" &&
+                      !searchParams.has("request")
+                        ? "page"
+                        : undefined
+                    }
+                    className={cn(
+                      navLinkClass,
+                      collapsed && collapsedNavLinkClass,
+                    )}
+                    onClick={onCloseDrawer}
+                  >
+                    <MessagesSquare
+                      size={20}
+                      strokeWidth={1.7}
+                      className="flex-none"
+                    />
+                    <span
+                      className={cn(
+                        collapsed &&
+                          "w-0 overflow-hidden opacity-0 max-[767px]:w-auto max-[767px]:overflow-visible max-[767px]:opacity-100",
+                      )}
+                    >
+                      Project Messages
+                    </span>
+                    {collapsed && (
+                      <CollapsedTooltip>Project Messages</CollapsedTooltip>
+                    )}
+                  </Link>
+                )}
+              {activeModuleId === "service-operations" &&
+                canAccessRequestInbox(account) && (
+                  <Link
+                    href="/messages?scope=service"
+                    aria-current={
+                      pathname === "/messages" &&
+                      searchParams.get("scope") === "service" &&
+                      searchParams.get("mode") !== "internal" &&
+                      !searchParams.has("project")
+                        ? "page"
+                        : undefined
+                    }
+                    className={cn(
+                      navLinkClass,
+                      collapsed && collapsedNavLinkClass,
+                    )}
+                    onClick={onCloseDrawer}
+                  >
+                    <MessageSquareText
+                      size={20}
+                      strokeWidth={1.7}
+                      className="flex-none"
+                    />
+                    <span
+                      className={cn(
+                        collapsed &&
+                          "w-0 overflow-hidden opacity-0 max-[767px]:w-auto max-[767px]:overflow-visible max-[767px]:opacity-100",
+                      )}
+                    >
+                      Service Messages
+                    </span>
+                    {collapsed && (
+                      <CollapsedTooltip>Service Messages</CollapsedTooltip>
+                    )}
+                  </Link>
+                )}
             </>
           )}
 
@@ -267,6 +358,39 @@ export function Sidebar({
                   onNavigate={onCloseDrawer}
                 />
               ))}
+              {!isClient && (
+                <Link
+                  href="/messages?mode=internal"
+                  aria-current={
+                    pathname === "/messages" &&
+                    searchParams.get("mode") === "internal"
+                      ? "page"
+                      : undefined
+                  }
+                  className={cn(
+                    navLinkClass,
+                    collapsed && collapsedNavLinkClass,
+                  )}
+                  onClick={onCloseDrawer}
+                >
+                  <UsersRound
+                    size={20}
+                    strokeWidth={1.7}
+                    className="flex-none"
+                  />
+                  <span
+                    className={cn(
+                      collapsed &&
+                        "w-0 overflow-hidden opacity-0 max-[767px]:w-auto max-[767px]:overflow-visible max-[767px]:opacity-100",
+                    )}
+                  >
+                    Internal Messages
+                  </span>
+                  {collapsed && (
+                    <CollapsedTooltip>Internal Messages</CollapsedTooltip>
+                  )}
+                </Link>
+              )}
             </>
           )}
         </nav>

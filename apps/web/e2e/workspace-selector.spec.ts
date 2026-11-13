@@ -1,12 +1,35 @@
-import { expect, test } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
 import {
   configureRegressionTest,
   live,
+  mockApi,
   restoreSession,
+  storedTokens,
+  testAccounts,
 } from "./regression-support"
 
 configureRegressionTest()
 test.skip(live, "Workspace selector regressions use isolated API fixtures")
+
+async function expectLauncher(page: Page) {
+  await expect(
+    page.getByRole("main", { name: "Workspace selector" }),
+  ).toBeVisible()
+  await expect(page.locator("#app-sidebar")).toHaveCount(0)
+  await expect(page.locator("[data-portal-topbar]")).toHaveCount(0)
+  await expect(
+    page.getByRole("navigation", { name: "Breadcrumb" }),
+  ).toHaveCount(0)
+  await expect(
+    page.getByRole("button", { name: "Open navigation menu" }),
+  ).toHaveCount(0)
+  await expect(
+    page.getByRole("group", { name: "Account controls" }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("heading", { name: "Module", exact: true }),
+  ).toBeVisible()
+}
 
 const scenarios = [
   {
@@ -46,9 +69,10 @@ for (const scenario of scenarios) {
       account: "account" in scenario ? scenario.account : undefined,
     })
     await page.goto("/dashboard")
+    await expectLauncher(page)
 
     await expect(
-      page.getByRole("heading", { name: "Choose a workspace", exact: true }),
+      page.getByRole("heading", { name: "Module", exact: true }),
     ).toBeVisible()
 
     const cards = page.getByRole("link", { name: /^Open .+ workspace$/ })
@@ -75,6 +99,7 @@ test("an account without module permissions sees a safe empty state", async ({
 }) => {
   await restoreSession(page, "SUPERADMIN", { account: { permissions: [] } })
   await page.goto("/dashboard")
+  await expectLauncher(page)
 
   await expect(
     page.getByRole("heading", {
@@ -95,6 +120,8 @@ for (const width of [1440, 390]) {
     await restoreSession(page, "USER")
     await page.goto("/")
     await expect(page).toHaveURL(/\/dashboard$/)
+    await page.goto("/module")
+    await expect(page).toHaveURL(/\/dashboard$/)
     await expect(
       page.getByRole("main", { name: "Client dashboard" }),
     ).toBeVisible()
@@ -102,8 +129,9 @@ for (const width of [1440, 390]) {
       page.getByRole("link", { name: /^Open .+ workspace$/ }),
     ).toHaveCount(0)
     await expect(
-      page.getByRole("heading", { name: "Choose a workspace" }),
+      page.getByRole("banner", { name: "Workspace selector" }),
     ).toHaveCount(0)
+    await expect(page.getByRole("heading", { name: "Module" })).toHaveCount(0)
     if (width < 768)
       await page.getByRole("button", { name: "Open navigation menu" }).click()
     const sidebar = page.getByRole("complementary", {
@@ -122,7 +150,7 @@ for (const width of [1440, 390]) {
       ).toBeVisible()
     }
     await expect(
-      sidebar.getByRole("link", { name: "Switch workspace" }),
+      sidebar.getByRole("link", { name: "Switch Workspace" }),
     ).toHaveCount(0)
     expect(
       await page.evaluate(
@@ -130,4 +158,86 @@ for (const width of [1440, 390]) {
       ),
     ).toBe(true)
   })
+}
+
+for (const width of [390, 768, 1440]) {
+  for (const role of ["STAFF", "ADMIN", "SUPERADMIN", "USER"] as const) {
+    test(`${role} login uses its correct shell at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 844 })
+      await mockApi(page, role)
+      const applicationReads: string[] = []
+      page.on("request", (request) => {
+        const path = new URL(request.url()).pathname
+        if (
+          /^\/api\/(request-conversations|project-conversations|internal-conversations|request-workflows)/.test(
+            path,
+          )
+        )
+          applicationReads.push(path)
+      })
+      await page.goto(role === "USER" ? "/login" : "/internal/login")
+      await page
+        .getByLabel("Email address", { exact: true })
+        .fill(testAccounts[role].email)
+      await page
+        .getByLabel("Password", { exact: true })
+        .fill("CorrectHorse123!")
+      await page.getByRole("button", { name: "Sign In", exact: true }).click()
+      await expect(page).toHaveURL(
+        role === "USER" ? /\/dashboard$/ : /\/module$/,
+      )
+      await expect(
+        page.getByRole("status", { name: "Opening your account" }),
+      ).toHaveCount(0)
+      if (role === "USER") {
+        await expect(
+          page.getByRole("main", { name: "Client dashboard" }),
+        ).toBeVisible()
+        await expect(
+          page.getByRole("main", { name: "Workspace selector" }),
+        ).toHaveCount(0)
+        await expect(page.locator("[data-portal-topbar]")).toHaveCount(1)
+      } else {
+        await expectLauncher(page)
+        if (role === "ADMIN" && width !== 768)
+          await page.screenshot({
+            path: test.info().outputPath("module.png"),
+            fullPage: true,
+          })
+        expect(applicationReads).toEqual([])
+        await page.reload()
+        await expectLauncher(page)
+        await page
+          .getByRole("link", { name: /^Open .+ workspace$/ })
+          .first()
+          .click()
+        await expect(page.locator("[data-portal-topbar]")).toBeVisible()
+        if (width < 768)
+          await page
+            .getByRole("button", { name: "Open navigation menu" })
+            .click()
+        await page
+          .getByRole("link", { name: "Switch Workspace", exact: true })
+          .click()
+        await expect(page).toHaveURL(/\/module$/)
+        await expectLauncher(page)
+      }
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth,
+        ),
+      ).toBe(true)
+      expect(await storedTokens(page)).toEqual(["test-session", "test-refresh"])
+      await page
+        .getByRole("button", { name: "Open account menu", exact: true })
+        .click()
+      await page.getByRole("menuitem", { name: "Log out", exact: true }).click()
+      await expect(page).toHaveURL(
+        role === "USER" ? /\/login$/ : /\/internal\/login$/,
+      )
+      expect(await storedTokens(page)).toEqual([null, null])
+    })
+  }
 }

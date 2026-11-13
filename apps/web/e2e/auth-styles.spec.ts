@@ -62,10 +62,14 @@ test("route utilities stay styled across auth and portal navigation", async ({
   await page.emulateMedia({ reducedMotion: "reduce" })
   await restoreSession(page, "ADMIN")
   await page.goto("/login")
-  await expect(page).toHaveURL(/\/dashboard$/)
-  const dashboard = page.getByRole("main", { name: "Dashboard", exact: true })
-  await expect(dashboard).toHaveCSS("border-radius", "13px")
-  await expect(dashboard).toHaveCSS("background-color", "rgb(243, 247, 249)")
+  await expect(page).toHaveURL(/\/module$/)
+  const launcher = page.getByRole("group", { name: "Account controls" })
+  await expect(launcher).toHaveCSS("display", "flex")
+  await expect(page.locator("[data-portal-topbar]")).toHaveCount(0)
+  await expect(
+    page.getByRole("main", { name: "Workspace selector" }),
+  ).toBeVisible()
+  await expect(page.locator("#app-sidebar")).toHaveCount(0)
 
   await page
     .getByRole("button", { name: "Open account menu", exact: true })

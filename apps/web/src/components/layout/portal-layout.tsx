@@ -12,6 +12,8 @@ import { PreferencesProvider } from "@/features/settings/providers/preferences-p
 import { isRouteDenied } from "@/features/workspaces/model/route-policy"
 import { BreadcrumbLabelProvider } from "./breadcrumbs"
 import { RoleLayout } from "./role-layout"
+import { WorkspaceSelectorShell } from "@/features/workspaces/components/workspace-selector-shell"
+import { WorkspaceProvider } from "@/features/workspaces/providers/workspace-provider"
 
 const stateClassName =
   "grid min-h-dvh place-items-center bg-[var(--portal-canvas)] px-6 text-center text-[#5a6f95]"
@@ -22,10 +24,13 @@ export function PortalLayout({ children }: { children: ReactNode }) {
   const { markDestinationReady } = useAuthTransition()
   const { account, error } = useAccount(markDestinationReady)
   const denied = !!account && isRouteDenied(account, pathname)
+  const legacyInternalDashboard =
+    account?.role !== "USER" && !!account && pathname === "/dashboard"
 
   useEffect(() => {
-    if (denied) router.replace("/dashboard")
-  }, [denied, router])
+    if (legacyInternalDashboard || denied)
+      router.replace(account?.role === "USER" ? "/dashboard" : "/module")
+  }, [legacyInternalDashboard, denied, account?.role, router])
 
   async function handleSignOut() {
     const loginPath = loginPathForRole(account?.role ?? "USER")
@@ -56,15 +61,31 @@ export function PortalLayout({ children }: { children: ReactNode }) {
         Loading your account…
       </main>
     )
-  if (denied) return null
+  if (denied || legacyInternalDashboard) return null
+
+  const applicationShell = (
+    <RoleLayout account={account} onSignOut={() => void handleSignOut()}>
+      {children}
+    </RoleLayout>
+  )
 
   return (
     <AccountContext value={account}>
       <PreferencesProvider key={account.id}>
         <BreadcrumbLabelProvider>
-          <RoleLayout account={account} onSignOut={() => void handleSignOut()}>
-            {children}
-          </RoleLayout>
+          {account.role === "USER" ? (
+            applicationShell
+          ) : (
+            <WorkspaceProvider key={account.id} account={account}>
+              {pathname === "/module" ? (
+                <WorkspaceSelectorShell onSignOut={() => void handleSignOut()}>
+                  {children}
+                </WorkspaceSelectorShell>
+              ) : (
+                applicationShell
+              )}
+            </WorkspaceProvider>
+          )}
         </BreadcrumbLabelProvider>
       </PreferencesProvider>
     </AccountContext>

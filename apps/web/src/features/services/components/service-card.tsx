@@ -5,6 +5,8 @@ import { useEffect, useRef } from "react"
 import { gsap } from "gsap"
 import { Plus } from "lucide-react"
 import { focusRing } from "@/components/layout/styles"
+import { useRadialHoverFill } from "@/components/ui/use-radial-hover-fill"
+import { useHoverLabel } from "@/components/ui/use-hover-label"
 import { cn } from "@/lib/utils"
 import type { Service } from "../api/services-api"
 import { ServiceIcon } from "./service-icon"
@@ -16,61 +18,38 @@ export function ServiceCard({
   service: Service
   onSelect: (service: Service) => void
 }) {
-  const cardRef = useRef<HTMLButtonElement>(null)
   const imageRevealRef = useRef<HTMLSpanElement>(null)
-  const fillRef = useRef<HTMLSpanElement>(null)
-  const contentRef = useRef<HTMLSpanElement>(null)
-  const nameRef = useRef<HTMLSpanElement>(null)
-  const typeTweenRef = useRef<gsap.core.Tween | null>(null)
+  const {
+    cardRef,
+    fillRef,
+    contentRef,
+    showFill: showRadialFill,
+    hideFill: hideRadialFill,
+  } = useRadialHoverFill<HTMLButtonElement>()
+  const {
+    labelRef: nameRef,
+    show: showServiceName,
+    restore: restoreServiceName,
+  } = useHoverLabel(service.name)
 
   useEffect(() => {
     const imageReveal = imageRevealRef.current
-    const fill = fillRef.current
-    const content = contentRef.current
 
     return () => {
-      typeTweenRef.current?.kill()
-      gsap.killTweensOf([imageReveal, fill, content])
+      gsap.killTweensOf(imageReveal)
     }
   }, [])
-
-  function typeServiceName() {
-    const target = "EXPlore"
-    const reduceMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches
-    const name = nameRef.current
-
-    typeTweenRef.current?.kill()
-
-    if (!name || reduceMotion) {
-      if (name) name.textContent = target
-      return
-    }
-
-    const progress = { characters: 0 }
-    name.textContent = ""
-    typeTweenRef.current = gsap.to(progress, {
-      characters: target.length,
-      duration: 0.5,
-      ease: "none",
-      onUpdate: () => {
-        name.textContent = target.slice(0, Math.ceil(progress.characters))
-      },
-    })
-  }
-
-  function restoreServiceName() {
-    typeTweenRef.current?.kill()
-    if (nameRef.current) nameRef.current.textContent = service.name
-  }
 
   function showFill(clientX?: number, clientY?: number) {
     const card = cardRef.current
     const imageReveal = imageRevealRef.current
-    const fill = fillRef.current
     const content = contentRef.current
-    if (!card || !fill || !content) return
+    if (!service.imageUrl || !imageReveal) {
+      showRadialFill(clientX, clientY)
+      showServiceName()
+      return
+    }
+    if (!card || !content) return
 
     const bounds = card.getBoundingClientRect()
     const localX = (clientX ?? bounds.left + bounds.width / 2) - bounds.left
@@ -81,80 +60,43 @@ export function ServiceCard({
       ? 0
       : 1
 
-    gsap.killTweensOf([imageReveal, fill, content])
-
-    if (service.imageUrl && imageReveal) {
-      gsap.set(fill, { scale: 0 })
-      gsap.set(imageReveal, {
-        clipPath: `circle(0px at ${localX}px ${localY}px)`,
-        scale: 1,
-      })
-      gsap.to(imageReveal, {
-        clipPath: `circle(${diameter / 2}px at ${localX}px ${localY}px)`,
-        scale: 1.03,
-        duration: 0.55 * durationScale,
-        ease: "power3.out",
-      })
-      gsap.to(content, {
-        color: "#ffffff",
-        duration: 0.2 * durationScale,
-      })
-      typeServiceName()
-      return
-    }
-
-    gsap.set(fill, {
-      width: diameter,
-      height: diameter,
-      left: localX,
-      top: localY,
-      xPercent: -50,
-      yPercent: -50,
-      scale: 0,
-    })
-    gsap.to(fill, {
+    gsap.killTweensOf([imageReveal, content])
+    gsap.set(imageReveal, {
+      clipPath: `circle(0px at ${localX}px ${localY}px)`,
       scale: 1,
+    })
+    gsap.to(imageReveal, {
+      clipPath: `circle(${diameter / 2}px at ${localX}px ${localY}px)`,
+      scale: 1.03,
       duration: 0.55 * durationScale,
       ease: "power3.out",
     })
     gsap.to(content, {
-      color: "#294c96",
-      duration: 0.22 * durationScale,
-      delay: 0.12 * durationScale,
+      color: "#ffffff",
+      duration: 0.2 * durationScale,
     })
-    typeServiceName()
+    showServiceName()
   }
 
   function hideFill() {
     const imageReveal = imageRevealRef.current
-    const fill = fillRef.current
     const content = contentRef.current
-    if (!fill || !content) return
+    if (!service.imageUrl || !imageReveal) {
+      hideRadialFill()
+      restoreServiceName()
+      return
+    }
+    if (!content) return
 
     const durationScale = window.matchMedia("(prefers-reduced-motion: reduce)")
       .matches
       ? 0
       : 1
 
-    gsap.killTweensOf([imageReveal, fill, content])
-
-    if (service.imageUrl && imageReveal) {
-      gsap.to(imageReveal, {
-        clipPath: "circle(0px at 50% 50%)",
-        scale: 1,
-        duration: 0.4 * durationScale,
-        ease: "power3.inOut",
-      })
-      gsap.to(content, {
-        color: "#ffffff",
-        duration: 0.2 * durationScale,
-      })
-      restoreServiceName()
-      return
-    }
-
-    gsap.to(fill, {
-      scale: 0,
+    gsap.killTweensOf([imageReveal, content])
+    gsap.to(imageReveal, {
+      clipPath: "circle(0px at 50% 50%)",
+      scale: 1,
       duration: 0.4 * durationScale,
       ease: "power3.inOut",
     })

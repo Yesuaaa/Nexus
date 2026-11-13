@@ -289,23 +289,23 @@ test("navigation is generated from the same policies without changing role visib
       "Calendar",
       "My Projects",
     ],
-    STAFF: ["Dashboard", "Calendar", "Project Workspace"],
+    STAFF: ["Module", "Calendar", "Project Workspace"],
     STAFF_HEAD: [
-      "Dashboard",
+      "Module",
       "Calendar",
       "Staff Workload",
       "Request Inbox",
       "Project Workspace",
     ],
     ADMIN: [
-      "Dashboard",
+      "Module",
       "Department Management",
       "Employee Management",
       "Service Management",
       "Calendar",
       "Client Management",
     ],
-    SUPERADMIN: ["Dashboard", "Account Management", "Calendar"],
+    SUPERADMIN: ["Module", "Account Management", "Calendar"],
   }
 
   for (const [actor, labels] of Object.entries(expectedLabels)) {
@@ -360,4 +360,17 @@ test("department-head handoff immediately removes head-only routes and navigatio
     getNavigationPolicies(ordinaryStaff, "main").map((policy) => policy.id),
     ["dashboard", "calendar", "project-workspace"],
   )
+})
+
+test("Module route and launcher links remain internal-only", () => {
+  const client = account("USER")
+  assert.equal(canAccessRoute(client, "/module"), false)
+  for (const role of ["STAFF", "ADMIN", "SUPERADMIN"]) {
+    const actor = account(role)
+    assert.equal(canAccessRoute(actor, "/module"), true)
+    const navigation = getNavigationPolicies(actor, "main").find(
+      (policy) => policy.id === "dashboard",
+    ).navigation
+    assert.equal(navigation.href(actor), "/module")
+  }
 })

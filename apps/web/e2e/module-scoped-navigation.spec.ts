@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import {
   configureRegressionTest,
+  accountFor,
   live,
   restoreSession,
 } from "./regression-support"
@@ -35,7 +36,7 @@ test("Client moves directly between services and projects without switching work
     menu.getByText("Service Operations", { exact: true }),
   ).toHaveCount(0)
   await expect(
-    menu.getByRole("link", { name: "Switch workspace", exact: true }),
+    menu.getByRole("link", { name: "Switch Workspace", exact: true }),
   ).toHaveCount(0)
   await expect(
     menu.getByRole("link", { name: "Services", exact: true }),
@@ -72,8 +73,174 @@ test("Client moves directly between services and projects without switching work
   await page.reload()
   await expect(menu.getByRole("link", { name: "Services" })).toBeVisible()
   await expect(
-    menu.getByRole("link", { name: "Switch workspace" }),
+    menu.getByRole("link", { name: "Switch Workspace" }),
   ).toHaveCount(0)
+})
+
+for (const workspace of [
+  {
+    title: "Service Operations",
+    link: "Service Management",
+    hidden: "Employee Management",
+  },
+  {
+    title: "People & HR",
+    link: "Employee Management",
+    hidden: "Service Management",
+  },
+]) {
+  test(`${workspace.title} retains its shell through shared utilities and reload`, async ({
+    page,
+  }) => {
+    await restoreSession(page, "ADMIN")
+    await page.route("**/api/internal-conversations/contacts", (route) =>
+      route.fulfill({ json: [] }),
+    )
+    await page.route("**/api/projects/calendar?**", (route) =>
+      route.fulfill({ json: [] }),
+    )
+    await page.route("**/api/auth/profile", (route) =>
+      route.fulfill({
+        json: { user: accountFor("ADMIN"), employee: null, specialist: null },
+      }),
+    )
+    await page.goto("/module")
+    await page
+      .getByRole("link", {
+        name: `Open ${workspace.title} workspace`,
+        exact: true,
+      })
+      .click()
+    const menu = mainMenu(page)
+
+    await page.getByRole("link", { name: /^Messages/ }).click()
+    await expect(page).toHaveURL(/\/messages\?mode=internal$/)
+    await expect(menu.getByText(workspace.title, { exact: true })).toBeVisible()
+    await expect(
+      menu.getByRole("link", { name: workspace.link, exact: true }),
+    ).toBeVisible()
+    await expect(
+      menu.getByRole("link", { name: workspace.hidden, exact: true }),
+    ).toHaveCount(0)
+
+    await page.goto("/messages?mode=internal")
+    await page.reload()
+    await expect(menu.getByText(workspace.title, { exact: true })).toBeVisible()
+    await expect(
+      page.getByRole("button", { name: "Notifications", exact: true }),
+    ).toBeVisible()
+
+    await menu.getByRole("link", { name: "Calendar", exact: true }).click()
+    await expect(page).toHaveURL(/\/calendar$/)
+    await expect(
+      menu.getByRole("link", { name: workspace.link, exact: true }),
+    ).toBeVisible()
+
+    for (const label of ["Profile", "Settings"]) {
+      await page
+        .getByRole("button", { name: "Open account menu", exact: true })
+        .click()
+      await page.getByRole("menuitem", { name: label, exact: true }).click()
+      await expect(page).toHaveURL(
+        label === "Profile" ? /\/profile$/ : /\/settings$/,
+      )
+      await expect(
+        menu.getByText(workspace.title, { exact: true }),
+      ).toBeVisible()
+    }
+
+    await menu
+      .getByRole("link", { name: "Switch Workspace", exact: true })
+      .click()
+    await expect(page).toHaveURL(/\/module$/)
+    await expect(page.locator("#app-sidebar")).toHaveCount(0)
+    await expect(page.locator("[data-portal-topbar]")).toHaveCount(0)
+    await expect
+      .poll(() =>
+        page.evaluate(() => sessionStorage.getItem("nexus.workspace.actor")),
+      )
+      .toBeNull()
+
+    await page.goto("/messages?mode=internal")
+    await expect(
+      menu.getByRole("link", { name: "Switch Workspace", exact: true }),
+    ).toBeVisible()
+    await expect(menu.getByText(workspace.title, { exact: true })).toHaveCount(
+      0,
+    )
+    await expect(
+      menu.getByRole("link", { name: workspace.link, exact: true }),
+    ).toHaveCount(0)
+  })
+}
+
+test("module context is revalidated when permissions change on a shared page", async ({
+  page,
+}) => {
+  await restoreSession(page, "ADMIN")
+  await page.goto("/employees")
+  await page.route("**/api/internal-conversations/contacts", (route) =>
+    route.fulfill({ json: [] }),
+  )
+  await page.getByRole("link", { name: /^Messages/ }).click()
+  await expect(page).toHaveURL(/\/messages\?mode=internal$/)
+  const menu = mainMenu(page)
+  await expect(menu.getByText("People & HR", { exact: true })).toBeVisible()
+
+  await page.route("**/api/auth/me", (route) =>
+    route.fulfill({ json: { user: accountFor("ADMIN", { permissions: [] }) } }),
+  )
+  await page.evaluate(() =>
+    window.dispatchEvent(new Event("nexus:account-updated")),
+  )
+  await expect(menu.getByText("People & HR", { exact: true })).toHaveCount(0)
+  await expect(
+    menu.getByRole("link", { name: "Employee Management" }),
+  ).toHaveCount(0)
+  await expect(
+    menu.getByRole("link", { name: "Switch Workspace", exact: true }),
+  ).toBeVisible()
+  await page.goto("/employees")
+  await expect(page).toHaveURL(/\/module$/)
+  await expect(page.locator("#app-sidebar")).toHaveCount(0)
+  await expect(page.locator("[data-portal-topbar]")).toHaveCount(0)
+})
+
+test("remembered module context is isolated by account", async ({ page }) => {
+  await restoreSession(page, "ADMIN", { account: { id: "second-admin" } })
+  await page.route("**/api/internal-conversations/contacts", (route) =>
+    route.fulfill({ json: [] }),
+  )
+  await page.addInitScript(() =>
+    sessionStorage.setItem("nexus.workspace.actor", "people-hr"),
+  )
+  await page.goto("/messages?mode=internal")
+  const menu = mainMenu(page)
+  await expect(
+    menu.getByRole("link", { name: "Switch Workspace", exact: true }),
+  ).toBeVisible()
+  await expect(menu.getByText("People & HR", { exact: true })).toHaveCount(0)
+  await expect(
+    menu.getByRole("link", { name: "Employee Management" }),
+  ).toHaveCount(0)
+})
+
+test("authorized deep links replace the previous module and browser history restores it", async ({
+  page,
+}) => {
+  await restoreSession(page, "ADMIN")
+  await page.goto("/employees")
+  const menu = mainMenu(page)
+  await expect(menu.getByText("People & HR", { exact: true })).toBeVisible()
+  await page.goto("/services")
+  await expect(
+    menu.getByText("Service Operations", { exact: true }),
+  ).toBeVisible()
+  await expect(
+    menu.getByRole("link", { name: "Employee Management" }),
+  ).toHaveCount(0)
+  await page.goBack()
+  await expect(menu.getByText("People & HR", { exact: true })).toBeVisible()
 })
 
 test("Admin switches between Service Operations and People & HR scopes", async ({
@@ -100,7 +267,7 @@ test("Admin switches between Service Operations and People & HR scopes", async (
   ).toHaveCount(0)
 
   await menu
-    .getByRole("link", { name: "Switch workspace", exact: true })
+    .getByRole("link", { name: "Switch Workspace", exact: true })
     .click()
   await page
     .getByRole("link", { name: "Open People & HR workspace", exact: true })
@@ -156,7 +323,7 @@ test("department head keeps request and workload navigation in their approved mo
   ).toHaveCount(0)
 
   await menu
-    .getByRole("link", { name: "Switch workspace", exact: true })
+    .getByRole("link", { name: "Switch Workspace", exact: true })
     .click()
   await page
     .getByRole("link", {
@@ -190,7 +357,7 @@ test("Administration remains the only Superadmin module scope", async ({
     menu.getByRole("link", { name: "Account Management", exact: true }),
   ).toHaveAttribute("aria-current", "page")
   await expect(
-    menu.getByRole("link", { name: "Switch workspace", exact: true }),
+    menu.getByRole("link", { name: "Switch Workspace", exact: true }),
   ).toBeVisible()
 })
 
@@ -245,14 +412,14 @@ test("shared and compatibility deep links derive the correct navigation scope", 
   )
   await expect(menu.getByRole("link", { name: "Dashboard" })).toBeVisible()
   await expect(
-    menu.getByRole("link", { name: "Switch workspace" }),
+    menu.getByRole("link", { name: "Switch Workspace" }),
   ).toHaveCount(0)
   await expect(menu.getByRole("link", { name: "Services" })).toBeVisible()
   await expect(menu.getByRole("link", { name: "My Projects" })).toBeVisible()
 
   await page.goto("/booked-services")
   await expect(
-    menu.getByRole("link", { name: "Switch workspace", exact: true }),
+    menu.getByRole("link", { name: "Switch Workspace", exact: true }),
   ).toHaveCount(0)
   await expect(
     menu.getByText("Service Operations", { exact: true }),
@@ -262,7 +429,7 @@ test("shared and compatibility deep links derive the correct navigation scope", 
   await page.goto("/billing-logs")
   await expect(menu.getByRole("link", { name: "Dashboard" })).toBeVisible()
   await expect(
-    menu.getByRole("link", { name: "Switch workspace" }),
+    menu.getByRole("link", { name: "Switch Workspace" }),
   ).toHaveCount(0)
   await expect(menu.getByRole("link", { name: "Calendar" })).toBeVisible()
 })
@@ -285,7 +452,7 @@ test("client mobile drawer retains direct navigation when collapsed and closes a
     sidebar.getByText("Service Operations", { exact: true }),
   ).toHaveCount(0)
   await expect(
-    sidebar.getByRole("link", { name: "Switch workspace", exact: true }),
+    sidebar.getByRole("link", { name: "Switch Workspace", exact: true }),
   ).toHaveCount(0)
   await expect(
     sidebar.getByRole("link", { name: "Booked Requests", exact: true }),
