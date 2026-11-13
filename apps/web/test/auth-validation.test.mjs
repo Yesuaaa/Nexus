@@ -79,8 +79,8 @@ for (const language of ["en", "fil"]) {
     assert.deepEqual(validateAuth("register", valid, copy), {})
     for (const [field, value] of [
       ["fullName", "Jane123"],
-      ["email", "jane@example.org"],
       ["email", "jane..doe@example.com"],
+      ["email", "jane@example"],
       ["contactNumber", "+63 912 345 6789"],
       ["contactNumber", "07123456789"],
       ["password", "strongpassword1!"],
@@ -109,6 +109,11 @@ for (const language of ["en", "fil"]) {
         copy,
       ),
       {},
+    )
+    assert.deepEqual(
+      validateAuth("register", { ...valid, email: "jane@example.org" }, copy),
+      {},
+      "any email domain is accepted",
     )
   })
 }

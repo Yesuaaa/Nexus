@@ -9,24 +9,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { X } from "lucide-react"
+import { getInitials } from "@/lib/initials"
 
 type ClientProfile = {
   id: string
   fullName: string | null
   email: string
   contactNumber: string | null
-}
-
-function initials(name: string) {
-  return (
-    name
-      .trim()
-      .split(/\s+/)
-      .slice(0, 2)
-      .map((part) => part[0])
-      .join("")
-      .toUpperCase() || "C"
-  )
 }
 
 export function ClientProfileDialog({
@@ -60,7 +49,7 @@ export function ClientProfileDialog({
               aria-hidden="true"
               className="grid size-[88px] shrink-0 place-items-center rounded-full border-4 border-white bg-[#eef2f8] text-xl font-semibold text-[#294a9b] shadow-sm"
             >
-              {initials(name)}
+              {getInitials(name) || "C"}
             </span>
             <Button
               type="button"

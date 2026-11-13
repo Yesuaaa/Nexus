@@ -2,11 +2,8 @@
 
 import * as React from "react"
 
-import { focusRing } from "@/components/layout/styles"
 import { cn } from "@/lib/utils"
-
-const formInputClass =
-  "h-10 w-full min-w-0 rounded-lg border border-[#d6dfec] bg-background px-3 text-sm text-foreground placeholder:text-[#9aa8bb]"
+import { formControlClass } from "./form-control-styles"
 
 const FormInput = React.forwardRef<
   HTMLInputElement,
@@ -14,8 +11,9 @@ const FormInput = React.forwardRef<
 >(({ className, type, ...props }, ref) => {
   return (
     <input
+      data-slot="form-input"
       type={type}
-      className={cn(formInputClass, focusRing, className)}
+      className={cn(formControlClass, "h-10", className)}
       ref={ref}
       {...props}
     />
@@ -23,4 +21,17 @@ const FormInput = React.forwardRef<
 })
 FormInput.displayName = "FormInput"
 
-export { FormInput }
+const FormTextarea = React.forwardRef<
+  HTMLTextAreaElement,
+  React.ComponentProps<"textarea">
+>(({ className, ...props }, ref) => (
+  <textarea
+    data-slot="form-textarea"
+    className={cn(formControlClass, "min-h-24 resize-y", className)}
+    ref={ref}
+    {...props}
+  />
+))
+FormTextarea.displayName = "FormTextarea"
+
+export { FormInput, FormTextarea }

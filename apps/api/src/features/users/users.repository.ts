@@ -1,5 +1,15 @@
-import { Prisma, Role, type User } from "../../generated/prisma/client.js"
+import { Prisma, Role } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
+import { lockRows } from "../../shared/db/locks.js"
+import { HttpError } from "../../shared/http-error.js"
+import { paginate } from "../../shared/query/pagination.js"
+import {
+  deleteAccountPermanently,
+  moveAccountToTrash,
+  restoreAccountFromTrash,
+  setAccountActive,
+} from "./account-lifecycle.js"
+import { publicUserInclude } from "./users.dto.js"
 
 export interface CreateUserInput {
   email: string
@@ -34,88 +44,53 @@ export const usersRepository = {
     })
   },
 
-  async findById(id: string): Promise<User | null> {
-    const prisma = getPrisma()!
-    return prisma.user.findUnique({ where: { id } })
-  },
-
+  // Lifecycle writes are conditional on the state the service just checked,
+  // so a concurrent change returns null/false (a 409) instead of applying.
   async updateStatus(
     id: string,
     currentRole: Role,
     currentIsActive: boolean,
     nextIsActive: boolean,
   ) {
-    const prisma = getPrisma()!
-    return prisma.$transaction(async (transaction) => {
-      const updated = await transaction.user.updateMany({
-        where: { id, role: currentRole, isActive: currentIsActive },
-        data: { isActive: nextIsActive },
+    return getPrisma()!.$transaction(async (tx) => {
+      const updated = await setAccountActive(tx, id, nextIsActive, {
+        role: currentRole,
+        isActive: currentIsActive,
       })
-      if (updated.count === 0) return null
-      if (!nextIsActive) {
-        await transaction.session.deleteMany({ where: { userId: id } })
-      }
-      return transaction.user.findUniqueOrThrow({
+      if (!updated) return null
+      return tx.user.findUniqueOrThrow({
         where: { id },
-        include: {
-          department: {
-            select: { id: true, name: true, code: true, color: true },
-          },
-          team: { select: { id: true, name: true } },
-        },
+        include: publicUserInclude,
       })
     })
   },
 
   async softDeleteInactiveUser(id: string, role: Role) {
-    const prisma = getPrisma()!
-    return prisma.$transaction(async (transaction) => {
-      const deleted = await transaction.user.updateMany({
-        where: {
-          id,
-          role,
-          isActive: false,
-          accountDeletedAt: null,
-        },
-        data: { accountDeletedAt: new Date() },
-      })
-      if (deleted.count > 0) {
-        await transaction.session.deleteMany({ where: { userId: id } })
-      }
-      return deleted
-    })
+    return getPrisma()!.$transaction((tx) =>
+      moveAccountToTrash(tx, id, { guard: { role, isActive: false } }),
+    )
   },
 
   async restoreUser(id: string, role: Role, accountDeletedAt: Date) {
-    const prisma = getPrisma()!
-    return prisma.$transaction(async (transaction) => {
-      const updated = await transaction.user.updateMany({
-        where: { id, role, isActive: false, accountDeletedAt },
-        data: { accountDeletedAt: null },
+    return getPrisma()!.$transaction(async (tx) => {
+      const restored = await restoreAccountFromTrash(tx, id, {
+        role,
+        isActive: false,
+        accountDeletedAt,
       })
-      if (updated.count === 0) return null
-      await transaction.session.deleteMany({ where: { userId: id } })
-      return transaction.user.findUniqueOrThrow({
+      if (!restored) return null
+      return tx.user.findUniqueOrThrow({
         where: { id },
-        include: {
-          department: {
-            select: { id: true, name: true, code: true, color: true },
-          },
-          team: { select: { id: true, name: true } },
-        },
+        include: publicUserInclude,
       })
     })
   },
 
   async permanentlyDeleteUser(id: string, role: Role) {
-    const prisma = getPrisma()!
-    return prisma.user.deleteMany({
-      where: {
-        id,
-        role,
-        isActive: false,
-        accountDeletedAt: { not: null },
-      },
+    return deleteAccountPermanently(getPrisma()!, id, {
+      guard: { role, isActive: false, accountDeletedAt: { not: null } },
+      linkedMessage:
+        "This account has related records and cannot be permanently deleted. Keep it in Trash to preserve its history.",
     })
   },
 
@@ -129,31 +104,21 @@ export const usersRepository = {
     return prisma.team.findUnique({ where: { id } })
   },
 
-  async findUsersWithCount(
+  async findUsersPage(
     where: Prisma.UserWhereInput,
     orderBy: Prisma.UserOrderByWithRelationInput[],
-    skip: number,
-    take: number,
+    page: number,
   ) {
-    const prisma = getPrisma()!
-    return prisma.$transaction([
-      prisma.user.findMany({
-        where,
-        include: {
-          employee: { select: { profileImageUrl: true } },
-          department: {
-            select: { id: true, name: true, code: true, color: true },
-          },
-          team: {
-            select: { id: true, name: true },
-          },
-        },
-        orderBy,
-        skip,
-        take,
-      }),
-      prisma.user.count({ where }),
-    ])
+    return paginate(page, {
+      rows: (db, window) =>
+        db.user.findMany({
+          where,
+          include: publicUserInclude,
+          orderBy,
+          ...window,
+        }),
+      count: (db) => db.user.count({ where }),
+    })
   },
 
   async createUserWithSync(
@@ -176,14 +141,7 @@ export const usersRepository = {
           departmentId: data.departmentId,
           teamId: data.teamId,
         },
-        include: {
-          department: {
-            select: { id: true, name: true, code: true, color: true },
-          },
-          team: {
-            select: { id: true, name: true },
-          },
-        },
+        include: publicUserInclude,
       })
       await syncEmployee(tx, created.id)
       return created
@@ -201,14 +159,37 @@ export const usersRepository = {
   ) {
     const prisma = getPrisma()!
     return prisma.$transaction(async (tx) => {
-      await tx.$queryRaw(
-        Prisma.sql`SELECT "id" FROM "User" WHERE "id" = ${targetId} FOR UPDATE`,
-      )
+      await lockRows(tx, "User", targetId)
+      // Department heads and team leads must stay STAFF; otherwise their
+      // department's requests become unroutable and the roster goes stale.
+      if (nextRole !== Role.STAFF) {
+        const department = await tx.department.findFirst({
+          where: { headId: targetId },
+          select: { name: true },
+        })
+        if (department) {
+          throw new HttpError(
+            409,
+            `Reassign the ${department.name} head role before changing this account's role`,
+          )
+        }
+        const team = await tx.team.findFirst({
+          where: { leadId: targetId },
+          select: { name: true },
+        })
+        if (team) {
+          throw new HttpError(
+            409,
+            `Reassign the ${team.name} team lead role before changing this account's role`,
+          )
+        }
+      }
       if (
         nextRole === Role.SUPERADMIN &&
         (await tx.employee.findUnique({ where: { userId: targetId } }))
       ) {
-        throw new UserPromotionError(
+        throw new HttpError(
+          409,
           "Unlink the employee record before promoting this account to Superadmin",
         )
       }
@@ -217,32 +198,13 @@ export const usersRepository = {
         data: { role: nextRole },
       })
       if (result.count === 0) {
-        throw new UserRoleConflictError("Role changed; refresh and retry")
+        throw new HttpError(409, "Role changed; refresh and retry")
       }
       await syncEmployee(tx, targetId)
       return tx.user.findUniqueOrThrow({
         where: { id: targetId },
-        include: {
-          department: {
-            select: { id: true, name: true, code: true, color: true },
-          },
-          team: { select: { id: true, name: true } },
-        },
+        include: publicUserInclude,
       })
     })
   },
-}
-
-export class UserPromotionError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = "UserPromotionError"
-  }
-}
-
-export class UserRoleConflictError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = "UserRoleConflictError"
-  }
 }

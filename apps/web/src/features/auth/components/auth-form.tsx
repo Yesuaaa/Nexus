@@ -3,7 +3,12 @@ import { useRef, useState, type FormEvent } from "react"
 import Link from "next/link"
 import { sileo } from "@/lib/toast"
 import { Button } from "@/components/ui/button"
-import { ApiError, register, signIn } from "../api/auth-api"
+import {
+  ApiError,
+  PortalAccessError,
+  register,
+  signInToPortal,
+} from "../api/auth-api"
 import type { AuthCopy } from "../content/auth-copy"
 import { requestErrorMessage } from "../api/auth-errors"
 import { Brand, PasswordField, TextField } from "./auth-fields"
@@ -14,17 +19,17 @@ import {
   visibleFieldAfterInteraction,
   type Field,
 } from "../model/schema"
-import type { AuthLanguage, AuthMode } from "../model/types"
+import type { AuthMode, AuthPortal } from "../model/types"
 
 export function AuthContent({
   mode,
+  portal,
   copy,
-  language,
   onLoggedIn,
 }: {
   mode: AuthMode
+  portal: AuthPortal
   copy: AuthCopy
-  language: AuthLanguage
   onLoggedIn: (mode: AuthMode) => void
 }) {
   const formRef = useRef<HTMLFormElement>(null)
@@ -34,10 +39,6 @@ export function AuthContent({
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
-  const [formError, setFormError] = useState<{
-    language: AuthLanguage
-    message: string
-  } | null>(null)
   const [visibleErrorField, setVisibleErrorField] = useState<Field | null>(null)
   const [pending, setPending] = useState(false)
 
@@ -48,8 +49,6 @@ export function AuthContent({
   )
   const visibleError = (field: Field) =>
     visibleErrorField === field ? errors[field] : undefined
-  const currentFormError =
-    formError?.language === language ? formError.message : undefined
 
   function markTouched(field: Field) {
     setVisibleErrorField((current) =>
@@ -69,13 +68,11 @@ export function AuthContent({
 
   function changeValue(setValue: (value: string) => void, value: string) {
     setValue(value)
-    setFormError(null)
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (submissionInFlight.current) return
-    setFormError(null)
     const firstInvalid = (Object.keys(fieldIds) as Field[]).find(
       (field) => errors[field],
     )
@@ -90,7 +87,7 @@ export function AuthContent({
     setPending(true)
     try {
       if (mode === "login") {
-        await signIn(email.trim(), password)
+        await signInToPortal(email.trim(), password, portal)
         onLoggedIn("login")
       } else {
         await register({
@@ -102,24 +99,28 @@ export function AuthContent({
         onLoggedIn("register")
       }
     } catch (caught) {
-      const message = requestErrorMessage(caught, mode, copy)
-      if (
-        caught instanceof ApiError &&
-        (caught.status === 400 ||
-          (mode === "register" && caught.status === 409))
-      ) {
-        setFormError({ language, message })
-      } else {
+      if (caught instanceof PortalAccessError) {
         sileo.error({
-          title:
-            mode === "login"
-              ? caught instanceof ApiError && caught.status === 401
-                ? copy.signInFailed
-                : copy.signInUnavailable
-              : copy.accountUnavailable,
-          description: message,
+          title: copy.signInFailed,
+          description:
+            portal === "workforce"
+              ? copy.workforceAccountRequired
+              : copy.clientAccountRequired,
         })
+        return
       }
+      const message = requestErrorMessage(caught, mode, copy)
+      // Submission failures belong in a toast; field validation stays beside
+      // the relevant input so users can correct it in place.
+      sileo.error({
+        title:
+          mode === "login"
+            ? caught instanceof ApiError && caught.status === 401
+              ? copy.signInFailed
+              : copy.signInUnavailable
+            : copy.accountUnavailable,
+        description: message,
+      })
     } finally {
       submissionInFlight.current = false
       setPending(false)
@@ -127,17 +128,35 @@ export function AuthContent({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 justify-center overflow-y-auto px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden max-[850px]:overflow-visible max-[850px]:px-6">
+    <div
+      className={
+        portal === "workforce"
+          ? "w-full max-w-[440px]"
+          : "flex min-h-0 flex-1 justify-center overflow-y-auto px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden max-[850px]:overflow-visible max-[850px]:px-6"
+      }
+    >
       <div
-        className={`auth-form-enter my-auto w-full max-w-[400px] min-w-0 max-[850px]:pt-8 max-[850px]:pb-14 ${mode === "register" ? "py-0" : "py-12"}`}
+        className={
+          portal === "workforce"
+            ? "auth-form-enter w-full rounded-xl border border-border bg-card px-8 py-10 max-[420px]:px-6"
+            : `auth-form-enter my-auto w-full max-w-[400px] min-w-0 max-[850px]:pt-8 max-[850px]:pb-14 ${mode === "register" ? "py-0" : "py-12"}`
+        }
       >
         <div className="text-center">
           <Brand />
           <h2 className="inline-block bg-[linear-gradient(90deg,#172735_0%,#246ea0_55%,#1cc5d0_100%)] bg-clip-text text-[25px] leading-[1.25] font-bold tracking-[-0.03em] text-transparent">
-            {mode === "login" ? copy.loginTitle : copy.registerTitle}
+            {mode === "register"
+              ? copy.registerTitle
+              : portal === "workforce"
+                ? copy.workforceLoginTitle
+                : copy.loginTitle}
           </h2>
           <p className="mt-0 text-sm leading-[1.4] text-[#5b709e]">
-            {mode === "login" ? copy.loginSubtitle : copy.registerSubtitle}
+            {mode === "register"
+              ? copy.registerSubtitle
+              : portal === "workforce"
+                ? copy.workforceLoginSubtitle
+                : copy.loginSubtitle}
           </p>
         </div>
 
@@ -239,14 +258,6 @@ export function AuthContent({
               />
             </div>
           )}
-          {currentFormError && (
-            <p
-              className="-my-[3px] rounded-lg bg-[#fff0f0] px-3 py-2.5 text-[13px] leading-[1.4] text-[#a1293d]"
-              role="alert"
-            >
-              {currentFormError}
-            </p>
-          )}
           <Button
             className={`grid h-[46px] w-full place-items-center rounded-md border-0 bg-[#253f8c] text-sm font-bold text-white transition-[background,transform] duration-150 hover:bg-[#1a3276] hover:enabled:-translate-y-px disabled:cursor-wait disabled:opacity-70 motion-reduce:transition-none ${focusOutline} ${mode === "register" ? "mt-2" : ""}`}
             type="submit"
@@ -262,15 +273,19 @@ export function AuthContent({
           </Button>
         </Form>
 
-        <p className="mt-6 text-center text-sm leading-[1.4] text-[#52688d]">
-          {mode === "login" ? copy.noAccountYet : copy.haveAccountYet}{" "}
-          <Link
-            href={mode === "login" ? "/register" : "/login"}
-            className={`font-semibold text-[#253f8c] underline-offset-2 hover:underline ${focusOutline}`}
-          >
-            {mode === "login" ? copy.createOne : copy.signInHere}
-          </Link>
-        </p>
+        {portal === "client" && (
+          <div className="mt-6 space-y-2 text-center text-sm leading-[1.4] text-[#52688d]">
+            <p>
+              {mode === "login" ? copy.noAccountYet : copy.haveAccountYet}{" "}
+              <Link
+                href={mode === "login" ? "/register" : "/login"}
+                className={`font-semibold text-[#253f8c] underline-offset-2 hover:underline ${focusOutline}`}
+              >
+                {mode === "login" ? copy.createOne : copy.signInHere}
+              </Link>
+            </p>
+          </div>
+        )}
       </div>
     </div>
   )

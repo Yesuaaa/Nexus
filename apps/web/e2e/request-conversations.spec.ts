@@ -499,6 +499,113 @@ async function openMessages(page: Page, role: "USER" | "STAFF") {
 
 test.use({ reducedMotion: "reduce" })
 
+test("Service Messages search finds booking references and keeps the shared thread", async ({
+  page,
+}) => {
+  await mock(page, sharedFixture(), "STAFF")
+  await page.goto("/messages?scope=service")
+  const rail = page.getByRole("navigation", {
+    name: "Conversations",
+    exact: true,
+  })
+  const search = rail.getByRole("searchbox", {
+    name: "Search conversations",
+    exact: true,
+  })
+  await search.fill("SR-101")
+  await expect(
+    rail.locator('[data-conversation-id="shared-design"]'),
+  ).toBeVisible()
+  await search.fill("  mara   design  ")
+  await expect(
+    rail.locator('[data-conversation-id="shared-design"]'),
+  ).toBeVisible()
+  await search.fill("unknown booking")
+  await expect(
+    rail.getByText("No conversations found.", { exact: true }),
+  ).toBeVisible()
+  await rail
+    .getByRole("button", { name: "Clear conversation search", exact: true })
+    .click()
+  await rail
+    .locator('[data-conversation-id="shared-design"]')
+    .getByRole("link")
+    .click()
+  await expect(
+    page.getByRole("region", { name: "Request conversation", exact: true }),
+  ).toBeVisible()
+})
+
+for (const width of [1440, 390]) {
+  test(`Service Operations reuses the continuous department thread at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const state = sharedFixture()
+    await mock(page, state, "STAFF")
+    await page.goto("/messages?scope=service")
+    await expect(
+      page.getByRole("heading", { name: "Service Messages", exact: true }),
+    ).toBeVisible()
+    const rail = page.getByRole("navigation", {
+      name: "Conversations",
+      exact: true,
+    })
+    await expect(
+      rail.locator('[data-conversation-id="shared-design"]'),
+    ).toHaveCount(1)
+    const link = rail
+      .locator('[data-conversation-id="shared-design"]')
+      .getByRole("link")
+    await expect(link).toHaveAttribute(
+      "href",
+      "/messages?scope=service&request=shared-design",
+    )
+    await link.click()
+    await expect(
+      page.getByRole("region", { name: "Request conversation" }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole("complementary", { name: "Request context" }),
+    ).toContainText("SR-101")
+    await page.goto("/messages?scope=service&request=shared-design")
+    await expect(
+      page.getByRole("region", { name: "Request conversation" }),
+    ).toBeVisible()
+    if (width < 768)
+      await page.getByRole("button", { name: "Open navigation menu" }).click()
+    const sidebar = page.getByRole("navigation", {
+      name: "Main menu",
+      exact: true,
+    })
+    await expect(
+      sidebar.getByRole("link", { name: "Service Messages", exact: true }),
+    ).toHaveAttribute("aria-current", "page")
+    await expect(
+      sidebar.getByText("Service Operations", { exact: true }),
+    ).toBeVisible()
+  })
+}
+
+test("service scope does not split the unified client Messages experience", async ({
+  page,
+}) => {
+  await mock(page, sharedFixture(), "USER")
+  await page.goto("/messages?scope=service&request=shared-design")
+  await expect(
+    page.getByRole("heading", { name: "Messages", exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("region", { name: "Request conversation" }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("link", { name: "Service Messages", exact: true }),
+  ).toHaveCount(0)
+  await expect(
+    page.getByRole("button", { name: "Archived conversations", exact: true }),
+  ).toBeVisible()
+})
+
 test("department-head chat loads and polls each booking workflow once", async ({
   page,
 }) => {
@@ -795,12 +902,8 @@ for (const role of ["STAFF", "ADMIN", "SUPERADMIN"] as const) {
     await expect(
       page.getByRole("link", { name: "Messages", exact: true }),
     ).toBeVisible()
-    await expect(
-      page.getByRole("heading", { name: "No conversations yet", exact: true }),
-    ).toBeVisible()
-    expect(state.listReads).toBeGreaterThan(0)
     await page
-      .getByRole("button", { name: "Open internal conversations", exact: true })
+      .getByRole("link", { name: "Internal Messages", exact: true })
       .click()
     await expect(page).toHaveURL(/\/messages\?mode=internal$/)
     await expect.poll(() => internalReads).toBeGreaterThan(0)
@@ -808,7 +911,7 @@ for (const role of ["STAFF", "ADMIN", "SUPERADMIN"] as const) {
       page
         .getByRole("navigation", { name: "Conversations", exact: true })
         .getByRole("link", { name: "Back to client chats", exact: true }),
-    ).toBeVisible()
+    ).toHaveCount(0)
   })
 }
 
@@ -2024,7 +2127,7 @@ test("department heads keep clients with identical names in separate conversatio
   await expect(page).toHaveURL(/request=other-client$/)
   await expect(nav.locator('[aria-current="page"]')).toHaveAttribute(
     "href",
-    "/messages?request=other-client",
+    "/messages?scope=service&request=other-client",
   )
 })
 /* Legacy archive UI tests were removed because conversations remain available after booking completion or cancellation.
@@ -2307,6 +2410,20 @@ for (const role of ["USER", "STAFF"] as const) {
     await expect(
       chat.getByRole("textbox", { name: "Message", exact: true }),
     ).toBeVisible()
+    if (role === "STAFF") {
+      await expect(
+        page.getByRole("button", {
+          name: "Archived conversations",
+          exact: true,
+        }),
+      ).toHaveCount(0)
+      await expect(
+        page
+          .getByRole("navigation", { name: "Conversations", exact: true })
+          .locator('[data-conversation-id="shared-design"]'),
+      ).toHaveCount(1)
+      return
+    }
     await page
       .getByRole("button", { name: "Archived conversations", exact: true })
       .click()

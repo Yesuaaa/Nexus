@@ -4,13 +4,8 @@ import { useState } from "react"
 import { Activity, CheckCircle2, FilePenLine, UsersRound } from "lucide-react"
 import { SearchField } from "@/components/ui/search-field"
 import { Button } from "@/components/ui/button"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { EmptyState } from "@/components/ui/empty-state"
+import { FilterSelect } from "@/components/ui/filter-select"
 import type { ProjectWorkspaceDetail } from "../api/project-workspace-api"
 
 function category(type: string) {
@@ -74,51 +69,40 @@ export function WorkspaceActivity({
             label: "Activity type",
             value: kind,
             set: setKind,
-            items: [
-              ["all", "All activity"],
-              ["work", "Tasks & plans"],
-              ["staffing", "Staffing"],
-              ["project", "Project"],
+            options: [
+              { value: "all", label: "All activity" },
+              { value: "work", label: "Tasks & plans" },
+              { value: "staffing", label: "Staffing" },
+              { value: "project", label: "Project" },
             ],
           },
           {
             label: "Activity author",
             value: actor,
             set: setActor,
-            items: [
-              ["all", "All staff"],
-              ...actors.map((name) => [name, name]),
+            options: [
+              { value: "all", label: "All staff" },
+              ...actors.map((name) => ({ value: name, label: name })),
             ],
           },
           {
             label: "Activity order",
             value: sort,
             set: setSort,
-            items: [
-              ["newest", "Newest first"],
-              ["oldest", "Oldest first"],
+            options: [
+              { value: "newest", label: "Newest first" },
+              { value: "oldest", label: "Oldest first" },
             ],
           },
         ].map((filter) => (
-          <Select
+          <FilterSelect
             key={filter.label}
+            label={filter.label}
             value={filter.value}
-            onValueChange={filter.set}
-          >
-            <SelectTrigger
-              aria-label={filter.label}
-              className="h-[34px] w-[165px] text-xs"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {filter.items.map(([value, label]) => (
-                <SelectItem key={value} value={value}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            options={filter.options}
+            triggerClassName="w-[165px]"
+            onChange={filter.set}
+          />
         ))}
       </div>
       {visible.length ? (
@@ -177,32 +161,34 @@ export function WorkspaceActivity({
           </p>
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-[#d8e0eb] px-5 py-12 text-center">
-          <Activity size={28} className="mx-auto text-[#8293ad]" />
-          <h3 className="mt-3 mb-1 text-sm font-semibold">
-            {workspace.activity.length
+        <EmptyState
+          icon={Activity}
+          title={
+            workspace.activity.length
               ? "No matching activity"
-              : "No activity yet"}
-          </h3>
-          <p className="m-0 text-xs text-[#738096]">
-            {workspace.activity.length
+              : "No activity yet"
+          }
+          description={
+            workspace.activity.length
               ? "Try another search or clear your filters."
-              : "Project changes will appear here as staff update the plan, tasks, and assignments."}
-          </p>
-          {workspace.activity.length > 0 && (
-            <Button
-              variant="outline"
-              className="mt-4 text-xs"
-              onClick={() => {
-                setSearch("")
-                setKind("all")
-                setActor("all")
-              }}
-            >
-              Clear filters
-            </Button>
-          )}
-        </div>
+              : "Project changes will appear here as staff update the plan, tasks, and assignments."
+          }
+          action={
+            workspace.activity.length > 0 && (
+              <Button
+                variant="outline"
+                className="text-xs"
+                onClick={() => {
+                  setSearch("")
+                  setKind("all")
+                  setActor("all")
+                }}
+              >
+                Clear filters
+              </Button>
+            )
+          }
+        />
       )}
     </section>
   )

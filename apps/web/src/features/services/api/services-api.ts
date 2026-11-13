@@ -1,14 +1,9 @@
 import { apiRequest } from "@/features/auth/api/auth-api"
 import type { DepartmentColor } from "@/features/departments/model/department-color"
+import type { ServiceRequestStatus } from "@/features/service-operations/model/service-request-contracts"
 import type { ProjectRequirementsDraft } from "../model/project-requirements"
 
-export type ServiceRequestStatus =
-  | "SUBMITTED"
-  | "UNDER_REVIEW"
-  | "AWAITING_CLIENT_INFO"
-  | "READY_FOR_QUOTATION"
-  | "CLOSED"
-  | "CANCELLED"
+export type { ServiceRequestStatus } from "@/features/service-operations/model/service-request-contracts"
 
 export type ServiceRequestReceipt = {
   id: string
@@ -82,9 +77,11 @@ export type ServiceSpecialistProfile = ServiceSpecialist & {
 export async function getServiceSpecialistProfile(
   serviceId: string,
   specialistId: string,
+  signal?: AbortSignal,
 ): Promise<ServiceSpecialistProfile> {
   const result = await apiRequest<{ specialist: ServiceSpecialistProfile }>(
     `/api/services/${encodeURIComponent(serviceId)}/specialists/${encodeURIComponent(specialistId)}`,
+    { signal },
   )
   return result.specialist
 }
@@ -215,8 +212,10 @@ export type ServiceInput = {
   packages: ServicePackageInput[]
 }
 
-export async function listServices(): Promise<Service[]> {
-  const result = await apiRequest<{ services: Service[] }>("/api/services")
+export async function listServices(signal?: AbortSignal): Promise<Service[]> {
+  const result = await apiRequest<{ services: Service[] }>("/api/services", {
+    signal,
+  })
   return result.services
 }
 
@@ -227,9 +226,12 @@ export async function listAvailableServices(): Promise<Service[]> {
   return result.services
 }
 
-export async function listPricingTemplates(): Promise<PricingTemplate[]> {
+export async function listPricingTemplates(
+  signal?: AbortSignal,
+): Promise<PricingTemplate[]> {
   const result = await apiRequest<{ pricingTemplates: PricingTemplate[] }>(
     "/api/services/pricing-templates",
+    { signal },
   )
   return result.pricingTemplates
 }

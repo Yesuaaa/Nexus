@@ -1,25 +1,45 @@
-import { useRef, useState, type ReactNode } from "react"
-import { MoreHorizontal } from "lucide-react"
+import { Fragment, useRef, useState, type ReactNode } from "react"
+import { MoreHorizontal, type LucideIcon } from "lucide-react"
 import { useExclusiveMenu } from "@/components/ui/dropdown"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
   dropdownItemClass,
   dropdownMenuClass,
 } from "@/components/ui/dropdown-styles"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import { cn } from "@/lib/utils"
+
+type AnchorPoint = { x: number; y: number }
 
 export type RowActionMenuItem<Action extends string> = {
   action: Action
   label: ReactNode
   disabled?: boolean
   className?: string
+  /** Draw a divider above this item to start a new group. */
+  separatorBefore?: boolean
+}
+
+/** Icon + text label for a RowActionsMenu item. */
+export function RowActionLabel({
+  icon: Icon,
+  children,
+}: {
+  icon: LucideIcon
+  children: ReactNode
+}) {
+  return (
+    <span className="flex items-center gap-2">
+      <Icon size={14} aria-hidden="true" />
+      {children}
+    </span>
+  )
 }
 
 export function RowActionsMenu<Action extends string>({
@@ -30,6 +50,7 @@ export function RowActionsMenu<Action extends string>({
   disabled = false,
   triggerId,
   triggerClassName,
+  triggerContent,
   menuClassName,
   open: controlledOpen,
   onOpenChange,
@@ -42,6 +63,8 @@ export function RowActionsMenu<Action extends string>({
   disabled?: boolean
   triggerId?: string
   triggerClassName?: string
+  /** Replaces the default "⋯" icon, e.g. a text label. */
+  triggerContent?: ReactNode
   menuClassName?: string
   open?: boolean
   onOpenChange?: (open: boolean) => void
@@ -52,6 +75,10 @@ export function RowActionsMenu<Action extends string>({
   const pendingAction = useRef<Action | null>(null)
   const closedByOther = useRef(false)
   const restoreFocus = useRef(false)
+  const wasOpenOnPointerDown = useRef(false)
+  // null = under the button's right edge (keyboard or externally opened).
+  const [anchor, setAnchor] = useState<AnchorPoint | null>(null)
+  const [align, setAlign] = useState<"start" | "end">("end")
   const open = controlledOpen ?? internalOpen
 
   function changeOpen(next: boolean) {
@@ -69,9 +96,15 @@ export function RowActionsMenu<Action extends string>({
     changeOpen(false)
   })
 
+  function openAt(point: AnchorPoint | null) {
+    setAnchor(point)
+    setAlign(point ? "start" : "end")
+    changeOpen(true)
+  }
+
   return (
     <DropdownMenu open={open} onOpenChange={changeOpen} modal={modal}>
-      <DropdownMenuTrigger asChild>
+      <span className="relative inline-flex">
         <button
           ref={triggerRef}
           id={triggerId}
@@ -79,14 +112,47 @@ export function RowActionsMenu<Action extends string>({
           className={cn(rowActionButton, triggerClassName)}
           disabled={disabled}
           aria-label={triggerLabel}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          data-state={open ? "open" : "closed"}
+          onPointerDown={() => {
+            // The menu's outside-click handler closes it after this, so a
+            // second click on the button acts as a toggle.
+            wasOpenOnPointerDown.current = open
+          }}
+          onClick={(event) => {
+            if (wasOpenOnPointerDown.current) {
+              wasOpenOnPointerDown.current = false
+              return
+            }
+            if (event.detail === 0) return openAt(null)
+            const rect = event.currentTarget.getBoundingClientRect()
+            openAt({
+              x: event.clientX - rect.left,
+              y: event.clientY - rect.top,
+            })
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowDown") {
+              event.preventDefault()
+              openAt(null)
+            }
+          }}
         >
-          <MoreHorizontal size={16} aria-hidden="true" />
-          <HoverTooltip>More actions</HoverTooltip>
+          {triggerContent ?? <MoreHorizontal size={16} aria-hidden="true" />}
         </button>
-      </DropdownMenuTrigger>
+        <DropdownMenuTrigger asChild>
+          <span
+            aria-hidden="true"
+            tabIndex={-1}
+            className="pointer-events-none absolute size-0"
+            style={{ left: anchor?.x ?? "100%", top: anchor?.y ?? "100%" }}
+          />
+        </DropdownMenuTrigger>
+      </span>
       <DropdownMenuContent
-        align="end"
-        sideOffset={6}
+        align={align}
+        sideOffset={align === "start" ? 4 : 6}
         collisionPadding={24}
         aria-label={menuLabel}
         className={cn(
@@ -116,16 +182,20 @@ export function RowActionsMenu<Action extends string>({
         }}
       >
         {items.map((item) => (
-          <DropdownMenuItem
-            key={item.action}
-            disabled={item.disabled}
-            className={cn(dropdownItemClass, "text-xs", item.className)}
-            onSelect={() => {
-              pendingAction.current = item.action
-            }}
-          >
-            {item.label}
-          </DropdownMenuItem>
+          <Fragment key={item.action}>
+            {item.separatorBefore && (
+              <DropdownMenuSeparator className="mx-0 my-1 bg-[#eceef1]" />
+            )}
+            <DropdownMenuItem
+              disabled={item.disabled}
+              className={cn(dropdownItemClass, "text-xs", item.className)}
+              onSelect={() => {
+                pendingAction.current = item.action
+              }}
+            >
+              {item.label}
+            </DropdownMenuItem>
+          </Fragment>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>

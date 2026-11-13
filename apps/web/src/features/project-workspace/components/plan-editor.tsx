@@ -1,5 +1,7 @@
 "use client"
 
+import { FormInput } from "@/components/ui/form-input"
+
 import { Button } from "@/components/ui/button"
 import type { ProjectWorkPlan } from "../api/project-workspace-api"
 
@@ -16,8 +18,6 @@ export function PlanEditor({
   onChange: (plan: ProjectWorkPlan) => void
   disabled?: boolean
 }) {
-  const inputClass =
-    "min-w-0 rounded-md border border-[#dfe4ec] bg-background px-3 py-2 text-xs"
   return (
     <fieldset disabled={disabled} className="m-0 space-y-4 border-0 p-0">
       <legend className="sr-only">Edit phases and tasks</legend>
@@ -27,11 +27,10 @@ export function PlanEditor({
           className="rounded-lg border border-[#dfe4ec] p-4"
         >
           <div className="grid items-center gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-            <input
+            <FormInput
               aria-label={`Phase ${index + 1} name`}
               maxLength={120}
               value={phase.title}
-              className={`${inputClass} w-full font-semibold`}
               onChange={(event) =>
                 onChange({
                   phases: plan.phases.map((item) =>
@@ -58,11 +57,11 @@ export function PlanEditor({
           </div>
           {phase.tasks.map((task) => (
             <div key={task.id} className="mt-3 flex flex-wrap gap-2">
-              <input
+              <FormInput
                 aria-label="Task name"
                 maxLength={180}
                 value={task.title}
-                className={`${inputClass} flex-1`}
+                className="flex-1"
                 placeholder="Task name"
                 onChange={(event) =>
                   onChange({
@@ -81,11 +80,11 @@ export function PlanEditor({
                   })
                 }
               />
-              <input
+              <FormInput
                 aria-label="Suggested task role"
                 maxLength={80}
                 value={task.role}
-                className={`${inputClass} flex-1`}
+                className="flex-1"
                 placeholder="Suggested role"
                 onChange={(event) =>
                   onChange({

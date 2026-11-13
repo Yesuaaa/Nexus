@@ -1,9 +1,10 @@
 import type { Prisma } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
+import { activeAccount, activeStaff } from "../../shared/query/accounts.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 import { readDeliverableCard } from "./deliverable-messages.js"
+import { lockRows } from "../../shared/db/locks.js"
 
-const activeAccount = { isActive: true, accountDeletedAt: null } as const
 const archivedStatuses = ["COMPLETED", "CANCELLED"] as const
 const messageSelect = {
   id: true,
@@ -43,7 +44,7 @@ function conversationScope(userId: string): Prisma.ProjectWhereInput {
             employee: {
               userId,
               status: "ACTIVE",
-              user: { role: "STAFF", ...activeAccount },
+              user: activeStaff,
             },
           },
         },
@@ -73,7 +74,7 @@ const conversationSelect = {
     where: {
       employee: {
         status: "ACTIVE",
-        user: { role: "STAFF", ...activeAccount },
+        user: activeStaff,
       },
     },
     select: {
@@ -341,8 +342,8 @@ export async function sendProjectMessage(
     // Staffing uses the request lock; completion uses the project lock.
     const initial = await access(tx, userId, projectId)
     if (initial.requestId)
-      await tx.$queryRaw`SELECT "id" FROM "ServiceRequest" WHERE "id" = ${initial.requestId} FOR SHARE`
-    await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${projectId} FOR UPDATE`
+      await lockRows(tx, "ServiceRequest", initial.requestId, "share")
+    await lockRows(tx, "Project", projectId)
     const chat = summary(await access(tx, userId, projectId))
     if (chat.archived)
       throw new ServiceRequestsError(
