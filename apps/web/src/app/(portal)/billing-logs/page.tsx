@@ -3,9 +3,11 @@
 import { useWorkflowFilePreview } from "@/features/request-workflow/hooks/use-workflow-file-preview"
 import Link from "next/link"
 import Image from "next/image"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { ChevronRight, Download } from "lucide-react"
 import { contentClass, focusRing } from "@/components/layout/styles"
+import { PageHeader } from "@/components/layout/page-header"
+import { Alert } from "@/components/ui/alert"
 import {
   Table,
   TableHeader,
@@ -23,11 +25,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { apiRequest } from "@/features/auth/api/auth-api"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
-import { Pill } from "@/components/ui/pill"
+import { Pill, type PillTone } from "@/components/ui/pill"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import { downloadWorkflowFile } from "@/features/request-workflow/api/workflow-api"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
+import { errorMessage } from "@/lib/error-message"
+import { useAsyncResource } from "@/lib/use-async-resource"
 
 type BillingPayment = {
   id: string
@@ -47,7 +50,6 @@ type BillingPayment = {
   proofFile: { id: string; name: string; mimeType: string } | null
 }
 
-const billingActionColor = "text-xs bg-[#203f8c] text-white hover:bg-[#172f70]"
 const paymentRowClass =
   "grid grid-cols-2 items-center gap-x-4 gap-y-2 px-4 py-3 text-xs text-foreground @min-[640px]:grid-cols-[minmax(0,2fr)_minmax(8rem,1fr)_minmax(9rem,1fr)_9.5rem]"
 const conversationHref = (id: string) =>
@@ -67,20 +69,16 @@ function formatAmount({
   )
 }
 
-function paymentStatus(payment: BillingPayment) {
+function paymentStatus(payment: BillingPayment): {
+  label: string
+  tone: PillTone
+} {
   if (payment.status === "PENDING")
-    return { label: "Payment due", className: "bg-amber-100 text-amber-800" }
-  if (payment.sandbox)
-    return { label: "Test payment", className: "bg-slate-100 text-slate-700" }
+    return { label: "Payment due", tone: "warning" }
+  if (payment.sandbox) return { label: "Test payment", tone: "neutral" }
   if (payment.status === "VERIFIED")
-    return {
-      label: "Verified payment",
-      className: "bg-emerald-100 text-emerald-800",
-    }
-  return {
-    label: "Awaiting verification",
-    className: "bg-amber-100 text-amber-800",
-  }
+    return { label: "Verified payment", tone: "success" }
+  return { label: "Awaiting verification", tone: "warning" }
 }
 
 function ProofAttachment({
@@ -140,30 +138,17 @@ function ProofAttachment({
 
 export default function BillingLogsPage() {
   const { formatDate } = useDatePreferences()
-  const [payments, setPayments] = useState<BillingPayment[] | null>(null)
-  const [error, setError] = useState("")
+  const { data: payments = null, error } = useAsyncResource(
+    (signal) =>
+      apiRequest<BillingPayment[]>("/api/request-workflows/billing", {
+        signal,
+      }),
+    [],
+    { fallbackError: "Could not load billing records." },
+  )
   const [selected, setSelected] = useState<BillingPayment | null>(null)
   const [downloadError, setDownloadError] = useState("")
   const [downloading, setDownloading] = useState(false)
-
-  useEffect(() => {
-    const controller = new AbortController()
-    apiRequest<BillingPayment[]>("/api/request-workflows/billing", {
-      signal: controller.signal,
-    })
-      .then((items) => {
-        if (!controller.signal.aborted) setPayments(items)
-      })
-      .catch((reason: unknown) => {
-        if (!controller.signal.aborted)
-          setError(
-            reason instanceof Error
-              ? reason.message
-              : "Could not load billing records.",
-          )
-      })
-    return () => controller.abort()
-  }, [])
 
   const due = (payments ?? [])
     .filter(({ status }) => status === "PENDING")
@@ -177,11 +162,7 @@ export default function BillingLogsPage() {
     try {
       await downloadWorkflowFile(selected.requestId, selected.proofFile)
     } catch (reason) {
-      setDownloadError(
-        reason instanceof Error
-          ? reason.message
-          : "Could not download the file.",
-      )
+      setDownloadError(errorMessage(reason, "Could not download the file."))
     } finally {
       setDownloading(false)
     }
@@ -189,19 +170,16 @@ export default function BillingLogsPage() {
 
   return (
     <main className={`${contentClass} p-[clamp(16px,2.1vw,32px)]`}>
-      <header className="-mx-[clamp(16px,2.1vw,32px)] border-b border-[#eceef1] px-[clamp(16px,2.1vw,32px)] pt-0.5 pb-5">
-        <h1 className="m-0 text-[clamp(21px,2vw,25px)] leading-[1.25] font-[650] tracking-[-0.03em]">
-          Billing Logs
-        </h1>
-        <p className="mt-[5px] mb-0 text-xs leading-[1.45] text-[#52627a]">
-          See what’s due and review payments for your booked services.
-        </p>
-      </header>
+      <PageHeader
+        tone="client"
+        title="Billing Logs"
+        description="See what’s due and review payments for your booked services."
+      />
 
       {error ? (
-        <p role="alert" className="mt-6 text-sm text-red-700">
+        <Alert variant="text" className="mt-6 text-sm">
           {error}
-        </p>
+        </Alert>
       ) : payments === null ? (
         <p role="status" className="mt-6 text-sm text-[#52627a]">
           Loading billing records…
@@ -236,7 +214,8 @@ export default function BillingLogsPage() {
                       </p>
                       <Button
                         type="button"
-                        className={`${billingActionColor} col-span-2 min-w-24 justify-self-end @min-[640px]:col-span-1`}
+                        variant="brand"
+                        className="col-span-2 min-w-24 justify-self-end text-xs @min-[640px]:col-span-1"
                         onClick={() => {
                           setDownloadError("")
                           setSelected(payment)
@@ -284,7 +263,8 @@ export default function BillingLogsPage() {
                         {formatAmount(payment)}
                       </span>
                       <Pill
-                        className={`justify-self-start @min-[640px]:justify-self-center ${status.className}`}
+                        tone={status.tone}
+                        className="justify-self-start @min-[640px]:justify-self-center"
                       >
                         {status.label}
                       </Pill>
@@ -298,7 +278,6 @@ export default function BillingLogsPage() {
                         }}
                       >
                         <ChevronRight size={16} aria-hidden="true" />
-                        <HoverTooltip>{actionLabel}</HoverTooltip>
                       </button>
                     </li>
                   )
@@ -355,7 +334,7 @@ export default function BillingLogsPage() {
                     ? "Amount due"
                     : "Payment amount"}
                 </p>
-                <Pill className={paymentStatus(selected).className}>
+                <Pill tone={paymentStatus(selected).tone}>
                   {paymentStatus(selected).label}
                 </Pill>
               </div>
@@ -515,11 +494,7 @@ export default function BillingLogsPage() {
                 )}
               </Table>
             )}
-            {downloadError && (
-              <p role="alert" className="text-xs text-red-700">
-                {downloadError}
-              </p>
-            )}
+            {downloadError && <Alert variant="text">{downloadError}</Alert>}
             <DialogFooter className="flex-row flex-wrap justify-between gap-2 sm:justify-between sm:space-x-0 [&>*:nth-child(2)]:ml-auto">
               <Button asChild variant="outline" className="text-xs">
                 <Link href={conversationHref(selected.requestId)}>
@@ -527,7 +502,7 @@ export default function BillingLogsPage() {
                 </Link>
               </Button>
               {selected.status === "PENDING" && (
-                <Button asChild className={billingActionColor}>
+                <Button asChild variant="brand" className="text-xs">
                   <Link
                     href={`${conversationHref(selected.requestId)}#workflow-${encodeURIComponent(selected.id)}`}
                   >
@@ -540,7 +515,8 @@ export default function BillingLogsPage() {
                   type="button"
                   disabled={downloading}
                   onClick={() => void downloadSelected()}
-                  className={billingActionColor}
+                  variant="brand"
+                  className="text-xs"
                 >
                   <Download size={15} aria-hidden="true" />
                   {downloading

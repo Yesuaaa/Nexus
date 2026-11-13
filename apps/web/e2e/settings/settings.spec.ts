@@ -258,7 +258,7 @@ for (const role of ["USER", "STAFF", "ADMIN", "SUPERADMIN"] as const) {
         .fill("old-password-value")
       await page
         .getByLabel("New password", { exact: true })
-        .fill("new-password-value")
+        .fill("New-password-value1")
       await page
         .getByLabel("Confirm new password", { exact: true })
         .fill("different-password")
@@ -273,7 +273,7 @@ for (const role of ["USER", "STAFF", "ADMIN", "SUPERADMIN"] as const) {
       expect(changedPassword).toBe(false)
       await page
         .getByLabel("Confirm new password", { exact: true })
-        .fill("new-password-value")
+        .fill("New-password-value1")
       await page
         .getByRole("button", { name: "Update password", exact: true })
         .click()

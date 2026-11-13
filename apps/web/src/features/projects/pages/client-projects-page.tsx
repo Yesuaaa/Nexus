@@ -2,33 +2,44 @@
 
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 import Link from "next/link"
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { CheckCircle2, FileCheck2, FolderKanban, Plus } from "lucide-react"
+import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { contentClass } from "@/components/layout/styles"
-import { ClientPageHeader } from "@/components/layout/client-page-header"
+import {
+  ClientPageHeader,
+  clientPageHeaderActionClass,
+} from "@/components/layout/client-page-header"
+import { EmptyState } from "@/components/ui/empty-state"
+import { FilterSelect } from "@/components/ui/filter-select"
 import { KpiCards } from "@/components/ui/kpi-cards"
 import { ClientTableSkeleton } from "@/components/ui/client-table-skeleton"
-import { NumberedPagination } from "@/components/ui/numbered-pagination"
 import { SearchField } from "@/components/ui/search-field"
+import { TablePaginationFooter } from "@/components/ui/table-pagination-footer"
+import { useLocalTable } from "@/components/ui/use-local-table"
+import { useAsyncResource } from "@/lib/use-async-resource"
 import { cn } from "@/lib/utils"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import {
   listClientProjects,
   type ClientProjectSummary,
 } from "../api/projects-api"
-import { ClientProjectDetailsDrawer } from "../components/client-project-details-drawer"
 import { ClientProjectsTable } from "../components/client-projects-table"
 
 type ProjectFilter = "ALL" | "ACTIVE" | "COMPLETED" | "CANCELLED"
 type ProjectSort = "NEWEST" | "OLDEST"
-const PAGE_SIZE = 10
+
+const filterOptions: { value: ProjectFilter; label: string }[] = [
+  { value: "ALL", label: "All Statuses" },
+  { value: "ACTIVE", label: "Active" },
+  { value: "COMPLETED", label: "Completed" },
+  { value: "CANCELLED", label: "Cancelled" },
+]
+const sortOptions: { value: ProjectSort; label: string }[] = [
+  { value: "NEWEST", label: "Most recently updated" },
+  { value: "OLDEST", label: "Least recently updated" },
+]
+const noProjects: ClientProjectSummary[] = []
 
 function isActive(status: string) {
   return status === "IN_PROGRESS" || status === "ON_HOLD"
@@ -36,38 +47,16 @@ function isActive(status: string) {
 
 export function ClientProjectsPage() {
   const { formatDate } = useDatePreferences()
-  const [projects, setProjects] = useState<ClientProjectSummary[]>([])
+  const {
+    data: projects = noProjects,
+    loading,
+    error,
+  } = useAsyncResource((signal) => listClientProjects(signal), [], {
+    fallbackError: "Couldn't load your projects.",
+  })
   const [query, setQuery] = useState("")
   const [filter, setFilter] = useState<ProjectFilter>("ALL")
   const [sort, setSort] = useState<ProjectSort>("NEWEST")
-  const [page, setPage] = useState(1)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
-  const [selectedProject, setSelectedProject] =
-    useState<ClientProjectSummary | null>(null)
-
-  useEffect(() => {
-    const controller = new AbortController()
-    listClientProjects(controller.signal)
-      .then((result) => {
-        if (!controller.signal.aborted) {
-          setProjects(result)
-          setError("")
-        }
-      })
-      .catch((reason: unknown) => {
-        if (!controller.signal.aborted)
-          setError(
-            reason instanceof Error
-              ? reason.message
-              : "Couldn't load your projects.",
-          )
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false)
-      })
-    return () => controller.abort()
-  }, [])
 
   const activeCount = projects.filter((project) =>
     isActive(project.status),
@@ -104,15 +93,10 @@ export function ClientProjectsPage() {
         return sort === "NEWEST" ? updatedDifference : -updatedDifference
       })
   }, [filter, projects, query, sort])
-  const totalPages = Math.max(1, Math.ceil(visibleProjects.length / PAGE_SIZE))
-  const currentPage = Math.min(page, totalPages)
-  const pageStart = (currentPage - 1) * PAGE_SIZE
-  const paginatedProjects = visibleProjects.slice(
-    pageStart,
-    pageStart + PAGE_SIZE,
-  )
-  const from = visibleProjects.length ? pageStart + 1 : 0
-  const to = Math.min(pageStart + PAGE_SIZE, visibleProjects.length)
+  const table = useLocalTable(visibleProjects, {
+    view: [filter, sort, query],
+    loading,
+  })
 
   const projectStats = [
     {
@@ -148,10 +132,7 @@ export function ClientProjectsPage() {
         title="My Projects"
         description="Follow project progress and review work shared with you."
         actions={
-          <Button
-            asChild
-            className="h-[34px] bg-[#203f8c] text-xs text-white hover:bg-[#172f70] max-[560px]:h-11"
-          >
+          <Button asChild className={clientPageHeaderActionClass}>
             <Link href="/services">
               <Plus size={16} aria-hidden="true" />
               New Service Request
@@ -177,58 +158,28 @@ export function ClientProjectsPage() {
             placeholder="Search project, service or reference…"
             value={query}
             maxLength={100}
-            onChange={(event) => {
-              setQuery(event.target.value)
-              setPage(1)
-            }}
+            onChange={(event) => setQuery(event.target.value)}
           />
-          <Select
+          <FilterSelect
+            label="Filter projects by status"
             value={filter}
-            onValueChange={(value) => {
-              setFilter(value as ProjectFilter)
-              setPage(1)
-            }}
-          >
-            <SelectTrigger
-              aria-label="Filter projects by status"
-              className="h-[34px] w-[165px] border-[#e1e4ea] text-xs max-[560px]:h-11 max-[560px]:w-full"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">All Statuses</SelectItem>
-              <SelectItem value="ACTIVE">Active</SelectItem>
-              <SelectItem value="COMPLETED">Completed</SelectItem>
-              <SelectItem value="CANCELLED">Cancelled</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select
+            options={filterOptions}
+            triggerClassName="w-[165px]"
+            onChange={setFilter}
+          />
+          <FilterSelect
+            label="Sort projects"
             value={sort}
-            onValueChange={(value) => {
-              setSort(value as ProjectSort)
-              setPage(1)
-            }}
-          >
-            <SelectTrigger
-              aria-label="Sort projects"
-              className="h-[34px] w-[180px] border-[#e1e4ea] text-xs max-[560px]:h-11 max-[560px]:w-full"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="NEWEST">Most recently updated</SelectItem>
-              <SelectItem value="OLDEST">Least recently updated</SelectItem>
-            </SelectContent>
-          </Select>
+            options={sortOptions}
+            triggerClassName="w-[180px]"
+            onChange={setSort}
+          />
         </div>
 
         {error ? (
-          <div
-            role="alert"
-            className="rounded-xl border border-rose-200 bg-rose-50 px-5 py-6 text-sm text-rose-800"
-          >
+          <Alert as="div" className="rounded-xl px-5 py-6 text-sm">
             {error}
-          </div>
+          </Alert>
         ) : loading ? (
           <ClientTableSkeleton
             label="your projects"
@@ -236,62 +187,48 @@ export function ClientProjectsPage() {
             gridClassName="grid grid-cols-[76px_minmax(180px,1.25fr)_minmax(180px,1.25fr)_minmax(145px,.9fr)_minmax(100px,.7fr)_minmax(130px,.9fr)_120px] items-center gap-3.5"
           />
         ) : projects.length === 0 ? (
-          <section className="grid justify-items-center rounded-xl border border-dashed border-[#ccd7e5] bg-white/60 px-6 py-14 text-center">
-            <span className="grid size-12 place-items-center rounded-full bg-[#edf2f9] text-[#2b4b97]">
-              <FolderKanban size={22} aria-hidden="true" />
-            </span>
-            <h2 className="mt-4 mb-0 text-base font-semibold">
-              No projects yet
-            </h2>
-            <p className="mt-2 mb-0 max-w-sm text-xs leading-5 text-[#667894]">
-              Once a booked service is activated, it will appear here with its
-              progress and shared deliverables.
-            </p>
-            <Button className="mt-5 bg-[#243f8f] hover:bg-[#1d367d]" asChild>
-              <Link href="/services">
-                <Plus size={16} aria-hidden="true" />
-                Book a service
-              </Link>
-            </Button>
-          </section>
+          <EmptyState
+            as="section"
+            size="lg"
+            headingLevel={2}
+            icon={FolderKanban}
+            title="No projects yet"
+            description="Once a booked service is activated, it will appear here with its progress and shared deliverables."
+            className="bg-white/60"
+            action={
+              <Button variant="brand" asChild>
+                <Link href="/services">
+                  <Plus size={16} aria-hidden="true" />
+                  Book a service
+                </Link>
+              </Button>
+            }
+          />
         ) : visibleProjects.length === 0 ? (
-          <section className="rounded-xl border border-[#dce3eb] bg-white px-5 py-10 text-center">
-            <p className="m-0 text-sm font-medium">No projects match</p>
-            <p className="mt-1.5 mb-0 text-xs text-[#667894]">
-              Try another search or status filter.
-            </p>
-          </section>
+          <EmptyState
+            as="section"
+            title="No projects match"
+            description="Try another search or status filter."
+            className="bg-white"
+          />
         ) : (
           <>
             <ClientProjectsTable
-              projects={paginatedProjects}
+              projects={table.visible}
               formatDate={formatDate}
-              viewKey={`${filter}:${sort}:${query}:${currentPage}`}
+              viewKey={table.viewKey}
               quickKey={`${filter}:${sort}:${query}`}
-              onView={setSelectedProject}
+              onRowsSettled={table.onRowsSettled}
             />
-            <footer className="flex flex-wrap items-center justify-between gap-3 pt-4 text-[11px] text-[#52627a]">
-              <span role="status" aria-live="polite" aria-atomic="true">
-                Showing {from}–{to} of {visibleProjects.length}
-              </span>
-              <NumberedPagination
-                page={currentPage}
-                totalPages={totalPages}
-                label="My Projects pages"
-                onPageChange={setPage}
-              />
-            </footer>
+            <TablePaginationFooter
+              {...table.footer}
+              label="My Projects pages"
+              onPageChange={table.setPage}
+              className="text-[#52627a]"
+            />
           </>
         )}
       </div>
-      {selectedProject && (
-        <ClientProjectDetailsDrawer
-          key={selectedProject.id}
-          project={selectedProject}
-          formatDate={formatDate}
-          onClose={() => setSelectedProject(null)}
-        />
-      )}
     </main>
   )
 }

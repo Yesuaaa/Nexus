@@ -8,42 +8,56 @@ import {
 configureRegressionTest()
 
 for (const role of ["SUPERADMIN", "ADMIN", "STAFF", "USER"] as const) {
-  test(`Dashboard renders its accessible shell for ${role}`, async ({
-    page,
-  }) => {
-    await restoreSession(page, role)
-    await page.goto("/dashboard")
+  test(
+    role === "USER"
+      ? "Dashboard renders its accessible shell for USER"
+      : `Dashboard access for ${role} redirects to the workspace selector`,
+    async ({ page }) => {
+      await restoreSession(page, role)
+      await page.goto("/dashboard")
 
-    await expect(page.locator(`[data-role="${role}"]`)).toBeVisible()
-    await expect(
-      page.getByRole("main", { name: "Dashboard", exact: true }),
-    ).toBeVisible()
-    await expect(
-      page
-        .getByRole("navigation", { name: "Main menu" })
-        .getByRole("link", { name: "Dashboard", exact: true }),
-    ).toHaveAttribute("aria-current", "page")
-    await expect(
-      page.getByRole("button", { name: /^Notifications/ }),
-    ).toBeVisible()
-    await expect(page.getByRole("link", { name: /^Messages/ })).toBeVisible()
-    await expect(
-      page.getByRole("button", { name: "Open account menu" }),
-    ).toBeVisible()
-  })
+      if (role !== "USER") {
+        await expect(page).toHaveURL(/\/module$/)
+        await expect(
+          page.getByRole("main", { name: "Workspace selector", exact: true }),
+        ).toBeVisible()
+        await expect(
+          page.getByRole("heading", { name: "Module", exact: true }),
+        ).toBeVisible()
+        return
+      }
+
+      await expect(page.locator(`[data-role="${role}"]`)).toBeVisible()
+      await expect(
+        page.getByRole("main", { name: "Client dashboard", exact: true }),
+      ).toBeVisible()
+      await expect(
+        page
+          .getByRole("navigation", { name: "Main menu" })
+          .getByRole("link", { name: "Dashboard", exact: true }),
+      ).toHaveAttribute("aria-current", "page")
+      await expect(
+        page.getByRole("button", { name: /^Notifications/ }),
+      ).toBeVisible()
+      await expect(page.getByRole("link", { name: /^Messages/ })).toBeVisible()
+      await expect(
+        page.getByRole("button", { name: "Open account menu" }),
+      ).toBeVisible()
+    },
+  )
 }
 
 test("Dashboard keeps its account loading state until lookup completes", async ({
   page,
 }) => {
-  await restoreSession(page, "ADMIN")
+  await restoreSession(page, "USER")
   let releaseLookup: () => void = () => {}
   const lookupGate = new Promise<void>((resolve) => {
     releaseLookup = resolve
   })
   await page.route("**/api/auth/me", async (route) => {
     await lookupGate
-    await route.fulfill({ json: { user: accountFor("ADMIN") } })
+    await route.fulfill({ json: { user: accountFor("USER") } })
   })
 
   try {
@@ -54,7 +68,7 @@ test("Dashboard keeps its account loading state until lookup completes", async (
   }
 
   await expect(
-    page.getByRole("main", { name: "Dashboard", exact: true }),
+    page.getByRole("main", { name: "Client dashboard", exact: true }),
   ).toBeVisible()
 })
 
@@ -72,7 +86,7 @@ test("Dashboard reports an account lookup failure without showing the portal", a
     "Please refresh to try again.",
   )
   await expect(
-    page.getByRole("main", { name: "Dashboard", exact: true }),
+    page.getByRole("main", { name: "Client dashboard", exact: true }),
   ).toHaveCount(0)
 })
 
@@ -95,7 +109,7 @@ test("Dashboard navigation works from the mobile drawer", async ({ page }) => {
   await expect(page).toHaveURL(/\/dashboard$/)
   await expect(sidebar).toHaveAttribute("data-drawer-open", "false")
   await expect(
-    page.getByRole("main", { name: "Dashboard", exact: true }),
+    page.getByRole("main", { name: "Client dashboard", exact: true }),
   ).toBeVisible()
 })
 
@@ -130,7 +144,7 @@ test("Dashboard notifications show loading before an empty result", async ({
 test("Dashboard notification errors recover and keep the source link", async ({
   page,
 }) => {
-  await restoreSession(page, "ADMIN")
+  await restoreSession(page, "USER")
   let unavailable = true
   await page.route("**/api/request-workflows/notifications", (route) =>
     unavailable

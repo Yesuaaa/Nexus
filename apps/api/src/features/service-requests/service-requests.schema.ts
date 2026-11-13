@@ -1,5 +1,7 @@
 import type { ServiceRequestStatus } from "../../generated/prisma/client.js"
-import { parsePage, parseQueryString } from "../../shared/query-helpers.js"
+import { parseQueryString } from "../../shared/query-helpers.js"
+import { parsePage } from "../../shared/query/pagination.js"
+import { isUuidV4 } from "../../shared/validation.js"
 
 export type ServiceRequestFilters = {
   page: number
@@ -25,7 +27,6 @@ export function parseServiceRequestFilters(
   const selectedStatus = statuses.find((value) => value === status)
   if (
     page === null ||
-    page > 100_000 ||
     search === null ||
     search.length > 100 ||
     status === null ||
@@ -70,11 +71,7 @@ export function validateServiceRequestInput(
       }
   }
   const submissionKey = text("submissionKey")
-  if (
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      submissionKey,
-    )
-  )
+  if (!isUuidV4(submissionKey))
     return { error: "Invalid request reference. Please start a new request." }
   const limits = {
     goals: 2000,

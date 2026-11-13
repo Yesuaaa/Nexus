@@ -1,14 +1,10 @@
+import { CalendarClock, UserCheck, UserX, UsersRound } from "lucide-react"
 import {
-  BriefcaseBusiness,
-  CalendarClock,
-  UserCheck,
-  UsersRound,
-} from "lucide-react"
-import { KpiCards, type KpiMetric } from "@/components/ui/kpi-cards"
-import {
-  KpiDistributionChart,
-  type KpiDistributionSegment,
-} from "@/components/ui/kpi-distribution-chart"
+  ProgressMeter,
+  SegmentMeter,
+  StatStrip,
+  type StatStripItem,
+} from "@/components/ui/stat-strip"
 
 export type EmployeeKpiSummary = {
   total: number
@@ -17,18 +13,8 @@ export type EmployeeKpiSummary = {
   inactive: number
 }
 
-const colors = {
-  active: "#29906b",
-  onLeave: "#d69a24",
-  inactive: "#d81758",
-}
-
-function distribution(summary: EmployeeKpiSummary): KpiDistributionSegment[] {
-  return [
-    { label: "Active", value: summary.active, color: colors.active },
-    { label: "On leave", value: summary.onLeave, color: colors.onLeave },
-    { label: "Inactive", value: summary.inactive, color: colors.inactive },
-  ]
+function share(value: number, total: number) {
+  return total === 0 ? "0%" : `${Math.round((value / total) * 100)}%`
 }
 
 export function EmployeeKpiCards({
@@ -40,98 +26,83 @@ export function EmployeeKpiCards({
   pending: boolean
   unavailable: boolean
 }) {
-  const segments = distribution(summary)
-  const metrics: KpiMetric[] = [
+  const { total, active, onLeave, inactive } = summary
+  const empty = total === 0
+
+  const items: StatStripItem[] = [
     {
-      label: "Total Employees",
-      value: summary.total,
-      description: "Employee records",
+      label: "Employees",
+      value: total.toLocaleString("en-US"),
+      caption: empty ? "No employee records yet" : "Employee records",
       icon: UsersRound,
-      iconClassName: "text-[#2058d4]",
-      chart: (
-        <KpiDistributionChart
-          label={`Employee status distribution: ${segments.map((segment) => `${segment.label}: ${segment.value}`).join("; ")}`}
-          segments={segments}
+      tone: "bg-[#e8eef8] text-[#284f9e]",
+      meter: (
+        <SegmentMeter
+          label="Employee status breakdown"
+          segments={[
+            { label: "Active", value: active, colorClass: "bg-[#29906b]" },
+            { label: "On leave", value: onLeave, colorClass: "bg-[#d69a24]" },
+            { label: "Inactive", value: inactive, colorClass: "bg-[#c94a6a]" },
+          ]}
         />
       ),
     },
     {
       label: "Active",
-      value: summary.active,
-      description: "Currently employed",
+      value: active.toLocaleString("en-US"),
+      caption: empty ? "—" : `${share(active, total)} of employees`,
+      captionTone: empty ? undefined : "text-[#25745b]",
       icon: UserCheck,
-      iconClassName: "text-[#159447]",
-      chart: (
-        <KpiDistributionChart
-          label={`Active employee share: ${summary.active} of ${summary.total}`}
-          segments={[
-            { label: "Active", value: summary.active, color: colors.active },
-            {
-              label: "Other statuses",
-              value: summary.total - summary.active,
-              color: "#e3e9ef",
-            },
-          ]}
+      tone: "bg-[#e6f4ee] text-[#25745b]",
+      meter: (
+        <ProgressMeter
+          value={active}
+          max={total}
+          label="Active employees"
+          colorClass="bg-[#29906b]"
         />
       ),
     },
     {
-      label: "On Leave",
-      value: summary.onLeave,
-      description: "Temporarily unavailable",
+      label: "On leave",
+      value: onLeave.toLocaleString("en-US"),
+      caption: onLeave === 0 ? "Everyone is available" : "Temporarily away",
+      captionTone: onLeave > 0 ? "text-[#9a5b00]" : undefined,
       icon: CalendarClock,
-      iconClassName: "text-[#a45b12]",
-      chart: (
-        <KpiDistributionChart
-          label={`Employees on leave: ${summary.onLeave} of ${summary.total}`}
-          segments={[
-            {
-              label: "On leave",
-              value: summary.onLeave,
-              color: colors.onLeave,
-            },
-            {
-              label: "Other statuses",
-              value: summary.total - summary.onLeave,
-              color: "#e3e9ef",
-            },
-          ]}
+      tone: "bg-[#fbf0e2] text-[#a45b12]",
+      meter: (
+        <ProgressMeter
+          value={onLeave}
+          max={total}
+          label="Employees on leave"
+          colorClass="bg-[#d69a24]"
         />
       ),
     },
     {
       label: "Inactive",
-      value: summary.inactive,
-      description: "Not active in the directory",
-      icon: BriefcaseBusiness,
-      iconClassName: "text-[#d81758]",
-      chart: (
-        <KpiDistributionChart
-          label={`Inactive employees: ${summary.inactive} of ${summary.total}`}
-          segments={[
-            {
-              label: "Inactive",
-              value: summary.inactive,
-              color: colors.inactive,
-            },
-            {
-              label: "Other statuses",
-              value: summary.total - summary.inactive,
-              color: "#e3e9ef",
-            },
-          ]}
+      value: inactive.toLocaleString("en-US"),
+      caption: inactive === 0 ? "None inactive" : "Not currently working",
+      captionTone: inactive > 0 ? "text-[#b4234d]" : undefined,
+      icon: UserX,
+      tone: "bg-[#fbe9ee] text-[#b4234d]",
+      meter: (
+        <ProgressMeter
+          value={inactive}
+          max={total}
+          label="Inactive employees"
+          colorClass="bg-[#c94a6a]"
         />
       ),
     },
   ]
 
   return (
-    <KpiCards
-      metrics={metrics}
+    <StatStrip
+      items={items}
       label="Employee overview"
       pending={pending}
       unavailable={unavailable}
-      className="grid-cols-4 max-[1050px]:grid-cols-2 max-[560px]:grid-cols-1"
     />
   )
 }

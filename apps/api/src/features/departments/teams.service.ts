@@ -1,8 +1,7 @@
-import { EmployeeStatus, Prisma, Role } from "../../generated/prisma/client.js"
+import { EmployeeStatus, Role } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { isUniqueConflict } from "../../lib/errors.js"
 import {
-  EmployeeError,
   syncEmployeeForUser,
   updateEmployee,
 } from "../employees/employees.service.js"
@@ -10,87 +9,11 @@ import {
   validateTeamCreateInput,
   validateTeamUpdateInput,
 } from "./departments.schema.js"
+import { assertLeadershipCandidate } from "./leadership.policy.js"
+import { HttpError as TeamError } from "../../shared/http-error.js"
 
-export class TeamError extends Error {
-  constructor(
-    public readonly status: number,
-    message: string,
-  ) {
-    super(message)
-    this.name = "TeamError"
-  }
-}
-
-async function validateTeamLead(
-  tx: Prisma.TransactionClient,
-  departmentId: string,
-  leadId: string,
-  currentTeamId: string | undefined,
-  conflictStatus: number,
-) {
-  await tx.$queryRaw(
-    Prisma.sql`SELECT "id" FROM "User" WHERE "id" = ${leadId} FOR UPDATE`,
-  )
-  const candidate = await tx.user.findUnique({
-    where: { id: leadId },
-    select: {
-      role: true,
-      isActive: true,
-      accountDeletedAt: true,
-      departmentId: true,
-      employee: { select: { departmentId: true, status: true } },
-      team: { select: { departmentId: true } },
-    },
-  })
-
-  if (
-    !candidate ||
-    candidate.role !== "STAFF" ||
-    !candidate.isActive ||
-    candidate.accountDeletedAt
-  ) {
-    throw new TeamError(400, "Only active staff accounts can be Team Leads.")
-  }
-
-  if (candidate.employee && candidate.employee.status !== "ACTIVE") {
-    throw new TeamError(
-      400,
-      "Only employees with active status can be Team Leads.",
-    )
-  }
-
-  const assignedDepartmentIds = [
-    candidate.departmentId,
-    candidate.employee?.departmentId,
-    candidate.team?.departmentId,
-  ].filter((id): id is string => id != null)
-  if (assignedDepartmentIds.some((id) => id !== departmentId)) {
-    throw new TeamError(
-      400,
-      "Team Leads must belong to the department that owns the team.",
-    )
-  }
-
-  const [departmentHead, otherLeadTeam] = await Promise.all([
-    tx.department.findFirst({
-      where: { headId: leadId },
-      select: { id: true },
-    }),
-    tx.team.findFirst({
-      where: {
-        leadId,
-        ...(currentTeamId ? { id: { not: currentTeamId } } : {}),
-      },
-      select: { id: true },
-    }),
-  ])
-  if (departmentHead || otherLeadTeam) {
-    throw new TeamError(
-      conflictStatus,
-      "Reassign the current lead role before assigning this Team Lead.",
-    )
-  }
-}
+/** Feature-named alias of the shared `HttpError`. */
+export { TeamError }
 
 export const teamsService = {
   async createTeam(departmentId: string, body: unknown) {
@@ -112,7 +35,11 @@ export const teamsService = {
     try {
       const team = await prisma.$transaction(async (tx) => {
         if (leadId) {
-          await validateTeamLead(tx, departmentId, leadId, undefined, 400)
+          await assertLeadershipCandidate(tx, leadId, {
+            kind: "lead",
+            departmentId,
+            conflictStatus: 400,
+          })
         }
 
         if (memberIds) {
@@ -197,9 +124,6 @@ export const teamsService = {
         },
       }
     } catch (error) {
-      if (error instanceof EmployeeError) {
-        throw new TeamError(error.status, error.message)
-      }
       if (isUniqueConflict(error)) {
         throw new TeamError(
           409,
@@ -229,7 +153,12 @@ export const teamsService = {
     try {
       const updated = await prisma.$transaction(async (tx) => {
         if (leadId) {
-          await validateTeamLead(tx, departmentId, leadId, teamId, 409)
+          await assertLeadershipCandidate(tx, leadId, {
+            kind: "lead",
+            departmentId,
+            currentTeamId: teamId,
+            conflictStatus: 409,
+          })
         }
 
         await tx.team.update({

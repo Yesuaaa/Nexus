@@ -158,7 +158,10 @@ test.describe("Department management", () => {
     await page.reload()
 
     // 2. Edit the Department
-    await page.getByRole("button", { name: "Edit Customer Support" }).click()
+    await page
+      .getByRole("button", { name: "Actions for Customer Support" })
+      .click()
+    await page.getByRole("menuitem", { name: "Edit", exact: true }).click()
     await expect(
       page.getByRole("heading", { name: "Edit Department" }),
     ).toBeVisible()
@@ -178,20 +181,20 @@ test.describe("Department management", () => {
       .getByRole("button", { name: "Client Success", exact: true })
       .click()
 
-    // Member Management Drawer / Sheet opens
+    // Member management side panel opens, titled with the department name
     await expect(
-      page.getByRole("heading", { name: "Members & teams" }),
+      page.getByRole("heading", { name: "Client Success" }),
     ).toBeVisible()
     await page.getByRole("button", { name: "Close drawer" }).click()
     await expect(
-      page.getByRole("heading", { name: "Members & teams" }),
+      page.getByRole("heading", { name: "Client Success" }),
     ).toHaveCount(0)
 
     // 4. Delete the Department
     await page
-      .getByRole("button", { name: "More actions for Client Success" })
+      .getByRole("button", { name: "Actions for Client Success" })
       .click()
-    await page.getByRole("menuitem", { name: "Delete department" }).click()
+    await page.getByRole("menuitem", { name: "Delete", exact: true }).click()
 
     await expect(page.getByText("Delete department?")).toBeVisible()
     await page

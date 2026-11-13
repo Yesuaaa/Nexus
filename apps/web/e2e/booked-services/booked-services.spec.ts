@@ -490,7 +490,7 @@ test("internal roles cannot open client bookings or fetch their data", async ({
     await page.goto("/booked-services?booking=request-1")
     await expect(page).toHaveURL(/\/dashboard$/)
     await expect(
-      page.getByRole("main", { name: "Dashboard", exact: true }),
+      page.getByRole("main", { name: "Workspace selector", exact: true }),
     ).toBeVisible()
     await expect(
       page

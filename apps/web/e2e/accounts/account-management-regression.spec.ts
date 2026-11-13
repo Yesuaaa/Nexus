@@ -206,11 +206,14 @@ test.describe("Account management regression coverage", () => {
     const password = dialog.getByLabel(/^Password/)
     const confirmation = dialog.getByLabel(/^Confirm password/)
 
-    await email.fill("person@example.org")
+    await email.fill("not-an-email")
     await name.fill("Jo@ne")
     await phone.fill("12345678901")
     await password.fill("lowercasepassword123!")
     await confirmation.fill("differentpassword123!")
+    await dialog
+      .getByRole("button", { name: "Create account", exact: true })
+      .click()
 
     await expect(
       dialog.getByText("Enter a valid email like name@example.com."),
@@ -232,9 +235,6 @@ test.describe("Account management regression coverage", () => {
     await expect(
       dialog.getByText("Full name must be at least 2 characters."),
     ).toBeVisible()
-    await dialog
-      .getByRole("button", { name: "Create account", exact: true })
-      .click()
     expect(createAttempts).toBe(0)
     await expect(dialog).toBeVisible()
   })
@@ -285,7 +285,7 @@ test.describe("Account management regression coverage", () => {
     const table = page.getByRole("table", { name: "Accounts", exact: true })
     await expect(table.getByText("Target User", { exact: true })).toBeVisible()
     await page
-      .getByRole("button", { name: "Role for target@example.com: User" })
+      .getByRole("button", { name: "Role for target@example.com: Client" })
       .click()
     await page.getByRole("menuitemradio", { name: "Staff" }).click()
     const save = page.getByRole("button", { name: "Save changes" })

@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import {
   CheckCircle2,
   ClipboardList,
@@ -16,28 +16,18 @@ import {
 import { contentClass } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
 import { ClientTableSkeleton } from "@/components/ui/client-table-skeleton"
+import { EmptyState } from "@/components/ui/empty-state"
+import { FilterSelect } from "@/components/ui/filter-select"
 import { KpiCards } from "@/components/ui/kpi-cards"
-import {
-  useTableSearch,
-  useTableFooter,
-} from "@/components/ui/use-table-search"
+import { usePaginatedList } from "@/components/ui/use-paginated-list"
 import { TableSearchStatus } from "@/components/ui/table-search-status"
-import { NumberedPagination } from "@/components/ui/numbered-pagination"
+import { TablePaginationFooter } from "@/components/ui/table-pagination-footer"
 import { SearchField } from "@/components/ui/search-field"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import type { ServiceRequestStatus } from "@/features/service-operations/model/service-request-contracts"
 import { cn } from "@/lib/utils"
-import { ApiError } from "@/features/auth/api/auth-api"
-import { watchVisibleRefresh } from "@/lib/visible-refresh"
 import {
   listMyServiceRequests,
   type ClientRequestsResponse,
-  type ServiceRequestStatus,
   type ServiceRequestSummary,
 } from "../api/client-services-api"
 import { ClientRequestsTable } from "../components/client-requests-table"
@@ -51,6 +41,18 @@ const initial: ClientRequestsResponse = {
   pageSize: 10,
   summary: { total: 0, pending: 0, inProgress: 0, completed: 0, cancelled: 0 },
 }
+
+const statusOptions: { value: ServiceRequestStatus | ""; label: string }[] = [
+  { value: "", label: "All Statuses" },
+  ...Object.entries(serviceRequestStatuses).map(([value, item]) => ({
+    value: value as ServiceRequestStatus,
+    label: item.label,
+  })),
+]
+const sortOptions: { value: "asc" | "desc"; label: string }[] = [
+  { value: "desc", label: "Newest first" },
+  { value: "asc", label: "Oldest first" },
+]
 
 function matchesTableSearch(item: ServiceRequestSummary, query: string) {
   return [
@@ -67,96 +69,29 @@ export function ClientServiceRequestsPage() {
   const query = search.trim()
   const [status, setStatus] = useState<ServiceRequestStatus | "">("")
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
-  const [page, setPage] = useState(1)
-  const [revision, setRevision] = useState(0)
-  const [result, setResult] = useState(initial)
-  const [resolvedKey, setResolvedKey] = useState("")
-  const [errorMessage, setError] = useState("")
-  const [errorRequestKey, setErrorRequestKey] = useState("")
   const [selected, setSelected] = useState<ServiceRequestSummary | null>(null)
-  const requestKey = JSON.stringify({
-    page,
-    query,
-    status,
-    sortOrder,
-    revision,
-  })
-  const error = errorRequestKey === requestKey ? errorMessage : ""
-  const loading = requestKey !== resolvedKey || search.trim() !== query
   const filtered = Boolean(query || status)
-  const searchScope = JSON.stringify([status, sortOrder, revision])
-  const { acceptRows, preview, previewing } =
-    useTableSearch<ServiceRequestSummary>({
-      search: query,
-      scope: searchScope,
-      page,
-      matches: matchesTableSearch,
-    })
-  const { footer, onRowsSettled } = useTableFooter(
-    result,
-    loading || previewing,
-  )
-  const tableViewKey = JSON.stringify([searchScope, query, page])
-  useEffect(() => {
-    const controller = new AbortController()
-    let active = true
-    let inFlight = false
-    let hasLoaded = false
-    const load = () => {
-      if (inFlight) return
-      inFlight = true
-      void listMyServiceRequests({
-        page,
-        search: query,
-        status,
-        sortOrder,
-        signal: controller.signal,
-      })
-        .then((data) => {
-          if (!active) return
-          const lastPage = Math.max(1, Math.ceil(data.total / data.pageSize))
-          if (page > lastPage) {
-            setPage(lastPage)
-            return
-          }
-          hasLoaded = true
-          acceptRows(data.requests)
-          setResult(data)
-          setSelected((current) =>
-            current
-              ? (data.requests.find((item) => item.id === current.id) ?? null)
-              : null,
-          )
-          setError("")
-          setResolvedKey(requestKey)
-        })
-        .catch((reason: unknown) => {
-          if (!active) return
-          if (
-            hasLoaded &&
-            (!(reason instanceof ApiError) || reason.status >= 500)
-          )
-            return
-          setErrorRequestKey(requestKey)
-          setError(
-            reason instanceof Error
-              ? reason.message
-              : "Could not load your service requests.",
-          )
-          setResolvedKey(requestKey)
-        })
-        .finally(() => {
-          inFlight = false
-        })
-    }
-    load()
-    const stopRefresh = watchVisibleRefresh(load, { poll: false })
-    return () => {
-      active = false
-      controller.abort()
-      stopRefresh()
-    }
-  }, [page, query, status, sortOrder, revision, requestKey, acceptRows])
+
+  const list = usePaginatedList({
+    params: { search: query, status, sortOrder },
+    load: ({ page, signal }) =>
+      listMyServiceRequests({ page, search: query, status, sortOrder, signal }),
+    rows: (result) => result.requests,
+    matches: matchesTableSearch,
+    initial,
+    refresh: "focus",
+    viewKeyFrom: "request",
+    fallbackError: "Could not load your service requests.",
+    onLoaded: (result) =>
+      setSelected((current) =>
+        current
+          ? (result.requests.find((item) => item.id === current.id) ?? null)
+          : null,
+      ),
+  })
+  const { setPage, retry } = list
+  const summary = (list.data ?? initial).summary
+
   function clearFilters() {
     setSearch("")
     setStatus("")
@@ -165,28 +100,28 @@ export function ClientServiceRequestsPage() {
   const metrics = [
     {
       label: "Total Requests",
-      value: result.summary.total,
+      value: summary.total,
       description: "All your service requests",
       icon: ClipboardList,
       iconClassName: "text-[#2058d4]",
     },
     {
       label: "Pending Review",
-      value: result.summary.pending,
+      value: summary.pending,
       description: "Awaiting department review",
       icon: Clock3,
       iconClassName: "text-[#b78112]",
     },
     {
       label: "In Review",
-      value: result.summary.inProgress,
+      value: summary.inProgress,
       description: "Review and quotation preparation",
       icon: LoaderCircle,
       iconClassName: "text-[#2058d4]",
     },
     {
       label: "Closed",
-      value: result.summary.completed,
+      value: summary.completed,
       description: "Closed service requests",
       icon: CheckCircle2,
       iconClassName: "text-[#159447]",
@@ -214,8 +149,8 @@ export function ClientServiceRequestsPage() {
         <KpiCards
           metrics={metrics}
           label="Your request overview"
-          pending={loading && !resolvedKey}
-          unavailable={Boolean(error)}
+          pending={!list.hasLoaded}
+          unavailable={Boolean(list.error)}
           showCharts={false}
           variant="blue"
           className="grid-cols-4 max-[1100px]:grid-cols-2 max-[480px]:grid-cols-1"
@@ -233,46 +168,26 @@ export function ClientServiceRequestsPage() {
               setPage(1)
             }}
           />
-          <Select
-            value={status || "all"}
-            onValueChange={(value) => {
-              setStatus(value === "all" ? "" : (value as ServiceRequestStatus))
+          <FilterSelect
+            label="Filter by request status"
+            value={status}
+            options={statusOptions}
+            triggerClassName="w-[165px]"
+            onChange={(value) => {
+              setStatus(value)
               setPage(1)
             }}
-          >
-            <SelectTrigger
-              aria-label="Filter by request status"
-              className="h-[34px] w-[165px] border-[#e1e4ea] text-xs max-[560px]:h-11 max-[560px]:w-full"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              {Object.entries(serviceRequestStatuses).map(([value, item]) => (
-                <SelectItem key={value} value={value}>
-                  {item.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
+          />
+          <FilterSelect
+            label="Sort service requests"
             value={sortOrder}
-            onValueChange={(value) => {
-              setSortOrder(value as "asc" | "desc")
+            options={sortOptions}
+            triggerClassName="w-[160px]"
+            onChange={(value) => {
+              setSortOrder(value)
               setPage(1)
             }}
-          >
-            <SelectTrigger
-              aria-label="Sort service requests"
-              className="h-[34px] w-[160px] text-xs max-[560px]:h-11 max-[560px]:w-full"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="desc">Newest first</SelectItem>
-              <SelectItem value="asc">Oldest first</SelectItem>
-            </SelectContent>
-          </Select>
+          />
           {Boolean(search || status) && (
             <Button
               variant="outline"
@@ -283,104 +198,72 @@ export function ClientServiceRequestsPage() {
             </Button>
           )}
         </div>
-        {loading && !resolvedKey ? (
+        {!list.hasLoaded ? (
           <ClientTableSkeleton
             label="your service requests"
             columns={6}
             gridClassName="grid grid-cols-[76px_minmax(180px,1.25fr)_minmax(180px,1.25fr)_minmax(120px,.8fr)_minmax(130px,.9fr)_140px] items-center gap-3.5"
           />
-        ) : error ? (
+        ) : list.error ? (
           <div
             role="alert"
             className="grid min-h-64 place-content-center gap-4 rounded-lg border border-[#e1e4ea] p-6 text-center text-sm text-[#52627a]"
           >
-            <p>{error}</p>
-            <Button
-              variant="outline"
-              onClick={() => setRevision((value) => value + 1)}
-            >
+            <p>{list.error}</p>
+            <Button variant="outline" onClick={retry}>
               Try again
             </Button>
           </div>
-        ) : resolvedKey ? (
+        ) : (
           <ClientRequestsTable
-            requests={preview ?? result.requests}
-            viewKey={tableViewKey}
+            requests={list.rows}
+            viewKey={list.tableViewKey}
             quickKey={query}
-            onRowsSettled={onRowsSettled}
+            onRowsSettled={list.onRowsSettled}
             emptyMessage={
-              loading ? (
+              list.loading ? (
                 "Searching requests…"
               ) : (
-                <div>
-                  <ClipboardList
-                    size={28}
-                    className="mx-auto mb-3 text-[#8a9ab3]"
-                    aria-hidden="true"
-                  />
-                  <h2 className="m-0 text-sm font-semibold">
-                    {filtered
+                <EmptyState
+                  headingLevel={2}
+                  icon={ClipboardList}
+                  title={
+                    filtered
                       ? "No matching requests"
-                      : "No service requests yet"}
-                  </h2>
-                  <p className="mt-2 text-xs text-[#52627a]">
-                    {filtered
+                      : "No service requests yet"
+                  }
+                  description={
+                    filtered
                       ? "Try a different search or status filter."
-                      : "Explore our services and tell us what you need."}
-                  </p>
-                  <Button asChild variant="outline" className="mt-2 text-xs">
-                    <Link href="/services">Browse services</Link>
-                  </Button>
-                </div>
+                      : "Explore our services and tell us what you need."
+                  }
+                  action={
+                    <Button asChild variant="outline" className="text-xs">
+                      <Link href="/services">Browse services</Link>
+                    </Button>
+                  }
+                  className="border-0 p-0"
+                />
               )
             }
             onView={(request) => {
               setSelected(request)
-              setRevision((value) => value + 1)
+              retry()
             }}
-            onCancelled={() => setRevision((value) => value + 1)}
+            onCancelled={retry}
           />
-        ) : (
-          <div className="grid min-h-64 place-items-center rounded-lg border border-dashed border-[#d7e0ee] p-6 text-center">
-            <div>
-              <ClipboardList
-                size={28}
-                className="mx-auto mb-3 text-[#8a9ab3]"
-                aria-hidden="true"
-              />
-              <h2 className="m-0 text-sm font-semibold">
-                {filtered ? "No matching requests" : "No service requests yet"}
-              </h2>
-              <p className="mt-2 text-xs text-[#52627a]">
-                {filtered
-                  ? "Try a different search or status filter."
-                  : "Explore our services and tell us what you need."}
-              </p>
-              <Button asChild variant="outline" className="mt-2 text-xs">
-                <Link href="/services">Browse services</Link>
-              </Button>
-            </div>
-          </div>
         )}
-        <TableSearchStatus active={loading && previewing} label="requests" />
-        {!error && !previewing && footer.total > 0 && (
-          <footer className="flex flex-wrap items-center justify-between gap-3 pt-4 text-[11px] text-[#52627a]">
-            <span role="status">
-              Showing {(footer.page - 1) * footer.pageSize + 1}–
-              {(footer.page - 1) * footer.pageSize + footer.requests.length} of{" "}
-              {footer.total}
-            </span>
-            <NumberedPagination
-              page={footer.page}
-              totalPages={Math.max(
-                1,
-                Math.ceil(footer.total / footer.pageSize),
-              )}
-              disabled={loading || footer !== result}
-              label="Service request pages"
-              onPageChange={setPage}
-            />
-          </footer>
+        <TableSearchStatus
+          active={list.loading && list.previewing}
+          label="requests"
+        />
+        {list.footer && (
+          <TablePaginationFooter
+            {...list.footer}
+            label="Service request pages"
+            onPageChange={setPage}
+            className="text-[#52627a]"
+          />
         )}
       </section>
       {selected && (

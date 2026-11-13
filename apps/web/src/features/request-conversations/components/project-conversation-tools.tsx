@@ -32,7 +32,8 @@ export function ProjectConversationTools({
           <Button
             type="button"
             aria-label="Open project tools"
-            className="size-10 shrink-0 rounded-full bg-[#203f8c] p-0 text-white hover:bg-[#172f70]"
+            variant="brand"
+            className="size-10 shrink-0 rounded-full p-0"
           >
             <Plus size={16} aria-hidden="true" />
           </Button>

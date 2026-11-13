@@ -72,7 +72,7 @@ test("[NEX-024] client creation accepts minimum profile boundaries and trims nam
   page,
 }) => {
   const { dialog, submissions } = await openCreateForm(page)
-  const password = "clientpass12"
+  const password = "Clientpass123!"
 
   await dialog.getByLabel("Full Name").fill("  李山  ")
   await dialog.getByLabel("Email Address").fill("li@example.com")
@@ -102,7 +102,7 @@ test("[NEX-025] client creation accepts exact name, email, contact, and password
   const fullName = "C".repeat(100)
   const email = `${"a".repeat(64)}@${"d".repeat(63)}.${"e".repeat(63)}.${"f".repeat(57)}.com`
   const contactNumber = "12345678901234567890"
-  const password = "p".repeat(256)
+  const password = `P${"p".repeat(253)}1!`
   expect(email).toHaveLength(254)
 
   await expect(dialog.getByLabel("Full Name")).toHaveAttribute(
@@ -147,7 +147,7 @@ test("[NEX-026] client creation rejects short names and malformed or short conta
   await fullName.fill("A")
   await dialog.getByLabel("Email Address").fill("client@example.com")
   await dialog.getByLabel("Contact Number").fill("09123456789")
-  await dialog.getByLabel("Initial Password").fill("clientpass12")
+  await dialog.getByLabel("Initial Password").fill("Clientpass123!")
   await dialog.getByRole("button", { name: "Create Client" }).click()
   await expect(dialog.locator("[data-field-error]")).toHaveCount(1)
   await expect(fullName).toHaveAccessibleDescription(
@@ -326,7 +326,7 @@ test("[NEX-028] client creation preserves the selected inactive initial status",
   await dialog.getByLabel("Full Name").fill("Inactive Client")
   await dialog.getByLabel("Email Address").fill("inactive@example.com")
   await dialog.getByLabel("Contact Number").fill("09123456789")
-  await dialog.getByLabel("Initial Password").fill("clientpass12")
+  await dialog.getByLabel("Initial Password").fill("Clientpass123!")
   await dialog.getByRole("combobox", { name: "Account Status" }).click()
   await page.getByRole("option", { name: "Inactive", exact: true }).click()
   await dialog.getByRole("button", { name: "Create Client" }).click()
@@ -351,7 +351,7 @@ test("[NEX-029] client form disables submission while one save is pending", asyn
   await dialog.getByLabel("Full Name").fill("Pending Client")
   await dialog.getByLabel("Email Address").fill("pending@example.com")
   await dialog.getByLabel("Contact Number").fill("09123456789")
-  await dialog.getByLabel("Initial Password").fill("clientpass12")
+  await dialog.getByLabel("Initial Password").fill("Clientpass123!")
 
   const submit = dialog.locator('button[type="submit"]')
   await expect(submit).toHaveAccessibleName("Create Client")
@@ -376,7 +376,7 @@ test("[NEX-030] client creation retains values after a network failure and retri
   await dialog.getByLabel("Full Name").fill("Retry Client")
   await dialog.getByLabel("Email Address").fill("retry@example.com")
   await dialog.getByLabel("Contact Number").fill("09123456789")
-  await dialog.getByLabel("Initial Password").fill("clientpass12")
+  await dialog.getByLabel("Initial Password").fill("Clientpass123!")
 
   await dialog.getByRole("button", { name: "Create Client" }).click()
   await expect(dialog.getByRole("alert")).toBeVisible()

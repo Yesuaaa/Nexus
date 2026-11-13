@@ -9,7 +9,7 @@ export function ProjectAccessPage({
   initialTab,
 }: {
   projectId: string
-  initialTab?: "overview" | "deliverables"
+  initialTab?: "overview" | "deliverables" | "notes" | "team"
 }) {
   const account = usePortalAccount()
   return account.role === "USER" ? (

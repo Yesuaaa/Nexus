@@ -18,6 +18,60 @@ const workspace: ProjectWorkspaceDetail = {
   activity: [],
 }
 
+test("staff project routes preserve the current mixed client and staff behavior", async ({
+  page,
+}) => {
+  await page.addInitScript(() =>
+    sessionStorage.setItem("nexus.auth.token", "test-session"),
+  )
+  const projectReads: string[] = []
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname
+    if (path === "/api/auth/me")
+      return route.fulfill({ json: { user: accountFor("STAFF") } })
+    if (path === "/api/projects") {
+      projectReads.push(path)
+      return route.fulfill({ json: [] })
+    }
+    if (path === "/api/projects/project-1") {
+      projectReads.push(path)
+      return route.fulfill({
+        json: {
+          id: "project-1",
+          name: "Staff project",
+          description: null,
+          status: "IN_PROGRESS",
+          startDate: null,
+          createdAt: "2026-11-09T00:00:00Z",
+          workspaceManaged: true,
+          canManage: false,
+          request: null,
+          milestones: [],
+          deliverables: [],
+        },
+      })
+    }
+    return route.fulfill({
+      json: { notifications: [], unreadCount: 0 },
+    })
+  })
+
+  await page.goto("/projects")
+  await expect(page).toHaveURL(/\/projects$/)
+  await expect(
+    page.getByRole("heading", { name: "My Projects", exact: true }),
+  ).toBeVisible()
+
+  await page.goto("/projects/project-1/deliverables/deliverable-1")
+  await expect(page).toHaveURL(
+    /\/projects\/project-1\/deliverables\/deliverable-1$/,
+  )
+  await expect(
+    page.getByText("Shared deliverable not found", { exact: true }),
+  ).toBeVisible()
+  expect(projectReads).toEqual(["/api/projects", "/api/projects/project-1"])
+})
+
 for (const width of [1440, 390]) {
   test(`workspace archive and search keep active and ended projects separate at ${width}px`, async ({
     page,

@@ -56,8 +56,12 @@ test.describe("Dropdown positioning", () => {
       await restoreSession(page, "ADMIN")
       await page.goto("/services")
       await page
-        .getByRole("button", { name: "Edit Test Service", exact: true })
+        .getByRole("button", {
+          name: "More actions for Test Service",
+          exact: true,
+        })
         .click()
+      await page.getByRole("menuitem", { name: "Edit", exact: true }).click()
       const dialog = page.getByRole("dialog")
       const progress = dialog.getByRole("navigation", {
         name: "Service form progress",

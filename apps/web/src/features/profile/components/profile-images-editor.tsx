@@ -3,8 +3,10 @@
 import { Form } from "@/components/ui/form"
 import { useEffect, useRef, useState, type FormEvent } from "react"
 import { ImagePlus, UserRound } from "lucide-react"
+import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { uploadProfileImage, type Profile } from "../api/profile-api"
+import { errorMessage } from "@/lib/error-message"
 type ImageKind = "avatar" | "banner"
 const labels = { avatar: "Profile picture", banner: "Cover banner" }
 export function ProfileImagesEditor({
@@ -90,8 +92,7 @@ export function ProfileImagesEditor({
           })
           saved.push(labels[kind])
         } catch (reason) {
-          const detail =
-            reason instanceof Error ? reason.message : "Please try again."
+          const detail = errorMessage(reason, "Please try again.")
           setError(
             (saved.length ? saved.join(" and ") + " saved. " : "") +
               labels[kind] +
@@ -205,9 +206,9 @@ export function ProfileImagesEditor({
           })}
         </fieldset>
         {error && (
-          <p role="alert" className="m-0 text-xs leading-5 text-[#bc3649]">
+          <Alert variant="text" className="leading-5">
             {error}
-          </p>
+          </Alert>
         )}
         <footer className="flex justify-end gap-2 border-t border-[#eceef1] pt-4">
           <Button
@@ -221,7 +222,8 @@ export function ProfileImagesEditor({
           </Button>
           <Button
             type="submit"
-            className="min-h-11 bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
+            variant="brand"
+            size="touch"
             disabled={busy || !hasDraft || Object.values(reading).some(Boolean)}
           >
             {busy ? "Saving…" : "Save changes"}

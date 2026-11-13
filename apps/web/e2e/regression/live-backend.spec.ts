@@ -52,7 +52,9 @@ test.describe("live test accounts", () => {
       throw new Error(
         `Set ${account.passwordKey} in apps/web/.env.regression.local or the environment`,
       )
-    await page.goto("/login")
+    await page.goto(
+      role === "USER" || role === "DEACTIVATED" ? "/login" : "/internal/login",
+    )
     await page.getByLabel("Email address", { exact: true }).fill(account.email)
     await page.getByLabel("Password", { exact: true }).fill(password)
     const response = page.waitForResponse(

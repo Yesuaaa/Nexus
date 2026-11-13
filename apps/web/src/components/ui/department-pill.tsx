@@ -1,7 +1,6 @@
 import { Check } from "lucide-react"
 import { focusRing } from "@/components/layout/styles"
 import { Pill } from "@/components/ui/pill"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import type { DepartmentColor } from "@/features/departments/model/department-color"
 import { cn } from "@/lib/utils"
 
@@ -120,12 +119,7 @@ export function DepartmentPill({
   className?: string
 }) {
   const color = resolveDepartmentColor(department.color, department.name)
-  return (
-    <Pill className={cn(color.pill, className)}>
-      {department.name}
-      <HoverTooltip>{department.name}</HoverTooltip>
-    </Pill>
-  )
+  return <Pill className={cn(color.pill, className)}>{department.name}</Pill>
 }
 
 export function DepartmentColorPicker({
@@ -164,7 +158,6 @@ export function DepartmentColorPicker({
             {selected && (
               <Check size={14} className="text-white" aria-hidden="true" />
             )}
-            <HoverTooltip>{item.label}</HoverTooltip>
           </button>
         )
       })}

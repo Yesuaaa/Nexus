@@ -287,7 +287,7 @@ test("registration enforces the contact prefix and email suffix rules", async ({
   await page.goto("/register")
   await fillRegistration(page, {
     contactNumber: "07123456789",
-    email: "member@example.org",
+    email: "member@example.c",
   })
   await createAccountButton(page).click()
   await expect(
@@ -502,9 +502,7 @@ test("registration handles HTTP 400 validation responses and permits a corrected
   await createAccountButton(page).click()
 
   await expect(
-    page.getByRole("alert").filter({
-      hasText: "Something went wrong. Please try again.",
-    }),
+    page.getByRole("button", { name: /Account unavailable/ }),
   ).toBeVisible()
   await expect(page.getByLabel("Email address", { exact: true })).toHaveValue(
     validRegistration.email,

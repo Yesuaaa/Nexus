@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test"
 
-for (const route of ["/login", "/register"]) {
+for (const route of ["/login", "/register", "/internal/login"]) {
   test(`${route} fetches its preloaded font without waiting for CSS`, async ({
     page,
   }) => {

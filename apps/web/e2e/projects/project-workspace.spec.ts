@@ -94,7 +94,7 @@ test("client project workspace shows milestones and conversation handoff on mobi
   await expect(
     page.getByRole("heading", { name: "Business website", exact: true }),
   ).toBeVisible()
-  await page.getByRole("tab", { name: /Deliverables/ }).click()
+  await page.goto("/projects/project-1?tab=deliverables")
   await page.screenshot({
     path: "test-results/project-deliverables-mobile.png",
     fullPage: true,
@@ -112,7 +112,7 @@ test("client project workspace shows milestones and conversation handoff on mobi
     "/projects/project-1/deliverables/shared-deliverable",
   )
   await expect(
-    page.getByRole("link", { name: "Open project conversation" }),
+    page.getByRole("link", { name: "Open project chat", exact: true }),
   ).toHaveAttribute("href", "/messages?project=project-1")
   await expect(page.getByRole("button", { name: "Mark complete" })).toHaveCount(
     0,

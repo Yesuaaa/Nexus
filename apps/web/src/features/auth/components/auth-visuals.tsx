@@ -2,7 +2,7 @@ import { getImageProps } from "next/image"
 import { useEffect, useState } from "react"
 import type { AuthCopy } from "../content/auth-copy"
 import { focusOutline, heroTitleClass } from "../styles/auth-styles"
-import type { AuthLanguage, AuthMode } from "../model/types"
+import type { AuthLanguage, AuthMode, AuthPortal } from "../model/types"
 
 const photos = [
   { src: "/auth/community-1.webp", width: 1672, height: 941 },
@@ -31,10 +31,12 @@ function getPhotoProps(index: number) {
 
 export function PhotoPanel({
   mode,
+  portal,
   copy,
   language,
 }: {
   mode: AuthMode
+  portal: AuthPortal
   copy: AuthCopy
   language: AuthLanguage
 }) {
@@ -93,22 +95,30 @@ export function PhotoPanel({
       <AuthPhoto key={active} index={active} animate={previous !== null} />
       <div className="absolute inset-0 bg-[linear-gradient(90deg,rgb(10_30_52_/_77%)_0%,rgb(13_39_67_/_49%)_60%,rgb(12_45_77_/_38%)_100%),linear-gradient(0deg,rgb(5_31_56_/_48%),transparent_55%)]" />
       <div
-        key={mode}
+        key={`${portal}-${mode}`}
         className="auth-hero-enter absolute z-1 top-[37%] left-[clamp(42px,6.2%,90px)] w-[min(83%,650px)] text-white"
       >
         {mode === "login" ? (
           <>
             <h1 className={`${heroTitleClass} ${responsiveHeroTitleClass}`}>
-              {copy.loginHeroLine1}
+              {portal === "workforce"
+                ? copy.workforceHeroLine1
+                : copy.loginHeroLine1}
               <br />
               <span className="bg-linear-to-r from-[#0989e5] to-[#23cae0] bg-clip-text text-transparent">
-                {copy.loginHeroLine2}
+                {portal === "workforce"
+                  ? copy.workforceHeroLine2
+                  : copy.loginHeroLine2}
               </span>
               <br />
-              {copy.loginHeroLine3}
+              {portal === "workforce"
+                ? copy.workforceHeroLine3
+                : copy.loginHeroLine3}
             </h1>
             <p className="mt-[22px] max-w-[560px] text-[clamp(16px,1.04vw,20px)] leading-[1.32]">
-              {copy.loginHeroDescription}
+              {portal === "workforce"
+                ? copy.workforceHeroDescription
+                : copy.loginHeroDescription}
             </p>
           </>
         ) : (

@@ -22,7 +22,9 @@ test.describe("Client management", () => {
       })
       await page.goto("/clients")
       if (role !== "ADMIN") {
-        await expect(page).toHaveURL(/\/dashboard$/)
+        await expect(page).toHaveURL(
+          role === "USER" ? /\/dashboard$/ : /\/module$/,
+        )
         expect(requests).toEqual([])
         return
       }

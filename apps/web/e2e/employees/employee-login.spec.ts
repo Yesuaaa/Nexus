@@ -156,8 +156,12 @@ for (const width of [1440, 390]) {
     })
     await page.goto("/employees")
     await page
-      .getByRole("button", { name: "Edit Alex Employee", exact: true })
+      .getByRole("button", {
+        name: "More actions for Alex Employee",
+        exact: true,
+      })
       .click()
+    await page.getByRole("menuitem", { name: "Edit", exact: true }).click()
     const dialog = page.getByRole("dialog")
     await expect(dialog.getByLabel("Password", { exact: true })).toHaveCount(0)
     await expect(dialog.getByRole("heading")).toHaveText(
@@ -235,7 +239,10 @@ for (const width of [1440, 390]) {
       .click()
     await expect(dialog).toHaveCount(0)
     await expect(
-      page.getByRole("button", { name: "Edit Alex Employee", exact: true }),
+      page.getByRole("button", {
+        name: "More actions for Alex Employee",
+        exact: true,
+      }),
     ).toHaveCount(0)
     await page.getByRole("button", { name: "Archive", exact: true }).click()
     await menu("Delete permanently")
@@ -252,7 +259,8 @@ for (const width of [1440, 390]) {
     expect(accountDeleted).toBe(true)
     expect(employee.status).toBe("ACTIVE")
     await page
-      .getByRole("button", { name: "Back to Employees", exact: true })
+      .getByRole("group", { name: "Employee view" })
+      .getByRole("button", { name: "Employees", exact: true })
       .click()
     await page
       .getByRole("button", { name: "Create Employee", exact: true })

@@ -114,7 +114,9 @@ test.describe("Authentication and session regression", () => {
       expect((await logout).headers().authorization).toBe(
         `Bearer ${renewedTokens.token}`,
       )
-      await expect(page).toHaveURL(/\/login$/)
+      await expect(page).toHaveURL(
+        role === "USER" ? /\/login$/ : /\/internal\/login$/,
+      )
       expect(await storedTokens(page)).toEqual([null, null])
       await page.goto("/dashboard")
       await expect(page).toHaveURL(/\/login$/)
@@ -304,8 +306,12 @@ test.describe("Authentication and session regression", () => {
     })
     await page.goto("/services")
     await page
-      .getByRole("button", { name: "Edit Test Service", exact: true })
+      .getByRole("button", {
+        name: "More actions for Test Service",
+        exact: true,
+      })
       .click()
+    await page.getByRole("menuitem", { name: "Edit", exact: true }).click()
     await page
       .getByRole("dialog")
       .getByLabel("Service Name")
@@ -346,7 +352,7 @@ test.describe("Authentication and session regression", () => {
     expect(requests).toEqual([])
   })
 
-  for (const path of ["/login", "/register"]) {
+  for (const path of ["/login", "/register", "/internal/login"]) {
     test(`${path} offers email authentication without removed social providers`, async ({
       page,
     }) => {
@@ -370,6 +376,7 @@ test.describe("Authentication and session regression", () => {
     for (const [path, title] of [
       ["/login", "Welcome Back"],
       ["/register", "Create Account"],
+      ["/internal/login", "Team Portal"],
     ]) {
       const response = await request.get(path)
       expect(response.status()).toBe(200)
@@ -404,7 +411,7 @@ test.describe("Authentication and session regression", () => {
     page,
   }) => {
     await mockApi(page, "ADMIN")
-    await page.goto("/login")
+    await page.goto("/internal/login")
     await page
       .getByLabel("Email address", { exact: true })
       .fill(testAccounts.ADMIN.email)
@@ -413,7 +420,7 @@ test.describe("Authentication and session regression", () => {
     await expect(
       page.getByRole("status", { name: "Opening your account" }),
     ).toBeVisible()
-    await expect(page).toHaveURL(/\/dashboard$/)
+    await expect(page).toHaveURL(/\/module$/)
     await expect(
       page.getByRole("status", { name: "Opening your account" }),
     ).toHaveCount(0)
@@ -437,7 +444,7 @@ test.describe("Authentication and session regression", () => {
     ).toBeNull()
     await page.getByRole("button", { name: "Open account menu" }).click()
     await page.getByRole("menuitem", { name: "Log out", exact: true }).click()
-    await expect(page).toHaveURL(/\/login$/)
+    await expect(page).toHaveURL(/\/internal\/login$/)
     expect(await storedTokens(page)).toEqual([null, null])
     expect(
       await page.evaluate(() => sessionStorage.getItem("nexus.auth.token")),
@@ -493,7 +500,7 @@ test.describe("Authentication and session regression", () => {
     await expect(page).toHaveURL(/\/register$/)
   })
 
-  test("duplicate email registration displays inline server error alert", async ({
+  test("duplicate email registration displays server conflict feedback", async ({
     page,
   }) => {
     await mockApi(page, "USER")
@@ -513,11 +520,12 @@ test.describe("Authentication and session regression", () => {
       .getByRole("button", { name: "Create Account", exact: true })
       .click()
 
-    // 409 Conflict triggers inline form alert
+    // Registration errors are reported through the shared notification UI.
     await expect(
-      page.getByRole("alert").filter({
-        hasText: "This email is already registered. Sign in instead.",
-      }),
+      page.getByRole("button", { name: /Account unavailable/ }),
+    ).toBeVisible()
+    await expect(
+      page.getByText("This email is already registered. Sign in instead."),
     ).toBeVisible()
     await expect(page).toHaveURL(/\/register$/)
   })
@@ -584,7 +592,9 @@ test.describe("Authentication and session regression", () => {
       await page.goto("/dashboard")
       for (const path of ["/login", "/register"]) {
         await page.goto(path)
-        await expect(page).toHaveURL(/\/dashboard$/)
+        await expect(page).toHaveURL(
+          role === "USER" ? /\/dashboard$/ : /\/module$/,
+        )
         expect(
           await page.evaluate(() => sessionStorage.getItem("nexus.auth.token")),
         ).toBe("test-session")
@@ -636,7 +646,7 @@ test.describe("Authentication and session regression", () => {
     ).toHaveCount(0)
     unavailable = false
     await page.getByRole("button", { name: "Try again", exact: true }).click()
-    await expect(page).toHaveURL(/\/dashboard$/)
+    await expect(page).toHaveURL(/\/module$/)
     expect(
       await page.evaluate(() => sessionStorage.getItem("nexus.auth.token")),
     ).toBe("test-session")

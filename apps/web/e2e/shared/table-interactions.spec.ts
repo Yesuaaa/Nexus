@@ -129,15 +129,12 @@ for (const width of [1440, 390]) {
       route.fulfill({ json: alpha }),
     )
     await page.goto("/dashboard")
-    if (width < 768)
-      await page.getByRole("button", { name: "Open navigation menu" }).click()
-    const workspaceLink = page.getByRole("link", {
-      name: "Project Workspace",
-      exact: true,
-    })
-    await expect(workspaceLink).toBeVisible()
-    await expect(page).toHaveURL(/\/dashboard$/)
-    await workspaceLink.click()
+    await page
+      .getByRole("link", {
+        name: "Open Project Management workspace",
+        exact: true,
+      })
+      .click()
     await expect(page).toHaveURL(/\/project-workspace$/)
     await expect(
       page.getByRole("region", { name: "Project list" }).getByRole("table"),
