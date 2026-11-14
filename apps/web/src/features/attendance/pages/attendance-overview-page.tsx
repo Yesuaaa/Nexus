@@ -3,6 +3,7 @@ import Link from "next/link"
 import { useState } from "react"
 import { CircleCheck, Clock3, TriangleAlert, UsersRound } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { FilterSelect } from "@/components/ui/filter-select"
 import {
   BreakdownList,
   ItemList,
@@ -15,11 +16,16 @@ import {
   StatStrip,
   type StatStripItem,
 } from "@/components/ui/stat-strip"
+import { formatDateTime } from "@/lib/format"
 import { useAsyncResource } from "@/lib/use-async-resource"
 import { AttendanceShell } from "../components/attendance-shell"
 import { RangeFields, ResourceStatus } from "../components/attendance-shared"
-import { attendanceOverview } from "../api/attendance-api"
-import { defaultRange } from "../model/attendance"
+import {
+  attendanceDepartments,
+  attendanceOverview,
+  type AttendanceWorkday,
+} from "../api/attendance-api"
+import { attendanceStatusLabels, defaultRange } from "../model/attendance"
 
 function hours(value: number | undefined) {
   return value === undefined ? "—" : `${value.toFixed(2)} h`
@@ -27,9 +33,13 @@ function hours(value: number | undefined) {
 
 export function AttendanceOverviewPage() {
   const [range, setRange] = useState(defaultRange)
+  const [departmentId, setDepartmentId] = useState("")
+  const departments = useAsyncResource(attendanceDepartments, [], {
+    fallbackError: "Couldn't load departments.",
+  })
   const result = useAsyncResource(
-    (signal) => attendanceOverview(range.from, range.to, signal),
-    [range.from, range.to],
+    (signal) => attendanceOverview(range.from, range.to, departmentId, signal),
+    [range.from, range.to, departmentId],
     {
       enabled: Boolean(range.from && range.to),
       fallbackError: "Couldn't load attendance summaries.",
@@ -84,11 +94,49 @@ export function AttendanceOverviewPage() {
       tone: "warning",
     })
   }
+  if (data?.pendingCorrections) {
+    attentionRows.push({
+      id: "pending-corrections",
+      label: "Pending corrections",
+      note: `${data.pendingCorrections} awaiting review`,
+      tone: "warning",
+    })
+  }
+  if (data?.overnightReviews) {
+    attentionRows.push({
+      id: "overnight-reviews",
+      label: "Overnight reviews",
+      note: `${data.overnightReviews} require review`,
+      tone: "warning",
+    })
+  }
+  const statusOrder: AttendanceWorkday["status"][] = [
+    "COMPLETE",
+    "HOURS_MET",
+    "IN_PROGRESS",
+    "INCOMPLETE",
+    "NOT_STARTED",
+    "NOT_REQUIRED",
+  ]
+  const statusRows = statusOrder.map((status) => ({
+    id: status,
+    label: attendanceStatusLabels[status],
+    value: data?.statusBreakdown[status] ?? 0,
+  }))
+  const selectedDepartment = departments.data?.departments.find(
+    (department) => department.id === departmentId,
+  )
   const contextRows: ItemRow[] = [
     {
       id: "scope",
       label: "Reporting scope",
       note: scopeLabel,
+      tone: "muted",
+    },
+    {
+      id: "department",
+      label: "Department filter",
+      note: selectedDepartment?.name ?? "All permitted departments",
       tone: "muted",
     },
     {
@@ -103,6 +151,16 @@ export function AttendanceOverviewPage() {
       note: "Not classified as absences",
       tone: "muted",
     },
+    ...(data?.asOf
+      ? [
+          {
+            id: "updated",
+            label: "Last refreshed",
+            note: `${formatDateTime(data.asOf, "UTC")} UTC`,
+            tone: "muted" as const,
+          },
+        ]
+      : []),
   ]
   const metrics: StatStripItem[] = [
     {
@@ -153,10 +211,24 @@ export function AttendanceOverviewPage() {
         </Button>
       }
     >
-      <div className="mb-4">
+      <div className="mb-4 flex flex-wrap items-center gap-[10px]">
         <RangeFields
           {...range}
           onChange={(from, to) => setRange({ from, to })}
+        />
+        <FilterSelect
+          label="Attendance department"
+          value={departmentId}
+          disabled={departments.loading}
+          triggerClassName="w-[210px]"
+          options={[
+            { value: "", label: "All permitted departments" },
+            ...(departments.data?.departments ?? []).map((department) => ({
+              value: department.id,
+              label: department.name,
+            })),
+          ]}
+          onChange={setDepartmentId}
         />
       </div>
       <ResourceStatus
@@ -222,6 +294,23 @@ export function AttendanceOverviewPage() {
             )}
           </OverviewPanel>
           <OverviewPanel
+            title="Workday status"
+            description="Recorded workdays grouped by their current attendance status."
+          >
+            <BreakdownList
+              rows={statusRows}
+              loading={pending}
+              total={data?.recordedDays ?? 0}
+              unit="workdays"
+              empty={
+                unavailable
+                  ? "Attendance data unavailable."
+                  : "No recorded workdays in this range."
+              }
+              colorClass="bg-[#29906b]"
+            />
+          </OverviewPanel>
+          <OverviewPanel
             title={`${scopeLabel} attendance`}
             description="Figures cover recorded attendance only; missing days are not classified as absences."
           >
@@ -245,7 +334,7 @@ export function AttendanceOverviewPage() {
             loading={pending}
             empty={
               data?.recordedDays
-                ? "No active sessions or excess-hour workdays in this range."
+                ? "No attendance signals require follow-up in this range."
                 : "No recorded workdays in this range."
             }
             emptyTone={data?.recordedDays ? "success" : "muted"}

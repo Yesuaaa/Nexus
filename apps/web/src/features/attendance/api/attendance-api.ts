@@ -98,6 +98,7 @@ export type AttendancePolicy = {
   _count?: { assignments: number }
 }
 export type AttendanceOverview = {
+  asOf: string
   scope: "DEPARTMENT" | "ORGANIZATION"
   recordedDays: number
   employees: number
@@ -106,6 +107,9 @@ export type AttendanceOverview = {
   completeDays: number
   activeSessions: number
   excessDays: number
+  pendingCorrections: number
+  overnightReviews: number
+  statusBreakdown: Record<AttendanceWorkday["status"], number>
 }
 export type AttendanceMutation =
   | { action: "clock-in"; workdayId?: string }
@@ -210,10 +214,11 @@ export function attendanceAudit(
 export const attendanceOverview = (
   from: string,
   to: string,
+  departmentId = "",
   signal?: AbortSignal,
 ) =>
   apiRequest<AttendanceOverview>(
-    `${root}/overview?${new URLSearchParams({ from, to })}`,
+    `${root}/overview?${new URLSearchParams({ from, to, departmentId })}`,
     { signal },
   )
 export const attendancePolicies = (signal?: AbortSignal) =>

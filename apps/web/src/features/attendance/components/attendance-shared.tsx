@@ -1,17 +1,13 @@
 "use client"
-import { useState, type ReactNode } from "react"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { DateInput } from "@/components/ui/date-input"
-import { SearchField } from "@/components/ui/search-field"
-import { FilterSelect } from "@/components/ui/filter-select"
 import {
   TablePaginationFooter,
   pageRange,
 } from "@/components/ui/table-pagination-footer"
-import { useAsyncResource } from "@/lib/use-async-resource"
-import { attendanceEmployees, type Paging } from "../api/attendance-api"
+import { type Paging } from "../api/attendance-api"
 
 export function ResourceStatus({
   loading,
@@ -121,76 +117,5 @@ export function RangeFields({
         />
       </label>
     </div>
-  )
-}
-export function EmployeePicker({
-  value,
-  onChange,
-  departmentId = "",
-  allowAll = false,
-  children,
-}: {
-  value: string
-  onChange: (id: string) => void
-  departmentId?: string
-  allowAll?: boolean
-  children?: ReactNode
-}) {
-  const [search, setSearch] = useState("")
-  const [page, setPage] = useState(1)
-  const list = useAsyncResource(
-    (signal) => attendanceEmployees(search, page, signal, departmentId),
-    [search, page, departmentId],
-    { fallbackError: "Couldn't load employees." },
-  )
-  return (
-    <section aria-label="Attendance employee selection" className="min-w-0">
-      <div className="flex min-w-0 flex-wrap items-center gap-[10px] max-[560px]:flex-col max-[560px]:items-stretch">
-        <SearchField
-          label="Search attendance employees"
-          placeholder="Search employee name or ID"
-          value={search}
-          onChange={(event) => {
-            setSearch(event.target.value)
-            setPage(1)
-          }}
-        />
-        <FilterSelect
-          label="Select attendance employee"
-          value={value}
-          onChange={onChange}
-          disabled={list.loading}
-          placeholder="Select an employee"
-          options={[
-            ...(allowAll
-              ? [{ value: "", label: "All permitted employees" }]
-              : []),
-            ...(list.data?.employees ?? []).map((employee) => ({
-              value: employee.id,
-              label: `${employee.fullName} · ${employee.employeeId}`,
-            })),
-          ]}
-          triggerClassName="h-[34px] w-[220px] max-[560px]:w-full"
-        />
-        {children}
-      </div>
-      <ResourceStatus
-        loading={list.loading && !list.data}
-        error={list.error}
-        retry={list.retry}
-      />
-      {list.data && !list.loading && !list.data.total && (
-        <p className="text-xs text-[#738096]">
-          No employees match your search.
-        </p>
-      )}
-      {list.data && list.data.total > list.data.pageSize && (
-        <AttendancePagination
-          data={list.data}
-          onChange={setPage}
-          disabled={list.loading}
-        />
-      )}
-    </section>
   )
 }

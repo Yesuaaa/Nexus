@@ -164,22 +164,13 @@ export function AttendanceHistoryTable({
                         <Pill tone="info">Correction pending</Pill>
                       </div>
                     )}
-                    {day.activeSessionId && (
-                      <div className="mt-1">
-                        <Pill tone="warning">
-                          {day.activeBreakId
-                            ? "Open unpaid break"
-                            : "Open session"}
-                        </Pill>
-                      </div>
-                    )}
                     {overnight && (
                       <div className="mt-1">
                         <Pill tone="info">Overnight</Pill>
                       </div>
                     )}
                   </ResponsiveDataTableCell>
-                  <ResponsiveDataTableCell className="justify-self-end @max-[820px]:justify-self-end">
+                  <ResponsiveDataTableCell className="flex min-w-0 justify-start @max-[820px]:justify-self-end">
                     <RowActionsMenu
                       triggerId={actionId}
                       triggerLabel={`Actions for ${day.workDate}`}

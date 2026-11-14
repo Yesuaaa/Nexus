@@ -213,21 +213,105 @@ test("department head reviews scoped requests and HR policy settings work", asyn
   await expect(page.getByText("APPROVED", { exact: true })).toBeVisible()
   await page.goto("/attendance/records")
   await page
-    .getByRole("combobox", { name: "Select attendance employee", exact: true })
+    .getByRole("button", {
+      name: "View logs for Attendance staff",
+      exact: true,
+    })
     .click()
-  await page.getByRole("option", { name: /Attendance staff/ }).click()
   await expect(
     page.getByRole("table", { name: "Attendance history" }),
   ).toBeVisible()
+  await page.getByRole("button", { name: "Employees", exact: true }).click()
   await page
     .getByRole("combobox", { name: "Attendance department", exact: true })
     .click()
   await page
     .getByRole("option", { name: "Attendance browser department", exact: true })
     .click()
+  await expect(page.getByRole("table", { name: "Employees" })).toBeVisible()
+})
+
+test("time logs employee table preserves filters and opens individual or all logs", async ({
+  page,
+}) => {
+  await signIn(page, "admin")
+  await page.goto("/attendance/records")
+  const table = page.getByRole("table", { name: "Employees", exact: true })
+  await expect(table).toHaveAttribute("aria-busy", "false")
   await expect(
     page.getByRole("table", { name: "Attendance history" }),
+  ).toHaveCount(0)
+  const search = page.getByRole("searchbox", {
+    name: "Search attendance employees",
+  })
+  await search.fill("No matching employee")
+  await expect(table.getByText("No employees match your search.")).toBeVisible()
+  await search.fill("BROWSER-staff")
+  await expect(
+    table.getByRole("button", {
+      name: "View logs for Attendance staff",
+      exact: true,
+    }),
   ).toBeVisible()
+  const individual = page.waitForRequest((request) => {
+    const url = new URL(request.url())
+    return (
+      url.pathname === "/api/attendance/records" &&
+      url.searchParams.get("employeeId") === fixture.actors.staff.employeeId
+    )
+  })
+  await table
+    .getByRole("button", {
+      name: "View logs for Attendance staff",
+      exact: true,
+    })
+    .click()
+  await individual
+  await expect(
+    page.getByRole("heading", {
+      name: "Logs for Attendance staff",
+      exact: true,
+    }),
+  ).toBeVisible()
+  await expect(table).toHaveCount(0)
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await page.getByRole("button", { name: "Employees", exact: true }).click()
+  await expect(search).toHaveValue("BROWSER-staff")
+  const all = page.waitForRequest((request) => {
+    const url = new URL(request.url())
+    return (
+      url.pathname === "/api/attendance/records" &&
+      url.searchParams.get("employeeId") === ""
+    )
+  })
+  await page.getByRole("button", { name: "All logs", exact: true }).click()
+  await all
+  await expect(
+    page.getByRole("heading", { name: "All permitted employees", exact: true }),
+  ).toBeVisible()
+  for (const width of [390, 820, 1440]) {
+    await page.setViewportSize({ width, height: 1000 })
+    await assertNoPageOverflow(page)
+    await page.getByRole("button", { name: "Employees", exact: true }).click()
+    await expect(table).toBeVisible()
+    await assertNoPageOverflow(page)
+    await page.screenshot({
+      path: test.info().outputPath(`time-log-employees-${width}.png`),
+      fullPage: true,
+    })
+    await page
+      .getByRole("button", {
+        name: "View logs for Attendance staff",
+        exact: true,
+      })
+      .click()
+    await expect(
+      page.getByRole("table", { name: "Attendance history" }),
+    ).toBeVisible()
+    await assertNoPageOverflow(page)
+  }
+  await page.getByRole("button", { name: "Employees", exact: true }).click()
+  await expect(search).toHaveValue("BROWSER-staff")
 })
 
 for (const viewport of [
@@ -433,7 +517,7 @@ test("loaded attendance screens follow the Department Management design", async 
       await expect(page.getByLabel("Elapsed work")).toBeVisible()
     if (tab === "records")
       await expect(
-        page.getByRole("table", { name: "Attendance history" }),
+        page.getByRole("table", { name: "Employees" }),
       ).toHaveAttribute("aria-busy", "false")
     if (tab === "adjustments")
       await expect(
@@ -478,6 +562,15 @@ for (const viewport of [
     await expect(
       page.getByRole("heading", {
         name: "Attendance requirement coverage",
+        exact: true,
+      }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole("heading", { name: "Workday status", exact: true }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole("combobox", {
+        name: "Attendance department",
         exact: true,
       }),
     ).toBeVisible()

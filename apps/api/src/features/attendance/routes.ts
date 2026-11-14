@@ -4,7 +4,6 @@ import { recordIdParam } from "../../shared/validation.js"
 import { attendanceHandlers } from "./attendance.controller.js"
 import { createAttendanceService } from "./attendance.service.js"
 import { createAttendanceManagement } from "./attendance.management.js"
-import { parseAttendanceHistory } from "./attendance.schema.js"
 
 export function createAttendanceRouter(clock: () => Date = () => new Date()) {
   const router = Router()
@@ -27,12 +26,7 @@ export function createAttendanceRouter(clock: () => Date = () => new Date()) {
     res.json(await management.employees(req.auth!.user.id, req.query))
   })
   router.get("/overview", async (req, res) => {
-    res.json(
-      await management.overview(
-        req.auth!.user.id,
-        parseAttendanceHistory(req.query, clock()),
-      ),
-    )
+    res.json(await management.overview(req.auth!.user.id, req.query))
   })
   router.get("/policies", async (req, res) => {
     res.json(await management.policies(req.auth!.user.id))

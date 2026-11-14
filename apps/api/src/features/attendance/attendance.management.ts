@@ -473,14 +473,34 @@ export function createAttendanceManagement(clock: () => Date) {
         { isolationLevel: "RepeatableRead" },
       )
     },
-    async overview(userId: string, query: AttendanceHistoryQuery) {
+    async overview(userId: string, query: Record<string, unknown>) {
+      const input = object(query, ["from", "to", "departmentId"])
+      const range = parseAttendanceHistory(
+        { from: input.from, to: input.to },
+        clock(),
+      )
+      const requestedDepartment =
+        input.departmentId === undefined || input.departmentId === ""
+          ? undefined
+          : id(input.departmentId)
       return getPrisma()!.$transaction(
         async (tx) => {
-          const departmentId = await managementScope(tx, userId)
+          const scope = await managementScope(tx, userId)
+          if (scope && requestedDepartment && scope !== requestedDepartment)
+            fail(403, "Department is outside your attendance scope")
+          const departmentId = scope ?? requestedDepartment
+          if (
+            departmentId &&
+            !(await tx.department.findUnique({
+              where: { id: departmentId },
+              select: { id: true },
+            }))
+          )
+            fail(404, "Department not found")
           const now = clock()
           const rows = await tx.attendanceWorkday.findMany({
             where: {
-              workDate: { gte: query.from, lte: query.to },
+              workDate: { gte: range.from, lte: range.to },
               ...(departmentId ? { employee: { departmentId } } : {}),
             },
             include: attendanceWorkdayInclude,
@@ -492,6 +512,18 @@ export function createAttendanceManagement(clock: () => Date) {
               "Narrow the overview date range to at most 10,000 records",
             )
           const days = rows.map((day) => summarizeAttendance(day, now))
+          const statusBreakdown = {
+            NOT_STARTED: 0,
+            IN_PROGRESS: 0,
+            HOURS_MET: 0,
+            INCOMPLETE: 0,
+            COMPLETE: 0,
+            NOT_REQUIRED: 0,
+          }
+          for (const day of days) {
+            const status = day.status as keyof typeof statusBreakdown
+            statusBreakdown[status] += 1
+          }
           return {
             asOf: now,
             scope: departmentId ? "DEPARTMENT" : "ORGANIZATION",
@@ -507,6 +539,13 @@ export function createAttendanceManagement(clock: () => Date) {
             ).length,
             activeSessions: days.filter((day) => day.activeSessionId).length,
             excessDays: days.filter((day) => day.excessRequiresReview).length,
+            pendingCorrections: days.reduce(
+              (sum, day) => sum + day.pendingCorrections,
+              0,
+            ),
+            overnightReviews: days.filter((day) => day.overnightRequiresReview)
+              .length,
+            statusBreakdown,
           }
         },
         { isolationLevel: "RepeatableRead" },
