@@ -27,10 +27,7 @@ import {
   notifyOvertime,
   submitRecordedOvertime,
 } from "./attendance.overtime.js"
-import {
-  parseAttendanceHistory,
-  type AttendanceHistoryQuery,
-} from "./attendance.schema.js"
+import { parseAttendanceHistory } from "./attendance.schema.js"
 
 async function managementScope(
   tx: Prisma.TransactionClient,
