@@ -25,6 +25,8 @@ import { lockRows, lockServiceRequest } from "../../shared/db/locks.js"
 import { pageWindow, type Page } from "../../shared/query/pagination.js"
 import { parseWorkspaceIdentity } from "./workspace-identity.js"
 
+const terminalProjectStatuses: ProjectStatus[] = ["COMPLETED", "CANCELLED"]
+
 function validateEditablePlan(input: unknown): ProjectWorkPlan {
   const plan = readWorkPlan(input)
   if (
@@ -469,7 +471,7 @@ function workspaceRows(
         canManage &&
         !mixed &&
         groupProjects.some(
-          ({ status }) => !["COMPLETED", "CANCELLED"].includes(status),
+          ({ status }) => !terminalProjectStatuses.includes(status),
         ),
       workstreams: groupProjects.map((project) => ({
         ...projectWorkstream(project, includePlan, context.id),
@@ -1037,7 +1039,7 @@ export async function listApprovedBookings(userId: string) {
         },
         workspaceGroupId: null,
         templateKey: null,
-        status: { notIn: ["CANCELLED", "COMPLETED"] },
+        status: { notIn: terminalProjectStatuses },
       },
       select: {
         id: true,
@@ -1159,6 +1161,7 @@ export async function createProjectWorkspaces(userId: string, input: unknown) {
         ...scopedProjectWhere(context),
         workspaceGroupId: null,
         templateKey: null,
+        status: { notIn: terminalProjectStatuses },
       },
       include: {
         request: {
@@ -1230,7 +1233,12 @@ export async function createProjectWorkspaces(userId: string, input: unknown) {
             "Create the workspace and approve project staff before assigning tasks",
           )
         const changed = await tx.project.updateMany({
-          where: { id: project.id, workspaceGroupId: null, templateKey: null },
+          where: {
+            id: project.id,
+            workspaceGroupId: null,
+            templateKey: null,
+            status: { notIn: terminalProjectStatuses },
+          },
           data: {
             workspaceGroupId: group.id,
             templateKey,
@@ -1649,7 +1657,7 @@ export async function renameProjectWorkspace(
       )
     if (
       workspace.projects.every(({ status }) =>
-        ["COMPLETED", "CANCELLED"].includes(status),
+        terminalProjectStatuses.includes(status),
       )
     )
       throw new ServiceRequestsError(409, "Archived projects cannot be renamed")
@@ -2440,7 +2448,7 @@ export async function sendProjectDeliverableToClient(
       where: { id: projectId },
       select: { status: true },
     })
-    if (["COMPLETED", "CANCELLED"].includes(lockedStatus.status))
+    if (terminalProjectStatuses.includes(lockedStatus.status))
       throw new ServiceRequestsError(
         409,
         "Archived projects cannot share new deliverables",

@@ -7,7 +7,7 @@ test(
   "workspace reads and renames respect department ownership",
   { timeout: 120_000 },
   async (t) => {
-    const { prisma, origin } = await startPgliteApp(t)
+    const { prisma, origin, db } = await startPgliteApp(t)
     const [head, staff, client] = await Promise.all(
       ["head", "staff", "client"].map((name) =>
         prisma.user.create({
@@ -685,31 +685,35 @@ test(
       ).total,
       0,
     )
-    const quotation = await prisma.workflowQuotation.create({
-      data: {
-        requestId: booking.requestId,
-        version: 1,
-        scope: "Design",
-        deliverables: ["Design brief"],
-        lineItems: [],
-        total: 100,
-        currency: "PHP",
-        timeline: "One week",
-        paymentTerms: "Full payment",
-        paymentDue: 100,
-        validUntil: new Date("2030-01-01T00:00:00Z"),
-        createdById: head.id,
-      },
-    })
-    await prisma.workflowApproval.create({
-      data: {
-        requestId: booking.requestId,
-        quotationId: quotation.id,
-        amount: 100,
-        currency: "PHP",
-        approvedById: client.id,
-      },
-    })
+    async function approveBooking(projectRecord: { requestId: string | null }) {
+      assert.ok(projectRecord.requestId)
+      const quotation = await prisma.workflowQuotation.create({
+        data: {
+          requestId: projectRecord.requestId,
+          version: 1,
+          scope: "Design",
+          deliverables: ["Design brief"],
+          lineItems: [],
+          total: 100,
+          currency: "PHP",
+          timeline: "One week",
+          paymentTerms: "Full payment",
+          paymentDue: 100,
+          validUntil: new Date("2030-01-01T00:00:00Z"),
+          createdById: head.id,
+        },
+      })
+      await prisma.workflowApproval.create({
+        data: {
+          requestId: projectRecord.requestId,
+          quotationId: quotation.id,
+          amount: 100,
+          currency: "PHP",
+          approvedById: client.id,
+        },
+      })
+    }
+    await approveBooking(booking)
     const bookings = await headApi("/approved-bookings")
     assert.equal(bookings.status, 200)
     assert.deepEqual(
@@ -928,5 +932,129 @@ test(
       (await headApi(`/group%3A${created.workspaces[0].id}`)).status,
       200,
     )
+
+    const completedBooking = await project("Completed setup candidate", own.id)
+    const cancelledBooking = await project("Cancelled setup candidate", own.id)
+    await prisma.project.update({
+      where: { id: completedBooking.id },
+      data: { status: "COMPLETED" },
+    })
+    await prisma.project.update({
+      where: { id: cancelledBooking.id },
+      data: { status: "CANCELLED" },
+    })
+    await approveBooking(completedBooking)
+    await approveBooking(cancelledBooking)
+    const groupsBeforeTerminalRequests =
+      await prisma.projectWorkspaceGroup.count()
+    for (const terminalBooking of [completedBooking, cancelledBooking]) {
+      const rejectedSetup = await headApi("", "POST", {
+        requestIds: [terminalBooking.requestId],
+        templateKeys: { [terminalBooking.requestId!]: "website-development" },
+        structure: "SEPARATE",
+      })
+      assert.equal(rejectedSetup.status, 409)
+      const unchanged = await prisma.project.findUniqueOrThrow({
+        where: { id: terminalBooking.id },
+        select: { status: true, workspaceGroupId: true, workPlan: true },
+      })
+      assert.deepEqual(unchanged, {
+        status:
+          terminalBooking === completedBooking ? "COMPLETED" : "CANCELLED",
+        workspaceGroupId: null,
+        workPlan: null,
+      })
+    }
+    assert.equal(
+      await prisma.projectWorkspaceGroup.count(),
+      groupsBeforeTerminalRequests,
+    )
+    assert.equal(
+      (
+        await staffApi("", "POST", {
+          requestIds: [completedBooking.requestId],
+          templateKeys: {
+            [completedBooking.requestId!]: "website-development",
+          },
+          structure: "SEPARATE",
+        })
+      ).status,
+      403,
+    )
+
+    const racingBooking = await project("Setup status race candidate", own.id)
+    await approveBooking(racingBooking)
+    const otherDepartmentHead = await prisma.user.create({
+      data: {
+        email: "other-department-head@example.com",
+        fullName: "Other Department Head",
+        role: "STAFF",
+        passwordHash: "test-only",
+      },
+    })
+    await prisma.department.update({
+      where: { id: other.id },
+      data: { headId: otherDepartmentHead.id },
+    })
+    const otherDepartmentHeadApi = await apiFor(otherDepartmentHead)
+    assert.equal(
+      (
+        await otherDepartmentHeadApi("", "POST", {
+          requestIds: [racingBooking.requestId],
+          templateKeys: {
+            [racingBooking.requestId!]: "website-development",
+          },
+          structure: "SEPARATE",
+        })
+      ).status,
+      409,
+    )
+    const unauthorizedSetupState = await prisma.project.findUniqueOrThrow({
+      where: { id: racingBooking.id },
+      select: { status: true, workspaceGroupId: true, workPlan: true },
+    })
+    assert.deepEqual(unauthorizedSetupState, {
+      status: "PLANNED",
+      workspaceGroupId: null,
+      workPlan: null,
+    })
+    const escapedRequestId = racingBooking.requestId!.replaceAll("'", "''")
+    await db.exec(`
+      CREATE FUNCTION phase52_terminalize_setup_project() RETURNS trigger
+      LANGUAGE plpgsql AS $$
+      BEGIN
+        UPDATE "Project" SET "status" = 'CANCELLED'
+        WHERE "requestId" = '${escapedRequestId}';
+        RETURN NEW;
+      END;
+      $$;
+      CREATE TRIGGER phase52_terminalize_setup_project
+      AFTER INSERT ON "ProjectWorkspaceGroup"
+      FOR EACH ROW EXECUTE FUNCTION phase52_terminalize_setup_project();
+    `)
+    const groupsBeforeRacingRequest = await prisma.projectWorkspaceGroup.count()
+    const racedSetup = await headApi("", "POST", {
+      requestIds: [racingBooking.requestId],
+      templateKeys: { [racingBooking.requestId!]: "website-development" },
+      structure: "SEPARATE",
+    })
+    assert.equal(racedSetup.status, 409)
+    const rolledBack = await prisma.project.findUniqueOrThrow({
+      where: { id: racingBooking.id },
+      select: { status: true, workspaceGroupId: true, workPlan: true },
+    })
+    assert.deepEqual(rolledBack, {
+      status: "PLANNED",
+      workspaceGroupId: null,
+      workPlan: null,
+    })
+    assert.equal(
+      await prisma.projectWorkspaceGroup.count(),
+      groupsBeforeRacingRequest,
+    )
+    await db.exec(`
+      DROP TRIGGER phase52_terminalize_setup_project ON "ProjectWorkspaceGroup";
+      DROP FUNCTION phase52_terminalize_setup_project();
+    `)
   },
 )

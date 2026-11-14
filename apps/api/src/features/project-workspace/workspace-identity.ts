@@ -12,3 +12,12 @@ export function parseWorkspaceIdentity(value: string) {
     fail(400, "Invalid project workspace ID")
   return { id, kind }
 }
+
+export function projectWorkspaceIdentity(project: {
+  id: string
+  workspaceGroupId: string | null
+}) {
+  return project.workspaceGroupId
+    ? `group:${project.workspaceGroupId}`
+    : `ungrouped-project:${project.id}`
+}

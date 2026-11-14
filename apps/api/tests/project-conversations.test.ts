@@ -93,6 +93,15 @@ test(
         staff: { create: { employeeId: employee.id, approvedById: head.id } },
       },
     })
+    await prisma.projectWorkspaceGroup.create({
+      data: {
+        id: project.id,
+        name: "Colliding empty workspace",
+        structure: "SEPARATE",
+        clientId: client.id,
+        createdById: head.id,
+      },
+    })
     const planned = await prisma.project.create({
       data: {
         name: "Not started",
@@ -142,11 +151,22 @@ test(
         description: "Create a brand identity.",
         status: "IN_PROGRESS",
         startDate: project.startDate!.toISOString(),
-        workspaceId: project.id,
+        workspaceId: `ungrouped-project:${project.id}`,
         serviceName: service.name,
         referenceNumber: request.referenceNumber,
       })
     }
+    const typedWorkspace = await fetch(
+      `${base}/project-workspace/${encodeURIComponent(`ungrouped-project:${project.id}`)}`,
+      { headers: { authorization: `Bearer ${staff.token}` } },
+    )
+    assert.equal(typedWorkspace.status, 200)
+    assert.deepEqual(
+      (
+        (await typedWorkspace.json()) as { workstreams: { id: string }[] }
+      ).workstreams.map(({ id }) => id),
+      [project.id],
+    )
     assert.equal((await call(client, `/${planned.id}`)).status, 404)
     assert.equal((await fetch(`${base}/project-conversations`)).status, 401)
     for (const who of [outsider, otherClient, head]) {
@@ -592,5 +612,13 @@ test(
         assert.equal(cancelled.archived, true)
       },
     )
+    await prisma.project.update({
+      where: { id: project.id },
+      data: { workspaceGroupId: project.id },
+    })
+    const groupedHistory = (await (
+      await call(staff, `/${project.id}`)
+    ).json()) as { project: { workspaceId: string } }
+    assert.equal(groupedHistory.project.workspaceId, `group:${project.id}`)
   },
 )
