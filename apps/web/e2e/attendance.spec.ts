@@ -1,7 +1,9 @@
 import { test, expect, type Page } from "@playwright/test"
 import { spawn, type ChildProcess } from "node:child_process"
 import { createRequire } from "node:module"
+import { randomUUID } from "node:crypto"
 import path from "node:path"
+import { defaultPreferences } from "../src/features/settings/api/settings-api"
 
 test.describe.configure({ mode: "serial" })
 type Fixture = {
@@ -56,6 +58,37 @@ test.beforeAll(async () => {
     })
   })
 })
+async function routeAttendanceApi(page: Page) {
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url())
+    if (
+      [
+        "/api/request-conversations",
+        "/api/internal-conversations",
+        "/api/project-conversations",
+        "/api/auth/settings",
+      ].includes(url.pathname)
+    ) {
+      if (url.pathname === "/api/auth/settings")
+        return route.fulfill({
+          json: { preferences: defaultPreferences, sessions: [] },
+        })
+      return route.fulfill({
+        json: { conversations: [], nextCursor: null, unreadCount: 0 },
+      })
+    }
+    if (url.pathname === "/api/request-workflows/notifications")
+      return route.fulfill({ json: { notifications: [], unreadCount: 0 } })
+    const response = await route.fetch({
+      url: `${api}${url.pathname}${url.search}`,
+    })
+    await route.fulfill({ response })
+  })
+}
+test.beforeEach(async ({ page }) => routeAttendanceApi(page))
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: "ignoreErrors" })
+})
 test.afterAll(() => {
   server?.kill()
 })
@@ -65,6 +98,45 @@ async function signIn(page: Page, actor: string) {
     sessionStorage.setItem("nexus.auth.token", session.token)
     sessionStorage.setItem("nexus.auth.refreshToken", session.refreshToken)
   }, fixture.actors[actor])
+}
+async function createApprovedCorrection(
+  startedAt: string,
+  endedAt: string,
+  reason: string,
+) {
+  const createdResponse = await fetch(`${api}/api/attendance/adjustments`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${fixture.actors.staff.token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      type: "CORRECTION",
+      requestKey: randomUUID(),
+      startedAt,
+      endedAt,
+      reason,
+    }),
+  })
+  expect(createdResponse.status).toBe(201)
+  const created = (await createdResponse.json()) as {
+    adjustment: { id: string }
+  }
+  const reviewedResponse = await fetch(
+    `${api}/api/attendance/adjustments/${created.adjustment.id}/review`,
+    {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${fixture.actors.head.token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        decision: "APPROVED",
+        note: "Verified by the isolated browser fixture",
+      }),
+    },
+  )
+  expect(reviewedResponse.status).toBe(200)
 }
 async function clock(value: string) {
   const response = await fetch(`${api}/__attendance_clock`, {
@@ -185,32 +257,50 @@ test("unpaid break timer freezes and correction request uses the real API", asyn
     .getByRole("button", { name: "Submit request", exact: true })
     .click()
   await expect(page.getByRole("dialog")).toHaveCount(0)
+  await signIn(page, "head")
   await page.goto("/attendance/adjustments")
-  await expect(page.getByText("PENDING", { exact: true })).toBeVisible()
+  await expect(page.getByText("Pending", { exact: true })).toBeVisible()
 })
 
 test("department head reviews scoped requests and HR policy settings work", async ({
   page,
 }) => {
+  const requestReason = "Standalone head review fixture request"
+  const requestResponse = await fetch(`${api}/api/attendance/adjustments`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${fixture.actors.staff.token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      type: "CORRECTION",
+      requestKey: randomUUID(),
+      startedAt: "2026-11-10T02:00:00.000Z",
+      endedAt: "2026-11-10T03:00:00.000Z",
+      reason: requestReason,
+    }),
+  })
+  expect(requestResponse.status).toBe(201)
+
   await signIn(page, "head")
   await page.goto("/attendance/adjustments")
   await expect(
     page.getByRole("heading", { name: "OT & Agreements", exact: true }),
   ).toBeVisible()
-  await page
+  const requestRow = page.getByRole("row").filter({ hasText: requestReason })
+  await requestRow
     .getByRole("button", { name: /More actions for .* request/ })
-    .first()
     .click()
   await page
     .getByRole("menuitem", { name: "Approve request", exact: true })
     .click()
   await page
-    .getByLabel("Review note", { exact: true })
+    .getByRole("textbox", { name: "Review note", exact: true })
     .fill("Verified the service work with the department")
   await page
     .getByRole("button", { name: "Confirm decision", exact: true })
     .click()
-  await expect(page.getByText("APPROVED", { exact: true })).toBeVisible()
+  await expect(page.getByText("Approved", { exact: true })).toBeVisible()
   await page.goto("/attendance/records")
   await page
     .getByRole("button", {
@@ -221,7 +311,10 @@ test("department head reviews scoped requests and HR policy settings work", asyn
   await expect(
     page.getByRole("table", { name: "Attendance history" }),
   ).toBeVisible()
-  await page.getByRole("button", { name: "Employees", exact: true }).click()
+  await page
+    .getByRole("main", { name: "Attendance workspace" })
+    .getByRole("button", { name: "Employees", exact: true })
+    .click()
   await page
     .getByRole("combobox", { name: "Attendance department", exact: true })
     .click()
@@ -236,6 +329,7 @@ test("time logs employee table preserves filters and opens individual or all log
 }) => {
   await signIn(page, "admin")
   await page.goto("/attendance/records")
+  const workspace = page.getByRole("main", { name: "Attendance workspace" })
   const table = page.getByRole("table", { name: "Employees", exact: true })
   await expect(table).toHaveAttribute("aria-busy", "false")
   await expect(
@@ -253,11 +347,12 @@ test("time logs employee table preserves filters and opens individual or all log
       exact: true,
     }),
   ).toBeVisible()
-  const individual = page.waitForRequest((request) => {
-    const url = new URL(request.url())
+  const individual = page.waitForResponse((response) => {
+    const url = new URL(response.url())
     return (
       url.pathname === "/api/attendance/records" &&
-      url.searchParams.get("employeeId") === fixture.actors.staff.employeeId
+      url.searchParams.get("employeeId") === fixture.actors.staff.employeeId &&
+      response.status() === 200
     )
   })
   await table
@@ -275,13 +370,16 @@ test("time logs employee table preserves filters and opens individual or all log
   ).toBeVisible()
   await expect(table).toHaveCount(0)
   await expect(page.getByRole("dialog")).toHaveCount(0)
-  await page.getByRole("button", { name: "Employees", exact: true }).click()
+  await workspace
+    .getByRole("button", { name: "Employees", exact: true })
+    .click()
   await expect(search).toHaveValue("BROWSER-staff")
-  const all = page.waitForRequest((request) => {
-    const url = new URL(request.url())
+  const all = page.waitForResponse((response) => {
+    const url = new URL(response.url())
     return (
       url.pathname === "/api/attendance/records" &&
-      url.searchParams.get("employeeId") === ""
+      url.searchParams.get("employeeId") === "" &&
+      response.status() === 200
     )
   })
   await page.getByRole("button", { name: "All logs", exact: true }).click()
@@ -292,12 +390,23 @@ test("time logs employee table preserves filters and opens individual or all log
   for (const width of [390, 820, 1440]) {
     await page.setViewportSize({ width, height: 1000 })
     await assertNoPageOverflow(page)
-    await page.getByRole("button", { name: "Employees", exact: true }).click()
+    await workspace
+      .getByRole("button", { name: "Employees", exact: true })
+      .click()
     await expect(table).toBeVisible()
     await assertNoPageOverflow(page)
     await page.screenshot({
       path: test.info().outputPath(`time-log-employees-${width}.png`),
       fullPage: true,
+    })
+    const individualReload = page.waitForResponse((response) => {
+      const url = new URL(response.url())
+      return (
+        url.pathname === "/api/attendance/records" &&
+        url.searchParams.get("employeeId") ===
+          fixture.actors.staff.employeeId &&
+        response.status() === 200
+      )
     })
     await page
       .getByRole("button", {
@@ -305,13 +414,12 @@ test("time logs employee table preserves filters and opens individual or all log
         exact: true,
       })
       .click()
+    await individualReload
     await expect(
       page.getByRole("table", { name: "Attendance history" }),
     ).toBeVisible()
     await assertNoPageOverflow(page)
   }
-  await page.getByRole("button", { name: "Employees", exact: true }).click()
-  await expect(search).toHaveValue("BROWSER-staff")
 })
 
 for (const viewport of [
@@ -402,6 +510,7 @@ test("Admin policy creation and assignment are live; clients remain denied", asy
   await expect(page.getByRole("dialog")).toHaveCount(0)
   const clientPage = await page.context().newPage()
   await signIn(clientPage, "client")
+  await routeAttendanceApi(clientPage)
   await clientPage.goto("/attendance/my")
   await expect(clientPage).toHaveURL(/\/dashboard$/)
   await clientPage.close()
@@ -480,6 +589,12 @@ for (const viewport of [
 test("loaded attendance screens follow the Department Management design", async ({
   page,
 }) => {
+  const approvedReason = "Approved design fixture request"
+  await createApprovedCorrection(
+    "2026-11-11T02:00:00.000Z",
+    "2026-11-11T03:00:00.000Z",
+    approvedReason,
+  )
   await page.setViewportSize({ width: 1440, height: 1000 })
   await signIn(page, "admin")
   await page.goto("/departments")
@@ -523,7 +638,9 @@ test("loaded attendance screens follow the Department Management design", async 
       await expect(
         page
           .getByRole("table", { name: "Attendance requests" })
-          .getByText("APPROVED", { exact: true }),
+          .getByRole("row")
+          .filter({ hasText: approvedReason })
+          .getByText("Approved", { exact: true }),
       ).toBeVisible()
     if (tab === "settings")
       await expect(
@@ -595,6 +712,15 @@ for (const viewport of [
       viewport.width +
       "px",
     async ({ page }) => {
+      const date =
+        viewport.width === 390
+          ? "2026-11-12T02:00:00.000Z"
+          : viewport.width === 820
+            ? "2026-11-12T04:00:00.000Z"
+            : "2026-11-12T06:00:00.000Z"
+      const endDate = new Date(Date.parse(date) + 60 * 60 * 1000).toISOString()
+      const approvedReason = `Approved ${viewport.width}px fixture request`
+      await createApprovedCorrection(date, endDate, approvedReason)
       await page.setViewportSize(viewport)
       await signIn(page, "admin")
       for (const tab of ["records", "adjustments", "settings"]) {
@@ -610,7 +736,11 @@ for (const viewport of [
           ).toBeVisible()
         if (tab === "adjustments")
           await expect(
-            page.getByRole("table").getByText("APPROVED", { exact: true }),
+            page
+              .getByRole("table", { name: "Attendance requests" })
+              .getByRole("row")
+              .filter({ hasText: approvedReason })
+              .getByText("Approved", { exact: true }),
           ).toBeVisible()
         if (tab === "settings")
           await expect(
