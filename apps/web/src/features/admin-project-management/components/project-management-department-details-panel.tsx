@@ -132,7 +132,7 @@ export function ProjectManagementDepartmentDetailsPanel({
                     nameAdornment={<Pill>Department Head</Pill>}
                   />
                 ) : (
-                  <p className="m-0 text-xs text-[#738096]">Unassigned</p>
+                  <p className="m-0 text-xs text-[#65718a]">Unassigned</p>
                 )}
               </div>
             </section>
@@ -148,7 +148,7 @@ export function ProjectManagementDepartmentDetailsPanel({
                 >
                   Other Members
                 </h3>
-                <p className="mt-1 mb-0 text-[11px] text-[#738096]">
+                <p className="mt-1 mb-0 text-[11px] text-[#65718a]">
                   {otherMembers.length}{" "}
                   {otherMembers.length === 1 ? "member" : "members"}
                 </p>

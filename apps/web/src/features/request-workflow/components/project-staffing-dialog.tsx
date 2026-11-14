@@ -20,12 +20,14 @@ export function ProjectStaffingDialog({
   controls,
   mode,
   onClose,
+  onMutationSuccess,
   onReturnFocus,
 }: {
   workflow: Workflow
   controls: WorkflowControls
   mode: "activation" | "staffing"
   onClose: () => void
+  onMutationSuccess?: () => void
   /** Moves focus back when the element that opened the dialog is gone. */
   onReturnFocus: () => void
 }) {
@@ -86,7 +88,10 @@ export function ProjectStaffingDialog({
           employeeIds: selected.map((person) => person.id),
         })
       ) {
-        if (!activation) onClose()
+        if (!activation) {
+          onMutationSuccess?.()
+          onClose()
+        }
       } else
         setActionError(
           "Couldn't approve staffing. Your selection is saved here so you can retry.",

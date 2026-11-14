@@ -101,7 +101,7 @@ projectWorkspaceRouter.get("/directory", async (request, response) => {
       sort !== "name" &&
       sort !== "client" &&
       sort !== "projects") ||
-    (view !== "active" && view !== "archive")
+    (view !== "active" && view !== "archive" && view !== "all")
   )
     fail(400, "Invalid workspace directory filters")
   response.json(

@@ -548,7 +548,7 @@ type DirectoryOptions = {
   departmentId: string
   status: string
   sort: "recent" | "name" | "client" | "projects"
-  view: "active" | "archive"
+  view: "all" | "active" | "archive"
 }
 
 type DirectoryRecord = {
@@ -668,7 +668,7 @@ export async function listWorkspaceDirectory(
         GROUP BY a."workspaceGroupId", COALESCE(a."workspaceGroupId", a.id), g.name
       ), filtered AS (
         SELECT * FROM grouped
-        WHERE active = ${options.view === "active"}
+        WHERE (${options.view} = 'all' OR active = ${options.view === "active"})
           AND (${options.status} = '' OR ${options.status} = ANY(statuses::text[]))
           AND (${options.search} = '' OR name ILIKE ${search} OR "clientName" ILIKE ${search} OR "projectMatch")
       )

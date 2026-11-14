@@ -23,6 +23,23 @@ test("department directory state restores search, sort direction, and page from 
   )
 })
 
+test("department directory ignores the retired grid layout parameter", () => {
+  const state = parseDepartmentDirectoryState(
+    new URLSearchParams("search=Design&sort=projects&page=2&layout=grid"),
+  )
+
+  assert.deepEqual(state, {
+    search: "Design",
+    sort: "projects",
+    direction: "desc",
+    page: 2,
+  })
+  assert.equal(
+    serializeDepartmentDirectoryState(state),
+    "search=Design&sort=projects&page=2",
+  )
+})
+
 test("department directory state rejects unsupported values and repeated keys", () => {
   assert.deepEqual(
     parseDepartmentDirectoryState(

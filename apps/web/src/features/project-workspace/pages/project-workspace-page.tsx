@@ -24,6 +24,7 @@ import { KpiPieChart } from "@/components/ui/kpi-pie-chart"
 import { SearchField } from "@/components/ui/search-field"
 import {
   listProjectWorkspaces,
+  onProjectWorkspaceListChanged,
   type ProjectWorkspaceSummary,
 } from "../api/project-workspace-api"
 import { WorkspaceListTable } from "../components/workspace-list-table"
@@ -93,6 +94,7 @@ function StaffProjectWorkspacePage() {
     () => ({
       ...parsedState,
       departmentId: "",
+      view: parsedState.view === "archive" ? "archive" : "active",
       sort: parsedState.sort === "most-active" ? "most-active" : "recent",
     }),
     [parsedState],
@@ -154,6 +156,10 @@ function StaffProjectWorkspacePage() {
   const projectCounts = list.data?.projectCounts ?? emptyProjectCounts
   const resultsTruncated = list.data?.resultsTruncated ?? false
   const { loading, error, retry: refresh } = list
+  useEffect(
+    () => onProjectWorkspaceListChanged(refresh, { crossTabOnly: true }),
+    [refresh],
+  )
 
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase()
@@ -414,7 +420,7 @@ function StaffProjectWorkspacePage() {
           </div>
         </div>
         {resultsTruncated && (
-          <p role="status" className="mb-3 text-xs text-[#738096]">
+          <p role="status" className="mb-3 text-xs text-[#65718a]">
             Search, filters, and activity sorting use the first 200 assigned
             projects, so some results may be missing.
           </p>

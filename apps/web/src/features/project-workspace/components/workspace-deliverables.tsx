@@ -391,7 +391,7 @@ function DeliverableDetailsPanel({
                 <span className="block truncate text-xs font-medium text-[#203f8c]">
                   {row.deliverable.workflowFile.name}
                 </span>
-                <span className="mt-1 block text-[11px] text-[#738096]">
+                <span className="mt-1 block text-[11px] text-[#65718a]">
                   {formatBytes(row.deliverable.workflowFile.size)}
                 </span>
               </span>
@@ -469,7 +469,7 @@ function DeliverableDetailsPanel({
             )}
           </div>
         ) : (
-          <span className="mr-auto text-[11px] text-[#738096]">
+          <span className="mr-auto text-[11px] text-[#65718a]">
             {row.deliverable.deliveryStatus === "SENT_TO_CLIENT"
               ? "Shared with the client"
               : "Review the details and attachment above."}
@@ -705,7 +705,7 @@ export function WorkspaceDeliverables({
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="m-0 text-sm font-semibold">
           Project deliverables{" "}
-          <span className="font-normal text-[#738096]">
+          <span className="font-normal text-[#65718a]">
             {rows.length} deliverables
           </span>
         </h2>
@@ -717,8 +717,8 @@ export function WorkspaceDeliverables({
             value={query}
             onChange={(event) => setQuery(event.currentTarget.value)}
             placeholder="Search deliverables..."
-            containerClassName="w-full max-w-[300px] border-[#dfe4ec] bg-transparent px-3 text-[#738096] focus-within:ring-2 focus-within:ring-[#294c96] max-[1050px]:w-full max-[1050px]:max-w-[300px] max-[1050px]:flex-none"
-            className="text-[#182235] placeholder:text-[#8090a8]"
+            containerClassName="w-full max-w-[300px] border-[#dfe4ec] bg-transparent px-3 text-[#65718a] focus-within:ring-2 focus-within:ring-[#294c96] max-[1050px]:w-full max-[1050px]:max-w-[300px] max-[1050px]:flex-none"
+            className="text-[#182235] placeholder:text-[#65718a]"
           />
           <FilterSelect
             label="Filter deliverables by service"
@@ -857,7 +857,7 @@ export function WorkspaceDeliverables({
                       </span>
                       {deliverable.description && (
                         <span
-                          className="mt-1 block truncate text-[11px] text-[#738096]"
+                          className="mt-1 block truncate text-[11px] text-[#65718a]"
                           title={deliverable.description}
                         >
                           {deliverable.description}
@@ -875,7 +875,7 @@ export function WorkspaceDeliverables({
                           {deliverable.workflowFile.name}
                         </button>
                       ) : (
-                        <span className="text-[#738096]">
+                        <span className="text-[#65718a]">
                           {deliverable.workflowFile?.name ?? "No attachment"}
                         </span>
                       )}

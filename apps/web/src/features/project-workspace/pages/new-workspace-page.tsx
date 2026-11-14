@@ -209,7 +209,7 @@ export function NewWorkspacePanel({
 
       <SidePanelBody key={step}>
         {loading ? (
-          <p role="status" className="py-12 text-center text-sm text-[#738096]">
+          <p role="status" className="py-12 text-center text-sm text-[#65718a]">
             Loading approved bookings…
           </p>
         ) : error && !bookings.length ? (
@@ -308,7 +308,7 @@ function BookingStep({
         <h2 className="m-0 text-sm font-semibold text-[#263750]">
           No bookings ready for setup
         </h2>
-        <p className="mt-2 mb-0 text-xs text-[#738096]">
+        <p className="mt-2 mb-0 text-xs text-[#65718a]">
           A client must formally accept the quotation before a project can be
           created.
         </p>
@@ -324,7 +324,7 @@ function BookingStep({
         >
           Choose approved bookings
         </h2>
-        <p className="mt-1 mb-0 text-xs text-[#738096]">
+        <p className="mt-1 mb-0 text-xs text-[#65718a]">
           Select one or more bookings for the same client, up to eight.
         </p>
       </div>
@@ -359,7 +359,7 @@ function BookingStep({
                   {booking.name}
                 </strong>
                 <span
-                  className={`mt-1 block leading-5 ${checked ? "text-white/80" : "text-[#738096]"}`}
+                  className={`mt-1 block leading-5 ${checked ? "text-white/80" : "text-[#65718a]"}`}
                 >
                   {booking.serviceName} · {booking.client.fullName || "Client"}
                   {booking.referenceNumber
@@ -395,7 +395,7 @@ function StructureStep({
         >
           Choose the project structure
         </h2>
-        <p className="mt-1 mb-0 text-xs text-[#738096]">
+        <p className="mt-1 mb-0 text-xs text-[#65718a]">
           Decide whether each booking gets a workspace of its own.
         </p>
       </div>
@@ -414,7 +414,7 @@ function StructureStep({
                 : "One project, multiple services"}
             </strong>
             <span
-              className={`mt-2 block text-xs leading-5 ${structure === value ? "text-white/85" : "text-[#738096]"}`}
+              className={`mt-2 block text-xs leading-5 ${structure === value ? "text-white/85" : "text-[#65718a]"}`}
             >
               {value === "SEPARATE"
                 ? "Create one workspace and plan for each selected booking."
@@ -466,7 +466,7 @@ function TemplateStep({
         >
           Pick a delivery plan for each service
         </h2>
-        <p className="mt-1 mb-0 text-xs text-[#738096]">
+        <p className="mt-1 mb-0 text-xs text-[#65718a]">
           You can use a starter plan or build a custom one from scratch.
         </p>
       </div>
@@ -475,7 +475,7 @@ function TemplateStep({
           <section key={booking.requestId}>
             <h3 className="mb-3 text-xs font-semibold text-[#263750]">
               {booking.serviceName}
-              <span className="ml-2 font-normal text-[#738096]">
+              <span className="ml-2 font-normal text-[#65718a]">
                 · {booking.name}
               </span>
             </h3>
@@ -494,7 +494,7 @@ function TemplateStep({
                   >
                     <strong className="block text-xs">{template.name}</strong>
                     <span
-                      className={`mt-2 block text-[11px] leading-5 ${active ? "text-white/85" : "text-[#738096]"}`}
+                      className={`mt-2 block text-[11px] leading-5 ${active ? "text-white/85" : "text-[#65718a]"}`}
                     >
                       {template.description}
                     </span>
@@ -553,7 +553,7 @@ function ReviewStep({
         >
           Review project setup
         </h2>
-        <p className="mt-1 mb-0 text-xs text-[#738096]">
+        <p className="mt-1 mb-0 text-xs text-[#65718a]">
           Confirm the bookings and plans before creating the workspace.
         </p>
       </div>
@@ -596,7 +596,7 @@ function ReviewStep({
                     ? booking.name
                     : booking.serviceName}
                 </h3>
-                <p className="mt-1 mb-0 text-[11px] text-[#738096]">
+                <p className="mt-1 mb-0 text-[11px] text-[#65718a]">
                   {booking.serviceName} · {booking.client.fullName || "Client"}
                 </p>
               </div>
@@ -604,7 +604,7 @@ function ReviewStep({
                 <p className="m-0 text-xs font-medium text-[#263750]">
                   {template?.name || "Custom plan"}
                 </p>
-                <p className="mt-1 mb-0 text-[10px] text-[#738096]">
+                <p className="mt-1 mb-0 text-[10px] text-[#65718a]">
                   {plan
                     ? `${plan.phases.length} phases · ${tasks} tasks`
                     : `${template?.phases.length ?? 0} phases`}
@@ -614,7 +614,7 @@ function ReviewStep({
           )
         })}
       </div>
-      <p className="mt-4 mb-0 text-[11px] leading-5 text-[#738096]">
+      <p className="mt-4 mb-0 text-[11px] leading-5 text-[#65718a]">
         Templates suggest roles, not people. You can assign staff after the
         workspace is created.
       </p>

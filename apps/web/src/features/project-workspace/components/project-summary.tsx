@@ -65,7 +65,7 @@ export function ProjectSummary({
               ],
             ].map(([label, value]) => (
               <div key={label}>
-                <dt className="text-[#738096]">{label}</dt>
+                <dt className="text-[#65718a]">{label}</dt>
                 <dd className="m-0 mt-1.5 leading-5 font-medium">
                   {label === "Status" ? (
                     <span
@@ -89,7 +89,7 @@ export function ProjectSummary({
             {percent}
             <span className="text-xl">%</span>
           </p>
-          <p className="mt-0 mb-4 text-xs text-[#738096]">
+          <p className="mt-0 mb-4 text-xs text-[#65718a]">
             {done} of {tasks.length} tasks complete
           </p>
           <ProgressMeter
@@ -121,7 +121,7 @@ export function ProjectSummary({
               <h3 className="m-0 text-xs font-semibold">
                 Expected deliverables
               </h3>
-              <span className="text-[11px] text-[#738096]">
+              <span className="text-[11px] text-[#65718a]">
                 {stream.milestones?.filter(
                   (item) => item.deliveryStatus === "SENT_TO_CLIENT",
                 ).length ?? 0}{" "}
@@ -153,7 +153,7 @@ export function ProjectSummary({
                 ))}
               </ul>
             ) : (
-              <p className="text-xs text-[#738096]">
+              <p className="text-xs text-[#65718a]">
                 No deliverables recorded yet.
               </p>
             )}
@@ -171,7 +171,7 @@ export function ProjectSummary({
         <div className="flex items-center justify-between gap-3">
           <h2 className="m-0 text-sm font-semibold">
             Assigned staff{" "}
-            <span className="font-normal text-[#738096]">({staff.length})</span>
+            <span className="font-normal text-[#65718a]">({staff.length})</span>
           </h2>
           <button
             onClick={onViewTeam}
@@ -190,7 +190,7 @@ export function ProjectSummary({
                 <Avatar name={person.fullName} />
                 <div className="min-w-0">
                   <p className="m-0 truncate font-medium">{person.fullName}</p>
-                  <p className="mt-1 mb-0 truncate text-[11px] text-[#738096]">
+                  <p className="mt-1 mb-0 truncate text-[11px] text-[#65718a]">
                     {person.position || "Staff"}
                   </p>
                 </div>
@@ -198,7 +198,7 @@ export function ProjectSummary({
             ))}
           </div>
         ) : (
-          <p className="mb-0 mt-3 text-xs text-[#738096]">
+          <p className="mb-0 mt-3 text-xs text-[#65718a]">
             No staff assigned yet. The department head can approve staffing from
             Team.
           </p>

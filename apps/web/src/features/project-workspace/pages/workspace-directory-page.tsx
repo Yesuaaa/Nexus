@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation"
 import {
   Archive,
   FolderKanban,
+  FolderOpen,
+  Layers3,
   Plus,
   UserRound,
   UsersRound,
@@ -35,6 +37,7 @@ import { useDepartments } from "@/features/departments/hooks/use-departments"
 import { statusLabel } from "@/features/projects/model/project-status"
 import {
   listWorkspaceDirectory,
+  onProjectWorkspaceListChanged,
   type ProjectStatus,
   type WorkspaceDirectoryQuery,
 } from "../api/project-workspace-api"
@@ -90,7 +93,11 @@ export function WorkspaceDirectoryPage({
     }),
     [parsedDirectoryState],
   )
+  const directoryStateRef = useRef(directoryState)
   const canonicalSearchParams = serializeWorkspaceDirectoryState(directoryState)
+  useEffect(() => {
+    directoryStateRef.current = directoryState
+  }, [directoryState])
   const [searchDraft, setSearchDraft] = useState({
     source: directoryState.search,
     value: directoryState.search,
@@ -140,11 +147,11 @@ export function WorkspaceDirectoryPage({
   )
   const changePage = useCallback(
     (page: number) => {
-      const next = { ...directoryState, page }
+      const next = { ...directoryStateRef.current, page }
       const href = workspaceDirectoryHref(next, pathname)
       router.replace(href, { scroll: false })
     },
-    [directoryState, pathname, router],
+    [pathname, router],
   )
   useEffect(() => {
     if (rawSearchParams === canonicalSearchParams) return
@@ -162,6 +169,10 @@ export function WorkspaceDirectoryPage({
     initial: null,
     fallbackError: "Couldn't load project workspaces.",
   })
+  useEffect(
+    () => onProjectWorkspaceListChanged(list.retry, { crossTabOnly: true }),
+    [list.retry],
+  )
   function sortBy(value: WorkspaceDirectoryQuery["sort"]) {
     updateDirectoryState({ sort: value, page: 1 })
   }
@@ -195,7 +206,9 @@ export function WorkspaceDirectoryPage({
       : data?.hasWorkspaces
         ? archive
           ? "Archive is empty"
-          : "No active workspaces"
+          : directoryState.view === "all"
+            ? "No workspaces"
+            : "No active workspaces"
         : "No project workspaces yet"
   const departmentProjectCount = selectedDepartment?.projectCount ?? 0
   const departmentMemberCount = selectedDepartment?.memberCount ?? 0
@@ -242,7 +255,7 @@ export function WorkspaceDirectoryPage({
                 <span
                   role="group"
                   aria-label="Department project summary"
-                  className="mt-1.5 flex flex-wrap items-center text-xs leading-5 text-[#738096]"
+                  className="mt-1.5 flex flex-wrap items-center text-xs leading-5 text-[#65718a]"
                 >
                   {departmentMetadata.map(({ icon: Icon, label }, index) => (
                     <span
@@ -323,15 +336,16 @@ export function WorkspaceDirectoryPage({
           </div>
           <ManagementViewToggle
             className="ml-auto max-[560px]:ml-0"
-            active={!archive}
+            active={directoryState.view}
             ariaLabel="Workspace view"
             views={[
-              { value: true, label: "Active", icon: FolderKanban },
-              { value: false, label: "Archive", icon: Archive },
+              { value: "all", label: "All", icon: Layers3 },
+              { value: "active", label: "Active", icon: FolderOpen },
+              { value: "archive", label: "Archive", icon: Archive },
             ]}
-            onChange={(active) => {
+            onChange={(view) => {
               updateDirectoryState({
-                view: active ? "active" : "archive",
+                view,
                 status: "",
                 page: 1,
               })

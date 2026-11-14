@@ -796,21 +796,49 @@ test(
       where: { id: completed.id },
       data: { status: "COMPLETED" },
     })
+    const terminalOnly = await prisma.projectWorkspaceGroup.create({
+      data: {
+        name: "Completed workspace",
+        clientId: client.id,
+        createdById: head.id,
+        structure: "SEPARATE",
+      },
+    })
+    const completedOnlyProject = await project(
+      "Completed delivery",
+      own.id,
+      terminalOnly.id,
+    )
+    await prisma.project.update({
+      where: { id: completedOnlyProject.id },
+      data: { status: "COMPLETED" },
+    })
     const activeMixed = await directory("status=COMPLETED")
     assert.deepEqual(
       activeMixed.rows.map(({ id }) => id),
       [mixed.id],
     )
     assert.deepEqual(activeMixed.rows[0].statuses, ["PLANNED", "COMPLETED"])
-    assert.equal((await directory("view=archive&status=COMPLETED")).total, 0)
+    const archivedCompleted = await directory("view=archive&status=COMPLETED")
+    assert.equal(archivedCompleted.total, 1)
+    assert.deepEqual(
+      archivedCompleted.rows.map(({ id }) => id),
+      [terminalOnly.id],
+    )
+    const allCompleted = await directory("view=all&status=COMPLETED")
+    assert.equal(allCompleted.total, 2)
+    assert.deepEqual(
+      new Set(allCompleted.rows.map(({ id }) => id)),
+      new Set([mixed.id, terminalOnly.id]),
+    )
     await prisma.project.update({
       where: { id: visible.id },
       data: { status: "CANCELLED" },
     })
     const archived = await directory("view=archive")
     assert.deepEqual(
-      archived.rows.map(({ id }) => id),
-      [mixed.id],
+      new Set(archived.rows.map(({ id }) => id)),
+      new Set([mixed.id, terminalOnly.id]),
     )
     assert.equal(archived.rows[0].canRename, false)
 

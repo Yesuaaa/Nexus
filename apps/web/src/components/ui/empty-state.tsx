@@ -70,7 +70,7 @@ export function EmptyState({
       {description && (
         <p
           className={cn(
-            "mb-0 max-w-md text-xs leading-5 text-[#738096]",
+            "mb-0 max-w-md text-xs leading-5 text-[#65718a]",
             title ? "mt-1" : "mt-0",
           )}
         >

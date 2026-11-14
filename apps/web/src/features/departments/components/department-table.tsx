@@ -375,7 +375,7 @@ export function DepartmentTable({
                     )}
                   </span>
                   {department.code && (
-                    <span className="mt-0.5 block truncate text-[11px] text-[#738096]">
+                    <span className="mt-0.5 block truncate text-[11px] text-[#65718a]">
                       {department.code}
                     </span>
                   )}
@@ -384,13 +384,13 @@ export function DepartmentTable({
                   role="cell"
                   className="min-w-0 break-words @max-[820px]:col-span-2 @max-[820px]:col-start-1 @max-[820px]:row-start-2"
                 >
-                  <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
+                  <span className="mr-1.5 hidden text-[#65718a] @max-[820px]:inline">
                     {projectManagement ? "Department Head" : "Head"}
                   </span>
                   {department.head ? (
                     department.head.fullName || department.head.email
                   ) : (
-                    <span className="text-[#738096]">Unassigned</span>
+                    <span className="text-[#65718a]">Unassigned</span>
                   )}
                 </div>
                 {projectManagement ? (
@@ -399,7 +399,7 @@ export function DepartmentTable({
                       role="cell"
                       className="tabular-nums @max-[820px]:col-start-1 @max-[820px]:row-start-3"
                     >
-                      <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
+                      <span className="mr-1.5 hidden text-[#65718a] @max-[820px]:inline">
                         Members
                       </span>
                       {department.memberCount}
@@ -408,7 +408,7 @@ export function DepartmentTable({
                       role="cell"
                       className="tabular-nums @max-[820px]:col-start-2 @max-[820px]:row-start-3"
                     >
-                      <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
+                      <span className="mr-1.5 hidden text-[#65718a] @max-[820px]:inline">
                         No. of Projects
                       </span>
                       {department.projectCount ?? 0}
@@ -420,7 +420,7 @@ export function DepartmentTable({
                       role="cell"
                       className="tabular-nums @max-[820px]:col-start-1 @max-[820px]:row-start-3"
                     >
-                      <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
+                      <span className="mr-1.5 hidden text-[#65718a] @max-[820px]:inline">
                         Teams
                       </span>
                       {department.teamCount ?? 0}
@@ -429,7 +429,7 @@ export function DepartmentTable({
                       role="cell"
                       className="tabular-nums @max-[820px]:col-start-2 @max-[820px]:row-start-3"
                     >
-                      <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
+                      <span className="mr-1.5 hidden text-[#65718a] @max-[820px]:inline">
                         Employees
                       </span>
                       {department.memberCount}
@@ -438,7 +438,7 @@ export function DepartmentTable({
                       role="cell"
                       className="tabular-nums @max-[820px]:col-span-2 @max-[820px]:col-start-1 @max-[820px]:row-start-4"
                     >
-                      <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
+                      <span className="mr-1.5 hidden text-[#65718a] @max-[820px]:inline">
                         Services
                       </span>
                       {department.serviceCount ?? 0}

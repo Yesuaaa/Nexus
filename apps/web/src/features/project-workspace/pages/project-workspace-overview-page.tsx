@@ -146,6 +146,13 @@ export function ProjectWorkspaceOverviewPage() {
       caption: totalProjects
         ? "Across your department"
         : "No department projects yet",
+      href:
+        totalProjects > 0
+          ? workspaceDirectoryHref({
+              ...defaultWorkspaceDirectoryState,
+              view: "all",
+            })
+          : undefined,
       icon: FolderKanban,
       tone: "bg-[#e8eef8] text-[#284f9e]",
       meter: (
@@ -185,6 +192,14 @@ export function ProjectWorkspaceOverviewPage() {
       label: "Completed",
       value: (totals?.completed ?? 0).toLocaleString("en-US"),
       caption: "Projects completed",
+      href:
+        (totals?.completed ?? 0) > 0
+          ? workspaceDirectoryHref({
+              ...defaultWorkspaceDirectoryState,
+              status: "COMPLETED",
+              view: "all",
+            })
+          : undefined,
       icon: CheckCircle2,
       tone: "bg-[#e8eef8] text-[#4169bd]",
       meter: (
@@ -312,11 +327,11 @@ export function ProjectWorkspaceOverviewPage() {
             description="All lifecycle statuses across individual projects"
           >
             {unavailable ? (
-              <p className="m-0 text-xs leading-5 text-[#8a94a6]">
+              <p className="m-0 text-xs leading-5 text-[#65718a]">
                 Project status data is unavailable.
               </p>
             ) : totalProjects === 0 && !loading ? (
-              <p className="m-0 text-xs leading-5 text-[#8a94a6]">
+              <p className="m-0 text-xs leading-5 text-[#65718a]">
                 No department projects yet.
               </p>
             ) : (
@@ -342,7 +357,7 @@ export function ProjectWorkspaceOverviewPage() {
             description="Task-weighted completion across authorized projects"
           >
             {unavailable ? (
-              <p className="m-0 text-xs leading-5 text-[#8a94a6]">
+              <p className="m-0 text-xs leading-5 text-[#65718a]">
                 Workspace progress is unavailable.
               </p>
             ) : data && data.workspaceProgress.length > 0 ? (
@@ -371,7 +386,7 @@ export function ProjectWorkspaceOverviewPage() {
                   >
                     <div
                       aria-hidden="true"
-                      className="grid grid-cols-3 text-[10px] leading-none text-[#8a94a6] tabular-nums"
+                      className="grid grid-cols-3 text-[10px] leading-none text-[#65718a] tabular-nums"
                     >
                       <span>0%</span>
                       <span className="text-center">50%</span>
@@ -392,7 +407,7 @@ export function ProjectWorkspaceOverviewPage() {
                               >
                                 {workspace.name}
                               </Link>
-                              <span className="shrink-0 text-[#738096] tabular-nums">
+                              <span className="shrink-0 text-[#65718a] tabular-nums">
                                 {workspace.completedTasks}/
                                 {workspace.totalTasks} tasks · {progress}%
                               </span>
@@ -420,8 +435,8 @@ export function ProjectWorkspaceOverviewPage() {
                     title="Projects without work plans aren't counted in overall completion."
                     className="flex items-center justify-between gap-3 border-t border-[#eceef1] pt-3 text-xs"
                   >
-                    <span className="text-[#8a94a6]">Unplanned projects</span>
-                    <span className="shrink-0 font-medium tabular-nums text-[#738096]">
+                    <span className="text-[#65718a]">Unplanned projects</span>
+                    <span className="shrink-0 font-medium tabular-nums text-[#65718a]">
                       {totals?.projectsWithoutTasks.toLocaleString("en-US")}
                     </span>
                   </div>
@@ -435,7 +450,7 @@ export function ProjectWorkspaceOverviewPage() {
                 empty="No projects yet."
               />
             ) : (
-              <p className="m-0 text-xs leading-5 text-[#8a94a6]">
+              <p className="m-0 text-xs leading-5 text-[#65718a]">
                 No projects yet.
               </p>
             )}
@@ -446,7 +461,7 @@ export function ProjectWorkspaceOverviewPage() {
             description="Individual department projects by associated client"
           >
             {unavailable ? (
-              <p className="m-0 text-xs leading-5 text-[#8a94a6]">
+              <p className="m-0 text-xs leading-5 text-[#65718a]">
                 Client distribution is unavailable.
               </p>
             ) : (
@@ -472,14 +487,14 @@ export function ProjectWorkspaceOverviewPage() {
             description="Unfinished tasks due within the next 14 days"
             action={
               !unavailable && !loading && totals?.upcomingTasks ? (
-                <span className="text-[11px] font-medium text-[#738096]">
+                <span className="text-[11px] font-medium text-[#65718a]">
                   {totals.upcomingTasks} tasks
                 </span>
               ) : undefined
             }
           >
             {unavailable ? (
-              <p className="m-0 text-xs leading-5 text-[#8a94a6]">
+              <p className="m-0 text-xs leading-5 text-[#65718a]">
                 Task deadline data is unavailable.
               </p>
             ) : (
@@ -503,7 +518,7 @@ export function ProjectWorkspaceOverviewPage() {
             }
           >
             {unavailable ? (
-              <p className="m-0 text-xs leading-5 text-[#8a94a6]">
+              <p className="m-0 text-xs leading-5 text-[#65718a]">
                 Overdue task data is unavailable.
               </p>
             ) : (

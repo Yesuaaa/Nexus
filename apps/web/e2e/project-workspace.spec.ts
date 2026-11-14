@@ -296,7 +296,7 @@ test("Admin Project Management is department-first and opens read-only scoped wo
     })
   })
 
-  await page.goto("/project-management?page=4")
+  await page.goto("/project-management?layout=grid&page=4")
   await expect(page).toHaveURL(/\/project-management$/)
   const table = page.getByRole("table", {
     name: "Project Management departments",
@@ -304,6 +304,10 @@ test("Admin Project Management is department-first and opens read-only scoped wo
   await expect(
     page.getByRole("heading", { name: "Project Management" }),
   ).toBeVisible()
+  await expect(table).toBeVisible()
+  await expect(
+    page.getByRole("button", { name: "Grid", exact: true }),
+  ).toHaveCount(0)
   const departmentColumns = [
     "Department",
     "Department Head",
@@ -1360,6 +1364,13 @@ test("department workspace directory paginates, resets filters, and recovers fro
   await page.getByRole("button", { name: "Try again" }).click()
   await expect(
     page.getByRole("link", { name: "Project on page 1" }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("button", { name: "Grid", exact: true }),
+  ).toHaveCount(0)
+
+  await expect(
+    page.getByRole("link", { name: "Project on page 1" }),
   ).toHaveAttribute("href", "/project-workspace/ungrouped-project%3Aproject-1")
   expect(pageErrors).toEqual([])
   expect(effectEventErrors).toEqual([])
@@ -1581,7 +1592,7 @@ test("directory state survives typed detail and breadcrumb return navigation", a
   })
 
   await page.goto(
-    "/project-workspace?search=client-name&status=COMPLETED&sort=client&view=archive&page=2&ignored=value",
+    "/project-workspace?search=client-name&status=COMPLETED&sort=client&view=archive&layout=grid&page=2&ignored=value",
   )
   await expect(
     page.getByRole("searchbox", { name: "Search workspaces" }),
@@ -1592,14 +1603,18 @@ test("directory state survives typed detail and breadcrumb return navigation", a
   await expect
     .poll(() => new URL(page.url()).searchParams.get("ignored"))
     .toBeNull()
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get("layout"))
+    .toBeNull()
   const initialQuery = directoryRequests.at(-1)
   expect(initialQuery?.get("search")).toBe("client-name")
   expect(initialQuery?.get("status")).toBe("COMPLETED")
   expect(initialQuery?.get("sort")).toBe("client")
   expect(initialQuery?.get("view")).toBe("archive")
   expect(initialQuery?.get("page")).toBe("2")
+  expect(initialQuery?.get("layout")).toBeNull()
 
-  await page.getByRole("link", { name: row.name, exact: true }).click()
+  await page.getByRole("link", { name: row.name, exact: true }).first().click()
   await expect(page).toHaveURL(/\/project-workspace\/group%3Ashared-id\?/)
   await expect(
     page.getByRole("heading", { name: row.name, exact: true }),
@@ -1615,6 +1630,7 @@ test("directory state survives typed detail and breadcrumb return navigation", a
   expect(returned.get("status")).toBe("COMPLETED")
   expect(returned.get("sort")).toBe("client")
   expect(returned.get("view")).toBe("archive")
+  expect(returned.get("layout")).toBeNull()
   expect(returned.get("page")).toBe("2")
   await page.goBack()
   await expect(page).toHaveURL(
@@ -1853,10 +1869,28 @@ test("supported overview KPIs drill into the matching Management status filter",
   await expect(
     page.getByRole("heading", { name: "Project Overview" }),
   ).toBeVisible()
-  await expect(page.getByRole("link", { name: /Total Projects/ })).toHaveCount(
-    0,
-  )
-  await expect(page.getByRole("link", { name: /Completed/ })).toHaveCount(0)
+  const statusChart = page
+    .getByRole("region", { name: "Project status distribution" })
+    .getByRole("img", { name: /Project status distribution:/ })
+  await expect(statusChart).toBeVisible()
+  expect(
+    await statusChart.evaluate((element) => (element as HTMLElement).tabIndex),
+  ).toBe(-1)
+
+  await page.getByRole("link", { name: /Total projects/i }).click()
+  await expect(page).toHaveURL("/project-workspace?view=all")
+  await expect.poll(() => directoryRequests.length).toBeGreaterThan(0)
+  expect(directoryRequests.at(-1)?.get("view")).toBe("all")
+  await page.goBack()
+
+  await page.getByRole("link", { name: /completed/i }).click()
+  await expect(page).toHaveURL("/project-workspace?status=COMPLETED&view=all")
+  await expect
+    .poll(() => directoryRequests.at(-1)?.get("status"))
+    .toBe("COMPLETED")
+  expect(directoryRequests.at(-1)?.get("view")).toBe("all")
+  await page.goBack()
+
   await page.getByRole("link", { name: /in progress/i }).click()
   await expect(page).toHaveURL(/\/project-workspace\?status=IN_PROGRESS/)
   await expect
@@ -1870,6 +1904,146 @@ test("supported overview KPIs drill into the matching Management status filter",
   await expect
     .poll(() => directoryRequests.at(-1)?.get("status"))
     .toBe("ON_HOLD")
+})
+
+test("Admin Overview refreshes after a project cancellation in another tab", async ({
+  page,
+  context,
+}) => {
+  await restoreSession(page, "ADMIN")
+  let projectCancelled = false
+  let overviewRequests = 0
+  await page.route("**/api/project-management/overview", (route) => {
+    overviewRequests += 1
+    const hasProject = !projectCancelled
+    return route.fulfill({
+      json: {
+        totals: {
+          totalProjects: hasProject ? 1 : 0,
+          planned: 0,
+          inProgress: hasProject ? 1 : 0,
+          onHold: 0,
+          completed: 0,
+          cancelled: 0,
+          workspaceGroups: 0,
+          departmentsWithProjects: hasProject ? 1 : 0,
+          projectsWithoutDepartment: 0,
+          projectsWithTasks: 0,
+          projectsWithoutTasks: hasProject ? 1 : 0,
+          totalTasks: 0,
+          completedTasks: 0,
+          activeProjects: hasProject ? 1 : 0,
+          activeProjectsWithoutLead: hasProject ? 1 : 0,
+          activeProjectsWithoutTeam: hasProject ? 1 : 0,
+          activeAssignments: 0,
+        },
+        statusDistribution: hasProject
+          ? [{ status: "IN_PROGRESS", count: 1 }]
+          : [],
+        departments: [],
+        topStaffAssignments: [],
+        recentlyUpdatedProjects: hasProject
+          ? [
+              {
+                id: "project-one",
+                identity: "ungrouped-project:project-one",
+                name: "Cross-tab project",
+                status: "IN_PROGRESS",
+                updatedAt: "2026-11-14T00:00:00Z",
+                departmentId: "design",
+                departmentName: "Design",
+              },
+            ]
+          : [],
+      },
+    })
+  })
+
+  await page.goto("/project-management/overview")
+  await expect(
+    page.getByRole("heading", { name: "Project Management Overview" }),
+  ).toBeVisible()
+  await expect(
+    page.getByText("Cross-tab project", { exact: true }),
+  ).toBeVisible()
+  const overviewRequestsBeforeCancel = overviewRequests
+
+  const departmentHeadPage = await context.newPage()
+  await restoreSession(departmentHeadPage, "STAFF", {
+    account: { headOf: { id: "design", name: "Design" } },
+  })
+  let directoryRequests = 0
+  let cancellationRequests = 0
+  await departmentHeadPage.route("**/api/project-workspace/**", (route) => {
+    const pathname = decodeURIComponent(new URL(route.request().url()).pathname)
+    if (pathname.endsWith("/directory")) {
+      directoryRequests += 1
+      const rows: WorkspaceDirectoryRow[] = projectCancelled
+        ? []
+        : [
+            {
+              rowId: "ungrouped-project:project-one",
+              id: "project-one",
+              kind: "ungrouped-project",
+              name: "Cross-tab project",
+              clientName: "Client One",
+              statuses: ["IN_PROGRESS"],
+              projectCount: 1,
+              departmentNames: ["Design"],
+              updatedAt: "2026-11-14T00:00:00Z",
+              progress: null,
+              canManage: true,
+              canRename: false,
+            },
+          ]
+      return route.fulfill({
+        json: {
+          rows,
+          page: 1,
+          pageSize: 10,
+          total: rows.length,
+          totalPages: rows.length ? 1 : 0,
+          hasWorkspaces: true,
+        },
+      })
+    }
+    if (pathname.endsWith("/cancel")) {
+      cancellationRequests += 1
+      projectCancelled = true
+      return route.fulfill({ json: { saved: true } })
+    }
+    return route.fallback()
+  })
+
+  await departmentHeadPage.goto("/project-workspace")
+  await departmentHeadPage
+    .getByRole("button", { name: "More actions for Cross-tab project" })
+    .click()
+  const directoryRequestsBeforeCancel = directoryRequests
+  await departmentHeadPage
+    .getByRole("menuitem", { name: "Cancel project" })
+    .click()
+  const overviewRefresh = page.waitForResponse(
+    (response) =>
+      response.request().method() === "GET" &&
+      new URL(response.url()).pathname === "/api/project-management/overview",
+  )
+  await departmentHeadPage
+    .getByRole("dialog")
+    .getByRole("button", { name: "Cancel project" })
+    .click()
+  await overviewRefresh
+
+  await expect(
+    departmentHeadPage.getByText("No active workspaces"),
+  ).toBeVisible()
+  await expect(
+    page.getByText("No projects have been updated yet."),
+  ).toBeVisible()
+  expect(cancellationRequests).toBe(1)
+  expect(directoryRequests).toBe(directoryRequestsBeforeCancel + 1)
+  expect(overviewRequests).toBe(overviewRequestsBeforeCancel + 1)
+  await departmentHeadPage.close()
 })
 
 test("workspace detail errors stop loading and can be retried", async ({
@@ -1923,6 +2097,276 @@ test("workspace detail errors stop loading and can be retried", async ({
     page.getByRole("heading", { name: "Recovered workspace", exact: true }),
   ).toBeVisible()
   expect(attempts).toBe(attemptsBeforeRetry + 1)
+})
+
+test("workspace directory errors recover on retry", async ({ page }) => {
+  await restoreSession(page, "STAFF", {
+    account: { headOf: { id: "design", name: "Design" } },
+  })
+  let attempts = 0
+  await page.route("**/api/project-workspace/directory**", (route) => {
+    attempts += 1
+    if (attempts === 1)
+      return route.fulfill({
+        status: 503,
+        json: { error: "Directory unavailable" },
+      })
+    return route.fulfill({
+      json: {
+        rows: [
+          {
+            rowId: "ungrouped-project:retry-project",
+            id: "retry-project",
+            kind: "ungrouped-project",
+            name: "Recovered project",
+            clientName: "Client",
+            statuses: ["IN_PROGRESS"],
+            projectCount: 1,
+            departmentNames: ["Design"],
+            updatedAt: "2026-11-14T00:00:00Z",
+            progress: null,
+            canManage: true,
+            canRename: false,
+          },
+        ],
+        page: 1,
+        pageSize: 10,
+        total: 1,
+        totalPages: 1,
+        hasWorkspaces: true,
+      },
+    })
+  })
+
+  await page.goto("/project-workspace?view=all")
+  await expect(
+    page.locator('[role="alert"]').filter({ hasText: "Directory unavailable" }),
+  ).toBeVisible()
+  await page.getByRole("button", { name: "Try again" }).click()
+  await expect(
+    page.getByRole("link", { name: "Recovered project", exact: true }),
+  ).toBeVisible()
+  expect(attempts).toBe(2)
+})
+
+test("workspace detail refreshes across tabs after staffing and team-lead changes", async ({
+  page,
+  context,
+}) => {
+  await restoreSession(page, "STAFF", {
+    account: { headOf: { id: "design", name: "Design" } },
+  })
+  let assignedIds = ["employee-1"]
+  let teamLeadId: string | null = null
+  let failStaffing = false
+  const staff = [
+    {
+      id: "employee-1",
+      fullName: "Dani Worker",
+      position: "Designer",
+      status: "ACTIVE",
+      profileSpecialties: ["Design"],
+      approvedAt: "2026-11-01T00:00:00Z",
+    },
+    {
+      id: "employee-2",
+      fullName: "Alex Designer",
+      position: "Designer",
+      status: "ACTIVE",
+      profileSpecialties: ["Branding"],
+      approvedAt: "2026-11-02T00:00:00Z",
+    },
+  ]
+  function workspace() {
+    return {
+      id: "group:cross-tab-refresh",
+      rowId: "group:cross-tab-refresh",
+      kind: "group",
+      name: "Cross-tab workspace",
+      structure: "MULTI_WORKSTREAM",
+      status: "IN_PROGRESS",
+      client: { id: "client-1", fullName: "Mara Client" },
+      updatedAt: "2026-11-14T00:00:00Z",
+      activityCount: 0,
+      canCreate: true,
+      canManage: true,
+      canRename: true,
+      workstreams: [
+        {
+          id: "project-1",
+          requestId: "request-1",
+          name: "Design project",
+          description: null,
+          serviceName: "Website Design",
+          referenceNumber: "REQ-1",
+          workflowState: "ACTIVE_PROJECT",
+          status: "IN_PROGRESS",
+          startDate: null,
+          createdAt: "2026-11-01T00:00:00Z",
+          updatedAt: "2026-11-14T00:00:00Z",
+          templateKey: null,
+          taskCount: 0,
+          completedTaskCount: 0,
+          plan: null,
+          milestones: [],
+          canUploadDeliverables: false,
+          staff: staff
+            .filter(({ id }) => assignedIds.includes(id))
+            .map((person) => ({
+              ...person,
+              isTeamLead: person.id === teamLeadId,
+            })),
+          canAssign: true,
+        },
+      ],
+      activity: [],
+    }
+  }
+  function workflow() {
+    return {
+      request: {
+        id: "request-1",
+        referenceNumber: "REQ-1",
+        title: "Design project",
+        serviceName: "Website Design",
+        packageName: null,
+        pricingModel: null,
+        goals: "",
+        requirements: "",
+        expectedTimeline: "",
+        client: { id: "client-1", fullName: "Mara Client" },
+        department: { id: "design", name: "Design" },
+      },
+      state: "ACTIVE_PROJECT",
+      previousState: null,
+      version: 1,
+      nextAction: "",
+      consultationRequired: false,
+      quotationApprovalRequired: false,
+      permissions: {
+        manage: true,
+        isClient: false,
+        approveQuotation: false,
+        verifyPayment: false,
+      },
+      requirements: [],
+      files: [],
+      consultations: [],
+      quotations: [],
+      approval: {
+        quotationId: "quote-1",
+        amount: "0",
+        currency: "PHP",
+        approvedById: "head",
+        approvedAt: "2026-11-01T00:00:00Z",
+      },
+      agreement: null,
+      payment: null,
+      project: {
+        id: "project-1",
+        name: "Design project",
+        status: "IN_PROGRESS",
+      },
+      events: [],
+      internal: {
+        staff: staff.map((person) => ({
+          ...person,
+          skills: person.profileSpecialties,
+          activeProjectCount: 0,
+          assigned: assignedIds.includes(person.id),
+        })),
+        approvers: [],
+        quotationApproverId: null,
+        paymentVerifierId: null,
+        events: [],
+      },
+    }
+  }
+  async function mockPage(target: Page, requestCounts: { detail: number }) {
+    await target.route("**/api/project-workspace/**", (route) => {
+      const request = route.request()
+      const path = decodeURIComponent(new URL(request.url()).pathname)
+      if (
+        request.method() === "GET" &&
+        path.endsWith("/group:cross-tab-refresh")
+      ) {
+        requestCounts.detail += 1
+        return route.fulfill({ json: workspace() })
+      }
+      if (path.endsWith("/projects/project-1/team-lead")) {
+        teamLeadId = "employee-2"
+        return route.fulfill({ json: workspace() })
+      }
+      return route.fallback()
+    })
+    await target.route("**/api/request-workflows/request-1**", (route) => {
+      const request = route.request()
+      if (request.method() === "POST") {
+        if (failStaffing)
+          return route.fulfill({
+            status: 503,
+            json: { error: "Staffing unavailable" },
+          })
+        assignedIds = ["employee-1", "employee-2"]
+        return route.fulfill({ json: workflow() })
+      }
+      return route.fulfill({ json: workflow() })
+    })
+  }
+
+  const firstCounts = { detail: 0 }
+  const secondCounts = { detail: 0 }
+  await mockPage(page, firstCounts)
+  await page.goto("/project-workspace/group%3Across-tab-refresh")
+  await expect(
+    page.getByRole("heading", { name: "Cross-tab workspace" }),
+  ).toBeVisible()
+
+  const secondPage = await context.newPage()
+  await restoreSession(secondPage, "STAFF", {
+    account: { headOf: { id: "design", name: "Design" } },
+  })
+  await mockPage(secondPage, secondCounts)
+  await secondPage.goto("/project-workspace/group%3Across-tab-refresh")
+  await expect(
+    secondPage.getByRole("heading", { name: "Cross-tab workspace" }),
+  ).toBeVisible()
+  const firstBeforeStaffing = firstCounts.detail
+  const secondBeforeStaffing = secondCounts.detail
+
+  await page.getByRole("tab", { name: "Team" }).click()
+  await page.getByRole("button", { name: "Assign staff" }).click()
+  const staffing = page.getByRole("dialog", { name: "Manage project staff" })
+  await staffing.getByRole("checkbox", { name: "Alex Designer" }).check()
+  await staffing.getByRole("button", { name: "Save staffing" }).click()
+  await expect(staffing).toHaveCount(0)
+  await expect.poll(() => firstCounts.detail).toBe(firstBeforeStaffing + 1)
+  await expect.poll(() => secondCounts.detail).toBe(secondBeforeStaffing + 1)
+  await secondPage.getByRole("tab", { name: "Team" }).click()
+  await expect(secondPage.getByText("Alex Designer")).toBeVisible()
+
+  const firstBeforeTeamLead = firstCounts.detail
+  const secondBeforeTeamLead = secondCounts.detail
+  await page.getByRole("button", { name: "View Alex Designer" }).click()
+  await page.getByRole("button", { name: "Assign as team lead" }).click()
+  await expect.poll(() => secondCounts.detail).toBe(secondBeforeTeamLead + 1)
+  await expect.poll(() => firstCounts.detail).toBe(firstBeforeTeamLead)
+  await expect(secondPage.getByText("Team lead", { exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Close team member details" }).click()
+
+  const secondBeforeFailedStaffing = secondCounts.detail
+  failStaffing = true
+  await page.getByRole("button", { name: "Assign staff" }).click()
+  const failedStaffing = page.getByRole("dialog", {
+    name: "Manage project staff",
+  })
+  await failedStaffing
+    .getByRole("checkbox", { name: "Alex Designer" })
+    .uncheck()
+  await failedStaffing.getByRole("button", { name: "Save staffing" }).click()
+  await expect(failedStaffing).toContainText("Staffing unavailable")
+  expect(secondCounts.detail).toBe(secondBeforeFailedStaffing)
+  await secondPage.close()
 })
 
 test("ordinary Staff keep their Project Workspace link and cannot open Overview", async ({

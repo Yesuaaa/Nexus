@@ -10,7 +10,7 @@ import {
 test("workspace directory URL state parses and serializes one canonical filter set", () => {
   const state = parseWorkspaceDirectoryState(
     new URLSearchParams(
-      "search=%20Acme%20&status=IN_PROGRESS&sort=client&view=archive&page=2&departmentId=design-1&ignored=drop",
+      "search=%20Acme%20&status=IN_PROGRESS&sort=client&view=archive&layout=grid&page=2&departmentId=design-1&ignored=drop",
     ),
   )
 
@@ -44,12 +44,24 @@ test("company directory links keep the department filter on its own route", () =
 test("unsupported and repeated directory parameters reset safely", () => {
   const state = parseWorkspaceDirectoryState(
     new URLSearchParams(
-      "search=one&search=two&status=UNKNOWN&sort=bad&view=all&page=0&ignored=yes",
+      "search=one&search=two&status=UNKNOWN&sort=bad&view=everywhere&page=0&ignored=yes",
     ),
   )
 
   assert.deepEqual(state, defaultWorkspaceDirectoryState)
   assert.equal(serializeWorkspaceDirectoryState(state), "")
+})
+
+test("All view serializes for status drill-downs", () => {
+  const state = parseWorkspaceDirectoryState(
+    new URLSearchParams("status=COMPLETED&view=all"),
+  )
+
+  assert.equal(state.view, "all")
+  assert.equal(
+    workspaceDirectoryHref(state),
+    "/project-workspace?status=COMPLETED&view=all",
+  )
 })
 
 test("directory detail and Management links preserve canonical state", () => {
@@ -84,5 +96,24 @@ test("Staff workspace sort and filters survive typed detail navigation", () => {
   assert.equal(
     workspaceDirectoryHref(state),
     "/project-workspace?search=Brand+campaign&status=ON_HOLD&sort=most-active",
+  )
+})
+
+test("workspace directory ignores the retired grid layout parameter", () => {
+  const state = parseWorkspaceDirectoryState(
+    new URLSearchParams("layout=grid&search=Campaign&page=2"),
+  )
+
+  assert.deepEqual(state, {
+    page: 2,
+    departmentId: "",
+    search: "Campaign",
+    status: "",
+    sort: "recent",
+    view: "active",
+  })
+  assert.equal(
+    serializeWorkspaceDirectoryState(state),
+    "search=Campaign&page=2",
   )
 })

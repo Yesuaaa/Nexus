@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { ApiError } from "@/features/auth/api/auth-api"
 import { errorMessage } from "@/lib/error-message"
 import { watchVisibleRefresh } from "@/lib/visible-refresh"
@@ -121,13 +121,15 @@ export function usePaginatedList<R extends PageInfo, T>({
     loading || previewing,
   )
 
-  const fetchPage = useEffectEvent((signal: AbortSignal) =>
-    load({ page, signal }),
-  )
-  const accept = useEffectEvent((result: R) => {
-    acceptRows(getRows(result))
-    setData(result)
-    onLoaded?.(result)
+  const loadRef = useRef(load)
+  const acceptRef = useRef<(result: R) => void>(() => {})
+  useEffect(() => {
+    loadRef.current = load
+    acceptRef.current = (result) => {
+      acceptRows(getRows(result))
+      setData(result)
+      onLoaded?.(result)
+    }
   })
   const fallbackRef = useRef(fallbackError)
 
@@ -143,7 +145,8 @@ export function usePaginatedList<R extends PageInfo, T>({
     const run = () => {
       if (inFlight) return
       inFlight = true
-      fetchPage(controller.signal)
+      loadRef
+        .current({ page, signal: controller.signal })
         .then((result) => {
           if (!active) return
           const lastPage = Math.max(
@@ -155,7 +158,7 @@ export function usePaginatedList<R extends PageInfo, T>({
             return
           }
           hasLoaded = true
-          accept(result)
+          acceptRef.current(result)
           setFailure({ requestKey: "", message: "" })
           setResolved({ requestKey, viewKey })
         })

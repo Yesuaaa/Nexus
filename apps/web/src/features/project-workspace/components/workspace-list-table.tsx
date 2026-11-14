@@ -161,7 +161,7 @@ export function WorkspaceListTable({
               <ResponsiveDataTableCell
                 className={cn(cells[1], "truncate text-[#52627a]")}
               >
-                <span className="mr-2 hidden text-[#738096] @max-[900px]:inline">
+                <span className="mr-2 hidden text-[#65718a] @max-[900px]:inline">
                   Client
                 </span>
                 {("clientName" in workspace
@@ -170,7 +170,7 @@ export function WorkspaceListTable({
               </ResponsiveDataTableCell>
               <ResponsiveDataTableCell className={cells[2]}>
                 <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
-                  <span className="hidden shrink-0 text-[#738096] @max-[900px]:inline">
+                  <span className="hidden shrink-0 text-[#65718a] @max-[900px]:inline">
                     {directory ? "Progress" : "Services"}
                   </span>
                   {"projectCount" in workspace ? (
@@ -184,7 +184,7 @@ export function WorkspaceListTable({
                         />
                       </div>
                     ) : departmentScopedDirectory ? (
-                      <span className="shrink-0 text-[#738096]">Unplanned</span>
+                      <span className="shrink-0 text-[#65718a]">Unplanned</span>
                     ) : workspace.progress ? (
                       <span className="shrink-0 tabular-nums text-[#52627a]">
                         {workspace.progress.total > 0
@@ -192,7 +192,7 @@ export function WorkspaceListTable({
                           : "0%"}
                       </span>
                     ) : (
-                      <span className="shrink-0 text-[#738096]">Unplanned</span>
+                      <span className="shrink-0 text-[#65718a]">Unplanned</span>
                     )
                   ) : workspace.workstreams.length ? (
                     workspace.workstreams.map((workstream) => (
@@ -205,12 +205,12 @@ export function WorkspaceListTable({
                       </Pill>
                     ))
                   ) : (
-                    <span className="text-[#738096]">No services</span>
+                    <span className="text-[#65718a]">No services</span>
                   )}
                 </div>
               </ResponsiveDataTableCell>
               <ResponsiveDataTableCell className={cells[3]}>
-                <span className="mr-2 hidden text-[#738096] @max-[900px]:inline">
+                <span className="mr-2 hidden text-[#65718a] @max-[900px]:inline">
                   Status
                 </span>
                 {"statuses" in workspace && workspace.statuses.length > 1 ? (
@@ -240,7 +240,7 @@ export function WorkspaceListTable({
               <ResponsiveDataTableCell
                 className={cn(cells[4], "text-[#52627a]")}
               >
-                <span className="mr-2 hidden text-[#738096] @max-[900px]:inline">
+                <span className="mr-2 hidden text-[#65718a] @max-[900px]:inline">
                   Updated
                 </span>
                 <time dateTime={workspace.updatedAt}>

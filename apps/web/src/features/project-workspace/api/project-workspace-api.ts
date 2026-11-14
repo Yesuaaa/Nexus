@@ -16,15 +16,40 @@ export type {
 } from "@/features/project-management/model/project-contracts"
 
 const projectWorkspaceListChangedEvent = "project-workspace-list-changed"
+const projectWorkspaceListChangedStorageKey =
+  "nexus.project-workspace-list-changed"
 
 export function notifyProjectWorkspaceListChanged() {
   window.dispatchEvent(new Event(projectWorkspaceListChangedEvent))
+  try {
+    window.localStorage.setItem(
+      projectWorkspaceListChangedStorageKey,
+      `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    )
+  } catch {
+    // Keep same-tab refresh working when browser storage is unavailable.
+  }
 }
 
-export function onProjectWorkspaceListChanged(callback: () => void) {
-  window.addEventListener(projectWorkspaceListChangedEvent, callback)
-  return () =>
-    window.removeEventListener(projectWorkspaceListChangedEvent, callback)
+export function onProjectWorkspaceListChanged(
+  callback: () => void,
+  { crossTabOnly = false }: { crossTabOnly?: boolean } = {},
+) {
+  if (!crossTabOnly)
+    window.addEventListener(projectWorkspaceListChangedEvent, callback)
+  const handleStorage = (event: StorageEvent) => {
+    if (
+      event.key === projectWorkspaceListChangedStorageKey &&
+      event.newValue !== null
+    )
+      callback()
+  }
+  window.addEventListener("storage", handleStorage)
+  return () => {
+    if (!crossTabOnly)
+      window.removeEventListener(projectWorkspaceListChangedEvent, callback)
+    window.removeEventListener("storage", handleStorage)
+  }
 }
 
 export type ProjectTask = {

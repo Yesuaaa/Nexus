@@ -91,8 +91,8 @@ export function StatStrip({
                   className={cn(
                     "m-0 truncate text-[11px]",
                     unavailable
-                      ? "text-[#738096]"
-                      : (item.captionTone ?? "text-[#738096]"),
+                      ? "text-[#65718a]"
+                      : (item.captionTone ?? "text-[#65718a]"),
                   )}
                 >
                   {unavailable ? "Data unavailable" : item.caption}

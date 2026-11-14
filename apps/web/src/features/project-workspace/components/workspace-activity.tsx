@@ -54,7 +54,7 @@ export function WorkspaceActivity({
   return (
     <section aria-label="Project activity">
       <h2 className="m-0 text-sm font-semibold">Project activity</h2>
-      <p className="mt-1 mb-4 text-xs text-[#738096]">
+      <p className="mt-1 mb-4 text-xs text-[#65718a]">
         Changes to project details, work plans, tasks, and staffing.
       </p>
       <div className="mb-4 flex flex-wrap gap-2.5">
@@ -136,14 +136,14 @@ export function WorkspaceActivity({
                           {event.summary}
                         </p>
                         {workspace.workstreams.length > 1 && (
-                          <p className="mt-1 mb-0 text-[10px] text-[#738096]">
+                          <p className="mt-1 mb-0 text-[10px] text-[#65718a]">
                             {event.projectName}
                           </p>
                         )}
                       </div>
                       <time
                         dateTime={event.createdAt}
-                        className="shrink-0 text-[11px] text-[#738096]"
+                        className="shrink-0 text-[11px] text-[#65718a]"
                       >
                         {new Date(event.createdAt).toLocaleTimeString(
                           undefined,
@@ -156,7 +156,7 @@ export function WorkspaceActivity({
               </ol>
             </section>
           ))}
-          <p className="m-0 border-t border-[#edf0f4] px-5 py-3 text-[11px] text-[#738096]">
+          <p className="m-0 border-t border-[#edf0f4] px-5 py-3 text-[11px] text-[#65718a]">
             Showing {visible.length} activities
           </p>
         </div>

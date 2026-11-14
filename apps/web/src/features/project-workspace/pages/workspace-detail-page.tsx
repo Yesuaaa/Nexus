@@ -3,7 +3,7 @@ import { WorkspaceTeam } from "../components/workspace-team"
 import { WorkspaceActivity } from "../components/workspace-activity"
 import { WorkspaceDeliverables } from "../components/workspace-deliverables"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { CheckCircle2, ChevronDown, Pause, Play } from "lucide-react"
@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dropdown-styles"
 import {
   notifyProjectWorkspaceListChanged,
+  onProjectWorkspaceListChanged,
   saveProjectPlan,
   updateProjectWorkspaceStatus,
   type ProjectWorkPlan,
@@ -75,6 +76,10 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
         id: id.includes(":") ? id : project.data.workspace.id,
       }
     : null
+  useEffect(
+    () => onProjectWorkspaceListChanged(project.retry, { crossTabOnly: true }),
+    [project.retry],
+  )
   useBreadcrumbLabel(id, workspace?.name)
   const setWorkspace = (updated: ProjectWorkspaceDetail) => {
     project.setData((current) =>
@@ -267,7 +272,7 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
                         </span>
                       </DropdownMenuItem>
                       {!canComplete && (
-                        <p className="m-0 px-2.5 py-2 text-[11px] leading-4 text-[#738096]">
+                        <p className="m-0 px-2.5 py-2 text-[11px] leading-4 text-[#65718a]">
                           {completionBlockReason}
                         </p>
                       )}
@@ -316,7 +321,7 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
                 <TabsTrigger
                   key={item}
                   value={item}
-                  className="h-auto shrink-0 rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 text-xs text-[#738096] shadow-none data-[state=active]:border-[#203f8c] data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-[#203f8c] data-[state=active]:shadow-none"
+                  className="h-auto shrink-0 rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 text-xs text-[#65718a] shadow-none data-[state=active]:border-[#203f8c] data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-[#203f8c] data-[state=active]:shadow-none"
                 >
                   {item}
                 </TabsTrigger>
@@ -335,7 +340,7 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
                   <h2 className="text-sm font-semibold">
                     Edit plan · {editing.name}
                   </h2>
-                  <p className="text-xs text-[#738096]">
+                  <p className="text-xs text-[#65718a]">
                     Rename phases and tasks, add work, or remove items. Removing
                     a phase also removes its tasks when you save.
                   </p>
@@ -390,7 +395,7 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
             <TabsContent value="Team" className="m-0 outline-none">
               <WorkspaceTeam
                 workspace={workspace}
-                onUpdated={setWorkspace}
+                onUpdated={updateWorkspaceAndNotify}
                 onChanged={project.retry}
               />
             </TabsContent>

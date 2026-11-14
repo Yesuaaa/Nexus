@@ -14,8 +14,7 @@ export function KpiDonutChart({
     <div
       role="img"
       aria-label={label}
-      tabIndex={0}
-      className="relative h-full w-full rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#203f8c]"
+      className="relative h-full w-full rounded-sm"
     >
       <div
         className={`mx-auto flex items-center justify-center rounded-full ${size === "dashboard" ? "h-40 w-40" : "h-8 w-8"}`}

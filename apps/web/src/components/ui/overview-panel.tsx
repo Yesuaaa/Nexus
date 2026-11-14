@@ -47,7 +47,7 @@ export function OverviewPanel({
             {title}
           </h2>
           {description && (
-            <p className="mt-0.5 mb-0 text-xs leading-5 text-[#8a94a6]">
+            <p className="mt-0.5 mb-0 text-xs leading-5 text-[#65718a]">
               {description}
             </p>
           )}
@@ -73,7 +73,7 @@ function RowsSkeleton({ meters = true }: { meters?: boolean }) {
 }
 
 function EmptyText({ children }: { children: ReactNode }) {
-  return <p className="m-0 text-xs leading-5 text-[#8a94a6]">{children}</p>
+  return <p className="m-0 text-xs leading-5 text-[#65718a]">{children}</p>
 }
 
 export type BreakdownRow = {
@@ -118,11 +118,11 @@ export function BreakdownList({
               <span className="min-w-0 truncate font-medium text-[#182235]">
                 {row.label}
               </span>
-              <span className="shrink-0 text-[#738096] tabular-nums">
+              <span className="shrink-0 text-[#65718a] tabular-nums">
                 {row.value.toLocaleString("en-US")}
                 <span className="sr-only"> {unit}</span>
                 {share !== null && (
-                  <span className="ml-1.5 text-[#a3acba]">{share}%</span>
+                  <span className="ml-1.5 text-[#65718a]">{share}%</span>
                 )}
               </span>
             </div>
@@ -149,7 +149,7 @@ export type ItemRow = {
 const noteTones = {
   warning: "text-[#a45b12]",
   danger: "text-[#b4234d]",
-  muted: "text-[#738096]",
+  muted: "text-[#65718a]",
 }
 
 /** Named items with a short status note, e.g. departments needing a head. */
@@ -172,7 +172,7 @@ export function ItemList({
       <p
         className={cn(
           "m-0 text-xs leading-5",
-          emptyTone === "success" ? "text-[#25745b]" : "text-[#8a94a6]",
+          emptyTone === "success" ? "text-[#25745b]" : "text-[#65718a]",
         )}
       >
         {empty}
@@ -197,7 +197,7 @@ export function ItemList({
         ))}
       </ul>
       {rows.length > shown.length && (
-        <p className="mt-3 mb-0 text-[11px] text-[#8a94a6]">
+        <p className="mt-3 mb-0 text-[11px] text-[#65718a]">
           +{rows.length - shown.length} more
         </p>
       )}
@@ -248,7 +248,7 @@ export function MiniStats({
             <dt
               className={cn(
                 "truncate text-[11px]",
-                attention ? "text-[#805316]" : "text-[#8a94a6]",
+                attention ? "text-[#805316]" : "text-[#65718a]",
               )}
             >
               {item.label}
@@ -262,7 +262,7 @@ export function MiniStats({
               {loading ? <Skeleton className="mt-1 h-4 w-12" /> : item.value}
             </dd>
             {item.hint && !loading && (
-              <dd className="m-0 mt-0.5 truncate text-[11px] text-[#738096]">
+              <dd className="m-0 mt-0.5 truncate text-[11px] text-[#65718a]">
                 {item.hint}
               </dd>
             )}

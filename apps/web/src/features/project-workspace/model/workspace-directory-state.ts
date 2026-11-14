@@ -7,7 +7,7 @@ export type WorkspaceDirectoryState = {
   departmentId: string
   status: WorkspaceDirectoryStatus | ""
   sort: "recent" | "name" | "client" | "projects" | "most-active"
-  view: "active" | "archive"
+  view: "all" | "active" | "archive"
 }
 
 export const defaultWorkspaceDirectoryState: WorkspaceDirectoryState = {
@@ -78,7 +78,7 @@ export function parseWorkspaceDirectoryState(
         ? (sort as WorkspaceDirectoryState["sort"])
         : defaultWorkspaceDirectoryState.sort,
     view:
-      view === "active" || view === "archive"
+      view === "all" || view === "active" || view === "archive"
         ? view
         : defaultWorkspaceDirectoryState.view,
   }

@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect } from "react"
 import Link from "next/link"
 import { Activity, CheckCircle2, FolderKanban, PauseCircle } from "lucide-react"
 import { PageHeader } from "@/components/layout/page-header"
@@ -29,6 +30,7 @@ import {
 import { ProgressMeter, SegmentMeter } from "@/components/ui/stat-strip"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
+import { onProjectWorkspaceListChanged } from "@/features/project-workspace/api/project-workspace-api"
 import {
   projectStatusValues,
   type ProjectStatus,
@@ -173,7 +175,7 @@ function DepartmentBreakdown({
 
   if (departments.length === 0)
     return (
-      <p className="m-0 py-4 text-xs text-[#8a94a6]">
+      <p className="m-0 py-4 text-xs text-[#65718a]">
         No projects have been assigned to a department yet.
       </p>
     )
@@ -187,7 +189,7 @@ function DepartmentBreakdown({
         {projectStatusValues.map((status) => (
           <li
             key={status}
-            className="flex items-center gap-1.5 text-[10px] text-[#738096]"
+            className="flex items-center gap-1.5 text-[10px] text-[#65718a]"
           >
             <span
               aria-hidden="true"
@@ -223,7 +225,7 @@ function DepartmentBreakdown({
                     {department.departmentName}
                   </span>
                 )}
-                <span className="shrink-0 text-xs text-[#738096] tabular-nums">
+                <span className="shrink-0 text-xs text-[#65718a] tabular-nums">
                   {department.projectCount.toLocaleString("en-US")}{" "}
                   {department.projectCount === 1 ? "project" : "projects"}
                 </span>
@@ -238,7 +240,7 @@ function DepartmentBreakdown({
                     segments={departmentStatusSegments(department)}
                     label={`Project status mix for ${department.departmentName}`}
                   />
-                  <p className="mt-1.5 mb-0 text-[10px] leading-4 text-[#8a94a6]">
+                  <p className="mt-1.5 mb-0 text-[10px] leading-4 text-[#65718a]">
                     {departmentStatusSummary(department) || "No projects"}
                   </p>
                 </div>
@@ -261,14 +263,14 @@ function DepartmentBreakdown({
                         label={`${department.departmentName} task completion`}
                         colorClass="bg-[#4169bd]"
                       />
-                      <p className="mt-1.5 mb-0 text-[10px] text-[#8a94a6] tabular-nums">
+                      <p className="mt-1.5 mb-0 text-[10px] text-[#65718a] tabular-nums">
                         {department.completedTasks.toLocaleString("en-US")} of{" "}
                         {department.totalTasks.toLocaleString("en-US")} tasks
                         complete
                       </p>
                     </>
                   ) : (
-                    <p className="mt-1.5 mb-0 text-[10px] text-[#8a94a6]">
+                    <p className="mt-1.5 mb-0 text-[10px] text-[#65718a]">
                       No planned tasks
                     </p>
                   )}
@@ -333,7 +335,7 @@ function RecentProjectUpdates({
           <ResponsiveDataTableRow>
             <ResponsiveDataTableCell
               aria-colspan={3}
-              className="px-4 py-6 text-center text-xs text-[#8a94a6]"
+              className="px-4 py-6 text-center text-xs text-[#65718a]"
             >
               No projects have been updated yet.
             </ResponsiveDataTableCell>
@@ -354,7 +356,7 @@ function RecentProjectUpdates({
                 >
                   {project.name}
                 </span>
-                <span className="mt-1 block text-[10px] text-[#8a94a6] min-[701px]:hidden">
+                <span className="mt-1 block text-[10px] text-[#65718a] min-[701px]:hidden">
                   {formatDate(project.updatedAt)}
                 </span>
               </ResponsiveDataTableCell>
@@ -363,7 +365,7 @@ function RecentProjectUpdates({
                   {statusLabel(project.status)}
                 </Pill>
               </ResponsiveDataTableCell>
-              <ResponsiveDataTableCell className="text-right text-[11px] text-[#738096] tabular-nums max-[700px]:hidden">
+              <ResponsiveDataTableCell className="text-right text-[11px] text-[#65718a] tabular-nums max-[700px]:hidden">
                 {formatDate(project.updatedAt)}
               </ResponsiveDataTableCell>
             </ResponsiveDataTableRow>
@@ -379,6 +381,10 @@ export function ProjectManagementOverviewPage() {
   const overview = useAsyncResource(getProjectManagementOverview, [], {
     fallbackError: "Couldn't load company-wide project analytics.",
   })
+  useEffect(
+    () => onProjectWorkspaceListChanged(overview.retry),
+    [overview.retry],
+  )
   const data = overview.data
   const loading = overview.loading && !data
   const unavailable = Boolean(overview.error) && !data
@@ -527,7 +533,7 @@ export function ProjectManagementOverviewPage() {
                     size="dashboard"
                   />
                 ) : (
-                  <p className="m-0 text-center text-xs text-[#8a94a6]">
+                  <p className="m-0 text-center text-xs text-[#65718a]">
                     No project records yet.
                   </p>
                 )}
@@ -556,7 +562,7 @@ export function ProjectManagementOverviewPage() {
             description="Completion across valid work-plan tasks from projects in every status. Projects without tasks are excluded from the task denominator."
           >
             {unavailable ? (
-              <p className="m-0 text-xs leading-5 text-[#8a94a6]">
+              <p className="m-0 text-xs leading-5 text-[#65718a]">
                 Work-plan progress is unavailable.
               </p>
             ) : loading ? (
@@ -588,7 +594,7 @@ export function ProjectManagementOverviewPage() {
                       <p className="m-0 text-xs font-medium text-[#65718a]">
                         Overall task completion
                       </p>
-                      <p className="mt-1 mb-0 text-[11px] text-[#738096] tabular-nums">
+                      <p className="mt-1 mb-0 text-[11px] text-[#65718a] tabular-nums">
                         {totalTasks > 0
                           ? `${totals.completedTasks.toLocaleString("en-US")} of ${totalTasks.toLocaleString("en-US")} tasks complete`
                           : "No valid work-plan tasks are recorded yet."}
@@ -654,7 +660,7 @@ export function ProjectManagementOverviewPage() {
             description="Active includes planned, in progress, and on hold. Assignment bars compare counts among the staff shown, not utilization."
           >
             {unavailable ? (
-              <p className="m-0 text-xs leading-5 text-[#8a94a6]">
+              <p className="m-0 text-xs leading-5 text-[#65718a]">
                 Assignment figures are unavailable.
               </p>
             ) : (
@@ -700,7 +706,7 @@ export function ProjectManagementOverviewPage() {
                   <h3 className="m-0 text-xs font-semibold text-[#182235]">
                     Assignment distribution
                   </h3>
-                  <p className="mt-1 mb-3 text-[11px] leading-4 text-[#8a94a6]">
+                  <p className="mt-1 mb-3 text-[11px] leading-4 text-[#65718a]">
                     Bars compare active project assignments among the staff
                     shown.
                   </p>
@@ -728,7 +734,7 @@ export function ProjectManagementOverviewPage() {
                                 }
                               />
                             </div>
-                            <span className="shrink-0 text-xs text-[#738096] tabular-nums">
+                            <span className="shrink-0 text-xs text-[#65718a] tabular-nums">
                               {staff.activeProjects.toLocaleString("en-US")}{" "}
                               {staff.activeProjects === 1
                                 ? "project"

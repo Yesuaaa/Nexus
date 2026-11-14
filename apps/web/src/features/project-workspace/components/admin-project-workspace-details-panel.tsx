@@ -90,7 +90,7 @@ function WorkspaceSummary({
             nameAdornment={<Pill>Department Head</Pill>}
           />
         ) : (
-          <p className="m-0 text-xs text-[#738096]">Unassigned</p>
+          <p className="m-0 text-xs text-[#65718a]">Unassigned</p>
         )}
       </SidePanelSection>
 
@@ -108,7 +108,7 @@ function WorkspaceSummary({
               colorClass="bg-[#244993]"
             />
             {workspace.unplannedProjectCount > 0 && (
-              <p className="m-0 text-[11px] text-[#738096]">
+              <p className="m-0 text-[11px] text-[#65718a]">
                 {workspace.unplannedProjectCount} project
                 {workspace.unplannedProjectCount === 1 ? " has" : "s have"} no
                 work plan yet and are excluded from progress.
@@ -116,7 +116,7 @@ function WorkspaceSummary({
             )}
           </div>
         ) : (
-          <p className="m-0 text-xs text-[#738096]">Unplanned</p>
+          <p className="m-0 text-xs text-[#65718a]">Unplanned</p>
         )}
       </SidePanelSection>
 
@@ -133,7 +133,7 @@ function WorkspaceSummary({
             ))}
           </ul>
         ) : (
-          <p className="m-0 text-xs text-[#738096]">
+          <p className="m-0 text-xs text-[#65718a]">
             No project team members assigned.
           </p>
         )}
@@ -180,7 +180,7 @@ function ProjectListButton({
     >
       <span className="min-w-0 flex-1">
         <span className="block truncate font-semibold">{project.name}</span>
-        <span className="block truncate text-[11px] font-normal text-[#738096]">
+        <span className="block truncate text-[11px] font-normal text-[#65718a]">
           {statusLabel(project.status)} · {progress} · Lead:{" "}
           {leadNames || "Unassigned"}
         </span>
@@ -274,7 +274,7 @@ function ProjectDetails({
             ))}
           </ul>
         ) : (
-          <p className="m-0 text-xs text-[#738096]">No staff assigned yet</p>
+          <p className="m-0 text-xs text-[#65718a]">No staff assigned yet</p>
         )}
       </SidePanelSection>
 
@@ -304,7 +304,7 @@ function ProjectDetails({
               />
             </>
           ) : (
-            <p className="m-0 text-xs text-[#738096]">
+            <p className="m-0 text-xs text-[#65718a]">
               Unplanned · no task plan is recorded.
             </p>
           )}
@@ -329,7 +329,7 @@ function ProjectDetails({
                 <p className="m-0 break-words whitespace-pre-wrap text-xs leading-5 text-[#52627a]">
                   {event.summary}
                 </p>
-                <p className="m-0 flex flex-wrap gap-x-1 break-words text-[11px] text-[#738096]">
+                <p className="m-0 flex flex-wrap gap-x-1 break-words text-[11px] text-[#65718a]">
                   <span>{event.actor?.fullName || "System"}</span>
                   <span aria-hidden="true">·</span>
                   <time dateTime={event.createdAt}>

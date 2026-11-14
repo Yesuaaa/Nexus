@@ -106,7 +106,7 @@ export function WorkspaceOverview({
                   </div>
                 )}
                 {!stream.plan && (
-                  <p className="p-3 text-xs text-[#738096]">
+                  <p className="p-3 text-xs text-[#65718a]">
                     A delivery template has not been selected yet.
                   </p>
                 )}
@@ -221,7 +221,7 @@ export function WorkspaceOverview({
                                     )}
                                     <div>
                                       <p className="m-0">{task.title}</p>
-                                      <p className="mt-1 mb-0 text-[10px] text-[#738096]">
+                                      <p className="mt-1 mb-0 text-[10px] text-[#65718a]">
                                         {task.role}
                                       </p>
                                     </div>
@@ -239,7 +239,7 @@ export function WorkspaceOverview({
                                     {taskStatusLabels[task.status]}
                                   </span>
                                 </td>
-                                <td className="whitespace-nowrap px-3 py-3 text-center align-middle text-[#738096]">
+                                <td className="whitespace-nowrap px-3 py-3 text-center align-middle text-[#65718a]">
                                   {task.dueDate
                                     ? new Date(
                                         `${task.dueDate}T00:00:00`,
@@ -260,7 +260,7 @@ export function WorkspaceOverview({
                           />
                         </table>
                         {!phase.tasks.length && (
-                          <p className="text-xs text-[#738096]">
+                          <p className="text-xs text-[#65718a]">
                             No tasks in this phase yet.
                           </p>
                         )}
