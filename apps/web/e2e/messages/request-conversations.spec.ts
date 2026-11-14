@@ -877,6 +877,32 @@ test("messages page handles an empty inbox and a failed conversation list", asyn
   ).toHaveCount(1)
 })
 
+test("malformed request deep links return to the inbox without fetching a thread", async ({
+  page,
+}) => {
+  await mock(page, stateFixture(), "USER")
+  const threadReads: string[] = []
+  page.on("request", (request) => {
+    const pathname = new URL(request.url()).pathname
+    if (/^\/api\/request-conversations\/[^/]+$/.test(pathname))
+      threadReads.push(pathname)
+  })
+
+  await page.goto("/messages?request=invalid%20id")
+
+  const nav = page.getByRole("navigation", {
+    name: "Conversations",
+    exact: true,
+  })
+  await expect(
+    nav.getByRole("link", { name: /Dani Head, Design:/ }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("region", { name: "Request conversation", exact: true }),
+  ).toHaveCount(0)
+  expect(threadReads).toEqual([])
+})
+
 for (const role of ["STAFF", "ADMIN", "SUPERADMIN"] as const) {
   test(`${role} without client requests can open internal Messages`, async ({
     page,
@@ -2442,6 +2468,23 @@ for (const role of ["USER", "STAFF"] as const) {
     ).toBeVisible()
   })
 }
+
+test("archive filtering remains keyboard operable when its pointer target is overlapped", async ({
+  page,
+}) => {
+  await mock(page, sharedFixture(), "USER")
+  await page.goto("/messages")
+
+  const archive = page.getByRole("button", {
+    name: "Archived conversations",
+    exact: true,
+  })
+  await expect(archive).toBeVisible()
+  await archive.focus()
+  await expect(archive).toBeFocused()
+  await page.keyboard.press("Enter")
+  await expect(page).toHaveURL(/\/messages\?view=archived$/)
+})
 
 for (const width of [1440, 390]) {
   for (const role of ["STAFF", "USER"] as const) {

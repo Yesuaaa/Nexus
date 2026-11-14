@@ -170,6 +170,17 @@ test(
       })
 
     await t.test(
+      "malformed conversation identifiers are rejected before record lookup",
+      async () => {
+        const response = await history("invalid id", client)
+        assert.equal(response.status, 400)
+        assert.deepEqual(await response.json(), {
+          error: "Invalid request id",
+        })
+      },
+    )
+
+    await t.test(
       "concurrent acceptance reuses one client-department conversation",
       async () => {
         const [acceptedA, acceptedB] = await Promise.all([
