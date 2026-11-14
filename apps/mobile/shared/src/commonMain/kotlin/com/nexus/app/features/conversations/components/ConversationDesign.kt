@@ -109,7 +109,7 @@ fun FileAttachmentCard(file: WorkflowFile, onDownload: () -> Unit) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(ConversationStyle.Background).border(1.dp, ConversationStyle.Divider, RoundedCornerShape(8.dp)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Icon(Icons.Outlined.Description, null, Modifier.size(20.dp), tint = ConversationStyle.Navy)
-            Text(file.name, color = ConversationStyle.Navy, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(file.name, modifier = Modifier.weight(1f), color = ConversationStyle.Navy, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("File \u00B7 ${maxOf(1, file.size / 1024)} KB", Modifier.weight(1f), fontSize = 12.sp, color = ConversationStyle.Muted)

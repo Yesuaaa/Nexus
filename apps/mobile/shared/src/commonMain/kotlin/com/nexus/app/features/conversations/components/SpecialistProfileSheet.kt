@@ -85,7 +85,7 @@ fun SpecialistProfileSheet(profile: SpecialistProfile, department: String, onClo
             HorizontalDivider(color = ConversationStyle.Divider)
             Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text("View the specialist's background and featured work from your request conversation.", fontSize = 12.sp, lineHeight = 18.sp, color = ConversationStyle.Muted)
-                OutlinedButton(onClick = onClose, modifier = Modifier.fillMaxWidth().height(48.dp), shape = NexusButtonShape, border = BorderStroke(1.dp, ConversationStyle.Border)) {
+                OutlinedButton(onClick = onClose, modifier = Modifier.fillMaxWidth().height(40.dp), shape = NexusButtonShape, border = BorderStroke(1.dp, ConversationStyle.Border)) {
                     Text("Close profile", fontSize = 14.sp, color = ConversationStyle.Navy)
                 }
             }

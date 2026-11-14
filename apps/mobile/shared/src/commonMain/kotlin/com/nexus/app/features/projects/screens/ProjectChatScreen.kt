@@ -36,7 +36,7 @@ fun ProjectChatScreen(id: String, userId: String, onBack: () -> Unit, onDelivera
             while (isActive) { viewModel.refresh(id); delay(15_000) }
         }
     }
-    LaunchedEffect(state.sentCount) { if (state.sentCount > 0) { text = ""; list.animateScrollToItem((state.history?.messages?.size ?: 0).coerceAtLeast(0)) } }
+    LaunchedEffect(state.sentCount) { if (state.sentCount > 0) { text = ""; list.scrollToItem((state.history?.messages?.size ?: 0).coerceAtLeast(0)) } }
     Column(Modifier.fillMaxSize().background(NexusColors.SurfaceLight).imePadding().padding(horizontal = 20.dp)) {
         ProjectBack("Back to project", onBack)
         if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = NexusColors.PrimaryBlue)

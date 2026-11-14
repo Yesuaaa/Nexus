@@ -35,6 +35,16 @@ class NotificationsViewModel(private val repository: ClientCommunicationReposito
             navigate(notification.requestId)
         } }
     }
+    fun openGroup(notifications: List<WorkflowNotification>, navigate: (String) -> Unit) {
+        val latest = notifications.maxByOrNull { it.createdAt } ?: return
+        if (mutation?.isActive == true) return
+        mutation = viewModelScope.launch { perform {
+            repository.checkRequestAccess(latest.requestId)
+            notifications.filter { it.readAt == null }.forEach { repository.readNotification(it.id) }
+            refresh()
+            navigate(latest.requestId)
+        } }
+    }
     private suspend fun perform(block: suspend () -> Unit) {
         try { block() } catch (e: CancellationException) { throw e }
         catch (e: Exception) { mutable.update { it.copy(error = e.message ?: "Unable to load notifications") } }

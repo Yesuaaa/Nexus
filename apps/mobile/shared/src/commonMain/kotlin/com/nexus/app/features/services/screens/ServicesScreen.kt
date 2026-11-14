@@ -1,5 +1,7 @@
 package com.nexus.app.features.services.screens
 
+import com.nexus.app.core.components.LocalNexusBottomPadding
+import com.nexus.app.core.components.NexusSearchField
 import com.nexus.app.core.components.NexusDialogButton
 import com.nexus.app.core.components.NexusAlertDialog
 import com.nexus.app.core.theme.NexusButtonShape
@@ -15,7 +17,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -52,13 +53,13 @@ fun ServicesScreen(
     val selectedPrice = selectedPackage?.price() ?: service?.price().orEmpty()
     LazyColumn(
         modifier.fillMaxSize().background(Color(0xFFF7F8FA)).imePadding(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp,
+        contentPadding = PaddingValues(start = 24.dp, end = 24.dp,
             top = when {
                 state.receipt != null -> 24.dp
                 state.step > 1 -> 0.dp
                 else -> 20.dp
-            }, bottom = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            }, bottom = 20.dp + LocalNexusBottomPadding.current),
+        verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
         if (state.receipt != null) {
             val receipt = state.receipt!!
@@ -83,17 +84,7 @@ fun ServicesScreen(
                 OutlinedButton(shape = NexusButtonShape, onClick = { viewModel.goTo(if (state.packageSelected) 3 else 2) }) { Text("Continue your draft") }
             }
             item { BookingProgress(1) }
-            item { OutlinedTextField(
-                state.search, viewModel::search, modifier = Modifier.fillMaxWidth(), singleLine = true,
-                placeholder = { Text("Search services", color = NexusColors.TextSecondary) },
-                leadingIcon = { Icon(Icons.Outlined.Search, "Search services", tint = NexusColors.TextSecondary, modifier = Modifier.size(20.dp)) },
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White,
-                    disabledContainerColor = Color.White
-                ),
-                shape = RoundedCornerShape(10.dp)
-            ) }
+            item { NexusSearchField(state.search, viewModel::search, "Search services") }
             item {
                 val departments = state.services.flatMap { it.departments }.distinctBy { it.id }
                 FilterMenu(departments.find { it.id == state.department }?.name ?: "All services",
@@ -114,20 +105,22 @@ fun ServicesScreen(
                 }
             }
             items(services.chunked(2), key = { it.first().id }) { row ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                     row.forEach { item ->
                         Card(onClick = { viewModel.showDetails(item) }, modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp),
                             colors = CardDefaults.cardColors(containerColor = NexusColors.ServiceCardNavy)) {
-                            ServiceImage(item.imageUrl, item.imageAltText ?: item.name, Modifier.fillMaxWidth().height(88.dp))
-                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(item.name, fontSize = 14.sp, lineHeight = 20.sp,
-                                    minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                            ServiceImage(item.imageUrl, item.imageAltText ?: item.name, Modifier.fillMaxWidth().height(64.dp))
+                            Column(Modifier.fillMaxWidth().height(96.dp).padding(horizontal = 10.dp, vertical = 6.dp)) {
+                                Text(item.name, fontSize = 13.sp, lineHeight = 16.sp,
+                                    maxLines = 2, overflow = TextOverflow.Ellipsis,
                                     fontWeight = FontWeight.SemiBold, color = Color.White)
-                                Text(item.price(), fontSize = 11.sp, lineHeight = 16.sp,
-                                    minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                Spacer(Modifier.height(6.dp))
+                                Text(item.price(), fontSize = 11.sp, lineHeight = 14.sp,
+                                    maxLines = 2, overflow = TextOverflow.Ellipsis,
                                     color = Color.White.copy(alpha = 0.85f))
-                                Text("Request service  +", fontSize = 12.sp, lineHeight = 18.sp,
+                                Spacer(Modifier.weight(1f))
+                                Text("Request service  +", fontSize = 12.sp, lineHeight = 16.sp,
                                     maxLines = 1, color = Color.White)
                             }
                         }
@@ -154,7 +147,7 @@ fun ServicesScreen(
                 item { BookingPanel("Selected service") {
                     Text(service.name, fontWeight = FontWeight.SemiBold)
                     Text(service.departments.joinToString { it.name }, fontSize = 12.sp, color = NexusColors.TextSecondary)
-                    TextButton(shape = NexusButtonShape, onClick = { viewModel.showDetails(service) }) { Text("View service details") }
+                    TextButton(shape = NexusButtonShape, contentPadding = PaddingValues(0.dp), modifier = Modifier.align(Alignment.Start), onClick = { viewModel.showDetails(service) }) { Text("View service details") }
                 } }
                 item { PageHeading("Packages & pricing", "Choose a service option to see what's included.") }
                 if (service.packages.none { it.isActive }) {
@@ -193,6 +186,8 @@ fun ServicesScreen(
                 item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { toast.show("Draft saved", "Your draft is kept while you continue in the app.", com.nexus.app.core.components.ToastKind.INFO) },
                         enabled = !locked, shape = NexusButtonShape,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, NexusColors.PrimaryBlue),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NexusColors.PrimaryBlue),
                         modifier = Modifier.heightIn(min = 44.dp)) { Text("Save requirements") }
                     BookingContinueButton(onClick = { viewModel.goTo(4) }, enabled = !locked,
                         modifier = Modifier.weight(1f))
