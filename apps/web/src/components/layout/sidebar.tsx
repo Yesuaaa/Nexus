@@ -279,6 +279,20 @@ function SidebarLink({
   )
 }
 
+/**
+ * Within a module, Overview → Management slides forward and back again
+ * (see ModuleTransition); jumps between modules switch without a slide.
+ */
+function groupTransition(
+  group: NavGroup,
+  href: string,
+  pathname: string,
+): string[] | undefined {
+  const inGroup = group.links.some((link) => link.href === pathname)
+  if (!inGroup || href === pathname) return undefined
+  return [href.endsWith("/overview") ? "nav-back" : "nav-forward"]
+}
+
 /** Expandable group: a toggle row and its indented sub-links. */
 function GroupDisclosure({
   group,
@@ -332,6 +346,7 @@ function GroupDisclosure({
                 <Link
                   key={link.href}
                   href={link.href}
+                  transitionTypes={groupTransition(group, link.href, pathname)}
                   aria-label={link.ariaLabel}
                   aria-current={active ? "page" : undefined}
                   onClick={onNavigate}
@@ -399,6 +414,7 @@ function GroupFlyout({
             >
               <Link
                 href={link.href}
+                transitionTypes={groupTransition(group, link.href, pathname)}
                 aria-label={link.ariaLabel}
                 aria-current={active ? "page" : undefined}
                 onClick={onNavigate}
