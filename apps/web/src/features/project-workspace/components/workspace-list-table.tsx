@@ -6,6 +6,7 @@ import { ProgressMeter } from "@/components/ui/stat-strip"
 import {
   ResponsiveDataTable,
   ResponsiveDataTableBody,
+  ResponsiveDataTableCell,
   ResponsiveDataTableColumnHeader,
   ResponsiveDataTableHeader,
 } from "@/components/ui/responsive-data-table"
@@ -25,18 +26,8 @@ import { WorkspaceListRowActions } from "./workspace-list-row-actions"
 
 const grid =
   "grid grid-cols-[minmax(140px,1.4fr)_minmax(100px,1fr)_minmax(120px,1.2fr)_minmax(90px,.8fr)_minmax(100px,.9fr)_112px] items-center gap-3.5 @max-[900px]:grid-cols-[minmax(0,1fr)_auto]"
-const departmentScopedGrid =
-  "grid grid-cols-[minmax(140px,1.4fr)_minmax(100px,1fr)_minmax(120px,1.2fr)_minmax(90px,.8fr)_minmax(100px,.9fr)_112px] items-center gap-3.5 @max-[900px]:grid-cols-[minmax(0,1fr)_auto]"
 
 const cells = [
-  "min-w-0 @max-[900px]:col-start-1 @max-[900px]:row-start-1",
-  "min-w-0 @max-[900px]:col-span-2 @max-[900px]:row-start-2",
-  "min-w-0 @max-[900px]:col-span-2 @max-[900px]:row-start-3",
-  "min-w-0 @max-[900px]:col-span-2 @max-[900px]:row-start-4",
-  "min-w-0 @max-[900px]:col-span-2 @max-[900px]:row-start-5",
-  "@max-[900px]:col-start-2 @max-[900px]:row-start-1",
-]
-const departmentScopedCells = [
   "min-w-0 @max-[900px]:col-start-1 @max-[900px]:row-start-1",
   "min-w-0 @max-[900px]:col-span-2 @max-[900px]:row-start-2",
   "min-w-0 @max-[900px]:col-span-2 @max-[900px]:row-start-3",
@@ -48,17 +39,12 @@ const departmentScopedCells = [
 type WorkspaceRow = ProjectWorkspaceSummary | WorkspaceDirectoryRow
 
 function workspaceKey(workspace: WorkspaceRow) {
-  return "rowId" in workspace ? workspace.rowId : workspace.id
+  return workspace.rowId
 }
 
-function rowClass(
-  _workspace: WorkspaceRow,
-  _index: number,
-  isLast: boolean,
-  departmentScopedDirectory = false,
-) {
+function rowClass(_workspace: WorkspaceRow, _index: number, isLast: boolean) {
   return cn(
-    departmentScopedDirectory ? departmentScopedGrid : grid,
+    grid,
     "h-[58px] border-b border-[#eceef1] bg-background px-4 py-[7px] text-xs text-foreground transition-colors hover:bg-[#e8eef2] @max-[900px]:h-[210px] @max-[900px]:gap-y-2",
     isLast && "rounded-b-[7px] border-b-0",
   )
@@ -88,7 +74,7 @@ export function WorkspaceListTable({
   directoryState?: WorkspaceDirectoryState
 }) {
   const { formatDate } = useDatePreferences()
-  const rowGrid = departmentScopedDirectory ? departmentScopedGrid : grid
+  const rowGrid = grid
   return (
     <ResponsiveDataTable
       label={
@@ -133,9 +119,7 @@ export function WorkspaceListTable({
               rowGrid,
               "h-[58px] px-4 py-[7px] @max-[900px]:h-[210px] @max-[900px]:gap-y-2",
             )}
-            cellClassNames={
-              departmentScopedDirectory ? departmentScopedCells : cells
-            }
+            cellClassNames={cells}
           />
         </ResponsiveDataTableBody>
       ) : (
@@ -143,7 +127,7 @@ export function WorkspaceListTable({
           items={workspaces}
           getKey={workspaceKey}
           rowClassName={(workspace, index, isLast) =>
-            rowClass(workspace, index, isLast, departmentScopedDirectory)
+            rowClass(workspace, index, isLast)
           }
           viewKey={viewKey}
           quickKey={quickKey}
@@ -157,7 +141,7 @@ export function WorkspaceListTable({
           }
           renderRow={(workspace) => (
             <>
-              <div role="cell" className={cells[0]}>
+              <ResponsiveDataTableCell className={cells[0]}>
                 {departmentScopedDirectory ? (
                   <span className="block truncate font-semibold text-foreground">
                     {workspace.name}
@@ -166,16 +150,15 @@ export function WorkspaceListTable({
                   <Link
                     href={projectWorkspaceHref(
                       workspaceKey(workspace),
-                      directory ? directoryState : undefined,
+                      directoryState,
                     )}
                     className="block truncate font-semibold text-foreground no-underline hover:underline focus-visible:outline-2 focus-visible:outline-ring"
                   >
                     {workspace.name}
                   </Link>
                 )}
-              </div>
-              <div
-                role="cell"
+              </ResponsiveDataTableCell>
+              <ResponsiveDataTableCell
                 className={cn(cells[1], "truncate text-[#52627a]")}
               >
                 <span className="mr-2 hidden text-[#738096] @max-[900px]:inline">
@@ -184,13 +167,8 @@ export function WorkspaceListTable({
                 {("clientName" in workspace
                   ? workspace.clientName
                   : workspace.client.fullName) || "Client"}
-              </div>
-              <div
-                role="cell"
-                className={
-                  (departmentScopedDirectory ? departmentScopedCells : cells)[2]
-                }
-              >
+              </ResponsiveDataTableCell>
+              <ResponsiveDataTableCell className={cells[2]}>
                 <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
                   <span className="hidden shrink-0 text-[#738096] @max-[900px]:inline">
                     {directory ? "Progress" : "Services"}
@@ -230,13 +208,8 @@ export function WorkspaceListTable({
                     <span className="text-[#738096]">No services</span>
                   )}
                 </div>
-              </div>
-              <div
-                role="cell"
-                className={
-                  (departmentScopedDirectory ? departmentScopedCells : cells)[3]
-                }
-              >
+              </ResponsiveDataTableCell>
+              <ResponsiveDataTableCell className={cells[3]}>
                 <span className="mr-2 hidden text-[#738096] @max-[900px]:inline">
                   Status
                 </span>
@@ -263,15 +236,9 @@ export function WorkspaceListTable({
                     )}
                   </Pill>
                 )}
-              </div>
-              <div
-                role="cell"
-                className={cn(
-                  (departmentScopedDirectory
-                    ? departmentScopedCells
-                    : cells)[4],
-                  "text-[#52627a]",
-                )}
+              </ResponsiveDataTableCell>
+              <ResponsiveDataTableCell
+                className={cn(cells[4], "text-[#52627a]")}
               >
                 <span className="mr-2 hidden text-[#738096] @max-[900px]:inline">
                   Updated
@@ -279,11 +246,10 @@ export function WorkspaceListTable({
                 <time dateTime={workspace.updatedAt}>
                   {formatDate(workspace.updatedAt)}
                 </time>
-              </div>
+              </ResponsiveDataTableCell>
               {departmentScopedDirectory ? (
-                <div
-                  role="cell"
-                  className={departmentScopedCells[5]}
+                <ResponsiveDataTableCell
+                  className={cells[5]}
                   aria-label={`Actions for ${workspace.name}`}
                 >
                   {onViewDetails && (
@@ -296,20 +262,20 @@ export function WorkspaceListTable({
                       }
                     />
                   )}
-                </div>
+                </ResponsiveDataTableCell>
               ) : (
-                <div role="cell" className={cells[5]}>
+                <ResponsiveDataTableCell className={cells[5]}>
                   <WorkspaceListRowActions
                     workspace={workspace}
                     identity={workspaceKey(workspace)}
-                    returnState={directory ? directoryState : undefined}
+                    returnState={directoryState}
                     onChanged={onChanged}
                     isArchived={
                       "status" in workspace &&
                       ["COMPLETED", "CANCELLED"].includes(workspace.status)
                     }
                   />
-                </div>
+                </ResponsiveDataTableCell>
               )}
             </>
           )}

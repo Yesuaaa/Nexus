@@ -6,6 +6,8 @@ configureRegressionTest()
 
 const workspace: ProjectWorkspaceDetail = {
   id: "workspace-1",
+  rowId: "group:workspace-1",
+  kind: "group",
   name: "Website launch",
   structure: "SEPARATE",
   status: "IN_PROGRESS",
@@ -94,16 +96,29 @@ for (const width of [1440, 390]) {
               {
                 ...workspace,
                 id: "archive-1",
+                rowId: "group:archive-1",
                 name: "Completed branding",
                 status: "COMPLETED",
               },
               {
                 ...workspace,
                 id: "archive-2",
+                rowId: "group:archive-2",
                 name: "Cancelled campaign",
                 status: "CANCELLED",
               },
             ],
+            projectCounts: {
+              total: 3,
+              byStatus: {
+                PLANNED: 0,
+                IN_PROGRESS: 1,
+                ON_HOLD: 0,
+                COMPLETED: 1,
+                CANCELLED: 1,
+              },
+            },
+            resultsTruncated: false,
           },
         })
       return route.fulfill({ json: { notifications: [], unreadCount: 0 } })
@@ -121,12 +136,13 @@ for (const width of [1440, 390]) {
       .getByRole("searchbox", { name: "Search projects" })
       .fill("missing")
     await expect(
-      table.getByText("No projects match these filters.", { exact: true }),
+      main.getByRole("heading", { name: "No projects match those filters" }),
     ).toBeVisible()
     await main.getByRole("button", { name: /Archive/ }).click()
     await expect(
       main.getByRole("searchbox", { name: "Search projects" }),
-    ).toHaveValue("")
+    ).toHaveValue("missing")
+    await main.getByRole("searchbox", { name: "Search projects" }).clear()
     await expect(
       table.getByRole("link", { name: "Completed branding", exact: true }),
     ).toBeVisible()
@@ -144,7 +160,10 @@ for (const width of [1440, 390]) {
     ).toHaveCount(0)
     await expect(
       table.getByRole("link", { name: "Completed branding", exact: true }),
-    ).toHaveAttribute("href", "/project-workspace/archive-1")
+    ).toHaveAttribute(
+      "href",
+      "/project-workspace/group%3Aarchive-1?search=branding&view=archive",
+    )
     await expect(
       main.getByRole("button", { name: "New project", exact: true }),
     ).toHaveCount(0)

@@ -173,7 +173,6 @@ test(
         },
       },
     })
-
     async function apiFor(user: typeof head) {
       const { token } = await issueSession(user)
       return (path = "", method = "GET", body?: unknown) =>
@@ -546,6 +545,110 @@ test(
         )
       ).total,
       0,
+    )
+
+    const staffCollisionProject = await project(
+      "Staff standalone collision",
+      null,
+    )
+    await prisma.project.update({
+      where: { id: staffCollisionProject.id },
+      data: { status: "ON_HOLD" },
+    })
+    const staffCollisionGroup = await prisma.projectWorkspaceGroup.create({
+      data: {
+        id: staffCollisionProject.id,
+        name: "Staff colliding group",
+        structure: "SEPARATE",
+        clientId: client.id,
+        createdById: head.id,
+      },
+    })
+    const staffCollisionMember = await project(
+      "Staff grouped collision member",
+      null,
+      staffCollisionGroup.id,
+    )
+    await prisma.project.update({
+      where: { id: staffCollisionMember.id },
+      data: { status: "COMPLETED" },
+    })
+
+    const staffList = await staffApi()
+    assert.equal(staffList.status, 200)
+    const staffListBody = (await staffList.json()) as {
+      workspaces: {
+        id: string
+        rowId: string
+        kind: string
+        canRename: boolean
+      }[]
+      projectCounts: {
+        total: number
+        byStatus: Record<string, number>
+      }
+    }
+    assert.equal(staffListBody.projectCounts.total, 3)
+    assert.deepEqual(staffListBody.projectCounts.byStatus, {
+      PLANNED: 0,
+      IN_PROGRESS: 1,
+      ON_HOLD: 1,
+      COMPLETED: 1,
+      CANCELLED: 0,
+    })
+    assert.deepEqual(
+      staffListBody.workspaces
+        .filter(({ id }) => id === staffCollisionProject.id)
+        .map(({ rowId, kind, canRename }) => ({ rowId, kind, canRename })),
+      [
+        {
+          rowId: `group:${staffCollisionGroup.id}`,
+          kind: "group",
+          canRename: false,
+        },
+        {
+          rowId: `ungrouped-project:${staffCollisionProject.id}`,
+          kind: "ungrouped-project",
+          canRename: false,
+        },
+      ],
+    )
+    const limitedStaffList = await staffApi("?limit=1")
+    const limitedStaffListBody = (await limitedStaffList.json()) as {
+      workspaces: unknown[]
+      projectCounts: { total: number }
+      resultsTruncated: boolean
+    }
+    assert.equal(limitedStaffListBody.workspaces.length, 1)
+    assert.equal(limitedStaffListBody.projectCounts.total, 3)
+    assert.equal(limitedStaffListBody.resultsTruncated, true)
+    const staffGroupDetail = await staffApi(
+      `/group%3A${staffCollisionGroup.id}`,
+    )
+    const staffProjectDetail = await staffApi(
+      `/ungrouped-project%3A${staffCollisionProject.id}`,
+    )
+    assert.equal(staffGroupDetail.status, 200)
+    assert.equal(staffProjectDetail.status, 200)
+    assert.deepEqual(
+      ((await staffGroupDetail.json()) as Workspace).workstreams.map(
+        ({ id }) => id,
+      ),
+      [staffCollisionMember.id],
+    )
+    assert.deepEqual(
+      ((await staffProjectDetail.json()) as Workspace).workstreams.map(
+        ({ id }) => id,
+      ),
+      [staffCollisionProject.id],
+    )
+    assert.equal(
+      (
+        await staffApi(`/group%3A${staffCollisionGroup.id}`, "PATCH", {
+          name: "Unauthorized group rename",
+        })
+      ).status,
+      403,
     )
 
     const archivedCompanyGroup = await prisma.projectWorkspaceGroup.create({

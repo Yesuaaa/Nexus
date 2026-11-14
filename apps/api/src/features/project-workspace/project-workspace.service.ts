@@ -455,6 +455,8 @@ function workspaceRows(
     )
     return {
       id: group?.id ?? first.id,
+      rowId: group ? `group:${group.id}` : `ungrouped-project:${first.id}`,
+      kind: group ? ("group" as const) : ("ungrouped-project" as const),
       name: group?.name ?? first.name,
       structure: group?.structure ?? "SEPARATE",
       status: summarizeStatus(groupProjects),
@@ -489,11 +491,30 @@ export async function listProjectWorkspaces(
   return getPrisma()!.$transaction(
     async (tx) => {
       const context = await getStaffContext(tx, userId)
+      const statusCounts = await tx.project.groupBy({
+        by: ["status"],
+        where: workspaceReadWhere(context),
+        _count: { _all: true },
+      })
+      const byStatus: Record<ProjectStatus, number> = {
+        PLANNED: 0,
+        IN_PROGRESS: 0,
+        ON_HOLD: 0,
+        COMPLETED: 0,
+        CANCELLED: 0,
+      }
+      for (const { status, _count } of statusCounts)
+        byStatus[status] = _count._all
+      const projectCounts = {
+        total: Object.values(byStatus).reduce((sum, count) => sum + count, 0),
+        byStatus,
+      }
+      const take = Math.min(Math.max(options.limit ?? 200, 1), 250)
       const projects = await tx.project.findMany({
         where: workspaceReadWhere(context),
         include: projectInclude,
         orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-        take: Math.min(Math.max(options.limit ?? 200, 1), 250),
+        take,
       })
       const counts = await activityCounts(tx, projects)
       const mixedGroupIds = await mixedWorkspaceGroupIds(
@@ -513,6 +534,8 @@ export async function listProjectWorkspaces(
       return {
         workspaces: rows,
         canCreate: context.canCreate,
+        projectCounts,
+        resultsTruncated: projectCounts.total > projects.length,
       }
     },
     { isolationLevel: "RepeatableRead" },

@@ -80,7 +80,14 @@ export function WorkspaceDirectoryPage({
     [rawSearchParams],
   )
   const directoryState = useMemo(
-    () => ({ ...parsedDirectoryState, departmentId: "" }),
+    () => ({
+      ...parsedDirectoryState,
+      departmentId: "",
+      sort:
+        parsedDirectoryState.sort === "most-active"
+          ? "recent"
+          : parsedDirectoryState.sort,
+    }),
     [parsedDirectoryState],
   )
   const canonicalSearchParams = serializeWorkspaceDirectoryState(directoryState)

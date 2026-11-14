@@ -65,3 +65,24 @@ test("directory detail and Management links preserve canonical state", () => {
     "/project-workspace?search=Campaign&status=ON_HOLD&page=3",
   )
 })
+
+test("Staff workspace sort and filters survive typed detail navigation", () => {
+  const state = parseWorkspaceDirectoryState(
+    new URLSearchParams(
+      "search=Brand%20campaign&status=ON_HOLD&sort=most-active&view=active",
+    ),
+  )
+
+  assert.deepEqual(state, {
+    page: 1,
+    departmentId: "",
+    search: "Brand campaign",
+    status: "ON_HOLD",
+    sort: "most-active",
+    view: "active",
+  })
+  assert.equal(
+    workspaceDirectoryHref(state),
+    "/project-workspace?search=Brand+campaign&status=ON_HOLD&sort=most-active",
+  )
+})

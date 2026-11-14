@@ -1424,10 +1424,103 @@ test("ordinary Staff workspace list retries after a failed request", async ({
   failRequests = false
   await page.getByRole("button", { name: "Try again" }).click()
   await expect(
-    page.getByRole("heading", { name: "No project workspaces yet" }),
+    page.getByRole("heading", { name: "No assigned projects yet" }),
   ).toBeVisible()
   expect(pageErrors).toEqual([])
   expect(effectEventErrors).toEqual([])
+})
+
+test("ordinary Staff rows retain typed identity and directory state", async ({
+  page,
+}) => {
+  await restoreSession(page, "STAFF")
+  const group = {
+    id: "collision-id",
+    rowId: "group:collision-id",
+    kind: "group" as const,
+    name: "Brand campaign workspace",
+    structure: "SEPARATE" as const,
+    status: "IN_PROGRESS" as const,
+    client: { id: "client", fullName: "Client" },
+    updatedAt: "2026-11-09T00:00:00Z",
+    activityCount: 0,
+    canCreate: false,
+    canManage: false,
+    canRename: false,
+    workstreams: [],
+  }
+  const project = {
+    ...group,
+    rowId: "ungrouped-project:collision-id",
+    kind: "ungrouped-project" as const,
+    name: "Brand campaign project",
+  }
+  const detailRequests: string[] = []
+  await page.route("**/api/project-workspace**", (route) => {
+    const url = new URL(route.request().url())
+    const path = decodeURIComponent(url.pathname)
+    if (path === "/api/project-workspace")
+      return route.fulfill({
+        json: {
+          workspaces: [group, project],
+          canCreate: false,
+          projectCounts: {
+            total: 2,
+            byStatus: {
+              PLANNED: 1,
+              IN_PROGRESS: 1,
+              ON_HOLD: 0,
+              COMPLETED: 0,
+              CANCELLED: 0,
+            },
+          },
+        },
+      })
+    const identity = path.slice("/api/project-workspace/".length)
+    detailRequests.push(identity)
+    const target = identity === group.rowId ? group : project
+    return route.fulfill({
+      json: {
+        ...target,
+        activity: [],
+      },
+    })
+  })
+
+  await page.goto(
+    "/project-workspace?search=Brand+campaign&status=IN_PROGRESS&sort=most-active",
+  )
+  await expect(
+    page.getByRole("searchbox", { name: "Search projects" }),
+  ).toHaveValue("Brand campaign")
+  await expect(
+    page.getByRole("img", {
+      name: /Project status distribution: Planned: 1; In progress: 1/,
+    }),
+  ).toBeVisible()
+
+  await page.getByRole("link", { name: group.name, exact: true }).click()
+  await expect(page).toHaveURL(
+    /\/project-workspace\/group%3Acollision-id\?.*search=Brand\+campaign.*status=IN_PROGRESS.*sort=most-active/,
+  )
+  await expect(page.getByRole("heading", { name: group.name })).toBeVisible()
+  await page
+    .getByRole("navigation", { name: "Breadcrumb" })
+    .getByRole("link", { name: "Project Workspace" })
+    .click()
+  await expect(
+    page.getByRole("link", { name: project.name, exact: true }),
+  ).toBeVisible()
+
+  await page.getByRole("link", { name: project.name, exact: true }).click()
+  await expect(page).toHaveURL(
+    /\/project-workspace\/ungrouped-project%3Acollision-id\?.*search=Brand\+campaign.*status=IN_PROGRESS.*sort=most-active/,
+  )
+  await expect(page.getByRole("heading", { name: project.name })).toBeVisible()
+  expect(detailRequests).toEqual([
+    "group:collision-id",
+    "ungrouped-project:collision-id",
+  ])
 })
 
 test("directory state survives typed detail and breadcrumb return navigation", async ({

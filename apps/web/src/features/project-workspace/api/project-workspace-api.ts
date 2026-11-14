@@ -94,6 +94,8 @@ export type ProjectWorkspaceWorkstream = {
 
 export type ProjectWorkspaceSummary = {
   id: string
+  rowId: string
+  kind: "group" | "ungrouped-project"
   name: string
   structure: "SEPARATE" | "MULTI_WORKSTREAM"
   status: ProjectStatus
@@ -135,6 +137,11 @@ export const listProjectWorkspaces = (
   return apiRequest<{
     workspaces: ProjectWorkspaceSummary[]
     canCreate: boolean
+    projectCounts: {
+      total: number
+      byStatus: Record<ProjectStatus, number>
+    }
+    resultsTruncated: boolean
   }>(`/api/project-workspace${suffix}`, { signal })
 }
 
@@ -264,7 +271,9 @@ export function projectWorkspaceHref(
   return `/project-workspace/${encodeURIComponent(identity)}${query ? `?${query}` : ""}`
 }
 
-export type WorkspaceDirectoryQuery = WorkspaceDirectoryState
+export type WorkspaceDirectoryQuery = Omit<WorkspaceDirectoryState, "sort"> & {
+  sort: "recent" | "name" | "client" | "projects"
+}
 
 export function listWorkspaceDirectory(
   query: WorkspaceDirectoryQuery,

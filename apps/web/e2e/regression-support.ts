@@ -341,6 +341,17 @@ export async function mockApi(
         json: {
           workspaces: [],
           canCreate: role === "STAFF" && Boolean(currentUser.headOf),
+          projectCounts: {
+            total: 0,
+            byStatus: {
+              PLANNED: 0,
+              IN_PROGRESS: 0,
+              ON_HOLD: 0,
+              COMPLETED: 0,
+              CANCELLED: 0,
+            },
+          },
+          resultsTruncated: false,
         },
       })
       return

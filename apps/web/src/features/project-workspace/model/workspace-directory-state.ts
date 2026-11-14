@@ -6,7 +6,7 @@ export type WorkspaceDirectoryState = {
   search: string
   departmentId: string
   status: WorkspaceDirectoryStatus | ""
-  sort: "recent" | "name" | "client" | "projects"
+  sort: "recent" | "name" | "client" | "projects" | "most-active"
   view: "active" | "archive"
 }
 
@@ -32,6 +32,7 @@ const sorts = new Set<WorkspaceDirectoryState["sort"]>([
   "name",
   "client",
   "projects",
+  "most-active",
 ])
 
 function oneValue(params: URLSearchParams, key: string) {
