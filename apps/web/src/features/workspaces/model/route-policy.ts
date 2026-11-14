@@ -1,3 +1,4 @@
+import { attendanceNavigation } from "../../attendance/model/navigation.ts"
 import {
   canAccessAccountManagement,
   canAccessAttendance,
@@ -18,22 +19,35 @@ import {
 import type { Account } from "../../auth/model/types.ts"
 
 export type WorkspaceModuleId =
-  "service-operations" | "project-management" | "people-hr" | "administration"
+  | "service-operations"
+  | "project-management"
+  | "people-hr"
+  | "attendance-monitoring"
+  | "administration"
 
 export const workspaceModuleLabels: Record<WorkspaceModuleId, string> = {
   "service-operations": "Service Operations",
   "project-management": "Project Management",
   "people-hr": "People & HR",
+  "attendance-monitoring": "Attendance & Monitoring",
   administration: "Administration",
 }
 
 export type RoutePolicyId =
+  | "attendance-dashboard"
+  | "attendance-time-logs"
+  | "attendance-requests"
+  | "attendance-policies"
+  | (typeof attendanceNavigation)[number]["links"][number]["id"]
   | "attendance"
   | "attendance-overview"
   | "attendance-my"
   | "attendance-records"
   | "attendance-adjustments"
   | "attendance-settings"
+  | "attendance-my-legacy"
+  | "attendance-records-legacy"
+  | "attendance-settings-legacy"
   | "dashboard"
   | "module"
   | "accounts"
@@ -87,50 +101,74 @@ export type RoutePolicy = {
 const alwaysAccessible = () => true
 
 export const routePolicies: readonly RoutePolicy[] = [
-  {
-    id: "attendance-overview",
-    match: { kind: "exact", path: "/attendance/overview" },
-    moduleId: "people-hr",
-    canAccess: canManageAttendance,
-  },
-  {
-    id: "attendance-my",
-    match: { kind: "exact", path: "/attendance/my" },
-    moduleId: "people-hr",
-    canAccess: canAccessAttendance,
-  },
-  {
-    id: "attendance-records",
-    match: { kind: "exact", path: "/attendance/records" },
-    moduleId: "people-hr",
-    canAccess: canManageAttendance,
-  },
+  ...attendanceNavigation.flatMap((group, index): RoutePolicy[] => [
+    ...group.links.map((link): RoutePolicy => ({
+      id: link.id,
+      match: { kind: "exact", path: link.href },
+      moduleId: "attendance-monitoring",
+      canAccess:
+        link.access === "configure"
+          ? canConfigureAttendance
+          : link.access === "manage"
+            ? canManageAttendance
+            : canAccessAttendance,
+    })),
+    {
+      id: group.id,
+      match: {
+        kind: index === 0 ? "exact" : "prefix",
+        path:
+          index === 0
+            ? "/attendance"
+            : group.links[0].href.replace(/\/overview$/, ""),
+      },
+      moduleId: "attendance-monitoring",
+      canAccess:
+        group.access === "configure"
+          ? canConfigureAttendance
+          : group.access === "manage"
+            ? canManageAttendance
+            : canAccessAttendance,
+      navigation: {
+        href: (account) =>
+          group.id === "attendance" && !canManageAttendance(account)
+            ? "/attendance/check-ins"
+            : group.links[0].href,
+        label: group.label,
+        location: "main",
+        order: group.id === "attendance-dashboard" ? 34 : 35 + index,
+      },
+    },
+  ]),
   {
     id: "attendance-adjustments",
     match: { kind: "exact", path: "/attendance/adjustments" },
-    moduleId: "people-hr",
+    moduleId: "attendance-monitoring",
     canAccess: canAccessAttendance,
   },
   {
-    id: "attendance-settings",
+    id: "attendance-my-legacy",
+    match: { kind: "exact", path: "/attendance/my" },
+    moduleId: "attendance-monitoring",
+    canAccess: canAccessAttendance,
+  },
+  {
+    id: "attendance-records-legacy",
+    match: { kind: "exact", path: "/attendance/records" },
+    moduleId: "attendance-monitoring",
+    canAccess: canManageAttendance,
+  },
+  {
+    id: "attendance-settings-legacy",
     match: { kind: "exact", path: "/attendance/settings" },
-    moduleId: "people-hr",
+    moduleId: "attendance-monitoring",
     canAccess: canConfigureAttendance,
   },
   {
     id: "attendance",
     match: { kind: "prefix", path: "/attendance" },
-    moduleId: "people-hr",
+    moduleId: "attendance-monitoring",
     canAccess: canAccessAttendance,
-    navigation: {
-      href: (account) =>
-        canManageAttendance(account)
-          ? "/attendance/overview"
-          : "/attendance/my",
-      label: "Attendance",
-      location: "main",
-      order: 35,
-    },
   },
   {
     id: "dashboard",

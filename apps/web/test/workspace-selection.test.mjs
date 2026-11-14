@@ -6,11 +6,16 @@ import { Permissions } from "../src/features/auth/model/permissions.ts"
 const admin = {
   id: "admin-1",
   role: "ADMIN",
+  isActive: true,
   permissions: [Permissions.EMPLOYEES_READ, Permissions.SERVICES_READ],
 }
 
 test("shared utilities retain any authorized internal module without owning it", () => {
-  for (const moduleId of ["service-operations", "people-hr"])
+  for (const moduleId of [
+    "service-operations",
+    "people-hr",
+    "attendance-monitoring",
+  ])
     for (const pathname of ["/messages", "/calendar", "/profile", "/settings"])
       assert.equal(
         resolveWorkspaceModuleId(admin, pathname, moduleId),
@@ -36,6 +41,34 @@ test("authorized business deep links override remembered shell context", () => {
 test("the selector and legacy landing route clear module context", () => {
   for (const pathname of ["/module", "/dashboard"])
     assert.equal(resolveWorkspaceModuleId(admin, pathname, "people-hr"), null)
+})
+
+test("attendance deep links replace HR context and retain only authorized attendance context", () => {
+  assert.equal(
+    resolveWorkspaceModuleId(
+      admin,
+      "/attendance/time-logs/records",
+      "people-hr",
+    ),
+    "attendance-monitoring",
+  )
+  const restricted = { ...admin, permissions: [] }
+  assert.equal(
+    resolveWorkspaceModuleId(
+      restricted,
+      "/attendance/time-logs/records",
+      "attendance-monitoring",
+    ),
+    null,
+  )
+  assert.equal(
+    resolveWorkspaceModuleId(restricted, "/attendance/check-ins", "people-hr"),
+    "attendance-monitoring",
+  )
+  assert.equal(
+    resolveWorkspaceModuleId(restricted, "/messages", "attendance-monitoring"),
+    "attendance-monitoring",
+  )
 })
 
 test("stale, unknown and forbidden module selections cannot grant access", () => {

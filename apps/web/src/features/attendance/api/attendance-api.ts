@@ -98,8 +98,21 @@ export type AttendancePolicy = {
   _count?: { assignments: number }
 }
 export type AttendanceOverview = {
+  checkIns: {
+    employees: number
+    total: number
+    closed: number
+    working: number
+    onBreak: number
+    recentActivity: {
+      id: string
+      action: "CLOCK_IN" | "CLOCK_OUT" | "BREAK_START" | "BREAK_END"
+      at: string
+      employeeName: string
+    }[]
+  }
   asOf: string
-  scope: "DEPARTMENT" | "ORGANIZATION"
+  scope: "PERSONAL" | "DEPARTMENT" | "ORGANIZATION"
   recordedDays: number
   employees: number
   workedHours: number
@@ -205,9 +218,15 @@ export function attendanceAudit(
   employeeId: string,
   departmentId: string,
   signal?: AbortSignal,
+  recordsOnly = false,
 ) {
-  return apiRequest<Paging & { events: AttendanceAuditEvent[] }>(
-    `${root}/audit?${new URLSearchParams({ from, to, page: String(page), employeeId, departmentId })}`,
+  return apiRequest<
+    Paging & {
+      events: AttendanceAuditEvent[]
+      actionCounts: { action: string; count: number }[]
+    }
+  >(
+    `${root}/audit?${new URLSearchParams({ from, to, page: String(page), employeeId, departmentId, ...(recordsOnly ? { recordsOnly: "true" } : {}) })}`,
     { signal },
   )
 }
@@ -222,7 +241,15 @@ export const attendanceOverview = (
     { signal },
   )
 export const attendancePolicies = (signal?: AbortSignal) =>
-  apiRequest<{ policies: AttendancePolicy[] }>(`${root}/policies`, { signal })
+  apiRequest<{
+    policies: AttendancePolicy[]
+    summary: {
+      totalPolicies: number
+      activePolicies: number
+      archivedPolicies: number
+      assignmentPeriods: number
+    }
+  }>(`${root}/policies`, { signal })
 export const createAttendancePolicy = (input: AttendancePolicyInput) =>
   apiRequest(`${root}/policies`, {
     method: "POST",
@@ -278,6 +305,7 @@ export const attendanceAdjustments = (
   search = "",
   signal?: AbortSignal,
   type = "",
+  status = "",
 ) =>
   apiRequest<Paging & { adjustments: AttendanceAdjustment[] }>(
     `${root}/adjustments?${new URLSearchParams({
@@ -285,6 +313,7 @@ export const attendanceAdjustments = (
       page: String(page),
       search,
       type,
+      status,
     })}`,
     { signal },
   )
@@ -309,3 +338,30 @@ export const reviewAttendanceAdjustment = (
     method: "POST",
     body: JSON.stringify({ decision, note }),
   })
+
+export type AttendanceRequestSummary = {
+  groups: {
+    type: AttendanceAdjustment["type"]
+    status: AttendanceAdjustment["status"]
+    count: number
+    overtimeMinutes: number
+  }[]
+}
+export const attendanceRequestSummary = (
+  scope: "mine" | "team",
+  signal?: AbortSignal,
+) =>
+  apiRequest<AttendanceRequestSummary>(
+    root + "/adjustments/overview?" + new URLSearchParams({ scope }),
+    { signal },
+  )
+
+export const personalAttendanceOverview = (
+  from: string,
+  to: string,
+  signal?: AbortSignal,
+) =>
+  apiRequest<AttendanceOverview>(
+    root + "/me/overview?" + new URLSearchParams({ from, to }),
+    { signal },
+  )

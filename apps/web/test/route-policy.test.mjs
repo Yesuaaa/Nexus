@@ -292,10 +292,19 @@ test("navigation is generated from the same policies without changing role visib
       "Calendar",
       "My Projects",
     ],
-    STAFF: ["Module", "Attendance", "Calendar", "Project Workspace"],
-    STAFF_HEAD: [
+    STAFF: [
       "Module",
       "Attendance",
+      "Requests & Approvals",
+      "Calendar",
+      "Project Workspace",
+    ],
+    STAFF_HEAD: [
+      "Module",
+      "Dashboard",
+      "Attendance",
+      "Time Logs",
+      "Requests & Approvals",
       "Calendar",
       "Staff Workload",
       "Request Inbox",
@@ -305,7 +314,11 @@ test("navigation is generated from the same policies without changing role visib
       "Module",
       "Department Management",
       "Employee Management",
+      "Dashboard",
       "Attendance",
+      "Time Logs",
+      "Requests & Approvals",
+      "Policies",
       "Service Management",
       "Calendar",
       "Client Management",
@@ -363,7 +376,13 @@ test("department-head handoff immediately removes head-only routes and navigatio
   assert.equal(canAccessRoute(ordinaryStaff, "/request-inbox"), false)
   assert.deepEqual(
     getNavigationPolicies(ordinaryStaff, "main").map((policy) => policy.id),
-    ["dashboard", "attendance", "calendar", "project-workspace"],
+    [
+      "dashboard",
+      "attendance",
+      "attendance-requests",
+      "calendar",
+      "project-workspace",
+    ],
   )
 })
 

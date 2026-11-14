@@ -58,20 +58,27 @@ export function getWorkspaceModules(account: Account): WorkspaceModule[] {
 
   if (
     canAccessRoute(account, "/employees") ||
-    canAccessRoute(account, "/departments") ||
-    canAccessRoute(account, "/attendance/my")
+    canAccessRoute(account, "/departments")
   ) {
     modules.push({
       id: "people-hr",
       title: "People & HR",
-      description: "Attendance, employee records, and department structure.",
+      description: "Manage employee records and department structure.",
       href: canAccessRoute(account, "/employees")
         ? "/employees"
-        : canAccessRoute(account, "/departments")
-          ? "/departments"
-          : canAccessRoute(account, "/attendance/overview")
-            ? "/attendance/overview"
-            : "/attendance/my",
+        : "/departments",
+    })
+  }
+
+  if (canAccessRoute(account, "/attendance/check-ins")) {
+    modules.push({
+      id: "attendance-monitoring",
+      title: "Attendance & Monitoring",
+      description:
+        "Track attendance, review time logs, and manage attendance policies.",
+      href: canAccessRoute(account, "/attendance/dashboard")
+        ? "/attendance/overview"
+        : "/attendance/check-ins",
     })
   }
 

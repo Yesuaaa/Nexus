@@ -169,9 +169,12 @@ test("real employee clocks overnight and never receives Employee Management", as
   await signIn(page, "staff")
   await page.goto("/module")
   await page
-    .getByRole("link", { name: "Open People & HR workspace", exact: true })
+    .getByRole("link", {
+      name: "Open Attendance & Monitoring workspace",
+      exact: true,
+    })
     .click()
-  await expect(page).toHaveURL(/\/attendance\/my$/)
+  await expect(page).toHaveURL(/\/attendance\/check-ins$/)
   await expect(
     page.getByRole("heading", { name: "Check-Ins", exact: true }),
   ).toBeVisible()
@@ -212,7 +215,7 @@ test("unpaid break timer freezes and correction request uses the real API", asyn
 }) => {
   await signIn(page, "staff")
   await clock("2026-11-14T09:00:00+08:00")
-  await page.goto("/attendance/my")
+  await page.goto("/attendance/check-ins")
   await confirm(page, "Clock in")
   await clock("2026-11-14T10:00:00+08:00")
   await confirm(page, "Start break")
@@ -285,7 +288,7 @@ test("department head reviews scoped requests and HR policy settings work", asyn
   await signIn(page, "head")
   await page.goto("/attendance/adjustments")
   await expect(
-    page.getByRole("heading", { name: "OT & Agreements", exact: true }),
+    page.getByRole("heading", { name: "Requests & Approvals", exact: true }),
   ).toBeVisible()
   const requestRow = page.getByRole("row").filter({ hasText: requestReason })
   await requestRow
@@ -301,7 +304,7 @@ test("department head reviews scoped requests and HR policy settings work", asyn
     .getByRole("button", { name: "Confirm decision", exact: true })
     .click()
   await expect(page.getByText("Approved", { exact: true })).toBeVisible()
-  await page.goto("/attendance/records")
+  await page.goto("/attendance/time-logs/records")
   await page
     .getByRole("button", {
       name: "View logs for Attendance staff",
@@ -328,7 +331,7 @@ test("time logs employee table preserves filters and opens individual or all log
   page,
 }) => {
   await signIn(page, "admin")
-  await page.goto("/attendance/records")
+  await page.goto("/attendance/time-logs/records")
   const workspace = page.getByRole("main", { name: "Attendance workspace" })
   const table = page.getByRole("table", { name: "Employees", exact: true })
   await expect(table).toHaveAttribute("aria-busy", "false")
@@ -430,7 +433,7 @@ for (const viewport of [
   test(`real attendance layout at ${viewport.width}px`, async ({ page }) => {
     await page.setViewportSize(viewport)
     await signIn(page, "staff")
-    await page.goto("/attendance/my")
+    await page.goto("/attendance/check-ins")
     await expect(page.getByLabel("Elapsed work")).toBeVisible()
     expect(
       await page.evaluate(
@@ -474,7 +477,7 @@ test("Admin policy creation and assignment are live; clients remain denied", asy
 }) => {
   await page.clock.setFixedTime(new Date("2026-11-13T08:00:00Z"))
   await signIn(page, "admin")
-  await page.goto("/attendance/settings")
+  await page.goto("/attendance/policies/management")
   await page.getByRole("button", { name: "Create policy", exact: true }).click()
   await page
     .getByLabel("Policy name", { exact: true })
@@ -511,7 +514,7 @@ test("Admin policy creation and assignment are live; clients remain denied", asy
   const clientPage = await page.context().newPage()
   await signIn(clientPage, "client")
   await routeAttendanceApi(clientPage)
-  await clientPage.goto("/attendance/my")
+  await clientPage.goto("/attendance/check-ins")
   await expect(clientPage).toHaveURL(/\/dashboard$/)
   await clientPage.close()
 })
@@ -624,7 +627,7 @@ test("loaded attendance screens follow the Department Management design", async 
     if (tab === "overview")
       await expect(
         page.getByRole("heading", {
-          name: "Organization attendance",
+          name: "Personal attendance",
           exact: true,
         }),
       ).toBeVisible()
@@ -678,22 +681,46 @@ for (const viewport of [
     await expect(overview).toHaveAttribute("aria-busy", "false")
     await expect(
       page.getByRole("heading", {
-        name: "Attendance requirement coverage",
+        name: "Check-in status",
         exact: true,
       }),
     ).toBeVisible()
     await expect(
-      page.getByRole("heading", { name: "Workday status", exact: true }),
+      page.getByRole("heading", {
+        name: "Recent check-in activity",
+        exact: true,
+      }),
     ).toBeVisible()
     await expect(
       page.getByRole("combobox", {
         name: "Attendance department",
         exact: true,
       }),
-    ).toBeVisible()
+    ).toHaveCount(0)
     await expect(
-      page.getByRole("heading", { name: "Needs attention", exact: true }),
+      page.getByRole("heading", {
+        name: "Personal attendance",
+        exact: true,
+      }),
     ).toBeVisible()
+    const main = page.getByRole("main", { name: "Attendance workspace" })
+    await expect(main.getByText("Check-ins", { exact: true })).toBeVisible()
+    await expect(main.getByText("Check-outs", { exact: true })).toBeVisible()
+    await expect(
+      main.getByRole("link", { name: "Open Check-Ins", exact: true }),
+    ).toHaveAttribute("href", "/attendance/check-ins")
+    await expect(
+      main.getByText(
+        /time logs|overtime|corrections|requests|polic|required hours|excess/i,
+      ),
+    ).toHaveCount(0)
+    const refreshed = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/api/attendance/me/overview",
+    )
+    await main.getByRole("button", { name: "Refresh", exact: true }).click()
+    expect((await refreshed).status()).toBe(200)
+    await expect(overview).toHaveAttribute("aria-busy", "false")
     await assertNoPageOverflow(page)
     await page.screenshot({
       path: test.info().outputPath(`attendance-overview-${viewport.width}.png`),
@@ -884,7 +911,7 @@ test("policy editing updates the existing row and archive/restore/delete reuse t
   page,
 }) => {
   await signIn(page, "admin")
-  await page.goto("/attendance/settings")
+  await page.goto("/attendance/policies/management")
   await page.getByRole("button", { name: "Create policy", exact: true }).click()
   await page.getByLabel("Policy name", { exact: true }).fill("Lifecycle policy")
   await page
@@ -976,4 +1003,351 @@ test("policy editing updates the existing row and archive/restore/delete reuse t
     .click()
   await expect(page.getByRole("dialog")).toHaveCount(0)
   await expect(updated).toHaveCount(0)
+})
+
+for (const width of [390, 820, 1440]) {
+  test(
+    "grouped attendance pages use live scoped data at " + width + "px",
+    async ({ page }) => {
+      test.setTimeout(90000)
+      await page.setViewportSize({ width, height: 1000 })
+      await signIn(page, "admin")
+      const pages = [
+        ["overview", "Attendance Overview", "/api/attendance/me/overview"],
+        [
+          "dashboard",
+          "Attendance & Monitoring Dashboard",
+          "/api/attendance/overview",
+        ],
+        ["my", "Check-Ins", "/api/attendance/me/current"],
+        [
+          "time-logs/overview",
+          "Time Logs Overview",
+          "/api/attendance/overview",
+        ],
+        ["records", "Time Log Records", "/api/attendance/employees"],
+        ["time-logs/audit", "Attendance Audit Trail", "/api/attendance/audit"],
+        [
+          "requests/overview",
+          "Requests & Approvals Overview",
+          "/api/attendance/adjustments/overview",
+        ],
+        ["requests/overtime", "Overtime", "/api/attendance/adjustments"],
+        [
+          "requests/corrections",
+          "Attendance Corrections",
+          "/api/attendance/adjustments",
+        ],
+        ["policies/overview", "Policies Overview", "/api/attendance/policies"],
+        ["settings", "Policy Management", "/api/attendance/policies"],
+        [
+          "policies/assignments",
+          "Policy Assignments",
+          "/api/attendance/policies",
+        ],
+      ]
+      for (const [path, title, endpoint] of pages) {
+        const read = page.waitForResponse(
+          (response) =>
+            new URL(response.url()).pathname === endpoint &&
+            response.request().method() === "GET",
+        )
+        const recordAudit =
+          path === "time-logs/overview"
+            ? page.waitForResponse(
+                (response) =>
+                  new URL(response.url()).pathname ===
+                    "/api/attendance/audit" &&
+                  new URL(response.url()).searchParams.get("recordsOnly") ===
+                    "true",
+              )
+            : null
+        await page.goto("/attendance/" + path)
+        expect((await read).status()).toBe(200)
+        await expect(
+          page.getByRole("heading", { name: title, exact: true }),
+        ).toBeVisible()
+        await expect(
+          page.getByRole("button", { name: "Retry", exact: true }),
+        ).toHaveCount(0)
+        if (recordAudit) {
+          expect((await recordAudit).status()).toBe(200)
+          const main = page.getByRole("main", { name: "Attendance workspace" })
+          for (const title of [
+            "Recorded session status",
+            "Record-change summary",
+            "Recent record activity",
+          ])
+            await expect(
+              main.getByRole("heading", { name: title, exact: true }),
+            ).toBeVisible()
+          await expect(
+            main.getByText("Check-ins", { exact: true }),
+          ).toBeVisible()
+          await expect(
+            main.getByText("Check-outs", { exact: true }),
+          ).toBeVisible()
+          await expect(
+            main.getByRole("link", { name: "View records", exact: true }),
+          ).toHaveAttribute("href", "/attendance/time-logs/records")
+          await expect(
+            main.getByRole("link", { name: "Open audit trail", exact: true }),
+          ).toHaveAttribute("href", "/attendance/time-logs/audit")
+          await expect(main.getByRole("table")).toHaveCount(0)
+          await expect(
+            main.getByText(
+              /overtime|correction|requests|polic|required hours|net worked hours|average net hours/i,
+            ),
+          ).toHaveCount(0)
+          const refreshed = page.waitForResponse(
+            (response) =>
+              new URL(response.url()).pathname === "/api/attendance/audit" &&
+              new URL(response.url()).searchParams.get("recordsOnly") ===
+                "true",
+          )
+          await main
+            .getByRole("button", { name: "Refresh", exact: true })
+            .click()
+          expect((await refreshed).status()).toBe(200)
+          await expect(
+            main.getByRole("region", { name: "Record-change summary" }),
+          ).toBeVisible()
+        }
+        if (
+          [
+            "overview",
+            "dashboard",
+            "time-logs/overview",
+            "requests/overview",
+            "policies/overview",
+          ].includes(path)
+        ) {
+          const kpis = page
+            .getByRole("main", { name: "Attendance workspace" })
+            .locator("section[aria-busy]")
+          await expect(kpis).toHaveCount(1)
+          await expect(kpis).toHaveAttribute("aria-busy", "false")
+          const cards = kpis.locator("article")
+          await expect(cards).toHaveCount(4)
+          const columns = await kpis.evaluate(
+            (element) =>
+              getComputedStyle(element).gridTemplateColumns.split(" ").length,
+          )
+          expect(columns).toBe(width <= 560 ? 1 : width <= 1050 ? 2 : 4)
+        }
+        await assertNoPageOverflow(page)
+        if (path === "requests/overtime" || path === "requests/corrections") {
+          await expect(
+            page.getByRole("table", { name: "Attendance requests" }),
+          ).toHaveAttribute("aria-busy", "false")
+          const filtered = page.waitForResponse(
+            (response) =>
+              new URL(response.url()).pathname === endpoint &&
+              new URL(response.url()).searchParams.get("status") === "APPROVED",
+          )
+          await page
+            .getByRole("combobox", { name: "Request status filter" })
+            .click()
+          await page
+            .getByRole("option", { name: "Approved", exact: true })
+            .click()
+          const response = await filtered
+          const body = (await response.json()) as {
+            adjustments: { type: string; status: string }[]
+          }
+          expect(
+            body.adjustments.every(
+              (row) =>
+                row.status === "APPROVED" &&
+                row.type ===
+                  (path.endsWith("overtime") ? "OVERTIME" : "CORRECTION"),
+            ),
+          ).toBe(true)
+        }
+        if (path === "time-logs/audit") {
+          await page
+            .getByRole("button", { name: /View audit event/ })
+            .first()
+            .click()
+          await expect(
+            page.getByRole("heading", {
+              name: "Audit event details",
+              exact: true,
+            }),
+          ).toBeVisible()
+          await expect(
+            page.getByRole("heading", { name: "Before", exact: true }),
+          ).toBeVisible()
+          await page.getByRole("button", { name: "Done", exact: true }).click()
+          await expect(
+            page.getByRole("heading", {
+              name: "Audit event details",
+              exact: true,
+            }),
+          ).toHaveCount(0)
+        }
+        if (path === "policies/assignments") {
+          await page
+            .getByRole("combobox", { name: "Assignment policy" })
+            .click()
+          await page.getByRole("option").nth(1).click()
+          await expect(
+            page.getByRole("heading", { name: "Assigned people", exact: true }),
+          ).toBeVisible()
+          await expect(
+            page.getByText("Loading attendance", { exact: true }),
+          ).toHaveCount(0)
+        }
+        await page.screenshot({
+          path: test
+            .info()
+            .outputPath(path.replaceAll("/", "-") + "-" + width + ".png"),
+          fullPage: true,
+        })
+      }
+      if (width < 768)
+        await page.getByRole("button", { name: "Open navigation menu" }).click()
+      const menu = page.getByRole("navigation", {
+        name: "Main menu",
+        exact: true,
+      })
+      for (const name of [
+        "Attendance",
+        "Time Logs",
+        "Requests & Approvals",
+        "Policies",
+      ])
+        await expect(
+          menu.getByRole("button", { name, exact: true }),
+        ).toBeVisible()
+      if (width >= 768) {
+        const expand = page.getByRole("button", {
+          name: "Expand sidebar",
+          exact: true,
+        })
+        if (await expand.isVisible()) await expand.click()
+      }
+      await menu.getByRole("button", { name: "Time Logs", exact: true }).click()
+      await expect(
+        menu.getByRole("link", { name: "Time Logs Overview", exact: true }),
+      ).toBeVisible()
+      await menu
+        .getByRole("link", { name: "Time Logs Overview", exact: true })
+        .click()
+      await expect(page).toHaveURL(/attendance\/time-logs\/overview$/)
+      if (width < 768)
+        await expect(page.locator("#app-sidebar")).toHaveAttribute(
+          "data-drawer-open",
+          "false",
+        )
+      else {
+        await page
+          .getByRole("button", { name: "Collapse sidebar", exact: true })
+          .click()
+        await page
+          .getByRole("button", { name: "Policies", exact: true })
+          .click()
+        await expect(
+          page.getByRole("menuitem", { name: "Assignments", exact: true }),
+        ).toBeVisible()
+      }
+    },
+  )
+}
+
+test("grouped attendance routes enforce staff and department-head boundaries", async ({
+  page,
+}) => {
+  await signIn(page, "staff")
+  for (const path of [
+    "time-logs/overview",
+    "records",
+    "time-logs/audit",
+    "policies/overview",
+    "settings",
+    "policies/assignments",
+    "dashboard",
+  ]) {
+    await page.goto("/attendance/" + path)
+    await expect(page).toHaveURL(/\/module$/)
+  }
+  for (const [path, title] of [
+    ["requests/overview", "Requests & Approvals Overview"],
+    ["requests/overtime", "Overtime"],
+    ["requests/corrections", "Attendance Corrections"],
+  ]) {
+    await page.goto("/attendance/" + path)
+    await expect(
+      page.getByRole("heading", { name: title, exact: true }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole("group", { name: /Request.*view/ }),
+    ).toHaveCount(0)
+  }
+  const headPage = await page.context().newPage()
+  await signIn(headPage, "head")
+  await routeAttendanceApi(headPage)
+  await headPage.goto("/attendance/time-logs/overview")
+  await expect(
+    headPage.getByRole("heading", { name: "Time Logs Overview", exact: true }),
+  ).toBeVisible()
+  await headPage.goto("/attendance/policies/assignments")
+  await expect(headPage).toHaveURL(/\/module$/)
+  await headPage.close()
+})
+
+test("time log overview preserves available figures during partial failures and retries", async ({
+  page,
+}) => {
+  await signIn(page, "admin")
+  for (const failed of ["audit", "overview"]) {
+    const pattern = `**/api/attendance/${failed}?*`
+    await page.route(pattern, (route) =>
+      route.fulfill({
+        status: 503,
+        json: { error: "Summary temporarily unavailable." },
+      }),
+    )
+    const available = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname ===
+        `/api/attendance/${failed === "audit" ? "overview" : "audit"}`,
+    )
+    await page.goto("/attendance/time-logs/overview")
+    const response = await available
+    expect(response.status()).toBe(200)
+    const data = (await response.json()) as {
+      total?: number
+      checkIns?: { total: number }
+    }
+    const main = page.getByRole("main", { name: "Attendance workspace" })
+    const kpis = main.getByRole("region", { name: "Record activity figures" })
+    await expect(kpis).toHaveAttribute("aria-busy", "false")
+    await expect(
+      kpis.getByText("Data unavailable", { exact: true }),
+    ).toHaveCount(failed === "audit" ? 1 : 3)
+    const availableMetric = kpis.locator("article").filter({
+      has: page.getByRole("heading", {
+        name: failed === "audit" ? "Check-ins" : "Record changes",
+        exact: true,
+      }),
+    })
+    const count = failed === "audit" ? data.checkIns?.total : data.total
+    expect(count).toBeDefined()
+    await expect(
+      availableMetric.getByText(count!.toLocaleString("en-US"), {
+        exact: true,
+      }),
+    ).toBeVisible()
+    await page.unroute(pattern)
+    await main.getByRole("button", { name: "Retry", exact: true }).click()
+    await expect(kpis).toHaveAttribute("aria-busy", "false")
+    await expect(
+      kpis.getByText("Data unavailable", { exact: true }),
+    ).toHaveCount(0)
+    await expect(
+      main.getByRole("button", { name: "Retry", exact: true }),
+    ).toHaveCount(0)
+    await assertNoPageOverflow(page)
+  }
 })

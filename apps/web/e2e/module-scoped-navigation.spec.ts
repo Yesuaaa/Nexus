@@ -174,9 +174,7 @@ for (const workspace of [
   })
 }
 
-test("management links are revalidated while personal attendance keeps People & HR accessible", async ({
-  page,
-}) => {
+test("management access loss clears People & HR context", async ({ page }) => {
   await restoreSession(page, "ADMIN")
   await page.goto("/employees")
   await page.route("**/api/internal-conversations/contacts", (route) =>
@@ -193,10 +191,10 @@ test("management links are revalidated while personal attendance keeps People & 
   await page.evaluate(() =>
     window.dispatchEvent(new Event("nexus:account-updated")),
   )
-  await expect(menu.getByText("People & HR", { exact: true })).toBeVisible()
+  await expect(menu.getByText("People & HR", { exact: true })).toHaveCount(0)
   await expect(
     menu.getByRole("button", { name: "Attendance", exact: true }),
-  ).toBeVisible()
+  ).toHaveCount(0)
   await expect(
     menu.getByRole("link", { name: "Employee Management" }),
   ).toHaveCount(0)
@@ -277,6 +275,9 @@ test("Admin switches between Service Operations and People & HR scopes", async (
     .click()
   await expect(page).toHaveURL(/\/employees$/)
   await expect(menu.getByText("People & HR", { exact: true })).toBeVisible()
+  await expect(
+    menu.getByRole("button", { name: "Attendance", exact: true }),
+  ).toHaveCount(0)
   await expect(
     menu.getByRole("link", { name: "Department Management", exact: true }),
   ).toBeVisible()

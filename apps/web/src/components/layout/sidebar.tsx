@@ -39,6 +39,7 @@ import {
   type RoutePolicy,
   type RoutePolicyId,
 } from "@/features/workspaces/model/route-policy"
+import { attendanceNavigation } from "@/features/attendance/model/navigation"
 import { useWorkspaceModuleId } from "@/features/workspaces/providers/workspace-provider"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 
@@ -94,6 +95,7 @@ function NavigationIcon({
     "request-inbox": Inbox,
     help: CircleHelp,
     employees: UsersRound,
+    "attendance-dashboard": DashboardIcon,
     "staff-workload": Gauge,
   }
   const icon = icons[policyId]
@@ -399,23 +401,23 @@ export function Sidebar({
   }
 
   function renderPolicy(policy: RoutePolicy) {
-    if (policy.id === "attendance") {
+    const attendanceGroup = attendanceNavigation.find(
+      (group) => group.id === policy.id,
+    )
+    if (attendanceGroup && attendanceGroup.id !== "attendance-dashboard") {
       return renderGroup({
         kind: "group",
-        label: "Attendance",
-        icon: Clock3,
+        label: attendanceGroup.label,
+        icon:
+          attendanceGroup.id === "attendance"
+            ? Clock3
+            : attendanceGroup.id === "attendance-requests"
+              ? Inbox
+              : ClipboardList,
         visible: policy.canAccess,
-        links: [
-          {
-            href: "/attendance/overview",
-            label: "Overview",
-            ariaLabel: "Attendance Overview",
-          },
-          { href: "/attendance/my", label: "Check-Ins" },
-          { href: "/attendance/records", label: "Time Logs" },
-          { href: "/attendance/adjustments", label: "OT & Agreements" },
-          { href: "/attendance/settings", label: "Policies" },
-        ].filter((link) => canAccessRoute(account, link.href)),
+        links: attendanceGroup.links.filter((link) =>
+          canAccessRoute(account, link.href),
+        ),
       })
     }
     const props = {

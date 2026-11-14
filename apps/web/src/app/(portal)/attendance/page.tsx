@@ -1,4 +1,4 @@
 import { redirect } from "next/navigation"
 export default function Page() {
-  redirect("/attendance/my")
+  redirect("/attendance/check-ins")
 }

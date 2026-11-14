@@ -1,3 +1,4 @@
+import { attendanceNavigation } from "../src/features/attendance/model/navigation.ts"
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import {
@@ -38,11 +39,11 @@ test("attendance navigation grants self-service independently of employee manage
     assert.equal(canAccessRoute(actor, "/attendance/adjustments"), true)
     assert.equal(
       getActiveWorkspaceModuleId(actor, "/attendance/my"),
-      "people-hr",
+      "attendance-monitoring",
     )
   }
   assert.equal(canAccessRoute(staff, "/employees"), false)
-  for (const path of ["/attendance/overview", "/attendance/records"]) {
+  for (const path of ["/attendance/dashboard", "/attendance/records"]) {
     assert.equal(canAccessRoute(staff, path), false)
     assert.equal(canAccessRoute(head, path), true)
     assert.equal(canAccessRoute(admin, path), true)
@@ -102,4 +103,26 @@ test("live elapsed time preserves overnight attribution and pauses during unpaid
     9 * 3600000,
   )
   assert.equal(duration(27 * 3600000 + 61000), "27:01:01")
+})
+
+test("all attendance navigation pages preserve module ownership and role boundaries", () => {
+  const staff = { id: "staff", role: "STAFF", isActive: true, permissions: [] }
+  for (const group of attendanceNavigation)
+    for (const link of group.links) {
+      assert.equal(
+        canAccessRoute(staff, link.href),
+        link.access === "self",
+        link.href,
+      )
+      assert.equal(
+        canAccessRoute(
+          { ...staff, headOf: { id: "dept", name: "Design" } },
+          link.href,
+        ),
+        link.access !== "configure",
+        link.href,
+      )
+      for (const role of ["USER", "SUPERADMIN"])
+        assert.equal(canAccessRoute({ ...staff, role }, link.href), false)
+    }
 })

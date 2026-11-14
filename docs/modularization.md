@@ -1,4 +1,6 @@
 Phased roadmap
+
+Attendance module update (2026-11-14): Attendance & Monitoring is a separate workforce module. It owns the existing `/attendance/*` routes and reuses the shared workspace shell and attendance components. People & HR owns department and employee management. Attendance management opens Overview; personal access opens Check-Ins. Existing permissions remain in force.
 Current scope correction: Workspace selection and module-scoped navigation apply only to workforce accounts (STAFF, ADMIN, SUPERADMIN). Clients (USER) keep `/dashboard` as their landing page and use direct sidebar links to Services, Booked Requests, My Projects, Calendar, and Help. The historical client selector recommendations below are superseded by this requirement. Existing route policies and permissions still govern access.
 
 Phase 0 — Characterization and safety net
