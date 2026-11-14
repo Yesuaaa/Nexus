@@ -1,5 +1,5 @@
 import type { PillTone } from "@/components/ui/pill"
-import type { ProjectTaskStatus } from "../api/project-workspace-api"
+import type { ProjectTaskStatus } from "@/features/project-management/model/project-contracts"
 
 export const taskStatusLabels: Record<ProjectTaskStatus, string> = {
   NOT_STARTED: "Not started",

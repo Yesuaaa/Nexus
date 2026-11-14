@@ -44,7 +44,7 @@ function participantDto(user: InternalUser) {
   }
 }
 
-function isInternalRole(role: string): role is InternalRole {
+export function isInternalRole(role: string): role is InternalRole {
   return (internalRoles as readonly string[]).includes(role)
 }
 
@@ -275,7 +275,10 @@ export async function getInternalConversationAccess(
   const participant = otherParticipant(record, userId)
   return {
     conversation: participantDto(participant),
-    canSend: participant.isActive && participant.accountDeletedAt === null,
+    canSend:
+      participant.isActive &&
+      participant.accountDeletedAt === null &&
+      isInternalRole(participant.role),
   }
 }
 
@@ -375,6 +378,19 @@ export async function sendInternalMessage(
     })
     if (!access)
       throw new ServiceRequestsError(404, "Internal conversation not found")
+    const sender =
+      access.participantOne.id === userId
+        ? access.participantOne
+        : access.participantTwo
+    if (
+      !sender.isActive ||
+      sender.accountDeletedAt !== null ||
+      !isInternalRole(sender.role)
+    )
+      throw new ServiceRequestsError(
+        403,
+        "Only staff and administrators can use internal chat.",
+      )
     const participant =
       access.participantOne.id === userId
         ? access.participantTwo

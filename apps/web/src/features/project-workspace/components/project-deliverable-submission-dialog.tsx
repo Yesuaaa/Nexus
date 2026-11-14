@@ -1,5 +1,7 @@
 "use client"
 
+import { FormTextarea } from "@/components/ui/form-input"
+
 import { useId, useRef, useState, type FormEvent } from "react"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -172,7 +174,7 @@ export function ProjectDeliverableSubmissionDialog({
             )}
             <label className="grid gap-2 text-xs font-medium">
               Submission note (optional)
-              <textarea
+              <FormTextarea
                 value={note}
                 maxLength={2000}
                 rows={3}
@@ -181,7 +183,6 @@ export function ProjectDeliverableSubmissionDialog({
                   setNote(event.target.value)
                   pendingId.current = null
                 }}
-                className="resize-y rounded-lg border border-[#d7dfe8] px-3 py-2 text-xs leading-5"
               />
             </label>
             <p className="text-[11px] text-[#52627a]">

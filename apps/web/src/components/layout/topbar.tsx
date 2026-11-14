@@ -12,31 +12,42 @@ export function Topbar({
   onOpenMenu,
   onSignOut,
   showMessages,
+  minimal = false,
 }: {
-  drawerOpen: boolean
-  onOpenMenu: () => void
+  drawerOpen?: boolean
+  onOpenMenu?: () => void
   onSignOut: () => void
-  showMessages: boolean
+  showMessages?: boolean
+  minimal?: boolean
 }) {
   return (
     <header
       data-portal-topbar
       className="flex h-[70px] min-w-0 items-center rounded-[13px] border border-[#dedede] bg-background px-4 max-[767px]:h-[62px] max-[767px]:gap-[9px] max-[767px]:px-[10px]"
     >
-      <button
-        type="button"
-        className={`${iconButtonClass} hidden max-[767px]:grid`}
-        aria-label="Open navigation menu"
-        aria-controls="app-sidebar"
-        aria-expanded={drawerOpen}
-        onClick={onOpenMenu}
+      {!minimal && (
+        <>
+          <button
+            type="button"
+            className={`${iconButtonClass} hidden max-[767px]:grid`}
+            aria-label="Open navigation menu"
+            aria-controls="app-sidebar"
+            aria-expanded={drawerOpen}
+            onClick={onOpenMenu}
+          >
+            <MenuIcon />
+          </button>
+          <Breadcrumbs />
+        </>
+      )}
+      <div
+        className="ml-auto flex shrink-0 items-center gap-1 pl-2"
+        {...(minimal
+          ? { role: "group", "aria-label": "Account controls" }
+          : {})}
       >
-        <MenuIcon />
-      </button>
-      <Breadcrumbs />
-      <div className="ml-auto flex shrink-0 items-center gap-1 pl-2">
-        <WorkflowNotifications />
-        {showMessages && <MessagesLink />}
+        {!minimal && <WorkflowNotifications />}
+        {!minimal && showMessages && <MessagesLink />}
         <AccountMenu onSignOut={onSignOut} />
       </div>
     </header>

@@ -1,5 +1,7 @@
 "use client"
 
+import { FormTextarea } from "@/components/ui/form-input"
+
 import { Form } from "@/components/ui/form"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 
@@ -968,7 +970,7 @@ function ConversationPanel({
                             >
                               Edit message
                             </label>
-                            <textarea
+                            <FormTextarea
                               id={`edit-message-${message.id}`}
                               autoFocus
                               rows={3}
@@ -987,7 +989,6 @@ function ConversationPanel({
                                 event.preventDefault()
                                 event.currentTarget.form?.requestSubmit()
                               }}
-                              className="block min-h-20 w-full resize-y rounded-lg border border-[#d8e1ef] bg-white px-3 py-2 text-xs leading-5 text-[#182235] outline-none focus-visible:ring-2 focus-visible:ring-[#294a9b]"
                             />
                             {messageActionError && (
                               <Alert variant="text">{messageActionError}</Alert>

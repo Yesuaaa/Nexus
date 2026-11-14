@@ -25,7 +25,6 @@ import {
   accountButtonPrimary,
   accountButtonSecondary,
   accountField,
-  accountInput,
 } from "../styles/account-styles"
 import { errorMessage } from "@/lib/error-message"
 
@@ -187,11 +186,6 @@ export function ChangePasswordDialog({
                       .filter(Boolean)
                       .join(" ") || undefined
                   }
-                  className={cn(
-                    accountInput,
-                    "text-sm shadow-none",
-                    errors[name] && "border-[#d64557]",
-                  )}
                 />
                 {name === "newPassword" && (
                   <p

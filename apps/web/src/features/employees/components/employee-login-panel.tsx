@@ -113,7 +113,6 @@ export function EmployeeLoginPanel({
                       event.target.value,
                     )
                   }
-                  className="h-10 rounded-lg border-[#d6dfec] text-sm"
                   required
                   minLength={PASSWORD_MIN_LENGTH}
                   maxLength={256}

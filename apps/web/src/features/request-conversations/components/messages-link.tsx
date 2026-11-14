@@ -7,6 +7,12 @@ import { MessageSquare } from "lucide-react"
 import { iconButtonClass } from "@/components/layout/styles"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { watchVisibleRefresh } from "@/lib/visible-refresh"
+import { useWorkspaceModuleId } from "@/features/workspaces/providers/workspace-provider"
+import {
+  getMessagesView,
+  messagesViewHref,
+  type MessagesView,
+} from "../model/messages-view"
 import { listConversations } from "../api/request-conversations-api"
 import { listInternalConversations } from "../api/internal-conversations-api"
 import { listProjectConversations } from "../api/project-conversations-api"
@@ -18,19 +24,15 @@ import {
 function AccountMessagesLink({
   internal,
   projects,
+  view,
 }: {
   internal: boolean
   projects: boolean
+  view: MessagesView
 }) {
   const pathname = usePathname()
-  const searchParams = useSearchParams()
   // The open inbox already refreshes its active list and publishes its count.
-  const inboxKind =
-    pathname === "/messages"
-      ? searchParams.get("mode") === "internal"
-        ? "internal"
-        : "requests"
-      : null
+  const inboxKind = pathname === "/messages" ? view : null
   const [counts, setCounts] = useState({
     requests: 0,
     internal: 0,
@@ -52,13 +54,13 @@ function AccountMessagesLink({
       loading = true
       // Keep the last known count when one source is temporarily unavailable.
       await Promise.allSettled([
-        ...(inboxKind !== "requests"
+        ...(inboxKind !== "service" && inboxKind !== "unified"
           ? [listConversations(undefined, controller.signal)]
           : []),
         ...(internal && inboxKind !== "internal"
           ? [listInternalConversations(undefined, controller.signal)]
           : []),
-        ...(projects && inboxKind !== "requests"
+        ...(projects && inboxKind !== "project" && inboxKind !== "unified"
           ? [listProjectConversations("active", undefined, controller.signal)]
           : []),
       ])
@@ -82,7 +84,7 @@ function AccountMessagesLink({
     (projects ? counts.projects : 0)
   return (
     <Link
-      href="/messages"
+      href={messagesViewHref(view)}
       aria-label={`Messages${unreadCount ? `, ${unreadCount} unread` : ""}`}
       aria-current={pathname === "/messages" ? "page" : undefined}
       className={`${iconButtonClass} relative ${pathname === "/messages" ? "bg-[#e9eef5] text-[#203a78]" : ""}`}
@@ -102,11 +104,29 @@ function AccountMessagesLink({
 
 export function MessagesLink() {
   const account = usePortalAccount()
+  const moduleId = useWorkspaceModuleId()
+  const pathname = usePathname()
+  const params = useSearchParams()
+  const view = getMessagesView(
+    account,
+    moduleId,
+    pathname === "/messages"
+      ? {
+          internal: params.get("mode") === "internal" || params.has("internal"),
+          project:
+            params.get("mode") === "projects" ||
+            params.has("project") ||
+            (params.get("scope") === "project" && !params.has("request")),
+          service: params.has("request") || params.get("scope") === "service",
+        }
+      : {},
+  )
   return (
     <AccountMessagesLink
       key={account.id}
       internal={account.role !== "USER"}
       projects={account.role === "USER" || account.role === "STAFF"}
+      view={view}
     />
   )
 }

@@ -1,3 +1,4 @@
+import { FormInput } from "@/components/ui/form-input"
 import { Form } from "@/components/ui/form"
 import { useState, type FormEvent } from "react"
 import { Alert } from "@/components/ui/alert"
@@ -19,7 +20,6 @@ import {
   accountButtonPrimary,
   accountButtonSecondary,
   accountField,
-  accountInput,
 } from "../styles/account-styles"
 import { errorMessage } from "@/lib/error-message"
 
@@ -124,17 +124,6 @@ export function CreateAccountDialog({
     setTouched((current) => ({ ...current, [field]: true }))
   }
 
-  function inputClass(field: FieldName) {
-    return cn(
-      accountInput,
-      showError(field) && [
-        "border-[#d64557] focus:border-[#d64557] focus-visible:border-[#d64557]",
-        "outline-none focus:outline-none focus-visible:outline-none",
-        "focus:ring-0 focus-visible:ring-0 focus:shadow-none focus-visible:shadow-none",
-      ],
-    )
-  }
-
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setSubmitted(true)
@@ -181,8 +170,7 @@ export function CreateAccountDialog({
             <span>
               Email address <RequiredMark />
             </span>
-            <input
-              className={inputClass("email")}
+            <FormInput
               name="email"
               type="email"
               autoComplete="off"
@@ -200,8 +188,7 @@ export function CreateAccountDialog({
             <span>
               Full name <RequiredMark />
             </span>
-            <input
-              className={inputClass("fullName")}
+            <FormInput
               name="fullName"
               type="text"
               maxLength={100}
@@ -216,8 +203,7 @@ export function CreateAccountDialog({
           </label>
           <label className={accountField}>
             <span>Contact number</span>
-            <input
-              className={inputClass("contactNumber")}
+            <FormInput
               name="contactNumber"
               type="tel"
               inputMode="numeric"
@@ -256,7 +242,6 @@ export function CreateAccountDialog({
             </span>
             <PasswordInput
               key={`password-${passwordKey}`}
-              className={cn(inputClass("password"), "text-sm shadow-none")}
               name="password"
               autoComplete="new-password"
               maxLength={1024}
@@ -275,7 +260,6 @@ export function CreateAccountDialog({
             <PasswordInput
               key={`confirmation-${passwordKey}`}
               toggleLabel="confirm password"
-              className={cn(inputClass("confirmation"), "text-sm shadow-none")}
               name="confirmation"
               autoComplete="new-password"
               maxLength={1024}

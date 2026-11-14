@@ -1,5 +1,7 @@
 "use client"
 
+import { FormInput, FormTextarea } from "@/components/ui/form-input"
+
 import { Form } from "@/components/ui/form"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 
@@ -25,7 +27,6 @@ import {
   WorkflowBadge,
   WorkflowField,
   workflowButton,
-  workflowInput,
 } from "./workflow-primitives"
 
 export function WorkflowDisclosure({
@@ -733,12 +734,7 @@ export function WorkflowContextPanel({
                           })}
                         >
                           <WorkflowField label="Resume note">
-                            <input
-                              name="note"
-                              required
-                              maxLength={2000}
-                              className={workflowInput}
-                            />
+                            <FormInput name="note" required maxLength={2000} />
                           </WorkflowField>
                         </ActionForm>
                       ) : (
@@ -751,12 +747,7 @@ export function WorkflowContextPanel({
                           })}
                         >
                           <WorkflowField label="Reason for hold">
-                            <input
-                              name="note"
-                              required
-                              maxLength={2000}
-                              className={workflowInput}
-                            />
+                            <FormInput name="note" required maxLength={2000} />
                           </WorkflowField>
                         </ActionForm>
                       ))}
@@ -770,12 +761,11 @@ export function WorkflowContextPanel({
                       })}
                     >
                       <WorkflowField label="Cancellation reason">
-                        <textarea
+                        <FormTextarea
                           name="note"
                           required
                           maxLength={2000}
                           rows={2}
-                          className={workflowInput}
                         />
                       </WorkflowField>
                       <label className="flex items-start gap-2 text-[10px]">

@@ -1,6 +1,7 @@
 "use client"
 
 import { Form } from "@/components/ui/form"
+import { formFieldClass } from "@/components/ui/form-control-styles"
 import { useState, type FormEvent, type ReactNode } from "react"
 import { sileo } from "@/lib/toast"
 import { Alert } from "@/components/ui/alert"
@@ -14,8 +15,6 @@ import {
   passwordIssue,
   passwordPolicyHint,
 } from "@/lib/validation"
-const inputClass =
-  "min-h-11 w-full min-w-0 rounded-lg border border-[#d8e1ef] bg-background px-3 py-2 text-sm text-[#182235] shadow-none outline-none focus-visible:ring-2 focus-visible:ring-[#294a9b] disabled:opacity-60"
 function Field({
   label,
   children,
@@ -26,7 +25,7 @@ function Field({
   hint?: string
 }) {
   return (
-    <label className="grid min-w-0 content-start gap-2 text-xs font-medium text-[#52627a]">
+    <label className={`${formFieldClass} content-start`}>
       {label}
       {children}
       {hint && (
@@ -91,7 +90,6 @@ function PasswordField({
         minLength={minLength}
         maxLength={PASSWORD_MAX_BYTES}
         required
-        className={inputClass}
       />
     </Field>
   )

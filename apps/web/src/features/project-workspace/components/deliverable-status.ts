@@ -1,5 +1,5 @@
 import { pillToneClass, type PillTone } from "@/components/ui/pill"
-import type { ProjectDeliverableStatus } from "../api/project-workspace-api"
+import type { ProjectDeliverableStatus } from "@/features/project-management/model/project-contracts"
 
 export function deliverableStatusLabel(status: ProjectDeliverableStatus) {
   switch (status) {

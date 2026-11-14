@@ -1,5 +1,7 @@
 "use client"
 
+import { FormInput } from "@/components/ui/form-input"
+
 import { useState } from "react"
 import { TaskDetailsPanel } from "./task-details-panel"
 import { Eye, Pencil } from "lucide-react"
@@ -153,25 +155,23 @@ export function TaskRowActions({
             >
               <label className="block text-xs font-medium sm:col-span-2">
                 Task name
-                <input
+                <FormInput
                   required
                   maxLength={180}
                   value={draft.title}
                   onChange={(event) =>
                     setDraft({ ...draft, title: event.target.value })
                   }
-                  className={inputClass}
                 />
               </label>
               <label className="block text-xs font-medium">
                 Project role
-                <input
+                <FormInput
                   maxLength={80}
                   value={draft.role}
                   onChange={(event) =>
                     setDraft({ ...draft, role: event.target.value })
                   }
-                  className={inputClass}
                 />
               </label>
               <label className="block text-xs font-medium">

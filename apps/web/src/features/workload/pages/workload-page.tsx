@@ -1,5 +1,7 @@
 "use client"
 
+import { FormInput } from "@/components/ui/form-input"
+
 import { Form } from "@/components/ui/form"
 
 import { WorkloadWeekInput } from "../components/workload-week-input"
@@ -41,7 +43,6 @@ import {
 } from "@/components/ui/modal"
 import { Pill, type PillTone } from "@/components/ui/pill"
 import { ProgressMeter } from "@/components/ui/stat-strip"
-import { Input } from "@/components/ui/input"
 import { DateInput } from "@/components/ui/date-input"
 import { SearchField } from "@/components/ui/search-field"
 import {
@@ -797,8 +798,7 @@ export function WorkloadPage() {
               </div>
               <label className={panelField}>
                 Hours per week
-                <Input
-                  className={panelInput}
+                <FormInput
                   name="weeklyHours"
                   type="number"
                   min="0.25"

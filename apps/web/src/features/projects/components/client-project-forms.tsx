@@ -1,5 +1,7 @@
 "use client"
 
+import { FormInput, FormTextarea } from "@/components/ui/form-input"
+
 import { useState } from "react"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -86,23 +88,21 @@ export function ClientProjectBriefDrawer({
         <SidePanelBody>
           <label className="grid gap-2 text-xs font-medium">
             Project name
-            <input
+            <FormInput
               value={draftName}
               onChange={(event) => setDraftName(event.target.value)}
               maxLength={160}
               required
-              className="h-10 rounded-lg border border-[#d7dfe8] bg-background px-3 text-sm font-normal outline-none focus-visible:ring-2 focus-visible:ring-[#28468f]/25"
             />
           </label>
           <label className="grid gap-2 text-xs font-medium">
             Project brief
-            <textarea
+            <FormTextarea
               value={draftDescription}
               onChange={(event) => setDraftDescription(event.target.value)}
               maxLength={6000}
               rows={8}
               placeholder="Describe the goals, scope, or context for this project."
-              className="resize-y rounded-lg border border-[#d7dfe8] bg-background px-3 py-2.5 text-sm leading-6 font-normal outline-none focus-visible:ring-2 focus-visible:ring-[#28468f]/25"
             />
             <span className="text-right text-[11px] font-normal text-[#71839d]">
               {draftDescription.length}/6,000
@@ -213,7 +213,7 @@ export function RequestProjectDialog({
             {isCancellation
               ? "Why are you requesting cancellation?"
               : "What needs to change?"}
-            <textarea
+            <FormTextarea
               autoFocus
               value={details}
               onChange={(event) => setDetails(event.target.value)}
@@ -226,7 +226,6 @@ export function RequestProjectDialog({
                   ? "Share the reason for your request."
                   : "Describe the requested change and why it is needed."
               }
-              className="resize-y rounded-lg border border-[#d7dfe8] bg-background px-3 py-2.5 text-sm leading-6 font-normal outline-none focus-visible:ring-2 focus-visible:ring-[#28468f]/25"
             />
             <span className="text-right text-[11px] font-normal text-[#71839d]">
               {details.length}/{maxLength.toLocaleString()}
@@ -293,7 +292,7 @@ export function RequestDeliverableRevisionDialog({
         >
           <label className="grid gap-2 text-xs font-medium">
             What should be revised?
-            <textarea
+            <FormTextarea
               autoFocus
               value={note}
               onChange={(event) => setNote(event.target.value)}
@@ -302,7 +301,6 @@ export function RequestDeliverableRevisionDialog({
               rows={5}
               required
               placeholder="Describe the change you need."
-              className="resize-y rounded-lg border border-[#d7dfe8] bg-background px-3 py-2.5 text-sm leading-6 font-normal outline-none focus-visible:ring-2 focus-visible:ring-[#28468f]/25"
             />
             <span className="text-right text-[11px] font-normal text-[#71839d]">
               {note.length}/2,000
@@ -390,7 +388,7 @@ export function ReviewProjectChangeDialog({
           <label className="grid gap-2 text-xs font-medium">
             Response to client
             {decision === "NOT_APPROVED" ? " (required)" : " (optional)"}
-            <textarea
+            <FormTextarea
               autoFocus
               value={responseNote}
               onChange={(event) => setResponseNote(event.target.value)}
@@ -407,7 +405,6 @@ export function ReviewProjectChangeDialog({
                     ? "Explain why the project will continue."
                     : "Explain why this change cannot be approved."
               }
-              className="resize-y rounded-lg border border-[#d7dfe8] bg-background px-3 py-2.5 text-sm leading-6 font-normal outline-none focus-visible:ring-2 focus-visible:ring-[#28468f]/25"
             />
           </label>
           <DialogFooter className="gap-2 sm:gap-2">

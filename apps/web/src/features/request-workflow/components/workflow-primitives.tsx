@@ -8,6 +8,7 @@ import {
 } from "lucide-react"
 import { humanizeEnum } from "@/lib/format"
 import { cn } from "@/lib/utils"
+import { formFieldClass } from "@/components/ui/form-control-styles"
 import type { Workflow, WorkflowState } from "../model/workflow"
 
 export const workflowInput =
@@ -64,7 +65,7 @@ export function WorkflowField({
 }) {
   const Container = asGroup ? "div" : "label"
   return (
-    <Container className="grid min-w-0 gap-1.5 text-[11px] font-medium text-[#52627a]">
+    <Container className={formFieldClass}>
       {label}
       {children}
     </Container>

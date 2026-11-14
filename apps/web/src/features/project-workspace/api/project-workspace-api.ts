@@ -1,4 +1,15 @@
 import { apiRequest, apiStreamRequest } from "@/features/auth/api/auth-api"
+import type {
+  ManagedProjectDeliverable,
+  ProjectStatus,
+  ProjectTaskStatus,
+} from "@/features/project-management/model/project-contracts"
+
+export type {
+  ProjectDeliverableStatus,
+  ProjectStatus,
+  ProjectTaskStatus,
+} from "@/features/project-management/model/project-contracts"
 
 const projectWorkspaceListChangedEvent = "project-workspace-list-changed"
 
@@ -12,8 +23,6 @@ export function onProjectWorkspaceListChanged(callback: () => void) {
     window.removeEventListener(projectWorkspaceListChangedEvent, callback)
 }
 
-export type ProjectTaskStatus = "NOT_STARTED" | "IN_PROGRESS" | "DONE"
-
 export type ProjectTask = {
   employeeId?: string | null
   dueDate?: string | null
@@ -23,31 +32,7 @@ export type ProjectTask = {
   status: ProjectTaskStatus
 }
 
-export type ProjectDeliverableStatus =
-  "NOT_SUBMITTED" | "IN_REVIEW" | "REJECTED" | "APPROVED" | "SENT_TO_CLIENT"
-
-export type ProjectDeliverable = {
-  id: string
-  title: string
-  description: string | null
-  expectedFileType: string | null
-  deliveryStatus: ProjectDeliverableStatus
-  rejectionReason: string | null
-  reviewedAt: string | null
-  sentToClientAt: string | null
-  workflowFileId: string | null
-  updatedAt: string
-  completedAt: string | null
-  workflowFile: {
-    id: string
-    name: string
-    mimeType: string
-    size: number
-    uploaderId: string
-    createdAt: string
-    clientVisible: boolean
-  } | null
-}
+export type ProjectDeliverable = ManagedProjectDeliverable
 
 export type ProjectWorkPlan = {
   phases: { id: string; title: string; tasks: ProjectTask[] }[]
@@ -81,7 +66,7 @@ export type ProjectWorkspaceWorkstream = {
   serviceName: string
   referenceNumber: string | null
   workflowState: string | null
-  status: string
+  status: ProjectStatus
   startDate: string | null
   createdAt: string
   updatedAt: string
@@ -107,7 +92,7 @@ export type ProjectWorkspaceSummary = {
   id: string
   name: string
   structure: "SEPARATE" | "MULTI_WORKSTREAM"
-  status: string
+  status: ProjectStatus
   client: { id: string; fullName: string | null }
   updatedAt: string
   activityCount: number

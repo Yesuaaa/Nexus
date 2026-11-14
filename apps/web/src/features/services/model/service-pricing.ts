@@ -4,6 +4,14 @@ import type {
   Service,
 } from "../api/services-api"
 
+export const pricingModelLabels: Record<PricingModel, string> = {
+  FIXED: "Fixed Price",
+  STARTING: "Starting At",
+  CUSTOM_QUOTE: "Custom Quotation",
+  RECURRING: "Recurring",
+  HOURLY: "Hourly Rate",
+}
+
 type PriceInput = {
   pricingModel: PricingModel
   currency: string

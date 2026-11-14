@@ -1,5 +1,5 @@
 import { Pill } from "@/components/ui/pill"
-import type { ServiceRequestStatus } from "@/features/services/api/services-api"
+import type { ServiceRequestStatus } from "@/features/service-operations/model/service-request-contracts"
 import { bookingStatuses } from "../model/booking-status"
 
 export function BookingStatusPill({

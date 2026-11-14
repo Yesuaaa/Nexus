@@ -29,6 +29,7 @@ test(
     const outsider = await user("Outsider", "STAFF")
     const head = await user("Head", "STAFF")
     const admin = await user("Admin", "ADMIN")
+    const superadmin = await user("Superadmin", "SUPERADMIN")
     const department = await prisma.department.create({
       data: { name: "Design", headId: head.id },
     })
@@ -165,6 +166,19 @@ test(
       )
     }
     assert.equal((await call(admin, "")).status, 403)
+    for (const who of [admin, superadmin]) {
+      assert.equal((await call(who, "")).status, 403)
+      assert.equal((await call(who, `/${project.id}`)).status, 403)
+      assert.equal(
+        (
+          await call(who, `/${project.id}/messages`, "POST", {
+            body: "Unauthorized privileged access",
+            clientMessageId: randomUUID(),
+          })
+        ).status,
+        403,
+      )
+    }
     assert.equal(
       (await call(client, `/${project.id}?before=missing`)).status,
       400,

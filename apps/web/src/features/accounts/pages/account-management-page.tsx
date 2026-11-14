@@ -2,8 +2,9 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { LoaderCircle, Trash2 } from "lucide-react"
+import { LoaderCircle, Trash2, UsersRound } from "lucide-react"
 import { Avatar } from "@/components/ui/avatar"
+import { ManagementViewToggle } from "@/components/layout/management-view-toggle"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { sileo } from "@/lib/toast"
 import { cn } from "@/lib/utils"
@@ -12,7 +13,6 @@ import { PageHeader, PageHeaderButton } from "@/components/layout/page-header"
 import { Alert } from "@/components/ui/alert"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
-import { DepartmentPill } from "@/components/ui/department-pill.tsx"
 import { Dropdown as AccessDropdown } from "@/components/ui/dropdown"
 import { FilterSelect } from "@/components/ui/filter-select"
 import { Pill } from "@/components/ui/pill"
@@ -125,24 +125,7 @@ function AccountRowContents({
           {trashView ? "Deleted" : user.isActive ? "Active" : "Inactive"}
         </Pill>
       </div>
-      <div className="min-w-0 @max-[900px]:col-start-1 @max-[900px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto">
-        {user.department ? (
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <DepartmentPill
-              className="self-start"
-              department={user.department}
-            />
-            {user.team && (
-              <span className="truncate text-[11px] text-[#738096]">
-                {user.team.name}
-              </span>
-            )}
-          </div>
-        ) : (
-          <span className="text-xs text-[#94a3b8]">—</span>
-        )}
-      </div>
-      <div className="text-[11px] text-[#738096] @max-[900px]:col-start-1 @max-[900px]:row-start-3 @max-[530px]:row-auto">
+      <div className="text-[11px] text-[#738096] @max-[900px]:col-start-1 @max-[900px]:row-start-2 @max-[530px]:row-auto">
         <span className="mr-1.5 hidden @max-[900px]:inline">
           {trashView ? "Deleted" : "Created"}
         </span>
@@ -152,7 +135,7 @@ function AccountRowContents({
             : user.createdAt,
         )}
       </div>
-      <div className="flex min-w-0 items-center @max-[900px]:col-start-2 @max-[900px]:row-start-3 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+      <div className="flex min-w-0 items-center @max-[900px]:col-start-1 @max-[900px]:row-start-3 @max-[530px]:col-start-1 @max-[530px]:row-auto">
         {trashView ? (
           <span className="text-[11px] text-[#738096]">Removed</span>
         ) : editable ? (
@@ -175,7 +158,7 @@ function AccountRowContents({
           </span>
         )}
       </div>
-      <div className="flex min-w-0 items-center gap-2 @max-[900px]:col-start-2 @max-[900px]:row-start-4 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+      <div className="flex min-w-0 items-center gap-2 @max-[900px]:col-start-2 @max-[900px]:row-start-3 @max-[530px]:col-start-1 @max-[530px]:row-auto">
         <span className="hidden text-[#738096] @max-[530px]:inline">
           Actions
         </span>
@@ -214,7 +197,7 @@ const accountKey = (account: Account) => account.id
 
 const accountRowClassName = cn(
   accountGrid,
-  "h-[58px] border-b border-[#eceef1] bg-background px-4 py-[7px] text-xs text-foreground hover:bg-[#e8eef2] @max-[900px]:h-[188px] @max-[900px]:gap-x-4 @max-[900px]:gap-y-[10px] @max-[900px]:py-[14px] @max-[530px]:h-[258px] @max-[530px]:gap-[9px]",
+  "h-[58px] border-b border-[#eceef1] bg-background px-4 py-[7px] text-xs text-foreground hover:bg-[#e8eef2] @max-[900px]:h-[158px] @max-[900px]:gap-x-4 @max-[900px]:gap-y-[10px] @max-[900px]:py-[14px] @max-[530px]:h-[228px] @max-[530px]:gap-[9px]",
 )
 
 function accountRowClass(_account: Account, _index: number, isLast: boolean) {
@@ -543,26 +526,27 @@ export function AccountManagementPage() {
             />
           </div>
           <div className="flex items-center justify-end gap-2 max-[560px]:justify-start">
-            <button
-              type="button"
-              className={cn(
-                accountButton,
-                "min-h-[34px] rounded-lg border-red-500 bg-background px-[12px] text-xs text-red-600 hover:enabled:bg-red-50",
-              )}
+            <ManagementViewToggle
+              active={trashView}
+              ariaLabel="Account view"
+              views={[
+                {
+                  value: false,
+                  label: trashView ? "Back to Accounts" : "Accounts",
+                  icon: UsersRound,
+                },
+                { value: true, label: "Trash", icon: Trash2 },
+              ]}
               disabled={mutating || busy}
-              aria-pressed={trashView}
-              onClick={() => {
-                setTrashView(!trashView)
-                setSortKey(trashView ? "createdAt" : "deletedAt")
+              onChange={(nextTrashView) => {
+                setTrashView(nextTrashView)
+                setSortKey(nextTrashView ? "deletedAt" : "createdAt")
                 setSortDirection("desc")
                 setPage(1)
                 setDraftRoles({})
                 setAccessError("")
               }}
-            >
-              <Trash2 size={14} aria-hidden="true" />
-              {trashView ? "Back to Accounts" : "Trash"}
-            </button>
+            />
             <button
               type="button"
               className={cn(
@@ -624,13 +608,6 @@ export function AccountManagementPage() {
             </span>
             <span>
               <TableSortButton
-                label="Department"
-                direction={sortKey === "department" ? sortDirection : null}
-                onClick={() => sortBy("department")}
-              />
-            </span>
-            <span>
-              <TableSortButton
                 label={trashView ? "Deleted" : "Created"}
                 direction={
                   sortKey === (trashView ? "deletedAt" : "createdAt")
@@ -650,22 +627,19 @@ export function AccountManagementPage() {
                   label="accounts"
                   rowClassName={cn(
                     accountGrid,
-                    "h-[58px] px-4 py-[7px] @max-[900px]:h-[188px] @max-[900px]:gap-x-4 @max-[900px]:gap-y-[10px] @max-[900px]:py-[14px] @max-[530px]:h-[258px] @max-[530px]:gap-[9px]",
+                    "h-[58px] px-4 py-[7px] @max-[900px]:h-[158px] @max-[900px]:gap-x-4 @max-[900px]:gap-y-[10px] @max-[900px]:py-[14px] @max-[530px]:h-[228px] @max-[530px]:gap-[9px]",
                   )}
                   cellClassNames={[
                     "@max-[900px]:col-start-1 @max-[900px]:row-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto",
                     "@max-[900px]:col-start-2 @max-[900px]:row-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto",
                     "@max-[900px]:col-start-2 @max-[900px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto",
-                    "@max-[900px]:col-start-1 @max-[900px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto",
                     "@max-[900px]:col-start-1 @max-[900px]:row-start-3 @max-[530px]:col-start-1 @max-[530px]:row-auto",
                     "@max-[900px]:col-start-2 @max-[900px]:row-start-3 @max-[530px]:col-start-1 @max-[530px]:row-auto",
-                    "@max-[900px]:col-start-2 @max-[900px]:row-start-4 @max-[530px]:col-start-1 @max-[530px]:row-auto",
                   ]}
                   cellSkeletonClassNames={[
                     "h-8 w-4/5",
                     "h-3 w-3/5",
                     "h-5 w-16 rounded",
-                    "h-3 w-4/5",
                     "h-3 w-20",
                     "h-3 w-20",
                     "h-8 w-24",
@@ -674,7 +648,7 @@ export function AccountManagementPage() {
               ) : (
                 <DataTableErrorRow
                   message={list.error}
-                  colSpan={7}
+                  colSpan={6}
                   onRetry={retry}
                 />
               )}

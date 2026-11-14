@@ -7,6 +7,7 @@ import { SidePanelLoading } from "@/components/ui/panel-loading"
 import { PlusIcon } from "@/components/layout/icons"
 import { PageHeader, PageHeaderButton } from "@/components/layout/page-header"
 import { contentClass, focusRing } from "@/components/layout/styles"
+import { ManagementViewToggle } from "@/components/layout/management-view-toggle"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { FilterSelect } from "@/components/ui/filter-select"
@@ -20,10 +21,6 @@ import { useDepartments } from "@/features/departments/hooks/use-departments"
 import { sileo } from "@/lib/toast"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { hasPermission, Permissions } from "@/features/auth/model/permissions"
-import {
-  EmployeeKpiCards,
-  type EmployeeKpiSummary,
-} from "../components/employee-kpi-cards"
 import {
   EmployeeLoginActionDialog,
   type EmployeeLoginAction,
@@ -39,7 +36,6 @@ import {
   employmentStatusOptions,
   employmentTypeOptions,
 } from "../model/employment"
-import { useAsyncResource } from "@/lib/use-async-resource"
 
 const ManageMembersDrawer = dynamic(
   () =>
@@ -138,24 +134,6 @@ export function EmployeeManagementPage() {
   })
   const { setPage } = list
 
-  // Overview counts: one lightweight list request per status (totals only).
-  const summary = useAsyncResource<EmployeeKpiSummary>(
-    async (signal) => {
-      const count = (status: EmploymentStatus | "") =>
-        listEmployees({ status, page: 1, signal }).then(
-          (result) => result.total,
-        )
-      const [total, active, onLeave, inactive] = await Promise.all([
-        count(""),
-        count("ACTIVE"),
-        count("ON_LEAVE"),
-        count("INACTIVE"),
-      ])
-      return { total, active, onLeave, inactive }
-    },
-    [list.revision],
-  )
-
   const departmentList = useDepartments()
   const departmentOptions = [
     { value: "", label: "All Departments" },
@@ -213,56 +191,22 @@ export function EmployeeManagementPage() {
         }
       />
 
-      {!archiveView && (
-        <div className="mt-[18px] max-[560px]:mt-[14px]">
-          <EmployeeKpiCards
-            summary={
-              summary.data ?? { total: 0, active: 0, onLeave: 0, inactive: 0 }
-            }
-            pending={!summary.data && !summary.error}
-            unavailable={Boolean(summary.error) && !summary.data}
-          />
-        </div>
-      )}
-
       <section
         className="mt-[18px] min-w-0 max-[767px]:mt-[14px]"
         aria-label="Employee directory"
       >
         <div className="flex flex-wrap items-center justify-between gap-3 pb-4 max-[560px]:flex-col max-[560px]:items-stretch max-[560px]:pb-3">
-          <div
-            role="group"
-            aria-label="Employee view"
-            className="order-last inline-flex flex-none rounded-lg border border-[#e1e4ea] bg-[#f3f5f8] p-0.5 max-[560px]:order-first max-[560px]:w-full"
-          >
-            {(
-              [
-                { archived: false, label: "Employees", icon: UsersRound },
-                { archived: true, label: "Archive", icon: Archive },
-              ] as const
-            ).map(({ archived, label, icon: Icon }) => {
-              const selected = archiveView === archived
-              return (
-                <button
-                  key={label}
-                  type="button"
-                  aria-pressed={selected}
-                  disabled={loginActionPending}
-                  onClick={() => switchView(archived)}
-                  className={cn(
-                    "inline-flex min-h-[30px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md border-0 px-3 text-xs font-semibold whitespace-nowrap transition-[background-color,color,box-shadow] duration-150 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none",
-                    selected
-                      ? "bg-background text-foreground shadow-[0_1px_2px_rgb(20_45_97_/_12%)]"
-                      : "bg-transparent text-[#65718a] hover:text-foreground",
-                    focusRing,
-                  )}
-                >
-                  <Icon size={14} aria-hidden="true" />
-                  {label}
-                </button>
-              )
-            })}
-          </div>
+          <ManagementViewToggle
+            active={archiveView}
+            ariaLabel="Employee view"
+            views={[
+              { value: false, label: "Employees", icon: UsersRound },
+              { value: true, label: "Archive", icon: Archive },
+            ]}
+            disabled={loginActionPending}
+            className="order-last max-[560px]:order-first max-[560px]:w-full"
+            onChange={switchView}
+          />
           <div className="flex min-w-0 flex-wrap items-center gap-[10px] max-[560px]:w-full max-[560px]:flex-col max-[560px]:items-stretch">
             <SearchField
               label="Search employees"
