@@ -46,7 +46,7 @@ test("clients do not receive workspace selector entries", () => {
 test("Staff receive project and personal attendance workspaces", () => {
   assert.deepEqual(moduleEntries(account("STAFF")), [
     ["Project Management", "/project-workspace"],
-    ["People & HR", "/attendance/my"],
+    ["Attendance & Monitoring", "/attendance/check-ins"],
   ])
 })
 
@@ -60,7 +60,7 @@ test("a current department head receives Service Operations without changing Sta
     [
       ["Service Operations", "/request-inbox"],
       ["Project Management", "/project-workspace"],
-      ["People & HR", "/attendance/overview"],
+      ["Attendance & Monitoring", "/attendance/overview"],
     ],
   )
 })
@@ -69,6 +69,7 @@ test("the selector returns only the Admin operational workspaces", () => {
   assert.deepEqual(moduleEntries(account("ADMIN")), [
     ["Service Operations", "/services"],
     ["People & HR", "/employees"],
+    ["Attendance & Monitoring", "/attendance/overview"],
   ])
 })
 
@@ -85,14 +86,17 @@ test("permission-limited accounts never receive a denied module entry route", ()
     ),
     [
       ["Service Operations", "/clients"],
-      ["People & HR", "/attendance/my"],
+      ["Attendance & Monitoring", "/attendance/check-ins"],
     ],
   )
   assert.deepEqual(
     moduleEntries(
       account("ADMIN", { permissions: [Permissions.DEPARTMENTS_READ] }),
     ),
-    [["People & HR", "/departments"]],
+    [
+      ["People & HR", "/departments"],
+      ["Attendance & Monitoring", "/attendance/check-ins"],
+    ],
   )
   assert.deepEqual(
     moduleEntries(account("SUPERADMIN", { permissions: [] })),

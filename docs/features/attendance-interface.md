@@ -2,17 +2,57 @@
 
 Developed: 2026-11-13
 
-Attendance is a standalone navigation group in **People & HR**, separate from Employees. It reuses the existing sidebar disclosures/flyouts, shared topbar, workspace provider, route policy, tabs, confirmation dialogs, date inputs, cards, and responsive tables. Staff can enter People & HR through Attendance without access to Employee Management. Existing Admin module entry routes remain unchanged.
+Attendance belongs to the standalone **Attendance & Monitoring** module, separate from **People & HR**. It reuses the existing sidebar disclosures/flyouts, shared topbar, workspace provider, route policy, tabs, confirmation dialogs, date inputs, cards, and responsive tables. Staff enter Attendance & Monitoring without access to People & HR or Employee Management. Existing Admin module entry routes remain unchanged.
+
+## Module separation (2026-11-14)
+
+Attendance & Monitoring reuses the existing workspace cards, sidebar disclosure/flyout, workspace provider, and shared topbar. Admin and current Department Heads enter Overview; ordinary Staff and Admin without management access enter Check-Ins. People & HR retains department and employee management. Existing `/attendance/*` routes, permissions, attendance components, and APIs are preserved.
+
+## Grouped workspace pages (2026-11-14)
+
+The module keeps the shared ModuleCard, workspace provider, sidebar disclosures/flyouts, topbar, breadcrumbs, and role guards. The four sidebar groups are defined once in `features/attendance/model/navigation.ts`; route policies use the same page metadata. Existing attendance, employee, workload, and availability rules remain unchanged.
+
+| Group                | Page        | Route                              | Access                  |
+| -------------------- | ----------- | ---------------------------------- | ----------------------- |
+| Attendance           | Overview    | `/attendance/overview`             | Attendance managers     |
+| Attendance           | Check-Ins   | `/attendance/check-ins`            | Active Staff/Admin      |
+| Time Logs            | Overview    | `/attendance/time-logs/overview`   | Attendance managers     |
+| Time Logs            | Records     | `/attendance/time-logs/records`    | Attendance managers     |
+| Time Logs            | Audit Trail | `/attendance/time-logs/audit`      | Attendance managers     |
+| Requests & Approvals | Overview    | `/attendance/requests/overview`    | Active Staff/Admin      |
+| Requests & Approvals | Overtime    | `/attendance/requests/overtime`    | Active Staff/Admin      |
+| Requests & Approvals | Corrections | `/attendance/requests/corrections` | Active Staff/Admin      |
+| Policies             | Overview    | `/attendance/policies/overview`    | Authorized policy Admin |
+| Policies             | Management  | `/attendance/policies/management`  | Authorized policy Admin |
+| Policies             | Assignments | `/attendance/policies/assignments` | Authorized policy Admin |
+
+Attendance managers retain the existing organization or current-department scope. Staff request pages remain personal. The legacy `/attendance/adjustments` route still provides the combined request directory for existing links. Clients and Superadmins do not gain attendance access.
+
+Time Logs Overview summarizes the selected historical workday period, using the existing summary service, policy snapshots, and unpaid-break deductions. Records retains its employee directory, session details, filters, and CSV export. Audit Trail uses the existing paginated audit API and shows actors, reasons, and before/after snapshots. Its date filters apply to UTC event timestamps; it is business history rather than developer diagnostics.
+
+Requests Overview uses `GET /api/attendance/adjustments/overview?scope=mine|team` to aggregate all authorized rows by type and status. It does not total only the displayed page. Overtime and Corrections share the existing request table, review panel, pagination, and scope toggle; the existing list endpoint additionally accepts a validated `status` filter. Overtime remains automatic at clock-out with department verification before HR approval. Corrections reuse the existing submission dialog and approval validation.
+
+Policies Overview uses full-inventory counts returned alongside `GET /api/attendance/policies`. Assignment-period totals include current, scheduled, and ended history and do not claim employee coverage. The existing recent-policy directory remains limited to 200 entries, explicitly labeled in the new inventory and assignment views. Assignments selects a policy and reuses the assigned-people view from policy details, including server-calculated statuses and pagination. Assignment creation reuses the existing form, confirmation, effective-date validation, and archived-policy restrictions.
+
+Implementation proceeded through navigation/access unit checks; existing clocking/foundation checks; records/audit scope checks; request summary/status and overtime tests; policy inventory/lifecycle tests; then integrated browser and responsive regression checks. Backend tests use isolated PGlite without live data or schema changes.
+
+## Check-in overview focus (2026-11-14)
+
+Attendance Overview now shows only check-in activity: distinct employees checked in, sessions started, recorded check-outs, open sessions, session status, and the latest eight clock-in/out and break actions. Counts use the existing authorized workday range and department scope; split sessions count separately and overnight sessions retain their attendance workday. Activity timestamps are shown in UTC. The shared overview API adds a `checkIns` summary while preserving the existing fields used by Time Logs Overview. The page reuses StatStrip, BreakdownList, ItemList, OverviewPanel, the shared filters and resource hook, and links only to Check-Ins. It contains no time-log, request, overtime, correction, or policy summaries.
+
+## Records and audit overview focus (2026-11-14)
+
+Time Logs Overview now summarizes check-ins, check-outs, open sessions, session status, and record-change activity. It reuses the existing scoped attendance summary and audit API, with `recordsOnly=true` selecting workday/session/break events before pagination. The audit response includes action counts across all matching events, so summaries do not total only one page. The overview shows the latest eight matching events without reasons or snapshots, and links to Records and Audit Trail for details. Record statistics use attendance work dates; audit statistics and activity use UTC creation dates. Policy, overtime, approval, correction, and request information is excluded, along with detailed record tables and hour-requirement summaries. Existing audit behavior is preserved when the new filter is omitted.
 
 ## Routes and access
 
-| Subtab      | Route                     | Staff          | Current Department Head            | Authorized Admin                     |
-| ----------- | ------------------------- | -------------- | ---------------------------------- | ------------------------------------ |
-| Overview    | `/attendance/overview`    | Denied         | Department summaries               | Organization summaries               |
-| Check-Ins   | `/attendance/my`          | Own attendance | Own attendance                     | Own attendance                       |
-| Time Logs   | `/attendance/records`     | Denied         | Current department records         | Organization employee records        |
-| Adjustments | `/attendance/adjustments` | Own requests   | Own requests and department review | Own requests and organization review |
-| Policies    | `/attendance/settings`    | Denied         | Denied                             | Policy configuration and assignment  |
+| Subtab      | Route                             | Staff          | Current Department Head            | Authorized Admin                     |
+| ----------- | --------------------------------- | -------------- | ---------------------------------- | ------------------------------------ |
+| Overview    | `/attendance/overview`            | Denied         | Department summaries               | Organization summaries               |
+| Check-Ins   | `/attendance/check-ins`           | Own attendance | Own attendance                     | Own attendance                       |
+| Time Logs   | `/attendance/time-logs/records`   | Denied         | Current department records         | Organization employee records        |
+| Adjustments | `/attendance/adjustments`         | Own requests   | Own requests and department review | Own requests and organization review |
+| Policies    | `/attendance/policies/management` | Denied         | Denied                             | Policy configuration and assignment  |
 
 Clients and Superadmins do not gain HR attendance access. Admin records/summaries use the existing `employees:read` permission; policy management uses `employees:manage`. Department management access is derived from the current active Staff account and current `Department.headId`, checked by the backend on every request. Changing a head assignment revokes that scope immediately on subsequent requests.
 
@@ -105,3 +145,7 @@ Clock-out automatically creates a Pending overtime request for whole excess work
 The existing notification inbox alerts the current Department Head and active HR/Admin accounts. Department Heads verify requests within their department; verification notifies HR for final approval. HR cannot approve Pending overtime before department verification. A department needs an authorized head to complete this step, and self-review remains prohibited. Verification identity, date, and note are preserved separately from final review. Approval records overtime minutes without modifying attendance timestamps or calculating pay. Corrections are blocked while the workday has pending, verified, or approved overtime to protect reviewed totals. Existing manual overtime API requests remain supported for compatibility and use the same validation and approval flow.
 
 `pnpm --filter @nexus/api db:seed:attendance-requests` adds three pending demo overtime requests and supporting demo sessions without replacing existing corrections or time logs. Reruns preserve existing demo requests.
+
+## Personal overview and module dashboard (2026-11-14)
+
+Attendance Overview now uses `/api/attendance/me/overview`, deriving the employee from the authenticated account. It has no department selector and accepts no scope overrides. `/attendance/dashboard` is a separate Dashboard sidebar group for authorized attendance managers. It reuses the attendance, record-audit, request, and policy summaries with links to all permitted pages. Admin sees organization data; Department Heads retain their current department scope and cannot access policy summaries. Attendance/audit filters apply to those sections; requests cover all permitted history and policies cover the current organization inventory.

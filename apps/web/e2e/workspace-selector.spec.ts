@@ -35,7 +35,10 @@ const scenarios = [
   {
     label: "Staff",
     role: "STAFF",
-    expected: [["Project Management", "/project-workspace"]],
+    expected: [
+      ["Project Management", "/project-workspace"],
+      ["Attendance & Monitoring", "/attendance/check-ins"],
+    ],
   },
   {
     label: "department head",
@@ -44,6 +47,7 @@ const scenarios = [
     expected: [
       ["Service Operations", "/request-inbox"],
       ["Project Management", "/project-workspace"],
+      ["Attendance & Monitoring", "/attendance/overview"],
     ],
   },
   {
@@ -52,6 +56,7 @@ const scenarios = [
     expected: [
       ["Service Operations", "/services"],
       ["People & HR", "/employees"],
+      ["Attendance & Monitoring", "/attendance/overview"],
     ],
   },
   {

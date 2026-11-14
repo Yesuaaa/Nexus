@@ -47,7 +47,8 @@ export function WorkloadPlanningContext({ staff }: { staff: WorkloadStaff }) {
       </DetailList>
       <p className="m-0 text-[11px] leading-5 text-[#738096]">
         Policy requirements are duration targets, not scheduled availability.
-        Policies and attendance records are managed in People &amp; HR.
+        Policies and attendance records are managed in Attendance &amp;
+        Monitoring.
       </p>
       {planning && (
         <>

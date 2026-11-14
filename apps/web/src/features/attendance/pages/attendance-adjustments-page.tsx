@@ -24,12 +24,17 @@ import { UserRound, UsersRound } from "lucide-react"
 import { AttendanceAdjustmentTable } from "../components/attendance-adjustment-table"
 import { AttendanceAdjustmentReviewPanel } from "../components/attendance-adjustment-review-panel"
 
-export function AttendanceAdjustmentsPage() {
+export function AttendanceAdjustmentsPage({
+  requestType,
+}: {
+  requestType?: "CORRECTION" | "OVERTIME"
+}) {
   const account = usePortalAccount(),
     manager = canManageAttendance(account)
   const [scope, setScope] = useState<"mine" | "team">(manager ? "team" : "mine")
   const [search, setSearch] = useState("")
   const [type, setType] = useState("")
+  const [status, setStatus] = useState("")
   const [page, setPage] = useState(1)
   const [requestOpen, setRequestOpen] = useState(false)
   const [review, setReview] = useState<{
@@ -46,9 +51,10 @@ export function AttendanceAdjustmentsPage() {
         page,
         search,
         signal,
-        type,
+        requestType ?? type,
+        status,
       ),
-    [scope, page, manager, search, type],
+    [scope, page, manager, search, type, requestType, status],
     { fallbackError: "Couldn't load attendance requests." },
   )
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -74,11 +80,19 @@ export function AttendanceAdjustmentsPage() {
   }
   return (
     <AttendanceShell
-      tab="adjustments"
+      tab={
+        requestType === "OVERTIME"
+          ? "overtime"
+          : requestType === "CORRECTION"
+            ? "corrections"
+            : "adjustments"
+      }
       actions={
-        <PageHeaderButton onClick={() => setRequestOpen(true)}>
-          Request correction
-        </PageHeaderButton>
+        requestType !== "OVERTIME" ? (
+          <PageHeaderButton onClick={() => setRequestOpen(true)}>
+            Request correction
+          </PageHeaderButton>
+        ) : undefined
       }
     >
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 max-[560px]:items-stretch">
@@ -93,19 +107,41 @@ export function AttendanceAdjustmentsPage() {
               setPage(1)
             }}
           />
+          {!requestType && (
+            <FilterSelect
+              label="Request type filter"
+              value={type}
+              triggerClassName="w-[140px]"
+              options={[
+                { value: "", label: "All requests" },
+                { value: "CORRECTION", label: "Corrections" },
+                { value: "OVERTIME", label: "Overtime" },
+              ]}
+              onChange={(value) => {
+                setType(value)
+                setPage(1)
+              }}
+            />
+          )}
           <FilterSelect
-            label="Request type filter"
-            value={type}
-            triggerClassName="w-[140px]"
-            options={[
-              { value: "", label: "All requests" },
-              { value: "CORRECTION", label: "Corrections" },
-              { value: "OVERTIME", label: "Overtime" },
-            ]}
+            label="Request status filter"
+            value={status}
             onChange={(value) => {
-              setType(value)
+              setStatus(value)
               setPage(1)
             }}
+            options={[
+              { value: "", label: "All statuses" },
+              ...["PENDING", "VERIFIED", "APPROVED", "REJECTED"]
+                .filter(
+                  (value) =>
+                    requestType !== "CORRECTION" || value !== "VERIFIED",
+                )
+                .map((value) => ({
+                  value,
+                  label: value.charAt(0) + value.slice(1).toLowerCase(),
+                })),
+            ]}
           />
         </div>
         {manager && (
