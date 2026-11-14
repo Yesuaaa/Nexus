@@ -17,6 +17,29 @@ export type WorkloadStaff = {
   team: { id: string; name: string } | null
   capacity: { scheduledHours: number; timeOffHours: number } | null
   assignments: WorkloadAssignment[]
+  planning?: WorkloadPlanning
+}
+
+export type WorkloadPlanning = {
+  requirement: {
+    totalHours: number | null
+    knownHours: number
+    days: {
+      workDate: string
+      requiredMinutes: number | null
+      isWorkingDay: boolean | null
+      policyName: string | null
+      timeZone: string | null
+    }[]
+  }
+  confirmedAvailableSlots: null
+  commitments: {
+    id: string
+    title: string
+    startsAt: string
+    endsAt: string
+  }[]
+  overlaps: { firstId: string; secondId: string }[]
 }
 
 export function getWorkloadMetrics(s: WorkloadStaff) {

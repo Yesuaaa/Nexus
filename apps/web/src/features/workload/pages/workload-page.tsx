@@ -285,6 +285,11 @@ export function WorkloadPage() {
           unavailable={!!error && !data}
         />
       </div>
+      <p className="mt-3 mb-0 text-xs leading-5 text-[#738096]">
+        Availability reflects weekly capacity estimates, not confirmed free time
+        slots. View workload details for daily HR policy requirements and known
+        scheduling conflicts.
+      </p>
       <section className="mt-4 min-w-0" aria-label="Staff workload directory">
         <div className="flex flex-wrap gap-[10px] pb-4 max-[560px]:flex-col">
           <SearchField
@@ -422,6 +427,14 @@ export function WorkloadPage() {
                         >
                           {m.availability}
                         </Pill>
+                        <div className="mt-1 text-[11px] text-[#738096]">
+                          Time slots unconfirmed
+                        </div>
+                        {!!s.planning?.overlaps.length && (
+                          <div className="mt-1 text-[11px] text-[#bc3649]">
+                            Scheduling conflict
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <WorkloadRowActions

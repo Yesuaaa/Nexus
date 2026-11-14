@@ -32,6 +32,7 @@ import { MemberIdentity } from "@/components/ui/member-identity"
 import { SearchField } from "@/components/ui/search-field"
 import { cn } from "@/lib/utils"
 import { EditMemberForm } from "./edit-member-form"
+import { EmployeeSelection } from "@/features/employees/components/employee-selection"
 import { ConfirmSwap, InlineConfirm } from "@/components/ui/inline-confirm"
 import { InfoTip } from "@/components/ui/info-tip"
 import { PanelSubview } from "@/components/ui/panel-subview"
@@ -116,7 +117,6 @@ export function ManageMembersDrawer({
   // Team creation state
   const [newTeamName, setNewTeamName] = useState("")
   const [newTeamDesc, setNewTeamDesc] = useState("")
-  const [newTeamMemberSearch, setNewTeamMemberSearch] = useState("")
   const [newTeamMemberIds, setNewTeamMemberIds] = useState<string[]>([])
   const [creatingTeam, setCreatingTeam] = useState(false)
   const [assignMembersOpen, setAssignMembersOpen] = useState(false)
@@ -292,7 +292,6 @@ export function ManageMembersDrawer({
   const availableStaffToAssign = displayedCandidates.filter(
     (employee) => !currentMemberAccountIds.has(employee.id),
   )
-  const newTeamMemberQuery = newTeamMemberSearch.trim().toLowerCase()
   const newTeamMemberCandidates = (detail?.members ?? []).filter(
     (member) =>
       member.status === "ACTIVE" &&
@@ -300,15 +299,6 @@ export function ManageMembersDrawer({
       member.user.isActive &&
       member.user.accountDeletedAt === null &&
       (departmentHeadId === null || member.userId !== departmentHeadId),
-  )
-  const filteredNewTeamMembers = newTeamMemberCandidates.filter((member) =>
-    [
-      member.fullName,
-      member.email,
-      member.user?.fullName,
-      member.user?.email,
-      member.position,
-    ].some((value) => value?.toLowerCase().includes(newTeamMemberQuery)),
   )
 
   const assignTeam =
@@ -385,14 +375,6 @@ export function ManageMembersDrawer({
     } finally {
       setSubmitting(false)
     }
-  }
-
-  function toggleNewTeamMember(memberId: string) {
-    setNewTeamMemberIds((previous) =>
-      previous.includes(memberId)
-        ? previous.filter((id) => id !== memberId)
-        : [...previous, memberId],
-    )
   }
 
   async function handleAddMember(userId: string) {
@@ -496,7 +478,6 @@ export function ManageMembersDrawer({
       })
       setNewTeamName("")
       setNewTeamDesc("")
-      setNewTeamMemberSearch("")
       setNewTeamMemberIds([])
       setCreatingTeam(false)
       setRevision((r) => r + 1)
@@ -924,7 +905,6 @@ export function ManageMembersDrawer({
                         className={panelAssignButton}
                         onClick={() => {
                           setActionError("")
-                          setNewTeamMemberSearch("")
                           setNewTeamMemberIds([])
                           setCreatingTeam(true)
                         }}
@@ -1509,62 +1489,20 @@ export function ManageMembersDrawer({
                 disabled={submitting}
               />
             </label>
-            <div className="grid gap-2">
-              <div className="flex items-center justify-between gap-3">
-                <p className="m-0 text-xs font-medium text-foreground">
-                  Team members{" "}
-                  <span className="font-normal text-[#bc3649]">(required)</span>
-                </p>
-                <span className={panelMuted}>
-                  {newTeamMemberIds.length} selected
-                </span>
-              </div>
-              <SearchField
-                id="new-team-member-search"
-                label="Search team members"
-                placeholder="Search name, email, or position"
-                value={newTeamMemberSearch}
-                onChange={(event) => setNewTeamMemberSearch(event.target.value)}
-                disabled={submitting}
-                containerClassName="w-full max-[1050px]:w-full max-[1050px]:flex-none"
-              />
-              {filteredNewTeamMembers.length > 0 ? (
-                <ul
-                  className="m-0 grid list-none gap-2 p-0"
-                  aria-label="Available team members"
-                >
-                  {filteredNewTeamMembers.map((member) => {
-                    const selected = newTeamMemberIds.includes(member.id)
-                    return (
-                      <li
-                        key={member.id}
-                        className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-[#e8ebef] p-2.5"
-                      >
-                        <MemberIdentity member={member} />
-                        <Button
-                          type="button"
-                          variant={selected ? "default" : "outline"}
-                          className={
-                            selected ? panelAssignButton : panelSecondaryButton
-                          }
-                          aria-pressed={selected}
-                          onClick={() => toggleNewTeamMember(member.id)}
-                          disabled={submitting}
-                        >
-                          {selected ? "Added" : "Add"}
-                        </Button>
-                      </li>
-                    )
-                  })}
-                </ul>
-              ) : (
-                <p className={`${panelMuted} m-0`}>
-                  {newTeamMemberCandidates.length > 0
-                    ? "No department members match your search."
-                    : "No eligible department members are available."}
-                </p>
-              )}
-            </div>
+            <EmployeeSelection
+              employees={newTeamMemberCandidates}
+              selectedIds={newTeamMemberIds}
+              onChange={setNewTeamMemberIds}
+              title="Team members"
+              searchLabel="Search team members"
+              searchPlaceholder="Search name, email, or position"
+              listLabel="Available team members"
+              emptyMessage="No eligible department members are available."
+              noMatchesMessage="No department members match your search."
+              control="button"
+              required
+              disabled={submitting}
+            />
           </div>
           <SidePanelFooter>
             <SidePanelButton

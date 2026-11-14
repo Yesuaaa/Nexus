@@ -21,7 +21,7 @@ import { watchVisibleRefresh } from "@/lib/visible-refresh"
 
 type Notification = {
   id: string
-  requestId: string
+  requestId: string | null
   summary: string
   type: string
   entityId: string | null
@@ -143,15 +143,17 @@ export function WorkflowNotifications() {
             <DropdownMenuItem key={item.id} asChild>
               <Link
                 href={
-                  item.entityId &&
-                  [
-                    "PROJECT_ACTIVATED",
-                    "PROJECT_CANCELLATION_REQUESTED",
-                    "PROJECT_CANCELLATION_APPROVED",
-                    "PROJECT_CANCELLATION_DECLINED",
-                  ].includes(item.type)
-                    ? `/projects/${encodeURIComponent(item.entityId)}`
-                    : `/messages?request=${encodeURIComponent(item.requestId)}`
+                  item.type.startsWith("ATTENDANCE_OVERTIME_")
+                    ? "/attendance/adjustments"
+                    : item.entityId &&
+                        [
+                          "PROJECT_ACTIVATED",
+                          "PROJECT_CANCELLATION_REQUESTED",
+                          "PROJECT_CANCELLATION_APPROVED",
+                          "PROJECT_CANCELLATION_DECLINED",
+                        ].includes(item.type)
+                      ? `/projects/${encodeURIComponent(item.entityId)}`
+                      : `/messages?request=${encodeURIComponent(item.requestId ?? "")}`
                 }
                 onClick={() => {
                   if (!item.readAt) void read(item.id)

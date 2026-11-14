@@ -58,6 +58,30 @@ export function canAccessEmployeeManagement(account: Account): boolean {
   )
 }
 
+export function canAccessAttendance(account: Account): boolean {
+  return (
+    Boolean(account.isActive) &&
+    (account.role === "STAFF" || account.role === "ADMIN")
+  )
+}
+
+export function canManageAttendance(account: Account): boolean {
+  return (
+    canAccessAttendance(account) &&
+    ((account.role === "ADMIN" &&
+      hasPermission(account, Permissions.EMPLOYEES_READ)) ||
+      (account.role === "STAFF" && Boolean(account.headOf)))
+  )
+}
+
+export function canConfigureAttendance(account: Account): boolean {
+  return (
+    Boolean(account.isActive) &&
+    account.role === "ADMIN" &&
+    hasPermission(account, Permissions.EMPLOYEES_MANAGE)
+  )
+}
+
 export function canAccessServiceManagement(account: Account): boolean {
   return (
     account.role === "ADMIN" &&

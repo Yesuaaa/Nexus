@@ -23,9 +23,13 @@ import { projectConversationsRouter } from "./features/project-conversations/pro
 import { devErrorInterceptor, handleError } from "./shared/error-handler.js"
 
 import { workloadRouter } from "./features/workload/workload.controller.js"
+import { createAttendanceRouter } from "./features/attendance/routes.js"
 
 export function createApp(
-  options: { conversationRealtime?: ConversationRealtime } = {},
+  options: {
+    conversationRealtime?: ConversationRealtime
+    attendanceClock?: () => Date
+  } = {},
 ) {
   const app = express()
   app.set("trust proxy", trustedProxyAddresses(process.env.TRUST_PROXY))
@@ -82,6 +86,7 @@ export function createApp(
   app.use("/api/project-workspace", projectWorkspaceRouter)
   app.use("/api/project-conversations", projectConversationsRouter)
   app.use("/api/workload", workloadRouter)
+  app.use("/api/attendance", createAttendanceRouter(options.attendanceClock))
   app.use(
     "/api/request-conversations",
     createRequestConversationsRouter(options.conversationRealtime),
