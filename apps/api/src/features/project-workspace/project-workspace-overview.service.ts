@@ -1,5 +1,6 @@
 import { Prisma, type ProjectStatus } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
+import { validProjectWorkPlansCte } from "./overview-query.js"
 import { requireDepartmentHead } from "../request-inbox/request-inbox.service.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 import { readPreferences } from "../auth/settings.service.js"
@@ -219,74 +220,7 @@ export async function getProjectWorkspaceOverview(userId: string) {
               ON g."id" = p."workspaceGroupId"
             WHERE r."acceptedDepartmentId" = ${department.id}
           ),
-          valid_plans AS (
-            SELECT p.*
-            FROM authorized_projects p
-            WHERE jsonb_typeof(p."workPlan") = 'object'
-              AND jsonb_typeof(p."workPlan"->'phases') = 'array'
-              AND NOT EXISTS (
-                SELECT 1
-                FROM jsonb_array_elements(
-                  CASE
-                    WHEN jsonb_typeof(p."workPlan"->'phases') = 'array'
-                      THEN p."workPlan"->'phases'
-                    ELSE '[]'::jsonb
-                  END
-                ) AS phase(value)
-                WHERE jsonb_typeof(phase.value) <> 'object'
-                  OR jsonb_typeof(phase.value->'id') <> 'string'
-                  OR jsonb_typeof(phase.value->'title') <> 'string'
-                  OR jsonb_typeof(phase.value->'tasks') <> 'array'
-                  OR EXISTS (
-                    SELECT 1
-                    FROM jsonb_array_elements(
-                      CASE
-                        WHEN jsonb_typeof(phase.value->'tasks') = 'array'
-                          THEN phase.value->'tasks'
-                        ELSE '[]'::jsonb
-                      END
-                    ) AS task(value)
-                    WHERE jsonb_typeof(task.value) <> 'object'
-                      OR jsonb_typeof(task.value->'id') <> 'string'
-                      OR jsonb_typeof(task.value->'title') <> 'string'
-                      OR jsonb_typeof(task.value->'role') <> 'string'
-                      OR COALESCE(task.value->>'status', '') NOT IN (
-                        'NOT_STARTED', 'IN_PROGRESS', 'DONE'
-                      )
-                  )
-              )
-              AND NOT EXISTS (
-                SELECT 1
-                FROM (
-                  SELECT phase.value->>'id' AS id
-                  FROM jsonb_array_elements(
-                    CASE
-                      WHEN jsonb_typeof(p."workPlan"->'phases') = 'array'
-                        THEN p."workPlan"->'phases'
-                      ELSE '[]'::jsonb
-                    END
-                  ) AS phase(value)
-                  UNION ALL
-                  SELECT task.value->>'id' AS id
-                  FROM jsonb_array_elements(
-                    CASE
-                      WHEN jsonb_typeof(p."workPlan"->'phases') = 'array'
-                        THEN p."workPlan"->'phases'
-                      ELSE '[]'::jsonb
-                    END
-                  ) AS phase(value)
-                  CROSS JOIN LATERAL jsonb_array_elements(
-                    CASE
-                      WHEN jsonb_typeof(phase.value->'tasks') = 'array'
-                        THEN phase.value->'tasks'
-                      ELSE '[]'::jsonb
-                    END
-                  ) AS task(value)
-                ) AS plan_ids
-                GROUP BY id
-                HAVING COUNT(*) > 1
-              )
-          ),
+          ${validProjectWorkPlansCte},
           tasks AS (
             SELECT
               p."id" AS project_id,

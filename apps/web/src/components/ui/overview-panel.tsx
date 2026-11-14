@@ -205,37 +205,70 @@ export function ItemList({
   )
 }
 
-export type MiniStat = { label: string; value: string; hint?: string }
+export type MiniStat = {
+  label: string
+  value: string
+  hint?: string
+  emphasis?: "attention"
+}
 
 /** A quiet row of secondary figures under the KPI strip. */
 export function MiniStats({
   items,
   loading,
   label,
+  columns = 4,
 }: {
   items: MiniStat[]
   loading: boolean
   label: string
+  columns?: 2 | 4
 }) {
   return (
     <dl
       aria-label={label}
       aria-busy={loading}
-      className="m-0 grid grid-cols-4 gap-px overflow-hidden rounded-xl border border-[#eceef1] bg-[#eceef1] max-[1050px]:grid-cols-2 max-[480px]:grid-cols-1"
+      className={cn(
+        "m-0 grid gap-px overflow-hidden rounded-xl border border-[#eceef1] bg-[#eceef1]",
+        columns === 2
+          ? "grid-cols-2 max-[480px]:grid-cols-1"
+          : "grid-cols-4 max-[1050px]:grid-cols-2 max-[480px]:grid-cols-1",
+      )}
     >
-      {items.map((item) => (
-        <div key={item.label} className="min-w-0 bg-background px-4 py-3">
-          <dt className="truncate text-[11px] text-[#8a94a6]">{item.label}</dt>
-          <dd className="m-0 mt-1 truncate text-base font-semibold text-[#101d35] tabular-nums">
-            {loading ? <Skeleton className="mt-1 h-4 w-12" /> : item.value}
-          </dd>
-          {item.hint && !loading && (
-            <dd className="m-0 mt-0.5 truncate text-[11px] text-[#738096]">
-              {item.hint}
+      {items.map((item) => {
+        const attention = item.emphasis === "attention"
+        return (
+          <div
+            key={item.label}
+            className={cn(
+              "min-w-0 px-4 py-3",
+              attention ? "bg-[#fffaf0]" : "bg-background",
+            )}
+          >
+            <dt
+              className={cn(
+                "truncate text-[11px]",
+                attention ? "text-[#805316]" : "text-[#8a94a6]",
+              )}
+            >
+              {item.label}
+            </dt>
+            <dd
+              className={cn(
+                "m-0 mt-1 truncate text-base font-semibold tabular-nums",
+                attention ? "text-[#805316]" : "text-[#101d35]",
+              )}
+            >
+              {loading ? <Skeleton className="mt-1 h-4 w-12" /> : item.value}
             </dd>
-          )}
-        </div>
-      ))}
+            {item.hint && !loading && (
+              <dd className="m-0 mt-0.5 truncate text-[11px] text-[#738096]">
+                {item.hint}
+              </dd>
+            )}
+          </div>
+        )
+      })}
     </dl>
   )
 }
