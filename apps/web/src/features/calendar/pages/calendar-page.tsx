@@ -22,7 +22,7 @@ import { KpiCards, type KpiMetric } from "@/components/ui/kpi-cards"
 import { pillToneClass, type PillTone } from "@/components/ui/pill"
 import { apiRequest } from "@/features/auth/api/auth-api"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
-import { FilterSelect } from "@/components/ui/filter-select"
+import { FilterSelect, filterGridClass } from "@/components/ui/filter-select"
 import { watchVisibleRefresh } from "@/lib/visible-refresh"
 import {
   calendarConflicts,
@@ -354,7 +354,7 @@ export function CalendarPage() {
       )}
       {!isClient && (
         <section className="mt-6 space-y-4" aria-label="Calendar filters">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className={filterGridClass}>
             {!organization && canViewTeam && (
               <FilterSelect
                 label="Calendar scope"
@@ -439,7 +439,7 @@ export function CalendarPage() {
             pending={loading && allEvents.length === 0}
             unavailable={Boolean(error) && allEvents.length === 0}
             showCharts={false}
-            className="grid-cols-4 gap-3 max-[1200px]:grid-cols-2 max-[560px]:grid-cols-1"
+            className="grid-cols-4 gap-3 max-[1200px]:grid-cols-2 max-[560px]:gap-2"
           />
           {organization && (
             <p className={cn(mutedText, "m-0")}>

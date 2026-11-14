@@ -15,6 +15,19 @@ export type FilterSelectOption<T extends string> = {
   disabled?: boolean
 }
 
+/**
+ * Toolbar row for a search field followed by filter selects. On phones it
+ * becomes a two-column grid: the first item (the search) spans the row,
+ * selects pair up, and a lone last item spans the row, instead of every
+ * control taking a full-width row of its own.
+ */
+export const filterBarClass =
+  "flex flex-wrap items-center gap-2.5 max-[560px]:grid max-[560px]:grid-cols-2 max-[560px]:gap-2 max-[560px]:[&>*:first-child]:col-span-2 max-[560px]:[&>*:last-child:nth-child(even)]:col-span-2"
+
+/** Selects-only variant: pairs up on phones, a lone last item spans the row. */
+export const filterGridClass =
+  "flex flex-wrap items-center gap-2 max-[560px]:grid max-[560px]:grid-cols-2 max-[560px]:[&>*:last-child:nth-child(odd)]:col-span-2"
+
 /** Toolbar filter/sort trigger: 34px tall (44px on phones), full width on phones. */
 export const filterSelectTriggerClass =
   "h-[34px] border-[#e1e4ea] text-xs max-[560px]:h-11 max-[560px]:w-full"

@@ -8,7 +8,7 @@ import { sileo } from "@/lib/toast"
 import { PageHeader, PageHeaderButton } from "@/components/layout/page-header"
 import { contentClass } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
-import { FilterSelect } from "@/components/ui/filter-select"
+import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
 import { usePaginatedList } from "@/components/ui/use-paginated-list"
 import { TableSearchStatus } from "@/components/ui/table-search-status"
 import { TablePaginationFooter } from "@/components/ui/table-pagination-footer"
@@ -126,7 +126,7 @@ export function ClientManagementPage() {
         aria-label="Client directory"
         className="@container mt-[18px] min-w-0 max-[767px]:mt-[14px]"
       >
-        <div className="flex flex-wrap items-center gap-2.5 pb-4 max-[560px]:flex-col max-[560px]:items-stretch">
+        <div className={`${filterBarClass} pb-4`}>
           <SearchField
             label="Search clients"
             value={search}

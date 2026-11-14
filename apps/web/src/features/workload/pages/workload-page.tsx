@@ -32,7 +32,7 @@ import { contentClass } from "@/components/layout/styles"
 import { Alert } from "@/components/ui/alert"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { Button } from "@/components/ui/button"
-import { FilterSelect } from "@/components/ui/filter-select"
+import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
 import {
   Modal,
   ModalBody,
@@ -253,6 +253,7 @@ export function WorkloadPage() {
   return (
     <main className={cn(contentClass, "p-[clamp(16px,2.1vw,32px)]")}>
       <PageHeader
+        mobileActions="stack"
         title="Staff Workload"
         description={
           <>
@@ -285,7 +286,7 @@ export function WorkloadPage() {
         />
       </div>
       <section className="mt-4 min-w-0" aria-label="Staff workload directory">
-        <div className="flex flex-wrap gap-[10px] pb-4 max-[560px]:flex-col">
+        <div className={`${filterBarClass} pb-4`}>
           <SearchField
             label="Search staff"
             placeholder="Search staff, role, or skills…"

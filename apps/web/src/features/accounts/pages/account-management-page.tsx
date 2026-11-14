@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
@@ -14,7 +14,7 @@ import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
 import { DepartmentPill } from "@/components/ui/department-pill.tsx"
 import { Dropdown as AccessDropdown } from "@/components/ui/dropdown"
-import { FilterSelect } from "@/components/ui/filter-select"
+import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
 import { Pill } from "@/components/ui/pill"
 import { SearchField } from "@/components/ui/search-field"
 import {
@@ -139,7 +139,7 @@ function AccountRowContents({
             )}
           </div>
         ) : (
-          <span className="text-xs text-[#94a3b8]">—</span>
+          <span className="text-xs text-[#94a3b8]">â€”</span>
         )}
       </div>
       <div className="text-[11px] text-[#738096] @max-[900px]:col-start-1 @max-[900px]:row-start-3 @max-[530px]:row-auto">
@@ -195,7 +195,7 @@ function AccountRowContents({
             trashView={trashView}
           />
         ) : (
-          <span className="text-[11px] text-[#94a3b8]">—</span>
+          <span className="text-[11px] text-[#94a3b8]">â€”</span>
         )}
       </div>
     </>
@@ -523,7 +523,7 @@ export function AccountManagementPage() {
         aria-label="Accounts"
       >
         <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 pb-4 max-[560px]:grid-cols-1 max-[560px]:pb-3">
-          <div className="flex min-w-0 gap-[10px] max-[560px]:flex-col">
+          <div className={`${filterBarClass} min-w-0`}>
             <SearchField
               label="Search accounts"
               value={search}

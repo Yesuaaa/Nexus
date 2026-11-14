@@ -17,7 +17,7 @@ import { contentClass } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
 import { ClientTableSkeleton } from "@/components/ui/client-table-skeleton"
 import { EmptyState } from "@/components/ui/empty-state"
-import { FilterSelect } from "@/components/ui/filter-select"
+import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
 import { KpiCards } from "@/components/ui/kpi-cards"
 import { usePaginatedList } from "@/components/ui/use-paginated-list"
 import { TableSearchStatus } from "@/components/ui/table-search-status"
@@ -157,7 +157,7 @@ export function ClientServiceRequestsPage() {
         />
       </div>
       <section className="@container mt-6 min-w-0" aria-label="Request history">
-        <div className="flex flex-wrap items-center gap-2.5 pb-4 max-[560px]:flex-col max-[560px]:items-stretch">
+        <div className={`${filterBarClass} pb-4`}>
           <SearchField
             label="Search service requests"
             placeholder="Search reference, service or package…"

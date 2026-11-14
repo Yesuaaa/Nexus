@@ -134,13 +134,13 @@ export function EmployeeTable({
               )}
               cellClassNames={[
                 "@max-[1000px]:col-start-1 @max-[1000px]:row-start-1",
-                "@max-[1000px]:col-span-2 @max-[1000px]:row-start-2",
+                "@max-[1000px]:col-start-1 @max-[1000px]:row-start-2",
                 "@max-[1000px]:col-span-2 @max-[1000px]:row-start-3",
-                "@max-[1000px]:col-start-1 @max-[1000px]:row-start-4",
+                "@max-[1000px]:col-span-2 @max-[1000px]:row-start-4",
                 "@max-[1000px]:col-start-1 @max-[1000px]:row-start-5",
                 "@max-[1000px]:col-start-2 @max-[1000px]:row-start-5 @max-[1000px]:justify-self-end",
                 "@max-[1000px]:col-start-2 @max-[1000px]:row-start-1 @max-[1000px]:justify-self-end",
-                "@max-[1000px]:col-start-2 @max-[1000px]:row-start-4 @max-[1000px]:justify-self-end",
+                "@max-[1000px]:col-start-2 @max-[1000px]:row-start-2 @max-[1000px]:justify-self-end",
               ]}
               cellSkeletonClassNames={[
                 "h-3 w-16",
@@ -182,7 +182,7 @@ export function EmployeeTable({
               </div>
               <div
                 role="cell"
-                className="flex min-w-0 items-center gap-2.5 @max-[1000px]:col-span-2 @max-[1000px]:row-start-2"
+                className="flex min-w-0 items-center gap-2.5 @max-[1000px]:col-start-1 @max-[1000px]:row-start-2"
               >
                 <Avatar
                   name={employee.fullName}
@@ -225,7 +225,7 @@ export function EmployeeTable({
               </div>
               <div
                 role="cell"
-                className="min-w-0 text-[#52627a] @max-[1000px]:col-start-1 @max-[1000px]:row-start-4"
+                className="min-w-0 text-[#52627a] @max-[1000px]:col-span-2 @max-[1000px]:row-start-4"
               >
                 <span className="hidden text-[#738096] @max-[1000px]:inline">
                   Position / team{" "}
@@ -283,7 +283,7 @@ export function EmployeeTable({
               </div>
               <div
                 role="cell"
-                className="flex justify-start @max-[1000px]:col-start-2 @max-[1000px]:row-start-4 @max-[1000px]:justify-self-end"
+                className="flex justify-start @max-[1000px]:col-start-2 @max-[1000px]:row-start-2 @max-[1000px]:justify-self-end"
               >
                 <EmployeeRowActions
                   open={
