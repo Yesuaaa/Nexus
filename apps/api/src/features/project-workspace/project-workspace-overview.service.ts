@@ -130,16 +130,15 @@ export async function getProjectWorkspaceOverview(userId: string) {
   const prisma = getPrisma()!
   return prisma.$transaction(
     async (tx) => {
-      const [department, user] = await Promise.all([
-        requireDepartmentHead(userId, {
-          client: tx,
-          message: "Only department heads can view project analytics",
-        }),
-        tx.user.findUnique({
-          where: { id: userId },
-          select: { settings: true },
-        }),
-      ])
+      // Interactive transactions share one connection, so issue reads in order.
+      const department = await requireDepartmentHead(userId, {
+        client: tx,
+        message: "Only department heads can view project analytics",
+      })
+      const user = await tx.user.findUnique({
+        where: { id: userId },
+        select: { settings: true },
+      })
       if (!user)
         throw new ServiceRequestsError(
           403,
@@ -154,20 +153,19 @@ export async function getProjectWorkspaceOverview(userId: string) {
       const projectWhere: Prisma.ProjectWhereInput = {
         request: { acceptedDepartmentId: department.id },
       }
-      const [statusRows, groupRows, clientRows, taskRows] = await Promise.all([
-        tx.project.groupBy({
-          by: ["status"],
-          where: projectWhere,
-          _count: { _all: true },
-        }),
-        tx.$queryRaw<{ count: number }[]>`
+      const statusRows = await tx.project.groupBy({
+        by: ["status"],
+        where: projectWhere,
+        _count: { _all: true },
+      })
+      const groupRows = await tx.$queryRaw<{ count: number }[]>`
           SELECT COUNT(DISTINCT p."workspaceGroupId")::int AS count
           FROM "Project" p
           JOIN "ServiceRequest" r ON r."id" = p."requestId"
           WHERE r."acceptedDepartmentId" = ${department.id}
             AND p."workspaceGroupId" IS NOT NULL
-        `,
-        tx.$queryRaw<ClientCount[]>`
+        `
+      const clientRows = await tx.$queryRaw<ClientCount[]>`
           WITH authorized_projects AS (
             SELECT p."clientId" AS client_id, c."fullName" AS client_name
             FROM "Project" p
@@ -205,8 +203,8 @@ export async function getProjectWorkspaceOverview(userId: string) {
           WHERE rank > 7
           HAVING SUM(project_count) > 0
           ORDER BY "projectCount" DESC, name ASC
-        `,
-        tx.$queryRaw<JsonOverviewRow[]>`
+        `
+      const taskRows = await tx.$queryRaw<JsonOverviewRow[]>`
           WITH authorized_projects AS (
             SELECT
               p."id",
@@ -382,8 +380,7 @@ export async function getProjectWorkspaceOverview(userId: string) {
               '[]'::jsonb
             ) AS "overdueTaskList"
           FROM task_metrics metrics
-        `,
-      ])
+        `
 
       const statusCounts = new Map(
         statusRows.map(({ status, _count }) => [status, _count._all]),

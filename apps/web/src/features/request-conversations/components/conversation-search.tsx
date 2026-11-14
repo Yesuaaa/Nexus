@@ -64,7 +64,8 @@ export function ConversationSearch({
             value={value}
             maxLength={200}
             onChange={(event) => onChange(event.target.value)}
-            containerClassName="min-w-0 flex-1 pr-9 max-[1050px]:w-auto max-[1050px]:flex-1"
+            fullWidth
+            containerClassName="min-w-0 flex-1 pr-9"
             className="[&::-webkit-search-cancel-button]:appearance-none"
           />
           {value && (

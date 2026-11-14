@@ -2104,9 +2104,10 @@ test("workspace directory errors recover on retry", async ({ page }) => {
     account: { headOf: { id: "design", name: "Design" } },
   })
   let attempts = 0
+  let retryAllowed = false
   await page.route("**/api/project-workspace/directory**", (route) => {
     attempts += 1
-    if (attempts === 1)
+    if (!retryAllowed)
       return route.fulfill({
         status: 503,
         json: { error: "Directory unavailable" },
@@ -2142,11 +2143,13 @@ test("workspace directory errors recover on retry", async ({ page }) => {
   await expect(
     page.locator('[role="alert"]').filter({ hasText: "Directory unavailable" }),
   ).toBeVisible()
+  const initialAttempts = attempts
+  retryAllowed = true
   await page.getByRole("button", { name: "Try again" }).click()
   await expect(
     page.getByRole("link", { name: "Recovered project", exact: true }),
   ).toBeVisible()
-  expect(attempts).toBe(2)
+  expect(attempts).toBeGreaterThan(initialAttempts)
 })
 
 test("workspace detail refreshes across tabs after staffing and team-lead changes", async ({

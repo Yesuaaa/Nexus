@@ -181,7 +181,6 @@ export function WorkspaceTeam({
               emptyContent="No staff match these filters."
               renderRow={({ id, person, stream }) => (
                 <>
-                  {" "}
                   <td className="px-4 py-4">
                     <div className="flex items-center gap-3">
                       <Avatar name={person.fullName} className="size-8" />

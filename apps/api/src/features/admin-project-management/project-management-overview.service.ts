@@ -46,20 +46,13 @@ export async function getProjectManagementOverview() {
 
   return prisma.$transaction(
     async (tx) => {
-      const [
-        statusRows,
-        workspaceGroups,
-        departmentRows,
-        workloadRows,
-        staffRows,
-        recentProjects,
-      ] = await Promise.all([
-        tx.project.groupBy({
-          by: ["status"],
-          _count: { _all: true },
-        }),
-        tx.projectWorkspaceGroup.count(),
-        tx.$queryRaw<DepartmentAggregateRow[]>`
+      // Interactive transactions share one connection, so issue reads in order.
+      const statusRows = await tx.project.groupBy({
+        by: ["status"],
+        _count: { _all: true },
+      })
+      const workspaceGroups = await tx.projectWorkspaceGroup.count()
+      const departmentRows = await tx.$queryRaw<DepartmentAggregateRow[]>`
             WITH authorized_projects AS (
               SELECT
                 p."id",
@@ -105,8 +98,8 @@ export async function getProjectManagementOverview() {
             LEFT JOIN project_task_counts pt ON pt.project_id = p."id"
             GROUP BY p.department_id, d."name"
             ORDER BY "projectCount" DESC, "departmentName" ASC
-          `,
-        tx.$queryRaw<WorkloadSummaryRow[]>`
+          `
+      const workloadRows = await tx.$queryRaw<WorkloadSummaryRow[]>`
             WITH active_projects AS (
               SELECT p."id"
               FROM "Project" p
@@ -132,8 +125,8 @@ export async function getProjectManagementOverview() {
                 WHERE p."status" IN ('PLANNED', 'IN_PROGRESS', 'ON_HOLD')
               ) AS "activeAssignments"
             FROM assignment_counts
-          `,
-        tx.$queryRaw<StaffAssignmentRow[]>`
+          `
+      const staffRows = await tx.$queryRaw<StaffAssignmentRow[]>`
             SELECT
               e."id" AS "employeeId",
               e."fullName",
@@ -148,25 +141,24 @@ export async function getProjectManagementOverview() {
             GROUP BY e."id", e."fullName", d."name"
             ORDER BY "activeProjects" DESC, e."fullName" ASC, e."id" ASC
             LIMIT 6
-          `,
-        tx.project.findMany({
-          orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-          take: 8,
-          select: {
-            id: true,
-            name: true,
-            status: true,
-            updatedAt: true,
-            workspaceGroupId: true,
-            request: {
-              select: {
-                acceptedDepartmentId: true,
-                acceptedDepartment: { select: { name: true } },
-              },
+          `
+      const recentProjects = await tx.project.findMany({
+        orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+        take: 8,
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          updatedAt: true,
+          workspaceGroupId: true,
+          request: {
+            select: {
+              acceptedDepartmentId: true,
+              acceptedDepartment: { select: { name: true } },
             },
           },
-        }),
-      ])
+        },
+      })
 
       const statusCounts = new Map(
         statusRows.map(({ status, _count }) => [status, _count._all]),
