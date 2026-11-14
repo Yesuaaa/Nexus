@@ -142,6 +142,10 @@ enum WorkflowConsultationStatus {
 }
 
 model User {
+  attendanceRequests                AttendanceAdjustment[]            @relation("AttendanceRequester")
+  attendanceReviews                 AttendanceAdjustment[]            @relation("AttendanceReviewer")
+  attendanceVerifications           AttendanceAdjustment[]            @relation("AttendanceVerifier")
+  attendanceAudit                   AttendanceAudit[]
   id                                String                            @id @default(cuid())
   email                             String                            @unique
   fullName                          String?
@@ -568,6 +572,10 @@ model Team {
 }
 
 model Employee {
+  attendanceAdjustments    AttendanceAdjustment[]
+  attendanceAudit          AttendanceAudit[]
+  attendanceAssignments    AttendancePolicyAssignment[]
+  attendanceWorkdays       AttendanceWorkday[]
   id                       String                       @id @default(cuid())
   employeeId               String                       @unique
   fullName                 String
@@ -790,14 +798,19 @@ model WorkflowNotification {
   id        String          @id @default(cuid())
   userId    String
   user      User            @relation(fields: [userId], references: [id], onDelete: Restrict)
-  requestId String
-  workflow  RequestWorkflow @relation(fields: [requestId], references: [requestId], onDelete: Restrict)
-  eventId   String
-  event     WorkflowEvent   @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  requestId String?
+  workflow  RequestWorkflow? @relation(fields: [requestId], references: [requestId], onDelete: Restrict)
+  eventId   String?
+  event     WorkflowEvent?   @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  attendanceAdjustmentId String?
+  attendanceAdjustment AttendanceAdjustment? @relation(fields: [attendanceAdjustmentId], references: [id], onDelete: Restrict)
+  type String?
+  summary String?
   readAt    DateTime?
   createdAt DateTime        @default(now())
 
   @@unique([userId, eventId])
+  @@unique([userId, attendanceAdjustmentId, type])
   @@index([userId, readAt, createdAt])
 }
 
@@ -945,4 +958,149 @@ model RefreshToken {
   session    Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
+}
+
+model AttendancePolicy {
+  archivedAt              DateTime?                    @db.Timestamptz(3)
+  unpaidBreaksEnabled     Boolean                      @default(true)
+  overnightRequiresReview Boolean                      @default(false)
+  id                      String                       @id @default(cuid())
+  name                    String
+  timeZone                String
+  createdAt               DateTime                     @default(now()) @db.Timestamptz(3)
+  days                    AttendancePolicyDay[]
+  assignments             AttendancePolicyAssignment[]
+}
+
+model AttendancePolicyDay {
+  policyId        String
+  policy          AttendancePolicy @relation(fields: [policyId], references: [id], onDelete: Restrict)
+  weekday         Int
+  isWorkingDay    Boolean
+  requiredMinutes Int
+
+  @@id([policyId, weekday])
+}
+
+model AttendancePolicyAssignment {
+  id             String              @id @default(cuid())
+  employeeId     String
+  employee       Employee            @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  policyId       String
+  policy         AttendancePolicy    @relation(fields: [policyId], references: [id], onDelete: Restrict)
+  effectiveFrom  DateTime            @db.Date
+  effectiveUntil DateTime?           @db.Date
+  createdAt      DateTime            @default(now()) @db.Timestamptz(3)
+  workdays       AttendanceWorkday[]
+
+  @@unique([id, employeeId])
+  @@index([employeeId, effectiveFrom])
+}
+
+model AttendanceWorkday {
+  policyName              String
+  unpaidBreaksEnabled     Boolean
+  overnightRequiresReview Boolean
+  id                      String                     @id @default(cuid())
+  employeeId              String
+  employee                Employee                   @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  assignmentId            String
+  assignment              AttendancePolicyAssignment @relation(fields: [assignmentId, employeeId], references: [id, employeeId], onDelete: Restrict)
+  workDate                DateTime                   @db.Date
+  timeZone                String
+  isWorkingDay            Boolean
+  requiredMinutes         Int
+  createdAt               DateTime                   @default(now()) @db.Timestamptz(3)
+  sessions                AttendanceWorkSession[]
+  audit                   AttendanceAudit[]
+
+  @@unique([employeeId, workDate])
+  @@unique([id, employeeId])
+}
+
+model AttendanceWorkSession {
+  adjustments AttendanceAdjustment[]
+  id          String                 @id @default(cuid())
+  // A BEFORE INSERT trigger selects/creates the starting workday if omitted.
+  workdayId   String                 @default(dbgenerated())
+  employeeId  String
+  workday     AttendanceWorkday      @relation(fields: [workdayId, employeeId], references: [id, employeeId], onDelete: Restrict)
+  startedAt   DateTime               @db.Timestamptz(3)
+  endedAt     DateTime?              @db.Timestamptz(3)
+  breaks      AttendanceBreak[]
+
+  @@index([workdayId, startedAt])
+  @@index([employeeId, startedAt])
+}
+
+model AttendanceBreak {
+  id        String                @id @default(cuid())
+  sessionId String
+  session   AttendanceWorkSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  startedAt DateTime              @db.Timestamptz(3)
+  endedAt   DateTime?             @db.Timestamptz(3)
+  isPaid    Boolean               @default(false)
+
+  @@index([sessionId, startedAt])
+}
+
+model AttendanceAudit {
+  id         String             @id @default(cuid())
+  // Stable entity identity and snapshots also cover policy/rule/assignment changes.
+  entityType String
+  entityId   String
+  employeeId String?
+  employee   Employee?          @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  workdayId  String?
+  workday    AttendanceWorkday? @relation(fields: [workdayId], references: [id], onDelete: Restrict)
+  actorId    String?
+  actor      User?              @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  action     String
+  reason     String
+  before     Json?
+  after      Json?
+  actionId   String             @unique
+  createdAt  DateTime           @default(now()) @db.Timestamptz(3)
+
+  @@index([workdayId, createdAt])
+  @@index([employeeId, createdAt])
+  @@index([entityType, entityId, createdAt])
+}
+
+enum AttendanceAdjustmentStatus {
+  PENDING
+  VERIFIED
+  APPROVED
+  REJECTED
+}
+
+model AttendanceAdjustment {
+  notifications WorkflowNotification[]
+  type              String                     @default("CORRECTION") @db.VarChar(20)
+  overtimeMinutes   Int                        @default(0)
+  verifiedById      String?
+  verifiedBy        User?                      @relation("AttendanceVerifier", fields: [verifiedById], references: [id], onDelete: Restrict)
+  verifiedAt        DateTime?                  @db.Timestamptz(3)
+  verificationNote  String?                    @db.VarChar(2000)
+  id                String                     @id @default(cuid())
+  requestKey        String                     @unique
+  employeeId        String
+  employee          Employee                   @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  sessionId         String?
+  session           AttendanceWorkSession?     @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  originalSession   Json?
+  proposedStartedAt DateTime                   @db.Timestamptz(3)
+  proposedEndedAt   DateTime                   @db.Timestamptz(3)
+  reason            String                     @db.VarChar(2000)
+  status            AttendanceAdjustmentStatus @default(PENDING)
+  requestedById     String
+  requestedBy       User                       @relation("AttendanceRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+  reviewedById      String?
+  reviewedBy        User?                      @relation("AttendanceReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+  reviewNote        String?                    @db.VarChar(2000)
+  createdAt         DateTime                   @default(now()) @db.Timestamptz(3)
+  reviewedAt        DateTime?                  @db.Timestamptz(3)
+
+  @@index([employeeId, createdAt, id])
+  @@index([status, createdAt, id])
 }

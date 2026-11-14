@@ -1,5 +1,8 @@
 import {
   canAccessAccountManagement,
+  canAccessAttendance,
+  canManageAttendance,
+  canConfigureAttendance,
   canAccessBookedServices,
   canAccessCalendar,
   canAccessClientManagement,
@@ -25,6 +28,12 @@ export const workspaceModuleLabels: Record<WorkspaceModuleId, string> = {
 }
 
 export type RoutePolicyId =
+  | "attendance"
+  | "attendance-overview"
+  | "attendance-my"
+  | "attendance-records"
+  | "attendance-adjustments"
+  | "attendance-settings"
   | "dashboard"
   | "module"
   | "accounts"
@@ -78,6 +87,51 @@ export type RoutePolicy = {
 const alwaysAccessible = () => true
 
 export const routePolicies: readonly RoutePolicy[] = [
+  {
+    id: "attendance-overview",
+    match: { kind: "exact", path: "/attendance/overview" },
+    moduleId: "people-hr",
+    canAccess: canManageAttendance,
+  },
+  {
+    id: "attendance-my",
+    match: { kind: "exact", path: "/attendance/my" },
+    moduleId: "people-hr",
+    canAccess: canAccessAttendance,
+  },
+  {
+    id: "attendance-records",
+    match: { kind: "exact", path: "/attendance/records" },
+    moduleId: "people-hr",
+    canAccess: canManageAttendance,
+  },
+  {
+    id: "attendance-adjustments",
+    match: { kind: "exact", path: "/attendance/adjustments" },
+    moduleId: "people-hr",
+    canAccess: canAccessAttendance,
+  },
+  {
+    id: "attendance-settings",
+    match: { kind: "exact", path: "/attendance/settings" },
+    moduleId: "people-hr",
+    canAccess: canConfigureAttendance,
+  },
+  {
+    id: "attendance",
+    match: { kind: "prefix", path: "/attendance" },
+    moduleId: "people-hr",
+    canAccess: canAccessAttendance,
+    navigation: {
+      href: (account) =>
+        canManageAttendance(account)
+          ? "/attendance/overview"
+          : "/attendance/my",
+      label: "Attendance",
+      location: "main",
+      order: 35,
+    },
+  },
   {
     id: "dashboard",
     match: { kind: "exact", path: "/dashboard" },

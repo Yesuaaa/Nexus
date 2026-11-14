@@ -5,6 +5,7 @@ import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import {
   CalendarDays,
+  Clock3,
   ChevronDown,
   CircleHelp,
   ClipboardList,
@@ -34,6 +35,7 @@ import {
   getNavigationPolicies,
   isNavigationActive,
   workspaceModuleLabels,
+  canAccessRoute,
   type RoutePolicy,
   type RoutePolicyId,
 } from "@/features/workspaces/model/route-policy"
@@ -397,6 +399,25 @@ export function Sidebar({
   }
 
   function renderPolicy(policy: RoutePolicy) {
+    if (policy.id === "attendance") {
+      return renderGroup({
+        kind: "group",
+        label: "Attendance",
+        icon: Clock3,
+        visible: policy.canAccess,
+        links: [
+          {
+            href: "/attendance/overview",
+            label: "Overview",
+            ariaLabel: "Attendance Overview",
+          },
+          { href: "/attendance/my", label: "Check-Ins" },
+          { href: "/attendance/records", label: "Time Logs" },
+          { href: "/attendance/adjustments", label: "OT & Agreements" },
+          { href: "/attendance/settings", label: "Policies" },
+        ].filter((link) => canAccessRoute(account, link.href)),
+      })
+    }
     const props = {
       policy,
       account,
