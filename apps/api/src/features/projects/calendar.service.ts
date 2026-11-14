@@ -3,6 +3,11 @@ import { getPrisma } from "../../lib/db.js"
 import { activeAccount } from "../../shared/query/accounts.js"
 import { readWorkPlan } from "../project-workspace/templates.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
+import {
+  consultationCalendarWhere,
+  meetingCalendarWhere,
+  type ServiceCalendarScope,
+} from "./calendar.queries.js"
 
 type CalendarPerson = { id: string; name: string }
 export type CalendarEvent = {
@@ -89,19 +94,12 @@ export async function listInternalCalendar(userId: string, scope: unknown) {
           ],
         }
       : {}
+  const timedScope: ServiceCalendarScope = organization
+    ? { kind: "ORGANIZATION" }
+    : { kind: "HEAD", userId }
   const [consultations, meetings, projects] = await Promise.all([
     prisma.workflowConsultation.findMany({
-      where: {
-        status: { not: "CANCELLED" },
-        workflow: {
-          request: {
-            status: { not: "CANCELLED" },
-            ...(!organization
-              ? { acceptedDepartment: { headId: userId } }
-              : {}),
-          },
-        },
-      },
+      where: consultationCalendarWhere({ scope: timedScope }),
       include: {
         workflow: {
           include: {
@@ -123,12 +121,7 @@ export async function listInternalCalendar(userId: string, scope: unknown) {
       },
     }),
     prisma.conversationMeeting.findMany({
-      where: {
-        status: { not: "CANCELLED" },
-        ...(!organization
-          ? { conversation: { department: { headId: userId } } }
-          : {}),
-      },
+      where: meetingCalendarWhere({ scope: timedScope }),
       include: {
         conversation: {
           include: {

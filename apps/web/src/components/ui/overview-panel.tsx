@@ -15,12 +15,14 @@ export function OverviewPanel({
   title,
   description,
   action,
+  titleClassName,
   className,
   children,
 }: {
   title: string
   description?: string
   action?: ReactNode
+  titleClassName?: string
   className?: string
   children: ReactNode
 }) {
@@ -37,7 +39,10 @@ export function OverviewPanel({
         <div className="min-w-0">
           <h2
             id={headingId}
-            className="m-0 text-sm font-semibold text-[#101d35]"
+            className={cn(
+              "m-0 text-sm font-semibold text-[#101d35]",
+              titleClassName,
+            )}
           >
             {title}
           </h2>

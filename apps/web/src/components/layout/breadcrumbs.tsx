@@ -61,6 +61,10 @@ export function useBreadcrumbLabel(key: string, label: string | undefined) {
 }
 
 const routeLabels: Record<string, string> = {
+  attendance: "Attendance",
+  my: "Check-Ins",
+  adjustments: "OT & Agreements",
+  records: "Time Logs",
   dashboard: "Dashboard",
   profile: "My Profile",
   "billing-logs": "Billing Logs",
@@ -81,9 +85,21 @@ const routeLabels: Record<string, string> = {
   clients: "Client Management",
 }
 
-function labelFor(segment: string) {
+const contextualRouteLabels: Record<string, Record<string, string>> = {
+  attendance: {
+    my: "Check-Ins",
+    records: "Time Logs",
+    adjustments: "OT & Agreements",
+    settings: "Policies",
+  },
+}
+
+function labelFor(segment: string, parentSegment?: string) {
   const decoded = decodeURIComponent(segment)
   return (
+    contextualRouteLabels[parentSegment?.toLowerCase() ?? ""]?.[
+      decoded.toLowerCase()
+    ] ??
     routeLabels[decoded.toLowerCase()] ??
     decoded
       .replace(/[-_]/g, " ")
@@ -129,18 +145,19 @@ export function Breadcrumbs() {
         </li>
         {segments.map((segment, index) => {
           const decodedSegment = decodedSegments[index]
-          const label =
-            labels[segment] ??
-            labels[decodedSegment] ??
-            (isProjectManagementDepartmentProjects && index === 1
+          const projectManagementLabel =
+            isProjectManagementDepartmentProjects && index === 1
               ? "Management"
               : isProjectManagementDepartmentProjects && index === 3
                 ? "Project Workspaces"
-                : index === 1 && isWorkspaceDetail
-                  ? "Project"
-                  : index === 1 && segments[0] === "projects"
-                    ? "Project"
-                    : labelFor(segment))
+                : undefined
+          const label =
+            projectManagementLabel ??
+            labels[segment] ??
+            labels[decodedSegment] ??
+            (index === 1 && (isWorkspaceDetail || segments[0] === "projects")
+              ? "Project"
+              : labelFor(segment, segments[index - 1]))
           const isCurrent = index === segments.length - 1
           const isDepartmentContext =
             isProjectManagementDepartmentProjects && index === 2

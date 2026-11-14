@@ -18,6 +18,7 @@ import {
   useSidePanel,
 } from "@/components/ui/side-panel"
 import { statusLabel as projectStatusLabel } from "@/features/projects/model/project-status"
+import { WorkloadPlanningContext } from "./workload-planning-context"
 import {
   getWorkloadMetrics,
   type WorkloadAssignment,
@@ -144,6 +145,7 @@ export function WorkloadDetailsDrawer({
           Utilization = assigned hours ÷ (scheduled hours − time off). Missing
           hours are never treated as free capacity.
         </p>
+        <WorkloadPlanningContext staff={staff} />
       </SidePanelBody>
       <SidePanelFooter className="justify-between">
         <SidePanelButton

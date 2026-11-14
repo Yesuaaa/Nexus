@@ -12,6 +12,8 @@
     "db:generate": "prisma generate",
     "db:seed": "prisma generate && prisma db seed",
     "db:seed:services": "prisma generate && tsx prisma/seed.ts --services-only",
+    "db:seed:attendance-adjustments": "prisma generate && tsx prisma/seed-attendance-adjustments.ts",
+    "db:seed:attendance-requests": "prisma generate && tsx prisma/seed-attendance-requests.ts",
     "db:migrate": "prisma migrate dev",
     "db:studio": "node -e \"process.env.DATABASE_URL = process.env.DIRECT_URL; require('child_process').spawn('npx', ['prisma', 'studio'], { stdio: 'inherit', shell: true })\"",
     "test:project-chat": "prisma generate && tsx --test tests/project-conversations.test.ts",

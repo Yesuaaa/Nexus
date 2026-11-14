@@ -13,6 +13,15 @@ export function notificationScope(
     userId,
     OR: [
       {
+        attendanceAdjustment: {
+          employee: { department: activeDepartmentHead(userId) },
+        },
+      },
+      {
+        attendanceAdjustmentId: { not: null },
+        user: { ...activeAccount, role: "ADMIN" },
+      },
+      {
         workflow: {
           request: {
             clientId: userId,
@@ -77,6 +86,9 @@ export async function listWorkflowNotifications(userId: string) {
             requestId: true,
             createdAt: true,
             readAt: true,
+            attendanceAdjustmentId: true,
+            summary: true,
+            type: true,
             event: { select: { summary: true, type: true, entityId: true } },
           },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -87,7 +99,9 @@ export async function listWorkflowNotifications(userId: string) {
       return {
         notifications: notifications.map(({ event, ...record }) => ({
           ...record,
-          ...event,
+          summary: event?.summary ?? record.summary!,
+          type: event?.type ?? record.type!,
+          entityId: event?.entityId ?? record.attendanceAdjustmentId,
         })),
         unreadCount,
       }

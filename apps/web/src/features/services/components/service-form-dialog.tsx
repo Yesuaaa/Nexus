@@ -60,7 +60,7 @@ import { RequiredMark } from "@/components/ui/required-mark"
 
 const fieldClass = formFieldClass
 const labelClass = "text-xs font-semibold"
-const inputClass = `w-full min-w-0 rounded-lg border border-[#d6dfec] bg-background px-3 text-sm text-foreground placeholder:text-[#9aa8bb] ${focusRing}`
+const inputClass = `w-full min-w-0 rounded-lg border border-[#d6dfec] bg-background px-3 text-sm font-normal text-foreground placeholder:text-[#9aa8bb] ${focusRing}`
 const secondaryButtonClass = `inline-flex h-[34px] flex-none cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-[#e1e4ea] bg-background px-3 text-xs font-semibold whitespace-nowrap text-foreground transition-colors hover:bg-[#f1f5fc] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none ${focusRing}`
 const removeButtonClass = `inline-flex cursor-pointer items-center gap-1 rounded-sm border-0 bg-transparent p-0 text-xs font-semibold text-[#b4234d] ${focusRing}`
 const cardClass = "grid gap-3 rounded-lg border border-[#e8ebef] p-3.5"
@@ -774,6 +774,7 @@ export function ServiceFormDialog({
                         {departments.map((department) => (
                           <DropdownMenuCheckboxItem
                             key={department.id}
+                            className="text-xs font-normal"
                             checked={departmentIds.includes(department.id)}
                             onCheckedChange={(checked) =>
                               setDepartmentIds((current) =>

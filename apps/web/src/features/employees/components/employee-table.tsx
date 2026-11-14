@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react"
+import { Eye } from "lucide-react"
 import { focusRing } from "@/components/layout/styles"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
@@ -20,6 +21,106 @@ import {
 } from "../model/employment"
 import { EmployeeRowActions } from "./employee-row-actions"
 import { Avatar } from "@/components/ui/avatar"
+import { rowActionButton } from "@/components/ui/row-action-styles"
+import { MemberIdentity } from "@/components/ui/member-identity"
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
+import {
+  ResponsiveDataTableRow,
+  ResponsiveDataTableCell,
+} from "@/components/ui/responsive-data-table"
+
+type DirectoryEmployee = Pick<Employee, "id" | "employeeId" | "fullName"> & {
+  departmentName: string
+}
+
+type ManagementTableProps = Parameters<typeof EmployeeManagementTable>[0] & {
+  mode?: "management"
+}
+type DirectoryTableProps = {
+  mode: "attendance"
+  employees: DirectoryEmployee[]
+  loading: boolean
+  error: string
+  emptyMessage: ReactNode
+  onRetry: () => void
+  onView: (employee: DirectoryEmployee) => void
+}
+
+export function EmployeeTable(
+  props: ManagementTableProps | DirectoryTableProps,
+) {
+  if (props.mode !== "attendance") return <EmployeeManagementTable {...props} />
+  const grid =
+    "grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1fr)_56px] items-center gap-3.5 max-[560px]:grid-cols-[minmax(0,1fr)_44px]"
+  return (
+    <ResponsiveDataTable label="Employees" aria-busy={props.loading}>
+      <ResponsiveDataTableHeader
+        rowClassName={grid}
+        className="max-[560px]:sr-only"
+      >
+        {["Employee ID", "Employee", "Department", "Actions"].map((label) => (
+          <ResponsiveDataTableColumnHeader key={label}>
+            {label}
+          </ResponsiveDataTableColumnHeader>
+        ))}
+      </ResponsiveDataTableHeader>
+      <ResponsiveDataTableBody>
+        {props.loading ? (
+          <DataTableSkeletonRows
+            label="employees"
+            rowClassName={`${grid} min-h-[58px] px-4 py-3`}
+            cellClassNames={["", "", "", ""]}
+          />
+        ) : props.error ? (
+          <DataTableErrorRow
+            message={props.error}
+            onRetry={props.onRetry}
+            colSpan={4}
+          />
+        ) : props.employees.length ? (
+          props.employees.map((employee) => (
+            <ResponsiveDataTableRow
+              key={employee.id}
+              className={`${grid} min-h-[58px] border-b border-[#eceef1] px-4 py-3 text-xs last:border-b-0 hover:bg-[#e8eef2]`}
+            >
+              <ResponsiveDataTableCell className="min-w-0 break-all max-[560px]:col-start-1">
+                {employee.employeeId}
+              </ResponsiveDataTableCell>
+              <ResponsiveDataTableCell className="min-w-0 max-[560px]:col-start-1 max-[560px]:row-start-2">
+                <MemberIdentity member={employee} secondaryText={null} />
+              </ResponsiveDataTableCell>
+              <ResponsiveDataTableCell className="min-w-0 break-words max-[560px]:col-start-1 max-[560px]:row-start-3">
+                {employee.departmentName}
+              </ResponsiveDataTableCell>
+              <ResponsiveDataTableCell className="max-[560px]:col-start-2 max-[560px]:row-span-3 max-[560px]:row-start-1">
+                <span className="group relative inline-flex">
+                  <button
+                    type="button"
+                    className={cn(rowActionButton, "max-[560px]:size-11")}
+                    aria-label={`View logs for ${employee.fullName}`}
+                    onClick={() => props.onView(employee)}
+                  >
+                    <Eye size={16} aria-hidden="true" />
+                  </button>
+                  <HoverTooltip>View logs</HoverTooltip>
+                </span>
+              </ResponsiveDataTableCell>
+            </ResponsiveDataTableRow>
+          ))
+        ) : (
+          <ResponsiveDataTableRow>
+            <ResponsiveDataTableCell
+              aria-colspan={4}
+              className="p-6 text-center text-xs text-muted-foreground"
+            >
+              {props.emptyMessage}
+            </ResponsiveDataTableCell>
+          </ResponsiveDataTableRow>
+        )}
+      </ResponsiveDataTableBody>
+    </ResponsiveDataTable>
+  )
+}
 
 const employeeGrid =
   "grid grid-cols-[minmax(100px,.75fr)_minmax(180px,1.35fr)_minmax(120px,1fr)_minmax(160px,1.2fr)_minmax(82px,.7fr)_minmax(90px,.7fr)_minmax(78px,.65fr)_56px] items-center gap-3.5 @max-[1000px]:grid-cols-[minmax(0,1fr)_minmax(105px,.65fr)]"
@@ -56,7 +157,7 @@ function employeeRowClass(
   )
 }
 
-export function EmployeeTable({
+function EmployeeManagementTable({
   employees,
   archiveView = false,
   viewKey,

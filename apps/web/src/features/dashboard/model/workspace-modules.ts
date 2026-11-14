@@ -58,15 +58,20 @@ export function getWorkspaceModules(account: Account): WorkspaceModule[] {
 
   if (
     canAccessRoute(account, "/employees") ||
-    canAccessRoute(account, "/departments")
+    canAccessRoute(account, "/departments") ||
+    canAccessRoute(account, "/attendance/my")
   ) {
     modules.push({
       id: "people-hr",
       title: "People & HR",
-      description: "Manage employee records and department structure.",
+      description: "Attendance, employee records, and department structure.",
       href: canAccessRoute(account, "/employees")
         ? "/employees"
-        : "/departments",
+        : canAccessRoute(account, "/departments")
+          ? "/departments"
+          : canAccessRoute(account, "/attendance/overview")
+            ? "/attendance/overview"
+            : "/attendance/my",
     })
   }
 
