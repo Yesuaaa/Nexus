@@ -191,6 +191,17 @@ const activityTypes = [
   "PROJECT_DELIVERABLE_SENT_TO_CLIENT",
 ] as const
 
+function safeProjectActivitySummary(type: string, summary: string) {
+  if (
+    type === "STAFFING_APPROVED" &&
+    summary.startsWith(
+      "The department head approved project staffing. Employee records: ",
+    )
+  )
+    return "The department head updated the project team."
+  return summary
+}
+
 type StaffContext = {
   id: string
   departmentIds: string[]
@@ -735,6 +746,252 @@ export async function listWorkspaceDirectory(
   )
 }
 
+export async function getAdminProjectManagementWorkspaceDetails(
+  userId: string,
+  departmentId: string,
+  identity: string,
+) {
+  const { id, kind } = parseWorkspaceIdentity(identity)
+  if (!kind) throw new ServiceRequestsError(400, "Use a typed workspace ID")
+
+  return getPrisma()!.$transaction(
+    async (tx) => {
+      const actor = await tx.user.findFirst({
+        where: { id: userId, ...activeAccount },
+        select: { id: true, role: true },
+      })
+      if (
+        !actor ||
+        !hasPermission(actor.role, Permission.PROJECT_MANAGEMENT_READ) ||
+        !hasPermission(actor.role, Permission.DEPARTMENTS_READ)
+      )
+        throw new ServiceRequestsError(
+          403,
+          "Project details access is required",
+        )
+
+      const department = await tx.department.findUnique({
+        where: { id: departmentId },
+        select: {
+          id: true,
+          name: true,
+          head: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+              position: true,
+            },
+          },
+          _count: { select: { employees: true } },
+        },
+      })
+      if (!department)
+        throw new ServiceRequestsError(404, "Department not found")
+
+      const group =
+        kind === "group"
+          ? await tx.projectWorkspaceGroup.findUnique({
+              where: { id },
+              select: { id: true, name: true, structure: true },
+            })
+          : null
+      if (kind === "group" && !group)
+        throw new ServiceRequestsError(404, "Project workspace not found")
+
+      const projects = await tx.project.findMany({
+        where:
+          kind === "group"
+            ? {
+                workspaceGroupId: id,
+                request: { acceptedDepartmentId: departmentId },
+              }
+            : {
+                id,
+                workspaceGroupId: null,
+                request: { acceptedDepartmentId: departmentId },
+              },
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          status: true,
+          startDate: true,
+          client: { select: { id: true, fullName: true } },
+          request: {
+            select: {
+              id: true,
+              acceptedDepartment: { select: { id: true, name: true } },
+            },
+          },
+          workspaceGroup: { select: { id: true, name: true } },
+          workPlan: true,
+          staff: {
+            where: { employee: { departmentId } },
+            select: {
+              isTeamLead: true,
+              employee: {
+                select: { id: true, fullName: true, position: true },
+              },
+            },
+          },
+        },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      })
+      if (!projects.length)
+        throw new ServiceRequestsError(404, "Project workspace not found")
+
+      const projectDetails = projects.map((project) => {
+        const tasks =
+          readWorkPlan(project.workPlan)?.phases.flatMap(
+            ({ tasks: phaseTasks }) => phaseTasks,
+          ) ?? []
+        const completed = tasks.filter(({ status }) => status === "DONE").length
+        const team = project.staff
+          .map(({ employee, isTeamLead }) => ({
+            ...employee,
+            isTeamLead,
+          }))
+          .sort((left, right) => left.fullName.localeCompare(right.fullName))
+        const taskDueDates = [
+          ...new Set(
+            tasks.flatMap(({ dueDate }) =>
+              typeof dueDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(dueDate)
+                ? [dueDate]
+                : [],
+            ),
+          ),
+        ].sort()
+        return {
+          id: project.id,
+          name: project.name,
+          description: project.description,
+          status: project.status,
+          client: project.client,
+          department: project.request?.acceptedDepartment ?? {
+            id: department.id,
+            name: department.name,
+          },
+          workspace: project.workspaceGroup,
+          leads: team
+            .filter(({ isTeamLead }) => isTeamLead)
+            .map(({ id, fullName, position }) => ({ id, fullName, position })),
+          team,
+          startDate: project.startDate,
+          taskDueDates,
+          tasks: {
+            total: tasks.length,
+            completed,
+            incomplete: tasks.length - completed,
+          },
+          progress: tasks.length ? { completed, total: tasks.length } : null,
+        }
+      })
+
+      const completedTasks = projectDetails.reduce(
+        (sum, project) => sum + project.tasks.completed,
+        0,
+      )
+      const totalTasks = projectDetails.reduce(
+        (sum, project) => sum + project.tasks.total,
+        0,
+      )
+      const teamMembers = new Map<
+        string,
+        { id: string; fullName: string; position: string | null }
+      >()
+      for (const project of projectDetails)
+        for (const member of project.team) {
+          if (!teamMembers.has(member.id))
+            teamMembers.set(member.id, {
+              id: member.id,
+              fullName: member.fullName,
+              position: member.position,
+            })
+        }
+      const clients = new Map(
+        projects.map(({ client }) => [client.id, client] as const),
+      )
+      const requestIds = projects.flatMap(({ request }) =>
+        request ? [request.id] : [],
+      )
+      const events = requestIds.length
+        ? await tx.workflowEvent.findMany({
+            where: {
+              requestId: { in: requestIds },
+              type: { in: [...activityTypes] },
+            },
+            select: {
+              id: true,
+              type: true,
+              summary: true,
+              createdAt: true,
+              actor: { select: { fullName: true } },
+              workflow: {
+                select: {
+                  request: {
+                    select: {
+                      project: { select: { id: true, name: true } },
+                    },
+                  },
+                },
+              },
+            },
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            take: 100,
+          })
+        : []
+      const activity = events.flatMap(({ workflow, ...event }) => {
+        const project = workflow.request.project
+        if (!project) return []
+        return [
+          {
+            id: event.id,
+            projectId: project.id,
+            projectName: project.name,
+            type: event.type,
+            summary: safeProjectActivitySummary(event.type, event.summary),
+            createdAt: event.createdAt,
+            actor: event.actor,
+          },
+        ]
+      })
+      const name = group?.name ?? projects[0]!.name
+      const statuses = [...new Set(projects.map(({ status }) => status))].sort()
+      return {
+        identity: `${kind}:${id}`,
+        kind,
+        id,
+        name,
+        structure: group?.structure ?? null,
+        department: {
+          id: department.id,
+          name: department.name,
+          head: department.head,
+          memberCount: department._count.employees,
+        },
+        clients: [...clients.values()].sort((left, right) =>
+          (left.fullName ?? "").localeCompare(right.fullName ?? ""),
+        ),
+        statuses,
+        projectCount: projectDetails.length,
+        unplannedProjectCount: projectDetails.filter(
+          ({ tasks }) => tasks.total === 0,
+        ).length,
+        progress: totalTasks
+          ? { completed: completedTasks, total: totalTasks }
+          : null,
+        teamMembers: [...teamMembers.values()].sort((left, right) =>
+          left.fullName.localeCompare(right.fullName),
+        ),
+        projects: projectDetails,
+        activity,
+      }
+    },
+    { isolationLevel: "RepeatableRead" },
+  )
+}
+
 export async function listProjectWorkspaceTemplates(userId: string) {
   await getPrisma()!.$transaction((tx) => getStaffContext(tx, userId))
   return projectTemplates
@@ -1058,13 +1315,7 @@ export async function getProjectWorkspace(userId: string, workspaceId: string) {
         ...workspace,
         activity: events.map(({ workflow, ...event }) => ({
           ...event,
-          summary:
-            event.type === "STAFFING_APPROVED" &&
-            event.summary.startsWith(
-              "The department head approved project staffing. Employee records: ",
-            )
-              ? "The department head updated the project team."
-              : event.summary,
+          summary: safeProjectActivitySummary(event.type, event.summary),
           projectName: workflow.request.project?.name ?? workspace.name,
         })),
       }

@@ -1,6 +1,10 @@
-import { expect, test, type Page } from "@playwright/test"
+import { expect, test, type Locator, type Page } from "@playwright/test"
+import type { ProjectManagementDepartmentDetail } from "../src/features/departments/api/departments-api"
 import type { ProjectWorkspace } from "../src/features/projects/api/projects-api"
-import type { WorkspaceDirectoryRow } from "../src/features/project-workspace/api/project-workspace-api"
+import type {
+  AdminProjectManagementWorkspaceDetails,
+  WorkspaceDirectoryRow,
+} from "../src/features/project-workspace/api/project-workspace-api"
 import {
   accountFor,
   configureRegressionTest,
@@ -211,35 +215,55 @@ test("Admin Project Management is department-first and opens read-only scoped wo
   await page.route("**/api/departments/project-management-directory", (route) =>
     route.fulfill({ json: { departments } }),
   )
+  const headMembership: ProjectManagementDepartmentDetail["members"][number] = {
+    id: "head-member",
+    userId: "head-1",
+    fullName: "Chris John Albert Bagacina",
+    position: "Department Head",
+    user: {
+      id: "head-1",
+      fullName: "Chris John Albert Bagacina",
+      role: "STAFF",
+    },
+  }
+  const head: NonNullable<ProjectManagementDepartmentDetail["head"]> = {
+    id: "head-1",
+    fullName: "Chris John Albert Bagacina",
+    role: "STAFF",
+    position: "Department Head",
+  }
+  const member = (
+    id: string,
+    userId: string | null,
+    fullName: string,
+    position: string,
+  ): ProjectManagementDepartmentDetail["members"][number] => ({
+    id,
+    userId,
+    fullName,
+    position,
+    user: userId ? { id: userId, fullName, role: "STAFF" } : null,
+  })
+  let departmentDetails: ProjectManagementDepartmentDetail = {
+    ...departments[0],
+    color: "blue",
+    head,
+    members: [
+      headMembership,
+      member("member-1", "member-user-1", "Alex Member", "Designer"),
+      member(
+        "member-2",
+        "member-user-2",
+        "Chris John Albert Bagacina",
+        "Copywriter",
+      ),
+      member("member-3", "member-user-3", "Bea Member", "Analyst"),
+      member("member-4", null, "Unlinked Member", "Specialist"),
+    ],
+  }
   await page.route(
     "**/api/departments/project-management-directory/dept-1",
-    (route) =>
-      route.fulfill({
-        json: {
-          department: {
-            ...departments[0],
-            head: {
-              id: "head-1",
-              fullName: "Chris John Albert Bagacina",
-              role: "STAFF",
-              position: "Department Head",
-            },
-            members: [
-              {
-                id: "member-1",
-                userId: "member-user-1",
-                fullName: "Alex Member",
-                position: "Designer",
-                user: {
-                  id: "member-user-1",
-                  fullName: "Alex Member",
-                  role: "STAFF",
-                },
-              },
-            ],
-          },
-        },
-      }),
+    (route) => route.fulfill({ json: { department: departmentDetails } }),
   )
 
   const workspaceRow: WorkspaceDirectoryRow = {
@@ -305,6 +329,25 @@ test("Admin Project Management is department-first and opens read-only scoped wo
     table.getByRole("row", { name: /Graphic Design and Creative Services/ }),
   ).toHaveCount(0)
 
+  async function openDepartmentDetails() {
+    await filteredRow
+      .getByRole("button", { name: "Actions for Engineering" })
+      .click()
+    await page
+      .getByRole("menuitem", { name: "View Department Details" })
+      .click()
+    const detailsPanel = page.getByRole("dialog")
+    await expect(detailsPanel).toBeVisible()
+    return detailsPanel
+  }
+
+  async function closeDepartmentDetails(detailsPanel: Locator) {
+    await detailsPanel
+      .getByRole("button", { name: "Close department details" })
+      .click()
+    await expect(detailsPanel).toHaveCount(0)
+  }
+
   await filteredRow
     .getByRole("button", { name: "Actions for Engineering" })
     .click()
@@ -327,14 +370,153 @@ test("Admin Project Management is department-first and opens read-only scoped wo
   await expect(
     panel.getByRole("heading", { name: "Engineering" }),
   ).toBeVisible()
+  await expect(panel.getByText("You're viewing", { exact: true })).toHaveCount(
+    0,
+  )
+  await expect(
+    panel.getByText("Read-only department details.", { exact: true }),
+  ).toHaveCount(0)
+  await expect(panel.getByText("ENG", { exact: true })).toBeVisible()
+  await expect(panel).toContainText("Engineering department")
   await expect(panel).toContainText("Chris John Albert Bagacina")
   await expect(panel).toContainText("Alex Member")
   await expect(panel).toContainText("Designer")
+  const headSection = panel.getByRole("region", { name: "Department Head" })
+  const otherMembers = panel.getByRole("region", { name: "Other Members" })
+  await expect(
+    headSection.getByText("Chris John Albert Bagacina", { exact: true }),
+  ).toHaveCount(1)
+  await expect(
+    headSection.locator(":scope > div.rounded-lg.border"),
+  ).toHaveCount(1)
+  await expect(
+    otherMembers.getByText("4 members", { exact: true }),
+  ).toBeVisible()
+  await expect(
+    otherMembers.getByText("Alex Member", { exact: true }),
+  ).toBeVisible()
+  await expect(
+    otherMembers.getByText("Chris John Albert Bagacina", { exact: true }),
+  ).toHaveCount(1)
+  await expect(
+    otherMembers.getByText("Unlinked Member", { exact: true }),
+  ).toBeVisible()
+  const departmentSummary = panel.getByRole("region", {
+    name: "Department summary",
+  })
+  expect(
+    await departmentSummary.evaluate(
+      (element) =>
+        getComputedStyle(element).gridTemplateColumns.split(" ").length,
+    ),
+  ).toBe(2)
+  await expect(departmentSummary).toContainText("Members")
+  await expect(departmentSummary).toContainText("5")
+  await expect(departmentSummary).toContainText("Department membership")
+  await expect(departmentSummary).toContainText("Projects")
+  await expect(departmentSummary).toContainText("7")
+  await expect(departmentSummary).toContainText("All project statuses")
+  await expect(panel.getByText("5", { exact: true })).toBeVisible()
+  await expect(panel.getByText("7", { exact: true })).toBeVisible()
   await expect(
     panel.getByRole("button", { name: /Edit|Delete|Assign|Remove/ }),
   ).toHaveCount(0)
-  await panel.getByRole("button", { name: "Close department details" }).click()
-  await expect(panel).toHaveCount(0)
+  await closeDepartmentDetails(panel)
+
+  departmentDetails = {
+    ...departmentDetails,
+    headId: null,
+    head: null,
+    memberCount: 1,
+    members: [member("unlinked-only", null, "Unlinked Member", "Specialist")],
+  }
+  const unassignedHeadPanel = await openDepartmentDetails()
+  await expect(unassignedHeadPanel).toContainText("Unassigned")
+  await expect(
+    unassignedHeadPanel
+      .getByRole("region", { name: "Other Members" })
+      .getByText("1 member", { exact: true }),
+  ).toBeVisible()
+  await expect(unassignedHeadPanel).toContainText("Unlinked Member")
+  await closeDepartmentDetails(unassignedHeadPanel)
+
+  departmentDetails = {
+    ...departmentDetails,
+    headId: "head-1",
+    head,
+    memberCount: 2,
+    members: [
+      member("head-absent-1", "member-user-1", "Alex Member", "Designer"),
+      member("head-absent-2", "member-user-3", "Bea Member", "Analyst"),
+    ],
+  }
+  const headNotInMembersPanel = await openDepartmentDetails()
+  await expect(
+    headNotInMembersPanel
+      .getByRole("region", { name: "Other Members" })
+      .getByText("2 members", { exact: true }),
+  ).toBeVisible()
+  await closeDepartmentDetails(headNotInMembersPanel)
+
+  departmentDetails = {
+    ...departmentDetails,
+    headId: "head-1",
+    head,
+    memberCount: 1,
+    members: [headMembership],
+  }
+  const headOnlyPanel = await openDepartmentDetails()
+  const headOnlyMembers = headOnlyPanel.getByRole("region", {
+    name: "Other Members",
+  })
+  await expect(
+    headOnlyMembers.getByText("0 members", { exact: true }),
+  ).toBeVisible()
+  await expect(headOnlyMembers.getByText("No other members")).toBeVisible()
+  await page.setViewportSize({ width: 390, height: 844 })
+  const mobileDepartmentSummary = headOnlyPanel.getByRole("region", {
+    name: "Department summary",
+  })
+  expect(
+    await mobileDepartmentSummary.evaluate(
+      (element) =>
+        getComputedStyle(element).gridTemplateColumns.split(" ").length,
+    ),
+  ).toBe(1)
+  expect(
+    await headOnlyPanel.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth,
+    ),
+  ).toBe(true)
+  await page.setViewportSize({ width: 1280, height: 720 })
+  await closeDepartmentDetails(headOnlyPanel)
+
+  departmentDetails = {
+    ...departmentDetails,
+    headId: null,
+    head: null,
+    memberCount: 0,
+    projectCount: 0,
+    members: [],
+  }
+  const emptyDepartmentPanel = await openDepartmentDetails()
+  const emptyDepartmentSummary = emptyDepartmentPanel.getByRole("region", {
+    name: "Department summary",
+  })
+  await expect(
+    emptyDepartmentSummary.getByText("0", { exact: true }),
+  ).toHaveCount(2)
+  const emptyDepartmentMembers = emptyDepartmentPanel.getByRole("region", {
+    name: "Other Members",
+  })
+  await expect(
+    emptyDepartmentMembers.getByText("0 members", { exact: true }),
+  ).toBeVisible()
+  await expect(
+    emptyDepartmentMembers.getByText("No department members"),
+  ).toBeVisible()
+  await page.keyboard.press("Escape")
+  await expect(emptyDepartmentPanel).toHaveCount(0)
 
   await filteredRow
     .getByRole("button", { name: "Actions for Engineering" })
@@ -405,11 +587,16 @@ test("Admin Project Management is department-first and opens read-only scoped wo
   ).toHaveCount(0)
   await expect(
     workspaces.getByRole("columnheader", { name: "Actions" }),
-  ).toHaveCount(0)
+  ).toBeVisible()
   const scopedWorkspace = workspaces.getByRole("row", {
     name: /Shared design and marketing workspace/,
   })
   await expect(scopedWorkspace.getByRole("link")).toHaveCount(0)
+  await expect(
+    scopedWorkspace.getByRole("button", {
+      name: "More actions for Shared design and marketing workspace",
+    }),
+  ).toBeVisible()
   const progressCell = scopedWorkspace.getByRole("cell").nth(2)
   await expect(progressCell.getByRole("progressbar")).toHaveCount(1)
   await expect(progressCell).not.toContainText(/%|\d+ tasks/i)
@@ -465,6 +652,325 @@ test("Admin Project Management is department-first and opens read-only scoped wo
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBe(true)
+})
+
+test("Admin workspace details stay read-only and reset to the summary view", async ({
+  page,
+}) => {
+  await restoreSession(page, "ADMIN")
+  await page.route("**/api/departments/project-management-directory", (route) =>
+    route.fulfill({
+      json: {
+        departments: [
+          {
+            id: "details-department",
+            name: "Design",
+            color: "blue",
+            code: "DES",
+            description: null,
+            headId: "head-id",
+            head: {
+              id: "head-id",
+              email: "head@example.com",
+              fullName: "Department Head",
+              role: "STAFF",
+            },
+            memberCount: 4,
+            teamCount: 1,
+            serviceCount: 1,
+            projectCount: 2,
+            createdAt: "2026-01-01T00:00:00Z",
+            updatedAt: "2026-01-01T00:00:00Z",
+          },
+        ],
+      },
+    }),
+  )
+  const projectTitle = "Project One With a Much Longer Name for Header Wrapping"
+  const sharedDetails: Omit<
+    AdminProjectManagementWorkspaceDetails,
+    | "identity"
+    | "kind"
+    | "id"
+    | "name"
+    | "structure"
+    | "projects"
+    | "progress"
+    | "unplannedProjectCount"
+  > = {
+    department: {
+      id: "details-department",
+      name: "Design",
+      head: {
+        id: "head-id",
+        fullName: "Department Head",
+        email: "head@example.com",
+        position: "Department Head",
+      },
+      memberCount: 4,
+    },
+    clients: [{ id: "client-id", fullName: "Client One" }],
+    statuses: ["IN_PROGRESS"],
+    projectCount: 1,
+    teamMembers: [
+      { id: "employee-id", fullName: "Project Assignee", position: "Designer" },
+    ],
+    activity: Array.from({ length: 6 }, (_, index) => ({
+      id: `activity-${index + 1}`,
+      projectId: "project-id",
+      projectName: projectTitle,
+      type: "WORKSPACE_TASK_UPDATED",
+      summary: `Updated project activity ${index + 1}.`,
+      createdAt: `2026-02-${String(6 - index).padStart(2, "0")}T00:00:00Z`,
+      actor: { fullName: "Department Head" },
+    })),
+  }
+  const groupDetails: AdminProjectManagementWorkspaceDetails = {
+    ...sharedDetails,
+    identity: "group:group-id",
+    kind: "group",
+    id: "group-id",
+    name: "Persisted workspace name",
+    structure: "SEPARATE",
+    progress: { completed: 1, total: 2 },
+    unplannedProjectCount: 0,
+    projects: [
+      {
+        id: "project-id",
+        name: projectTitle,
+        description: "Project description",
+        status: "IN_PROGRESS",
+        client: { id: "client-id", fullName: "Client One" },
+        department: { id: "details-department", name: "Design" },
+        workspace: { id: "group-id", name: "Persisted workspace name" },
+        leads: [
+          {
+            id: "employee-id",
+            fullName: "Project Assignee",
+            position: "Designer",
+          },
+        ],
+        team: [
+          {
+            id: "employee-id",
+            fullName: "Project Assignee",
+            position: "Designer",
+            isTeamLead: true,
+          },
+        ],
+        startDate: "2026-01-15T00:00:00Z",
+        taskDueDates: ["2026-02-10"],
+        tasks: { total: 2, completed: 1, incomplete: 1 },
+        progress: { completed: 1, total: 2 },
+      },
+    ],
+  }
+  const ungroupedDetails: AdminProjectManagementWorkspaceDetails = {
+    ...sharedDetails,
+    identity: "ungrouped-project:project-two",
+    kind: "ungrouped-project",
+    id: "project-two",
+    name: "Ungrouped Project",
+    structure: null,
+    statuses: ["PLANNED"],
+    projectCount: 1,
+    progress: null,
+    unplannedProjectCount: 1,
+    projects: [
+      {
+        ...groupDetails.projects[0]!,
+        id: "project-two",
+        name: "Ungrouped Project",
+        status: "PLANNED",
+        workspace: null,
+        leads: [],
+        team: [],
+        progress: null,
+        tasks: { total: 0, completed: 0, incomplete: 0 },
+        taskDueDates: [],
+      },
+    ],
+    activity: [],
+    teamMembers: [],
+  }
+  const rows: WorkspaceDirectoryRow[] = [
+    {
+      rowId: groupDetails.identity,
+      id: groupDetails.id,
+      kind: groupDetails.kind,
+      name: groupDetails.name,
+      clientName: "Client One",
+      departmentNames: ["Design"],
+      statuses: groupDetails.statuses,
+      projectCount: groupDetails.projectCount,
+      updatedAt: "2026-01-15T00:00:00Z",
+      progress: groupDetails.progress,
+      canManage: false,
+      canRename: false,
+    },
+    {
+      rowId: ungroupedDetails.identity,
+      id: ungroupedDetails.id,
+      kind: ungroupedDetails.kind,
+      name: ungroupedDetails.name,
+      clientName: "Client One",
+      departmentNames: ["Design"],
+      statuses: ungroupedDetails.statuses,
+      projectCount: ungroupedDetails.projectCount,
+      updatedAt: "2026-01-15T00:00:00Z",
+      progress: null,
+      canManage: false,
+      canRename: false,
+    },
+  ]
+  await page.route("**/api/project-workspace/directory**", (route) =>
+    route.fulfill({
+      json: {
+        rows,
+        page: 1,
+        pageSize: 10,
+        total: rows.length,
+        totalPages: 1,
+        hasWorkspaces: true,
+      },
+    }),
+  )
+  const requestedDetails: string[] = []
+  await page.route(
+    "**/api/project-workspace/admin/departments/details-department/workspaces/**",
+    async (route) => {
+      requestedDetails.push(new URL(route.request().url()).pathname)
+      const identity = decodeURIComponent(
+        new URL(route.request().url()).pathname.split("/").at(-1) ?? "",
+      )
+      await route.fulfill({
+        json:
+          identity === groupDetails.identity ? groupDetails : ungroupedDetails,
+      })
+    },
+  )
+  const writes: string[] = []
+  page.on("request", (request) => {
+    if (
+      request.url().includes("/api/project-workspace/admin/") &&
+      request.method() !== "GET"
+    )
+      writes.push(`${request.method()} ${request.url()}`)
+  })
+
+  await page.goto("/project-management/departments/details-department/projects")
+  const table = page.getByRole("table", {
+    name: "Department project workspaces",
+  })
+  await expect(
+    table.getByRole("columnheader", { name: "Actions" }),
+  ).toBeVisible()
+  const groupRow = table.getByRole("row", {
+    name: /Persisted workspace name/,
+  })
+  await groupRow
+    .getByRole("button", { name: "More actions for Persisted workspace name" })
+    .click()
+  await expect(
+    page.getByRole("menuitem", { name: "View details" }),
+  ).toBeVisible()
+  await expect(page.getByRole("menuitem")).toHaveCount(1)
+  await page.getByRole("menuitem", { name: "View details" }).click()
+
+  const panel = page.getByRole("dialog")
+  await expect(
+    panel.getByRole("heading", { name: "Persisted workspace name" }),
+  ).toBeVisible()
+  await expect(
+    panel.getByText("Workspace details", { exact: true }),
+  ).toHaveCount(0)
+  await expect(panel).toContainText("Department Head")
+  await expect(panel).toContainText("Project Assignee")
+  await expect(panel).toContainText("1 of 2 tasks complete")
+  await panel.getByRole("button", { name: projectTitle }).click()
+  await expect(panel.getByRole("heading", { name: projectTitle })).toBeVisible()
+  await expect(panel.getByText("Project details", { exact: true })).toHaveCount(
+    0,
+  )
+  await expect(panel.getByText("In progress", { exact: true })).toBeVisible()
+  await expect(panel).toContainText("Project description")
+  await expect(panel).toContainText("Project lead")
+  await expect(panel).toContainText("1 completed · 1 incomplete · 2 total")
+  await expect(panel.getByText("In progress", { exact: true })).toHaveCount(1)
+  await expect(panel.getByText("Status", { exact: true })).toHaveCount(0)
+  await expect(
+    panel.getByRole("heading", { name: "Project details" }),
+  ).toHaveCount(0)
+  await expect(panel).not.toContainText("Read-only project details.")
+  await expect(
+    panel.getByText("Persisted workspace name", { exact: true }),
+  ).toBeVisible()
+  await expect(
+    panel.getByRole("heading", { name: "Project team" }),
+  ).toBeVisible()
+  await expect(panel.getByText("Start date", { exact: true })).toBeVisible()
+  await expect(panel.getByText("Task due dates", { exact: true })).toBeVisible()
+  const activity = panel.getByRole("list", { name: "Project activity" })
+  const activityItems = await activity.getByRole("listitem").allTextContents()
+  expect(activityItems).toHaveLength(6)
+  expect(activityItems.at(0)).toContain("Updated project activity 1.")
+  expect(activityItems.at(-1)).toContain("Updated project activity 6.")
+  await expect(
+    panel.getByRole("button", {
+      name: /Edit|Assign|Cancel|Archive|Delete|Save/,
+    }),
+  ).toHaveCount(0)
+  await expect(panel.getByRole("button", { name: "Done" })).toHaveCount(0)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(panel).toBeVisible()
+  const projectHeading = panel.getByRole("heading", { name: projectTitle })
+  expect(
+    await projectHeading.evaluate(
+      (element) => getComputedStyle(element).whiteSpace,
+    ),
+  ).toBe("normal")
+  expect(
+    await projectHeading.evaluate(
+      (element) => element.getBoundingClientRect().height,
+    ),
+  ).toBeGreaterThan(22)
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true)
+  await page.setViewportSize({ width: 1280, height: 720 })
+  await panel.getByRole("button", { name: "Back to workspace summary" }).click()
+  await expect(
+    panel.getByRole("heading", { name: "Persisted workspace name" }),
+  ).toBeVisible()
+  await panel.getByRole("button", { name: projectTitle }).click()
+  await panel
+    .getByRole("button", { name: "Close project workspace details" })
+    .click()
+  await expect(panel).toHaveCount(0)
+
+  const ungroupedRow = table.getByRole("row", { name: /Ungrouped Project/ })
+  await ungroupedRow
+    .getByRole("button", { name: "More actions for Ungrouped Project" })
+    .click()
+  await page.getByRole("menuitem", { name: "View details" }).click()
+  const ungroupedPanel = page.getByRole("dialog")
+  await expect(
+    ungroupedPanel.getByRole("heading", { name: "Ungrouped Project" }),
+  ).toBeVisible()
+  await expect(ungroupedPanel).toContainText("Unplanned")
+  await ungroupedPanel
+    .getByRole("button", { name: "Ungrouped Project" })
+    .click()
+  await expect(ungroupedPanel.getByText("No staff assigned yet")).toBeVisible()
+  expect(requestedDetails).toContain(
+    "/api/project-workspace/admin/departments/details-department/workspaces/group%3Agroup-id",
+  )
+  expect(requestedDetails).toContain(
+    "/api/project-workspace/admin/departments/details-department/workspaces/ungrouped-project%3Aproject-two",
+  )
+  expect(writes).toEqual([])
 })
 
 test("department heads can navigate between workspace Overview and Management", async ({

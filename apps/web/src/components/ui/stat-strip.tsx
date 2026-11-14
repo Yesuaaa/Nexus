@@ -29,12 +29,14 @@ export function StatStrip({
   label,
   pending,
   unavailable,
+  columns = 4,
   className,
 }: {
   items: StatStripItem[]
   label: string
   pending: boolean
   unavailable: boolean
+  columns?: 2 | 4
   className?: string
 }) {
   return (
@@ -42,7 +44,10 @@ export function StatStrip({
       aria-label={label}
       aria-busy={pending}
       className={cn(
-        "grid min-w-0 grid-cols-4 gap-px overflow-hidden rounded-xl border border-[#dfe6eb] bg-[#eceef1] shadow-[0_1px_2px_rgb(30_55_80_/_4%)] max-[1050px]:grid-cols-2 max-[560px]:grid-cols-1",
+        "grid min-w-0 gap-px overflow-hidden rounded-xl border border-[#dfe6eb] bg-[#eceef1] shadow-[0_1px_2px_rgb(30_55_80_/_4%)]",
+        columns === 2
+          ? "grid-cols-2 max-[1050px]:grid-cols-2 max-[560px]:grid-cols-1"
+          : "grid-cols-4 max-[1050px]:grid-cols-2 max-[560px]:grid-cols-1",
         className,
       )}
     >

@@ -159,6 +159,63 @@ export type WorkspaceDirectoryRow = {
   canRename: boolean
 }
 
+export type AdminProjectWorkspaceMember = {
+  id: string
+  fullName: string
+  position: string | null
+}
+
+export type AdminProjectWorkspaceProject = {
+  id: string
+  name: string
+  description: string | null
+  status: ProjectStatus
+  client: { id: string; fullName: string | null }
+  department: { id: string; name: string }
+  workspace: { id: string; name: string } | null
+  leads: AdminProjectWorkspaceMember[]
+  team: (AdminProjectWorkspaceMember & { isTeamLead: boolean })[]
+  startDate: string | null
+  taskDueDates: string[]
+  tasks: { total: number; completed: number; incomplete: number }
+  progress: { completed: number; total: number } | null
+}
+
+export type AdminProjectManagementWorkspaceDetails = {
+  identity: string
+  kind: "group" | "ungrouped-project"
+  id: string
+  name: string
+  structure: "SEPARATE" | "MULTI_WORKSTREAM" | null
+  department: {
+    id: string
+    name: string
+    head: {
+      id: string
+      fullName: string | null
+      email: string
+      position: string | null
+    } | null
+    memberCount: number
+  }
+  clients: { id: string; fullName: string | null }[]
+  statuses: ProjectStatus[]
+  projectCount: number
+  unplannedProjectCount: number
+  progress: { completed: number; total: number } | null
+  teamMembers: AdminProjectWorkspaceMember[]
+  projects: AdminProjectWorkspaceProject[]
+  activity: {
+    id: string
+    projectId: string
+    projectName: string
+    type: string
+    summary: string
+    createdAt: string
+    actor: { fullName: string | null } | null
+  }[]
+}
+
 export type ProjectWorkspaceOverviewTask = {
   id: string
   title: string
@@ -222,6 +279,17 @@ export function listWorkspaceDirectory(
     totalPages: number
     hasWorkspaces: boolean
   }>(`/api/project-workspace/directory?${params}`, { signal })
+}
+
+export function getAdminProjectManagementWorkspaceDetails(
+  departmentId: string,
+  identity: string,
+  signal?: AbortSignal,
+) {
+  return apiRequest<AdminProjectManagementWorkspaceDetails>(
+    `/api/project-workspace/admin/departments/${encodeURIComponent(departmentId)}/workspaces/${encodeURIComponent(identity)}`,
+    { signal },
+  )
 }
 
 export const getProjectWorkspaceOverview = (signal?: AbortSignal) =>

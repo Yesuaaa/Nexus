@@ -1,6 +1,7 @@
 import { json, Router } from "express"
 import { isRecordId, recordIdParam } from "../../shared/validation.js"
-import { requireAuth } from "../auth/auth.middleware.js"
+import { requireAuth, requirePermission } from "../auth/auth.middleware.js"
+import { Permission } from "../auth/auth.permissions.js"
 import { fail } from "../../shared/http-error.js"
 import { parsePage } from "../../shared/query/pagination.js"
 import { parseWorkspaceIdentity } from "./workspace-identity.js"
@@ -10,6 +11,7 @@ import {
   cancelProjectWorkspace,
   createProjectWorkspaces,
   getProjectWorkspace,
+  getAdminProjectManagementWorkspaceDetails,
   listApprovedBookings,
   listProjectWorkspaceTemplates,
   listProjectWorkspaces,
@@ -32,6 +34,18 @@ projectWorkspaceRouter.use(requireAuth)
 
 projectWorkspaceRouter.param(
   "id",
+  (_request, _response, next, value: string) => {
+    parseWorkspaceIdentity(value)
+    next()
+  },
+)
+
+projectWorkspaceRouter.param(
+  "departmentId",
+  recordIdParam("Invalid department ID"),
+)
+projectWorkspaceRouter.param(
+  "identity",
   (_request, _response, next, value: string) => {
     parseWorkspaceIdentity(value)
     next()
@@ -101,6 +115,21 @@ projectWorkspaceRouter.get("/directory", async (request, response) => {
     }),
   )
 })
+
+projectWorkspaceRouter.get(
+  "/admin/departments/:departmentId/workspaces/:identity",
+  requirePermission(Permission.PROJECT_MANAGEMENT_READ),
+  requirePermission(Permission.DEPARTMENTS_READ),
+  async (request, response) => {
+    response.json(
+      await getAdminProjectManagementWorkspaceDetails(
+        request.auth!.user.id,
+        String(request.params.departmentId),
+        String(request.params.identity),
+      ),
+    )
+  },
+)
 
 projectWorkspaceRouter.get("/overview", async (request, response) => {
   response.json(await getProjectWorkspaceOverview(request.auth!.user.id))

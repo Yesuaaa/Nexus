@@ -42,12 +42,14 @@ export function WorkspaceListRowActions({
   identity,
   returnState,
   onChanged,
+  onViewDetails,
   isArchived = false,
 }: {
   workspace: Pick<ProjectWorkspaceSummary, "name" | "canManage" | "canRename">
   identity: string
   returnState?: WorkspaceDirectoryState
   onChanged: () => void
+  onViewDetails?: () => void
   isArchived?: boolean
 }) {
   const router = useRouter()
@@ -96,6 +98,23 @@ export function WorkspaceListRowActions({
     if (mode === "edit") setName(workspace.name)
     setDialog(mode)
   }
+
+  if (onViewDetails)
+    return (
+      <RowActionsMenu<"view-details">
+        triggerId={triggerId}
+        triggerLabel={`More actions for ${workspace.name}`}
+        menuLabel={`Actions for ${workspace.name}`}
+        triggerClassName="max-[560px]:size-11"
+        items={[
+          {
+            action: "view-details",
+            label: <RowActionLabel icon={Eye}>View details</RowActionLabel>,
+          },
+        ]}
+        onAction={onViewDetails}
+      />
+    )
 
   // Read-only rows keep a single view link; manageable rows use the menu.
   if (!workspace.canManage || isArchived)

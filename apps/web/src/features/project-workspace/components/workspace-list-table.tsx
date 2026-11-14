@@ -26,7 +26,7 @@ import { WorkspaceListRowActions } from "./workspace-list-row-actions"
 const grid =
   "grid grid-cols-[minmax(140px,1.4fr)_minmax(100px,1fr)_minmax(120px,1.2fr)_minmax(90px,.8fr)_minmax(100px,.9fr)_112px] items-center gap-3.5 @max-[900px]:grid-cols-[minmax(0,1fr)_auto]"
 const departmentScopedGrid =
-  "grid grid-cols-[minmax(140px,1.4fr)_minmax(100px,1fr)_minmax(120px,1.2fr)_minmax(90px,.8fr)_minmax(100px,.9fr)] items-center gap-3.5 @max-[900px]:grid-cols-[minmax(0,1fr)_auto]"
+  "grid grid-cols-[minmax(140px,1.4fr)_minmax(100px,1fr)_minmax(120px,1.2fr)_minmax(90px,.8fr)_minmax(100px,.9fr)_112px] items-center gap-3.5 @max-[900px]:grid-cols-[minmax(0,1fr)_auto]"
 
 const cells = [
   "min-w-0 @max-[900px]:col-start-1 @max-[900px]:row-start-1",
@@ -42,6 +42,7 @@ const departmentScopedCells = [
   "min-w-0 @max-[900px]:col-span-2 @max-[900px]:row-start-3",
   "min-w-0 @max-[900px]:col-span-2 @max-[900px]:row-start-4",
   "min-w-0 @max-[900px]:col-span-2 @max-[900px]:row-start-5",
+  "@max-[900px]:col-start-2 @max-[900px]:row-start-1",
 ]
 
 type WorkspaceRow = ProjectWorkspaceSummary | WorkspaceDirectoryRow
@@ -70,6 +71,7 @@ export function WorkspaceListTable({
   quickKey,
   archiveView,
   onChanged,
+  onViewDetails,
   directory = false,
   departmentScopedDirectory = false,
   directoryState,
@@ -80,6 +82,7 @@ export function WorkspaceListTable({
   quickKey: string
   archiveView: boolean
   onChanged: () => void
+  onViewDetails?: (identity: string) => void
   directory?: boolean
   departmentScopedDirectory?: boolean
   directoryState?: WorkspaceDirectoryState
@@ -100,7 +103,14 @@ export function WorkspaceListTable({
         rowClassName={rowGrid}
       >
         {(departmentScopedDirectory
-          ? ["Workspace", "Client", "Progress", "Status", "Last updated"]
+          ? [
+              "Workspace",
+              "Client",
+              "Progress",
+              "Status",
+              "Last updated",
+              "Actions",
+            ]
           : [
               directory ? "Workspace" : "Project",
               "Client",
@@ -270,7 +280,24 @@ export function WorkspaceListTable({
                   {formatDate(workspace.updatedAt)}
                 </time>
               </div>
-              {!departmentScopedDirectory && (
+              {departmentScopedDirectory ? (
+                <div
+                  role="cell"
+                  className={departmentScopedCells[5]}
+                  aria-label={`Actions for ${workspace.name}`}
+                >
+                  {onViewDetails && (
+                    <WorkspaceListRowActions
+                      workspace={workspace}
+                      identity={workspaceKey(workspace)}
+                      onChanged={onChanged}
+                      onViewDetails={() =>
+                        onViewDetails(workspaceKey(workspace))
+                      }
+                    />
+                  )}
+                </div>
+              ) : (
                 <div role="cell" className={cells[5]}>
                   <WorkspaceListRowActions
                     workspace={workspace}

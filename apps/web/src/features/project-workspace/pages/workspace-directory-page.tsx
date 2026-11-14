@@ -39,6 +39,7 @@ import {
   type WorkspaceDirectoryQuery,
 } from "../api/project-workspace-api"
 import { WorkspaceListTable } from "../components/workspace-list-table"
+import { AdminProjectWorkspaceDetailsPanel } from "../components/admin-project-workspace-details-panel"
 import { NewWorkspacePanel } from "./new-workspace-page"
 import {
   parseWorkspaceDirectoryState,
@@ -93,6 +94,7 @@ export function WorkspaceDirectoryPage({
       : directoryState.search
   const searchTimer = useRef<number | null>(null)
   const [setupOpen, setSetupOpen] = useState(false)
+  const [detailsIdentity, setDetailsIdentity] = useState<string | null>(null)
   const query = useMemo(
     () => ({
       search: directoryState.search,
@@ -365,6 +367,9 @@ export function WorkspaceDirectoryPage({
             directoryState={directoryState}
             departmentScopedDirectory={departmentProjectDirectory}
             onChanged={list.retry}
+            onViewDetails={
+              departmentProjectDirectory ? setDetailsIdentity : undefined
+            }
           />
         )}
         {data && data.total > 0 && (
@@ -384,6 +389,14 @@ export function WorkspaceDirectoryPage({
           onClose={() => setSetupOpen(false)}
           onCreated={list.retry}
           returnState={directoryState}
+        />
+      )}
+      {departmentProjectDirectory && scopedDepartmentId && detailsIdentity && (
+        <AdminProjectWorkspaceDetailsPanel
+          key={detailsIdentity}
+          departmentId={scopedDepartmentId}
+          identity={detailsIdentity}
+          onClose={() => setDetailsIdentity(null)}
         />
       )}
     </main>

@@ -1,9 +1,11 @@
 "use client"
 
 import { useState } from "react"
+import { FolderKanban, UsersRound } from "lucide-react"
 import { EmptyState } from "@/components/ui/empty-state"
 import { MemberIdentity } from "@/components/ui/member-identity"
 import { MemberRowSkeleton } from "@/components/ui/panel-loading"
+import { StatStrip } from "@/components/ui/stat-strip"
 import {
   SidePanel,
   SidePanelBody,
@@ -36,20 +38,25 @@ export function ProjectManagementDepartmentDetailsPanel({
   )
   const department = resource.data
   const loading = resource.loading && !department
+  const otherMembers = department
+    ? department.members.filter(
+        (member) => !department.headId || member.userId !== department.headId,
+      )
+    : []
 
   return (
     <SidePanel open={panel.open} onOpenChange={panel.onOpenChange}>
       <SidePanelHeader
-        eyebrow="You're viewing"
         title={
           department?.name ??
           (loading ? "Loading department" : "Department details")
         }
-        description="Read-only department details."
+        description={`Department details for ${department?.name ?? "this department"}`}
+        hideDescription
         meta={department?.code ? <Pill>{department.code}</Pill> : undefined}
         closeLabel="Close department details"
       />
-      <SidePanelBody>
+      <SidePanelBody className="gap-4">
         {loading ? (
           <div className="grid gap-4" aria-busy="true">
             <span role="status" className="sr-only">
@@ -79,22 +86,28 @@ export function ProjectManagementDepartmentDetailsPanel({
                 {department.description}
               </p>
             )}
-            <dl className="m-0 grid grid-cols-2 gap-3">
-              <div className="min-w-0 rounded-lg border border-[#e8ebef] px-3 py-2.5">
-                <dt className="text-[11px] text-[#738096]">Members</dt>
-                <dd className="mt-1 mb-0 text-sm font-semibold tabular-nums">
-                  {department.memberCount}
-                </dd>
-              </div>
-              <div className="min-w-0 rounded-lg border border-[#e8ebef] px-3 py-2.5">
-                <dt className="text-[11px] text-[#738096]">
-                  Projects (all statuses)
-                </dt>
-                <dd className="mt-1 mb-0 text-sm font-semibold tabular-nums">
-                  {department.projectCount}
-                </dd>
-              </div>
-            </dl>
+            <StatStrip
+              label="Department summary"
+              pending={false}
+              unavailable={false}
+              columns={2}
+              items={[
+                {
+                  label: "Members",
+                  value: String(department.memberCount),
+                  caption: "Department membership",
+                  icon: UsersRound,
+                  tone: "bg-[#e6f4ee] text-[#25745b]",
+                },
+                {
+                  label: "Projects",
+                  value: String(department.projectCount),
+                  caption: "All project statuses",
+                  icon: FolderKanban,
+                  tone: "bg-[#e8eef8] text-[#284f9e]",
+                },
+              ]}
+            />
 
             <section
               className="grid gap-3"
@@ -108,50 +121,50 @@ export function ProjectManagementDepartmentDetailsPanel({
                   Department Head
                 </h3>
               </div>
-              {department.head ? (
-                <MemberIdentity
-                  member={{ fullName: department.head.fullName }}
-                  secondaryText={
-                    department.head.position || roleLabels[department.head.role]
-                  }
-                  nameAdornment={<Pill>Department Head</Pill>}
-                />
-              ) : (
-                <p className="m-0 text-xs text-[#738096]">Unassigned</p>
-              )}
+              <div className="rounded-lg border border-[#e8ebef] px-4 py-3">
+                {department.head ? (
+                  <MemberIdentity
+                    member={{ fullName: department.head.fullName }}
+                    secondaryText={
+                      department.head.position ||
+                      roleLabels[department.head.role]
+                    }
+                    nameAdornment={<Pill>Department Head</Pill>}
+                  />
+                ) : (
+                  <p className="m-0 text-xs text-[#738096]">Unassigned</p>
+                )}
+              </div>
             </section>
 
             <section
               className="grid gap-3"
-              aria-labelledby="department-members-label"
+              aria-labelledby="department-other-members-label"
             >
               <div>
                 <h3
-                  id="department-members-label"
+                  id="department-other-members-label"
                   className="m-0 text-xs font-semibold"
                 >
-                  Members
+                  Other Members
                 </h3>
                 <p className="mt-1 mb-0 text-[11px] text-[#738096]">
-                  {department.memberCount} members
+                  {otherMembers.length}{" "}
+                  {otherMembers.length === 1 ? "member" : "members"}
                 </p>
               </div>
-              {department.members.length ? (
+              {otherMembers.length ? (
                 <ul className="m-0 list-none divide-y divide-[#eceef1] rounded-lg border border-[#e8ebef] p-0">
-                  {department.members.map((member) => {
+                  {otherMembers.map((member) => {
                     const details = [
                       member.user ? roleLabels[member.user.role] : null,
                       member.position,
                     ].filter(Boolean)
-                    const isHead = member.userId === department.headId
                     return (
                       <li key={member.id} className="min-w-0 px-4 py-3">
                         <MemberIdentity
                           member={{ fullName: member.fullName }}
                           secondaryText={details.join(" · ") || null}
-                          nameAdornment={
-                            isHead ? <Pill>Department Head</Pill> : undefined
-                          }
                         />
                       </li>
                     )
@@ -159,7 +172,11 @@ export function ProjectManagementDepartmentDetailsPanel({
                 </ul>
               ) : (
                 <EmptyState
-                  title="No department members"
+                  title={
+                    department.head
+                      ? "No other members"
+                      : "No department members"
+                  }
                   size="sm"
                   className="rounded-lg"
                 />
