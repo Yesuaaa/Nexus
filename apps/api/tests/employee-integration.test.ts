@@ -630,6 +630,7 @@ test(
       },
     )
     await t.test("only Superadmin may use the account API", async () => {
+      const usersBefore = await prisma.user.count()
       for (const actor of ["admin", "staff", "user"]) {
         assert.equal(
           (await request("/users", "GET", undefined, actor)).status,
@@ -647,6 +648,13 @@ test(
           403,
         )
       }
+      assert.equal(await prisma.user.count(), usersBefore)
+      assert.equal(
+        await prisma.user.findUnique({
+          where: { email: "denied@example.com" },
+        }),
+        null,
+      )
       assert.equal(
         (await request("/users", "GET", undefined, "superadmin")).status,
         200,
@@ -1608,6 +1616,57 @@ test(
         assert.equal(employee.status, "ACTIVE")
         assert.equal(employee.departmentId, "operations")
         assert.equal(employee.teamId, leadTeamId)
+      },
+    )
+    await t.test(
+      "[NEX-001] Superadmin creates basic and privileged accounts with safe responses and persistence",
+      async () => {
+        const usersBefore = await prisma.user.count()
+        const inputs = [
+          {
+            email: "nex001-user@example.com",
+            fullName: "Nexus Regression User",
+            contactNumber: "09123456789",
+            password: "ValidPassword1!",
+            role: "USER",
+          },
+          {
+            email: "nex001-admin@example.com",
+            fullName: "Nexus Regression Admin",
+            contactNumber: "09123456788",
+            password: "ValidPassword1!",
+            role: "ADMIN",
+          },
+        ] as const
+        for (const input of inputs) {
+          const response = await request("/users", "POST", input, "superadmin")
+          assert.equal(response.status, 201)
+          const result = (await response.json()) as {
+            user: Record<string, unknown>
+          }
+          assert.equal(result.user.email, input.email)
+          assert.equal(result.user.fullName, input.fullName)
+          assert.equal(result.user.contactNumber, input.contactNumber)
+          assert.equal(result.user.role, input.role)
+          for (const secret of [
+            "password",
+            "passwordHash",
+            "accessToken",
+            "refreshToken",
+            "sessionId",
+          ]) {
+            assert.equal(secret in result.user, false, `Exposed ${secret}`)
+          }
+
+          const persisted = await prisma.user.findUniqueOrThrow({
+            where: { email: input.email },
+          })
+          assert.equal(persisted.fullName, input.fullName)
+          assert.equal(persisted.contactNumber, input.contactNumber)
+          assert.equal(persisted.role, input.role)
+          assert.notEqual(persisted.passwordHash, input.password)
+        }
+        assert.equal(await prisma.user.count(), usersBefore + inputs.length)
       },
     )
   },

@@ -1,0 +1,27 @@
+{
+  "cwd": "C:/Users/ADMIN/Documents/Thesis/Nexus/apps/web",
+  "server": "HOSTNAME=127.0.0.1 PORT=5274 NODE_ENV=production node scripts/start.mjs",
+  "testCommand": "node node_modules/@playwright/test/cli.js test --workers=2 --retries=0 --reporter=line,json --output=../../test-results/phase2-audit/run-artifacts",
+  "environmentOverrides": {
+    "NEXUS_E2E_LIVE": "0",
+    "NEXUS_E2E_BASE_URL": "http://127.0.0.1:5274",
+    "PLAYWRIGHT_JSON_OUTPUT_FILE": "C:/Users/ADMIN/Documents/Thesis/Nexus/test-results/phase2-audit/execution.json"
+  },
+  "exitCode": 0,
+  "buildId": "RkU8ojA1HJpcyeFNdw-6u",
+  "buildRevision": "UNVERIFIED; pre-existing production build, no rebuild performed",
+  "api": "No listener observed on local port 3001 before run; pre-existing build rewrites /api/* to http://localhost:3001/api/*; browser application API fixtures intercepted data calls",
+  "database": "No database provisioned or connected; mocked application API mode",
+  "accounts": "Synthetic fixture accounts; live account cases skipped",
+  "safety": "Dedicated loopback web server; real backend/live-account suite not run; standalone server stopped after test execution",
+  "initialAttempt": "Exit 1 before tests due to WorkerHost.startRunner spawn EPERM; sandbox escalation allowed successful existing-suite run",
+  "stats": {
+    "startTime": "2026-11-09T07:29:46.933Z",
+    "duration": 191789.934,
+    "expected": 287,
+    "skipped": 5,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "flakiness": "No failures/retries in this run; long-term flakiness unverified"
+}
