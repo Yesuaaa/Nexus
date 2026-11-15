@@ -27,7 +27,7 @@ test("authorized business deep links override remembered shell context", () => {
   assert.equal(
     resolveWorkspaceModuleId(
       admin,
-      "/employees/employee-1",
+      "/employees/overview",
       "service-operations",
     ),
     "people-hr",

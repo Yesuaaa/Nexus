@@ -17,6 +17,7 @@ export default tseslint.config(
       "**/playwright-report/**",
       "apps/web/next-env.d.ts",
       "apps/api/src/generated/**",
+      "apps/api/.test-build/**",
       ".pnpm-store/**",
       ".ci-tools/**",
       ".localappdata/**",

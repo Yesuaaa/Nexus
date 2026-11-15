@@ -11,7 +11,7 @@ export function WorkspaceSelectorShell({
   onSignOut: () => void
 }) {
   return (
-    <div className="min-h-dvh bg-[var(--portal-canvas)] p-[15px] text-sm text-foreground max-[767px]:p-3">
+    <div className="flex h-dvh flex-col overflow-hidden bg-[var(--portal-canvas)] p-[15px] text-sm text-foreground max-[767px]:p-3">
       <Topbar minimal onSignOut={onSignOut} />
       {children}
     </div>

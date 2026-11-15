@@ -302,7 +302,7 @@ test(
         )
         assert.equal(head.status, 200, JSON.stringify(head.payload))
 
-        // Stale titles in any spelling are cleared when the department loads.
+        // Reads retain legacy data; an authorized edit must correct it explicitly.
         await prisma.user.update({
           where: { id: "designer" },
           data: { position: "Department head" },
@@ -312,8 +312,18 @@ test(
           where: { id: "designer" },
           include: { employee: true },
         })
-        assert.equal(designer.position, null)
+        assert.equal(designer.position, "Department head")
         assert.equal(designer.employee?.position, null)
+        const corrected = await request("/employees/emp-designer", "PUT", {
+          position: "Designer",
+        })
+        assert.equal(corrected.status, 200, JSON.stringify(corrected.payload))
+        const synchronized = await prisma.user.findUniqueOrThrow({
+          where: { id: "designer" },
+          include: { employee: true },
+        })
+        assert.equal(synchronized.position, "Designer")
+        assert.equal(synchronized.employee?.position, "Designer")
         const kept = await prisma.user.findUniqueOrThrow({
           where: { id: "member" },
         })

@@ -50,6 +50,14 @@ test("attendance navigation grants self-service independently of employee manage
   }
   assert.equal(canAccessRoute(head, "/attendance/settings"), false)
   assert.equal(canAccessRoute(admin, "/attendance/settings"), true)
+  const superadmin = { ...admin, role: "SUPERADMIN" }
+  for (const group of attendanceNavigation)
+    for (const link of group.links)
+      assert.equal(
+        canAccessRoute(superadmin, link.href),
+        group.id !== "attendance",
+        link.href,
+      )
   for (const role of ["USER", "SUPERADMIN"])
     assert.equal(canAccessRoute({ ...staff, role }, "/attendance/my"), false)
   assert.equal(

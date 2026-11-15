@@ -15,6 +15,8 @@ import { TablePaginationFooter } from "@/components/ui/table-pagination-footer"
 import { SearchEmptyState } from "@/components/ui/search-empty-state"
 import { SearchField } from "@/components/ui/search-field"
 import { cn } from "@/lib/utils"
+import { usePortalAccount } from "@/features/auth/providers/account-context"
+import { hasPermission, Permissions } from "@/features/auth/model/permissions"
 import {
   listClients,
   type ClientSort,
@@ -66,6 +68,8 @@ function matchesTableSearch(item: Client, query: string) {
 }
 
 export function ClientManagementPage() {
+  const account = usePortalAccount()
+  const canCreate = hasPermission(account, Permissions.CLIENTS_CREATE)
   const [formTarget, setFormTarget] = useState<Client | "create" | null>(null)
   const [selectedClient, setSelectedClient] = useState<{
     client: Client
@@ -113,13 +117,15 @@ export function ClientManagementPage() {
         title="Client Management"
         description="Create and manage client accounts and contact information."
         actions={
-          <PageHeaderButton
-            type="button"
-            onClick={() => setFormTarget("create")}
-          >
-            <Plus size={16} aria-hidden="true" />
-            Create Client
-          </PageHeaderButton>
+          canCreate && (
+            <PageHeaderButton
+              type="button"
+              onClick={() => setFormTarget("create")}
+            >
+              <Plus size={16} aria-hidden="true" />
+              Create Client
+            </PageHeaderButton>
+          )
         }
       />
       <section
@@ -212,7 +218,7 @@ export function ClientManagementPage() {
           />
         )}
       </section>
-      {formTarget && (
+      {formTarget && (formTarget !== "create" || canCreate) && (
         <ClientFormDialog
           client={formTarget === "create" ? null : formTarget}
           onClose={() => setFormTarget(null)}

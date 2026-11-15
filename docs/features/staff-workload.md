@@ -1,5 +1,7 @@
 # Staff Workload
 
+2026-11-14: [Phase 3B.2 Superadmin oversight](superadmin-workload-oversight.md) adds a separate organization-wide read-only view under Service Operations. The Department Head page and mutation permissions described below remain unchanged.
+
 HR planning integration developed: 2026-11-13.
 
 Department Heads open **Staff Workload** from the portal sidebar. Access is limited to the current active STAFF department head; admin roles do not bypass department scope.

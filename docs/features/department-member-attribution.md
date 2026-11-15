@@ -1,0 +1,86 @@
+# Department member management actor attribution — Phase 4B.4B.5C
+
+Developed: 2026-11-15.
+
+All three existing member-management routes now record their authenticated administrator and actual Employee/User changes atomically: `POST /api/departments/:id/members`, `PATCH /api/departments/:id/members/:memberId`, and `DELETE /api/departments/:id/members/:memberId`. This follows the [attribution audit](administrative-mutation-attribution-audit.md), [foundation](administrative-attribution-persistence-foundation.md), [Employee update integration](employee-update-head-attribution.md), [Department creation/update](department-creation-update-attribution.md), and [Department deletion](department-deletion-attribution.md).
+
+No schema, migration, permission grant, account lifecycle change, frontend feature, new synchronization rule, history interface, Diagnostics or System Logs is introduced. Standalone Team Management attribution remains outside this phase. Department deletion and creation/update workflows retain their previous implementations.
+
+## Authorization and preserved execution paths
+
+All routes retain `requireAuth` and `departments:manage`, currently Admin/Superadmin. Ordinary Staff, Department Heads and Clients gain no management permission. The controller derives `createManagementOperation(request.auth!)` and passes the trusted context into the existing services/transactions. Submitted actor, role, operation, timestamp and history claims do not control attribution.
+
+| Route/path                 | Existing business behavior retained                                                                                                                                                                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST with `employeeIds`    | Existing eligibility query, deduplication, current-team handling and `updateEmployee`. No account creation or additional synchronization call.                                                                                                                |
+| POST with `userIds`        | Existing account/linked-Employee eligibility query; existing `syncEmployeeForUser`, then existing Employee-backed assignment or fallback User assignment/synchronization. Actual missing-Employee creation remains a consequence of this business logic only. |
+| PATCH with Employee ID     | Existing membership/Head/active Staff/team checks, title normalization, team-in-department validation and shared Employee update.                                                                                                                             |
+| PATCH with legacy User ID  | Existing User membership/account/team/title checks, User update and Employee synchronization. Existing User-backed responses remain User responses even if synchronization materializes an Employee.                                                          |
+| DELETE with Employee ID    | Existing protected-Head check and shared Employee update clearing department/team. Protected Team Lead assignment changes still fail in the Employee writer.                                                                                                  |
+| DELETE with legacy User ID | Existing membership/Head checks, User assignment clearing and existing Employee synchronization. No new cleanup of Team leadership or free-form titles.                                                                                                       |
+
+User/Employee identity, status and employment type are not changed by an existing-record member operation. An actual new Employee retains the original synchronization defaults. Unlinked Employees can receive the existing position/clear-assignment operations without an invented User relationship. No Superadmin Staff/Employee identity or department assignment is created by attribution.
+
+## Recorded events and reuse
+
+Every record uses `WorkforceManagementChange`, `DEPARTMENT_MANAGEMENT`, the authenticated actor ID/role, a shared server-generated operation UUID and database-generated event time. No Account history is generated.
+
+| Actual persisted effect                                              | History                                                                                                                                                                                                                                                |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Existing Employee assignment changes                                 | Employee `ASSIGNMENT_CHANGED` with only actual department/team/link ID differences.                                                                                                                                                                    |
+| User assignment changes                                              | Department-scoped `ASSIGNMENT_CHANGED` with `affectedAccountId` and actual department/team ID transitions.                                                                                                                                             |
+| Position change on an Employee or its User mirror                    | One Employee `PROFILE_UPDATED` containing `position` as a changed field name and no title value. A User-only mirror repair is included even when Employee position is unchanged.                                                                       |
+| Existing User with no resulting Employee changes position            | The existing Department `ASSIGNMENT_CHANGED` contract supports the `position` field name and `affectedAccountId`, without a raw position payload. This preserves legacy User-only handling, including synchronization's existing Superadmin exclusion. |
+| Actual Employee birth through existing synchronization               | One Employee `CREATED` using its final stored link/assignment/status/employment-type values. No invented Account creation or separate assignment transition for the just-created Employee.                                                             |
+| Unchanged fields, repeated identity forms and timestamp-only updates | No false history transitions. A request that actually repairs synchronization or creates a missing Employee still records that material effect.                                                                                                        |
+
+The new feature-local snapshot helper reuses `recordEmployeeUpdate`, `recordEmployeeAssignments`, `recordUserSynchronization`, `writeEmployeeEffects` and their typed workforce writer. The shared Employee update/assignment recorders gain a closed optional Department origin, defaulting to their existing Employee origin. User synchronization gains an optional flag to include an unlinked User's position field name in its existing allowlist. Previous callers retain their defaults; no history payload allowlist, action/origin enum or database model is widened.
+
+Position is the only mirrored profile field written by these member inputs. Its User and Employee differences are merged into one profile event. Credentials, names, contact values, email addresses and free-form position values never enter history. Existing DTOs, `employeeInclude`, `publicUser`, response messages and response shapes are retained.
+
+## Snapshot and transaction boundary
+
+Before-values are captured under per-subject locks within each existing business transaction. Employee-backed operations retain Employee → User ordering. Legacy User PATCH/DELETE retain their existing User → synchronized Employee order; legacy POST starts with synchronization's Employee-by-user lock and its missing-Employee User fallback. Reads are repeated after locks; the helper performs no business writes or synchronization.
+
+The existing shared Employee writer is called without its Employee PUT attribution context, preventing a second set of Employee-origin events. Its validation, locking, assignment protection and persistence remain unchanged. Member history is appended explicitly with Department origin after the operation's business writes and actual state re-reads.
+
+POST retains the original list/loop order and validation. It remembers the first protected snapshot per distinct User, or per unlinked Employee, then compares final state after both ID lists complete. Naming one person through both lists therefore cannot duplicate events or produce an intermediate birth/assignment story. A batch creates one operation context; later history failure rolls back all members, actual Employee births/synchronization and earlier history inserts. PATCH/DELETE use their original transaction and return the original saved response only after required history succeeds.
+
+No broad lock acquisition, isolation-level change, global sorted batch, retry policy or transaction refactor is added. Existing membership/eligibility/Head/team prechecks are retained at their original locations (some outside the transaction; POST eligibility checks precede per-member locks). A guarantee that all such prechecks remain valid through competing role, membership or leadership changes is deferred. Legacy User PATCH retains its existing account-based team checks, while Employee-ID PATCH also checks Employee HR status. Legacy User removal retains its Head check and direct User/synchronization implementation; it does not pass through the Employee writer's Team Lead assignment guard. These pre-existing validation differences found during source inspection are not normalized by this attribution phase. Their cross-path eligibility implications are not independently certified by the member attribution tests and need a separate review. Do not infer stronger or uniform eligibility validation from these history changes.
+
+PGlite's pool uses one connection. Overlapping HTTP tests prove one material history operation for repeated assignments in that infrastructure, not independent PostgreSQL-session scheduling or deadlock freedom. A forced SQLSTATE `40001` conflict verifies existing conflict mapping and no committed success history. Broader cross-session validation/retry and uniform legacy eligibility would need a separately authorized review.
+
+## Validation
+
+The initial test compile found a JSON typing error, corrected before execution. A controlled negative run then removed the new transaction history calls, retained the real business services/Express/PGlite/database assertions, and failed on absent history plus a successful mutation despite a forced history-insert failure. The service/repository were restored byte-for-byte afterward; no history writer was mocked. The restored implementation passed the focused regression run.
+
+| Check                                                                                 | Result                                                                                                                                             |
+| ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm format`, `pnpm lint`, `pnpm typecheck`, `pnpm build`                            | PASS, exit 0                                                                                                                                       |
+| Focused member, Department creation/deletion/GET integrity and Employee update suites | PASS, 47 tests before the additional unlinked-Employee subtest; the final full suite includes that addition                                        |
+| `pnpm test:api`                                                                       | PASS, 386 tests, including all 11 new member tests (parent plus ten subtests), all prior attribution suites and existing authorization regressions |
+| `pnpm test:web`                                                                       | PASS, 108 tests                                                                                                                                    |
+| Selected production-browser regressions                                               | PASS, 34 tests; existing isolated frontend fixtures, separate from real database-attribution evidence                                              |
+| `git diff --check`                                                                    | PASS                                                                                                                                               |
+
+Browser command: `pnpm --filter @nexus/web exec playwright test employees.spec.ts departments.spec.ts employee-login.spec.ts superadmin-people-hr.spec.ts staff.spec.ts superadmin.spec.ts client-mutations.spec.ts client-create-permission.spec.ts --workers=2 --reporter=line`, using a task-owned production server on port 5273, `NEXUS_E2E_LIVE=0` and `NEXUS_E2E_BASE_URL=http://127.0.0.1:5273`. The server was stopped afterward. Backend evidence is authenticated Express/PGlite with persisted-state assertions. A late Department-subject history trigger verifies rollback after Employee history, across batch assignment, Employee/legacy PATCH and Employee/legacy removal; all business mutations and prior inserts roll back together.
+
+The new suite covers single/multiple assignment, both ID forms, duplicate/coalesced identities, real birth versus existing-record synchronization, position/team edits, mirror-only repair, unlinked Employee/User paths, all removal forms, no-ops, protected Heads/Leads, invalid assignments, all actor roles, forged claims, late rollback, transaction conflict, unrelated rows, private-value exclusion and observational GETs.
+
+Historical broader browser failures tracked by the [Department deletion report](department-deletion-attribution.md#validation) remain separate. This phase does not change unrelated Client onboarding expectations, claim those historical failures resolved, or use live data.
+
+No required check was blocked and no new regression remains in executed checks. Existing non-fatal `pg` query/deprecation warnings remain. The compiler/native Node runner successfully executed real-API tests; raw `tsx` startup was not retested. The historical full-browser backlog and independent-session contention were not rerun or certified. No live database, migration, seed, backfill or repair was used.
+
+Evidence is retained in ignored `.ci-tools/phase4b4b5c-{red,negative,focused,format,format-final,lint,typecheck,build,api,web-unit,browser}.log` files and browser artifacts. The `red` log records the corrected test-typing failure, `negative` is the deliberate failing integration control, and final passing runs provide the completion evidence. Comparing the initial hashes of 800 existing source/schema/test/documentation/reference files shows changes only to four existing source files, the feature index and module reference listed below. The new member helper, test and report complete this phase's nine changed files. Existing schemas/migrations, permissions, frontend sources, Department creation/deletion helpers, existing tests and unrelated working changes remain intact.
+
+## Changed files
+
+- `apps/api/src/features/departments/departments.controller.ts`: trusted context for the three member routes only.
+- `apps/api/src/features/departments/departments.service.ts`: transaction-local before/after observation for Employee and legacy User PATCH/DELETE; POST context propagation.
+- `apps/api/src/features/departments/departments.repository.ts`: POST snapshots, identity coalescing and final-state history under its existing batch transaction.
+- `apps/api/src/features/departments/department-member-history.ts`: bounded per-member snapshots and shared typed effect recorders; no business writes.
+- `apps/api/src/features/employees/employee-update-history.ts`: default-preserving Department origin and User-only position observation in existing contracts.
+- `apps/api/tests/features/departments/member-attribution.test.ts`: real authenticated Express/PGlite state/history, privacy, conflict and rollback coverage.
+- `docs/features/department-member-attribution.md`, `docs/features/README.md`, `.agents/skills/nexus-platform/references/modules.md`: bounded coverage, current references and validation.
+
+No known material effect in these member transaction bodies is intentionally omitted. Standalone Team Management, stronger cross-session guarantees, broader eligibility corrections, backfills and history viewing/export remain separate work. Stopped after Phase 4B.4B.5C.

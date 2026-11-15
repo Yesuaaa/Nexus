@@ -65,6 +65,7 @@ export type AttendanceEmployee = {
   departmentId: string | null
 }
 export type AttendanceAdjustment = {
+  capabilities: { approve: boolean; verify: boolean; reject: boolean }
   type: "CORRECTION" | "OVERTIME"
   overtimeMinutes: number
   verifiedById: string | null
@@ -307,7 +308,12 @@ export const attendanceAdjustments = (
   type = "",
   status = "",
 ) =>
-  apiRequest<Paging & { adjustments: AttendanceAdjustment[] }>(
+  apiRequest<
+    Paging & {
+      adjustments: AttendanceAdjustment[]
+      capabilities: { requestCorrection: boolean }
+    }
+  >(
     `${root}/adjustments?${new URLSearchParams({
       scope,
       page: String(page),

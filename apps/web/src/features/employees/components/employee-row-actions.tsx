@@ -5,6 +5,8 @@ import {
   type RowActionMenuItem,
 } from "@/components/ui/row-actions-menu"
 import type { Employee } from "../api/employees-api"
+import { usePortalAccount } from "@/features/auth/providers/account-context"
+import { hasPermission, Permissions } from "@/features/auth/model/permissions"
 
 type LoginAction =
   "create" | "deactivate" | "reactivate" | "delete" | "permanent"
@@ -34,29 +36,36 @@ export function EmployeeRowActions({
   onEdit: () => void
   onManageLogin: (action: LoginAction) => void
 }) {
+  const actor = usePortalAccount()
+  const canManage = hasPermission(actor, Permissions.EMPLOYEES_MANAGE)
+  // This module manages other Staff logins. Admin credentials stay in Account Management.
+  const canManageLogin =
+    canManage &&
+    employee.accountRole === "STAFF" &&
+    employee.accountId !== actor.id
   const items: RowActionMenuItem<EmployeeAction>[] = []
 
   if (!archiveView) {
-    items.push(
-      {
-        action: "view",
-        label: <RowActionLabel icon={Eye}>View Employee</RowActionLabel>,
-      },
-      {
+    items.push({
+      action: "view",
+      label: <RowActionLabel icon={Eye}>View Employee</RowActionLabel>,
+    })
+    if (canManage)
+      items.push({
         action: "edit",
         label: <RowActionLabel icon={Pencil}>Edit</RowActionLabel>,
-      },
-      !employee.hasAccount
-        ? {
-            action: "create",
-            label: (
-              <RowActionLabel icon={KeyRound}>
-                Create login account
-              </RowActionLabel>
-            ),
-            separatorBefore: true,
-          }
-        : employee.accountIsActive
+      })
+    if (canManage && !employee.hasAccount && !employee.accountDeletedAt)
+      items.push({
+        action: "create",
+        label: (
+          <RowActionLabel icon={KeyRound}>Create login account</RowActionLabel>
+        ),
+        separatorBefore: true,
+      })
+    else if (canManageLogin && employee.hasAccount)
+      items.push(
+        employee.accountIsActive
           ? {
               action: "deactivate",
               label: (
@@ -75,22 +84,24 @@ export function EmployeeRowActions({
               className: positiveItem,
               separatorBefore: true,
             },
-    )
+      )
   }
 
-  items.push({
-    action: archiveView ? "permanent" : "delete",
-    label: (
-      <RowActionLabel icon={Trash2}>
-        {archiveView ? "Delete permanently" : "Delete account"}
-      </RowActionLabel>
-    ),
-    disabled:
-      employee.accountRole === "ADMIN" ||
-      (!archiveView &&
-        (!employee.hasAccount || employee.accountIsActive !== false)),
-    className: dangerItem,
-  })
+  if (canManageLogin)
+    items.push({
+      action: archiveView ? "permanent" : "delete",
+      label: (
+        <RowActionLabel icon={Trash2}>
+          {archiveView ? "Delete permanently" : "Delete account"}
+        </RowActionLabel>
+      ),
+      disabled:
+        employee.accountIsActive !== false ||
+        (!archiveView && !employee.hasAccount),
+      className: dangerItem,
+    })
+
+  if (!items.length) return null
 
   return (
     <RowActionsMenu

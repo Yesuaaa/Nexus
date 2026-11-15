@@ -8,6 +8,7 @@ import {
 import {
   assertDepartmentHeadTitle,
   assertLeadershipCandidate,
+  isDepartmentHeadTitle,
   leadershipCandidateWhere,
 } from "../departments/leadership.policy.js"
 import { lockRows, lockRowsReturning } from "../../shared/db/locks.js"
@@ -21,6 +22,25 @@ import {
 import { directoryLogin, employeeInclude } from "./employees.repository.js"
 import type { EmployeeInput } from "./employees.schema.js"
 import { HttpError as EmployeeError } from "../../shared/http-error.js"
+import type { AuthContext } from "../auth/auth.middleware.js"
+import {
+  createManagementOperation,
+  type ManagementOperation,
+} from "../../shared/management-history.js"
+import { writeWorkforceManagementChange } from "./workforce-management-history.js"
+import {
+  employeeAssignmentSelect,
+  userUpdateSelect,
+  recordDepartmentLeadership,
+  recordEmployeeAssignments,
+  recordEmployeeUpdate,
+  recordUserSynchronization,
+} from "./employee-update-history.js"
+import { writeAccountManagementChange } from "../users/account-management-history.js"
+import {
+  readAccountDeletionWorkforce,
+  writeAccountDeletionWorkforce,
+} from "../users/account-workforce-history.js"
 
 export { employeeInclude }
 
@@ -256,6 +276,7 @@ async function writeEmployee(
   tx: Prisma.TransactionClient,
   id: string | null,
   input: EmployeeWriteInput,
+  operation?: ManagementOperation,
 ) {
   let statusSnapshot: {
     departmentId: string | null
@@ -493,7 +514,7 @@ async function writeEmployee(
       currentDepartment.temporaryHeadOriginalId ??
       (canRestoreOriginal ? oldUserId : null)
 
-    await tx.department.update({
+    const afterDepartment = await tx.department.update({
       where: { id: currentDepartment.id },
       data: {
         headId: candidateUserId,
@@ -501,26 +522,80 @@ async function writeEmployee(
         temporaryHeadAssignedId: originalHeadId ? candidateUserId : null,
       },
     })
+    if (operation)
+      await recordDepartmentLeadership(
+        tx,
+        operation,
+        currentDepartment,
+        afterDepartment,
+      )
+    const candidateBefore = operation
+      ? await tx.user.findUniqueOrThrow({
+          where: { id: candidateUserId },
+          select: userUpdateSelect,
+        })
+      : null
+    const replacementBefore = operation
+      ? await tx.employee.findUniqueOrThrow({
+          where: { id: replacementHead.id },
+          select: employeeAssignmentSelect,
+        })
+      : null
     await tx.user.update({
       where: { id: candidateUserId },
       data: { departmentId: currentDepartment.id, teamId: null },
     })
-    await tx.employee.update({
+    const replacementAfter = await tx.employee.update({
       where: { id: replacementHead.id },
       data: { teamId: null },
     })
+    if (operation && replacementBefore && candidateBefore) {
+      await recordEmployeeAssignments(
+        tx,
+        operation,
+        replacementBefore,
+        replacementAfter,
+      )
+      await recordUserSynchronization(
+        tx,
+        operation,
+        candidateBefore,
+        await tx.user.findUniqueOrThrow({
+          where: { id: candidateUserId },
+          select: userUpdateSelect,
+        }),
+      )
+    }
   }
 
   if (statusChanged && input.status !== EmployeeStatus.ACTIVE && oldUserId) {
     // Teams work without a lead, so a lead going non-active just steps down.
-    await tx.team.updateMany({
-      where: { leadId: oldUserId },
-      data: { leadId: null },
-    })
+    if (operation) {
+      // Returning the rows actually changed avoids a racy pre-read of Team.
+      const teams = await tx.team.updateManyAndReturn({
+        where: { leadId: oldUserId },
+        data: { leadId: null },
+        select: { id: true, leadId: true },
+      })
+      for (const team of teams)
+        await writeWorkforceManagementChange(tx, operation, {
+          origin: "EMPLOYEE_MANAGEMENT",
+          subjectType: "TEAM",
+          subjectId: team.id,
+          action: "LEAD_CHANGED",
+          changedFields: ["leadId"],
+          changes: { leadId: { before: oldUserId, after: team.leadId } },
+        })
+    } else {
+      await tx.team.updateMany({
+        where: { leadId: oldUserId },
+        data: { leadId: null },
+      })
+    }
   }
 
   if (returningDepartment && oldUserId) {
-    await tx.department.update({
+    const afterDepartment = await tx.department.update({
       where: { id: returningDepartment.id },
       data: {
         ...(restoreOriginal ? { headId: oldUserId } : {}),
@@ -528,6 +603,13 @@ async function writeEmployee(
         temporaryHeadAssignedId: null,
       },
     })
+    if (operation)
+      await recordDepartmentLeadership(
+        tx,
+        operation,
+        returningDepartment,
+        afterDepartment,
+      )
   }
 
   if (oldUserId) {
@@ -563,7 +645,7 @@ async function writeEmployee(
     userId: nextUserId,
   }
 
-  const employee = existing
+  let employee = existing
     ? await tx.employee.update({
         where: { id: existing.id },
         data,
@@ -571,7 +653,14 @@ async function writeEmployee(
       })
     : await tx.employee.create({ data, include: employeeInclude })
 
+  let mirrors: ("fullName" | "email" | "contactNumber" | "position")[] = []
   if (nextUserId) {
+    const beforeUser = operation
+      ? await tx.user.findUniqueOrThrow({
+          where: { id: nextUserId },
+          select: userUpdateSelect,
+        })
+      : null
     await tx.user.update({
       where: { id: nextUserId },
       data: {
@@ -587,9 +676,126 @@ async function writeEmployee(
             : undefined,
       },
     })
+    if (operation && beforeUser)
+      mirrors = await recordUserSynchronization(
+        tx,
+        operation,
+        beforeUser,
+        await tx.user.findUniqueOrThrow({
+          where: { id: nextUserId },
+          select: userUpdateSelect,
+        }),
+      )
   }
 
+  let ownTitleCleared = false
+  if (isDepartmentHeadLeaving && oldUserId) {
+    const cleared = await clearFormerDepartmentHeadTitle(
+      tx,
+      oldUserId,
+      operation && currentDepartment
+        ? { operation, departmentId: currentDepartment.id }
+        : undefined,
+    )
+    ownTitleCleared = cleared
+    if (cleared && employee.userId === oldUserId) {
+      employee = await tx.employee.findUniqueOrThrow({
+        where: { id: employee.id },
+        include: employeeInclude,
+      })
+    }
+  }
+  if (
+    restoreOriginal &&
+    returningDepartment?.headId &&
+    returningDepartment.headId !== oldUserId
+  ) {
+    await clearFormerDepartmentHeadTitle(
+      tx,
+      returningDepartment.headId,
+      operation
+        ? { operation, departmentId: returningDepartment.id }
+        : undefined,
+    )
+  }
+  if (operation && existing) {
+    const after = await tx.employee.findUniqueOrThrow({
+      where: { id: employee.id },
+    })
+    await recordEmployeeUpdate(
+      tx,
+      operation,
+      existing,
+      after,
+      mirrors,
+      ownTitleCleared,
+    )
+  }
   return employee
+}
+
+/** Only call after an authorized leadership change, within its transaction.
+ * Keep a current or temporarily reserved Head's title; synchronize only the
+ * displaced title, without provisioning records or repairing unrelated staff. */
+export async function clearFormerDepartmentHeadTitle(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  attribution?: {
+    operation: ManagementOperation
+    departmentId: string
+    origin?: "EMPLOYEE_MANAGEMENT" | "DEPARTMENT_MANAGEMENT"
+  },
+): Promise<boolean> {
+  await lockRowsReturning(tx, "Employee", userId, "update", "userId")
+  await lockRows(tx, "User", userId)
+  const user = await tx.user.findUnique({
+    where: { id: userId },
+    select: { position: true },
+  })
+  if (!isDepartmentHeadTitle(user?.position)) return false
+  const retained = await tx.department.findFirst({
+    where: { OR: [{ headId: userId }, { temporaryHeadOriginalId: userId }] },
+    select: { id: true },
+  })
+  if (retained) return false
+  const employeeBefore = attribution
+    ? await tx.employee.findUnique({
+        where: { userId },
+        select: { id: true, position: true },
+      })
+    : null
+  await tx.user.update({ where: { id: userId }, data: { position: null } })
+  await tx.employee.updateMany({ where: { userId }, data: { position: null } })
+  if (attribution) {
+    const afterUser = await tx.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { position: true },
+    })
+    const afterEmployee = employeeBefore
+      ? await tx.employee.findUniqueOrThrow({
+          where: { id: employeeBefore.id },
+          select: { position: true },
+        })
+      : null
+    // The actual User title changed; mirror it once through its Employee, or
+    // through the affected Department when this is a legacy User-only record.
+    if (
+      user?.position !== afterUser.position ||
+      employeeBefore?.position !== afterEmployee?.position
+    )
+      await writeWorkforceManagementChange(tx, attribution.operation, {
+        origin: attribution.origin ?? "EMPLOYEE_MANAGEMENT",
+        action: "TITLE_CLEARED",
+        subjectType: employeeBefore ? "EMPLOYEE" : "DEPARTMENT",
+        subjectId: employeeBefore?.id ?? attribution.departmentId,
+        changedFields: ["position"],
+        changes: {
+          cause: "FORMER_DEPARTMENT_HEAD",
+          ...(!employeeBefore ? { affectedAccountId: userId } : {}),
+        },
+      })
+  }
+  return true
 }
 
 export async function createEmployee(
@@ -603,8 +809,9 @@ export async function updateEmployee(
   tx: Prisma.TransactionClient,
   id: string,
   data: EmployeeWriteInput,
+  operation?: ManagementOperation,
 ) {
-  return writeEmployee(tx, id, data)
+  return writeEmployee(tx, id, data, operation)
 }
 
 export async function syncEmployeeForUser(
@@ -700,10 +907,11 @@ const ADMIN_LOGIN_MESSAGE =
 
 /** Enables or disables the STAFF login linked to an employee directory entry. */
 export async function setEmployeeLoginStatus(
-  actorId: string,
+  auth: AuthContext,
   employeeId: string,
   isActive: boolean,
 ) {
+  const operation = createManagementOperation(auth)
   await getPrisma()!.$transaction(
     async (tx) => {
       const employee = await directoryLogin(tx, employeeId)
@@ -712,14 +920,44 @@ export async function setEmployeeLoginStatus(
         throw new EmployeeError(409, "Employee has no login account")
       }
       assertNotSelf(
-        actorId,
+        operation.actorAccountId,
         employee.user.id,
         "You cannot change your own login status",
       )
       if (employee.user.role !== Role.STAFF) {
         throw new EmployeeError(403, ADMIN_LOGIN_MESSAGE)
       }
-      await setAccountActive(tx, employee.user.id, isActive)
+      const updated = await setAccountActive(tx, employee.user.id, isActive, {
+        role: Role.STAFF,
+        isActive: employee.user.isActive,
+        accountDeletedAt: null,
+      })
+      if (!updated)
+        throw new EmployeeError(409, "Employee changed; refresh and retry")
+      const after = await tx.user.findUniqueOrThrow({
+        where: { id: employee.user.id },
+        select: { isActive: true },
+      })
+      const changed = employee.user.isActive !== after.isActive
+      if (changed || !isActive) {
+        await writeAccountManagementChange(tx, operation, {
+          origin: "EMPLOYEE_MANAGEMENT",
+          action: "STATUS_CHANGED",
+          subjectAccountId: employee.user.id,
+          changedFields: changed ? ["isActive"] : [],
+          changes: {
+            ...(changed
+              ? {
+                  isActive: {
+                    before: employee.user.isActive,
+                    after: after.isActive,
+                  },
+                }
+              : {}),
+            sessionsRevoked: !isActive,
+          },
+        })
+      }
     },
     { isolationLevel: "Serializable" },
   )
@@ -730,10 +968,11 @@ export async function setEmployeeLoginStatus(
  * deletes an archived one permanently.
  */
 export async function removeEmployeeLogin(
-  actorId: string,
+  auth: AuthContext,
   employeeId: string,
   { permanent }: { permanent: boolean },
 ) {
+  const operation = createManagementOperation(auth)
   await getPrisma()!.$transaction(
     async (tx) => {
       const employee = await directoryLogin(tx, employeeId)
@@ -742,7 +981,7 @@ export async function removeEmployeeLogin(
         throw new EmployeeError(409, "Employee has no login account")
       }
       assertNotSelf(
-        actorId,
+        operation.actorAccountId,
         employee.user.id,
         "You cannot delete your own login account",
       )
@@ -755,7 +994,28 @@ export async function removeEmployeeLogin(
           "Deactivate the account before moving it to Archive",
         )
       if (!permanent) {
-        await moveAccountToTrash(tx, employee.user.id)
+        const moved = await moveAccountToTrash(tx, employee.user.id, {
+          guard: { role: Role.STAFF, isActive: false },
+        })
+        if (!moved)
+          throw new EmployeeError(409, "Employee changed; refresh and retry")
+        const after = await tx.user.findUniqueOrThrow({
+          where: { id: employee.user.id },
+          select: { accountDeletedAt: true },
+        })
+        await writeAccountManagementChange(tx, operation, {
+          origin: "EMPLOYEE_MANAGEMENT",
+          action: "ARCHIVED",
+          subjectAccountId: employee.user.id,
+          changedFields: ["accountDeletedAt"],
+          changes: {
+            accountDeletedAt: {
+              before: null,
+              after: after.accountDeletedAt!.toISOString(),
+            },
+            sessionsRevoked: true,
+          },
+        })
         return
       }
       if (!employee.user.accountDeletedAt)
@@ -763,10 +1023,31 @@ export async function removeEmployeeLogin(
           409,
           "Move the account to Archive before deleting it permanently",
         )
-      await deleteAccountPermanently(tx, employee.user.id, {
+      const workforce = await readAccountDeletionWorkforce(tx, employee.user.id)
+      const deleted = await deleteAccountPermanently(tx, employee.user.id, {
+        guard: {
+          role: Role.STAFF,
+          isActive: false,
+          accountDeletedAt: { not: null },
+        },
         linkedMessage:
           "This account has related records and cannot be permanently deleted. Keep it in Archive to preserve its history.",
       })
+      if (!deleted)
+        throw new EmployeeError(409, "Employee changed; refresh and retry")
+      await writeAccountManagementChange(tx, operation, {
+        origin: "EMPLOYEE_MANAGEMENT",
+        action: "DELETED",
+        subjectAccountId: employee.user.id,
+        changedFields: [],
+        changes: {},
+      })
+      await writeAccountDeletionWorkforce(
+        tx,
+        operation,
+        workforce,
+        "EMPLOYEE_MANAGEMENT",
+      )
     },
     { isolationLevel: "Serializable" },
   )

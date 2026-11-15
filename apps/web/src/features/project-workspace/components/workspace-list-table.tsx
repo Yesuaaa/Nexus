@@ -52,6 +52,8 @@ export function WorkspaceListTable({
   quickKey,
   archiveView,
   onChanged,
+  readOnly = false,
+  projectHref,
 }: {
   workspaces: ProjectWorkspaceSummary[]
   loading: boolean
@@ -59,6 +61,8 @@ export function WorkspaceListTable({
   quickKey: string
   archiveView: boolean
   onChanged: () => void
+  readOnly?: boolean
+  projectHref?: (id: string) => string
 }) {
   const { formatDate } = useDatePreferences()
   return (
@@ -110,7 +114,10 @@ export function WorkspaceListTable({
             <>
               <div role="cell" className={cells[0]}>
                 <Link
-                  href={`/project-workspace/${encodeURIComponent(workspace.id)}`}
+                  href={
+                    projectHref?.(workspace.id) ??
+                    `/project-workspace/${encodeURIComponent(workspace.id)}`
+                  }
                   className="block truncate font-semibold text-foreground no-underline hover:underline focus-visible:outline-2 focus-visible:outline-ring"
                 >
                   {workspace.name}
@@ -162,10 +169,14 @@ export function WorkspaceListTable({
                 </time>
               </div>
               <div role="cell" className={cells[5]}>
-                <WorkspaceListRowActions
-                  workspace={workspace}
-                  onChanged={onChanged}
-                />
+                {readOnly ? (
+                  <Link href={projectHref?.(workspace.id) ?? "#"}>Inspect</Link>
+                ) : (
+                  <WorkspaceListRowActions
+                    workspace={workspace}
+                    onChanged={onChanged}
+                  />
+                )}
               </div>
             </>
           )}

@@ -209,6 +209,13 @@ for (const width of [1440, 390]) {
     const state = await internalChat(page, "ADMIN")
     for (const moduleName of ["Service Operations", "People & HR"]) {
       await page.goto("/module")
+      // Keyboard focus brings the requested card into the visible carousel slot.
+      await page
+        .getByRole("link", {
+          name: `Open ${moduleName} workspace`,
+          exact: true,
+        })
+        .focus()
       await page
         .getByRole("link", {
           name: `Open ${moduleName} workspace`,

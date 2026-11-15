@@ -29,7 +29,7 @@ test.describe("Admin access and permissions", () => {
           requests.push(request.url())
       })
       await page.goto(feature.path)
-      await expect(page).toHaveURL(/\/dashboard$/)
+      await expect(page).toHaveURL(/\/module$/)
       await expect(
         page.getByRole("heading", { name: feature.title }),
       ).toHaveCount(0)

@@ -17,6 +17,10 @@ import {
   type ProjectWorkPlan,
 } from "./templates.js"
 import { lockRows, lockServiceRequest } from "../../shared/db/locks.js"
+import {
+  AdministrativeCapability,
+  hasAdministrativeCapability,
+} from "../auth/auth.capabilities.js"
 
 function validateEditablePlan(input: unknown): ProjectWorkPlan {
   const plan = readWorkPlan(input)
@@ -771,6 +775,14 @@ async function getMutableWorkspace(
   workspaceId: string,
 ) {
   const scope = scopedProjectWhere(context)
+  return findMutableWorkspace(tx, workspaceId, scope)
+}
+
+async function findMutableWorkspace(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  scope: Prisma.ProjectWhereInput,
+) {
   const group = await tx.projectWorkspaceGroup.findFirst({
     where: { id: workspaceId, projects: { some: scope } },
     select: {
@@ -897,6 +909,78 @@ export async function renameProjectWorkspace(
   workspaceId: string,
   input: unknown,
 ) {
+  return saveWorkspaceName(userId, workspaceId, input, async (tx) => {
+    const context = await getStaffContext(tx, userId)
+    const workspace = await getMutableWorkspace(tx, context, workspaceId)
+    requireWorkspaceManager(context, workspace.projects)
+    return workspace
+  })
+}
+
+export async function renameProjectWorkspaceAdministratively(
+  userId: string,
+  projectId: string,
+  input: unknown,
+) {
+  return saveWorkspaceName(userId, projectId, input, async (tx) => {
+    const actor = await tx.user.findUnique({ where: { id: userId } })
+    if (
+      !actor ||
+      !hasAdministrativeCapability(
+        actor,
+        AdministrativeCapability.MODULE_ACCESS,
+      ) ||
+      !hasAdministrativeCapability(
+        actor,
+        AdministrativeCapability.ORGANIZATION_READ,
+      ) ||
+      !hasAdministrativeCapability(actor, AdministrativeCapability.MANAGEMENT)
+    )
+      throw new ServiceRequestsError(
+        403,
+        "Administrative project management is required",
+      )
+    const project = await tx.project.findUnique({
+      where: { id: projectId },
+      select: { workspaceGroupId: true },
+    })
+    if (!project) throw new ServiceRequestsError(404, "Project not found")
+    const workspace = await findMutableWorkspace(
+      tx,
+      project.workspaceGroupId ?? projectId,
+      {},
+    )
+    if (workspace.projects.some((item) => !item.requestId))
+      throw new ServiceRequestsError(
+        409,
+        "Workspace renaming requires request history for actor attribution",
+      )
+    const histories = await tx.requestWorkflow.count({
+      where: {
+        requestId: {
+          in: workspace.projects.flatMap((item) =>
+            item.requestId ? [item.requestId] : [],
+          ),
+        },
+      },
+    })
+    if (histories !== workspace.projects.length)
+      throw new ServiceRequestsError(
+        409,
+        "Workspace renaming requires existing workflow history for actor attribution",
+      )
+    return workspace
+  })
+}
+
+async function saveWorkspaceName(
+  userId: string,
+  workspaceId: string,
+  input: unknown,
+  resolve: (
+    tx: Prisma.TransactionClient,
+  ) => Promise<Awaited<ReturnType<typeof findMutableWorkspace>>>,
+) {
   const name =
     input &&
     typeof input === "object" &&
@@ -911,17 +995,29 @@ export async function renameProjectWorkspace(
     )
 
   await getPrisma()!.$transaction(async (tx) => {
-    const context = await getStaffContext(tx, userId)
-    const current = await getMutableWorkspace(tx, context, workspaceId)
-    requireWorkspaceManager(context, current.projects)
+    const current = await resolve(tx)
     await lockWorkspaceProjects(
       tx,
       workspaceId,
       current.groupId,
       current.projects,
     )
-    const workspace = await getMutableWorkspace(tx, context, workspaceId)
-    requireWorkspaceManager(context, workspace.projects)
+    const workspace = await resolve(tx)
+    if (
+      workspace.groupId !== current.groupId ||
+      workspace.projects
+        .map(({ id }) => id)
+        .sort()
+        .join(",") !==
+        current.projects
+          .map(({ id }) => id)
+          .sort()
+          .join(",")
+    )
+      throw new ServiceRequestsError(
+        409,
+        "Workspace changed; refresh and retry",
+      )
     if (
       workspace.projects.every(({ status }) =>
         ["COMPLETED", "CANCELLED"].includes(status),

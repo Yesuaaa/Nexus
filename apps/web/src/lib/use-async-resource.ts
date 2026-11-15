@@ -56,10 +56,11 @@ export function useAsyncResource<T>(
       },
       (reason: unknown) => {
         if (!active) return
+        const message = errorMessage(reason, fallback())
         setSettled((current) => ({
           key: requestKey,
           data: current.data,
-          error: errorMessage(reason, fallback()),
+          error: message,
         }))
       },
     )

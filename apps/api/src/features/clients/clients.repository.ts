@@ -9,6 +9,8 @@ import { getPrisma } from "../../lib/db.js"
 import { fail } from "../../shared/http-error.js"
 import { insensitive, paginate } from "../../shared/query/pagination.js"
 import type { ClientFilters } from "./clients.schema.js"
+import type { ManagementOperation } from "../../shared/management-history.js"
+import { writeAccountManagementChange } from "../users/account-management-history.js"
 
 const clientSelect = {
   id: true,
@@ -20,13 +22,13 @@ const clientSelect = {
 } satisfies Prisma.UserSelect
 
 export const clientsRepository = {
-  async delete(id: string) {
+  async delete(id: string, operation: ManagementOperation) {
     const prisma = getPrisma()!
     return prisma.$transaction(
       async (tx) => {
         const target = await tx.user.findFirst({
           where: { id, role: Role.USER, accountDeletedAt: null },
-          select: { id: true },
+          select: { id: true, isActive: true, accountDeletedAt: true },
         })
         if (!target) return "missing"
         if (
@@ -36,7 +38,32 @@ export const clientsRepository = {
           return "linked"
         // Clients have no separate deactivate step: one write disables the
         // login, moves it to Trash and revokes its sessions.
-        await moveAccountToTrash(tx, id, { deactivate: true })
+        const moved = await moveAccountToTrash(tx, id, { deactivate: true })
+        if (!moved) return "missing"
+        const after = await tx.user.findUniqueOrThrow({
+          where: { id },
+          select: { isActive: true, accountDeletedAt: true },
+        })
+        const statusChanged = target.isActive !== after.isActive
+        await writeAccountManagementChange(tx, operation, {
+          subjectAccountId: id,
+          action: "ARCHIVED",
+          origin: "CLIENT_MANAGEMENT",
+          changedFields: [
+            "accountDeletedAt",
+            ...(statusChanged ? ["isActive" as const] : []),
+          ],
+          changes: {
+            accountDeletedAt: {
+              before: target.accountDeletedAt?.toISOString() ?? null,
+              after: after.accountDeletedAt!.toISOString(),
+            },
+            ...(statusChanged
+              ? { isActive: { before: target.isActive, after: after.isActive } }
+              : {}),
+            sessionsRevoked: true,
+          },
+        })
         return "deleted"
       },
       { isolationLevel: "Serializable" },
@@ -45,6 +72,7 @@ export const clientsRepository = {
   async save(
     input: NonNullable<ReturnType<typeof parseClientInput>>,
     id: string | null,
+    operation: ManagementOperation,
   ) {
     const prisma = getPrisma()!
     const creating = id === null
@@ -52,16 +80,17 @@ export const clientsRepository = {
     const passwordHash = creating ? await hashPassword(password!) : undefined
     return prisma.$transaction(
       async (tx) => {
-        if (!creating) {
-          const target = await tx.user.findFirst({
-            where: {
-              id: id!,
-              role: Role.USER,
-              accountDeletedAt: null,
-            },
-          })
-          if (!target) return null
-        }
+        const before = creating
+          ? null
+          : await tx.user.findFirst({
+              where: {
+                id: id!,
+                role: Role.USER,
+                accountDeletedAt: null,
+              },
+              select: clientSelect,
+            })
+        if (!creating && !before) return null
         const duplicate = await tx.user.findFirst({
           where: {
             email: { equals: profile.email, mode: "insensitive" },
@@ -70,21 +99,62 @@ export const clientsRepository = {
           select: { id: true },
         })
         if (duplicate) fail(409, "An account with this email already exists.")
-        if (creating)
-          return tx.user.create({
+        if (creating) {
+          const created = await tx.user.create({
             data: {
               ...profile,
               role: Role.USER,
               passwordHash: passwordHash!,
             },
-            select: clientSelect,
+            select: { ...clientSelect, role: true },
           })
+          const { role, ...client } = created
+          await writeAccountManagementChange(tx, operation, {
+            subjectAccountId: client.id,
+            action: "CREATED",
+            origin: "CLIENT_MANAGEMENT",
+            changedFields: [
+              "role",
+              "isActive",
+              "fullName",
+              "email",
+              "contactNumber",
+            ],
+            changes: {
+              role: { before: null, after: role },
+              isActive: { before: null, after: client.isActive },
+            },
+          })
+          return client
+        }
         const updated = await tx.user.update({
           where: { id: id! },
           data: profile,
           select: clientSelect,
         })
         if (!profile.isActive) await revokeSessions(tx, updated.id)
+        const changedFields = (
+          ["fullName", "email", "contactNumber", "isActive"] as const
+        ).filter((field) => before![field] !== updated[field])
+        if (changedFields.length || !profile.isActive) {
+          await writeAccountManagementChange(tx, operation, {
+            subjectAccountId: updated.id,
+            action: "PROFILE_UPDATED",
+            origin: "CLIENT_MANAGEMENT",
+            changedFields,
+            changes: {
+              ...(before!.isActive !== updated.isActive
+                ? {
+                    isActive: {
+                      before: before!.isActive,
+                      after: updated.isActive,
+                    },
+                  }
+                : {}),
+              ...(!profile.isActive ? { sessionsRevoked: true } : {}),
+            },
+          })
+        }
         return updated
       },
       { isolationLevel: "Serializable" },

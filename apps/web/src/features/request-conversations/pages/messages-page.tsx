@@ -50,6 +50,7 @@ import { errorMessage } from "@/lib/error-message"
 import { watchVisibleRefresh } from "@/lib/visible-refresh"
 import { useWorkspaceModuleId } from "@/features/workspaces/providers/workspace-provider"
 import { getMessagesView } from "../model/messages-view"
+import { canInspectBusinessConversations } from "@/features/auth/model/permissions"
 
 const conversationRailStorageKey = "nexus.messages.conversation-rail-collapsed"
 
@@ -653,6 +654,14 @@ function ConversationInbox({
             </button>
           )}
         </header>
+        {canInspectBusinessConversations(account) && (
+          <Link
+            href="/messages/oversight"
+            className={`mx-5 mb-3 rounded-lg border border-[#e1e4ea] px-3 py-2 text-xs font-medium text-[#294a9b] ${focusRing}`}
+          >
+            Business conversation oversight
+          </Link>
+        )}
         <ConversationSearch
           value={search}
           onChange={setSearch}

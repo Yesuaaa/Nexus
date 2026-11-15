@@ -24,6 +24,11 @@ import { devErrorInterceptor, handleError } from "./shared/error-handler.js"
 
 import { workloadRouter } from "./features/workload/workload.controller.js"
 import { createAttendanceRouter } from "./features/attendance/routes.js"
+import { modulesRouter } from "./features/modules/modules.controller.js"
+import { administrativeProjectsRouter } from "./features/projects/administrative-projects.js"
+import { administrativeRequestsRouter } from "./features/request-inbox/administrative-requests.js"
+import { administrativeWorkloadRouter } from "./features/workload/administrative-workload.controller.js"
+import { administrativeConversationsRouter } from "./features/request-conversations/administrative-conversations.controller.js"
 
 export function createApp(
   options: {
@@ -78,6 +83,14 @@ export function createApp(
   app.use(express.json({ limit: "16kb" }))
   app.use("/api/auth", authRouter)
   app.use("/api/users", usersRouter)
+  app.use("/api/modules", modulesRouter)
+  app.use("/api/administrative-projects", administrativeProjectsRouter)
+  app.use("/api/administrative-requests", administrativeRequestsRouter)
+  app.use("/api/administrative-workload", administrativeWorkloadRouter)
+  app.use(
+    "/api/administrative-conversations",
+    administrativeConversationsRouter,
+  )
   app.use("/api/departments", departmentsRouter)
   app.use("/api/employees", employeesRouter)
   app.use("/api/clients", clientsRouter)

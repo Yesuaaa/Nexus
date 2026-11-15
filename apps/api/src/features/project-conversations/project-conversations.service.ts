@@ -5,7 +5,7 @@ import { ServiceRequestsError } from "../service-requests/service-requests.servi
 import { readDeliverableCard } from "./deliverable-messages.js"
 import { lockRows } from "../../shared/db/locks.js"
 
-const archivedStatuses = ["COMPLETED", "CANCELLED"] as const
+export const archivedStatuses = ["COMPLETED", "CANCELLED"] as const
 const messageSelect = {
   id: true,
   body: true,

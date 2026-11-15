@@ -36,6 +36,13 @@ const permissionsByRole = {
     Permissions.CLIENTS_READ,
   ],
   SUPERADMIN: [
+    Permissions.MODULES_ACCESS_ALL,
+    Permissions.ORGANIZATION_READ_ALL,
+    Permissions.SERVICES_READ,
+    Permissions.SERVICES_MANAGE,
+    Permissions.EMPLOYEES_READ,
+    Permissions.EMPLOYEES_MANAGE,
+    Permissions.CLIENTS_READ,
     Permissions.DASHBOARD_READ,
     Permissions.PROFILE_READ,
     Permissions.PROFILE_CHANGE_PASSWORD,
@@ -82,7 +89,6 @@ const routeMatrix = {
     "/help",
     "/billing-logs",
     "/booked-services",
-    "/booked-services/legacy-1",
     "/calendar",
     "/profile",
     "/settings",
@@ -105,7 +111,6 @@ const routeMatrix = {
     "/projects",
     "/project-workspace",
     "/request-inbox",
-    "/request-inbox/request-1",
     "/staff-workload",
     "/calendar",
     "/profile",
@@ -116,19 +121,22 @@ const routeMatrix = {
     "/messages",
     "/services",
     "/clients",
-    "/clients/client-1",
     "/departments",
     "/employees",
-    "/employees/employee-1",
     "/calendar",
     "/profile",
     "/settings",
   ],
   SUPERADMIN: [
     "/dashboard",
+    "/services",
+    "/clients",
+    "/departments",
+    "/employees",
     "/messages",
     "/accounts",
-    "/accounts/account-1",
+    "/module/project-management",
+    "/module/service-operations/workload",
     "/calendar",
     "/profile",
     "/settings",
@@ -136,6 +144,7 @@ const routeMatrix = {
 }
 
 const protectedRoutes = [
+  "/module/service-operations/workload",
   "/accounts",
   "/projects",
   "/project-workspace",
@@ -176,16 +185,13 @@ for (const [actor, allowedRoutes] of Object.entries(routeMatrix)) {
   })
 }
 
-test("dynamic project routes select explicit policies before compatibility fallbacks", () => {
+test("dynamic project routes are explicit and unknown descendants are denied", () => {
   assert.equal(findRoutePolicy("/projects/project-1")?.id, "projects-detail")
   assert.equal(
     findRoutePolicy("/projects/project-1/deliverables/deliverable-1")?.id,
     "projects-deliverable",
   )
-  assert.equal(
-    findRoutePolicy("/projects/project-1/unknown")?.id,
-    "projects-fallback",
-  )
+  assert.equal(findRoutePolicy("/projects/project-1/unknown")?.id, undefined)
   assert.equal(
     findRoutePolicy("/project-workspace/new")?.id,
     "project-workspace-new",
@@ -196,17 +202,44 @@ test("dynamic project routes select explicit policies before compatibility fallb
   )
 })
 
-test("route policies protect management subroutes and retain legacy prefix matching", () => {
-  assert.equal(
-    findRoutePolicy("/departments/team-1")?.id,
-    "departments-overview",
-  )
-  assert.equal(findRoutePolicy("/services/custom")?.id, "services-overview")
-  assert.equal(findRoutePolicy("/accounts-legacy")?.id, "accounts")
-  assert.equal(
-    findRoutePolicy("/booked-services/legacy-1")?.id,
-    "booked-services",
-  )
+test("route policies reject unknown subroutes and prefix lookalikes", () => {
+  assert.equal(findRoutePolicy("/departments/team-1")?.id, undefined)
+  assert.equal(findRoutePolicy("/services/custom"), undefined)
+  assert.equal(findRoutePolicy("/accounts-legacy"), undefined)
+  assert.equal(findRoutePolicy("/booked-services/legacy-1")?.id, undefined)
+})
+
+test("workload oversight requires administrative module and organization-read grants", () => {
+  const path = "/module/service-operations/workload"
+  assert.equal(findRoutePolicy(path)?.moduleId, "service-operations")
+  const actor = account("SUPERADMIN")
+  assert.equal(canAccessRoute(actor, path), true)
+  assert.equal(canAccessRoute(actor, "/staff-workload"), false)
+  for (const permission of [
+    Permissions.MODULES_ACCESS_ALL,
+    Permissions.ORGANIZATION_READ_ALL,
+  ]) {
+    assert.equal(
+      canAccessRoute(
+        {
+          ...actor,
+          permissions: actor.permissions.filter((item) => item !== permission),
+        },
+        path,
+      ),
+      false,
+    )
+  }
+  for (const role of ["ADMIN", "STAFF", "USER"]) {
+    assert.equal(
+      canAccessRoute(
+        account(role, { headOf: { id: "head", name: "Design" } }),
+        path,
+      ),
+      false,
+    )
+  }
+  assert.equal(findRoutePolicy(`${path}/edit`), undefined)
 })
 
 test("route policies record the approved module ownership without claiming shared pages", () => {
@@ -241,7 +274,7 @@ test("the active workspace is derived from the current authorized pathname", () 
   const superadmin = account("SUPERADMIN")
 
   assert.equal(
-    getActiveWorkspaceModuleId(client, "/booked-services/legacy-1"),
+    getActiveWorkspaceModuleId(client, "/booked-services"),
     "service-operations",
   )
   assert.equal(
@@ -253,7 +286,7 @@ test("the active workspace is derived from the current authorized pathname", () 
     "project-management",
   )
   assert.equal(
-    getActiveWorkspaceModuleId(head, "/request-inbox/request-1"),
+    getActiveWorkspaceModuleId(head, "/request-inbox"),
     "service-operations",
   )
   assert.equal(
@@ -323,7 +356,22 @@ test("navigation is generated from the same policies without changing role visib
       "Calendar",
       "Client Management",
     ],
-    SUPERADMIN: ["Module", "Account Management", "Calendar"],
+    SUPERADMIN: [
+      "Module",
+      "Service Requests",
+      "Overview",
+      "Account Management",
+      "Department Management",
+      "Employee Management",
+      "Dashboard",
+      "Time Logs",
+      "Requests & Approvals",
+      "Policies",
+      "Service Management",
+      "Calendar",
+      "Staff Workload",
+      "Client Management",
+    ],
   }
 
   for (const [actor, labels] of Object.entries(expectedLabels)) {
@@ -407,7 +455,12 @@ test("management overviews retain authorization and module context", () => {
   ]) {
     assert.equal(canAccessRoute(account("ADMIN"), path), true)
     assert.equal(getActiveWorkspaceModuleId(account("ADMIN"), path), moduleId)
-    for (const role of ["USER", "STAFF", "SUPERADMIN"])
+    assert.equal(canAccessRoute(account("SUPERADMIN"), path), true)
+    assert.equal(
+      getActiveWorkspaceModuleId(account("SUPERADMIN"), path),
+      moduleId,
+    )
+    for (const role of ["USER", "STAFF"])
       assert.equal(canAccessRoute(account(role), path), false)
   }
   assert.equal(canAccessRoute(account("USER"), "/services"), true)

@@ -32,6 +32,7 @@ export function WorkloadDetailsDrawer({
   onEditCapacity,
   onEditAllocation,
   onUnassign,
+  readOnly = false,
 }: {
   staff: WorkloadStaff
   week: string
@@ -39,6 +40,7 @@ export function WorkloadDetailsDrawer({
   onEditCapacity: () => void
   onEditAllocation: (assignment: WorkloadAssignment) => void
   onUnassign: (assignment: WorkloadAssignment) => void
+  readOnly?: boolean
 }) {
   const panel = useSidePanel(onClose)
   const metrics = getWorkloadMetrics(staff)
@@ -113,25 +115,27 @@ export function WorkloadDetailsDrawer({
                     </Pill>
                   </div>
                 </div>
-                <div className="flex flex-none items-center gap-2 max-[400px]:ml-11">
-                  <Button
-                    type="button"
-                    className={panelAssignButton}
-                    onClick={() =>
-                      panel.close(() => onEditAllocation(assignment))
-                    }
-                  >
-                    Edit allocation
-                  </Button>
-                  <Button
-                    type="button"
-                    className={panelDangerButton}
-                    aria-label={`Unassign from ${assignment.project.name}`}
-                    onClick={() => panel.close(() => onUnassign(assignment))}
-                  >
-                    <Trash2 size={15} strokeWidth={1.7} aria-hidden="true" />
-                  </Button>
-                </div>
+                {!readOnly && (
+                  <div className="flex flex-none items-center gap-2 max-[400px]:ml-11">
+                    <Button
+                      type="button"
+                      className={panelAssignButton}
+                      onClick={() =>
+                        panel.close(() => onEditAllocation(assignment))
+                      }
+                    >
+                      Edit allocation
+                    </Button>
+                    <Button
+                      type="button"
+                      className={panelDangerButton}
+                      aria-label={`Unassign from ${assignment.project.name}`}
+                      onClick={() => panel.close(() => onUnassign(assignment))}
+                    >
+                      <Trash2 size={15} strokeWidth={1.7} aria-hidden="true" />
+                    </Button>
+                  </div>
+                )}
               </div>
             ))}
             {!count && (
@@ -148,12 +152,14 @@ export function WorkloadDetailsDrawer({
         <WorkloadPlanningContext staff={staff} />
       </SidePanelBody>
       <SidePanelFooter className="justify-between">
-        <SidePanelButton
-          variant="secondary"
-          onClick={() => panel.close(onEditCapacity)}
-        >
-          Edit capacity
-        </SidePanelButton>
+        {!readOnly && (
+          <SidePanelButton
+            variant="secondary"
+            onClick={() => panel.close(onEditCapacity)}
+          >
+            Edit capacity
+          </SidePanelButton>
+        )}
         <SheetClose asChild>
           <SidePanelButton aria-label="Done viewing workload details">
             Done

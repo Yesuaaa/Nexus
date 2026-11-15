@@ -13,6 +13,10 @@ import { isPlainObject, isRecordId, isUuidV4 } from "../../shared/validation.js"
 import { actor, selfEmployee, policyAt } from "./attendance.service.js"
 import { hasPermission, Permission } from "../auth/auth.permissions.js"
 import {
+  hasOperationalCapability,
+  OperationalCapability,
+} from "../auth/auth.capabilities.js"
+import {
   attendancePolicyDays,
   attendanceTimestamp,
   attendanceTimeZone,
@@ -293,6 +297,41 @@ async function adjustmentScope(
   return scope === "team"
     ? { employee: { departmentId: await managementScope(tx, userId) } }
     : { employeeId: (await selfEmployee(tx, userId)).id }
+}
+
+/** Review eligibility only. Attendance validation, locks and stages still apply. */
+function adjustmentReviewAccess(
+  request: {
+    requestedById: string
+    employeeId: string
+    type: string
+    status: string
+  },
+  userId: string,
+  ownEmployeeId: string | undefined,
+  organization: boolean,
+  management = true,
+) {
+  const own =
+    request.requestedById === userId || request.employeeId === ownEmployeeId
+  const reviewable =
+    request.status === "PENDING" ||
+    (request.type === "OVERTIME" && request.status === "VERIFIED")
+  const allowed = management && !own && reviewable
+  return {
+    own,
+    reviewable,
+    approve:
+      allowed &&
+      (request.type !== "OVERTIME" ||
+        (organization && request.status === "VERIFIED")),
+    verify:
+      allowed &&
+      !organization &&
+      request.type === "OVERTIME" &&
+      request.status === "PENDING",
+    reject: allowed && (organization || request.status === "PENDING"),
+  }
 }
 
 export function createAttendanceManagement(clock: () => Date) {
@@ -976,6 +1015,11 @@ export function createAttendanceManagement(clock: () => Date) {
       return getPrisma()!.$transaction(
         async (tx) => {
           const scopeWhere = await adjustmentScope(tx, userId, query.scope)
+          const user = await actor(tx, userId)
+          const ownEmployee = await tx.employee.findUnique({
+            where: { userId },
+            select: { id: true, userId: true },
+          })
           const where: Prisma.AttendanceAdjustmentWhereInput = {
             ...(query.type ? { type: String(query.type) } : {}),
             ...(status ? { status } : {}),
@@ -1000,7 +1044,28 @@ export function createAttendanceManagement(clock: () => Date) {
             },
             { tx },
           )
-          return { adjustments: rows, ...paging }
+          return {
+            adjustments: rows.map((row) => {
+              const { approve, verify, reject } = adjustmentReviewAccess(
+                row,
+                userId,
+                ownEmployee?.id,
+                hasPermission(user.role, Permission.EMPLOYEES_READ),
+                query.scope === "team",
+              )
+              return { ...row, capabilities: { approve, verify, reject } }
+            }),
+            capabilities: {
+              requestCorrection: hasOperationalCapability(
+                { ...user, id: userId },
+                {
+                  capability: OperationalCapability.EMPLOYEE_SELF_SERVICE,
+                  employeeUserId: ownEmployee?.userId ?? null,
+                },
+              ),
+            },
+            ...paging,
+          }
         },
         { isolationLevel: "RepeatableRead" },
       )
@@ -1134,24 +1199,20 @@ export function createAttendanceManagement(clock: () => Date) {
           const request = await tx.attendanceAdjustment.findUniqueOrThrow({
             where: { id: adjustmentId },
           })
-          if (
-            request.requestedById === userId ||
-            currentEmployee.userId === userId
+          const access = adjustmentReviewAccess(
+            request,
+            userId,
+            currentEmployee.userId === userId ? currentEmployee.id : undefined,
+            !currentScope,
           )
+          if (access.own)
             fail(403, "You cannot review your own attendance request")
           const overtime = request.type === "OVERTIME"
-          if (
-            request.status !== "PENDING" &&
-            !(overtime && request.status === "VERIFIED")
-          )
+          if (!access.reviewable)
             fail(409, "This request has already been reviewed")
           await context(tx, userId, note)
           if (overtime) {
-            if (
-              !currentScope &&
-              decision === "APPROVED" &&
-              request.status !== "VERIFIED"
-            )
+            if (!currentScope && decision === "APPROVED" && !access.approve)
               fail(
                 409,
                 "Department Head verification is required before HR approval",

@@ -82,6 +82,7 @@ function matchesTableSearch(item: Employee, query: string) {
 
 export function EmployeeManagementPage() {
   const actor = usePortalAccount()
+  const canManage = hasPermission(actor, Permissions.EMPLOYEES_MANAGE)
   const canManageDepartment = hasPermission(
     actor,
     Permissions.DEPARTMENTS_MANAGE,
@@ -182,12 +183,14 @@ export function EmployeeManagementPage() {
         title="Employee Management"
         description="Maintain employee records, team placement, and employment details."
         actions={
-          <PageHeaderButton
-            type="button"
-            onClick={() => setFormState({ employee: null })}
-          >
-            <PlusIcon width="14" height="14" /> Create Employee
-          </PageHeaderButton>
+          canManage && (
+            <PageHeaderButton
+              type="button"
+              onClick={() => setFormState({ employee: null })}
+            >
+              <PlusIcon width="14" height="14" /> Create Employee
+            </PageHeaderButton>
+          )
         }
       />
 
@@ -297,8 +300,11 @@ export function EmployeeManagementPage() {
           }
           onRetry={list.retry}
           onView={(employee) => setDrawerEmployeeId(employee.id)}
-          onEdit={(employee) => setFormState({ employee })}
+          onEdit={(employee) => {
+            if (canManage) setFormState({ employee })
+          }}
           onManageLogin={(employee, action) => {
+            if (!canManage) return
             if (action === "create") {
               setCreateLoginTarget(employee)
               return
@@ -331,7 +337,7 @@ export function EmployeeManagementPage() {
         )}
       </section>
 
-      {formState && (
+      {canManage && formState && (
         <EmployeeFormPanel
           employee={formState.employee}
           onClose={() => setFormState(null)}
@@ -351,6 +357,7 @@ export function EmployeeManagementPage() {
           employeeId={drawerEmployeeId}
           onClose={() => setDrawerEmployeeId(null)}
           onEdit={(employee) => {
+            if (!canManage) return
             setDrawerEmployeeId(null)
             setFormState({ employee })
           }}
@@ -377,7 +384,7 @@ export function EmployeeManagementPage() {
           onChanged={() => list.retry()}
         />
       )}
-      {createLoginTarget && (
+      {canManage && createLoginTarget && (
         <EmployeeLoginPanel
           employee={createLoginTarget}
           onClose={() => setCreateLoginTarget(null)}
@@ -388,7 +395,7 @@ export function EmployeeManagementPage() {
           }}
         />
       )}
-      {loginTarget && (
+      {canManage && loginTarget && (
         <EmployeeLoginActionDialog
           key={`${loginAction}-${loginTarget.id}`}
           action={loginAction}
