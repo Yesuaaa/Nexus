@@ -4,6 +4,7 @@ import { activeAccount, activeStaff } from "../../shared/query/accounts.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 import { readDeliverableCard } from "./deliverable-messages.js"
 import { lockRows } from "../../shared/db/locks.js"
+import { projectWorkspaceIdentity } from "../project-workspace/workspace-identity.js"
 
 export const archivedStatuses = ["COMPLETED", "CANCELLED"] as const
 const messageSelect = {
@@ -288,7 +289,7 @@ export async function getProjectConversation(
         description: project.description,
         status: project.status,
         startDate: project.startDate,
-        workspaceId: project.workspaceGroupId ?? project.id,
+        workspaceId: projectWorkspaceIdentity(project),
         serviceName: project.request?.service.name ?? null,
         referenceNumber: project.request?.referenceNumber ?? null,
       },

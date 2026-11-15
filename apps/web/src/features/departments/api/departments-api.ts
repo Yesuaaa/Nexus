@@ -59,6 +59,35 @@ export type Department = {
   memberCount: number
   teamCount?: number
   serviceCount?: number
+  /** Present only on the Admin/Superadmin Project Management directory. */
+  projectCount?: number
+  createdAt: string
+  updatedAt: string
+}
+
+export type ProjectManagementDepartment = Department & {
+  projectCount: number
+}
+
+export type ProjectManagementDepartmentMember = {
+  id: string
+  userId: string | null
+  fullName: string
+  position: string | null
+  user: { id: string; fullName: string | null; role: Role } | null
+}
+
+export type ProjectManagementDepartmentDetail = {
+  id: string
+  name: string
+  color: DepartmentColor
+  code: string | null
+  description: string | null
+  headId: string | null
+  head: Pick<DepartmentHead, "id" | "fullName" | "role" | "position"> | null
+  members: ProjectManagementDepartmentMember[]
+  memberCount: number
+  projectCount: number
   createdAt: string
   updatedAt: string
 }
@@ -142,6 +171,28 @@ export async function getDepartment(
 ): Promise<DepartmentDetail> {
   const result = await apiRequest<{ department: DepartmentDetail }>(
     `/api/departments/${encodeURIComponent(id)}`,
+    { signal },
+  )
+  return result.department
+}
+
+export async function listProjectManagementDepartments(
+  signal?: AbortSignal,
+): Promise<ProjectManagementDepartment[]> {
+  const result = await apiRequest<{
+    departments: ProjectManagementDepartment[]
+  }>("/api/departments/project-management-directory", { signal })
+  return result.departments
+}
+
+export async function getProjectManagementDepartment(
+  id: string,
+  signal?: AbortSignal,
+): Promise<ProjectManagementDepartmentDetail> {
+  const result = await apiRequest<{
+    department: ProjectManagementDepartmentDetail
+  }>(
+    `/api/departments/project-management-directory/${encodeURIComponent(id)}`,
     { signal },
   )
   return result.department

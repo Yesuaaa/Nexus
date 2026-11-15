@@ -12,6 +12,7 @@ interface SearchFieldProps extends Omit<
   label: string
   containerClassName?: string
   size?: "default" | "large"
+  fullWidth?: boolean
 }
 
 export function SearchField({
@@ -19,6 +20,7 @@ export function SearchField({
   containerClassName,
   className,
   size = "default",
+  fullWidth = false,
   ...props
 }: SearchFieldProps) {
   const large = size === "large"
@@ -28,6 +30,7 @@ export function SearchField({
         "flex h-[34px] w-[260px] min-w-0 items-center gap-2 rounded-lg border border-[#e1e4ea] px-[11px] text-[#7b8ca7] focus-within:bg-[#f8fafd] max-[1050px]:w-[min(350px,100%)] max-[1050px]:flex-1 max-[560px]:w-full max-[560px]:flex-none",
         large &&
           "h-12 w-full gap-3 rounded-xl border-[#dce3ee] bg-background px-4 shadow-[0_1px_2px_rgb(31_55_94_/_4%)] max-[1050px]:w-full max-[1050px]:flex-none",
+        fullWidth && "w-full",
         containerClassName,
       )}
     >

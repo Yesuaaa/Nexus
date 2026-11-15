@@ -14,7 +14,10 @@ import { rowActionButton } from "@/components/ui/row-action-styles"
 import { TeamMemberPanel, type TeamMember } from "./team-member-panel"
 import { useRequestWorkflow } from "@/features/request-workflow/hooks/use-request-workflow"
 import { ProjectStaffingDialog } from "@/features/request-workflow/components/project-staffing-dialog"
-import type { ProjectWorkspaceDetail } from "../api/project-workspace-api"
+import {
+  notifyProjectWorkspaceListChanged,
+  type ProjectWorkspaceDetail,
+} from "../api/project-workspace-api"
 
 function AssignStaff({
   requestId,
@@ -51,6 +54,7 @@ function AssignStaff({
           workflow={controls.workflow}
           controls={controls}
           mode="staffing"
+          onMutationSuccess={notifyProjectWorkspaceListChanged}
           onClose={() => {
             setOpen(false)
             onChanged()
@@ -129,7 +133,7 @@ export function WorkspaceTeam({
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h2 className="m-0 text-sm font-semibold">
           Project team{" "}
-          <span className="ml-2 font-normal text-[#738096]">
+          <span className="ml-2 font-normal text-[#65718a]">
             {new Set(rows.map(({ person }) => person.id)).size} assigned staff
           </span>
         </h2>
@@ -137,7 +141,7 @@ export function WorkspaceTeam({
           {manageable.map((stream) => (
             <div key={stream.id} className="flex items-center gap-2">
               {manageable.length > 1 && (
-                <span className="text-xs text-[#738096]">
+                <span className="text-xs text-[#65718a]">
                   {stream.serviceName}
                 </span>
               )}

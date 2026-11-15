@@ -2,6 +2,7 @@ import type { Prisma } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { activeAccount } from "../../shared/query/accounts.js"
 import { readWorkPlan } from "../project-workspace/templates.js"
+import { projectWorkspaceIdentity } from "../project-workspace/workspace-identity.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 import {
   consultationCalendarWhere,
@@ -223,7 +224,7 @@ export async function listInternalCalendar(userId: string, scope: unknown) {
     // Calendar overview access does not grant access to staff-only workspaces.
     const href = organization
       ? null
-      : `/project-workspace/${encodeURIComponent(project.workspaceGroupId ?? project.id)}`
+      : `/project-workspace/${encodeURIComponent(projectWorkspaceIdentity(project))}`
     const common = {
       context: project.name,
       department,

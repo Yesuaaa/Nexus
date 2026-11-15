@@ -6,6 +6,8 @@ configureRegressionTest()
 
 const workspace: ProjectWorkspaceDetail = {
   id: "workspace-1",
+  rowId: "group:workspace-1",
+  kind: "group",
   name: "Website launch",
   structure: "SEPARATE",
   status: "IN_PROGRESS",
@@ -14,6 +16,7 @@ const workspace: ProjectWorkspaceDetail = {
   activityCount: 0,
   canCreate: false,
   canManage: false,
+  canRename: false,
   workstreams: [],
   activity: [],
 }
@@ -93,16 +96,29 @@ for (const width of [1440, 390]) {
               {
                 ...workspace,
                 id: "archive-1",
+                rowId: "group:archive-1",
                 name: "Completed branding",
                 status: "COMPLETED",
               },
               {
                 ...workspace,
                 id: "archive-2",
+                rowId: "group:archive-2",
                 name: "Cancelled campaign",
                 status: "CANCELLED",
               },
             ],
+            projectCounts: {
+              total: 3,
+              byStatus: {
+                PLANNED: 0,
+                IN_PROGRESS: 1,
+                ON_HOLD: 0,
+                COMPLETED: 1,
+                CANCELLED: 1,
+              },
+            },
+            resultsTruncated: false,
           },
         })
       return route.fulfill({ json: { notifications: [], unreadCount: 0 } })
@@ -120,12 +136,13 @@ for (const width of [1440, 390]) {
       .getByRole("searchbox", { name: "Search projects" })
       .fill("missing")
     await expect(
-      table.getByText("No projects match these filters.", { exact: true }),
+      main.getByRole("heading", { name: "No projects match those filters" }),
     ).toBeVisible()
     await main.getByRole("button", { name: /Archive/ }).click()
     await expect(
       main.getByRole("searchbox", { name: "Search projects" }),
-    ).toHaveValue("")
+    ).toHaveValue("missing")
+    await main.getByRole("searchbox", { name: "Search projects" }).clear()
     await expect(
       table.getByRole("link", { name: "Completed branding", exact: true }),
     ).toBeVisible()
@@ -143,7 +160,10 @@ for (const width of [1440, 390]) {
     ).toHaveCount(0)
     await expect(
       table.getByRole("link", { name: "Completed branding", exact: true }),
-    ).toHaveAttribute("href", "/project-workspace/archive-1")
+    ).toHaveAttribute(
+      "href",
+      "/project-workspace/group%3Aarchive-1?search=branding&view=archive",
+    )
     await expect(
       main.getByRole("button", { name: "New project", exact: true }),
     ).toHaveCount(0)
@@ -198,9 +218,13 @@ for (const width of [1440, 390]) {
       })
       await page.goto(`/${kind}/workspace-1`)
       const main = page.getByRole("main")
-      await expect(main.getByRole("alert")).toHaveText(
+      await expect(main.getByRole("alert")).toContainText(
         "Project temporarily unavailable",
       )
+      if (kind === "project-workspace")
+        await expect(
+          main.getByRole("alert").getByRole("button", { name: "Try again" }),
+        ).toBeVisible()
       await expect(
         main.getByRole("heading", { name: workspace.name, exact: true }),
       ).toHaveCount(0)
@@ -213,7 +237,7 @@ for (const width of [1440, 390]) {
       await expect(main.getByRole("alert")).toHaveCount(0)
       expect(reads).toBeGreaterThan(failedReads)
       if (kind === "project-workspace") {
-        const navigation = main.getByRole("navigation", {
+        const tabs = main.getByRole("tablist", {
           name: "Project sections",
         })
         for (const [section, content] of [
@@ -222,11 +246,11 @@ for (const width of [1440, 390]) {
           ["Activity", "No activity yet"],
           ["Overview", "Project details"],
         ]) {
-          const button = navigation.getByRole("button", {
+          const tab = tabs.getByRole("tab", {
             name: section,
             exact: true,
           })
-          await button.click()
+          await tab.click()
           await expect(
             main.getByRole("heading", { name: content, exact: true }),
           ).toBeVisible()

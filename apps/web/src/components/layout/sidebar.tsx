@@ -29,6 +29,7 @@ import type { Account } from "@/features/auth/model/types"
 import {
   canAccessRequestInbox,
   canAccessProjectWorkspace,
+  canCreateProjectWorkspace,
 } from "@/features/auth/model/permissions"
 import {
   getNavigationLabel,
@@ -161,7 +162,16 @@ type NavGroup = {
   label: string
   icon: NavIcon
   visible: (account: Account) => boolean
-  links: { href: string; label: string; ariaLabel?: string }[]
+  links: {
+    href: string
+    label: string
+    ariaLabel?: string
+    match?: (pathname: string) => boolean
+  }[]
+}
+
+function isGroupLinkActive(link: NavGroup["links"][number], pathname: string) {
+  return link.match?.(pathname) ?? link.href === pathname
 }
 
 /**
@@ -223,7 +233,7 @@ function groupTransition(
   href: string,
   pathname: string,
 ): string[] | undefined {
-  const inGroup = group.links.some((link) => link.href === pathname)
+  const inGroup = group.links.some((link) => isGroupLinkActive(link, pathname))
   if (!inGroup || href === pathname) return undefined
   return [href.endsWith("/overview") ? "nav-back" : "nav-forward"]
 }
@@ -241,7 +251,9 @@ function GroupDisclosure({
   onToggle: () => void
 }) {
   const panelId = useId()
-  const groupActive = group.links.some((link) => link.href === pathname)
+  const groupActive = group.links.some((link) =>
+    isGroupLinkActive(link, pathname),
+  )
   return (
     <div className="min-w-0">
       <button
@@ -276,7 +288,7 @@ function GroupDisclosure({
         <div className="min-h-0 overflow-hidden">
           <div className="mt-0.5 mb-1 ml-[19px] grid gap-0.5 border-l border-[#e6e9ee] pl-2">
             {group.links.map((link) => {
-              const active = link.href === pathname
+              const active = isGroupLinkActive(link, pathname)
               return (
                 <Link
                   key={link.href}
@@ -309,7 +321,9 @@ function GroupFlyout({
   pathname,
   onNavigate,
 }: Omit<RowProps, "collapsed"> & { group: NavGroup }) {
-  const groupActive = group.links.some((link) => link.href === pathname)
+  const groupActive = group.links.some((link) =>
+    isGroupLinkActive(link, pathname),
+  )
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -339,7 +353,7 @@ function GroupFlyout({
           {group.label}
         </DropdownMenuLabel>
         {group.links.map((link) => {
-          const active = link.href === pathname
+          const active = isGroupLinkActive(link, pathname)
           return (
             <DropdownMenuItem
               key={link.href}
@@ -385,7 +399,7 @@ export function Sidebar({
   function renderGroup(group: NavGroup) {
     const open =
       openGroups[group.label] ??
-      group.links.some((link) => link.href === pathname)
+      group.links.some((link) => isGroupLinkActive(link, pathname))
     const disclosure = (
       <GroupDisclosure
         group={group}
@@ -444,6 +458,34 @@ export function Sidebar({
           canAccessRoute(account, link.href),
         ),
       })
+    }
+    if (policy.id === "admin-project-management" && policy.canAccess(account)) {
+      const group = moduleGroup(
+        "Project Workspace",
+        "Project Workspace",
+        FolderKanban,
+        "/project-management",
+        policy.canAccess,
+      )
+      group.links[1].match = (path) =>
+        path !== "/project-management/overview" &&
+        isNavigationActive(policy, path)
+      return renderGroup(group)
+    }
+    if (
+      policy.id === "project-workspace" &&
+      canCreateProjectWorkspace(account)
+    ) {
+      const group = moduleGroup(
+        "Project Workspace",
+        "Project Workspace",
+        FolderKanban,
+        "/project-workspace",
+        canCreateProjectWorkspace,
+      )
+      group.links[1].match = (path) =>
+        path !== group.links[0].href && isNavigationActive(policy, path)
+      return renderGroup(group)
     }
     const props = {
       policy,

@@ -5,10 +5,16 @@ import { FormInput } from "@/components/ui/form-input"
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, ChevronRight } from "lucide-react"
-import { Alert } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
 import { DialogStepProgress } from "@/components/ui/dialog-step-progress"
-import { Modal, ModalFooter, ModalHeader } from "@/components/ui/modal"
+import {
+  SidePanel,
+  SidePanelAlert,
+  SidePanelBody,
+  SidePanelButton,
+  SidePanelFooter,
+  SidePanelHeader,
+  useSidePanel,
+} from "@/components/ui/side-panel"
 import { PlanEditor, emptyPlan } from "../components/plan-editor"
 import type { ProjectWorkPlan } from "../api/project-workspace-api"
 import {
@@ -16,9 +22,11 @@ import {
   listApprovedProjectBookings,
   listProjectWorkspaceTemplates,
   notifyProjectWorkspaceListChanged,
+  projectWorkspaceHref,
   type ProjectWorkspaceBooking,
   type ProjectWorkspaceTemplate,
 } from "../api/project-workspace-api"
+import type { WorkspaceDirectoryState } from "../model/workspace-directory-state"
 import { errorMessage } from "@/lib/error-message"
 
 const steps = [
@@ -40,16 +48,17 @@ const steps = [
   },
 ] as const
 
-export function NewWorkspaceDialog({
-  open,
-  onOpenChange,
+export function NewWorkspacePanel({
+  onClose,
   onCreated,
+  returnState,
 }: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+  onClose: () => void
   onCreated: () => void
+  returnState: WorkspaceDirectoryState
 }) {
   const router = useRouter()
+  const panel = useSidePanel(onClose)
   const [bookings, setBookings] = useState<ProjectWorkspaceBooking[]>([])
   const [templates, setTemplates] = useState<ProjectWorkspaceTemplate[]>([])
   const [selected, setSelected] = useState<string[]>([])
@@ -67,7 +76,6 @@ export function NewWorkspaceDialog({
   const [error, setError] = useState("")
 
   useEffect(() => {
-    if (!open) return
     const controller = new AbortController()
     Promise.all([
       listApprovedProjectBookings(controller.signal),
@@ -87,20 +95,7 @@ export function NewWorkspaceDialog({
         if (!controller.signal.aborted) setLoading(false)
       })
     return () => controller.abort()
-  }, [open])
-
-  function resetWizard() {
-    setBookings([])
-    setTemplates([])
-    setStep(0)
-    setSelected([])
-    setKeys({})
-    setCustomPlans({})
-    setStructure("SEPARATE")
-    setName("")
-    setError("")
-    setLoading(true)
-  }
+  }, [])
 
   const selectedBookings = useMemo(
     () => bookings.filter(({ requestId }) => selected.includes(requestId)),
@@ -159,10 +154,12 @@ export function NewWorkspaceDialog({
         customPlans,
       })
       notifyProjectWorkspaceListChanged()
-      onCreated()
-      resetWizard()
-      onOpenChange(false)
-      router.push(`/project-workspace/${result.workspaces[0].id}`)
+      panel.close(() => {
+        onCreated()
+        router.push(
+          projectWorkspaceHref(`group:${result.workspaces[0].id}`, returnState),
+        )
+      })
     } catch (reason) {
       setError(errorMessage(reason, "Couldn't create workspace"))
     } finally {
@@ -187,25 +184,20 @@ export function NewWorkspaceDialog({
     setStep((current) => Math.max(current - 1, 0))
   }
 
-  function close() {
-    if (busy) return
-    resetWizard()
-    onOpenChange(false)
-  }
-
   return (
-    <Modal
-      open={open}
-      onClose={close}
+    <SidePanel
+      open={panel.open}
+      onOpenChange={panel.onOpenChange}
       busy={busy}
-      closeOnEscape={false}
-      size="xl"
-      className="flex flex-col overflow-hidden"
+      dismissible={false}
+      fallbackFocus={() =>
+        document.getElementById("project-workspace-management-heading")
+      }
     >
-      <ModalHeader
+      <SidePanelHeader
         title="Start project from approved booking"
-        description={steps[step].description}
-        closeLabel="Close dialog"
+        description={`Step ${step + 1} of ${steps.length} · ${steps[step].description}`}
+        closeLabel="Close workspace setup"
         closeDisabled={busy}
       />
 
@@ -215,15 +207,13 @@ export function NewWorkspaceDialog({
         label="Project setup progress"
       />
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+      <SidePanelBody key={step}>
         {loading ? (
-          <p role="status" className="py-12 text-center text-sm text-[#738096]">
+          <p role="status" className="py-12 text-center text-sm text-[#65718a]">
             Loading approved bookings…
           </p>
         ) : error && !bookings.length ? (
-          <Alert as="div" className="p-4 text-sm">
-            {error}
-          </Alert>
+          <SidePanelAlert>{error}</SidePanelAlert>
         ) : step === 0 ? (
           <BookingStep
             bookings={bookings}
@@ -268,33 +258,22 @@ export function NewWorkspaceDialog({
           />
         )}
         {error && bookings.length > 0 && (
-          <Alert variant="text" className="mt-4">
-            {error}
-          </Alert>
+          <SidePanelAlert>{error}</SidePanelAlert>
         )}
-      </div>
+      </SidePanelBody>
 
-      <ModalFooter className="items-center justify-between gap-3">
+      <SidePanelFooter className="justify-between">
         <div>
           {step > 0 && (
-            <Button
-              type="button"
-              variant="brandOutline"
-              disabled={busy}
-              onClick={back}
-              className="min-h-9 gap-1 text-xs"
-            >
+            <SidePanelButton variant="secondary" disabled={busy} onClick={back}>
               <ArrowLeft size={14} aria-hidden="true" />
               Back
-            </Button>
+            </SidePanelButton>
           )}
         </div>
-        <Button
-          type="button"
+        <SidePanelButton
           disabled={busy || loading || (step === 0 && !bookings.length)}
-          variant="brand"
           onClick={() => (step < steps.length - 1 ? next() : void create())}
-          className="min-h-9 gap-1 text-xs"
         >
           {busy
             ? "Creating…"
@@ -306,9 +285,9 @@ export function NewWorkspaceDialog({
           {step < steps.length - 1 && (
             <ChevronRight size={14} aria-hidden="true" />
           )}
-        </Button>
-      </ModalFooter>
-    </Modal>
+        </SidePanelButton>
+      </SidePanelFooter>
+    </SidePanel>
   )
 }
 
@@ -329,7 +308,7 @@ function BookingStep({
         <h2 className="m-0 text-sm font-semibold text-[#263750]">
           No bookings ready for setup
         </h2>
-        <p className="mt-2 mb-0 text-xs text-[#738096]">
+        <p className="mt-2 mb-0 text-xs text-[#65718a]">
           A client must formally accept the quotation before a project can be
           created.
         </p>
@@ -345,7 +324,7 @@ function BookingStep({
         >
           Choose approved bookings
         </h2>
-        <p className="mt-1 mb-0 text-xs text-[#738096]">
+        <p className="mt-1 mb-0 text-xs text-[#65718a]">
           Select one or more bookings for the same client, up to eight.
         </p>
       </div>
@@ -380,7 +359,7 @@ function BookingStep({
                   {booking.name}
                 </strong>
                 <span
-                  className={`mt-1 block leading-5 ${checked ? "text-white/80" : "text-[#738096]"}`}
+                  className={`mt-1 block leading-5 ${checked ? "text-white/80" : "text-[#65718a]"}`}
                 >
                   {booking.serviceName} · {booking.client.fullName || "Client"}
                   {booking.referenceNumber
@@ -416,7 +395,7 @@ function StructureStep({
         >
           Choose the project structure
         </h2>
-        <p className="mt-1 mb-0 text-xs text-[#738096]">
+        <p className="mt-1 mb-0 text-xs text-[#65718a]">
           Decide whether each booking gets a workspace of its own.
         </p>
       </div>
@@ -435,7 +414,7 @@ function StructureStep({
                 : "One project, multiple services"}
             </strong>
             <span
-              className={`mt-2 block text-xs leading-5 ${structure === value ? "text-white/85" : "text-[#738096]"}`}
+              className={`mt-2 block text-xs leading-5 ${structure === value ? "text-white/85" : "text-[#65718a]"}`}
             >
               {value === "SEPARATE"
                 ? "Create one workspace and plan for each selected booking."
@@ -487,7 +466,7 @@ function TemplateStep({
         >
           Pick a delivery plan for each service
         </h2>
-        <p className="mt-1 mb-0 text-xs text-[#738096]">
+        <p className="mt-1 mb-0 text-xs text-[#65718a]">
           You can use a starter plan or build a custom one from scratch.
         </p>
       </div>
@@ -496,7 +475,7 @@ function TemplateStep({
           <section key={booking.requestId}>
             <h3 className="mb-3 text-xs font-semibold text-[#263750]">
               {booking.serviceName}
-              <span className="ml-2 font-normal text-[#738096]">
+              <span className="ml-2 font-normal text-[#65718a]">
                 · {booking.name}
               </span>
             </h3>
@@ -515,7 +494,7 @@ function TemplateStep({
                   >
                     <strong className="block text-xs">{template.name}</strong>
                     <span
-                      className={`mt-2 block text-[11px] leading-5 ${active ? "text-white/85" : "text-[#738096]"}`}
+                      className={`mt-2 block text-[11px] leading-5 ${active ? "text-white/85" : "text-[#65718a]"}`}
                     >
                       {template.description}
                     </span>
@@ -574,7 +553,7 @@ function ReviewStep({
         >
           Review project setup
         </h2>
-        <p className="mt-1 mb-0 text-xs text-[#738096]">
+        <p className="mt-1 mb-0 text-xs text-[#65718a]">
           Confirm the bookings and plans before creating the workspace.
         </p>
       </div>
@@ -617,7 +596,7 @@ function ReviewStep({
                     ? booking.name
                     : booking.serviceName}
                 </h3>
-                <p className="mt-1 mb-0 text-[11px] text-[#738096]">
+                <p className="mt-1 mb-0 text-[11px] text-[#65718a]">
                   {booking.serviceName} · {booking.client.fullName || "Client"}
                 </p>
               </div>
@@ -625,7 +604,7 @@ function ReviewStep({
                 <p className="m-0 text-xs font-medium text-[#263750]">
                   {template?.name || "Custom plan"}
                 </p>
-                <p className="mt-1 mb-0 text-[10px] text-[#738096]">
+                <p className="mt-1 mb-0 text-[10px] text-[#65718a]">
                   {plan
                     ? `${plan.phases.length} phases · ${tasks} tasks`
                     : `${template?.phases.length ?? 0} phases`}
@@ -635,7 +614,7 @@ function ReviewStep({
           )
         })}
       </div>
-      <p className="mt-4 mb-0 text-[11px] leading-5 text-[#738096]">
+      <p className="mt-4 mb-0 text-[11px] leading-5 text-[#65718a]">
         Templates suggest roles, not people. You can assign staff after the
         workspace is created.
       </p>

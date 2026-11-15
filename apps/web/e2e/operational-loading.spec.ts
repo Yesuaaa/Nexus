@@ -74,6 +74,8 @@ const scenarios = [
       workspaces: [
         {
           id: "workspace-1",
+          rowId: "group:workspace-1",
+          kind: "group",
           name: "Website Project",
           structure: "SEPARATE",
           status: "IN_PROGRESS",
@@ -83,6 +85,17 @@ const scenarios = [
           workstreams: [],
         },
       ],
+      projectCounts: {
+        total: 1,
+        byStatus: {
+          PLANNED: 0,
+          IN_PROGRESS: 1,
+          ON_HOLD: 0,
+          COMPLETED: 0,
+          CANCELLED: 0,
+        },
+      },
+      resultsTruncated: false,
     },
   },
 ] as const

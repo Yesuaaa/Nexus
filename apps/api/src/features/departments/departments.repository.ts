@@ -68,6 +68,49 @@ export function withoutTemporaryHeadTracking<
   return fields
 }
 
+const departmentListInclude = {
+  head: {
+    select: {
+      id: true,
+      email: true,
+      fullName: true,
+      role: true,
+    },
+  },
+  _count: {
+    select: { employees: true, teams: true, services: true },
+  },
+} satisfies Prisma.DepartmentInclude
+
+async function findDepartmentsWithCounts() {
+  const prisma = getPrisma()!
+  return prisma.department.findMany({
+    orderBy: { name: "asc" },
+    include: departmentListInclude,
+  })
+}
+
+async function countProjectsByDepartmentIds(departmentIds: string[]) {
+  if (!departmentIds.length) return new Map<string, number>()
+  const prisma = getPrisma()!
+  const counts = await prisma.$queryRaw<
+    { departmentId: string; projectCount: number }[]
+  >(Prisma.sql`
+    SELECT r."acceptedDepartmentId" AS "departmentId",
+      COUNT(DISTINCT p.id)::int AS "projectCount"
+    FROM "Project" p
+    INNER JOIN "ServiceRequest" r ON r.id = p."requestId"
+    WHERE r."acceptedDepartmentId" IN (${Prisma.join(departmentIds)})
+    GROUP BY r."acceptedDepartmentId"
+  `)
+  return new Map(
+    counts.map(({ departmentId, projectCount }) => [
+      departmentId,
+      projectCount,
+    ]),
+  )
+}
+
 export const departmentsRepository = {
   async listDepartmentDirectory() {
     // Cross-department coordination needs identifiers and Head names, not HR
@@ -82,23 +125,65 @@ export const departmentsRepository = {
   },
 
   async listDepartmentsWithCounts() {
+    return findDepartmentsWithCounts()
+  },
+
+  async listProjectManagementDepartmentsWithCounts() {
+    const departments = await findDepartmentsWithCounts()
+    const projectCounts = await countProjectsByDepartmentIds(
+      departments.map(({ id }) => id),
+    )
+    return departments.map((department) => ({
+      ...department,
+      projectCount: projectCounts.get(department.id) ?? 0,
+    }))
+  },
+
+  async getProjectManagementDepartmentDetails(departmentId: string) {
     const prisma = getPrisma()!
-    return prisma.department.findMany({
-      orderBy: { name: "asc" },
-      include: {
-        head: {
-          select: {
-            id: true,
-            email: true,
-            fullName: true,
-            role: true,
+    const [department, projectCounts] = await Promise.all([
+      prisma.department.findUnique({
+        where: { id: departmentId },
+        select: {
+          id: true,
+          name: true,
+          color: true,
+          code: true,
+          description: true,
+          headId: true,
+          createdAt: true,
+          updatedAt: true,
+          head: {
+            select: {
+              id: true,
+              fullName: true,
+              role: true,
+              position: true,
+            },
+          },
+          employees: {
+            select: {
+              id: true,
+              userId: true,
+              fullName: true,
+              position: true,
+              user: {
+                select: { id: true, fullName: true, role: true },
+              },
+            },
+            orderBy: [{ fullName: "asc" }, { employeeId: "asc" }],
           },
         },
-        _count: {
-          select: { employees: true, teams: true, services: true },
-        },
-      },
-    })
+      }),
+      countProjectsByDepartmentIds([departmentId]),
+    ])
+    if (!department) return null
+    return {
+      ...department,
+      members: department.employees,
+      memberCount: department.employees.length,
+      projectCount: projectCounts.get(departmentId) ?? 0,
+    }
   },
 
   /**

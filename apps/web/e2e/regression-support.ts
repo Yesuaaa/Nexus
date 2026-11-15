@@ -340,6 +340,19 @@ export async function mockApi(
       })
       return
     }
+    if (pathname === "/api/project-workspace/directory" && method === "GET") {
+      await route.fulfill({
+        json: {
+          rows: [],
+          total: 0,
+          page: 1,
+          pageSize: 10,
+          totalPages: 0,
+          hasWorkspaces: false,
+        },
+      })
+      return
+    }
     if (pathname.startsWith("/api/modules/") && method === "GET") {
       const id = pathname.split("/").at(-1) as keyof typeof moduleRegistry
       const module = Object.hasOwn(moduleRegistry, id)

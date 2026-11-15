@@ -109,7 +109,7 @@ export function TeamMemberPanel({
         <SidePanelSection
           title="Assigned tasks"
           action={
-            <span className="text-[11px] text-[#738096]">
+            <span className="text-[11px] text-[#65718a]">
               {assignedTasks.length} assigned
             </span>
           }
@@ -125,7 +125,7 @@ export function TeamMemberPanel({
                     <p className="m-0 text-xs font-medium break-words">
                       {task.title}
                     </p>
-                    <p className="mt-1 mb-0 text-[11px] text-[#738096]">
+                    <p className="mt-1 mb-0 text-[11px] text-[#65718a]">
                       {phase} · {taskStatusLabels[task.status]}
                     </p>
                   </div>
@@ -143,7 +143,7 @@ export function TeamMemberPanel({
               ))}
             </ul>
           ) : (
-            <p className="m-0 rounded-lg border border-[#e8ebef] px-4 py-3 text-xs text-[#738096]">
+            <p className="m-0 rounded-lg border border-[#e8ebef] px-4 py-3 text-xs text-[#65718a]">
               No tasks assigned for this service yet.
             </p>
           )}

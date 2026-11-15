@@ -16,6 +16,7 @@ import {
   canInspectBusinessConversations,
   canAccessProjects,
   canAccessProjectWorkspace,
+  canCreateProjectWorkspace,
   canAccessRequestInbox,
   canAccessServiceCatalog,
   canAccessServiceManagement,
@@ -59,9 +60,13 @@ export type RoutePolicyId =
   | "projects-deliverable"
   | "projects-detail"
   | "projects"
+  | "project-workspace-overview"
   | "project-workspace-new"
   | "project-workspace-detail"
   | "project-workspace"
+  | "admin-project-management"
+  | "admin-project-management-overview"
+  | "admin-project-management-department"
   | "departments"
   | "departments-overview"
   | "employees"
@@ -142,6 +147,42 @@ export const routePolicies: readonly RoutePolicy[] = [
       location: "main",
       order: 80,
     },
+  },
+  {
+    id: "admin-project-management-overview",
+    match: { kind: "exact", path: "/project-management/overview" },
+    moduleId: "project-management",
+    canAccess: (account) =>
+      canAccessAdministrativeModules(account) &&
+      hasPermission(account, Permissions.ORGANIZATION_READ_ALL),
+  },
+  {
+    id: "admin-project-management",
+    match: { kind: "exact", path: "/project-management" },
+    moduleId: "project-management",
+    canAccess: (account) =>
+      canAccessAdministrativeModules(account) &&
+      hasPermission(account, Permissions.ORGANIZATION_READ_ALL) &&
+      hasPermission(account, Permissions.DEPARTMENTS_READ),
+    navigation: {
+      href: "/project-management",
+      label: "Project Workspace Management",
+      location: "main",
+      order: 120,
+      activeMatch: { kind: "prefix", path: "/project-management" },
+    },
+  },
+  {
+    id: "admin-project-management-department",
+    match: {
+      kind: "pattern",
+      path: "/project-management/departments/[departmentId]/projects",
+    },
+    moduleId: "project-management",
+    canAccess: (account) =>
+      canAccessAdministrativeModules(account) &&
+      hasPermission(account, Permissions.ORGANIZATION_READ_ALL) &&
+      hasPermission(account, Permissions.DEPARTMENTS_READ),
   },
   ...attendanceNavigation.flatMap((group, index): RoutePolicy[] => [
     ...group.links.map((link): RoutePolicy => ({
@@ -286,6 +327,12 @@ export const routePolicies: readonly RoutePolicy[] = [
       activeMatch: { kind: "prefix", path: "/projects" },
       visible: (account) => account.role === "USER",
     },
+  },
+  {
+    id: "project-workspace-overview",
+    match: { kind: "exact", path: "/project-workspace/overview" },
+    moduleId: "project-management",
+    canAccess: canCreateProjectWorkspace,
   },
   {
     id: "project-workspace-new",

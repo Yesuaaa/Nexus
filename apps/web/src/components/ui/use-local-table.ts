@@ -67,6 +67,8 @@ export function useLocalTable<T>(
     loading = false,
     search,
     pageSize = 10,
+    controlledPage,
+    onPageChange,
   }: {
     /** JSON-serializable inputs that define the current view (search, filters, sort). */
     view?: readonly unknown[]
@@ -74,6 +76,9 @@ export function useLocalTable<T>(
     /** Search draft that should settle before filtered rows replace the table. */
     search?: string
     pageSize?: number
+    /** Optional URL-backed page state for navigation that should restore filters. */
+    controlledPage?: number
+    onPageChange?: (page: number) => void
   } = {},
 ) {
   const trimmedSearch = search?.trim() ?? ""
@@ -87,7 +92,8 @@ export function useLocalTable<T>(
 
   const viewKey = JSON.stringify(view)
   const [paging, setPaging] = useState({ viewKey, page: 1 })
-  const requestedPage = paging.viewKey === viewKey ? paging.page : 1
+  const requestedPage =
+    controlledPage ?? (paging.viewKey === viewKey ? paging.page : 1)
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize))
   const page = Math.min(requestedPage, totalPages)
   const total = rows.length
@@ -106,8 +112,14 @@ export function useLocalTable<T>(
     pending,
   )
   const setPage = useCallback(
-    (next: number) => setPaging({ viewKey, page: next }),
-    [viewKey],
+    (next: number) => {
+      if (controlledPage !== undefined) {
+        onPageChange?.(next)
+      } else {
+        setPaging({ viewKey, page: next })
+      }
+    },
+    [controlledPage, onPageChange, viewKey],
   )
 
   const footer: PaginatedFooter = {

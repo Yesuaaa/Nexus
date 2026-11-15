@@ -85,7 +85,7 @@ test("the selector returns only the Admin operational workspaces", () => {
 test("Superadmin receives operational modules alongside Administration", () => {
   assert.deepEqual(moduleEntries(account("SUPERADMIN")), [
     ["Service Operations", "/services"],
-    ["Project Management", "/module/project-management"],
+    ["Project Management", "/project-management/overview"],
     ["People & HR", "/employees"],
     ["Attendance & Monitoring", "/attendance/dashboard"],
     ["Administration", "/accounts"],

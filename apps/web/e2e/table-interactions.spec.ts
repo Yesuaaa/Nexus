@@ -43,6 +43,8 @@ function fixture(name: string, id: string) {
 function workspaceFixture(name: string, id: string): ProjectWorkspaceDetail {
   return {
     id,
+    rowId: `group:${id}`,
+    kind: "group",
     name,
     structure: "SEPARATE",
     status: "IN_PROGRESS",
@@ -51,6 +53,7 @@ function workspaceFixture(name: string, id: string): ProjectWorkspaceDetail {
     activityCount: 0,
     canCreate: false,
     canManage: false,
+    canRename: false,
     activity: [],
     workstreams: [
       {
@@ -123,9 +126,25 @@ for (const width of [1440, 390]) {
     const alpha = workspaceFixture("Alpha Project", "alpha")
     const beta = workspaceFixture("Beta Project", "beta")
     await page.route("**/api/project-workspace?**", (route) =>
-      route.fulfill({ json: { workspaces: [alpha, beta], canCreate: false } }),
+      route.fulfill({
+        json: {
+          workspaces: [alpha, beta],
+          canCreate: false,
+          projectCounts: {
+            total: 2,
+            byStatus: {
+              PLANNED: 0,
+              IN_PROGRESS: 2,
+              ON_HOLD: 0,
+              COMPLETED: 0,
+              CANCELLED: 0,
+            },
+          },
+          resultsTruncated: false,
+        },
+      }),
     )
-    await page.route("**/api/project-workspace/alpha", (route) =>
+    await page.route("**/api/project-workspace/group%3Aalpha", (route) =>
       route.fulfill({ json: alpha }),
     )
     await page.goto("/dashboard")
@@ -164,9 +183,7 @@ for (const width of [1440, 390]) {
     await expect(
       page.getByRole("combobox", { name: "Filter projects by status" }),
     ).toContainText("All archived")
-    await page
-      .getByRole("button", { name: "Back to Projects", exact: true })
-      .click()
+    await page.getByRole("button", { name: "Active", exact: true }).click()
     await expect(rows).toHaveCount(2)
     await page.getByRole("combobox", { name: "Sort projects" }).click()
     await page
@@ -201,10 +218,10 @@ for (const width of [1440, 390]) {
       .getByRole("region", { name: "Project list" })
       .getByRole("link", { name: "Alpha Project", exact: true })
       .click()
-    await page.getByRole("button", { name: "Work", exact: true }).click()
+    await page.getByRole("tab", { name: "Work", exact: true }).click()
     await expect(rows).toHaveCount(2)
     await expect(rows.first()).toContainText("Alpha Task")
-    await page.getByRole("button", { name: "Team", exact: true }).click()
+    await page.getByRole("tab", { name: "Team", exact: true }).click()
     await expect(rows).toHaveCount(2)
     const staffSearch = page.getByRole("searchbox", {
       name: "Search assigned staff",
@@ -226,9 +243,7 @@ for (const width of [1440, 390]) {
     await staffSearch.fill("")
     await page.clock.runFor(200)
     await expect(rows).toHaveCount(2)
-    await page
-      .getByRole("button", { name: "Deliverables", exact: true })
-      .click()
+    await page.getByRole("tab", { name: "Deliverables", exact: true }).click()
     const deliverableSearch = page.getByRole("searchbox", {
       name: "Search deliverables",
     })

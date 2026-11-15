@@ -17,6 +17,7 @@ import { approximateSessionLocation } from "./session-location.js"
 import { HttpError as AuthError } from "../../shared/http-error.js"
 
 export const SESSION_DAYS = 7
+const DUMMY_PASSWORD_HASH = await hashPassword(randomBytes(32).toString("hex"))
 
 /** Feature-named alias of the shared `HttpError`. */
 export { AuthError }
@@ -137,11 +138,16 @@ export const authService = {
       throw new AuthError(429, "Too many login attempts. Try again later")
     }
     const user = await authRepository.findUserByEmail(cleanEmail)
+    const passwordHash =
+      user && user.isActive && user.accountDeletedAt === null
+        ? user.passwordHash
+        : DUMMY_PASSWORD_HASH
+    const passwordMatches = await verifyPassword(password, passwordHash)
     if (
       !user ||
       !user.isActive ||
       user.accountDeletedAt !== null ||
-      !(await verifyPassword(password, user.passwordHash))
+      !passwordMatches
     ) {
       recordFailure(attemptKey)
       throw new AuthError(401, "Invalid email or password")

@@ -56,6 +56,7 @@ export function getPrisma() {
     const pool = new pg.Pool({
       ...databasePoolConfig(connectionString),
       max: Number(process.env.DATABASE_POOL_MAX) || 10,
+      connectionTimeoutMillis: 5_000,
     })
 
     client = new PrismaClient({

@@ -8,7 +8,10 @@ test(
   "backend regression: real HTTP, authentication, authorization and persistence",
   { timeout: 120_000 },
   async (t) => {
-    const { prisma, origin } = await startPgliteApp(t)
+    let isShuttingDown = false
+    const { prisma, origin } = await startPgliteApp(t, {
+      app: { isShuttingDown: () => isShuttingDown },
+    })
     const base = `${origin}/api`
     const password = "RegressionPassword123!"
     const passwordHash = await hashPassword(password)
@@ -71,11 +74,16 @@ test(
     await t.test(
       "health and database readiness use the isolated database",
       async () => {
-        for (const path of ["/health", "/db-check"]) {
+        for (const path of ["/health", "/db-check", "/ready"]) {
           const response = await request(path)
           assert.equal(response.status, 200)
           assert.deepEqual(await response.json(), { status: "ok" })
         }
+
+        isShuttingDown = true
+        const readiness = await request("/ready")
+        assert.equal(readiness.status, 503)
+        assert.deepEqual(await readiness.json(), { status: "unavailable" })
       },
     )
 

@@ -1,6 +1,7 @@
 import { Router } from "express"
 import { requireAuth, requirePermission } from "../auth/auth.middleware.js"
 import { Permission } from "../auth/auth.permissions.js"
+import { recordIdParam } from "../../shared/validation.js"
 import { departmentsService } from "./departments.service.js"
 import { teamsService } from "./teams.service.js"
 import { createManagementOperation } from "../../shared/management-history.js"
@@ -8,6 +9,34 @@ import { createManagementOperation } from "../../shared/management-history.js"
 // Service errors are HttpErrors; Express 5 forwards them to `handleError`.
 export const departmentsRouter = Router()
 departmentsRouter.use(requireAuth)
+departmentsRouter.param("departmentId", recordIdParam("Invalid department ID"))
+
+// Project Management needs department metadata and actual project counts.
+// Both read permissions are checked; the existing general department routes
+// remain unchanged for Staff and People & HR.
+departmentsRouter.get(
+  "/project-management-directory",
+  requirePermission(Permission.MODULES_ACCESS_ALL),
+  requirePermission(Permission.ORGANIZATION_READ_ALL),
+  requirePermission(Permission.DEPARTMENTS_READ),
+  async (_request, response) => {
+    response.json(await departmentsService.listProjectManagementDepartments())
+  },
+)
+
+departmentsRouter.get(
+  "/project-management-directory/:departmentId",
+  requirePermission(Permission.MODULES_ACCESS_ALL),
+  requirePermission(Permission.ORGANIZATION_READ_ALL),
+  requirePermission(Permission.DEPARTMENTS_READ),
+  async (request, response) => {
+    response.json(
+      await departmentsService.getProjectManagementDepartmentDetails(
+        String(request.params.departmentId),
+      ),
+    )
+  },
+)
 
 // Directory readers receive summaries; HR readers retain management metadata.
 departmentsRouter.get(

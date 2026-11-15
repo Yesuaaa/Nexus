@@ -56,6 +56,37 @@ export const departmentsService = {
     }
   },
 
+  async listProjectManagementDepartments() {
+    const departments =
+      await departmentsRepository.listProjectManagementDepartmentsWithCounts()
+    return {
+      departments: departments.map((d) => ({
+        id: d.id,
+        name: d.name,
+        color: d.color,
+        code: d.code,
+        description: d.description,
+        headId: d.headId,
+        head: d.head,
+        memberCount: d._count.employees,
+        teamCount: d._count.teams,
+        serviceCount: d._count.services,
+        projectCount: d.projectCount,
+        createdAt: d.createdAt,
+        updatedAt: d.updatedAt,
+      })),
+    }
+  },
+
+  async getProjectManagementDepartmentDetails(id: string) {
+    const department =
+      await departmentsRepository.getProjectManagementDepartmentDetails(id)
+    if (!department) {
+      throw new DepartmentError(404, "Department not found")
+    }
+    return { department }
+  },
+
   /**
    * `?departmentId=<id>` scopes candidates to an existing department;
    * `?new=true` lists only unassigned staff (for a department being created).
