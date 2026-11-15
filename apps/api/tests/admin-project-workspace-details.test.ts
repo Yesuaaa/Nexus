@@ -276,7 +276,13 @@ test(
       return `/project-workspace/admin/departments/${encodeURIComponent(departmentId)}/workspaces/${encodeURIComponent(identity)}`
     }
 
-    for (const actor of [admin, superadmin]) {
+    const adminDenied = await request(
+      admin,
+      detailsPath(design.id, `group:${shared.id}`),
+    )
+    assert.equal(adminDenied.status, 403)
+
+    for (const actor of [superadmin]) {
       const result = await request(
         actor,
         detailsPath(design.id, `group:${shared.id}`),
@@ -365,14 +371,14 @@ test(
     }
 
     const ungrouped = await request(
-      admin,
+      superadmin,
       detailsPath(design.id, `ungrouped-project:${ungroupedCollision.id}`),
       "GET",
     )
     assert.equal(ungrouped.status, 200)
     assert.equal((ungrouped.payload as WorkspaceDetails).projectCount, 1)
 
-    for (const actor of [staff, client]) {
+    for (const actor of [admin, staff, client]) {
       const denied = await request(
         actor,
         detailsPath(design.id, `group:${shared.id}`),

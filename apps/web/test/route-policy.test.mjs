@@ -136,6 +136,9 @@ const routeMatrix = {
     "/messages",
     "/accounts",
     "/module/project-management",
+    "/project-management",
+    "/project-management/overview",
+    "/project-management/departments/department-1/projects",
     "/module/service-operations/workload",
     "/calendar",
     "/profile",
@@ -148,6 +151,9 @@ const protectedRoutes = [
   "/accounts",
   "/projects",
   "/project-workspace",
+  "/project-management",
+  "/project-management/overview",
+  "/project-management/departments/department-1/projects",
   "/departments",
   "/employees",
   "/services",
@@ -204,6 +210,98 @@ test("dynamic project routes are explicit and unknown descendants are denied", (
     findRoutePolicy("/project-workspace/project-1")?.id,
     "project-workspace-detail",
   )
+  assert.equal(
+    findRoutePolicy("/project-management")?.id,
+    "admin-project-management",
+  )
+  assert.equal(
+    findRoutePolicy("/project-management/overview")?.id,
+    "admin-project-management-overview",
+  )
+  assert.equal(
+    findRoutePolicy("/project-management/departments/department-1/projects")
+      ?.id,
+    "admin-project-management-department",
+  )
+  assert.equal(
+    findRoutePolicy(
+      "/project-management/departments/department-1/projects/extra",
+    ),
+    undefined,
+  )
+})
+
+test("department-first Project Management routes require the current global read grants", () => {
+  const superadmin = account("SUPERADMIN")
+  const departmentRoutes = [
+    "/project-management",
+    "/project-management/departments/department-1/projects",
+  ]
+  const allRoutes = [
+    ...departmentRoutes,
+    "/project-management/overview",
+  ]
+
+  for (const pathname of allRoutes) {
+    assert.equal(canAccessRoute(superadmin, pathname), true, pathname)
+    assert.equal(
+      getActiveWorkspaceModuleId(superadmin, pathname),
+      "project-management",
+    )
+  }
+
+  for (const role of ["ADMIN", "STAFF", "USER"]) {
+    for (const pathname of allRoutes)
+      assert.equal(
+        canAccessRoute(account(role), pathname),
+        false,
+        `${role}: ${pathname}`,
+      )
+  }
+
+  for (const permission of [
+    Permissions.MODULES_ACCESS_ALL,
+    Permissions.ORGANIZATION_READ_ALL,
+  ]) {
+    const withoutPermission = {
+      ...superadmin,
+      permissions: superadmin.permissions.filter((item) => item !== permission),
+    }
+    for (const pathname of allRoutes)
+      assert.equal(
+        canAccessRoute(withoutPermission, pathname),
+        false,
+        pathname,
+      )
+  }
+
+  const withoutDepartmentRead = {
+    ...superadmin,
+    permissions: superadmin.permissions.filter(
+      (item) => item !== Permissions.DEPARTMENTS_READ,
+    ),
+  }
+  assert.equal(
+    canAccessRoute(withoutDepartmentRead, "/project-management/overview"),
+    true,
+  )
+  for (const pathname of departmentRoutes)
+    assert.equal(
+      canAccessRoute(withoutDepartmentRead, pathname),
+      false,
+      pathname,
+    )
+
+  const managementNavigation = getNavigationPolicies(superadmin, "main").find(
+    (policy) => policy.id === "admin-project-management",
+  )
+  assert.ok(managementNavigation)
+  assert.equal(
+    getNavigationPolicies(account("ADMIN"), "main").some(
+      (policy) => policy.id === "admin-project-management",
+    ),
+    false,
+  )
 })
 
 test("route policies reject unknown subroutes and prefix lookalikes", () => {
@@ -253,6 +351,10 @@ test("route policies record the approved module ownership without claiming share
     "/clients": "service-operations",
     "/projects/project-1": "project-management",
     "/project-workspace/project-1": "project-management",
+    "/project-management": "project-management",
+    "/project-management/overview": "project-management",
+    "/project-management/departments/department-1/projects":
+      "project-management",
     "/staff-workload": "project-management",
     "/employees": "people-hr",
     "/departments": "people-hr",

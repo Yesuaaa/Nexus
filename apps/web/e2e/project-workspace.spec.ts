@@ -171,10 +171,10 @@ test("directory links and cancel distinguish a group and project with the same I
   ])
 })
 
-test("Admin Project Management is department-first and opens read-only scoped workspaces", async ({
+test("Superadmin Project Management is department-first and opens read-only scoped workspaces", async ({
   page,
 }) => {
-  await restoreSession(page, "ADMIN")
+  await restoreSession(page, "SUPERADMIN")
   const departments = [
     {
       id: "dept-1",
@@ -658,10 +658,10 @@ test("Admin Project Management is department-first and opens read-only scoped wo
   ).toBe(true)
 })
 
-test("Admin workspace details stay read-only and reset to the summary view", async ({
+test("Superadmin workspace details stay read-only and reset to the summary view", async ({
   page,
 }) => {
-  await restoreSession(page, "ADMIN")
+  await restoreSession(page, "SUPERADMIN")
   await page.route("**/api/departments/project-management-directory", (route) =>
     route.fulfill({
       json: {
@@ -1906,11 +1906,11 @@ test("supported overview KPIs drill into the matching Management status filter",
     .toBe("ON_HOLD")
 })
 
-test("Admin Overview refreshes after a project cancellation in another tab", async ({
+test("Superadmin Overview refreshes after a project cancellation in another tab", async ({
   page,
   context,
 }) => {
-  await restoreSession(page, "ADMIN")
+  await restoreSession(page, "SUPERADMIN")
   let projectCancelled = false
   let overviewRequests = 0
   await page.route("**/api/project-management/overview", (route) => {

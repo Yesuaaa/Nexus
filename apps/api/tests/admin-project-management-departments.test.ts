@@ -29,7 +29,7 @@ type ProjectManagementApiPayload = {
 }
 
 test(
-  "Admin Project Management department reads are scoped, read-only, and count projects",
+  "Project Management department reads require Superadmin access and remain scoped",
   { timeout: 120_000 },
   async (t) => {
     const { prisma, origin } = await startPgliteApp(t)
@@ -207,7 +207,7 @@ test(
       }
     }
 
-    for (const actor of [admin, superadmin]) {
+    for (const actor of [superadmin]) {
       const directory = await request(
         actor,
         "/departments/project-management-directory",
@@ -273,6 +273,15 @@ test(
       assert.equal(missingDepartment.status, 404)
     }
 
+    for (const path of [
+      "/departments/project-management-directory",
+      `/departments/project-management-directory/${design.id}`,
+      `/project-workspace/directory?departmentId=${design.id}`,
+    ]) {
+      const denied = await request(admin, path)
+      assert.equal(denied.status, 403, `Admin GET ${path}`)
+    }
+
     const stale = await prisma.user.findUniqueOrThrow({
       where: { id: member.id },
       include: { employee: true },
@@ -290,17 +299,17 @@ test(
     }
 
     const malformedDepartmentId = await request(
-      admin,
+      superadmin,
       "/departments/project-management-directory/invalid%20id",
     )
     assert.equal(malformedDepartmentId.status, 400)
     const malformedStatus = await request(
-      admin,
+      superadmin,
       `/project-workspace/directory?departmentId=${design.id}&status=UNKNOWN`,
     )
     assert.equal(malformedStatus.status, 400)
     const repeatedDepartmentFilter = await request(
-      admin,
+      superadmin,
       `/project-workspace/directory?departmentId=${design.id}&departmentId=${marketing.id}`,
     )
     assert.equal(repeatedDepartmentFilter.status, 400)

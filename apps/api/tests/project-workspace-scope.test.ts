@@ -413,7 +413,10 @@ test(
       }
     }
     assert.equal((await staffApi("/directory")).status, 403)
-    const companyMixed = (await companyDirectory(adminApi, "search=Shared"))
+    assert.equal((await adminApi("/directory")).status, 403)
+    const companyMixed = (
+      await companyDirectory(superadminApi, "search=Shared")
+    )
       .rows[0]
     assert.equal(companyMixed.rowId, `group:${mixed.id}`)
     assert.equal(companyMixed.name, "Shared workspace")
@@ -428,7 +431,10 @@ test(
     assert.equal(companyMixed.canRename, false)
 
     const designMixed = (
-      await companyDirectory(adminApi, `departmentId=${own.id}&search=Shared`)
+      await companyDirectory(
+        superadminApi,
+        `departmentId=${own.id}&search=Shared`,
+      )
     ).rows[0]
     assert.equal(designMixed.projectCount, 1)
     assert.deepEqual(designMixed.departmentNames, ["Design"])
@@ -436,21 +442,24 @@ test(
     assert.equal(
       (
         await companyDirectory(
-          adminApi,
+          superadminApi,
           `departmentId=${own.id}&search=Operations%20brief`,
         )
       ).total,
       0,
     )
     const operationsMixed = (
-      await companyDirectory(adminApi, `departmentId=${other.id}&search=Shared`)
+      await companyDirectory(
+        superadminApi,
+        `departmentId=${other.id}&search=Shared`,
+      )
     ).rows[0]
     assert.equal(operationsMixed.projectCount, 1)
     assert.equal(operationsMixed.clientName, otherClient.fullName)
     assert.deepEqual(operationsMixed.departmentNames, ["Operations"])
 
     const operationsStandalone = (
-      await companyDirectory(adminApi, "search=Operations%20standalone")
+      await companyDirectory(superadminApi, "search=Operations%20standalone")
     ).rows[0]
     assert.equal(
       operationsStandalone.rowId,
@@ -460,7 +469,7 @@ test(
     assert.equal(operationsStandalone.canManage, false)
     assert.equal(operationsStandalone.canRename, false)
     assert.equal(
-      (await companyDirectory(adminApi, "search=Operations%20workspace"))
+      (await companyDirectory(superadminApi, "search=Operations%20workspace"))
         .rows[0].progress,
       null,
     )
@@ -519,9 +528,12 @@ test(
       ({ rowId }) => rowId,
     )
     assert.deepEqual(rowIds, [...new Set(rowIds)].sort())
-    const companyFirstPage = await companyDirectory(adminApi, "sort=recent")
+    const companyFirstPage = await companyDirectory(
+      superadminApi,
+      "sort=recent",
+    )
     const companySecondPage = await companyDirectory(
-      adminApi,
+      superadminApi,
       "sort=recent&page=2",
     )
     assert.equal(companyFirstPage.total, 14)
@@ -540,7 +552,7 @@ test(
     assert.equal(
       (
         await companyDirectory(
-          adminApi,
+          superadminApi,
           `departmentId=${own.id}&search=Shared&status=IN_PROGRESS`,
         )
       ).total,
@@ -670,7 +682,7 @@ test(
       data: { status: "CANCELLED" },
     })
     const companyArchive = await companyDirectory(
-      adminApi,
+      superadminApi,
       `departmentId=${other.id}&view=archive&status=CANCELLED&search=Archived%20Operations`,
     )
     assert.equal(companyArchive.total, 1)
@@ -679,7 +691,7 @@ test(
     assert.equal(
       (
         await companyDirectory(
-          adminApi,
+          superadminApi,
           `departmentId=${other.id}&view=active&status=CANCELLED&search=Archived%20Operations`,
         )
       ).total,

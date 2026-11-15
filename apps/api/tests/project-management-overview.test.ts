@@ -58,7 +58,7 @@ type OverviewResponse = {
 }
 
 test(
-  "Project Management overview authorizes Admin roles and aggregates the full company project population",
+  "Project Management overview requires Superadmin access and aggregates the full company project population",
   { timeout: 120_000 },
   async (t) => {
     const { prisma, origin } = await startPgliteApp(t)
@@ -153,7 +153,7 @@ test(
       })
     }
 
-    const emptyResponse = await getOverview(admin.token)
+    const emptyResponse = await getOverview(superadmin.token)
     assert.equal(emptyResponse.status, 200)
     const emptyOverview = (await emptyResponse.json()) as OverviewResponse
     assert.equal(emptyOverview.totals.totalProjects, 0)
@@ -162,6 +162,7 @@ test(
       emptyOverview.statusDistribution.map((row) => row.count),
       [0, 0, 0, 0, 0],
     )
+    assert.equal((await getOverview(admin.token)).status, 403)
 
     const doneTask = {
       id: "task-done",
@@ -228,7 +229,7 @@ test(
     assert.equal((await getOverview(staff.token)).status, 403)
     assert.equal((await getOverview(client.token)).status, 403)
 
-    for (const token of [admin.token, superadmin.token]) {
+    for (const token of [superadmin.token]) {
       const response = await getOverview(token)
       assert.equal(response.status, 200)
       const overview = (await response.json()) as OverviewResponse
@@ -293,5 +294,6 @@ test(
         ),
       )
     }
+    assert.equal((await getOverview(admin.token)).status, 403)
   },
 )

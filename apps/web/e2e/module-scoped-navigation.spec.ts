@@ -13,7 +13,7 @@ function mainMenu(page: Page) {
   return page.getByRole("navigation", { name: "Main menu", exact: true })
 }
 
-for (const role of ["ADMIN", "SUPERADMIN"] as const) {
+for (const role of ["SUPERADMIN"] as const) {
   test(`${role} enters the read-only Project Management directory`, async ({
     page,
   }) => {
@@ -42,6 +42,16 @@ for (const role of ["ADMIN", "SUPERADMIN"] as const) {
     await page
       .getByRole("link", {
         name: "Open Project Management workspace",
+        exact: true,
+      })
+      .click()
+    await expect(page).toHaveURL(/\/module\/project-management$/)
+    await mainMenu(page)
+      .getByRole("button", { name: "Project Workspace", exact: true })
+      .click()
+    await mainMenu(page)
+      .getByRole("link", {
+        name: "Project Workspace Management",
         exact: true,
       })
       .click()
@@ -112,7 +122,6 @@ for (const role of ["ADMIN", "SUPERADMIN"] as const) {
 }
 
 const topbarActors = [
-  { label: "Admin", role: "ADMIN", path: "/project-management" },
   {
     label: "Superadmin Administration",
     role: "SUPERADMIN",
@@ -199,6 +208,26 @@ test("Staff cannot access the Admin Project Management shell routes", async ({
       exact: true,
     }),
   ).toHaveAttribute("href", "/project-workspace")
+})
+
+test("Admin cannot access the Superadmin Project Management routes", async ({
+  page,
+}) => {
+  await restoreSession(page, "ADMIN")
+  for (const path of [
+    "/project-management",
+    "/project-management/overview",
+    "/project-management/departments/department-1/projects",
+  ]) {
+    await page.goto(path)
+    await expect(page).toHaveURL(/\/module$/)
+  }
+  await expect(
+    page.getByRole("link", {
+      name: "Open Project Management workspace",
+      exact: true,
+    }),
+  ).toHaveCount(0)
 })
 
 test("Client moves directly between services and projects without switching workspaces", async ({
