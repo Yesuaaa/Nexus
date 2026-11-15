@@ -45,9 +45,10 @@ const viewOptions: { value: InboxView; label: string }[] = [
 
 function matchesTableSearch(item: InboxRequest, query: string) {
   return [
-    item.title,
+    item.id,
     item.referenceNumber,
     item.service.name,
+    item.packageName,
     item.client.fullName,
     item.client.email,
   ].some((value) => value?.toLowerCase().includes(query))

@@ -11,6 +11,59 @@ configureRegressionTest()
 test.describe("Employee management", () => {
   test.skip(live, "Live mode uses the supplied accounts against the real API")
 
+  test("employee contact search keeps the current row visible while refreshing", async ({
+    page,
+  }) => {
+    const employee: Employee = {
+      id: "employee-contact-search",
+      employeeId: "EXP-100",
+      fullName: "Alex Employee",
+      email: "alex@example.com",
+      contactNumber: "+639171234567",
+      position: "Designer",
+      employmentType: "FULL_TIME",
+      status: "ACTIVE",
+      startDate: "2026-01-15",
+      departmentId: null,
+      teamId: null,
+      department: null,
+      team: null,
+      hasAccount: true,
+      accountIsActive: true,
+      createdAt: "2026-01-15T00:00:00Z",
+      updatedAt: "2026-01-15T00:00:00Z",
+    }
+    await restoreSession(page, "ADMIN", { initialEmployees: [employee] })
+    let releaseSearch!: () => void
+    let notifySearchStarted!: () => void
+    const searchStarted = new Promise<void>((resolve) => {
+      notifySearchStarted = resolve
+    })
+    const pendingSearch = new Promise<void>((resolve) => {
+      releaseSearch = resolve
+    })
+    await page.route("**/api/employees?**", async (route) => {
+      if (
+        new URL(route.request().url()).searchParams.get("search") ===
+        "639171234567"
+      ) {
+        notifySearchStarted()
+        await pendingSearch
+      }
+      await route.fallback()
+    })
+    await page.goto("/employees")
+    const row = page.getByRole("row", { name: /Alex Employee/ })
+    await expect(row).toBeVisible()
+    await page
+      .getByRole("searchbox", { name: "Search employees" })
+      .fill("639171234567")
+    await searchStarted
+    await expect(row).toBeVisible()
+    releaseSearch()
+    await expect(row).toBeVisible()
+  })
+
   test("employee search keeps the summary in sync with row motion", async ({
     page,
   }) => {

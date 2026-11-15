@@ -1,4 +1,5 @@
 "use client"
+import type { ReactNode } from "react"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -49,7 +50,7 @@ export function AttendanceTableEmpty({
   message,
   colSpan,
 }: {
-  message: string
+  message: ReactNode
   colSpan: number
 }) {
   return (

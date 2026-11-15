@@ -4,7 +4,9 @@ import { useTableFooter } from "@/components/ui/use-table-search"
 import { AnimatedTableBody } from "@/components/ui/animated-table-body"
 import { Avatar } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { TableSkeletonBody } from "@/components/ui/data-table-skeleton"
 import { Pill } from "@/components/ui/pill"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   DetailItem,
   DetailList,
@@ -48,17 +50,24 @@ const relatedRowKey = (row: { id: string }) => row.id
 function RelatedTable({
   kind,
   data,
+  loading,
   onRowsSettled,
 }: {
   onRowsSettled: () => void
   kind: "service-requests" | "projects"
-  data: ClientPage<ClientServiceRequest> | ClientPage<ClientProject>
+  data: ClientPage<ClientServiceRequest> | ClientPage<ClientProject> | null
+  loading: boolean
 }) {
   const requests = kind === "service-requests"
+  const label = requests ? "service requests" : "projects"
   return (
     <>
-      <div className="hidden overflow-hidden rounded-lg border border-[#e8ebef] min-[801px]:block">
-        <table className="w-full table-fixed border-collapse text-left text-xs">
+      <div className="hidden min-h-40 overflow-hidden rounded-lg border border-[#e8ebef] min-[801px]:block">
+        <table
+          aria-label={requests ? "Service requests" : "Projects"}
+          aria-busy={loading}
+          className="w-full table-fixed border-collapse text-left text-xs"
+        >
           <thead className="bg-[#e8eef2] text-[#52627a]">
             <tr>
               <th scope="col" className="px-3 py-2.5 font-medium">
@@ -77,115 +86,153 @@ function RelatedTable({
               </th>
             </tr>
           </thead>
-          <AnimatedTableBody<ClientServiceRequest | ClientProject>
-            items={data.rows}
-            viewKey={`${kind}:${data.page}`}
-            onRowsSettled={onRowsSettled}
-            columns={requests ? 4 : 3}
-            rowClassName="border-t border-[#eceef1] align-top"
-            emptyContent="No related records."
-            renderRow={(row) => (
-              <>
-                {" "}
-                <td className="max-w-[200px] break-all px-3 py-3 font-medium">
-                  {requests
-                    ? (row as ClientServiceRequest).title
-                    : (row as ClientProject).name}
-                </td>
-                {requests && (
-                  <td className="max-w-[150px] break-all px-3 py-3 text-[#52627a]">
-                    {(row as ClientServiceRequest).service.name}
+          {data ? (
+            <AnimatedTableBody<ClientServiceRequest | ClientProject>
+              items={data.rows}
+              viewKey={`${kind}:${data.page}`}
+              onRowsSettled={onRowsSettled}
+              columns={requests ? 4 : 3}
+              rowClassName="border-t border-[#eceef1] align-top"
+              emptyContent="No related records."
+              renderRow={(row) => (
+                <>
+                  <td className="max-w-[200px] break-all px-3 py-3 font-medium">
+                    {requests
+                      ? (row as ClientServiceRequest).title
+                      : (row as ClientProject).name}
                   </td>
-                )}
-                <td className="px-3 py-3">
-                  <Pill>{humanizeEnum(row.status)}</Pill>
-                </td>
-                <td className="whitespace-nowrap px-3 py-3 text-[#52627a]">
-                  <time
-                    dateTime={
-                      requests
-                        ? row.createdAt
-                        : ((row as ClientProject).startDate ?? undefined)
-                    }
-                  >
-                    {dateLabel(
-                      requests
-                        ? row.createdAt
-                        : (row as ClientProject).startDate,
-                    )}
-                  </time>
-                </td>
-              </>
-            )}
-          />
+                  {requests && (
+                    <td className="max-w-[150px] break-all px-3 py-3 text-[#52627a]">
+                      {(row as ClientServiceRequest).service.name}
+                    </td>
+                  )}
+                  <td className="px-3 py-3">
+                    <Pill>{humanizeEnum(row.status)}</Pill>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3 text-[#52627a]">
+                    <time
+                      dateTime={
+                        requests
+                          ? row.createdAt
+                          : ((row as ClientProject).startDate ?? undefined)
+                      }
+                    >
+                      {dateLabel(
+                        requests
+                          ? row.createdAt
+                          : (row as ClientProject).startDate,
+                      )}
+                    </time>
+                  </td>
+                </>
+              )}
+            />
+          ) : loading ? (
+            <TableSkeletonBody
+              label={label}
+              columns={requests ? 4 : 3}
+              rows={2}
+            />
+          ) : null}
         </table>
       </div>
       <div
-        className="grid gap-2 min-[801px]:hidden"
+        className="grid min-h-40 gap-2 min-[801px]:hidden"
         role="list"
         aria-label={requests ? "Service requests" : "Projects"}
+        aria-busy={loading}
       >
-        <AnimatedSlotGridBody<ClientServiceRequest | ClientProject>
-          items={data.rows}
-          viewKey={`${kind}:${data.page}`}
-          animateRows
-          onRowsSettled={onRowsSettled}
-          getKey={relatedRowKey}
-          bodyRole="presentation"
-          rowRole="listitem"
-          rowClassName={() =>
-            "grid gap-2 rounded-lg border border-[#e8ebef] p-3 mb-2 text-xs"
-          }
-          emptyContent="No related records."
-          renderRow={(row) => {
-            const title = requests
-              ? (row as ClientServiceRequest).title
-              : (row as ClientProject).name
-            const detail = requests
-              ? (row as ClientServiceRequest).service.name
-              : dateLabel((row as ClientProject).startDate)
-            const detailLabel = requests ? "Service" : "Start date"
-            const date = requests
-              ? row.createdAt
-              : (row as ClientProject).createdAt
-            return (
-              <>
-                {" "}
-                <h3 className="m-0 break-all font-semibold">{title}</h3>
-                <dl className="m-0 grid gap-2">
-                  {requests && (
+        {data ? (
+          <AnimatedSlotGridBody<ClientServiceRequest | ClientProject>
+            items={data.rows}
+            viewKey={`${kind}:${data.page}`}
+            animateRows
+            onRowsSettled={onRowsSettled}
+            getKey={relatedRowKey}
+            bodyRole="presentation"
+            rowRole="listitem"
+            rowClassName={() =>
+              "grid gap-2 rounded-lg border border-[#e8ebef] p-3 mb-2 text-xs"
+            }
+            emptyContent="No related records."
+            renderRow={(row) => {
+              const title = requests
+                ? (row as ClientServiceRequest).title
+                : (row as ClientProject).name
+              const detail = requests
+                ? (row as ClientServiceRequest).service.name
+                : dateLabel((row as ClientProject).startDate)
+              const detailLabel = requests ? "Service" : "Start date"
+              const date = requests
+                ? row.createdAt
+                : (row as ClientProject).createdAt
+              return (
+                <>
+                  {" "}
+                  <h3 className="m-0 break-all font-semibold">{title}</h3>
+                  <dl className="m-0 grid gap-2">
+                    {requests && (
+                      <div className="flex justify-between gap-3">
+                        <dt className="text-[#52627a]">{detailLabel}</dt>
+                        <dd className="m-0 min-w-0 break-all text-right">
+                          {detail}
+                        </dd>
+                      </div>
+                    )}
                     <div className="flex justify-between gap-3">
-                      <dt className="text-[#52627a]">{detailLabel}</dt>
-                      <dd className="m-0 min-w-0 break-all text-right">
-                        {detail}
+                      <dt className="text-[#52627a]">Status</dt>
+                      <dd className="m-0">
+                        <Pill>{humanizeEnum(row.status)}</Pill>
                       </dd>
                     </div>
-                  )}
-                  <div className="flex justify-between gap-3">
-                    <dt className="text-[#52627a]">Status</dt>
-                    <dd className="m-0">
-                      <Pill>{humanizeEnum(row.status)}</Pill>
-                    </dd>
-                  </div>
-                  <div className="flex justify-between gap-3">
-                    <dt className="text-[#52627a]">Created</dt>
-                    <dd className="m-0 text-right text-[#52627a]">
-                      <time dateTime={date}>{dateLabel(date)}</time>
-                    </dd>
-                  </div>
-                  {!requests && (
                     <div className="flex justify-between gap-3">
-                      <dt className="text-[#52627a]">Start date</dt>
+                      <dt className="text-[#52627a]">Created</dt>
                       <dd className="m-0 text-right text-[#52627a]">
-                        {detail}
+                        <time dateTime={date}>{dateLabel(date)}</time>
                       </dd>
                     </div>
-                  )}
-                </dl>
-              </>
-            )
-          }}
-        />
+                    {!requests && (
+                      <div className="flex justify-between gap-3">
+                        <dt className="text-[#52627a]">Start date</dt>
+                        <dd className="m-0 text-right text-[#52627a]">
+                          {detail}
+                        </dd>
+                      </div>
+                    )}
+                  </dl>
+                </>
+              )
+            }}
+          />
+        ) : loading ? (
+          <>
+            <span className="sr-only" role="status">
+              Loading {label}…
+            </span>
+            <article
+              role="listitem"
+              aria-hidden="true"
+              className="grid min-h-[132px] gap-3 rounded-lg border border-[#e8ebef] p-3 text-xs"
+            >
+              <Skeleton className="h-3 w-3/4" />
+              {requests && <Skeleton className="h-3 w-1/2" />}
+              <div className="flex items-center justify-between gap-3">
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="h-5 w-20 rounded-md" />
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+              {!requests && (
+                <div className="flex items-center justify-between gap-3">
+                  <Skeleton className="h-3 w-16" />
+                  <Skeleton className="h-3 w-20" />
+                </div>
+              )}
+            </article>
+          </>
+        ) : null}
       </div>
     </>
   )
@@ -444,12 +491,12 @@ function RelatedPanel({
   const label = kind === "service-requests" ? "service requests" : "projects"
   if (loading && !data)
     return (
-      <div
-        role="status"
-        className="grid min-h-40 place-content-center text-xs text-[#52627a]"
-      >
-        Loading {label}…
-      </div>
+      <RelatedTable
+        kind={kind}
+        data={null}
+        loading
+        onRowsSettled={onRowsSettled}
+      />
     )
   if (error)
     return (
@@ -474,7 +521,12 @@ function RelatedPanel({
   const settled = !loading && footer === data
   return (
     <div className="grid gap-3">
-      <RelatedTable kind={kind} data={data} onRowsSettled={onRowsSettled} />
+      <RelatedTable
+        kind={kind}
+        data={data}
+        loading={loading}
+        onRowsSettled={onRowsSettled}
+      />
       <div className="flex flex-wrap items-center justify-between gap-3 text-[11px] text-[#52627a]">
         <span role="status" aria-live="polite">
           Showing {first}–{last} of {summary.total}

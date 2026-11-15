@@ -75,8 +75,8 @@ const statuses: { value: EmploymentStatus | ""; label: string }[] = [
 ]
 
 function matchesTableSearch(item: Employee, query: string) {
-  return [item.fullName, item.employeeId, item.email].some((value) =>
-    value?.toLowerCase().includes(query),
+  return [item.fullName, item.employeeId, item.email, item.contactNumber].some(
+    (value) => value?.toLowerCase().includes(query),
   )
 }
 

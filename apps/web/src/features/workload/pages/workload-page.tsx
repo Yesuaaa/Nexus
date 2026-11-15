@@ -179,6 +179,7 @@ export function WorkloadPage({
   }
   const staff = useMemo(() => data?.staff ?? [], [data])
   const current = staff.find((s) => s.id === selected)
+  const searchQuery = search.trim().toLowerCase()
   const teams = [
     ...new Map(
       staff.filter((s) => s.team).map((s) => [s.team!.id, s.team!]),
@@ -197,9 +198,17 @@ export function WorkloadPage({
             metrics(s).availability === availability) &&
           `${s.fullName} ${s.position ?? ""} ${s.profileSpecialties.join(" ")}`
             .toLowerCase()
-            .includes(search.toLowerCase()),
+            .includes(searchQuery),
       ),
-    [staff, team, availability, search, administrative, department, employee],
+    [
+      staff,
+      team,
+      availability,
+      searchQuery,
+      administrative,
+      department,
+      employee,
+    ],
   )
   const selectedProject = data?.projects.find(
     (project) => project.id === allocation?.projectId,

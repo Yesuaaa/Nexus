@@ -12,9 +12,11 @@ import { Button } from "@/components/ui/button"
 import { SearchField } from "@/components/ui/search-field"
 import { SearchEmptyState } from "@/components/ui/search-empty-state"
 import { Pill } from "@/components/ui/pill"
+import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import {
   ResponsiveDataTable,
+  ResponsiveDataTableBody,
   ResponsiveDataTableColumnHeader,
   ResponsiveDataTableHeader,
 } from "@/components/ui/responsive-data-table"
@@ -50,7 +52,7 @@ const policyGrid =
   "grid grid-cols-[minmax(180px,1.4fr)_minmax(140px,1fr)_minmax(110px,.8fr)_minmax(120px,.8fr)_56px] items-center gap-3.5 @max-[820px]:grid-cols-[minmax(0,1fr)_auto]"
 
 function policyRowClass(
-  _policy: AttendancePolicy,
+  _policy: AttendancePolicy | null,
   _index: number,
   isLast: boolean,
 ) {
@@ -180,7 +182,7 @@ export function AttendanceSettingsPage() {
         attendance history.
       </p>
       <ResourceStatus
-        loading={policies.loading && !policies.data}
+        loading={false}
         error={policies.error}
         retry={policies.retry}
       />
@@ -208,126 +210,148 @@ export function AttendanceSettingsPage() {
             Actions
           </ResponsiveDataTableColumnHeader>
         </ResponsiveDataTableHeader>
-        <AnimatedSlotGridBody
-          items={table.visible}
-          viewKey={table.viewKey}
-          quickKey={search}
-          animateRows
-          getKey={(policy) => policy.id}
-          onRowsSettled={table.onRowsSettled}
-          rowClassName={policyRowClass}
-          ariaBusy={policies.loading && Boolean(policies.data)}
-          className="relative min-w-0 overflow-x-clip"
-          emptyContent={
-            policies.loading ? (
-              "Loading policies…"
-            ) : query ? (
-              <SearchEmptyState query={search} />
-            ) : archivedView ? (
-              "No archived policies."
-            ) : (
-              "No attendance policies. Create a policy and assign it to an employee to enable clock-in."
-            )
-          }
-          renderRow={(policy) => (
-            <>
-              <div
-                role="cell"
-                className="min-w-0 truncate font-medium @max-[820px]:col-span-2 @max-[820px]:col-start-1 @max-[820px]:row-start-1"
-              >
-                {policy.name}
-              </div>
-              <div
-                role="cell"
-                className="min-w-0 break-words text-[#738096] @max-[820px]:col-span-2 @max-[820px]:col-start-1 @max-[820px]:row-start-2"
-              >
-                <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
-                  Timezone
-                </span>
-                {policy.timeZone}
-              </div>
-              <div
-                role="cell"
-                className="@max-[820px]:col-start-1 @max-[820px]:row-start-3"
-              >
-                <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
-                  Required hours
-                </span>
-                {policy.days.reduce(
-                  (sum, day) => sum + day.requiredMinutes,
-                  0,
-                ) / 60}{" "}
-                hrs/week
-              </div>
-              <div
-                role="cell"
-                className="@max-[820px]:col-start-2 @max-[820px]:row-start-3 @max-[820px]:justify-self-end"
-              >
-                <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
-                  Assignments
-                </span>
-                <Pill tone="neutral">
-                  {policy._count?.assignments ?? 0} assignments
-                </Pill>
-              </div>
-              <div
-                role="cell"
-                className="flex justify-start @max-[820px]:col-start-2 @max-[820px]:row-start-1 @max-[820px]:justify-self-end"
-              >
-                <RowActionsMenu
-                  triggerId={`attendance-policy-actions-${policy.id}`}
-                  triggerLabel={`More actions for ${policy.name}`}
-                  menuLabel={`Actions for ${policy.name}`}
-                  items={
-                    policy.archivedAt
-                      ? [
-                          policyActionItems[0],
-                          {
-                            action: "restore",
-                            label: (
-                              <RowActionLabel icon={ArchiveRestore}>
-                                Restore
-                              </RowActionLabel>
-                            ),
-                          },
-                          {
-                            action: "delete",
-                            label: (
-                              <RowActionLabel icon={Trash2}>
-                                Delete permanently
-                              </RowActionLabel>
-                            ),
-                            separatorBefore: true,
-                            className: "text-destructive",
-                          },
-                        ]
-                      : [
-                          ...policyActionItems,
-                          {
-                            action: "archive",
-                            label: (
-                              <RowActionLabel icon={Archive}>
-                                Archive
-                              </RowActionLabel>
-                            ),
-                            separatorBefore: true,
-                          },
-                        ]
-                  }
-                  onAction={(action) => {
-                    setError("")
-                    if (action === "view") setDetailsPolicy(policy)
-                    else if (action === "assign")
-                      setPanel({ mode: "assign", template: policy })
-                    else if (action === "edit")
-                      setPanel({ mode: "create", template: policy })
-                    else setConfirmation({ policy, action })
-                  }}
-                />
-              </div>
-            </>
-          )}
-        />
+        {policies.loading && !policies.data ? (
+          <ResponsiveDataTableBody className="relative min-w-0 overflow-x-clip">
+            <DataTableSkeletonRows
+              label="attendance policies"
+              rowClassName={policyRowClass(null, 0, false)}
+              cellClassNames={[
+                "min-w-0 truncate font-medium @max-[820px]:col-span-2 @max-[820px]:col-start-1 @max-[820px]:row-start-1",
+                "min-w-0 break-words text-[#738096] @max-[820px]:col-span-2 @max-[820px]:col-start-1 @max-[820px]:row-start-2",
+                "@max-[820px]:col-start-1 @max-[820px]:row-start-3",
+                "@max-[820px]:col-start-2 @max-[820px]:row-start-3 @max-[820px]:justify-self-end",
+                "flex justify-start @max-[820px]:col-start-2 @max-[820px]:row-start-1 @max-[820px]:justify-self-end",
+              ]}
+              cellSkeletonClassNames={[
+                "h-3 w-3/4",
+                "h-3 w-2/3",
+                "h-3 w-1/2",
+                "h-5 w-20 rounded-full",
+                "size-8 rounded-[7px]",
+              ]}
+              rows={5}
+            />
+          </ResponsiveDataTableBody>
+        ) : (
+          <AnimatedSlotGridBody
+            items={table.visible}
+            viewKey={table.viewKey}
+            quickKey={search}
+            animateRows
+            getKey={(policy) => policy.id}
+            onRowsSettled={table.onRowsSettled}
+            rowClassName={policyRowClass}
+            ariaBusy={policies.loading && Boolean(policies.data)}
+            className="relative min-w-0 overflow-x-clip"
+            emptyContent={
+              query ? (
+                <SearchEmptyState query={search} />
+              ) : archivedView ? (
+                "No archived policies."
+              ) : (
+                "No attendance policies. Create a policy and assign it to an employee to enable clock-in."
+              )
+            }
+            renderRow={(policy) => (
+              <>
+                <div
+                  role="cell"
+                  className="min-w-0 truncate font-medium @max-[820px]:col-span-2 @max-[820px]:col-start-1 @max-[820px]:row-start-1"
+                >
+                  {policy.name}
+                </div>
+                <div
+                  role="cell"
+                  className="min-w-0 break-words text-[#738096] @max-[820px]:col-span-2 @max-[820px]:col-start-1 @max-[820px]:row-start-2"
+                >
+                  <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
+                    Timezone
+                  </span>
+                  {policy.timeZone}
+                </div>
+                <div
+                  role="cell"
+                  className="@max-[820px]:col-start-1 @max-[820px]:row-start-3"
+                >
+                  <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
+                    Required hours
+                  </span>
+                  {policy.days.reduce(
+                    (sum, day) => sum + day.requiredMinutes,
+                    0,
+                  ) / 60}{" "}
+                  hrs/week
+                </div>
+                <div
+                  role="cell"
+                  className="@max-[820px]:col-start-2 @max-[820px]:row-start-3 @max-[820px]:justify-self-end"
+                >
+                  <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
+                    Assignments
+                  </span>
+                  <Pill tone="neutral">
+                    {policy._count?.assignments ?? 0} assignments
+                  </Pill>
+                </div>
+                <div
+                  role="cell"
+                  className="flex justify-start @max-[820px]:col-start-2 @max-[820px]:row-start-1 @max-[820px]:justify-self-end"
+                >
+                  <RowActionsMenu
+                    triggerId={`attendance-policy-actions-${policy.id}`}
+                    triggerLabel={`More actions for ${policy.name}`}
+                    menuLabel={`Actions for ${policy.name}`}
+                    items={
+                      policy.archivedAt
+                        ? [
+                            policyActionItems[0],
+                            {
+                              action: "restore",
+                              label: (
+                                <RowActionLabel icon={ArchiveRestore}>
+                                  Restore
+                                </RowActionLabel>
+                              ),
+                            },
+                            {
+                              action: "delete",
+                              label: (
+                                <RowActionLabel icon={Trash2}>
+                                  Delete permanently
+                                </RowActionLabel>
+                              ),
+                              separatorBefore: true,
+                              className: "text-destructive",
+                            },
+                          ]
+                        : [
+                            ...policyActionItems,
+                            {
+                              action: "archive",
+                              label: (
+                                <RowActionLabel icon={Archive}>
+                                  Archive
+                                </RowActionLabel>
+                              ),
+                              separatorBefore: true,
+                            },
+                          ]
+                    }
+                    onAction={(action) => {
+                      setError("")
+                      if (action === "view") setDetailsPolicy(policy)
+                      else if (action === "assign")
+                        setPanel({ mode: "assign", template: policy })
+                      else if (action === "edit")
+                        setPanel({ mode: "create", template: policy })
+                      else setConfirmation({ policy, action })
+                    }}
+                  />
+                </div>
+              </>
+            )}
+          />
+        )}
       </ResponsiveDataTable>
       <TablePaginationFooter
         {...table.footer}

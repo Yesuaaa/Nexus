@@ -1228,3 +1228,213 @@ test("time log overview preserves available figures during partial failures and 
     await assertNoPageOverflow(page)
   }
 })
+
+test("attendance audit search stays in sync with pagination and keeps rows during refresh", async ({
+  page,
+}) => {
+  await signIn(page, "admin")
+  const queries: string[] = []
+  let releaseSearch!: () => void
+  let notifySearchStarted!: () => void
+  let failRetry = true
+  const searchStarted = new Promise<void>((resolve) => {
+    notifySearchStarted = resolve
+  })
+  const pendingSearch = new Promise<void>((resolve) => {
+    releaseSearch = resolve
+  })
+  await page.route("**/api/attendance/audit?**", async (route) => {
+    const url = new URL(route.request().url())
+    queries.push(url.search)
+    const search = url.searchParams.get("search") ?? ""
+    if (search === "payroll") {
+      notifySearchStarted()
+      await pendingSearch
+    }
+    if (search === "retry" && failRetry) {
+      failRetry = false
+      return route.fulfill({
+        status: 503,
+        json: { error: "Audit temporarily unavailable." },
+      })
+    }
+    const pageNumber = Number(url.searchParams.get("page") ?? "1")
+    const events =
+      search === "no-match"
+        ? []
+        : search
+          ? [auditEvent(search === "latest" ? "latest-match" : "payroll-match")]
+          : Array.from({ length: 10 }, (_, index) =>
+              auditEvent(`event-${(pageNumber - 1) * 10 + index + 1}`),
+            )
+    return route.fulfill({
+      json: {
+        asOf: "2026-11-15T00:00:00.000Z",
+        total: search === "no-match" ? 0 : search ? 1 : 21,
+        page: pageNumber,
+        pageSize: 10,
+        events,
+        actionCounts:
+          search === "no-match"
+            ? []
+            : [{ action: "UPDATE", count: search ? 1 : 21 }],
+      },
+    })
+  })
+  await page.goto("/attendance/time-logs/audit")
+  const table = page.getByRole("table", { name: "Attendance audit events" })
+  await expect(table.getByText("event-1", { exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Page 2", exact: true }).click()
+  await expect(table.getByText("event-11", { exact: true })).toBeVisible()
+
+  const search = page.getByRole("searchbox", { name: "Search audit events" })
+  await search.fill("payroll")
+  await searchStarted
+  await expect(table).toHaveAttribute("aria-busy", "true")
+  await expect(table.getByText("event-11", { exact: true })).toBeVisible()
+  expect(queries.at(-1)).toContain("page=1")
+  expect(queries.at(-1)).toContain("search=payroll")
+  await search.fill("latest")
+  await expect(table.getByText("latest-match", { exact: true })).toBeVisible()
+  releaseSearch()
+  await expect(table.getByText("latest-match", { exact: true })).toBeVisible()
+  await expect(table.getByText("payroll-match", { exact: true })).toHaveCount(0)
+
+  await search.fill("")
+  await expect(table.getByText("event-1", { exact: true })).toBeVisible()
+  expect(queries.at(-1)).toContain("page=1")
+  expect(queries.at(-1)).not.toContain("search=")
+
+  await search.fill("no-match")
+  await expect(table.getByRole("status")).toContainText("No results for")
+  await expect(table.getByRole("status")).toContainText("no-match")
+
+  await search.fill("retry")
+  await expect(table.getByRole("alert")).toContainText(
+    "Audit temporarily unavailable.",
+  )
+  await table.getByRole("button", { name: "Try again", exact: true }).click()
+  await expect(table.getByText("payroll-match", { exact: true })).toBeVisible()
+})
+
+function auditEvent(id: string) {
+  return {
+    id,
+    entityType: "AttendanceWorkday",
+    action: "UPDATE",
+    reason: "",
+    createdAt: "2026-11-13T08:00:00.000Z",
+    actorId: "actor-1",
+    actor: { fullName: "Audit Actor" },
+    employee: { fullName: id },
+    before: null,
+    after: null,
+  }
+}
+
+for (const width of [1280, 390])
+  test(`attendance policy skeletons match the responsive grid and retain rows during refresh at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await signIn(page, "admin")
+    const initial = requestGate()
+    const refreshed = requestGate()
+    let holdingRefresh = false
+    await page.route("**/api/attendance/policies**", async (route) => {
+      if (route.request().method() === "GET") {
+        const gate = holdingRefresh ? refreshed : initial
+        gate.start()
+        await gate.pending
+      }
+      await route.fallback()
+    })
+
+    await page.goto("/attendance/settings")
+    const table = page.getByRole("table", { name: "Attendance policies" })
+    await initial.started
+    await expect(table).toHaveAttribute("aria-busy", "true")
+    const skeletonRows = table.getByRole("rowgroup").nth(1).getByRole("row")
+    await expect(skeletonRows).toHaveCount(5)
+    for (const row of await skeletonRows.all())
+      await expect(row.getByRole("cell")).toHaveCount(5)
+    await expect(table.getByRole("status")).toContainText(
+      "Loading attendance policies",
+    )
+    await expect(
+      page.getByRole("status", { name: "Loading attendance", exact: true }),
+    ).toHaveCount(0)
+    initial.release()
+
+    const existingRow = table
+      .getByRole("row")
+      .filter({ hasText: "Browser flexible policy" })
+    await expect(existingRow).toBeVisible()
+    await page
+      .getByRole("button", { name: "Create policy", exact: true })
+      .click()
+    const dialog = page.getByRole("dialog")
+    await dialog
+      .getByLabel("Policy name", { exact: true })
+      .fill(`Skeleton refresh ${width}`)
+    holdingRefresh = true
+    await dialog
+      .getByRole("button", { name: "Create policy", exact: true })
+      .click()
+
+    await refreshed.started
+    await expect(table).toHaveAttribute("aria-busy", "true")
+    await expect(existingRow).toBeVisible()
+    await expect(
+      table
+        .getByRole("status")
+        .filter({ hasText: "Loading attendance policies" }),
+    ).toHaveCount(0)
+    await expect(
+      page.getByRole("status", { name: "Loading attendance", exact: true }),
+    ).toHaveCount(0)
+    refreshed.release()
+    await expect(
+      table.getByRole("row").filter({ hasText: `Skeleton refresh ${width}` }),
+    ).toBeVisible()
+
+    const createdRow = table
+      .getByRole("row")
+      .filter({ hasText: `Skeleton refresh ${width}` })
+    const search = page.getByRole("searchbox", {
+      name: "Search attendance policies",
+      exact: true,
+    })
+    await search.fill(`Skeleton refresh ${width}`)
+    await expect(createdRow).toBeVisible()
+    await expect(existingRow).toHaveCount(0)
+    await search.fill("missing policy for skeleton test")
+    await expect(table.getByRole("status")).toContainText("No results for")
+    await search.fill("")
+    await expect(existingRow).toBeVisible()
+
+    const policyView = page.getByRole("group", {
+      name: "Policy view",
+      exact: true,
+    })
+    await policyView
+      .getByRole("button", { name: "Archived policies", exact: true })
+      .click()
+    await expect(createdRow).toHaveCount(0)
+    await policyView
+      .getByRole("button", { name: "Active policies", exact: true })
+      .click()
+    await expect(createdRow).toBeVisible()
+  })
+
+function requestGate() {
+  let start!: () => void
+  let release!: () => void
+  const started = new Promise<void>((resolve) => {
+    start = resolve
+  })
+  const pending = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  return { started, pending, start, release: () => release() }
+}
