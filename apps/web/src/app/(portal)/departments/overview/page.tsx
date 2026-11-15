@@ -1,5 +1,10 @@
+import { ModuleTransition } from "@/components/layout/module-transition"
 import { DepartmentOverviewPage } from "@/features/departments/pages/department-overview-page"
 
 export default function Page() {
-  return <DepartmentOverviewPage />
+  return (
+    <ModuleTransition>
+      <DepartmentOverviewPage />
+    </ModuleTransition>
+  )
 }

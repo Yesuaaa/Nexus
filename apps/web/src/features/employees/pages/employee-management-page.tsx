@@ -10,7 +10,7 @@ import { contentClass, focusRing } from "@/components/layout/styles"
 import { ManagementViewToggle } from "@/components/layout/management-view-toggle"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { FilterSelect } from "@/components/ui/filter-select"
+import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
 import { usePaginatedList } from "@/components/ui/use-paginated-list"
 import { TableSearchStatus } from "@/components/ui/table-search-status"
 import { TablePaginationFooter } from "@/components/ui/table-pagination-footer"
@@ -210,7 +210,7 @@ export function EmployeeManagementPage() {
             className="order-last max-[560px]:order-first max-[560px]:w-full"
             onChange={switchView}
           />
-          <div className="flex min-w-0 flex-wrap items-center gap-[10px] max-[560px]:w-full max-[560px]:flex-col max-[560px]:items-stretch">
+          <div className={`${filterBarClass} min-w-0 max-[560px]:w-full`}>
             <SearchField
               label="Search employees"
               placeholder="Search name, ID, email…"

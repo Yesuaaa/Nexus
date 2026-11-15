@@ -14,7 +14,7 @@ import { contentClass } from "@/components/layout/styles"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
-import { FilterSelect } from "@/components/ui/filter-select"
+import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
 import { KpiCards } from "@/components/ui/kpi-cards"
 import { KpiDistributionChart } from "@/components/ui/kpi-distribution-chart"
 import { KpiDonutChart } from "@/components/ui/kpi-donut-chart"
@@ -264,7 +264,7 @@ export function ProjectWorkspacePage() {
             {view === "archive" ? "Project archive" : "Department projects"}
           </h2>
           <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-3">
-            <div className="flex min-w-0 flex-wrap items-center gap-2.5 max-[560px]:w-full">
+            <div className={`${filterBarClass} min-w-0 max-[560px]:w-full`}>
               <SearchField
                 label="Search projects"
                 placeholder="Search project, service, or client..."

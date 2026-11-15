@@ -263,3 +263,80 @@ body {
     transform-origin: top center;
   }
 }
+
+/*
+ * Phones scroll without drawn scrollbars (touch browsers overlay them anyway);
+ * this keeps narrow desktop windows and device previews from showing
+ * classic scrollbars. Scrolling itself is unchanged.
+ */
+@media (max-width: 767px) {
+  * {
+    scrollbar-width: none;
+  }
+  *::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/*
+ * Module page transitions (ModuleTransition + Link transitionTypes).
+ * Forward (Overview → Management) slides left; back slides right. The old
+ * page leaves fast, the new one fades in after it; sidebar and topbar sit
+ * outside the transition and stay put.
+ */
+::view-transition {
+  pointer-events: none;
+}
+
+::view-transition-old(.nav-forward) {
+  --slide-offset: -48px;
+  animation:
+    150ms ease-in both module-fade reverse,
+    360ms cubic-bezier(0.32, 0.72, 0, 1) both module-slide reverse;
+}
+::view-transition-new(.nav-forward) {
+  --slide-offset: 48px;
+  animation:
+    210ms ease-out 150ms both module-fade,
+    360ms cubic-bezier(0.32, 0.72, 0, 1) both module-slide;
+}
+::view-transition-old(.nav-back) {
+  --slide-offset: 48px;
+  animation:
+    150ms ease-in both module-fade reverse,
+    360ms cubic-bezier(0.32, 0.72, 0, 1) both module-slide reverse;
+}
+::view-transition-new(.nav-back) {
+  --slide-offset: -48px;
+  animation:
+    210ms ease-out 150ms both module-fade,
+    360ms cubic-bezier(0.32, 0.72, 0, 1) both module-slide;
+}
+
+@keyframes module-fade {
+  from {
+    opacity: 0;
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+@keyframes module-slide {
+  from {
+    translate: var(--slide-offset);
+  }
+  to {
+    translate: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(*),
+  ::view-transition-new(*),
+  ::view-transition-group(*) {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+  }
+}
