@@ -554,19 +554,43 @@ test("conversation tables keep aligned skeletons on initial and background loads
   await search.fill("Engineering")
   await refreshedList.started
   await expect(conversations).toHaveAttribute("aria-busy", "true")
+  const searchSkeletons = conversations.locator("tbody tr")
+  await expect(searchSkeletons).toHaveCount(5)
+  for (const skeleton of await searchSkeletons.all())
+    await expect(skeleton.locator("td")).toHaveCount(6)
+  await expect(conversations.getByRole("status")).toContainText(
+    "Loading business conversations",
+  )
   await expect(
     conversations.getByText(rows[0].name, { exact: true }),
-  ).toBeVisible()
+  ).toHaveCount(0)
   await expect(
     conversations.getByText(rows[1].name, { exact: true }),
-  ).toBeVisible()
+  ).toHaveCount(0)
+  await expect(
+    conversations.getByText("No business conversations found.", {
+      exact: true,
+    }),
+  ).toHaveCount(0)
+  await expect(
+    page
+      .getByRole("navigation", { name: "Business conversation pages" })
+      .getByRole("button", { name: "Next page", exact: true }),
+  ).toBeDisabled()
   refreshedList.release()
+  await expect(conversations).toHaveAttribute("aria-busy", "false")
   await expect(
     conversations.getByText(rows[0].name, { exact: true }),
   ).toHaveCount(0)
   await expect(
     conversations.getByText(rows[1].name, { exact: true }),
   ).toBeVisible()
+  await expect(conversations.locator("tbody tr")).toHaveCount(1)
+  await expect(
+    conversations.getByText("No business conversations found.", {
+      exact: true,
+    }),
+  ).toHaveCount(0)
 
   await page
     .getByRole("link", {

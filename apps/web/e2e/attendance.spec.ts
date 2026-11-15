@@ -359,19 +359,23 @@ test("attendance employee search keeps a single pending state until results sett
     await search.fill("No matching employee")
     await searchStarted
     await expect(table).toHaveAttribute("aria-busy", "true")
+    const searchSkeletons = table.getByRole("rowgroup").nth(1).getByRole("row")
+    await expect(searchSkeletons).toHaveCount(10)
+    for (const skeleton of await searchSkeletons.all())
+      await expect(skeleton.getByRole("cell")).toHaveCount(4)
+    await expect(table.getByRole("status")).toContainText("Loading employees…")
     await expect(
-      table.getByRole("status").filter({ hasText: "Searching…" }),
-    ).toHaveCount(1)
+      table.getByRole("button", { name: "View logs for Attendance staff" }),
+    ).toHaveCount(0)
     await expect(
       table.getByText("No employees match your search.", { exact: true }),
     ).toHaveCount(0)
     releaseSearch()
+    await expect(table).toHaveAttribute("aria-busy", "false")
     await expect(
       table.getByText("No employees match your search.", { exact: true }),
     ).toBeVisible()
-    await expect(
-      table.getByRole("status").filter({ hasText: "Searching…" }),
-    ).toHaveCount(0)
+    await expect(table.getByRole("status")).toHaveCount(0)
   } finally {
     releaseSearch()
   }
