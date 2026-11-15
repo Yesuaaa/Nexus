@@ -39,7 +39,9 @@ type ManagementTableProps = Parameters<typeof EmployeeManagementTable>[0] & {
 type DirectoryTableProps = {
   mode: "attendance"
   employees: DirectoryEmployee[]
+  initialLoading: boolean
   loading: boolean
+  previewing: boolean
   error: string
   emptyMessage: ReactNode
   onRetry: () => void
@@ -65,11 +67,17 @@ export function EmployeeTable(
         ))}
       </ResponsiveDataTableHeader>
       <ResponsiveDataTableBody>
-        {props.loading ? (
+        {props.initialLoading ? (
           <DataTableSkeletonRows
             label="employees"
             rowClassName={`${grid} min-h-[58px] px-4 py-3`}
             cellClassNames={["", "", "", ""]}
+          />
+        ) : props.error ? (
+          <DataTableErrorRow
+            message={props.error}
+            onRetry={props.onRetry}
+            colSpan={4}
           />
         ) : props.error ? (
           <DataTableErrorRow
@@ -113,7 +121,13 @@ export function EmployeeTable(
               aria-colspan={4}
               className="p-6 text-center text-xs text-muted-foreground"
             >
-              {props.emptyMessage}
+              {props.loading ? (
+                <span role="status">
+                  {props.previewing ? "Searching…" : "Loading employees…"}
+                </span>
+              ) : (
+                props.emptyMessage
+              )}
             </ResponsiveDataTableCell>
           </ResponsiveDataTableRow>
         )}
@@ -162,7 +176,6 @@ function EmployeeManagementTable({
   archiveView = false,
   viewKey,
   quickKey,
-  animateRows,
   loading,
   error,
   emptyMessage,
@@ -177,7 +190,6 @@ function EmployeeManagementTable({
   archiveView?: boolean
   viewKey: string
   quickKey: string
-  animateRows: boolean
   loading: boolean
   error: string
   emptyMessage: ReactNode
@@ -264,7 +276,7 @@ function EmployeeManagementTable({
           items={employees}
           viewKey={viewKey}
           quickKey={quickKey}
-          animateRows={animateRows}
+          animateRows={false}
           getKey={employeeKey}
           rowClassName={employeeRowClass}
           emptyContent={emptyMessage}

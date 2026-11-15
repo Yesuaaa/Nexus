@@ -110,7 +110,7 @@ export function WorkflowNotifications() {
           aria-label={`Notifications${result?.unreadCount ? `, ${result.unreadCount} unread` : ""}`}
           className={`${iconButtonClass} relative data-[state=open]:outline-none`}
         >
-          <Bell size={21} strokeWidth={1.7} aria-hidden="true" />
+          <Bell size={18} strokeWidth={1.75} aria-hidden="true" />
           {Boolean(result?.unreadCount) && (
             <span className="absolute top-0.5 right-0 grid min-w-4 place-items-center rounded-full bg-[#203f8c] px-1 text-[9px] text-white">
               {result!.unreadCount > 99 ? "99+" : result!.unreadCount}

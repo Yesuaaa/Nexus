@@ -103,12 +103,26 @@ export function usePaginatedList<R extends PageInfo, T>({
   const [data, setData] = useState<R | null>(initial)
   const [resolved, setResolved] = useState({ requestKey: "", viewKey: "" })
   const [failure, setFailure] = useState({ requestKey: "", message: "" })
-  const { search, ...filters } = params
-  const viewKey = JSON.stringify([params, page])
+  const { search: rawSearch, ...filters } = params
+  const search = rawSearch.trim()
+  const [debouncedSearch, setDebouncedSearch] = useState(search)
+  const searchPending = search !== debouncedSearch
+  const requestParams = { ...params, search: debouncedSearch }
+  const viewKey = JSON.stringify([requestParams, page])
   const requestKey = JSON.stringify([viewKey, revision])
   const scope = JSON.stringify([filters, revision])
-  const loading = resolved.requestKey !== requestKey
-  const error = failure.requestKey === requestKey ? failure.message : ""
+  const requestLoading = resolved.requestKey !== requestKey
+  const loading = requestLoading || searchPending
+  const hasCurrentData =
+    !searchPending && data !== null && resolved.viewKey === viewKey
+  const error =
+    !searchPending && failure.requestKey === requestKey ? failure.message : ""
+
+  useEffect(() => {
+    if (!searchPending) return
+    const timer = window.setTimeout(() => setDebouncedSearch(search), 200)
+    return () => window.clearTimeout(timer)
+  }, [search, searchPending])
 
   const { acceptRows, preview, previewing } = useTableSearch<T>({
     search,
@@ -120,6 +134,8 @@ export function usePaginatedList<R extends PageInfo, T>({
     data,
     loading || previewing,
   )
+  const searchSkeleton =
+    loading && (searchPending || previewing) && !preview?.length
 
   const loadRef = useRef(load)
   const acceptRef = useRef<(result: R) => void>(() => {})
@@ -138,6 +154,7 @@ export function usePaginatedList<R extends PageInfo, T>({
   }, [fallbackError])
 
   useEffect(() => {
+    if (searchPending) return
     const controller = new AbortController()
     let active = true
     let inFlight = false
@@ -189,19 +206,28 @@ export function usePaginatedList<R extends PageInfo, T>({
       controller.abort()
       stopRefresh?.()
     }
-  }, [requestKey, viewKey, page, refresh, setPage])
+  }, [requestKey, viewKey, page, refresh, searchPending, setPage])
 
   const retry = useCallback(() => setRevision((value) => value + 1), [])
 
-  const tableViewKey =
-    viewKeyFrom === "request"
+  const tableViewKey = searchSkeleton
+    ? ""
+    : viewKeyFrom === "request"
       ? JSON.stringify([scope, search, page])
       : previewing
         ? JSON.stringify([scope, search, 1])
-        : resolved.viewKey
+        : hasCurrentData
+          ? resolved.viewKey
+          : ""
 
   let footer: PaginatedFooter | null = null
-  if (!error && !previewing && footerData && footerData.total > 0) {
+  if (
+    !error &&
+    hasCurrentData &&
+    !previewing &&
+    footerData &&
+    footerData.total > 0
+  ) {
     const start = (footerData.page - 1) * footerData.pageSize
     footer = {
       from: start + 1,
@@ -217,8 +243,8 @@ export function usePaginatedList<R extends PageInfo, T>({
   }
 
   return {
-    /** Rows to render: the search preview while typing, else the loaded page. */
-    rows: preview ?? (data ? getRows(data) : []),
+    /** Search preview or rows from the response for the requested view. */
+    rows: preview ?? (hasCurrentData && data ? getRows(data) : []),
     /** Client-side preview rows while a search request is pending. */
     preview,
     previewing,
@@ -227,10 +253,14 @@ export function usePaginatedList<R extends PageInfo, T>({
     /** Update the loaded response locally, e.g. to sync an edited row. */
     setData,
     loading,
+    searchPending,
+    searchSkeleton,
+    /** True when the last response belongs to the current filters and page. */
+    hasCurrentData,
     /** True once any response (or error) has arrived. */
     hasLoaded: resolved.requestKey !== "",
     /** True when the footer and rows show the same, settled page. */
-    settled: !loading && footerData === data,
+    settled: !loading && hasCurrentData && footerData === data,
     error,
     /** Props for `<TablePaginationFooter>`, or null while it should be hidden. */
     footer,

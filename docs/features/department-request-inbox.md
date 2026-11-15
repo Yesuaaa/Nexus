@@ -2,6 +2,12 @@
 
 Developed: 2026-10-30
 
+## Request lifecycle (2026-11-15)
+
+Service Requests and Request Inbox use five lifecycle statuses: **Pending** (`SUBMITTED`, waiting for a Department Head to accept), **Under Review** (`UNDER_REVIEW`, accepted), **Activated** (`ACTIVATED`, assigned to staff/team with an activated project workspace), **Cancelled** (`CANCELLED`), and **Concluded** (`CONCLUDED`, accomplished). Consultation and quotation steps remain workflow metadata, not request status choices. Acceptance, project activation, workspace completion, and workspace cancellation update the shared request status transactionally. Holds retain Activated.
+
+Deploy migrations `20261115040000_request_lifecycle_statuses` and `20261115040100_normalize_request_lifecycle` before running the updated API. Existing records are reconciled from project status and acceptance; legacy Closed requests without completed projects become Cancelled. Old enum values remain for compatibility but are excluded from UI filters. These migrations do not alter conversation, file, or role permissions.
+
 The **Request Inbox** (`/request-inbox`) lets current department heads review and accept clients' booked services. It follows the existing directory layout, with search, ten requests per page, oldest-first ordering, and a responsive booking details panel. The default view shows bookings awaiting acceptance; the **Under review** view shows accepted bookings.
 
 ## Access and routing

@@ -72,6 +72,51 @@ const scenarios = [
   },
 ] as const
 
+for (const width of [390, 715, 1440]) {
+  test(`workspace carousel stays centered at both limits at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 })
+    await page.emulateMedia({ reducedMotion: "reduce" })
+    await restoreSession(page, "SUPERADMIN")
+    await page.goto("/module")
+    const carousel = page.locator('[aria-roledescription="carousel"]')
+    const first = carousel.getByRole("link", {
+      name: "Open Service Operations workspace",
+      exact: true,
+    })
+    const last = carousel.getByLabel("Billing & Finance module coming soon")
+
+    // Focus distant cards, as keyboard navigation does. Native scrolling of a
+    // clipped track must not compete with the carousel's own positioning.
+    for (const [card, key, button] of [
+      [last, "ArrowRight", "Next module"],
+      [first, "ArrowLeft", "Previous module"],
+    ] as const) {
+      await card.focus()
+      await expect(card).toBeFocused()
+      await page.keyboard.press(key)
+      await page.keyboard.press(key)
+      await expect(
+        carousel.getByRole("button", { name: button }),
+      ).toBeDisabled()
+      await expect
+        .poll(async () => {
+          const bounds = await carousel.boundingBox()
+          const cardBounds = await card.boundingBox()
+          if (!bounds || !cardBounds) return Infinity
+          return Math.abs(
+            cardBounds.x + cardBounds.width / 2 - (bounds.x + bounds.width / 2),
+          )
+        })
+        .toBeLessThan(1)
+      await expect(card).toBeInViewport({ ratio: 1 })
+    }
+    await first.click()
+    await expect(page).toHaveURL(/\/services$/)
+  })
+}
+
 for (const scenario of scenarios) {
   test(`${scenario.label} sees only authorized workspace cards`, async ({
     page,
@@ -86,8 +131,14 @@ for (const scenario of scenarios) {
       page.getByRole("heading", { name: "Module", exact: true }),
     ).toBeVisible()
 
-    const cards = page.getByRole("link", { name: /^Open .+ workspace$/ })
+    const cards = page.getByRole("link", {
+      name: /^Open .+ workspace$/,
+      includeHidden: true,
+    })
     await expect(cards).toHaveCount(scenario.expected.length)
+    await expect(page.locator('[aria-roledescription="carousel"]')).toHaveCount(
+      scenario.expected.length + 1 > 5 ? 1 : 0,
+    )
 
     for (const [title, href] of scenario.expected) {
       await expect(

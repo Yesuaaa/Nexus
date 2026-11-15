@@ -78,7 +78,6 @@ export function ClientTable({
   viewKey,
   quickKey,
   onRowsSettled,
-  animateRows,
   loading,
   error,
   emptyMessage,
@@ -92,7 +91,6 @@ export function ClientTable({
   viewKey: string
   quickKey: string
   onRowsSettled?: () => void
-  animateRows: boolean
   loading: boolean
   error: string
   emptyMessage: ReactNode
@@ -178,7 +176,7 @@ export function ClientTable({
           viewKey={viewKey}
           quickKey={quickKey}
           onRowsSettled={onRowsSettled}
-          animateRows={animateRows}
+          animateRows={false}
           getKey={clientKey}
           rowClassName={clientRowClass}
           emptyContent={emptyMessage}

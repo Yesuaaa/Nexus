@@ -19,6 +19,7 @@ export function ClientRowTable<T extends { id: string }>({
   columns,
   rowClassName = "h-[66px] align-middle",
   emptyContent,
+  ariaBusy = false,
   onRowsSettled,
   renderRow,
   renderMobileRow,
@@ -32,6 +33,7 @@ export function ClientRowTable<T extends { id: string }>({
   columns: ClientRowTableColumn[]
   rowClassName?: string
   emptyContent: ReactNode
+  ariaBusy?: boolean
   onRowsSettled?: () => void
   renderRow: (item: T) => ReactNode
   renderMobileRow: (item: T) => ReactNode
@@ -39,7 +41,10 @@ export function ClientRowTable<T extends { id: string }>({
   return (
     <>
       <div className="overflow-x-auto rounded-xl bg-[#e7edf3] p-1.5 @max-[900px]:hidden">
-        <table className="w-full min-w-[920px] table-fixed border-separate border-spacing-y-2 text-left text-xs text-foreground">
+        <table
+          className="w-full min-w-[920px] table-fixed border-separate border-spacing-y-2 text-left text-xs text-foreground"
+          aria-busy={ariaBusy}
+        >
           <caption className="sr-only">{caption}</caption>
           <colgroup>
             {columns.map((column) => (
@@ -71,6 +76,7 @@ export function ClientRowTable<T extends { id: string }>({
         className="hidden gap-3 @max-[900px]:grid"
         role="list"
         aria-label={ariaLabel}
+        aria-busy={ariaBusy}
       >
         <AnimatedSlotGridBody
           items={items}

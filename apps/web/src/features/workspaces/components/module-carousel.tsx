@@ -13,19 +13,21 @@ export function ModuleCarousel({ modules }: { modules: WorkspaceModule[] }) {
   const touchStart = useRef<number | null>(null)
   const swiped = useRef(false)
   const moduleCount = modules.length
-  const activeIndex =
-    ((selectedIndex % moduleCount) + moduleCount) % moduleCount
+  const activeIndex = Math.min(selectedIndex, moduleCount - 1)
   const previewCount = 3
 
   function move(direction: number) {
-    if (moduleCount > 1) setSelectedIndex((current) => current + direction)
+    if (moduleCount > 1)
+      setSelectedIndex((current) =>
+        Math.max(0, Math.min(moduleCount - 1, current + direction)),
+      )
   }
 
   return (
     <section
       aria-label="Available workspaces"
       aria-roledescription="carousel"
-      className="relative mx-auto min-h-[400px] w-full max-w-[1616px] flex-1 overflow-hidden"
+      className="relative mx-auto min-h-[400px] w-full max-w-[1616px] flex-1 overflow-clip"
       onKeyDown={(event) => {
         if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
           event.preventDefault()
@@ -55,25 +57,19 @@ export function ModuleCarousel({ modules }: { modules: WorkspaceModule[] }) {
         }
       }}
     >
-      <div className="absolute inset-y-0 inset-x-14 overflow-hidden">
-        {Array.from({ length: previewCount * 2 + 1 }, (_, slot) => {
-          const offset = slot - previewCount
-          const position = selectedIndex + offset
-          const index = ((position % moduleCount) + moduleCount) % moduleCount
-          const module = modules[index]
-          const isDuplicate =
-            offset < -Math.floor(moduleCount / 2) ||
-            offset >= Math.ceil(moduleCount / 2)
+      {/* Clipping must not create a scroll container: focusing a distant card
+          would otherwise scroll the track independently of activeIndex. */}
+      <div className="absolute inset-y-0 inset-x-14 overflow-clip [container-type:inline-size]">
+        {modules.map((module, position) => {
+          const offset = position - activeIndex
           const distance = Math.abs(offset)
-
-          if (!module || (moduleCount === 1 && offset !== 0)) return null
 
           return (
             <div
               key={`${module.id}-${position}`}
-              className="absolute top-1/2 w-[min(280px,calc(100vw-100px))] transition-[left,transform] duration-500 ease-out motion-reduce:transition-none"
+              className="absolute top-1/2 w-[min(280px,100cqw)] transition-[left,transform] duration-500 ease-out motion-reduce:transition-none"
               style={{
-                left: `calc(50% + ${offset} * (min(280px, 100vw - 100px) + 20px))`,
+                left: `calc(50% + ${offset} * (min(280px, 100cqw) + 20px))`,
                 transform: "translate(-50%, -50%)",
                 zIndex: previewCount + 1 - distance,
               }}
@@ -85,13 +81,8 @@ export function ModuleCarousel({ modules }: { modules: WorkspaceModule[] }) {
                 )
                   setSelectedIndex(position)
               }}
-              onClick={() => {
-                if (isDuplicate) setSelectedIndex(position)
-              }}
             >
-              <div inert={isDuplicate} aria-hidden={isDuplicate || undefined}>
-                <ModuleCard module={module} />
-              </div>
+              <ModuleCard module={module} />
             </div>
           )
         })}
@@ -106,7 +97,9 @@ export function ModuleCarousel({ modules }: { modules: WorkspaceModule[] }) {
           variant="brandOutline"
           size="sm"
           aria-label={label}
-          disabled={moduleCount < 2}
+          disabled={
+            direction < 0 ? activeIndex === 0 : activeIndex === moduleCount - 1
+          }
           onClick={() => move(direction)}
           className="absolute z-50 size-11 -translate-y-1/2 rounded-full !border-0 p-0 text-[#294c96] hover:!border-0 disabled:opacity-0"
           style={{

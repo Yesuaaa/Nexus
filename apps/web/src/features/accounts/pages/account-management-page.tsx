@@ -659,7 +659,7 @@ export function AccountManagementPage() {
               viewKey={list.tableViewKey}
               quickKey={query}
               onRowsSettled={list.onRowsSettled}
-              animateRows
+              animateRows={false}
               getKey={accountKey}
               rowClassName={accountRowClass}
               emptyContent={
@@ -673,7 +673,10 @@ export function AccountManagementPage() {
             />
           )}
         </ResponsiveDataTable>
-        <TableSearchStatus active={busy && list.previewing} label="accounts" />
+        <TableSearchStatus
+          active={busy && list.previewing && Boolean(list.preview?.length)}
+          label="accounts"
+        />
         {list.footer && (
           <TablePaginationFooter
             {...list.footer}

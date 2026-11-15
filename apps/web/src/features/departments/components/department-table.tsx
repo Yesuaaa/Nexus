@@ -40,6 +40,7 @@ const defaultSortDirection = (key: SortKey): SortDirection =>
 export function DepartmentTable({
   departments,
   loading,
+  ariaBusy = loading,
   error,
   variant = "management",
   canManage,
@@ -55,6 +56,7 @@ export function DepartmentTable({
 }: {
   departments: Department[]
   loading: boolean
+  ariaBusy?: boolean
   error: string
   variant?: "management" | "project-management"
   canManage?: boolean
@@ -164,6 +166,7 @@ export function DepartmentTable({
   const table = useLocalTable(filtered, {
     view: [variant, query, sortKey, direction],
     loading: loading || searchPending,
+    search: projectManagement ? undefined : query,
     controlledPage: directoryState?.page,
     onPageChange: (page) => onDirectoryStateChange?.({ page }),
   })
@@ -243,7 +246,7 @@ export function DepartmentTable({
             ? "Project Management departments"
             : "Departments and their staffing"
         }
-        aria-busy={loading || searchPending}
+        aria-busy={ariaBusy || searchPending || table.searchPending}
       >
         <ResponsiveDataTableHeader
           className="@max-[820px]:sr-only"
@@ -317,9 +320,9 @@ export function DepartmentTable({
             </>
           )}
         </ResponsiveDataTableHeader>
-        {loading || error || searchPending ? (
+        {loading || error || searchPending || table.searchPending ? (
           <ResponsiveDataTableBody className="relative overflow-x-clip">
-            {loading || searchPending ? (
+            {loading || ((searchPending || table.searchPending) && !error) ? (
               <DataTableSkeletonRows
                 label="departments"
                 rowClassName={cn(
@@ -376,7 +379,7 @@ export function DepartmentTable({
             items={table.visible}
             viewKey={table.viewKey}
             quickKey={query}
-            animateRows={!projectManagement}
+            animateRows={false}
             getKey={tableRowKey}
             rowClassName={(_item, _index, isLast) =>
               cn(
@@ -387,13 +390,13 @@ export function DepartmentTable({
             }
             emptyHeight={150}
             emptyContent={
-              <>
-                {query ? (
-                  <SearchEmptyState query={query.trim()} />
-                ) : (
-                  "No departments created yet."
-                )}
-              </>
+              ariaBusy ? (
+                <span role="status">Refreshing departments…</span>
+              ) : query ? (
+                <SearchEmptyState query={query.trim()} />
+              ) : (
+                "No departments created yet."
+              )
             }
             className="relative overflow-x-clip"
             onRowsSettled={table.onRowsSettled}
@@ -514,7 +517,7 @@ export function DepartmentTable({
         )}
       </ResponsiveDataTable>
 
-      {!loading && !error && !searchPending && (
+      {!loading && !error && !searchPending && !table.searchPending && (
         <TablePaginationFooter
           {...table.footer}
           label="Department pages"

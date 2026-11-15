@@ -35,19 +35,19 @@ type ConfirmAction = { kind: "decline" | "delete"; request: InboxRequest }
 
 const viewOptions: { value: InboxView; label: string }[] = [
   { value: "all", label: "All statuses" },
-  { value: "pending", label: "Awaiting acceptance" },
-  { value: "under-review", label: "Under review" },
-  { value: "awaiting-information", label: "Awaiting information" },
-  { value: "ready-for-quotation", label: "Ready for quotation" },
-  { value: "closed", label: "Closed" },
+  { value: "pending", label: "Pending" },
+  { value: "under-review", label: "Under Review" },
+  { value: "activated", label: "Activated" },
   { value: "cancelled", label: "Cancelled" },
+  { value: "concluded", label: "Concluded" },
 ]
 
 function matchesTableSearch(item: InboxRequest, query: string) {
   return [
-    item.title,
+    item.id,
     item.referenceNumber,
     item.service.name,
+    item.packageName,
     item.client.fullName,
     item.client.email,
   ].some((value) => value?.toLowerCase().includes(query))
@@ -273,7 +273,9 @@ export function RequestInboxPage() {
           onDelete={(request) => setConfirm({ kind: "delete", request })}
         />
         <TableSearchStatus
-          active={list.loading && list.previewing}
+          active={
+            list.loading && list.previewing && Boolean(list.preview?.length)
+          }
           label="requests"
         />
         {list.footer && (

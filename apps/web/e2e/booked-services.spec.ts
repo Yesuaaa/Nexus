@@ -15,8 +15,8 @@ function bookingFixture(index = 1): BookingDetails {
         : index === 2
           ? "UNDER_REVIEW"
           : index === 3
-            ? "AWAITING_CLIENT_INFO"
-            : "CLOSED",
+            ? "ACTIVATED"
+            : "CONCLUDED",
     packageName: index === 1 ? "Business Website" : null,
     expectedTimeline: "Launch within six weeks",
     preferredSpecialistName: index === 1 ? "Sam Developer" : null,
@@ -37,12 +37,12 @@ test("booking row status refreshes manually and after reconnection without polli
 }) => {
   const state = await mockBookings(page, { bookings: [bookingFixture(1)] })
   await page.goto("/booked-services")
-  await expect(page.getByText("Submitted", { exact: true })).toBeVisible()
+  await expect(page.getByText("Pending", { exact: true })).toBeVisible()
   state.bookings[0]!.status = "UNDER_REVIEW"
   await page.waitForTimeout(6_000)
-  await expect(page.getByText("Submitted", { exact: true })).toBeVisible()
+  await expect(page.getByText("Pending", { exact: true })).toBeVisible()
   await page.getByRole("button", { name: "Refresh", exact: true }).click()
-  await expect(page.getByText("Under review", { exact: true })).toBeVisible({
+  await expect(page.getByText("Under Review", { exact: true })).toBeVisible({
     timeout: 10_000,
   })
   state.listError = true
@@ -58,7 +58,7 @@ test("booking row status refreshes manually and after reconnection without polli
       .getByRole("table", { name: "Booked services", exact: true })
       .getByRole("alert"),
   ).toHaveCount(0)
-  await expect(page.getByText("Under review", { exact: true })).toBeVisible()
+  await expect(page.getByText("Under Review", { exact: true })).toBeVisible()
   state.listError = false
   state.bookings[0]!.status = "CANCELLED"
   await page.evaluate(() => window.dispatchEvent(new Event("online")))
@@ -227,11 +227,9 @@ for (const width of [1440, 390]) {
     await expect(
       table.getByRole("button", { name: /^View booking / }),
     ).toHaveCount(10)
-    await expect(table.getByText("Submitted", { exact: true })).toBeVisible()
-    await expect(table.getByText("Under review", { exact: true })).toBeVisible()
-    await expect(
-      table.getByText("Awaiting information", { exact: true }),
-    ).toBeVisible()
+    await expect(table.getByText("Pending", { exact: true })).toBeVisible()
+    await expect(table.getByText("Under Review", { exact: true })).toBeVisible()
+    await expect(table.getByText("Activated", { exact: true })).toBeVisible()
     await expect(
       main.getByText("Showing 1–10 of 11", { exact: true }),
     ).toBeVisible()
@@ -293,7 +291,7 @@ for (const width of [1440, 390]) {
       .getByRole("combobox", { name: "Filter bookings by status", exact: true })
       .click()
     await page
-      .getByRole("option", { name: "Under review", exact: true })
+      .getByRole("option", { name: "Under Review", exact: true })
       .click()
     await expect(
       table.getByRole("button", { name: /^View booking / }),
@@ -370,7 +368,7 @@ for (const width of [1440, 390]) {
     await expect(
       drawer.getByText("Please use our existing brand guide.", { exact: true }),
     ).toBeVisible()
-    await expect(drawer.getByText("Submitted", { exact: true })).toBeVisible()
+    await expect(drawer.getByText("Pending", { exact: true })).toBeVisible()
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= window.innerWidth,
@@ -441,45 +439,57 @@ test("clients retry unavailable lists and booking details", async ({
   expect(state.detailIds.every((id) => id === "request-1")).toBe(true)
 })
 
-test("client list and detail requests display loading states", async ({
-  page,
-}) => {
-  const listGate = deferred()
-  const detailGate = deferred()
-  const state = await mockBookings(page, { listGate })
-  try {
-    await page.goto("/booked-services", { waitUntil: "domcontentloaded" })
-    const main = page.getByRole("main", {
-      name: "Booked services",
-      exact: true,
-    })
-    await expect(main.getByRole("table").getByRole("status")).toContainText(
-      "Loading booked services",
-    )
-    listGate.release()
-    await expect(
-      main.getByRole("table").getByRole("button", { name: /^View booking / }),
-    ).toHaveCount(10)
-    state.detailGate = detailGate
-    await main
-      .getByRole("button", { name: "View booking request-1", exact: true })
-      .click()
-    const drawer = page.getByRole("dialog", {
-      name: "Booking details",
-      exact: true,
-    })
-    await expect(drawer.getByRole("status")).toContainText(
-      "Loading booking details",
-    )
-    detailGate.release()
-    await expect(
-      drawer.getByRole("heading", { name: "Website Development", exact: true }),
-    ).toBeVisible()
-  } finally {
-    listGate.release()
-    detailGate.release()
-  }
-})
+for (const width of [1280, 390]) {
+  test(`client list and detail requests display loading states at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const listGate = deferred()
+    const detailGate = deferred()
+    const state = await mockBookings(page, { listGate })
+    try {
+      await page.goto("/booked-services", { waitUntil: "domcontentloaded" })
+      const main = page.getByRole("main", {
+        name: "Booked services",
+        exact: true,
+      })
+      const table = main.getByRole("table")
+      await expect(table).toHaveAttribute("aria-busy", "true")
+      const skeletonRows = table.getByRole("rowgroup").nth(1).getByRole("row")
+      await expect(skeletonRows).toHaveCount(10)
+      for (const row of await skeletonRows.all())
+        await expect(row.getByRole("cell")).toHaveCount(6)
+      await expect(table.getByRole("status")).toContainText(
+        "Loading booked services",
+      )
+      listGate.release()
+      await expect(
+        table.getByRole("button", { name: /^View booking / }),
+      ).toHaveCount(10)
+      state.detailGate = detailGate
+      await main
+        .getByRole("button", { name: "View booking request-1", exact: true })
+        .click()
+      const drawer = page.getByRole("dialog", {
+        name: "Booking details",
+        exact: true,
+      })
+      await expect(drawer.getByRole("status")).toContainText(
+        "Loading booking details",
+      )
+      detailGate.release()
+      await expect(
+        drawer.getByRole("heading", {
+          name: "Website Development",
+          exact: true,
+        }),
+      ).toBeVisible()
+    } finally {
+      listGate.release()
+      detailGate.release()
+    }
+  })
+}
 
 test("internal roles cannot open client bookings or fetch their data", async ({
   page,

@@ -96,6 +96,7 @@ export function ClientProjectsPage() {
   const table = useLocalTable(visibleProjects, {
     view: [filter, sort, query],
     loading,
+    search: query,
   })
 
   const projectStats = [
@@ -180,7 +181,7 @@ export function ClientProjectsPage() {
           <Alert as="div" className="rounded-xl px-5 py-6 text-sm">
             {error}
           </Alert>
-        ) : loading ? (
+        ) : loading || table.searchPending ? (
           <ClientTableSkeleton
             label="your projects"
             columns={7}

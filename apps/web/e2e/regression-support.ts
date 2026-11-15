@@ -506,6 +506,7 @@ export async function mockApi(
           !search ||
           employee.fullName.toLowerCase().includes(search) ||
           employee.employeeId.toLowerCase().includes(search) ||
+          (employee.contactNumber?.toLowerCase().includes(search) ?? false) ||
           (employee.email?.toLowerCase().includes(search) ?? false),
       )
       await route.fulfill({

@@ -204,12 +204,12 @@ export function WorkspaceOverview({
                                 task.dueDate,
                               ]),
                             )}
+                            animateRows={false}
                             columns={5}
                             rowClassName="border-t border-[#edf0f4]"
                             emptyContent="No tasks in this phase yet."
                             renderRow={(task) => (
                               <>
-                                {" "}
                                 <td className="px-4 py-3">
                                   <div className="flex items-start gap-2">
                                     {task.status === "DONE" ? (

@@ -1,5 +1,5 @@
 "use client"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import {
   canAccessPersonalAttendance,
@@ -37,6 +37,13 @@ export function AttendanceAdjustmentsPage({
   const selfService = canAccessPersonalAttendance(account)
   const [scope, setScope] = useState<"mine" | "team">(manager ? "team" : "mine")
   const [search, setSearch] = useState("")
+  const [settledSearch, setSettledSearch] = useState(search)
+  const searchPending = search !== settledSearch
+  useEffect(() => {
+    if (!searchPending) return
+    const timer = window.setTimeout(() => setSettledSearch(search), 200)
+    return () => window.clearTimeout(timer)
+  }, [search, searchPending])
   const [type, setType] = useState("")
   const [status, setStatus] = useState("")
   const [page, setPage] = useState(1)
@@ -53,15 +60,28 @@ export function AttendanceAdjustmentsPage({
       attendanceAdjustments(
         manager && (!selfService || scope === "team") ? "team" : "mine",
         page,
-        search,
+        settledSearch,
         signal,
         requestType ?? type,
         status,
       ),
-    [scope, page, manager, selfService, search, type, requestType, status],
-    { fallbackError: "Couldn't load attendance requests." },
+    [
+      scope,
+      page,
+      manager,
+      selfService,
+      settledSearch,
+      type,
+      requestType,
+      status,
+    ],
+    {
+      enabled: !searchPending,
+      fallbackError: "Couldn't load attendance requests.",
+    },
   )
-  const data = list.error ? undefined : list.data
+  const data = list.error && !searchPending ? undefined : list.data
+  const listLoading = list.loading || searchPending
   const currentReview = data?.adjustments.find(
     (item) => item.id === review?.request.id,
   )
@@ -199,19 +219,19 @@ export function AttendanceAdjustmentsPage({
         approval. Session details show your device timezone: {zone}.
       </p>
       <ResourceStatus
-        loading={list.loading && !list.data}
-        error={data ? "" : list.error}
+        loading={false}
+        error={data || searchPending ? "" : list.error}
         retry={list.retry}
       />
-      {data && (
+      {(data || listLoading) && (
         <AttendanceAdjustmentTable
-          items={data.adjustments}
+          items={data?.adjustments ?? []}
           zone={zone}
           canReview={manager && scope === "team"}
           actorId={account.id}
           isHR={account.role !== "STAFF"}
-          loading={list.loading}
-          error={list.error}
+          loading={listLoading}
+          error={searchPending ? "" : list.error}
           onRetry={list.retry}
           onReview={(request, decision) => {
             setReview({ request, decision, readOnly: false })
@@ -226,7 +246,7 @@ export function AttendanceAdjustmentsPage({
       {data && (
         <AttendancePagination
           data={data}
-          disabled={list.loading}
+          disabled={listLoading}
           onChange={setPage}
         />
       )}

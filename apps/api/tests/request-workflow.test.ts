@@ -1760,6 +1760,14 @@ test(
         )
         assert.equal(activated.state, "ACTIVE_PROJECT")
         assert.equal(
+          (
+            await prisma!.serviceRequest.findUniqueOrThrow({
+              where: { id: fixedRequest.id },
+            })
+          ).status,
+          "ACTIVATED",
+        )
+        assert.equal(
           await prisma!.workflowApproval.count({
             where: { requestId: fixedRequest.id },
           }),

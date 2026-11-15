@@ -1988,6 +1988,16 @@ export async function cancelProjectWorkspace(
         "The project changed while you were cancelling it. Refresh and try again.",
       )
     for (const project of cancellable) {
+      if (project.requestId) {
+        await tx.serviceRequest.update({
+          where: { id: project.requestId },
+          data: { status: "CANCELLED" },
+        })
+        await tx.requestWorkflow.updateMany({
+          where: { requestId: project.requestId },
+          data: { state: "CANCELLED" },
+        })
+      }
       if (project.requestId)
         await writeWorkspaceEvent(
           tx,
@@ -2123,6 +2133,11 @@ export async function updateProjectWorkspaceStatus(
       )
 
     for (const project of affected) {
+      if (project.requestId && status === "COMPLETED")
+        await tx.serviceRequest.update({
+          where: { id: project.requestId },
+          data: { status: "CONCLUDED" },
+        })
       if (project.requestId)
         await writeWorkspaceEvent(
           tx,

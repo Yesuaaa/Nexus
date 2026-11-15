@@ -136,14 +136,17 @@ export function Breadcrumbs() {
     : ""
 
   return (
-    <nav className="min-w-0 overflow-hidden" aria-label="Breadcrumb">
+    <nav
+      className="min-w-0 overflow-hidden text-[13px]"
+      aria-label="Breadcrumb"
+    >
       <ol className="flex min-w-0 list-none gap-[7px] p-0 whitespace-nowrap">
         <li className="flex min-w-0 items-center gap-[7px] text-[#8a9ab3]">
           <Link
             href="/"
             className={`flex items-center gap-[5px] text-[#647a9c] no-underline hover:text-[#203a78] ${focusRing}`}
           >
-            <HomeIcon width="15" height="15" />
+            <HomeIcon className="size-[18px]" strokeWidth={1.75} />
             <span className="max-[560px]:sr-only">Home</span>
           </Link>
         </li>
@@ -180,7 +183,10 @@ export function Breadcrumbs() {
               // otherwise squeeze into each other.
               className={`flex min-w-0 items-center gap-[7px] text-[#8a9ab3] ${isCurrent ? "" : "max-[560px]:hidden"}`}
             >
-              <ChevronRightIcon width="14" height="14" className="flex-none" />
+              <ChevronRightIcon
+                className="size-[18px] flex-none"
+                strokeWidth={1.75}
+              />
               {isCurrent ? (
                 <span
                   aria-current="page"

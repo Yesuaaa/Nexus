@@ -542,7 +542,7 @@ test("Superadmin Project Management is department-first and opens read-only scop
     projectManagementSidebar.getByRole("link", {
       name: "Project Workspace Management",
     }),
-  ).toHaveAttribute("aria-current", "location")
+  ).toHaveAttribute("aria-current", "page")
   await expect(
     page.getByRole("heading", {
       name: "Project Workspaces",

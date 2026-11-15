@@ -11,7 +11,113 @@ configureRegressionTest()
 test.describe("Employee management", () => {
   test.skip(live, "Live mode uses the supplied accounts against the real API")
 
-  test("employee search keeps the summary in sync with row motion", async ({
+  test("debounces unmatched search and shows the table skeleton until it resolves", async ({
+    page,
+  }) => {
+    await restoreSession(page, "ADMIN")
+    let searchRequested = false
+    let releaseSearch!: () => void
+    let notifySearchStarted!: () => void
+    const searchStarted = new Promise<void>((resolve) => {
+      notifySearchStarted = resolve
+    })
+    const pendingSearch = new Promise<void>((resolve) => {
+      releaseSearch = resolve
+    })
+    await page.route("**/api/employees?**", async (route) => {
+      if (
+        new URL(route.request().url()).searchParams.get("search") ===
+        "Missing employee"
+      ) {
+        searchRequested = true
+        notifySearchStarted()
+        await pendingSearch
+      }
+      await route.fallback()
+    })
+    await page.goto("/employees")
+    await expect(page.getByRole("row", { name: /Alex Employee/ })).toBeVisible()
+
+    await page.clock.install()
+    await page
+      .getByRole("searchbox", { name: "Search employees" })
+      .fill("Missing employee")
+    const table = page.getByRole("table", { name: "Employees" })
+    await expect(table.getByRole("status")).toHaveText("Loading employees…")
+    expect(searchRequested).toBe(false)
+    await page.clock.runFor(199)
+    expect(searchRequested).toBe(false)
+    await page.clock.runFor(1)
+    await searchStarted
+
+    await expect(table.getByRole("status")).toHaveText("Loading employees…")
+    const skeletonRows = table.getByRole("rowgroup").nth(1).getByRole("row")
+    await expect(skeletonRows).toHaveCount(10)
+    for (const row of await skeletonRows.all())
+      await expect(row.getByRole("cell")).toHaveCount(8)
+
+    releaseSearch()
+    await expect(
+      table.getByRole("status").filter({
+        hasText: "No results for “Missing employee” found.",
+      }),
+    ).toBeVisible()
+  })
+
+  test("employee contact search keeps the current row visible while refreshing", async ({
+    page,
+  }) => {
+    const employee: Employee = {
+      id: "employee-contact-search",
+      employeeId: "EXP-100",
+      fullName: "Alex Employee",
+      email: "alex@example.com",
+      contactNumber: "+639171234567",
+      position: "Designer",
+      employmentType: "FULL_TIME",
+      status: "ACTIVE",
+      startDate: "2026-01-15",
+      departmentId: null,
+      teamId: null,
+      department: null,
+      team: null,
+      hasAccount: true,
+      accountIsActive: true,
+      createdAt: "2026-01-15T00:00:00Z",
+      updatedAt: "2026-01-15T00:00:00Z",
+    }
+    await restoreSession(page, "ADMIN", { initialEmployees: [employee] })
+    let releaseSearch!: () => void
+    let notifySearchStarted!: () => void
+    const searchStarted = new Promise<void>((resolve) => {
+      notifySearchStarted = resolve
+    })
+    const pendingSearch = new Promise<void>((resolve) => {
+      releaseSearch = resolve
+    })
+    await page.route("**/api/employees?**", async (route) => {
+      if (
+        new URL(route.request().url()).searchParams.get("search") ===
+        "639171234567"
+      ) {
+        notifySearchStarted()
+        await pendingSearch
+      }
+      await route.fallback()
+    })
+    await page.goto("/employees")
+    const row = page.getByRole("row", { name: /Alex Employee/ })
+    await expect(row).toBeVisible()
+    await page
+      .getByRole("searchbox", { name: "Search employees" })
+      .fill("639171234567")
+    await searchStarted
+    await expect(row).toBeVisible()
+    releaseSearch()
+    await expect(row).toBeVisible()
+  })
+
+  test("employee search updates the summary with static rows", async ({
     page,
   }) => {
     await page.emulateMedia({ reducedMotion: "no-preference" })
@@ -42,16 +148,19 @@ test.describe("Employee management", () => {
       page.getByText("Showing 1–2 of 2", { exact: true }),
     ).toBeVisible()
     await page.evaluate(() => {
-      const samples: { moving: boolean; summary: string }[] = []
+      const samples: {
+        moving: boolean
+        rows: number
+        summary: string
+      }[] = []
       Reflect.set(window, "employeeMotionSamples", samples)
       const main = document.querySelector(
         'main[aria-label="Employee management"]',
       )!
       const observer = new MutationObserver(() => {
         samples.push({
-          moving: Boolean(
-            main.querySelector("[data-animated-slot-row][inert]"),
-          ),
+          moving: Boolean(main.querySelector("[data-animated-slot-row]")),
+          rows: main.querySelectorAll("[data-slot-grid-row]").length,
           summary: main.querySelector("footer")?.textContent ?? "",
         })
       })
@@ -77,21 +186,23 @@ test.describe("Employee management", () => {
       observer.disconnect()
       return Reflect.get(window, "employeeMotionSamples") as {
         moving: boolean
+        rows: number
         summary: string
       }[]
     })
+    expect(samples.every((sample) => !sample.moving)).toBe(true)
     expect(
       samples.some(
         (sample) =>
-          sample.moving && sample.summary.includes("Showing 1–2 of 2"),
+          sample.rows === 1 && sample.summary.includes("Showing 1–1 of 1"),
       ),
     ).toBe(true)
     expect(
-      samples.some(
+      samples.every(
         (sample) =>
-          sample.moving && sample.summary.includes("Showing 1–1 of 1"),
+          sample.rows !== 1 || !sample.summary.includes("Showing 1–2 of 2"),
       ),
-    ).toBe(false)
+    ).toBe(true)
     await expect(
       page.getByRole("row", { name: /Second Employee/ }),
     ).toBeVisible()

@@ -116,7 +116,7 @@ function workspaceFixture(name: string, id: string): ProjectWorkspaceDetail {
 }
 
 for (const width of [1440, 390]) {
-  test(`workspace, team, task and deliverable tables use shared row transitions at ${width}px`, async ({
+  test(`workspace, team, task and deliverable tables render without row transitions at ${width}px`, async ({
     page,
   }, testInfo) => {
     test.skip(live, "Uses isolated workspaces")
@@ -164,9 +164,10 @@ for (const width of [1440, 390]) {
         "false",
       )
     const rows = page.locator(
-      '[data-animated-slot-row][aria-hidden="false"]:visible',
+      "[data-slot-grid-row]:visible, tbody > tr[data-slot-table-row]:visible",
     )
     await expect(rows).toHaveCount(2)
+    await expect(page.locator("[data-animated-slot-row]")).toHaveCount(0)
     await page
       .getByRole("combobox", { name: "Filter projects by status" })
       .click()
@@ -195,45 +196,74 @@ for (const width of [1440, 390]) {
       ),
     ).toBe(true)
     const search = page.getByRole("searchbox")
+    const projectTable = page
+      .getByRole("region", { name: "Project list" })
+      .getByRole("table")
+    await page.clock.install()
     await search.fill("Beta")
+    await expect(projectTable).toHaveAttribute("aria-busy", "true")
+    await expect(projectTable.getByRole("status")).toHaveText(
+      "Loading projects…",
+    )
+    await page.clock.runFor(200)
     await expect(rows).toHaveCount(1)
     await expect(rows).toContainText("Beta Project")
     await search.fill("missing")
+    await page.clock.runFor(200)
     await expect(rows).toHaveCount(0)
     await search.fill("")
+    await page.clock.runFor(200)
     await expect(rows).toHaveCount(2)
     await page
       .getByRole("region", { name: "Project list" })
       .getByRole("link", { name: "Alpha Project", exact: true })
       .click()
-    await page.getByRole("button", { name: "Work", exact: true }).click()
+    await page.getByRole("tab", { name: "Work", exact: true }).click()
     await expect(rows).toHaveCount(2)
     await expect(rows.first()).toContainText("Alpha Task")
-    await page.getByRole("button", { name: "Team", exact: true }).click()
+    await page.getByRole("tab", { name: "Team", exact: true }).click()
     await expect(rows).toHaveCount(2)
     const staffSearch = page.getByRole("searchbox", {
       name: "Search assigned staff",
     })
+    const teamTable = page
+      .getByRole("region", { name: "Project team" })
+      .getByRole("table")
     await staffSearch.fill("Beta")
+    await expect(teamTable).toHaveAttribute("aria-busy", "true")
+    await expect(teamTable.getByRole("status")).toHaveText(
+      "Loading assigned staff…",
+    )
+    await page.clock.runFor(200)
     await expect(rows).toHaveCount(1)
     await expect(rows).toContainText("Beta Staff")
     await staffSearch.fill("missing")
+    await page.clock.runFor(200)
     await expect(rows).toHaveCount(0)
     await staffSearch.fill("")
+    await page.clock.runFor(200)
     await expect(rows).toHaveCount(2)
-    await page
-      .getByRole("button", { name: "Deliverables", exact: true })
-      .click()
+    await page.getByRole("tab", { name: "Deliverables", exact: true }).click()
     const deliverableSearch = page.getByRole("searchbox", {
       name: "Search deliverables",
     })
+    const deliverableTable = page.getByRole("table", {
+      name: "Project deliverables",
+    })
     await expect(rows).toHaveCount(2)
     await deliverableSearch.fill("Beta")
+    await expect(deliverableTable).toHaveAttribute("aria-busy", "true")
+    await expect(deliverableTable.getByRole("status")).toHaveText(
+      "Loading deliverables…",
+    )
+    await page.clock.runFor(200)
     await expect(rows).toHaveCount(1)
     await expect(rows).toContainText("Beta Deliverable")
     await deliverableSearch.fill("missing")
+    await page.clock.runFor(200)
     await expect(rows).toHaveCount(0)
     await deliverableSearch.fill("")
+    await page.clock.runFor(200)
     await expect(rows).toHaveCount(2)
     await rows.first().scrollIntoViewIfNeeded()
     await page.screenshot({ path: testInfo.outputPath("workspace-tables.png") })
@@ -330,7 +360,7 @@ for (const width of [1440, 390]) {
       })
       await page.goto(directory.path)
       const rows = page.locator(
-        '[data-animated-slot-row][aria-hidden="false"]:visible',
+        '[data-slot-grid-row]:not([aria-hidden="true"]):visible, [data-animated-slot-row][aria-hidden="false"]:visible, tbody > tr[data-slot-table-row]:visible',
       )
       await expect(rows).toHaveCount(2)
       const search = page.getByRole("searchbox", {
@@ -350,10 +380,16 @@ for (const width of [1440, 390]) {
         await expect(rows).toContainText("Beta Table")
         await search.fill("Remote")
         await expect(rows).toHaveCount(0)
-        await expect(page.getByText(/^Searching all/)).toBeVisible()
+        await expect(
+          page.getByRole("status").filter({ hasText: /^Loading / }),
+        ).toHaveCount(1)
+        await expect(page.getByText(/^Searching all/)).toHaveCount(0)
         release()
         await expect(rows).toHaveCount(1)
         await expect(rows).toContainText("Remote Table")
+        await expect(
+          page.getByRole("status").filter({ hasText: "Searching…" }),
+        ).toHaveCount(0)
         await expect(page.getByText(/^Searching all/)).toHaveCount(0)
         await rows.first().scrollIntoViewIfNeeded()
         await page.screenshot({

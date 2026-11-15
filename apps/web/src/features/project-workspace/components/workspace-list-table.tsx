@@ -53,9 +53,12 @@ function rowClass(_workspace: WorkspaceRow, _index: number, isLast: boolean) {
 export function WorkspaceListTable({
   workspaces,
   loading,
-  animateRows = true,
+  animateRows = false,
+  initialLoading = loading,
   viewKey,
   quickKey,
+  searching = false,
+  onRowsSettled,
   archiveView,
   onChanged,
   onViewDetails,
@@ -68,8 +71,11 @@ export function WorkspaceListTable({
   workspaces: WorkspaceRow[]
   loading: boolean
   animateRows?: boolean
+  initialLoading?: boolean
   viewKey: string
   quickKey: string
+  searching?: boolean
+  onRowsSettled?: () => void
   archiveView: boolean
   onChanged: () => void
   onViewDetails?: (identity: string) => void
@@ -82,228 +88,248 @@ export function WorkspaceListTable({
   const { formatDate } = useDatePreferences()
   const rowGrid = grid
   return (
-    <ResponsiveDataTable
-      label={
-        departmentScopedDirectory
-          ? "Department project workspaces"
-          : "Project workspaces"
-      }
-      aria-busy={loading}
-    >
-      <ResponsiveDataTableHeader
-        className="@max-[900px]:sr-only"
-        rowClassName={rowGrid}
+    <>
+      <ResponsiveDataTable
+        label={
+          departmentScopedDirectory
+            ? "Department project workspaces"
+            : "Project workspaces"
+        }
+        aria-busy={loading}
       >
-        {(departmentScopedDirectory
-          ? [
-              "Workspace",
-              "Client",
-              "Progress",
-              "Status",
-              "Last updated",
-              "Actions",
-            ]
-          : [
-              directory ? "Workspace" : "Project",
-              "Client",
-              directory ? "Progress" : "Services",
-              "Status",
-              "Last updated",
-              "Actions",
-            ]
-        ).map((label) => (
-          <ResponsiveDataTableColumnHeader key={label}>
-            {label}
-          </ResponsiveDataTableColumnHeader>
-        ))}
-      </ResponsiveDataTableHeader>
-      {loading ? (
-        <ResponsiveDataTableBody>
-          <DataTableSkeletonRows
-            label="projects"
-            rowClassName={cn(
-              rowGrid,
-              "h-[58px] px-4 py-[7px] @max-[900px]:h-[210px] @max-[900px]:gap-y-2",
-            )}
-            cellClassNames={cells}
-          />
-        </ResponsiveDataTableBody>
-      ) : (
-        <AnimatedSlotGridBody
-          items={workspaces}
-          getKey={(workspace) => workspaceKey(workspace, readOnly)}
-          rowClassName={(workspace, index, isLast) =>
-            rowClass(workspace, index, isLast)
-          }
-          viewKey={viewKey}
-          quickKey={quickKey}
-          animateRows={animateRows}
-          defaultRowHeight={58}
-          className="relative min-w-0 overflow-x-clip"
-          emptyContent={
-            archiveView
-              ? "No archived projects match these filters."
-              : "No projects match these filters."
-          }
-          renderRow={(workspace) => (
-            <>
-              <ResponsiveDataTableCell className={cells[0]}>
-                {departmentScopedDirectory ? (
-                  <span className="block truncate font-semibold text-foreground">
-                    {workspace.name}
-                  </span>
-                ) : (
-                  <Link
-                    href={
-                      readOnly
-                        ? (projectHref?.(workspace.id) ??
-                          `/project-workspace/${encodeURIComponent(workspace.id)}`)
-                        : projectWorkspaceHref(
-                            workspaceKey(workspace, readOnly),
-                            directoryState,
-                          )
-                    }
-                    className="block truncate font-semibold text-foreground no-underline hover:underline focus-visible:outline-2 focus-visible:outline-ring"
-                  >
-                    {workspace.name}
-                  </Link>
-                )}
-              </ResponsiveDataTableCell>
-              <ResponsiveDataTableCell
-                className={cn(cells[1], "truncate text-[#52627a]")}
-              >
-                <span className="mr-2 hidden text-[#65718a] @max-[900px]:inline">
-                  Client
+        <ResponsiveDataTableHeader
+          className="@max-[900px]:sr-only"
+          rowClassName={rowGrid}
+        >
+          {(departmentScopedDirectory
+            ? [
+                "Workspace",
+                "Client",
+                "Progress",
+                "Status",
+                "Last updated",
+                "Actions",
+              ]
+            : [
+                directory ? "Workspace" : "Project",
+                "Client",
+                directory ? "Progress" : "Services",
+                "Status",
+                "Last updated",
+                "Actions",
+              ]
+          ).map((label) => (
+            <ResponsiveDataTableColumnHeader key={label}>
+              {label}
+            </ResponsiveDataTableColumnHeader>
+          ))}
+        </ResponsiveDataTableHeader>
+        {initialLoading ? (
+          <ResponsiveDataTableBody>
+            <DataTableSkeletonRows
+              label="projects"
+              rowClassName={cn(
+                rowGrid,
+                "h-[58px] px-4 py-[7px] @max-[900px]:h-[210px] @max-[900px]:gap-y-2",
+              )}
+              cellClassNames={cells}
+            />
+          </ResponsiveDataTableBody>
+        ) : (
+          <AnimatedSlotGridBody
+            items={workspaces}
+            getKey={(workspace) => workspaceKey(workspace, readOnly)}
+            rowClassName={(workspace, index, isLast) =>
+              rowClass(workspace, index, isLast)
+            }
+            viewKey={viewKey}
+            quickKey={quickKey}
+            animateRows={animateRows}
+            onRowsSettled={onRowsSettled}
+            defaultRowHeight={58}
+            className="relative min-w-0 overflow-x-clip"
+            emptyContent={
+              loading ? (
+                <span role="status">
+                  {searching ? "Searching…" : "Refreshing project workspaces…"}
                 </span>
-                {("clientName" in workspace
-                  ? workspace.clientName
-                  : workspace.client.fullName) || "Client"}
-              </ResponsiveDataTableCell>
-              <ResponsiveDataTableCell className={cells[2]}>
-                <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
-                  <span className="hidden shrink-0 text-[#65718a] @max-[900px]:inline">
-                    {directory ? "Progress" : "Services"}
-                  </span>
-                  {"projectCount" in workspace ? (
-                    departmentScopedDirectory && workspace.progress ? (
-                      <div className="w-24 shrink-0">
-                        <ProgressMeter
-                          value={workspace.progress.completed}
-                          max={workspace.progress.total}
-                          label={`${workspace.name} task progress`}
-                          colorClass="bg-[#244993]"
-                        />
-                      </div>
-                    ) : departmentScopedDirectory ? (
-                      <span className="shrink-0 text-[#65718a]">Unplanned</span>
-                    ) : workspace.progress ? (
-                      <span className="shrink-0 tabular-nums text-[#52627a]">
-                        {workspace.progress.total > 0
-                          ? `${Math.round((workspace.progress.completed / workspace.progress.total) * 100)}%`
-                          : "0%"}
-                      </span>
-                    ) : (
-                      <span className="shrink-0 text-[#65718a]">Unplanned</span>
-                    )
-                  ) : workspace.workstreams.length ? (
-                    workspace.workstreams.map((workstream) => (
-                      <Pill
-                        key={workstream.id}
-                        className="min-w-0 shrink"
-                        title={workstream.serviceName}
-                      >
-                        {workstream.serviceName}
-                      </Pill>
-                    ))
-                  ) : (
-                    <span className="text-[#65718a]">No services</span>
-                  )}
-                </div>
-              </ResponsiveDataTableCell>
-              <ResponsiveDataTableCell className={cells[3]}>
-                <span className="mr-2 hidden text-[#65718a] @max-[900px]:inline">
-                  Status
-                </span>
-                {"statuses" in workspace && workspace.statuses.length > 1 ? (
-                  <Pill title={workspace.statuses.map(statusLabel).join(", ")}>
-                    Mixed statuses
-                    <span className="sr-only">
-                      {" "}
-                      ({workspace.statuses.map(statusLabel).join(", ")})
+              ) : archiveView ? (
+                "No archived projects match these filters."
+              ) : (
+                "No projects match these filters."
+              )
+            }
+            renderRow={(workspace) => (
+              <>
+                <ResponsiveDataTableCell className={cells[0]}>
+                  {departmentScopedDirectory ? (
+                    <span className="block truncate font-semibold text-foreground">
+                      {workspace.name}
                     </span>
-                  </Pill>
-                ) : (
-                  <Pill
-                    tone={statusTone(
-                      "statuses" in workspace
-                        ? workspace.statuses[0]
-                        : workspace.status,
-                    )}
-                  >
-                    {statusLabel(
-                      "statuses" in workspace
-                        ? workspace.statuses[0]
-                        : workspace.status,
-                    )}
-                  </Pill>
-                )}
-              </ResponsiveDataTableCell>
-              <ResponsiveDataTableCell
-                className={cn(cells[4], "text-[#52627a]")}
-              >
-                <span className="mr-2 hidden text-[#65718a] @max-[900px]:inline">
-                  Updated
-                </span>
-                <time dateTime={workspace.updatedAt}>
-                  {formatDate(workspace.updatedAt)}
-                </time>
-              </ResponsiveDataTableCell>
-              {readOnly ? (
-                <ResponsiveDataTableCell className={cells[5]}>
-                  <Link
-                    href={
-                      projectHref?.(workspace.id) ??
-                      `/project-workspace/${encodeURIComponent(workspace.id)}`
-                    }
-                    className="text-foreground underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
-                  >
-                    Inspect
-                  </Link>
+                  ) : (
+                    <Link
+                      href={
+                        readOnly
+                          ? (projectHref?.(workspace.id) ??
+                            `/project-workspace/${encodeURIComponent(workspace.id)}`)
+                          : projectWorkspaceHref(
+                              workspaceKey(workspace, readOnly),
+                              directoryState,
+                            )
+                      }
+                      className="block truncate font-semibold text-foreground no-underline hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+                    >
+                      {workspace.name}
+                    </Link>
+                  )}
                 </ResponsiveDataTableCell>
-              ) : departmentScopedDirectory ? (
                 <ResponsiveDataTableCell
-                  className={cells[5]}
-                  aria-label={`Actions for ${workspace.name}`}
+                  className={cn(cells[1], "truncate text-[#52627a]")}
                 >
-                  {onViewDetails && (
+                  <span className="mr-2 hidden text-[#65718a] @max-[900px]:inline">
+                    Client
+                  </span>
+                  {("clientName" in workspace
+                    ? workspace.clientName
+                    : workspace.client.fullName) || "Client"}
+                </ResponsiveDataTableCell>
+                <ResponsiveDataTableCell className={cells[2]}>
+                  <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+                    <span className="hidden shrink-0 text-[#65718a] @max-[900px]:inline">
+                      {directory ? "Progress" : "Services"}
+                    </span>
+                    {"projectCount" in workspace ? (
+                      departmentScopedDirectory && workspace.progress ? (
+                        <div className="w-24 shrink-0">
+                          <ProgressMeter
+                            value={workspace.progress.completed}
+                            max={workspace.progress.total}
+                            label={`${workspace.name} task progress`}
+                            colorClass="bg-[#244993]"
+                          />
+                        </div>
+                      ) : departmentScopedDirectory ? (
+                        <span className="shrink-0 text-[#65718a]">
+                          Unplanned
+                        </span>
+                      ) : workspace.progress ? (
+                        <span className="shrink-0 tabular-nums text-[#52627a]">
+                          {workspace.progress.total > 0
+                            ? `${Math.round((workspace.progress.completed / workspace.progress.total) * 100)}%`
+                            : "0%"}
+                        </span>
+                      ) : (
+                        <span className="shrink-0 text-[#65718a]">
+                          Unplanned
+                        </span>
+                      )
+                    ) : workspace.workstreams.length ? (
+                      workspace.workstreams.map((workstream) => (
+                        <Pill
+                          key={workstream.id}
+                          className="min-w-0 shrink"
+                          title={workstream.serviceName}
+                        >
+                          {workstream.serviceName}
+                        </Pill>
+                      ))
+                    ) : (
+                      <span className="text-[#65718a]">No services</span>
+                    )}
+                  </div>
+                </ResponsiveDataTableCell>
+                <ResponsiveDataTableCell className={cells[3]}>
+                  <span className="mr-2 hidden text-[#65718a] @max-[900px]:inline">
+                    Status
+                  </span>
+                  {"statuses" in workspace && workspace.statuses.length > 1 ? (
+                    <Pill
+                      title={workspace.statuses.map(statusLabel).join(", ")}
+                    >
+                      Mixed statuses
+                      <span className="sr-only">
+                        {" "}
+                        ({workspace.statuses.map(statusLabel).join(", ")})
+                      </span>
+                    </Pill>
+                  ) : (
+                    <Pill
+                      tone={statusTone(
+                        "statuses" in workspace
+                          ? workspace.statuses[0]
+                          : workspace.status,
+                      )}
+                    >
+                      {statusLabel(
+                        "statuses" in workspace
+                          ? workspace.statuses[0]
+                          : workspace.status,
+                      )}
+                    </Pill>
+                  )}
+                </ResponsiveDataTableCell>
+                <ResponsiveDataTableCell
+                  className={cn(cells[4], "text-[#52627a]")}
+                >
+                  <span className="mr-2 hidden text-[#65718a] @max-[900px]:inline">
+                    Updated
+                  </span>
+                  <time dateTime={workspace.updatedAt}>
+                    {formatDate(workspace.updatedAt)}
+                  </time>
+                </ResponsiveDataTableCell>
+                {readOnly ? (
+                  <ResponsiveDataTableCell className={cells[5]}>
+                    <Link
+                      href={
+                        projectHref?.(workspace.id) ??
+                        `/project-workspace/${encodeURIComponent(workspace.id)}`
+                      }
+                      className="text-foreground underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+                    >
+                      Inspect
+                    </Link>
+                  </ResponsiveDataTableCell>
+                ) : departmentScopedDirectory ? (
+                  <ResponsiveDataTableCell
+                    className={cells[5]}
+                    aria-label={`Actions for ${workspace.name}`}
+                  >
+                    {onViewDetails && (
+                      <WorkspaceListRowActions
+                        workspace={workspace}
+                        identity={workspaceKey(workspace, readOnly)}
+                        onChanged={onChanged}
+                        onViewDetails={() =>
+                          onViewDetails(workspaceKey(workspace, readOnly))
+                        }
+                      />
+                    )}
+                  </ResponsiveDataTableCell>
+                ) : (
+                  <ResponsiveDataTableCell className={cells[5]}>
                     <WorkspaceListRowActions
                       workspace={workspace}
                       identity={workspaceKey(workspace, readOnly)}
+                      returnState={directoryState}
                       onChanged={onChanged}
-                      onViewDetails={() =>
-                        onViewDetails(workspaceKey(workspace, readOnly))
+                      isArchived={
+                        "status" in workspace &&
+                        ["COMPLETED", "CANCELLED"].includes(workspace.status)
                       }
                     />
-                  )}
-                </ResponsiveDataTableCell>
-              ) : (
-                <ResponsiveDataTableCell className={cells[5]}>
-                  <WorkspaceListRowActions
-                    workspace={workspace}
-                    identity={workspaceKey(workspace, readOnly)}
-                    returnState={directoryState}
-                    onChanged={onChanged}
-                    isArchived={
-                      "status" in workspace &&
-                      ["COMPLETED", "CANCELLED"].includes(workspace.status)
-                    }
-                  />
-                </ResponsiveDataTableCell>
-              )}
-            </>
-          )}
-        />
+                  </ResponsiveDataTableCell>
+                )}
+              </>
+            )}
+          />
+        )}
+      </ResponsiveDataTable>
+      {loading && !initialLoading && (
+        <p role="status" className="mt-3 text-[11px] text-[#65718a]">
+          Refreshing project workspaces…
+        </p>
       )}
-    </ResponsiveDataTable>
+    </>
   )
 }

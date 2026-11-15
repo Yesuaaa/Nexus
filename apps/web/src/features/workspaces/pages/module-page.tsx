@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { getWorkspaceModules } from "../../dashboard/model/workspace-modules"
 import { ModuleCarousel } from "../components/module-carousel"
+import { ModuleCard } from "../components/module-card"
 
 export function ModulePage() {
   const account = usePortalAccount()
@@ -32,10 +33,23 @@ export function ModulePage() {
           role="status"
           className="mt-6 max-w-[960px]"
         />
-      ) : (
+      ) : modules.length > 5 ? (
         <div className="-mx-[clamp(16px,2.1vw,32px)] flex min-h-0 flex-1">
           <ModuleCarousel modules={modules} />
         </div>
+      ) : (
+        <section
+          aria-label="Available workspaces"
+          className="mx-auto my-auto w-full max-w-[1616px] shrink-0 overflow-x-auto py-6"
+        >
+          <div className="flex w-max min-w-full justify-center gap-5 px-1">
+            {modules.map((module) => (
+              <div key={module.id} className="w-[280px] shrink-0">
+                <ModuleCard module={module} />
+              </div>
+            ))}
+          </div>
+        </section>
       )}
     </main>
   )

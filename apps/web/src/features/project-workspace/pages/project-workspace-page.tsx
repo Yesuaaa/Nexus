@@ -134,7 +134,8 @@ function StaffProjectWorkspacePage() {
     router.replace(workspaceDirectoryHref(directoryState), { scroll: false })
   }, [canonicalSearchParams, directoryState, rawSearchParams, router])
   const trimmedSearch = search.trim()
-  const searchPending = trimmedSearch !== directoryState.search
+  const settledSearch = directoryState.search
+  const searchPending = trimmedSearch !== settledSearch
   useEffect(() => {
     if (trimmedSearch === directoryState.search) return
     searchTimer.current = window.setTimeout(() => {
@@ -163,7 +164,7 @@ function StaffProjectWorkspacePage() {
   )
 
   const filtered = useMemo(() => {
-    const needle = search.trim().toLowerCase()
+    const needle = settledSearch.toLowerCase()
     return workspaces.filter((workspace) => {
       const archived = ["COMPLETED", "CANCELLED"].includes(workspace.status)
       const matchesView = view === "archive" ? archived : !archived
@@ -179,7 +180,7 @@ function StaffProjectWorkspacePage() {
         )
       return matchesView && matchesStatus && matchesSearch
     })
-  }, [search, status, view, workspaces])
+  }, [settledSearch, status, view, workspaces])
 
   const activeCount = projectCounts.byStatus.IN_PROGRESS
   const openCount =
@@ -442,9 +443,11 @@ function StaffProjectWorkspacePage() {
           <WorkspaceListTable
             workspaces={filtered}
             loading={loading || searchPending}
+            initialLoading={(loading && !list.data) || searchPending}
+            searching={searchPending}
             animateRows={false}
-            viewKey={JSON.stringify([search, view, status, sort])}
-            quickKey={search}
+            viewKey={JSON.stringify([settledSearch, view, status, sort])}
+            quickKey={settledSearch}
             archiveView={view === "archive"}
             directoryState={directoryState}
             onChanged={refresh}
