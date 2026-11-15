@@ -220,16 +220,23 @@ export function attendanceAudit(
   departmentId: string,
   signal?: AbortSignal,
   recordsOnly = false,
+  search = "",
 ) {
+  const query = new URLSearchParams({
+    from,
+    to,
+    page: String(page),
+    employeeId,
+    departmentId,
+    ...(recordsOnly ? { recordsOnly: "true" } : {}),
+    ...(search.trim() ? { search: search.trim() } : {}),
+  })
   return apiRequest<
     Paging & {
       events: AttendanceAuditEvent[]
       actionCounts: { action: string; count: number }[]
     }
-  >(
-    `${root}/audit?${new URLSearchParams({ from, to, page: String(page), employeeId, departmentId, ...(recordsOnly ? { recordsOnly: "true" } : {}) })}`,
-    { signal },
-  )
+  >(`${root}/audit?${query}`, { signal })
 }
 export const attendanceOverview = (
   from: string,

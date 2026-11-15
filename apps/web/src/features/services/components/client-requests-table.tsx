@@ -204,11 +204,13 @@ export function ClientRequestsTable({
   quickKey,
   onRowsSettled,
   emptyMessage,
+  loading,
 }: {
   viewKey: string
   quickKey: string
   onRowsSettled?: () => void
   emptyMessage: ReactNode
+  loading: boolean
   requests: ServiceRequestSummary[]
   onView: (request: ServiceRequestSummary) => void
   onCancelled: () => void
@@ -231,6 +233,7 @@ export function ClientRequestsTable({
         { className: "w-[140px]", label: "Actions" },
       ]}
       emptyContent={emptyMessage}
+      ariaBusy={loading}
       onRowsSettled={onRowsSettled}
       renderRow={(request) => {
         const visual = requestRowVisual(request.service.name)

@@ -44,9 +44,10 @@ const viewOptions: { value: InboxView; label: string }[] = [
 
 function matchesTableSearch(item: InboxRequest, query: string) {
   return [
-    item.title,
+    item.id,
     item.referenceNumber,
     item.service.name,
+    item.packageName,
     item.client.fullName,
     item.client.email,
   ].some((value) => value?.toLowerCase().includes(query))
@@ -272,7 +273,9 @@ export function RequestInboxPage() {
           onDelete={(request) => setConfirm({ kind: "delete", request })}
         />
         <TableSearchStatus
-          active={list.loading && list.previewing}
+          active={
+            list.loading && list.previewing && Boolean(list.preview?.length)
+          }
           label="requests"
         />
         {list.footer && (

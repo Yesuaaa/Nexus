@@ -1,8 +1,11 @@
 "use client"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { FilterSelect } from "@/components/ui/filter-select"
 import { Pill } from "@/components/ui/pill"
+import { SearchEmptyState } from "@/components/ui/search-empty-state"
+import { SearchField } from "@/components/ui/search-field"
+import { TableSearchStatus } from "@/components/ui/table-search-status"
 import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
 import {
   ResponsiveDataTable,
@@ -47,20 +50,38 @@ export function AttendanceAuditPage() {
   const [range, setRange] = useState(defaultRange)
   const [page, setPage] = useState(1)
   const [departmentId, setDepartmentId] = useState("")
+  const [search, setSearch] = useState("")
+  const query = search.trim()
+  const [settledQuery, setSettledQuery] = useState(query)
+  const searchPending = query !== settledQuery
+  useEffect(() => {
+    if (!searchPending) return
+    const timer = window.setTimeout(() => setSettledQuery(query), 200)
+    return () => window.clearTimeout(timer)
+  }, [query, searchPending])
   const [selected, setSelected] = useState<AttendanceAuditEvent | null>(null)
   const departments = useAsyncResource(attendanceDepartments, [], {
     fallbackError: "Couldn't load departments.",
   })
   const result = useAsyncResource(
     (signal) =>
-      attendanceAudit(range.from, range.to, page, "", departmentId, signal),
-    [range.from, range.to, page, departmentId],
+      attendanceAudit(
+        range.from,
+        range.to,
+        page,
+        "",
+        departmentId,
+        signal,
+        false,
+        settledQuery,
+      ),
+    [range.from, range.to, page, departmentId, settledQuery],
     {
-      enabled: Boolean(range.from && range.to),
+      enabled: Boolean(range.from && range.to) && !searchPending,
       fallbackError: "Couldn't load the attendance audit trail.",
     },
   )
-  const data = result.loading || result.error ? undefined : result.data
+  const data = result.error ? undefined : result.data
   return (
     <AttendanceShell tab="audit">
       <div className="mb-4 flex flex-wrap items-center gap-[10px]">
@@ -87,6 +108,16 @@ export function AttendanceAuditPage() {
             })),
           ]}
         />
+        <SearchField
+          label="Search audit events"
+          placeholder="Search employee, actor, event type or reason…"
+          value={search}
+          maxLength={100}
+          onChange={(event) => {
+            setSearch(event.target.value)
+            setPage(1)
+          }}
+        />
       </div>
       <p className="mb-4 text-xs text-[#738096]">
         Dates filter the event timestamp in UTC. This history records business
@@ -97,9 +128,13 @@ export function AttendanceAuditPage() {
         error={departments.error}
         retry={departments.retry}
       />
+      <TableSearchStatus
+        active={searchPending || (result.loading && Boolean(query))}
+        label="attendance audit events"
+      />
       <ResponsiveDataTable
         label="Attendance audit events"
-        aria-busy={result.loading}
+        aria-busy={result.loading || searchPending}
       >
         <ResponsiveDataTableHeader
           className="@max-[900px]:sr-only"
@@ -114,7 +149,7 @@ export function AttendanceAuditPage() {
           )}
         </ResponsiveDataTableHeader>
         <ResponsiveDataTableBody>
-          {result.loading ? (
+          {result.loading && !data ? (
             <DataTableSkeletonRows
               label="audit events"
               rows={5}
@@ -130,7 +165,13 @@ export function AttendanceAuditPage() {
           ) : !data?.events.length ? (
             <AttendanceTableEmpty
               colSpan={5}
-              message="No audit events in this period and scope."
+              message={
+                query ? (
+                  <SearchEmptyState query={query} />
+                ) : (
+                  "No audit events in this period and scope."
+                )
+              }
             />
           ) : (
             data.events.map((event) => (
@@ -173,7 +214,9 @@ export function AttendanceAuditPage() {
           )}
         </ResponsiveDataTableBody>
       </ResponsiveDataTable>
-      {data && <AttendancePagination data={data} onChange={setPage} />}
+      {data && !result.loading && !searchPending && (
+        <AttendancePagination data={data} onChange={setPage} />
+      )}
       {selected && (
         <AuditDetails event={selected} onClose={() => setSelected(null)} />
       )}

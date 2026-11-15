@@ -147,7 +147,7 @@ export function RequestInboxTable({
           viewKey={viewKey}
           quickKey={quickKey}
           onRowsSettled={onRowsSettled}
-          animateRows
+          animateRows={false}
           ariaBusy={loading}
           defaultRowHeight={58}
           className="relative min-w-0 overflow-x-clip"

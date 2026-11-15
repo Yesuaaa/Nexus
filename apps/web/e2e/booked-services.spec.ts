@@ -439,45 +439,57 @@ test("clients retry unavailable lists and booking details", async ({
   expect(state.detailIds.every((id) => id === "request-1")).toBe(true)
 })
 
-test("client list and detail requests display loading states", async ({
-  page,
-}) => {
-  const listGate = deferred()
-  const detailGate = deferred()
-  const state = await mockBookings(page, { listGate })
-  try {
-    await page.goto("/booked-services", { waitUntil: "domcontentloaded" })
-    const main = page.getByRole("main", {
-      name: "Booked services",
-      exact: true,
-    })
-    await expect(main.getByRole("table").getByRole("status")).toContainText(
-      "Loading booked services",
-    )
-    listGate.release()
-    await expect(
-      main.getByRole("table").getByRole("button", { name: /^View booking / }),
-    ).toHaveCount(10)
-    state.detailGate = detailGate
-    await main
-      .getByRole("button", { name: "View booking request-1", exact: true })
-      .click()
-    const drawer = page.getByRole("dialog", {
-      name: "Booking details",
-      exact: true,
-    })
-    await expect(drawer.getByRole("status")).toContainText(
-      "Loading booking details",
-    )
-    detailGate.release()
-    await expect(
-      drawer.getByRole("heading", { name: "Website Development", exact: true }),
-    ).toBeVisible()
-  } finally {
-    listGate.release()
-    detailGate.release()
-  }
-})
+for (const width of [1280, 390]) {
+  test(`client list and detail requests display loading states at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const listGate = deferred()
+    const detailGate = deferred()
+    const state = await mockBookings(page, { listGate })
+    try {
+      await page.goto("/booked-services", { waitUntil: "domcontentloaded" })
+      const main = page.getByRole("main", {
+        name: "Booked services",
+        exact: true,
+      })
+      const table = main.getByRole("table")
+      await expect(table).toHaveAttribute("aria-busy", "true")
+      const skeletonRows = table.getByRole("rowgroup").nth(1).getByRole("row")
+      await expect(skeletonRows).toHaveCount(10)
+      for (const row of await skeletonRows.all())
+        await expect(row.getByRole("cell")).toHaveCount(6)
+      await expect(table.getByRole("status")).toContainText(
+        "Loading booked services",
+      )
+      listGate.release()
+      await expect(
+        table.getByRole("button", { name: /^View booking / }),
+      ).toHaveCount(10)
+      state.detailGate = detailGate
+      await main
+        .getByRole("button", { name: "View booking request-1", exact: true })
+        .click()
+      const drawer = page.getByRole("dialog", {
+        name: "Booking details",
+        exact: true,
+      })
+      await expect(drawer.getByRole("status")).toContainText(
+        "Loading booking details",
+      )
+      detailGate.release()
+      await expect(
+        drawer.getByRole("heading", {
+          name: "Website Development",
+          exact: true,
+        }),
+      ).toBeVisible()
+    } finally {
+      listGate.release()
+      detailGate.release()
+    }
+  })
+}
 
 test("internal roles cannot open client bookings or fetch their data", async ({
   page,

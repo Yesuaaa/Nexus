@@ -27,6 +27,70 @@ function fixture(index: number): RequestDetails {
   }
 }
 
+test("inbox preview matches package search and excludes title-only search", async ({
+  page,
+}) => {
+  const state = await mockInbox(page)
+  state.requests = [fixture(1)]
+  let searchGate: {
+    term: string
+    started: Promise<void>
+    pending: Promise<void>
+    release: () => void
+    notifyStarted: () => void
+  } | null = null
+  const holdSearch = (term: string) => {
+    let release!: () => void
+    let notifyStarted!: () => void
+    const started = new Promise<void>((resolve) => {
+      notifyStarted = resolve
+    })
+    const pending = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const gate = {
+      term,
+      started,
+      pending,
+      release: () => release(),
+      notifyStarted,
+    }
+    searchGate = gate
+    return gate
+  }
+  await page.route("**/api/request-inbox?**", async (route) => {
+    const gate = searchGate
+    if (
+      gate &&
+      new URL(route.request().url()).searchParams.get("search") === gate.term
+    ) {
+      gate.notifyStarted()
+      await gate.pending
+    }
+    await route.fallback()
+  })
+  await page.goto("/request-inbox")
+  const search = page.getByRole("searchbox", { name: "Search requests" })
+  const row = page.getByRole("row", { name: /SR-INBOX-1/ })
+  await expect(row).toBeVisible()
+
+  const packageSearch = holdSearch("Business Website")
+  await search.fill(packageSearch.term)
+  await packageSearch.started
+  await expect(row).toBeVisible()
+  packageSearch.release()
+  await expect(row).toBeVisible()
+
+  const titleSearch = holdSearch("Website request")
+  await search.fill(titleSearch.term)
+  await titleSearch.started
+  await expect(row).toHaveCount(0)
+  titleSearch.release()
+  await expect(
+    page.getByText("No requests match this view.", { exact: true }),
+  ).toBeVisible()
+})
+
 for (const width of [1440, 390]) {
   test(`inbox rows refresh when a booking status changes elsewhere at ${width}px`, async ({
     page,
@@ -291,7 +355,7 @@ async function mockInbox(
                 closed: "CLOSED",
                 cancelled: "CANCELLED",
               }[view || "pending"]) &&
-          `${item.id} ${item.referenceNumber ?? ""} ${item.client.fullName} ${item.service.name}`
+          `${item.id} ${item.referenceNumber ?? ""} ${item.service.name} ${item.packageName ?? ""} ${item.client.fullName ?? ""} ${item.client.email ?? ""}`
             .toLowerCase()
             .includes(search),
       )

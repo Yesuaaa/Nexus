@@ -48,8 +48,11 @@ function rowClass(
 export function WorkspaceListTable({
   workspaces,
   loading,
+  initialLoading,
   viewKey,
   quickKey,
+  searching = false,
+  onRowsSettled,
   archiveView,
   onChanged,
   readOnly = false,
@@ -57,8 +60,11 @@ export function WorkspaceListTable({
 }: {
   workspaces: ProjectWorkspaceSummary[]
   loading: boolean
+  initialLoading: boolean
   viewKey: string
   quickKey: string
+  searching?: boolean
+  onRowsSettled?: () => void
   archiveView: boolean
   onChanged: () => void
   readOnly?: boolean
@@ -66,122 +72,138 @@ export function WorkspaceListTable({
 }) {
   const { formatDate } = useDatePreferences()
   return (
-    <ResponsiveDataTable label="Project workspaces" aria-busy={loading}>
-      <ResponsiveDataTableHeader
-        className="@max-[900px]:sr-only"
-        rowClassName={grid}
-      >
-        {[
-          "Project",
-          "Client",
-          "Services",
-          "Status",
-          "Last updated",
-          "Actions",
-        ].map((label) => (
-          <ResponsiveDataTableColumnHeader key={label}>
-            {label}
-          </ResponsiveDataTableColumnHeader>
-        ))}
-      </ResponsiveDataTableHeader>
-      {loading ? (
-        <ResponsiveDataTableBody>
-          <DataTableSkeletonRows
-            label="projects"
-            rowClassName={cn(
-              grid,
-              "h-[58px] px-4 py-[7px] @max-[900px]:h-[210px] @max-[900px]:gap-y-2",
-            )}
-            cellClassNames={cells}
-          />
-        </ResponsiveDataTableBody>
-      ) : (
-        <AnimatedSlotGridBody
-          items={workspaces}
-          getKey={workspaceKey}
-          rowClassName={rowClass}
-          viewKey={viewKey}
-          quickKey={quickKey}
-          animateRows
-          defaultRowHeight={58}
-          className="relative min-w-0 overflow-x-clip"
-          emptyContent={
-            archiveView
-              ? "No archived projects match these filters."
-              : "No projects match these filters."
-          }
-          renderRow={(workspace) => (
-            <>
-              <div role="cell" className={cells[0]}>
-                <Link
-                  href={
-                    projectHref?.(workspace.id) ??
-                    `/project-workspace/${encodeURIComponent(workspace.id)}`
-                  }
-                  className="block truncate font-semibold text-foreground no-underline hover:underline focus-visible:outline-2 focus-visible:outline-ring"
-                >
-                  {workspace.name}
-                </Link>
-              </div>
-              <div
-                role="cell"
-                className={cn(cells[1], "truncate text-[#52627a]")}
-              >
-                <span className="mr-2 hidden text-[#738096] @max-[900px]:inline">
-                  Client
+    <>
+      <ResponsiveDataTable label="Project workspaces" aria-busy={loading}>
+        <ResponsiveDataTableHeader
+          className="@max-[900px]:sr-only"
+          rowClassName={grid}
+        >
+          {[
+            "Project",
+            "Client",
+            "Services",
+            "Status",
+            "Last updated",
+            "Actions",
+          ].map((label) => (
+            <ResponsiveDataTableColumnHeader key={label}>
+              {label}
+            </ResponsiveDataTableColumnHeader>
+          ))}
+        </ResponsiveDataTableHeader>
+        {initialLoading ? (
+          <ResponsiveDataTableBody>
+            <DataTableSkeletonRows
+              label="projects"
+              rowClassName={cn(
+                grid,
+                "h-[58px] px-4 py-[7px] @max-[900px]:h-[210px] @max-[900px]:gap-y-2",
+              )}
+              cellClassNames={cells}
+            />
+          </ResponsiveDataTableBody>
+        ) : (
+          <AnimatedSlotGridBody
+            items={workspaces}
+            getKey={workspaceKey}
+            rowClassName={rowClass}
+            viewKey={viewKey}
+            quickKey={quickKey}
+            animateRows={false}
+            onRowsSettled={onRowsSettled}
+            defaultRowHeight={58}
+            className="relative min-w-0 overflow-x-clip"
+            emptyContent={
+              loading ? (
+                <span role="status">
+                  {searching ? "Searching…" : "Refreshing project workspaces…"}
                 </span>
-                {workspace.client.fullName || "Client"}
-              </div>
-              <div role="cell" className={cells[2]}>
-                <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
-                  <span className="hidden shrink-0 text-[#738096] @max-[900px]:inline">
-                    Services
+              ) : archiveView ? (
+                "No archived projects match these filters."
+              ) : (
+                "No projects match these filters."
+              )
+            }
+            renderRow={(workspace) => (
+              <>
+                <div role="cell" className={cells[0]}>
+                  <Link
+                    href={
+                      projectHref?.(workspace.id) ??
+                      `/project-workspace/${encodeURIComponent(workspace.id)}`
+                    }
+                    className="block truncate font-semibold text-foreground no-underline hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+                  >
+                    {workspace.name}
+                  </Link>
+                </div>
+                <div
+                  role="cell"
+                  className={cn(cells[1], "truncate text-[#52627a]")}
+                >
+                  <span className="mr-2 hidden text-[#738096] @max-[900px]:inline">
+                    Client
                   </span>
-                  {workspace.workstreams.length ? (
-                    workspace.workstreams.map((workstream) => (
-                      <Pill
-                        key={workstream.id}
-                        className="min-w-0 shrink"
-                        title={workstream.serviceName}
-                      >
-                        {workstream.serviceName}
-                      </Pill>
-                    ))
+                  {workspace.client.fullName || "Client"}
+                </div>
+                <div role="cell" className={cells[2]}>
+                  <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+                    <span className="hidden shrink-0 text-[#738096] @max-[900px]:inline">
+                      Services
+                    </span>
+                    {workspace.workstreams.length ? (
+                      workspace.workstreams.map((workstream) => (
+                        <Pill
+                          key={workstream.id}
+                          className="min-w-0 shrink"
+                          title={workstream.serviceName}
+                        >
+                          {workstream.serviceName}
+                        </Pill>
+                      ))
+                    ) : (
+                      <span className="text-[#738096]">No services</span>
+                    )}
+                  </div>
+                </div>
+                <div role="cell" className={cells[3]}>
+                  <span className="mr-2 hidden text-[#738096] @max-[900px]:inline">
+                    Status
+                  </span>
+                  <Pill tone={statusTone(workspace.status)}>
+                    {statusLabel(workspace.status)}
+                  </Pill>
+                </div>
+                <div role="cell" className={cn(cells[4], "text-[#52627a]")}>
+                  <span className="mr-2 hidden text-[#738096] @max-[900px]:inline">
+                    Updated
+                  </span>
+                  <time dateTime={workspace.updatedAt}>
+                    {formatDate(workspace.updatedAt)}
+                  </time>
+                </div>
+                <div role="cell" className={cells[5]}>
+                  {readOnly ? (
+                    <Link href={projectHref?.(workspace.id) ?? "#"}>
+                      Inspect
+                    </Link>
                   ) : (
-                    <span className="text-[#738096]">No services</span>
+                    <WorkspaceListRowActions
+                      workspace={workspace}
+                      onChanged={onChanged}
+                    />
                   )}
                 </div>
-              </div>
-              <div role="cell" className={cells[3]}>
-                <span className="mr-2 hidden text-[#738096] @max-[900px]:inline">
-                  Status
-                </span>
-                <Pill tone={statusTone(workspace.status)}>
-                  {statusLabel(workspace.status)}
-                </Pill>
-              </div>
-              <div role="cell" className={cn(cells[4], "text-[#52627a]")}>
-                <span className="mr-2 hidden text-[#738096] @max-[900px]:inline">
-                  Updated
-                </span>
-                <time dateTime={workspace.updatedAt}>
-                  {formatDate(workspace.updatedAt)}
-                </time>
-              </div>
-              <div role="cell" className={cells[5]}>
-                {readOnly ? (
-                  <Link href={projectHref?.(workspace.id) ?? "#"}>Inspect</Link>
-                ) : (
-                  <WorkspaceListRowActions
-                    workspace={workspace}
-                    onChanged={onChanged}
-                  />
-                )}
-              </div>
-            </>
-          )}
-        />
+              </>
+            )}
+          />
+        )}
+      </ResponsiveDataTable>
+      {loading && !initialLoading && (
+        <p role="status" className="mt-3 text-[11px] text-[#65718a]">
+          Refreshing project workspaces…
+        </p>
       )}
-    </ResponsiveDataTable>
+    </>
   )
 }

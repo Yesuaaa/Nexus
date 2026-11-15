@@ -179,6 +179,7 @@ export function WorkloadPage({
   }
   const staff = useMemo(() => data?.staff ?? [], [data])
   const current = staff.find((s) => s.id === selected)
+  const searchQuery = search.trim().toLowerCase()
   const teams = [
     ...new Map(
       staff.filter((s) => s.team).map((s) => [s.team!.id, s.team!]),
@@ -197,9 +198,17 @@ export function WorkloadPage({
             metrics(s).availability === availability) &&
           `${s.fullName} ${s.position ?? ""} ${s.profileSpecialties.join(" ")}`
             .toLowerCase()
-            .includes(search.toLowerCase()),
+            .includes(searchQuery),
       ),
-    [staff, team, availability, search, administrative, department, employee],
+    [
+      staff,
+      team,
+      availability,
+      searchQuery,
+      administrative,
+      department,
+      employee,
+    ],
   )
   const selectedProject = data?.projects.find(
     (project) => project.id === allocation?.projectId,
@@ -267,6 +276,7 @@ export function WorkloadPage({
   const table = useLocalTable(filtered, {
     view: [search, team, availability, week, department, employee],
     loading,
+    search: searchQuery,
   })
   const teamOptions = [
     { value: "all", label: "All Teams" },
@@ -397,7 +407,7 @@ export function WorkloadPage({
         >
           <table
             className="w-full min-w-[850px] text-left text-xs"
-            aria-busy={loading}
+            aria-busy={loading || table.searchPending}
           >
             <thead className="bg-[#e8eef2]">
               <tr>
@@ -415,13 +425,14 @@ export function WorkloadPage({
                 ))}
               </tr>
             </thead>
-            {loading && !data ? (
+            {(loading && !data) || (!error && table.searchPending) ? (
               <TableSkeletonBody label="staff workload" columns={6} />
             ) : (
               <AnimatedTableBody
                 items={table.visible}
                 viewKey={table.viewKey}
                 quickKey={search}
+                animateRows={false}
                 columns={6}
                 rowClassName="border-t border-[#eceef1]"
                 onRowsSettled={table.onRowsSettled}
@@ -448,7 +459,6 @@ export function WorkloadPage({
                   const m = metrics(s)
                   return (
                     <>
-                      {" "}
                       <td className="px-4 py-3">
                         <span className="font-medium">{s.fullName}</span>
                         <div className="mt-1 text-[11px] text-[#738096]">
@@ -532,13 +542,16 @@ export function WorkloadPage({
             )}
           </table>
         </div>
-        {!loading && !error && table.footer.total > 0 && (
-          <TablePaginationFooter
-            {...table.footer}
-            label="Staff workload pages"
-            onPageChange={table.setPage}
-          />
-        )}
+        {!loading &&
+          !error &&
+          !table.searchPending &&
+          table.footer.total > 0 && (
+            <TablePaginationFooter
+              {...table.footer}
+              label="Staff workload pages"
+              onPageChange={table.setPage}
+            />
+          )}
       </section>
       {current && (
         <WorkloadDetailsDrawer

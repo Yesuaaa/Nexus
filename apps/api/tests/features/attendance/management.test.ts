@@ -327,6 +327,145 @@ test(
     )
 
     await t.test(
+      "attendance audit search covers scoped event and identity fields before pagination",
+      async () => {
+        await prisma.attendanceAudit.createMany({
+          data: [
+            ...Array.from({ length: 12 }, (_, index) => ({
+              entityType: "AttendanceWorkSession",
+              entityId: `searchable-${index}`,
+              employeeId: staff.employee.id,
+              actorId: admin.user.id,
+              action: "SEARCHABLE_ACTION",
+              reason: `SeriesNeedle ${index}`,
+              actionId: randomUUID(),
+              createdAt: new Date(
+                `2026-11-13T12:${String(index).padStart(2, "0")}:00Z`,
+              ),
+            })),
+            {
+              entityType: "AttendanceWorkSession",
+              entityId: "searchable-outside",
+              employeeId: other.employee.id,
+              actorId: admin.user.id,
+              action: "SEARCHABLE_ACTION",
+              reason: "SeriesNeedle outside department",
+              actionId: randomUUID(),
+              createdAt: new Date("2026-11-13T12:30:00Z"),
+            },
+            {
+              entityType: "AttendanceWorkSession",
+              entityId: "searchable-next-day",
+              employeeId: staff.employee.id,
+              actorId: admin.user.id,
+              action: "SEARCHABLE_ACTION",
+              reason: "SeriesNeedle next day",
+              actionId: randomUUID(),
+              createdAt: new Date("2026-11-14T12:00:00Z"),
+            },
+          ],
+        })
+        const dateQuery = "from=2026-11-13&to=2026-11-13"
+        for (const term of [
+          "staff",
+          "MGMT-staff",
+          "admin",
+          "admin@management.test",
+          admin.user.id,
+          "SEARCHABLE_ACTION",
+          "AttendanceWorkSession",
+          "Needle",
+        ]) {
+          const response = await request(
+            head,
+            `/audit?${dateQuery}&search=${encodeURIComponent(term)}`,
+          )
+          assert.equal(response.status, 200, await response.clone().text())
+          const result = (await response.json()) as {
+            total: number
+            events: {
+              actor: Record<string, unknown> | null
+              employee: Record<string, unknown> | null
+            }[]
+          }
+          assert.equal(result.total, 12, `search term: ${term}`)
+          assert.equal(result.events.length, 10, `search term: ${term}`)
+          assert.deepEqual(Object.keys(result.events[0]!.actor ?? {}), [
+            "fullName",
+          ])
+          assert.deepEqual(Object.keys(result.events[0]!.employee ?? {}), [
+            "fullName",
+          ])
+        }
+
+        const firstPage = (await (
+          await request(head, `/audit?${dateQuery}&search=SeriesNeedle`)
+        ).json()) as {
+          total: number
+          page: number
+          pageSize: number
+          events: unknown[]
+          actionCounts: { count: number }[]
+        }
+        const secondPageResponse = await request(
+          head,
+          `/audit?${dateQuery}&search=SeriesNeedle&page=2`,
+        )
+        assert.equal(secondPageResponse.status, 200)
+        const secondPage = (await secondPageResponse.json()) as {
+          total: number
+          page: number
+          events: unknown[]
+          actionCounts: { count: number }[]
+        }
+        assert.equal(firstPage.total, 12)
+        assert.equal(firstPage.page, 1)
+        assert.equal(firstPage.pageSize, 10)
+        assert.equal(firstPage.events.length, 10)
+        assert.equal(secondPage.total, 12)
+        assert.equal(secondPage.page, 2)
+        assert.equal(secondPage.events.length, 2)
+        assert.equal(
+          firstPage.actionCounts.reduce((sum, row) => sum + row.count, 0),
+          12,
+        )
+        const scopedAdmin = await request(
+          admin,
+          `/audit?${dateQuery}&departmentId=${department.id}&search=SeriesNeedle`,
+        )
+        assert.equal(scopedAdmin.status, 200)
+        assert.equal(
+          ((await scopedAdmin.json()) as { total: number }).total,
+          12,
+        )
+        const unrestrictedAdmin = await request(
+          admin,
+          `/audit?${dateQuery}&search=SeriesNeedle`,
+        )
+        assert.equal(unrestrictedAdmin.status, 200)
+        assert.equal(
+          ((await unrestrictedAdmin.json()) as { total: number }).total,
+          13,
+        )
+        assert.equal(
+          (
+            await request(
+              head,
+              `/audit?${dateQuery}&departmentId=${outside.id}&search=SeriesNeedle`,
+            )
+          ).status,
+          403,
+        )
+        const missing = await request(
+          head,
+          `/audit?${dateQuery}&search=does-not-exist`,
+        )
+        assert.equal(missing.status, 200)
+        assert.equal(((await missing.json()) as { total: number }).total, 0)
+      },
+    )
+
+    await t.test(
       "monitoring filters and audit trails enforce company and department scope",
       async () => {
         await prisma.attendanceWorkSession.create({

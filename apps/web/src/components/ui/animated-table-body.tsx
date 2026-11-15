@@ -28,6 +28,7 @@ export function AnimatedTableBody<T extends { id: string }>({
   items,
   viewKey,
   quickKey = "",
+  animateRows = true,
   renderRow,
   rowClassName,
   emptyContent,
@@ -37,6 +38,7 @@ export function AnimatedTableBody<T extends { id: string }>({
   items: T[]
   viewKey: string
   quickKey?: string
+  animateRows?: boolean
   renderRow: (item: T) => ReactNode
   rowClassName?: string | ((item: T) => string)
   emptyContent: ReactNode
@@ -65,6 +67,7 @@ export function AnimatedTableBody<T extends { id: string }>({
   }, [onRowsSettled])
 
   useLayoutEffect(() => {
+    if (!animateRows) return
     const body = bodyRef.current
     if (!body) return
     const measure = () => {
@@ -89,10 +92,23 @@ export function AnimatedTableBody<T extends { id: string }>({
     const observer = new ResizeObserver(measure)
     observer.observe(body)
     return () => observer.disconnect()
-  }, [slots])
+  }, [animateRows, slots])
+
+  useLayoutEffect(() => {
+    if (!animateRows) onRowsSettled?.()
+  }, [animateRows, items, onRowsSettled, quickKey, viewKey])
 
   useEffect(() => {
     latestItems.current = items
+    if (!animateRows) {
+      previous.current = { view: viewKey, quick: quickKey }
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
+      return
+    }
+
     const changed = previous.current.view !== viewKey
     const quick = previous.current.quick !== quickKey
     previous.current = { view: viewKey, quick: quickKey }
@@ -135,7 +151,38 @@ export function AnimatedTableBody<T extends { id: string }>({
     setSlots(next)
     setAnimating(true)
     timerRef.current = window.setTimeout(settle, animationDuration)
-  }, [items, viewKey, quickKey, reduced])
+  }, [animateRows, items, viewKey, quickKey, reduced])
+
+  if (!animateRows) {
+    return (
+      <tbody className="relative" aria-live="polite" aria-busy={false}>
+        {items.length === 0 ? (
+          <tr>
+            <td
+              colSpan={columns}
+              className="p-8 text-center text-xs text-[#7183a2]"
+            >
+              {emptyContent}
+            </td>
+          </tr>
+        ) : (
+          items.map((item) => (
+            <tr
+              key={item.id}
+              data-slot-table-row
+              className={
+                typeof rowClassName === "function"
+                  ? rowClassName(item)
+                  : rowClassName
+              }
+            >
+              {renderRow(item)}
+            </tr>
+          ))
+        )}
+      </tbody>
+    )
+  }
 
   return (
     <motion.tbody

@@ -29,13 +29,15 @@ const root = "/module/service-operations"
 const noop = () => {}
 
 function matchesTableSearch(request: AdministrativeRequest, query: string) {
+  const needle = query.trim().toLocaleLowerCase()
   return [
+    request.id,
     request.title,
     request.referenceNumber,
     request.service.name,
     request.client.fullName,
     request.client.email,
-  ].some((value) => value?.toLowerCase().includes(query))
+  ].some((value) => value?.toLocaleLowerCase().includes(needle))
 }
 
 async function loadAdministrativeDetails(id: string, signal: AbortSignal) {
@@ -141,7 +143,9 @@ export function AdministrativeRequestsPage() {
         readOnly
       />
       <TableSearchStatus
-        active={list.loading && list.previewing}
+        active={
+          list.loading && list.previewing && Boolean(list.preview?.length)
+        }
         label="requests"
       />
       {list.footer && (

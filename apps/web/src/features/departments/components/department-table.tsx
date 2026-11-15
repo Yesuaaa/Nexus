@@ -33,6 +33,7 @@ const defaultSortDirection = (key: SortKey): SortDirection =>
 export function DepartmentTable({
   departments,
   loading,
+  ariaBusy = loading,
   error,
   canManage,
   canDelete,
@@ -43,6 +44,7 @@ export function DepartmentTable({
 }: {
   departments: Department[]
   loading: boolean
+  ariaBusy?: boolean
   error: string
   canManage: boolean
   canDelete: boolean
@@ -54,7 +56,6 @@ export function DepartmentTable({
   const [search, setSearch] = useState("")
   const sort = useTableSort<SortKey>("name", "asc", defaultSortDirection)
   const { sortKey, direction } = sort
-  const [animateRows, setAnimateRows] = useState(true)
   const query = search.trim().toLowerCase()
   const filtered = useMemo(
     () =>
@@ -88,9 +89,9 @@ export function DepartmentTable({
   const table = useLocalTable(filtered, {
     view: [query, sortKey, direction],
     loading,
+    search: query,
   })
   function sortBy(key: SortKey) {
-    setAnimateRows(true)
     sort.toggle(key)
   }
 
@@ -104,7 +105,6 @@ export function DepartmentTable({
             value={search}
             maxLength={100}
             onChange={(event) => {
-              setAnimateRows(true)
               setSearch(event.target.value)
             }}
           />
@@ -113,7 +113,7 @@ export function DepartmentTable({
 
       <ResponsiveDataTable
         label="Departments and their staffing"
-        aria-busy={loading}
+        aria-busy={ariaBusy || table.searchPending}
       >
         <ResponsiveDataTableHeader
           className="@max-[820px]:sr-only"
@@ -150,9 +150,9 @@ export function DepartmentTable({
           </span>
           <span role="columnheader">Actions</span>
         </ResponsiveDataTableHeader>
-        {loading || error ? (
+        {loading || error || table.searchPending ? (
           <ResponsiveDataTableBody className="relative overflow-x-clip">
-            {loading ? (
+            {loading || (table.searchPending && !error) ? (
               <DataTableSkeletonRows
                 label="departments"
                 rowClassName={cn(
@@ -189,7 +189,7 @@ export function DepartmentTable({
             items={table.visible}
             viewKey={table.viewKey}
             quickKey={query}
-            animateRows={animateRows}
+            animateRows={false}
             getKey={tableRowKey}
             rowClassName={(_item, _index, isLast) =>
               cn(
@@ -200,13 +200,13 @@ export function DepartmentTable({
             }
             emptyHeight={150}
             emptyContent={
-              <>
-                {query ? (
-                  <SearchEmptyState query={query.trim()} />
-                ) : (
-                  "No departments created yet."
-                )}
-              </>
+              ariaBusy ? (
+                <span role="status">Refreshing departments…</span>
+              ) : query ? (
+                <SearchEmptyState query={query.trim()} />
+              ) : (
+                "No departments created yet."
+              )
             }
             className="relative overflow-x-clip"
             onRowsSettled={table.onRowsSettled}
@@ -293,12 +293,11 @@ export function DepartmentTable({
         )}
       </ResponsiveDataTable>
 
-      {!loading && !error && (
+      {!loading && !error && !table.searchPending && (
         <TablePaginationFooter
           {...table.footer}
           label="Department pages"
           onPageChange={(nextPage) => {
-            setAnimateRows(true)
             table.setPage(nextPage)
           }}
         />

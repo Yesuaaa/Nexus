@@ -24,6 +24,10 @@ test.describe("Superadmin account management", () => {
     const pendingSearch = new Promise<void>((resolve) => {
       releaseSearch = resolve
     })
+    let notifyRemoteSearchStarted!: () => void
+    const remoteSearchStarted = new Promise<void>((resolve) => {
+      notifyRemoteSearchStarted = resolve
+    })
     const remoteAccount = {
       ...accountFor("USER"),
       id: "remote-account",
@@ -33,6 +37,7 @@ test.describe("Superadmin account management", () => {
     await page.route("**/api/users?**", async (route) => {
       const query = new URL(route.request().url()).searchParams.get("search")
       if (!query) return route.fallback()
+      if (query === "Remote") notifyRemoteSearchStarted()
       await pendingSearch
       if (query !== "Remote") return route.fallback()
       await route.fulfill({
@@ -53,17 +58,35 @@ test.describe("Superadmin account management", () => {
     await search.fill("")
     await expect(table.getByText("Your account", { exact: true })).toBeVisible()
     await search.fill("Remote")
+    await remoteSearchStarted
     await expect(table.getByText("Target User", { exact: true })).toHaveCount(0)
-    await expect(page.getByRole("status")).toContainText(
-      "Searching all accounts",
+    await expect(table).toHaveAttribute("aria-busy", "true")
+    const searchSkeletons = table.getByRole("rowgroup").nth(1).getByRole("row")
+    await expect(searchSkeletons).toHaveCount(10)
+    await expect(table.getByRole("status")).toContainText("Loading accounts…")
+    await expect(table.getByText("Your account", { exact: true })).toHaveCount(
+      0,
     )
+    await expect(page.getByText(/^Searching all/)).toHaveCount(0)
     await expect(
       table.getByText("No accounts match your search.", { exact: true }),
     ).toHaveCount(0)
     releaseSearch()
+    await expect(table).toHaveAttribute("aria-busy", "false")
+    await expect(table.getByRole("status")).toHaveCount(0)
     await expect(
       table.getByText("Remote Client", { exact: true }),
     ).toBeVisible()
+    await expect(
+      table.getByText("No accounts match your search.", { exact: true }),
+    ).toHaveCount(0)
+    await expect(
+      table.getByRole("rowgroup").nth(1).getByRole("row"),
+    ).toHaveCount(1)
+    await expect(table.getByText("Target User", { exact: true })).toHaveCount(0)
+    await expect(table.getByText("Your account", { exact: true })).toHaveCount(
+      0,
+    )
     await expect(
       page.getByText("Searching all accounts…", { exact: true }),
     ).toHaveCount(0)

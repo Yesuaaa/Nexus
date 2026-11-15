@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { pageRange } from "@/components/ui/table-pagination-footer"
 import type { SortDirection } from "@/components/ui/table-sort-button"
 import type { PaginatedFooter } from "@/components/ui/use-paginated-list"
@@ -65,14 +65,26 @@ export function useLocalTable<T>(
   {
     view = [],
     loading = false,
+    search,
     pageSize = 10,
   }: {
     /** JSON-serializable inputs that define the current view (search, filters, sort). */
     view?: readonly unknown[]
     loading?: boolean
+    /** Search draft that should settle before filtered rows replace the table. */
+    search?: string
     pageSize?: number
   } = {},
 ) {
+  const trimmedSearch = search?.trim() ?? ""
+  const [settledSearch, setSettledSearch] = useState(trimmedSearch)
+  const searchPending = search !== undefined && trimmedSearch !== settledSearch
+  useEffect(() => {
+    if (!searchPending) return
+    const timer = window.setTimeout(() => setSettledSearch(trimmedSearch), 200)
+    return () => window.clearTimeout(timer)
+  }, [searchPending, trimmedSearch])
+
   const viewKey = JSON.stringify(view)
   const [paging, setPaging] = useState({ viewKey, page: 1 })
   const requestedPage = paging.viewKey === viewKey ? paging.page : 1
@@ -88,9 +100,10 @@ export function useLocalTable<T>(
     () => ({ page, total, viewKey }),
     [page, total, viewKey],
   )
+  const pending = loading || searchPending
   const { footer: settled, onRowsSettled } = useTableFooter(
     tableResult,
-    loading,
+    pending,
   )
   const setPage = useCallback(
     (next: number) => setPaging({ viewKey, page: next }),
@@ -102,7 +115,7 @@ export function useLocalTable<T>(
     total: settled.total,
     page: settled.page,
     totalPages: Math.max(1, Math.ceil(settled.total / pageSize)),
-    disabled: loading || settled !== tableResult,
+    disabled: pending || settled !== tableResult,
   }
 
   return {
@@ -112,6 +125,8 @@ export function useLocalTable<T>(
     setPage,
     totalPages,
     total,
+    loading: pending,
+    searchPending,
     /** Props for `<TablePaginationFooter>` (add `label` and `onPageChange`). */
     footer,
     onRowsSettled,

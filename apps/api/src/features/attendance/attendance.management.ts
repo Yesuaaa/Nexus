@@ -362,10 +362,13 @@ export function createAttendanceManagement(clock: () => Date) {
         "page",
         "employeeId",
         "departmentId",
-        ...(audit ? ["recordsOnly"] : []),
+        ...(audit ? ["recordsOnly", "search"] : []),
       ])
       if (input.recordsOnly !== undefined && input.recordsOnly !== "true")
         fail(400, "Invalid record audit filter")
+      const search = audit ? parseQueryString(input.search) : ""
+      if (search === null || search.length > 100)
+        fail(400, "Invalid attendance search")
       const range = parseAttendanceHistory(
         { from: input.from, to: input.to, page: input.page },
         clock(),
@@ -427,6 +430,16 @@ export function createAttendanceManagement(clock: () => Date) {
               ...(employeeId || departmentId
                 ? { employee: { is: employee } }
                 : {}),
+              ...insensitive<Prisma.AttendanceAuditWhereInput>(search, [
+                "action",
+                "entityType",
+                "reason",
+                "actorId",
+                (filter) => ({ employee: { is: { fullName: filter } } }),
+                (filter) => ({ employee: { is: { employeeId: filter } } }),
+                (filter) => ({ actor: { is: { fullName: filter } } }),
+                (filter) => ({ actor: { is: { email: filter } } }),
+              ]),
             }
             const { rows, ...paging } = await paginate(
               range.page,

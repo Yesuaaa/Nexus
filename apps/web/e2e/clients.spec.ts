@@ -10,6 +10,80 @@ configureRegressionTest()
 test.describe("Client management", () => {
   test.skip(live, "Live mode uses the supplied accounts against the real API")
 
+  for (const width of [1280, 390]) {
+    test(`client pagination shows only the requested page while loading at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 })
+      await restoreSession(page, "ADMIN")
+      const firstPage = Array.from({ length: 10 }, (_, index) => ({
+        id: `directory-client-${index + 1}`,
+        fullName: `Directory Client ${index + 1}`,
+        email: `directory-${index + 1}@example.test`,
+        contactNumber: null,
+        isActive: true,
+        createdAt: `2026-11-${String(index + 1).padStart(2, "0")}T00:00:00Z`,
+      }))
+      const lastClient = {
+        id: "directory-client-11",
+        fullName: "Directory Client 11",
+        email: "directory-11@example.test",
+        contactNumber: null,
+        isActive: true,
+        createdAt: "2026-11-11T00:00:00Z",
+      }
+      let releasePage!: () => void
+      let notifyPageStarted!: () => void
+      const pageStarted = new Promise<void>((resolve) => {
+        notifyPageStarted = resolve
+      })
+      const pendingPage = new Promise<void>((resolve) => {
+        releasePage = resolve
+      })
+      await page.route("**/api/clients?**", async (route) => {
+        const pageNumber = Number(
+          new URL(route.request().url()).searchParams.get("page") ?? "1",
+        )
+        if (pageNumber === 2) {
+          notifyPageStarted()
+          await pendingPage
+        }
+        await route.fulfill({
+          json: {
+            clients: pageNumber === 2 ? [lastClient] : firstPage,
+            total: 11,
+            page: pageNumber,
+            pageSize: 10,
+          },
+        })
+      })
+      try {
+        await page.goto("/clients")
+        const table = page.getByRole("table", { name: "Clients", exact: true })
+        await expect(
+          table.getByText("Directory Client 1", { exact: true }),
+        ).toBeVisible()
+        await expect(page.getByText("Showing 1–10 of 11")).toBeVisible()
+        await page.getByRole("button", { name: "Page 2", exact: true }).click()
+        await pageStarted
+        await expect(table).toHaveAttribute("aria-busy", "true")
+        await expect(
+          table.getByText("Directory Client 1", { exact: true }),
+        ).toHaveCount(0)
+        const skeletonRows = table.getByRole("rowgroup").nth(1).getByRole("row")
+        await expect(skeletonRows).toHaveCount(10)
+        for (const row of await skeletonRows.all())
+          await expect(row.getByRole("cell")).toHaveCount(6)
+        await expect(page.getByText("Showing 1–10 of 11")).toHaveCount(0)
+        releasePage()
+        await expect(table.getByText("Directory Client 11")).toBeVisible()
+        await expect(page.getByText("Showing 11–11 of 11")).toBeVisible()
+      } finally {
+        releasePage()
+      }
+    })
+  }
+
   for (const role of ["SUPERADMIN", "ADMIN", "STAFF", "USER"] as const) {
     test(`${role} client directory access and related records respect navigation guards`, async ({
       page,
@@ -274,6 +348,162 @@ test.describe("Client management", () => {
       await expect(opener).toBeFocused()
       await opener.click()
       await expect(dialog.getByLabel("Full Name")).toHaveValue("")
+    })
+  }
+
+  for (const width of [1280, 390]) {
+    test(`client related request pagination uses the requested page skeleton at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 })
+      await restoreSession(page, "ADMIN")
+      const gate = () => {
+        let start!: () => void
+        let release!: () => void
+        const started = new Promise<void>((resolve) => {
+          start = resolve
+        })
+        const pending = new Promise<void>((resolve) => {
+          release = resolve
+        })
+        return { started, pending, start, release: () => release() }
+      }
+      const initial = gate()
+      const nextPage = gate()
+      const initialProjects = gate()
+      await page.route("**/api/clients/*/service-requests**", async (route) => {
+        const url = new URL(route.request().url())
+        const pageNumber = Number(url.searchParams.get("page") ?? "1")
+        const requestGate = pageNumber === 1 ? initial : nextPage
+        requestGate.start()
+        await requestGate.pending
+        return route.fulfill({
+          json: {
+            serviceRequests: [
+              {
+                id: `related-request-${pageNumber}`,
+                title: `Related request page ${pageNumber}`,
+                status: "SUBMITTED",
+                createdAt: "2026-11-14T08:00:00.000Z",
+                service: { id: "service-1", name: "Website Development" },
+              },
+            ],
+            total: 2,
+            page: pageNumber,
+            pageSize: 1,
+          },
+        })
+      })
+      await page.route("**/api/clients/*/projects**", async (route) => {
+        initialProjects.start()
+        await initialProjects.pending
+        return route.fulfill({
+          json: {
+            projects: [
+              {
+                id: "related-project-1",
+                name: "Related project",
+                status: "IN_PROGRESS",
+                startDate: "2026-11-01T00:00:00.000Z",
+                createdAt: "2026-10-30T08:00:00.000Z",
+              },
+            ],
+            total: 1,
+            page: 1,
+            pageSize: 10,
+          },
+        })
+      })
+
+      await page.goto("/clients")
+      await page.getByRole("button", { name: /View.*Target User/i }).click()
+      const drawer = page.getByRole("dialog")
+      await drawer.getByRole("tab", { name: "Service requests" }).click()
+      const desktopTable = drawer.locator("table")
+      const mobileList = drawer.getByRole("list", { name: "Service requests" })
+      await initial.started
+
+      if (width > 800) {
+        await expect(desktopTable).toBeVisible()
+        await expect(desktopTable.locator("thead th")).toHaveCount(4)
+        const skeletonRows = desktopTable.locator("tbody tr")
+        await expect(skeletonRows).toHaveCount(2)
+        for (const row of await skeletonRows.all())
+          await expect(row.locator("td")).toHaveCount(4)
+        await expect(desktopTable.getByRole("status")).toContainText(
+          "Loading service requests",
+        )
+      } else {
+        await expect(desktopTable).toBeHidden()
+        await expect(mobileList).toBeVisible()
+        await expect(
+          mobileList.locator('[role="listitem"][aria-hidden="true"]'),
+        ).toHaveCount(1)
+        await expect(mobileList.getByRole("status")).toContainText(
+          "Loading service requests",
+        )
+      }
+
+      initial.release()
+      const firstRequest =
+        width > 800
+          ? desktopTable.getByText("Related request page 1", { exact: true })
+          : mobileList.getByText("Related request page 1", { exact: true })
+      await expect(firstRequest).toBeVisible()
+      const nextButton = drawer.getByRole("button", {
+        name: "Next",
+        exact: true,
+      })
+      await nextButton.click()
+      await nextPage.started
+      if (width > 800) {
+        await expect(desktopTable).toHaveAttribute("aria-busy", "true")
+        await expect(firstRequest).toHaveCount(0)
+        const skeletonRows = desktopTable.locator("tbody tr")
+        await expect(skeletonRows).toHaveCount(2)
+        for (const row of await skeletonRows.all())
+          await expect(row.locator("td")).toHaveCount(4)
+      } else {
+        await expect(mobileList).toHaveAttribute("aria-busy", "true")
+        await expect(firstRequest).toHaveCount(0)
+        await expect(
+          mobileList.locator('[role="listitem"][aria-hidden="true"]'),
+        ).toHaveCount(1)
+        await expect(mobileList.getByRole("status")).toContainText(
+          "Loading service requests",
+        )
+      }
+      nextPage.release()
+      const secondRequest =
+        width > 800
+          ? desktopTable.getByText("Related request page 2", { exact: true })
+          : mobileList.getByText("Related request page 2", { exact: true })
+      await expect(secondRequest).toBeVisible()
+
+      await drawer.getByRole("tab", { name: "Projects" }).click()
+      await initialProjects.started
+      const projectList = drawer.getByRole("list", { name: "Projects" })
+      if (width > 800) {
+        await expect(desktopTable.locator("thead th")).toHaveCount(3)
+        const skeletonRows = desktopTable.locator("tbody tr")
+        await expect(skeletonRows).toHaveCount(2)
+        for (const row of await skeletonRows.all())
+          await expect(row.locator("td")).toHaveCount(3)
+      } else {
+        await expect(desktopTable).toBeHidden()
+        await expect(
+          projectList.locator('[role="listitem"][aria-hidden="true"]'),
+        ).toHaveCount(1)
+        await expect(projectList.getByRole("status")).toContainText(
+          "Loading projects",
+        )
+      }
+      initialProjects.release()
+      const projectName =
+        width > 800
+          ? desktopTable.getByText("Related project", { exact: true })
+          : projectList.getByText("Related project", { exact: true })
+      await expect(projectName).toBeVisible()
     })
   }
 })
