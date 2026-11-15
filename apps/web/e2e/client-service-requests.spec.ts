@@ -7,7 +7,7 @@ function request(index: number): ServiceRequestSummary {
     id: `request-${index}`,
     referenceNumber: `SR-20261030-${index}`,
     title: `Website redesign ${index}`,
-    status: index % 2 ? "SUBMITTED" : "CLOSED",
+    status: index % 2 ? "SUBMITTED" : "CONCLUDED",
     description: "A new accessible website",
     service: { id: "web", name: "Web Development" },
     package: null,
@@ -122,9 +122,7 @@ for (const width of [1440, 390]) {
     await page
       .getByRole("combobox", { name: "Filter by request status" })
       .click()
-    await page
-      .getByRole("option", { name: "Pending review", exact: true })
-      .click()
+    await page.getByRole("option", { name: "Pending", exact: true }).click()
     await expect(page.getByText("Showing 1–6 of 6")).toBeVisible()
     await page
       .getByRole("searchbox", { name: "Search service requests" })
@@ -234,10 +232,9 @@ test("history renders the manager lifecycle statuses", async ({ page }) => {
   const statuses = [
     "SUBMITTED",
     "UNDER_REVIEW",
-    "AWAITING_CLIENT_INFO",
-    "READY_FOR_QUOTATION",
-    "CLOSED",
+    "ACTIVATED",
     "CANCELLED",
+    "CONCLUDED",
   ] as const
   await page.route("**/api/client/service-requests?*", (route) =>
     route.fulfill({
@@ -250,9 +247,9 @@ test("history renders the manager lifecycle statuses", async ({ page }) => {
         page: 1,
         pageSize: 10,
         summary: {
-          total: 6,
+          total: 5,
           pending: 1,
-          inProgress: 3,
+          inProgress: 2,
           completed: 1,
           cancelled: 1,
         },
@@ -266,12 +263,11 @@ test("history renders the manager lifecycle statuses", async ({ page }) => {
   ).toBeVisible()
   const table = page.getByRole("table")
   for (const label of [
-    "Pending review",
-    "Under review",
-    "Awaiting your information",
-    "Ready for quotation",
-    "Closed",
+    "Pending",
+    "Under Review",
+    "Activated",
     "Cancelled",
+    "Concluded",
   ])
     await expect(table.getByText(label, { exact: true })).toBeVisible()
 })
@@ -331,7 +327,7 @@ test("request history refreshes explicitly and keeps details status aligned with
     })
     .filter({ visible: true })
     .click()
-  await expect(page.getByRole("dialog")).toContainText("Under review")
+  await expect(page.getByRole("dialog")).toContainText("Under Review")
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "Close", exact: true })
@@ -340,13 +336,16 @@ test("request history refreshes explicitly and keeps details status aligned with
   await expect(
     page
       .getByRole("region", { name: "Request history" })
-      .getByText("Under review", { exact: true })
+      .getByText("Under Review", { exact: true })
       .filter({ visible: true }),
   ).toBeVisible()
   await expect(page.getByRole("dialog")).toHaveCount(0)
-  current = { ...current, status: "CLOSED" }
+  current = { ...current, status: "CONCLUDED" }
   await page.evaluate(() => window.dispatchEvent(new Event("online")))
   await expect(
-    page.getByText("Closed", { exact: true }).filter({ visible: true }).last(),
+    page
+      .getByText("Concluded", { exact: true })
+      .filter({ visible: true })
+      .last(),
   ).toBeVisible()
 })

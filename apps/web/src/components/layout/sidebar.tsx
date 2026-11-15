@@ -89,6 +89,7 @@ function NavigationIcon({
     departments: DepartmentIcon,
     services: ServiceIcon,
     "service-requests": ClipboardList,
+    "module-service-operations": ClipboardList,
     calendar: CalendarDays,
     projects: FolderKanban,
     "project-workspace": FolderKanban,
@@ -97,6 +98,7 @@ function NavigationIcon({
     employees: UsersRound,
     "attendance-dashboard": DashboardIcon,
     "staff-workload": Gauge,
+    "administrative-workload": Gauge,
   }
   const icon = icons[policyId]
   return icon ? <RowIcon icon={icon} active={active} /> : null
@@ -417,6 +419,13 @@ export function Sidebar({
   }
 
   function renderPolicy(policy: RoutePolicy) {
+    if (
+      account.role === "SUPERADMIN" &&
+      policy.id === "module-service-operations" &&
+      mainNavigation.some((entry) => entry.id === "services")
+    )
+      return null
+
     const attendanceGroup = attendanceNavigation.find(
       (group) => group.id === policy.id,
     )
@@ -452,12 +461,26 @@ export function Sidebar({
       const names = {
         departments: ["Departments", "Department", DepartmentIcon],
         employees: ["Employees", "Employee", UsersRound],
-        services: ["Services", "Service", ServiceIcon],
+        services: ["Service", "Service", ServiceIcon],
       } as const
       const [label, singular, icon] = names[policy.id]
-      return renderGroup(
-        moduleGroup(label, singular, icon, `/${policy.id}`, policy.canAccess),
+      const group = moduleGroup(
+        label,
+        singular,
+        icon,
+        `/${policy.id}`,
+        policy.canAccess,
       )
+      if (
+        policy.id === "services" &&
+        account.role === "SUPERADMIN" &&
+        mainNavigation.some((entry) => entry.id === "module-service-operations")
+      )
+        group.links.push({
+          href: "/module/service-operations",
+          label: "Requests",
+        })
+      return renderGroup(group)
     }
     return <SidebarNavigationLink key={policy.id} {...props} />
   }

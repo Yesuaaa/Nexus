@@ -122,7 +122,7 @@ export async function uploadWorkflowFile(
         ["PENDING_REVIEW", "CANCELLED", "DECLINED", "ON_HOLD"].includes(
           request.workflow.state,
         ) ||
-        ["CLOSED", "CANCELLED"].includes(request.status)
+        ["CLOSED", "CANCELLED", "CONCLUDED"].includes(request.status)
       )
         fail("File submissions are unavailable at this stage", 409)
       const existing = await tx.workflowFile.findUnique({

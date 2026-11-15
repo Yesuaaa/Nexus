@@ -111,10 +111,10 @@ for (const width of [1440, 390]) {
     await page
       .getByRole("option", { name: "All statuses", exact: true })
       .click()
-    await expect(page.getByText("Under review", { exact: true })).toBeVisible()
-    state.requests[0]!.status = "CLOSED"
+    await expect(page.getByText("Under Review", { exact: true })).toBeVisible()
+    state.requests[0]!.status = "CONCLUDED"
     await page.evaluate(() => window.dispatchEvent(new Event("focus")))
-    await expect(page.getByText("Closed", { exact: true })).toBeVisible()
+    await expect(page.getByText("Concluded", { exact: true })).toBeVisible()
     expect(state.queries.at(-1)).toContain("view=all")
   })
   test(`status filtering, sorting and exact-request chat feedback at ${width}px`, async ({
@@ -167,7 +167,7 @@ for (const width of [1440, 390]) {
     await page
       .getByRole("combobox", { name: "Filter requests", exact: true })
       .click()
-    await page.getByRole("option", { name: "Closed", exact: true }).click()
+    await page.getByRole("option", { name: "Concluded", exact: true }).click()
     await expect(
       page.getByText("No requests match this view.", { exact: true }),
     ).toBeVisible()
@@ -243,7 +243,7 @@ test("chat icons open the exact accepted request and report access failures", as
   await page
     .getByRole("combobox", { name: "Filter requests", exact: true })
     .click()
-  await page.getByRole("option", { name: "Under review", exact: true }).click()
+  await page.getByRole("option", { name: "Under Review", exact: true }).click()
   await page
     .getByRole("button", {
       name: "Go to chat for request booking-1",
@@ -348,6 +348,8 @@ async function mockInbox(
               {
                 pending: "SUBMITTED",
                 "under-review": "UNDER_REVIEW",
+                activated: "ACTIVATED",
+                concluded: "CONCLUDED",
                 "awaiting-information": "AWAITING_CLIENT_INFO",
                 "ready-for-quotation": "READY_FOR_QUOTATION",
                 closed: "CLOSED",
@@ -597,7 +599,7 @@ for (const width of [1440, 390]) {
     ).not.toBeVisible()
     await page.getByRole("combobox", { name: "Filter requests" }).click()
     await page
-      .getByRole("option", { name: "Under review", exact: true })
+      .getByRole("option", { name: "Under Review", exact: true })
       .click()
     await expect(page.getByText("Showing 1–1 of 1")).toBeVisible()
     await page

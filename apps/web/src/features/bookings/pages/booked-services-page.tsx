@@ -21,12 +21,13 @@ import {
 import { BookedServicesTable } from "../components/booked-services-table"
 import { BookingDetailsDrawer } from "../components/booking-details-drawer"
 import { bookingStatuses } from "../model/booking-status"
+import { serviceRequestStatusValues } from "@/features/service-operations/model/service-request-contracts"
 
 const statusOptions = [
   { value: "", label: "All Statuses" },
-  ...Object.entries(bookingStatuses).map(([value, info]) => ({
+  ...serviceRequestStatusValues.map((value) => ({
     value,
-    label: info.label,
+    label: bookingStatuses[value].label,
   })),
 ]
 

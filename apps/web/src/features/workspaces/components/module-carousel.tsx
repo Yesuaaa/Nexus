@@ -27,7 +27,7 @@ export function ModuleCarousel({ modules }: { modules: WorkspaceModule[] }) {
     <section
       aria-label="Available workspaces"
       aria-roledescription="carousel"
-      className="relative mx-auto min-h-[400px] w-full max-w-[1616px] flex-1 overflow-hidden"
+      className="relative mx-auto min-h-[400px] w-full max-w-[1616px] flex-1 overflow-clip"
       onKeyDown={(event) => {
         if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
           event.preventDefault()
@@ -57,7 +57,9 @@ export function ModuleCarousel({ modules }: { modules: WorkspaceModule[] }) {
         }
       }}
     >
-      <div className="absolute inset-y-0 inset-x-14 overflow-hidden">
+      {/* Clipping must not create a scroll container: focusing a distant card
+          would otherwise scroll the track independently of activeIndex. */}
+      <div className="absolute inset-y-0 inset-x-14 overflow-clip [container-type:inline-size]">
         {modules.map((module, position) => {
           const offset = position - activeIndex
           const distance = Math.abs(offset)
@@ -65,9 +67,9 @@ export function ModuleCarousel({ modules }: { modules: WorkspaceModule[] }) {
           return (
             <div
               key={`${module.id}-${position}`}
-              className="absolute top-1/2 w-[min(280px,calc(100vw-100px))] transition-[left,transform] duration-500 ease-out motion-reduce:transition-none"
+              className="absolute top-1/2 w-[min(280px,100cqw)] transition-[left,transform] duration-500 ease-out motion-reduce:transition-none"
               style={{
-                left: `calc(50% + ${offset} * (min(280px, 100vw - 100px) + 20px))`,
+                left: `calc(50% + ${offset} * (min(280px, 100cqw) + 20px))`,
                 transform: "translate(-50%, -50%)",
                 zIndex: previewCount + 1 - distance,
               }}

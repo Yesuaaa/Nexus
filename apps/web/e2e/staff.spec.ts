@@ -88,7 +88,7 @@ test.describe("Staff and role navigation", () => {
           menu.getByRole("link", { name: "Department overview", exact: true }),
         ).toHaveAttribute("href", "/departments/overview")
         await expect(
-          menu.getByRole("button", { name: "Services", exact: true }),
+          menu.getByRole("button", { name: "Service", exact: true }),
         ).toHaveCount(0)
         await page.reload()
         await expect(
@@ -161,7 +161,7 @@ test.describe("Staff and role navigation", () => {
           page.getByRole("button", { name: "Create Service", exact: true }),
         ).toHaveCount(1)
         await expect(
-          menu.getByRole("button", { name: "Services", exact: true }),
+          menu.getByRole("button", { name: "Service", exact: true }),
         ).toBeVisible()
         await expect(
           menu.getByRole("link", { name: "Service overview", exact: true }),

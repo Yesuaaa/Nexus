@@ -21,6 +21,8 @@ export type InboxList = {
 export type InboxView =
   | "pending"
   | "under-review"
+  | "activated"
+  | "concluded"
   | "all"
   | "awaiting-information"
   | "ready-for-quotation"
