@@ -6,6 +6,7 @@ import { usersRepository } from "../../../src/features/users/users.repository.js
 import { issueSession } from "../../../src/features/auth/auth.service.js"
 import type { publicUser } from "../../../src/features/users/users.dto.js"
 import { startPgliteApp } from "../../support/pglite-app.js"
+import { createManagementOperation } from "../../../src/shared/management-history.js"
 
 test(
   "Superadmins restore trashed accounts as inactive while preserving their records",
@@ -39,6 +40,12 @@ test(
       const session = await issueSession(user)
       tokens.set(id, session.token)
     }
+    const operation = createManagementOperation({
+      user: await prisma.user.findUniqueOrThrow({ where: { id: "actor" } }),
+      sessionId: (
+        await prisma.session.findFirstOrThrow({ where: { userId: "actor" } })
+      ).id,
+    })
     const department = await prisma.department.create({
       data: { name: "Design" },
     })
@@ -70,11 +77,21 @@ test(
     assert.equal((await restore("actor", "user")).status, 409)
     assert.equal((await restore("target")).status, 401)
     assert.equal(
-      await usersRepository.restoreUser("target", Role.USER, deletedAt),
+      await usersRepository.restoreUser(
+        "target",
+        Role.USER,
+        deletedAt,
+        operation,
+      ),
       null,
     )
     assert.equal(
-      await usersRepository.restoreUser("target", Role.STAFF, new Date(0)),
+      await usersRepository.restoreUser(
+        "target",
+        Role.STAFF,
+        new Date(0),
+        operation,
+      ),
       null,
     )
     assert.equal(
@@ -93,7 +110,7 @@ test(
     FOR EACH ROW EXECUTE FUNCTION reject_restore_session_deletion();
   `)
     await assert.rejects(() =>
-      usersRepository.restoreUser("target", Role.STAFF, deletedAt),
+      usersRepository.restoreUser("target", Role.STAFF, deletedAt, operation),
     )
     assert.equal(
       (

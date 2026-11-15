@@ -443,7 +443,7 @@ test(
               `/employees/${other.employee!.id}/history`,
             )
           ).status,
-          403,
+          200,
         )
       },
     )

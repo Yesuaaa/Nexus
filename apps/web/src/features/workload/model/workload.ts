@@ -15,6 +15,8 @@ export type WorkloadStaff = {
   status: string
   profileSpecialties: string[]
   team: { id: string; name: string } | null
+  /** Present on administrative reads; null represents an unassigned department. */
+  department?: { id: string; name: string } | null
   capacity: { scheduledHours: number; timeOffHours: number } | null
   assignments: WorkloadAssignment[]
   planning?: WorkloadPlanning

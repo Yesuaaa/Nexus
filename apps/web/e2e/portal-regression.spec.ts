@@ -33,7 +33,7 @@ for (const role of ["SUPERADMIN", "ADMIN", "STAFF", "USER"] as const) {
         workloadRequests.push(request.url())
     })
     await page.goto("/staff-workload")
-    await expect(page).toHaveURL(/\/dashboard$/)
+    await expect(page).toHaveURL(role === "USER" ? /\/dashboard$/ : /\/module$/)
     expect(workloadRequests).toEqual([])
     await expect(
       page.getByRole("link", { name: "Workflow Approvals", exact: true }),

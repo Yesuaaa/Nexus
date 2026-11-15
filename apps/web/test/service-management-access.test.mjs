@@ -20,13 +20,20 @@ function account(role, permissions = []) {
   }
 }
 
-test("service management is limited to the admin role", () => {
+test("service management is available to Admin and Superadmin", () => {
   assert.equal(
     canAccessServiceManagement(account("ADMIN", [Permissions.SERVICES_READ])),
     true,
   )
 
-  for (const role of ["USER", "STAFF", "SUPERADMIN"]) {
+  assert.equal(
+    canAccessServiceManagement(
+      account("SUPERADMIN", [Permissions.SERVICES_READ]),
+    ),
+    true,
+  )
+  assert.equal(canAccessServiceManagement(account("SUPERADMIN")), false)
+  for (const role of ["USER", "STAFF"]) {
     assert.equal(
       canAccessServiceManagement(account(role, [Permissions.SERVICES_READ])),
       false,

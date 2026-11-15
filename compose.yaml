@@ -46,6 +46,7 @@ services:
       - ./apps/web/next.config.ts:/workspace/apps/web/next.config.ts:ro
       - ./apps/web/postcss.config.mjs:/workspace/apps/web/postcss.config.mjs:ro
       - ./apps/web/tsconfig.json:/workspace/apps/web/tsconfig.json:ro
+      - ./apps/api/src/features/modules/module-registry.json:/workspace/apps/api/src/features/modules/module-registry.json:ro
     depends_on:
       api:
         condition: service_healthy

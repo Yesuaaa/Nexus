@@ -345,14 +345,15 @@ test("department head keeps request and workload navigation in their approved mo
   await expect(menu.getByRole("link", { name: "Request Inbox" })).toHaveCount(0)
 })
 
-test("Administration remains the only Superadmin module scope", async ({
-  page,
-}) => {
+test("Superadmin retains the Administration module scope", async ({ page }) => {
   await restoreSession(page, "SUPERADMIN")
   await page.goto("/dashboard")
-  await page
-    .getByRole("link", { name: "Open Administration workspace", exact: true })
-    .click()
+  const entry = page.getByRole("link", {
+    name: "Open Administration workspace",
+    exact: true,
+  })
+  await entry.focus()
+  await entry.click()
 
   const menu = mainMenu(page)
   await expect(page).toHaveURL(/\/accounts$/)

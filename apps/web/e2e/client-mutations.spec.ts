@@ -24,7 +24,7 @@ for (const width of [1440, 390]) {
               email: "admin@example.com",
               role: "ADMIN",
               isActive: true,
-              permissions: ["clients:read", "dashboard:read"],
+              permissions: ["clients:read", "clients:create", "dashboard:read"],
               createdAt: "2026-10-01T00:00:00Z",
             },
           },

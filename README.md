@@ -50,7 +50,9 @@ Frontend code remains organized by feature under `apps/web/src/features`. Within
 
 Authentication still uses the existing session-storage bearer token and Express endpoints. Account loading and frontend redirects therefore run on the client after hydration; the server renders a neutral loading state for protected pages. The API remains responsible for authorizing every operation. No cookie/session migration, backend changes, database changes, or duplicated Next.js authentication endpoints are introduced.
 
-Browser regression checks use mocked API responses and do not write to the database. Install Chromium once with `pnpm --filter @nexus/web exec playwright install chromium`, then run `pnpm --filter @nexus/web test:e2e`. Playwright builds the current frontend before starting its test server on port 5273. Close an existing Playwright test server before starting another run so the suite cannot reuse an outdated build. To use an installed Chrome browser instead, set `PLAYWRIGHT_CHANNEL=chrome` in your shell before running the tests.
+Browser regression checks use isolated API mocks or real Express/PGlite fixtures and never write to the configured live database. Install Chromium once with `pnpm --filter @nexus/web exec playwright install chromium`, then run `pnpm --filter @nexus/web test:e2e`. Playwright builds the current frontend before starting its test server on port 5273. Close an existing Playwright test server before starting another run so the suite cannot reuse an outdated build. To use an installed Chrome browser instead, set `PLAYWRIGHT_CHANNEL=chrome` in your shell before running the tests.
+
+API tests and the real Attendance browser fixture compile through the existing TypeScript configuration and run with native Node, avoiding `tsx` startup restrictions. `pnpm test:api` runs all offline backend tests; `pnpm --filter @nexus/api test tests/request-workflow.test.ts` selects a suite. See [test regression recovery](docs/features/testing-regression-recovery.md) for the runner, fixture routing and resolved historical failures.
 
 The API follows the same feature layout under `apps/api/src/features`: auth owns credentials, sessions, and login limits; users owns account administration and role rules; health owns service checks. `app.ts` mounts the routes and handles HTTP errors, `index.ts` starts the server, and `lib/db.ts` provides Prisma access. `apps/api/prisma/seed.ts` is the Prisma seed entry point. Run `pnpm --filter @nexus/api test` for backend checks.
 
@@ -93,7 +95,7 @@ docker compose ps
 docker compose down
 ```
 
-Change `WEB_PORT` or `API_PORT` in `.env` to use other host ports. If you change the browser origin, update `WEB_ORIGIN`. Source edits reload automatically; dependency changes require `docker compose up --build -d`. Run Prisma migrations using `pnpm db:migrate --name <name>` from the host with `apps/api/.env` configured.
+Change `WEB_PORT` or `API_PORT` in `.env` to use other host ports. If you change the browser origin, update `WEB_ORIGIN`. Source edits reload automatically; dependency changes require `docker compose up --build -d`. The web image includes the shared module registry from `apps/api/src/features/modules/module-registry.json`; development mounts that file read-only so registration edits also reload. After Dockerfile or mount changes, recreate the web service with `docker compose up --build -d --no-deps web`. Run Prisma migrations using `pnpm db:migrate --name <name>` from the host with `apps/api/.env` configured.
 
 The production Next.js standalone server is available with `docker compose -f compose.prod.yaml up --build -d` at http://localhost:8080. Stop the development containers first with `docker compose down`. The web image includes the standalone server, public assets, and generated static assets. The production runtime API image does not include Prisma CLI tooling.
 

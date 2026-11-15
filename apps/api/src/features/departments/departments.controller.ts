@@ -3,17 +3,20 @@ import { requireAuth, requirePermission } from "../auth/auth.middleware.js"
 import { Permission } from "../auth/auth.permissions.js"
 import { departmentsService } from "./departments.service.js"
 import { teamsService } from "./teams.service.js"
+import { createManagementOperation } from "../../shared/management-history.js"
 
 // Service errors are HttpErrors; Express 5 forwards them to `handleError`.
 export const departmentsRouter = Router()
 departmentsRouter.use(requireAuth)
 
-// GET /api/departments - List departments with head and related record counts
+// Directory readers receive summaries; HR readers retain management metadata.
 departmentsRouter.get(
   "/",
   requirePermission(Permission.DEPARTMENTS_READ),
-  async (_request, response) => {
-    response.json(await departmentsService.listDepartments())
+  async (request, response) => {
+    response.json(
+      await departmentsService.listDepartments(request.auth!.user.role),
+    )
   },
 )
 
@@ -29,7 +32,7 @@ departmentsRouter.get(
 // GET /api/departments/employee-options - Search employee records for department assignment
 departmentsRouter.get(
   "/employee-options",
-  requirePermission(Permission.DEPARTMENTS_READ),
+  requirePermission(Permission.DEPARTMENTS_MANAGE),
   async (request, response) => {
     response.json(await departmentsService.getEmployeeOptions(request.query))
   },
@@ -39,6 +42,9 @@ departmentsRouter.get(
 departmentsRouter.get(
   "/:id",
   requirePermission(Permission.DEPARTMENTS_READ),
+  // This response contains employee contact, HR and account lifecycle details.
+  // Head staffing uses the independently scoped workload/workflow endpoints.
+  requirePermission(Permission.EMPLOYEES_READ),
   async (request, response) => {
     response.json(
       await departmentsService.getDepartmentById(String(request.params.id)),
@@ -53,7 +59,12 @@ departmentsRouter.post(
   async (request, response) => {
     response
       .status(201)
-      .json(await departmentsService.createDepartment(request.body))
+      .json(
+        await departmentsService.createDepartment(
+          request.body,
+          createManagementOperation(request.auth!),
+        ),
+      )
   },
 )
 
@@ -66,6 +77,7 @@ departmentsRouter.put(
       await departmentsService.updateDepartment(
         String(request.params.id),
         request.body,
+        createManagementOperation(request.auth!),
       ),
     )
   },
@@ -80,6 +92,7 @@ departmentsRouter.post(
       await departmentsService.assignMembers(
         String(request.params.id),
         request.body,
+        createManagementOperation(request.auth!),
       ),
     )
   },
@@ -94,6 +107,7 @@ departmentsRouter.delete(
       await departmentsService.removeMember(
         String(request.params.id),
         String(request.params.memberId),
+        createManagementOperation(request.auth!),
       ),
     )
   },
@@ -105,7 +119,10 @@ departmentsRouter.delete(
   requirePermission(Permission.DEPARTMENTS_DELETE),
   async (request, response) => {
     response.json(
-      await departmentsService.deleteDepartment(String(request.params.id)),
+      await departmentsService.deleteDepartment(
+        String(request.params.id),
+        createManagementOperation(request.auth!),
+      ),
     )
   },
 )
@@ -118,7 +135,11 @@ departmentsRouter.post(
     response
       .status(201)
       .json(
-        await teamsService.createTeam(String(request.params.id), request.body),
+        await teamsService.createTeam(
+          String(request.params.id),
+          request.body,
+          createManagementOperation(request.auth!),
+        ),
       )
   },
 )
@@ -133,6 +154,7 @@ departmentsRouter.put(
         String(request.params.id),
         String(request.params.teamId),
         request.body,
+        createManagementOperation(request.auth!),
       ),
     )
   },
@@ -147,6 +169,7 @@ departmentsRouter.delete(
       await teamsService.deleteTeam(
         String(request.params.id),
         String(request.params.teamId),
+        createManagementOperation(request.auth!),
       ),
     )
   },
@@ -162,6 +185,7 @@ departmentsRouter.patch(
         String(request.params.id),
         String(request.params.memberId),
         request.body ?? {},
+        createManagementOperation(request.auth!),
       ),
     )
   },

@@ -117,7 +117,11 @@ export function WorkflowCard({
   )
 }
 
-export function WorkflowProgress({ workflow }: { workflow: Workflow }) {
+export function WorkflowProgress({
+  workflow,
+}: {
+  workflow: Pick<Workflow, "state" | "previousState">
+}) {
   const steps = [
     "Consultation",
     "Quotation",

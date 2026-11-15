@@ -1,6 +1,6 @@
 import { Prisma, Role } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
-import { lockRows } from "../../shared/db/locks.js"
+import { lockRows, lockRowsReturning } from "../../shared/db/locks.js"
 import { HttpError } from "../../shared/http-error.js"
 import { paginate } from "../../shared/query/pagination.js"
 import {
@@ -10,6 +10,13 @@ import {
   setAccountActive,
 } from "./account-lifecycle.js"
 import { publicUserInclude } from "./users.dto.js"
+import type { ManagementOperation } from "../../shared/management-history.js"
+import { writeAccountManagementChange } from "./account-management-history.js"
+import {
+  syncAccountWorkforce,
+  readAccountDeletionWorkforce,
+  writeAccountDeletionWorkforce,
+} from "./account-workforce-history.js"
 
 export interface CreateUserInput {
   email: string
@@ -27,6 +34,7 @@ export const usersRepository = {
     id: string,
     currentPasswordHash: string,
     passwordHash: string,
+    operation: ManagementOperation,
   ) {
     const prisma = getPrisma()!
     return prisma.$transaction(async (transaction) => {
@@ -40,6 +48,13 @@ export const usersRepository = {
       })
       if (updated.count === 0) return false
       await transaction.session.deleteMany({ where: { userId: id } })
+      await writeAccountManagementChange(transaction, operation, {
+        subjectAccountId: id,
+        action: "PASSWORD_RESET",
+        origin: "ACCOUNT_MANAGEMENT",
+        changedFields: [],
+        changes: { sessionsRevoked: true },
+      })
       return true
     })
   },
@@ -51,27 +66,74 @@ export const usersRepository = {
     currentRole: Role,
     currentIsActive: boolean,
     nextIsActive: boolean,
+    operation: ManagementOperation,
   ) {
     return getPrisma()!.$transaction(async (tx) => {
       const updated = await setAccountActive(tx, id, nextIsActive, {
         role: currentRole,
         isActive: currentIsActive,
+        accountDeletedAt: null,
       })
       if (!updated) return null
-      return tx.user.findUniqueOrThrow({
+      const user = await tx.user.findUniqueOrThrow({
         where: { id },
         include: publicUserInclude,
       })
+      if (currentIsActive !== user.isActive || !nextIsActive) {
+        await writeAccountManagementChange(tx, operation, {
+          subjectAccountId: id,
+          action: "STATUS_CHANGED",
+          origin: "ACCOUNT_MANAGEMENT",
+          changedFields: currentIsActive !== user.isActive ? ["isActive"] : [],
+          changes: {
+            ...(currentIsActive !== user.isActive
+              ? { isActive: { before: currentIsActive, after: user.isActive } }
+              : {}),
+            sessionsRevoked: !nextIsActive,
+          },
+        })
+      }
+      return user
     })
   },
 
-  async softDeleteInactiveUser(id: string, role: Role) {
-    return getPrisma()!.$transaction((tx) =>
-      moveAccountToTrash(tx, id, { guard: { role, isActive: false } }),
-    )
+  async softDeleteInactiveUser(
+    id: string,
+    role: Role,
+    operation: ManagementOperation,
+  ) {
+    return getPrisma()!.$transaction(async (tx) => {
+      const moved = await moveAccountToTrash(tx, id, {
+        guard: { role, isActive: false },
+      })
+      if (!moved) return false
+      const after = await tx.user.findUniqueOrThrow({
+        where: { id },
+        select: { accountDeletedAt: true },
+      })
+      await writeAccountManagementChange(tx, operation, {
+        subjectAccountId: id,
+        action: "ARCHIVED",
+        origin: "ACCOUNT_MANAGEMENT",
+        changedFields: ["accountDeletedAt"],
+        changes: {
+          accountDeletedAt: {
+            before: null,
+            after: after.accountDeletedAt!.toISOString(),
+          },
+          sessionsRevoked: true,
+        },
+      })
+      return true
+    })
   },
 
-  async restoreUser(id: string, role: Role, accountDeletedAt: Date) {
+  async restoreUser(
+    id: string,
+    role: Role,
+    accountDeletedAt: Date,
+    operation: ManagementOperation,
+  ) {
     return getPrisma()!.$transaction(async (tx) => {
       const restored = await restoreAccountFromTrash(tx, id, {
         role,
@@ -79,19 +141,53 @@ export const usersRepository = {
         accountDeletedAt,
       })
       if (!restored) return null
-      return tx.user.findUniqueOrThrow({
+      const user = await tx.user.findUniqueOrThrow({
         where: { id },
         include: publicUserInclude,
       })
+      await writeAccountManagementChange(tx, operation, {
+        subjectAccountId: id,
+        action: "RESTORED",
+        origin: "ACCOUNT_MANAGEMENT",
+        changedFields: ["accountDeletedAt"],
+        changes: {
+          accountDeletedAt: {
+            before: accountDeletedAt.toISOString(),
+            after: user.accountDeletedAt?.toISOString() ?? null,
+          },
+          sessionsRevoked: true,
+        },
+      })
+      return user
     })
   },
 
-  async permanentlyDeleteUser(id: string, role: Role) {
-    return deleteAccountPermanently(getPrisma()!, id, {
-      guard: { role, isActive: false, accountDeletedAt: { not: null } },
-      linkedMessage:
-        "This account has related records and cannot be permanently deleted. Keep it in Trash to preserve its history.",
-    })
+  async permanentlyDeleteUser(
+    id: string,
+    role: Role,
+    operation: ManagementOperation,
+  ) {
+    return getPrisma()!.$transaction(
+      async (tx) => {
+        const workforce = await readAccountDeletionWorkforce(tx, id)
+        const deleted = await deleteAccountPermanently(tx, id, {
+          guard: { role, isActive: false, accountDeletedAt: { not: null } },
+          linkedMessage:
+            "This account has related records and cannot be permanently deleted. Keep it in Trash to preserve its history.",
+        })
+        if (!deleted) return false
+        await writeAccountManagementChange(tx, operation, {
+          subjectAccountId: id,
+          action: "DELETED",
+          origin: "ACCOUNT_MANAGEMENT",
+          changedFields: [],
+          changes: {},
+        })
+        await writeAccountDeletionWorkforce(tx, operation, workforce)
+        return true
+      },
+      { isolationLevel: "Serializable" },
+    )
   },
 
   async findDepartmentById(id: string) {
@@ -127,6 +223,7 @@ export const usersRepository = {
       tx: Prisma.TransactionClient,
       userId: string,
     ) => Promise<unknown>,
+    operation: ManagementOperation,
   ) {
     const prisma = getPrisma()!
     return prisma.$transaction(async (tx) => {
@@ -143,7 +240,23 @@ export const usersRepository = {
         },
         include: publicUserInclude,
       })
-      await syncEmployee(tx, created.id)
+      await writeAccountManagementChange(tx, operation, {
+        subjectAccountId: created.id,
+        action: "CREATED",
+        origin: "ACCOUNT_MANAGEMENT",
+        changedFields: [
+          "role",
+          "isActive",
+          "fullName",
+          "email",
+          "contactNumber",
+        ],
+        changes: {
+          role: { before: null, after: created.role },
+          isActive: { before: null, after: created.isActive },
+        },
+      })
+      await syncAccountWorkforce(tx, operation, created.id, syncEmployee, true)
       return created
     })
   },
@@ -156,9 +269,11 @@ export const usersRepository = {
       tx: Prisma.TransactionClient,
       userId: string,
     ) => Promise<unknown>,
+    operation: ManagementOperation,
   ) {
     const prisma = getPrisma()!
     return prisma.$transaction(async (tx) => {
+      await lockRowsReturning(tx, "Employee", targetId, "update", "userId")
       await lockRows(tx, "User", targetId)
       // Department heads and team leads must stay STAFF; otherwise their
       // department's requests become unroutable and the roster goes stale.
@@ -194,13 +309,25 @@ export const usersRepository = {
         )
       }
       const result = await tx.user.updateMany({
-        where: { id: targetId, role: currentRole },
+        where: { id: targetId, role: currentRole, accountDeletedAt: null },
         data: { role: nextRole },
       })
       if (result.count === 0) {
         throw new HttpError(409, "Role changed; refresh and retry")
       }
-      await syncEmployee(tx, targetId)
+      const after = await tx.user.findUniqueOrThrow({
+        where: { id: targetId },
+        select: { role: true },
+      })
+      if (currentRole !== after.role)
+        await writeAccountManagementChange(tx, operation, {
+          subjectAccountId: targetId,
+          action: "ROLE_CHANGED",
+          origin: "ACCOUNT_MANAGEMENT",
+          changedFields: ["role"],
+          changes: { role: { before: currentRole, after: after.role } },
+        })
+      await syncAccountWorkforce(tx, operation, targetId, syncEmployee)
       return tx.user.findUniqueOrThrow({
         where: { id: targetId },
         include: publicUserInclude,

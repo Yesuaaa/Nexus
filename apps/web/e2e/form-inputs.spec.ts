@@ -12,7 +12,11 @@ test.skip(live, "Uses mocked accounts and profile writes")
 // Tailwind's shadow-none can serialize as several transparent, zero-size layers.
 const noVisibleShadow = /^(none|(?:rgba\(0, 0, 0, 0\) 0px 0px 0px 0px,? ?)+)$/
 
-async function expectBaseStyle(field: Locator, multiline = false) {
+async function expectBaseStyle(
+  field: Locator,
+  multiline = false,
+  height = "40px",
+) {
   await expect(field).toHaveCSS("font-size", "14px")
   await expect(field).toHaveCSS("font-weight", "400")
   await expect(field).toHaveCSS("line-height", "20px")
@@ -20,7 +24,7 @@ async function expectBaseStyle(field: Locator, multiline = false) {
   await expect(field).toHaveCSS("padding-left", "12px")
   await expect(field).toHaveCSS("outline-style", "none")
   await expect(field).toHaveCSS("box-shadow", noVisibleShadow)
-  if (!multiline) await expect(field).toHaveCSS("height", "40px")
+  if (!multiline) await expect(field).toHaveCSS("height", height)
 }
 
 for (const width of [1440, 390]) {
@@ -69,12 +73,13 @@ for (const width of [1440, 390]) {
     await page.goto("/login")
     const email = page.locator("#email")
     const password = page.locator("#password")
-    await expectBaseStyle(email)
-    await expectBaseStyle(password)
+    // Auth fields deliberately override the shared 40px management control.
+    await expectBaseStyle(email, false, "48px")
+    await expectBaseStyle(password, false, "48px")
     await email.fill("user@example.com")
     await email.focus()
     await expect(email).toHaveCSS("border-color", "rgb(154, 174, 203)")
-    await expectBaseStyle(email)
+    await expectBaseStyle(email, false, "48px")
     await password.fill("StrongPassword123!")
     await password.focus()
     await password.press("Tab")
@@ -85,7 +90,7 @@ for (const width of [1440, 390]) {
     await expect(toggle).toBeFocused()
     await toggle.press("Space")
     await expect(password).toHaveAttribute("type", "text")
-    await expectBaseStyle(password)
+    await expectBaseStyle(password, false, "48px")
   })
 
   test(`service text and multiline fields share styling at ${width}px`, async ({

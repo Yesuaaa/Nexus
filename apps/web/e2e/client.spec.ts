@@ -544,7 +544,7 @@ test.describe("Client service requests", () => {
       releaseSubmission!()
       await expect(
         page.getByRole("heading", {
-          name: "Service request submitted for review",
+          name: "Request submitted",
           exact: true,
         }),
       ).toBeVisible()
@@ -565,7 +565,7 @@ test.describe("Client service requests", () => {
         path: testInfo.outputPath("request-submitted.png"),
       })
       await page
-        .getByRole("button", { name: "Start another request", exact: true })
+        .getByRole("button", { name: "Back to services", exact: true })
         .click()
       await expect(page.getByRole("progressbar")).toHaveAttribute(
         "aria-valuenow",

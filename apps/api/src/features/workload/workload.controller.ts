@@ -5,22 +5,11 @@ import { activeStaff } from "../../shared/query/accounts.js"
 import type { Prisma } from "../../generated/prisma/client.js"
 import { fail } from "../../shared/http-error.js"
 import { requireDepartmentHead } from "../request-inbox/request-inbox.service.js"
-import { workloadPlanningContext } from "./workload-availability.service.js"
+import { readDepartmentWorkload } from "./workload-read.service.js"
+import { weekValue } from "./workload.schema.js"
 
 export const workloadRouter = Router()
 workloadRouter.use(requireAuth)
-function weekValue(value: unknown): string {
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value))
-    return fail(400, "Choose a valid week")
-  const date = new Date(`${value}T00:00:00Z`)
-  if (
-    !Number.isFinite(date.getTime()) ||
-    date.toISOString().slice(0, 10) !== value ||
-    date.getUTCDay() !== 1
-  )
-    return fail(400, "Week must start on Monday")
-  return value
-}
 function hours(value: unknown, positive = false): number {
   if (
     typeof value !== "number" ||
@@ -46,48 +35,19 @@ function eligibleStaffWhere(departmentId: string): Prisma.EmployeeWhereInput {
 }
 workloadRouter.get("/", async (req, res) => {
   const week = weekValue(req.query.week)
-  const end = new Date(`${week}T00:00:00Z`)
-  end.setUTCDate(end.getUTCDate() + 6)
   const result = await getPrisma()!.$transaction(
     async (tx) => {
       const department = await scope(tx, req.auth!.user.id)
-      const staff = await tx.employee.findMany({
-        where: staffAccountWhere(department.id),
-        select: {
-          id: true,
-          userId: true,
-          fullName: true,
-          position: true,
-          status: true,
-          profileSpecialties: true,
-          team: { select: { id: true, name: true } },
-          projectAssignments: {
-            where: {
-              project: {
-                status: { in: ["PLANNED", "IN_PROGRESS", "ON_HOLD"] },
-              },
-            },
-            include: {
-              project: { select: { id: true, name: true, status: true } },
-            },
-          },
-        },
-        orderBy: { fullName: "asc" },
-      })
+      const staff = await readDepartmentWorkload(
+        tx,
+        { id: department.id, headId: req.auth!.user.id },
+        week,
+      )
       const eligibleEmployeeIds = new Set(
         staff
           .filter((employee) => employee.status === "ACTIVE")
           .map((employee) => employee.id),
       )
-      const planning = await workloadPlanningContext(
-        tx,
-        { id: department.id, headId: req.auth!.user.id },
-        week,
-        staff,
-      )
-      const capacities = await tx.workloadCapacity.findMany({
-        where: { week, employeeId: { in: staff.map((s) => s.id) } },
-      })
       const projects = await tx.project.findMany({
         where: {
           request: {
@@ -137,20 +97,7 @@ workloadRouter.get("/", async (req, res) => {
             eligible: eligibleEmployeeIds.has(allocation.employeeId),
           })),
         })),
-        staff: staff.map((employee) => ({
-          ...employee,
-          userId: undefined,
-          planning: planning.get(employee.id),
-          capacity:
-            capacities.find((c) => c.employeeId === employee.id) ?? null,
-          assignments: employee.projectAssignments.filter(
-            (a) =>
-              (!a.allocationStart || a.allocationStart <= end) &&
-              (!a.allocationEnd ||
-                a.allocationEnd >= new Date(`${week}T00:00:00Z`)),
-          ),
-          projectAssignments: undefined,
-        })),
+        staff,
       }
     },
     { isolationLevel: "RepeatableRead" },

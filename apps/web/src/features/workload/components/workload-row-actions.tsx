@@ -26,6 +26,7 @@ export function WorkloadRowActions({
   onAssign,
   onReassign,
   onUnassign,
+  readOnly = false,
 }: {
   staffId: string
   name: string
@@ -36,6 +37,7 @@ export function WorkloadRowActions({
   onAssign: () => void
   onReassign: () => void
   onUnassign: () => void
+  readOnly?: boolean
 }) {
   const items: RowActionMenuItem<WorkloadAction>[] = [
     {
@@ -73,7 +75,7 @@ export function WorkloadRowActions({
       triggerId={`workload-actions-${staffId}`}
       triggerLabel={`More actions for ${name}`}
       menuLabel={`Actions for ${name}`}
-      items={items}
+      items={readOnly ? items.filter((item) => item.action === "view") : items}
       onAction={(action) => {
         if (action === "view") onView()
         else if (action === "edit") onEdit()

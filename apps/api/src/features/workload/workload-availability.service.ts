@@ -50,23 +50,28 @@ export function weeklyPolicyRequirement(
  * Keep the existing calendar's current-head mapping and cancellation rules. */
 export async function workloadPlanningContext(
   tx: Prisma.TransactionClient,
-  department: { id: string; headId: string },
+  department: { id: string | null; headId: string | null },
   week: string,
   staff: { id: string; userId: string | null }[],
 ) {
   const start = new Date(`${week}T00:00:00Z`)
   const until = new Date(start)
   until.setUTCDate(until.getUTCDate() + 7)
-  const head = staff.find((employee) => employee.userId === department.headId)
-  const calendarFilter = {
-    scope: {
-      kind: "HEAD" as const,
-      userId: department.headId,
-      departmentId: department.id,
-    },
-    period: { from: start, until },
-    scheduledOnly: true,
-  }
+  const head = department.headId
+    ? staff.find((employee) => employee.userId === department.headId)
+    : undefined
+  const calendarFilter =
+    department.id && department.headId
+      ? {
+          scope: {
+            kind: "HEAD" as const,
+            userId: department.headId,
+            departmentId: department.id,
+          },
+          period: { from: start, until },
+          scheduledOnly: true,
+        }
+      : null
   const [assignments, consultations, meetings] = await Promise.all([
     tx.attendancePolicyAssignment.findMany({
       where: {
@@ -76,13 +81,13 @@ export async function workloadPlanningContext(
       },
       include: { policy: { include: { days: true } } },
     }),
-    head
+    head && calendarFilter
       ? tx.workflowConsultation.findMany({
           where: consultationCalendarWhere(calendarFilter),
           select: { id: true, startsAt: true, endsAt: true },
         })
       : [],
-    head
+    head && calendarFilter
       ? tx.conversationMeeting.findMany({
           where: meetingCalendarWhere(calendarFilter),
           select: { id: true, startsAt: true, endsAt: true },

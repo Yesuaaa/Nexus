@@ -1,95 +1,78 @@
 import type { Account } from "../../auth/model/types.ts"
+import { canAccessRoute } from "../../workspaces/model/route-policy.ts"
 import {
-  canAccessRoute,
+  canAccessAdministrativeModules,
+  getAdministrativeModuleEntries,
+  moduleRegistry,
   type WorkspaceModuleId,
-} from "../../workspaces/model/route-policy.ts"
+} from "../../workspaces/model/module-registry.ts"
 
 export type WorkspaceModule = {
   id: WorkspaceModuleId
   title: string
   description: string
-  href: string
+  href: string | null
+  placeholder?: boolean
 }
 
 export function getWorkspaceModules(account: Account): WorkspaceModule[] {
-  if (account.role === "USER") return []
+  if (account.role === "USER" || !account.isActive || account.accountDeletedAt)
+    return []
 
-  const modules: WorkspaceModule[] = []
-
-  if (canAccessRoute(account, "/services")) {
-    modules.push({
-      id: "service-operations",
-      title: "Service Operations",
-      description: "Browse services and manage your service requests.",
-      href: "/services",
-    })
-  } else if (canAccessRoute(account, "/request-inbox")) {
-    modules.push({
-      id: "service-operations",
-      title: "Service Operations",
-      description: "Review incoming service requests for your department.",
-      href: "/request-inbox",
-    })
-  } else if (canAccessRoute(account, "/clients")) {
-    modules.push({
-      id: "service-operations",
-      title: "Service Operations",
-      description: "Manage services and client delivery operations.",
-      href: "/clients",
-    })
+  const modules: WorkspaceModule[] = getAdministrativeModuleEntries(
+    account,
+    moduleRegistry,
+  )
+  function add(id: WorkspaceModuleId, href: string) {
+    const module = moduleRegistry[id]
+    if (module.implemented)
+      modules.push({
+        id,
+        title: module.title,
+        description: module.description,
+        href,
+      })
   }
 
-  if (canAccessRoute(account, "/project-workspace")) {
-    modules.push({
-      id: "project-management",
-      title: "Project Management",
-      description:
-        "Coordinate assigned projects, milestones, and deliverables.",
-      href: "/project-workspace",
-    })
-  } else if (canAccessRoute(account, "/projects")) {
-    modules.push({
-      id: "project-management",
-      title: "Project Management",
-      description: "Track your active projects and deliverables.",
-      href: "/projects",
-    })
+  // Ordinary-role entry priorities and operational route checks remain unchanged.
+  if (!canAccessAdministrativeModules(account)) {
+    if (canAccessRoute(account, "/services"))
+      add("service-operations", "/services")
+    else if (canAccessRoute(account, "/request-inbox"))
+      add("service-operations", "/request-inbox")
+    else if (canAccessRoute(account, "/clients"))
+      add("service-operations", "/clients")
+
+    if (canAccessRoute(account, "/project-workspace"))
+      add("project-management", "/project-workspace")
+    else if (canAccessRoute(account, "/projects"))
+      add("project-management", "/projects")
+
+    if (canAccessRoute(account, "/employees")) add("people-hr", "/employees")
+    else if (canAccessRoute(account, "/departments"))
+      add("people-hr", "/departments")
+
+    if (canAccessRoute(account, "/attendance/check-ins"))
+      add(
+        "attendance-monitoring",
+        canAccessRoute(account, "/attendance/dashboard")
+          ? "/attendance/overview"
+          : "/attendance/check-ins",
+      )
+    if (canAccessRoute(account, "/accounts")) add("administration", "/accounts")
   }
 
-  if (
-    canAccessRoute(account, "/employees") ||
-    canAccessRoute(account, "/departments")
-  ) {
-    modules.push({
-      id: "people-hr",
-      title: "People & HR",
-      description: "Manage employee records and department structure.",
-      href: canAccessRoute(account, "/employees")
-        ? "/employees"
-        : "/departments",
-    })
-  }
-
-  if (canAccessRoute(account, "/attendance/check-ins")) {
-    modules.push({
-      id: "attendance-monitoring",
-      title: "Attendance & Monitoring",
-      description:
-        "Track attendance, review time logs, and manage attendance policies.",
-      href: canAccessRoute(account, "/attendance/dashboard")
-        ? "/attendance/overview"
-        : "/attendance/check-ins",
-    })
-  }
-
-  if (canAccessRoute(account, "/accounts")) {
-    modules.push({
-      id: "administration",
-      title: "Administration",
-      description: "Manage user accounts, roles, and access controls.",
-      href: "/accounts",
-    })
-  }
-
+  if (modules.length > 0)
+    for (const id of Object.keys(moduleRegistry) as WorkspaceModuleId[]) {
+      const module = moduleRegistry[id]
+      if (!module.implemented)
+        modules.push({
+          id,
+          title: module.title,
+          description: module.description,
+          href: null,
+          placeholder: true,
+        })
+    }
   return modules
 }

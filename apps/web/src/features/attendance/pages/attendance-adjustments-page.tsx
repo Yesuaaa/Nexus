@@ -1,7 +1,10 @@
 "use client"
 import { useState } from "react"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
-import { canManageAttendance } from "@/features/auth/model/permissions"
+import {
+  canAccessPersonalAttendance,
+  canManageAttendance,
+} from "@/features/auth/model/permissions"
 import { useAsyncResource } from "@/lib/use-async-resource"
 import { errorMessage } from "@/lib/error-message"
 import { sileo } from "@/lib/toast"
@@ -31,6 +34,7 @@ export function AttendanceAdjustmentsPage({
 }) {
   const account = usePortalAccount(),
     manager = canManageAttendance(account)
+  const selfService = canAccessPersonalAttendance(account)
   const [scope, setScope] = useState<"mine" | "team">(manager ? "team" : "mine")
   const [search, setSearch] = useState("")
   const [type, setType] = useState("")
@@ -47,19 +51,39 @@ export function AttendanceAdjustmentsPage({
   const list = useAsyncResource(
     (signal) =>
       attendanceAdjustments(
-        manager ? scope : "mine",
+        manager && (!selfService || scope === "team") ? "team" : "mine",
         page,
         search,
         signal,
         requestType ?? type,
         status,
       ),
-    [scope, page, manager, search, type, requestType, status],
+    [scope, page, manager, selfService, search, type, requestType, status],
     { fallbackError: "Couldn't load attendance requests." },
+  )
+  const data = list.error ? undefined : list.data
+  const currentReview = data?.adjustments.find(
+    (item) => item.id === review?.request.id,
+  )
+  const reviewAllowed = Boolean(
+    manager &&
+    scope === "team" &&
+    currentReview &&
+    (review?.decision === "APPROVED"
+      ? currentReview.capabilities?.approve ||
+        currentReview.capabilities?.verify
+      : review?.decision === "REJECTED" && currentReview.capabilities?.reject),
   )
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
   async function submitReview(reviewNote: string) {
-    if (!review || review.readOnly || !review.decision || pending) return false
+    if (
+      !review ||
+      review.readOnly ||
+      !review.decision ||
+      !reviewAllowed ||
+      pending
+    )
+      return false
     setPending(true)
     setError("")
     try {
@@ -88,6 +112,8 @@ export function AttendanceAdjustmentsPage({
             : "adjustments"
       }
       actions={
+        selfService &&
+        data?.capabilities?.requestCorrection &&
         requestType !== "OVERTIME" ? (
           <PageHeaderButton onClick={() => setRequestOpen(true)}>
             Request correction
@@ -144,7 +170,7 @@ export function AttendanceAdjustmentsPage({
             ]}
           />
         </div>
-        {manager && (
+        {manager && selfService && (
           <ManagementViewToggle
             active={scope === "mine"}
             ariaLabel="Request view"
@@ -152,7 +178,7 @@ export function AttendanceAdjustmentsPage({
               {
                 value: false,
                 label:
-                  account.role === "ADMIN"
+                  account.role !== "STAFF"
                     ? "Organization requests"
                     : "Department requests",
                 icon: UsersRound,
@@ -174,16 +200,16 @@ export function AttendanceAdjustmentsPage({
       </p>
       <ResourceStatus
         loading={list.loading && !list.data}
-        error={list.data ? "" : list.error}
+        error={data ? "" : list.error}
         retry={list.retry}
       />
-      {list.data && (
+      {data && (
         <AttendanceAdjustmentTable
-          items={list.data.adjustments}
+          items={data.adjustments}
           zone={zone}
           canReview={manager && scope === "team"}
           actorId={account.id}
-          isHR={account.role === "ADMIN"}
+          isHR={account.role !== "STAFF"}
           loading={list.loading}
           error={list.error}
           onRetry={list.retry}
@@ -197,28 +223,27 @@ export function AttendanceAdjustmentsPage({
           }}
         />
       )}
-      {list.data && (
+      {data && (
         <AttendancePagination
-          data={list.data}
+          data={data}
           disabled={list.loading}
           onChange={setPage}
         />
       )}
-      {requestOpen && (
+      {selfService && data?.capabilities?.requestCorrection && requestOpen && (
         <AdjustmentDialog
           session={null}
           onClose={() => setRequestOpen(false)}
           onSaved={list.retry}
         />
       )}
-      {review && (
+      {review && data && (
         <AttendanceAdjustmentReviewPanel
-          request={review.request}
+          request={currentReview ?? review.request}
           decision={review.decision}
-          readOnly={review.readOnly}
+          readOnly={review.readOnly || !reviewAllowed}
           verifying={
-            account.role !== "ADMIN" &&
-            review.request.type === "OVERTIME" &&
+            Boolean(currentReview?.capabilities?.verify) &&
             review.decision === "APPROVED"
           }
           zone={zone}

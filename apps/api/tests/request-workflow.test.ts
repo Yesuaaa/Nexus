@@ -1351,11 +1351,20 @@ test(
           ).status,
           404,
         )
-        const milestones = (
-          JSON.parse(workspaceJson) as {
-            milestones: { id: string; completedAt: string | null }[]
-          }
-        ).milestones
+        const clientProject = JSON.parse(workspaceJson) as {
+          milestones: unknown[]
+          canManage: boolean
+        }
+        assert.deepEqual(clientProject.milestones, [])
+        assert.equal(clientProject.canManage, false)
+        const staffWorkspace = await fetch(`${base}/projects/${projectId}`, {
+          headers: staff.headers,
+        })
+        assert.equal(staffWorkspace.status, 200)
+        const { milestones } = (await staffWorkspace.json()) as {
+          milestones: { id: string; completedAt: string | null }[]
+        }
+        assert.equal(milestones.length, 2)
         const milestoneId = milestones[0]!.id
         const patchMilestone = (actor: Actor, completed: boolean) =>
           fetch(`${base}/projects/${projectId}/milestones/${milestoneId}`, {

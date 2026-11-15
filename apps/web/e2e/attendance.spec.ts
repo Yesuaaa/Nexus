@@ -1,6 +1,5 @@
 import { test, expect, type Page } from "@playwright/test"
 import { spawn, type ChildProcess } from "node:child_process"
-import { createRequire } from "node:module"
 import path from "node:path"
 
 test.describe.configure({ mode: "serial" })
@@ -17,11 +16,11 @@ const api = "http://127.0.0.1:5391"
 test.beforeAll(async () => {
   test.setTimeout(90000)
   const root = path.resolve(import.meta.dirname, "../../..")
-  const requireApi = createRequire(path.join(root, "apps/api/package.json"))
   server = spawn(
     process.execPath,
     [
-      requireApi.resolve("tsx/cli"),
+      path.join(root, "apps/api/scripts/run-tests.mjs"),
+      "--fixture",
       "tests/support/attendance-browser-server.ts",
     ],
     {
@@ -58,6 +57,15 @@ test.beforeAll(async () => {
 })
 test.afterAll(() => {
   server?.kill()
+})
+
+test.beforeEach(async ({ context }) => {
+  // Forward same-origin requests to this test's real offline API rather than
+  // whichever backend target was baked into the shared Next production build.
+  await context.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url())
+    await route.continue({ url: `${api}${url.pathname}${url.search}` })
+  })
 })
 
 async function signIn(page: Page, actor: string) {

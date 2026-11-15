@@ -78,3 +78,19 @@ GET /api/employees starts from User records with role ADMIN or STAFF and account
 Rows without HR details carry accountId, hasEmployeeRecord=false, and a directory ID prefixed with account:. Viewing and login actions work for these rows. Change status is disabled until the HR profile is completed. POST /api/employees/accounts/:accountId/profile creates the HR profile transactionally for an eligible account without creating or resetting credentials. Duplicate/concurrent profiles are rejected. No data migration or automatic backfill is performed.
 
 Archive uses GET /api/employees?archived=true. DELETE /api/employees/:id/account requires an inactive account and archives it with session revocation. DELETE /api/employees/:id/account/permanent requires an archived inactive Staff account and preserves the HR record while clearing account-based relationships. Foreign-key-protected history blocks permanent deletion. Archived credentials cannot authenticate or be recreated through the login-creation endpoint. No existing database rows are changed automatically.
+
+## Update — 2026-11-14: Administrative access consistency
+
+[Phase 3C.2](superadmin-people-hr-administration.md) verifies Superadmin organization-wide HR administration without an Employee, Staff or Head identity. Create, Edit and login controls now require the effective `employees:manage` permission. Staff login lifecycle controls use the backend's account-role metadata and exclude the actor's own account; Admin rows retain HR editing while their credentials remain in Account Management. Existing backend scope, target eligibility, Head coverage and account lifecycle rules are unchanged.
+
+## Update — 2026-11-15: Employee login lifecycle attribution
+
+[Phase 4B.4B.3B](employee-account-lifecycle-attribution.md) records authenticated administrative actors for existing login provisioning, activation/deactivation, archival and permanent deletion. Account/link/FK effects share one operation and transaction without retaining credentials or personal profile values. Existing eligibility, self-protection, HR status, assignments and workflow rules remain. General Employee profile/status/assignment and Department Head management attribution is not implemented by this phase.
+
+## Update — 2026-11-15: Employee creation attribution
+
+[Phase 4B.4B.4A](employee-creation-profile-attribution.md) adds authenticated actor attribution to Employee + Staff account creation and eligible existing-account profile attachment. Account creation is recorded only for a new User; Employee birth and actual assignment synchronization share one operation/transaction without profile values or duplicate mirrored-field events. Existing lifecycle paths, general PUT/status/assignment logic and Department Head management are unchanged.
+
+## Update — 2026-11-15: Employee update and derived leadership attribution
+
+[Phase 4B.4B.4B](employee-update-head-attribution.md) records the authenticated actor for Employee PUT profile/HR/employment/assignment changes and all actual derived synchronization, Head handoff/restoration/title correction and Team Lead effects. All records share the existing business transaction and one operation, using safe IDs/state/field names only. Selection, eligibility, workflow, login status and no-op behavior are preserved. Standalone Department/Team Management attribution remains outside this phase.

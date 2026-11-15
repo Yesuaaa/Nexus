@@ -19,7 +19,10 @@ import {
 } from "@/components/ui/overview-panel"
 import { ManagementViewToggle } from "@/components/layout/management-view-toggle"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
-import { canManageAttendance } from "@/features/auth/model/permissions"
+import {
+  canAccessPersonalAttendance,
+  canManageAttendance,
+} from "@/features/auth/model/permissions"
 import { useAsyncResource } from "@/lib/use-async-resource"
 import { humanizeEnum } from "@/lib/format"
 import { attendanceRequestSummary } from "../api/attendance-api"
@@ -29,8 +32,9 @@ import { ResourceStatus } from "../components/attendance-shared"
 export function AttendanceRequestsOverviewPage() {
   const account = usePortalAccount()
   const manager = canManageAttendance(account)
+  const selfService = canAccessPersonalAttendance(account)
   const [mine, setMine] = useState(!manager)
-  const scope = !manager || mine ? "mine" : "team"
+  const scope = manager && (!selfService || !mine) ? "team" : "mine"
   const result = useAsyncResource(
     (signal) => attendanceRequestSummary(scope, signal),
     [scope],
@@ -44,7 +48,7 @@ export function AttendanceRequestsOverviewPage() {
   )
   return (
     <AttendanceShell tab="requests-overview">
-      {manager && (
+      {manager && selfService && (
         <div className="mb-4 flex flex-wrap justify-end">
           <ManagementViewToggle
             active={mine}
@@ -54,7 +58,7 @@ export function AttendanceRequestsOverviewPage() {
               {
                 value: false,
                 label:
-                  account.role === "ADMIN"
+                  account.role !== "STAFF"
                     ? "Organization requests"
                     : "Department requests",
                 icon: UsersRound,

@@ -6,6 +6,12 @@ import {
 } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { mapPrismaErrors } from "../../shared/http-error.js"
+import { createManagementOperation } from "../../shared/management-history.js"
+import { writeAccountManagementChange } from "../users/account-management-history.js"
+import {
+  writeWorkforceManagementChange,
+  type WorkforceManagementChangeInput,
+} from "./workforce-management-history.js"
 import {
   PASSWORD_POLICY_MESSAGE,
   isStrongPassword,
@@ -17,8 +23,8 @@ import { hashPassword } from "../auth/auth.password.js"
 import { Permission } from "../auth/auth.permissions.js"
 import { employeeInclude, employeesRepository } from "./employees.repository.js"
 import { validateEmployeeInput } from "./employees.schema.js"
+import { createEmployeeWithAttribution } from "./employee-creation.service.js"
 import {
-  createEmployee,
   createStaffAccount,
   EmployeeError,
   getEmployeeStatusOptions,
@@ -90,6 +96,7 @@ employeesRouter.post(
       return response.status(400).json({ error: PASSWORD_POLICY_MESSAGE })
     }
     const passwordHash = await hashPassword(password)
+    const operation = createManagementOperation(request.auth!)
     const employee = await getPrisma()!.$transaction(async (tx) => {
       const account = await createStaffAccount(
         tx,
@@ -103,7 +110,12 @@ employeesRouter.post(
         },
         passwordHash,
       )
-      return createEmployee(tx, { ...parsed.value, userId: account.id })
+      return createEmployeeWithAttribution(
+        tx,
+        { ...parsed.value, userId: account.id },
+        operation,
+        "NEW_STAFF_ACCOUNT",
+      )
     })
     return response
       .status(201)
@@ -149,6 +161,7 @@ employeesRouter.post(
       return response
         .status(400)
         .json({ error: "This account already has login credentials" })
+    const operation = createManagementOperation(request.auth!)
     const employee = await getPrisma()!.$transaction(
       async (tx) => {
         const user = await tx.user.findFirst({
@@ -171,7 +184,12 @@ employeesRouter.post(
             409,
             "This account already has employee details. Refresh and try again.",
           )
-        return createEmployee(tx, { ...parsed.value, userId: user.id })
+        return createEmployeeWithAttribution(
+          tx,
+          { ...parsed.value, userId: user.id },
+          operation,
+          "EXISTING_ACCOUNT_PROFILE",
+        )
       },
       { isolationLevel: "Serializable" },
     )
@@ -194,8 +212,9 @@ employeesRouter.put(
       return response.status(400).json({
         error: "Create a login account using the separate account form.",
       })
+    const operation = createManagementOperation(request.auth!)
     const employee = await getPrisma()!.$transaction((tx) =>
-      updateEmployee(tx, String(request.params.id), parsed.value),
+      updateEmployee(tx, String(request.params.id), parsed.value, operation),
     )
     return response.json({
       employee: withoutEmployeeAccountDetails(employee),
@@ -211,6 +230,7 @@ employeesRouter.post(
     if (!isStrongPassword(password))
       return response.status(400).json({ error: PASSWORD_POLICY_MESSAGE })
     const passwordHash = await hashPassword(password)
+    const operation = createManagementOperation(request.auth!)
     const employee = await getPrisma()!.$transaction(
       async (tx) => {
         const existing = await tx.employee.findUnique({
@@ -224,7 +244,73 @@ employeesRouter.post(
             "Employee already has an account. Manage archived accounts from Archive.",
           )
         const account = await createStaffAccount(tx, existing, passwordHash)
-        return updateEmployee(tx, existing.id, { userId: account.id })
+        const updated = await updateEmployee(tx, existing.id, {
+          userId: account.id,
+        })
+        const login = await tx.user.findUniqueOrThrow({
+          where: { id: account.id },
+          select: {
+            role: true,
+            isActive: true,
+            departmentId: true,
+            teamId: true,
+          },
+        })
+        await writeAccountManagementChange(tx, operation, {
+          subjectAccountId: account.id,
+          origin: "EMPLOYEE_MANAGEMENT",
+          action: "CREATED",
+          changedFields: [
+            "role",
+            "isActive",
+            "fullName",
+            "email",
+            "contactNumber",
+          ],
+          changes: {
+            role: { before: null, after: login.role },
+            isActive: { before: null, after: login.isActive },
+          },
+        })
+        const changedFields = (
+          ["userId", "departmentId", "teamId"] as const
+        ).filter((key) => existing[key] !== updated[key])
+        if (changedFields.length) {
+          const changes: Extract<
+            WorkforceManagementChangeInput,
+            { action: "ASSIGNMENT_CHANGED" }
+          >["changes"] = {}
+          for (const key of changedFields)
+            changes[key] = { before: existing[key], after: updated[key] }
+          await writeWorkforceManagementChange(tx, operation, {
+            origin: "EMPLOYEE_MANAGEMENT",
+            action: "ASSIGNMENT_CHANGED",
+            subjectType: "EMPLOYEE",
+            subjectId: updated.id,
+            changedFields,
+            changes,
+          })
+        }
+        if (login.departmentId) {
+          await writeWorkforceManagementChange(tx, operation, {
+            origin: "EMPLOYEE_MANAGEMENT",
+            action: "ASSIGNMENT_CHANGED",
+            subjectType: "DEPARTMENT",
+            subjectId: login.departmentId,
+            changedFields: [
+              "departmentId",
+              ...(login.teamId ? ["teamId" as const] : []),
+            ],
+            changes: {
+              affectedAccountId: account.id,
+              departmentId: { before: null, after: login.departmentId },
+              ...(login.teamId
+                ? { teamId: { before: null, after: login.teamId } }
+                : {}),
+            },
+          })
+        }
+        return updated
       },
       { isolationLevel: "Serializable" },
     )
@@ -245,7 +331,7 @@ employeesRouter.patch(
         .json({ error: "Provide a valid account status" })
     }
     await setEmployeeLoginStatus(
-      request.auth!.user.id,
+      request.auth!,
       String(request.params.id),
       request.body.isActive,
     )
@@ -258,11 +344,9 @@ for (const permanent of [false, true]) {
     permanent ? "/:id/account/permanent" : "/:id/account",
     requirePermission(Permission.EMPLOYEES_MANAGE),
     async (request, response) => {
-      await removeEmployeeLogin(
-        request.auth!.user.id,
-        String(request.params.id),
-        { permanent },
-      )
+      await removeEmployeeLogin(request.auth!, String(request.params.id), {
+        permanent,
+      })
       return response.status(204).send()
     },
   )

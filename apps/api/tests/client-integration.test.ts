@@ -119,10 +119,11 @@ test(
         headers: { authorization: `Bearer ${tokens.get(actor)}` },
       })
     await t.test(
-      "only Admin can read; Superadmin, Staff, User and anonymous cannot",
+      "Admin and Superadmin can read; Staff, User and anonymous cannot",
       async () => {
         await list()
-        for (const actor of ["SUPERADMIN", "STAFF", "USER"])
+        assert.deepEqual(await list("", "SUPERADMIN"), await list())
+        for (const actor of ["STAFF", "USER"])
           assert.equal((await request("", actor)).status, 403)
         assert.equal((await fetch(base)).status, 401)
       },
@@ -302,10 +303,14 @@ test(
           projects.projects.some((project) => project.startDate === null),
           true,
         )
-        assert.equal(
-          (await related("client-00", "/projects", "", "SUPERADMIN")).status,
-          403,
+        const superadminProjects = await related(
+          "client-00",
+          "/projects",
+          "",
+          "SUPERADMIN",
         )
+        assert.equal(superadminProjects.status, 200)
+        assert.deepEqual(await superadminProjects.json(), projects)
 
         const isolated = (await (
           await related("client-01", "/service-requests")
@@ -351,7 +356,7 @@ test(
       },
     )
     await t.test(
-      "client creation validates input and client edits/deletion are unavailable",
+      "Admin and Superadmin client creation validates input while Staff/User and Admin edits remain denied",
       async () => {
         const mutate = (
           path: string,
@@ -374,7 +379,7 @@ test(
           isActive: true,
           password: "Client-initial-password-1",
         }
-        for (const actor of ["STAFF", "USER", "SUPERADMIN"]) {
+        for (const actor of ["STAFF", "USER"]) {
           assert.equal((await mutate("", "POST", input, actor)).status, 403)
           assert.equal(
             (await mutate("/client-02", "PATCH", input, actor)).status,
@@ -437,6 +442,29 @@ test(
         assert.equal(unchanged.isActive, stored.isActive)
         assert.equal(unchanged.passwordHash, stored.passwordHash)
         assert.equal((await mutate("", "POST", input)).status, 409)
+        const privilegedCreate = await mutate(
+          "",
+          "POST",
+          {
+            ...input,
+            email: "superadmin-created@example.com",
+            role: "SUPERADMIN",
+          },
+          "SUPERADMIN",
+        )
+        assert.equal(privilegedCreate.status, 201)
+        const privilegedClient = (await privilegedCreate.json()) as {
+          client: { id: string }
+        }
+        assert.equal("passwordHash" in privilegedClient.client, false)
+        assert.equal(
+          (
+            await prisma.user.findUniqueOrThrow({
+              where: { id: privilegedClient.client.id },
+            })
+          ).role,
+          "USER",
+        )
       },
     )
     await t.test(

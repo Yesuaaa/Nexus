@@ -10,6 +10,7 @@ import type {
   ServiceInput,
 } from "../src/features/services/api/services-api"
 import { defaultPreferences } from "../src/features/settings/api/settings-api"
+import { moduleRegistry } from "../src/features/workspaces/model/module-registry"
 
 const pageErrors = new WeakMap<Page, string[]>()
 export const live = process.env.NEXUS_E2E_LIVE === "1"
@@ -77,9 +78,10 @@ export function accountFor(
       Permissions.DEPARTMENTS_DELETE,
     )
   }
-  if (role === "ADMIN") {
+  if (role === "ADMIN" || role === "SUPERADMIN") {
     permissions.push(
       Permissions.CLIENTS_READ,
+      Permissions.CLIENTS_CREATE,
       Permissions.EMPLOYEES_READ,
       Permissions.EMPLOYEES_MANAGE,
       Permissions.SERVICES_READ,
@@ -88,6 +90,10 @@ export function accountFor(
   }
   if (role === "SUPERADMIN") {
     permissions.push(
+      Permissions.MODULES_ACCESS_ALL,
+      Permissions.ORGANIZATION_READ_ALL,
+      Permissions.ADMINISTRATION_MANAGE_ALL,
+      Permissions.BUSINESS_CONVERSATIONS_INSPECT,
       Permissions.ACCOUNTS_READ,
       Permissions.ACCOUNTS_RESET_PASSWORD,
       Permissions.ACCOUNTS_CREATE_BASIC,
@@ -225,6 +231,8 @@ export async function mockApi(
     {
       id: "employee-1",
       employeeId: "EMP-001",
+      accountRole: "STAFF",
+      accountId: "employee-account-1",
       fullName: "Alex Employee",
       email: "alex.employee@example.com",
       contactNumber: "09123456789",
@@ -320,6 +328,47 @@ export async function mockApi(
       return
     }
 
+    if (pathname === "/api/administrative-projects" && method === "GET") {
+      await route.fulfill({
+        json: {
+          projects: [],
+          departments: [],
+          total: 0,
+          page: 1,
+          pageSize: 10,
+        },
+      })
+      return
+    }
+    if (pathname.startsWith("/api/modules/") && method === "GET") {
+      const id = pathname.split("/").at(-1) as keyof typeof moduleRegistry
+      const module = Object.hasOwn(moduleRegistry, id)
+        ? moduleRegistry[id]
+        : undefined
+      if (!currentUser.permissions.includes(Permissions.MODULES_ACCESS_ALL)) {
+        await route.fulfill({
+          status: 403,
+          json: { error: "Administrative module access is required" },
+        })
+      } else if (!module?.implemented) {
+        await route.fulfill({
+          status: 404,
+          json: { error: "Module not available" },
+        })
+      } else {
+        await route.fulfill({
+          json: {
+            module: {
+              id,
+              title: module.title,
+              description: module.description,
+              href: module.administrativePath ?? `/module/${id}`,
+            },
+          },
+        })
+      }
+      return
+    }
     if (pathname === "/api/project-workspace" && method === "GET") {
       await route.fulfill({
         json: {
