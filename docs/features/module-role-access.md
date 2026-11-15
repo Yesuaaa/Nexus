@@ -38,6 +38,8 @@ Internal users land on `/module`. Clients land on `/dashboard` and navigate dire
 
 Cards are derived from effective permissions and current assignments. Accounts without any available workspace see the empty state. Billing & Finance uses the shared radial-fill and typing animations to show “Coming Soon” on hover or keyboard focus; it grants no finance access.
 
+Module selection displays five or fewer cards in a single row, centered when they fit and horizontally scrollable when needed. More than five cards use a carousel. Each module appears once, and carousel navigation stops at either end without looping.
+
 ## Permissions and scope
 
 ### Service Operations

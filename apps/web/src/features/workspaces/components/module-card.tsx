@@ -35,7 +35,7 @@ export function ModuleCard({ module }: { module: WorkspaceModule }) {
   const appearance = moduleRegistry[module.id]
   const Icon = moduleIcons[appearance.icon] ?? FolderKanban
   const cardClassName =
-    "group flex w-full max-w-[280px] flex-none flex-col text-center no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#294a9b] sm:w-[280px]"
+    "group flex w-full max-w-[280px] flex-none flex-col text-center no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#294a9b]"
 
   const cardContent = (
     <>

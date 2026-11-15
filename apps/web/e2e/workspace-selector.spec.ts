@@ -86,8 +86,14 @@ for (const scenario of scenarios) {
       page.getByRole("heading", { name: "Module", exact: true }),
     ).toBeVisible()
 
-    const cards = page.getByRole("link", { name: /^Open .+ workspace$/ })
+    const cards = page.getByRole("link", {
+      name: /^Open .+ workspace$/,
+      includeHidden: true,
+    })
     await expect(cards).toHaveCount(scenario.expected.length)
+    await expect(page.locator('[aria-roledescription="carousel"]')).toHaveCount(
+      scenario.expected.length + 1 > 5 ? 1 : 0,
+    )
 
     for (const [title, href] of scenario.expected) {
       await expect(
