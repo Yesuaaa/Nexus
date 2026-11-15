@@ -95,6 +95,31 @@ test(
       },
     )
     await t.test(
+      "returns the same failure for unknown and inactive accounts",
+      async () => {
+        await prisma.user.create({
+          data: {
+            email: "inactive-login@example.org",
+            passwordHash: await hashPassword(password),
+            role: "USER",
+            isActive: false,
+          },
+        })
+
+        const unknown = await post("login", {
+          email: "unknown-login@example.org",
+          password,
+        })
+        const inactive = await post("login", {
+          email: "inactive-login@example.org",
+          password,
+        })
+        assert.equal(unknown.status, 401)
+        assert.equal(inactive.status, 401)
+        assert.deepEqual(await unknown.json(), await inactive.json())
+      },
+    )
+    await t.test(
       "accepts exact email and UTF-8 password boundaries",
       async () => {
         for (const value of [

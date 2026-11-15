@@ -87,8 +87,10 @@ apps/api/src/
     │   └── services.schema.ts            # Service input validation
     │
     └── health/                           # Health monitoring
-        └── health.controller.ts          # /api/health and /api/db-check routes
+        └── health.controller.ts          # Liveness, readiness, and database checks
 ```
+
+`server.ts` validates production database configuration and manages request draining, background-task shutdown, Prisma cleanup, and the optional realtime connection. `index.ts` loads environment variables and starts the API.
 
 Tests live outside `src/`, so they are never compiled into `dist/`:
 

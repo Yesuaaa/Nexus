@@ -26,7 +26,7 @@ copy apps/api/.env.example apps/api/.env
 pnpm dev
 ```
 
-On macOS or Linux, use `cp` instead of `copy`. Open http://localhost:5173. Next.js forwards `/api` to the existing API on port 3001 in development and production. Port 5173 is retained to preserve the backend's existing default origin. The API health check works before database setup. Optional frontend settings are documented in `apps/web/.env.example`; use `apps/web/.env.local` for local overrides.
+On macOS or Linux, use `cp` instead of `copy`. Open http://localhost:5173. Next.js forwards `/api` to the existing API on port 3001 in development and production. Port 5173 is retained to preserve the backend's existing default origin. The liveness check at `/api/health` works before database setup; `/api/ready` and `/api/db-check` report unavailable until a database is configured and reachable. Optional frontend settings are documented in `apps/web/.env.example`; use `apps/web/.env.local` for local overrides.
 
 In Supabase, open **Connect** and copy the **Transaction pooler** URL into `DATABASE_URL` and the **Direct connection** URL into `DIRECT_URL` in `apps/api/.env`. Add `pgbouncer=true` to the transaction pooler URL if it is absent. For migrations from an IPv4-only network, use the **Session pooler** URL for `DIRECT_URL`. Keep these URLs out of web environment variables.
 
@@ -86,7 +86,7 @@ copy docker.env.example .env
 docker compose up --build -d
 ```
 
-On macOS or Linux, use `cp` instead of `copy`. Open http://localhost:5173. The API is also available at http://localhost:3001. Fill in `DATABASE_URL` in the root `.env` for Supabase access and use `sslmode=verify-full`. The API image trusts the bundled Supabase 2021 root CA in `certs/supabase-root-2021.crt`. Download an updated CA from Supabase Database Settings if Supabase rotates it. The API health check works without `DATABASE_URL`; the database check reports unavailable until it is set. Do not commit `.env`.
+On macOS or Linux, use `cp` instead of `copy`. Open http://localhost:5173. The API is also available at http://localhost:3001. Fill in `DATABASE_URL` in the root `.env` for Supabase access and use `sslmode=verify-full`. The API image trusts the bundled Supabase 2021 root CA in `certs/supabase-root-2021.crt`. Download an updated CA from Supabase Database Settings if Supabase rotates it. The development health check uses liveness and works without `DATABASE_URL`; `/api/ready` reports unavailable until the database is reachable. Do not commit `.env`.
 
 ```sh
 docker compose ps
@@ -95,7 +95,7 @@ docker compose down
 
 Change `WEB_PORT` or `API_PORT` in `.env` to use other host ports. If you change the browser origin, update `WEB_ORIGIN`. Source edits reload automatically; dependency changes require `docker compose up --build -d`. Run Prisma migrations using `pnpm db:migrate --name <name>` from the host with `apps/api/.env` configured.
 
-The production Next.js standalone server is available with `docker compose -f compose.prod.yaml up --build -d` at http://localhost:8080. Stop the development containers first with `docker compose down`. The web image includes the standalone server, public assets, and generated static assets. The production runtime API image does not include Prisma CLI tooling.
+The production Next.js standalone server is available with `docker compose -f compose.prod.yaml up --build -d` at http://localhost:8080. Set a valid `DATABASE_URL` before starting it; production Compose requires that value and the API also validates its PostgreSQL URL at startup. Its health check uses `/api/ready`, so the API is healthy only after the database responds. Stop the development containers first with `docker compose down`. The web image includes the standalone server, public assets, and generated static assets. The production runtime API image does not include Prisma CLI tooling. The API drains requests for up to 12 seconds on SIGTERM or SIGINT, with a 20-second container stop allowance.
 
 ## Separate deployment
 
@@ -110,7 +110,7 @@ Deploy `apps/web` to a Next.js-compatible Node.js host or Vercel with the reposi
 
 Set the server-only `API_PROXY_TARGET` before building to the Express API origin, such as `https://api.example.com`. Rewrites are resolved at build time, so rebuild when this target changes. Docker builds default to `http://api:3001` through a build argument of the same name. Leave `NEXT_PUBLIC_API_URL` empty to use same-origin `/api` calls, or set it at build time to a public API origin for direct browser requests. Direct requests require `WEB_ORIGIN` on the API to match the frontend's origin. Existing local `VITE_API_URL` settings must be renamed to `NEXT_PUBLIC_API_URL`.
 
-Deploy `apps/api` to a Node.js host with its production dependencies, built `dist`, and `DATABASE_URL`. Set `WEB_ORIGIN` to the web app's public origin, then run `pnpm --filter @nexus/api start`. Set `DIRECT_URL` in the environment used to run Prisma migrations. Database credentials belong only in the API environment; never put them in a `NEXT_PUBLIC_` variable.
+Deploy `apps/api` to a Node.js host with its production dependencies, built `dist`, and a valid `DATABASE_URL` or `DIRECT_URL`. Production startup rejects a missing or invalid PostgreSQL connection URL. Set `WEB_ORIGIN` to the web app's public origin, then run `pnpm --filter @nexus/api start`. Set `DIRECT_URL` in the environment used to run Prisma migrations. Database credentials belong only in the API environment; never put them in a `NEXT_PUBLIC_` variable.
 
 ## Commands
 
