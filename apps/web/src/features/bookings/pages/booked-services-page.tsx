@@ -171,7 +171,9 @@ export function BookedServicesPage({
           }
         />
         <TableSearchStatus
-          active={list.loading && list.previewing}
+          active={
+            list.loading && list.previewing && Boolean(list.preview?.length)
+          }
           label="booked services"
         />
         {list.footer && (

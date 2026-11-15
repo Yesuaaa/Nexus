@@ -274,7 +274,9 @@ export function RequestInboxPage() {
           onDelete={(request) => setConfirm({ kind: "delete", request })}
         />
         <TableSearchStatus
-          active={list.loading && list.previewing}
+          active={
+            list.loading && list.previewing && Boolean(list.preview?.length)
+          }
           label="requests"
         />
         {list.footer && (

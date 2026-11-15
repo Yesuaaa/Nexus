@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   Archive,
   Activity,
@@ -52,6 +52,15 @@ export function ProjectWorkspacePage() {
   const [view, setView] = useState<"active" | "archive">("active")
   const [status, setStatus] = useState("all")
   const [search, setSearch] = useState("")
+  const [settledSearch, setSettledSearch] = useState("")
+  const searchPending = search.trim() !== settledSearch
+  useEffect(() => {
+    if (!searchPending) return
+    const timer = window.setTimeout(() => {
+      setSettledSearch(search.trim())
+    }, 200)
+    return () => window.clearTimeout(timer)
+  }, [search, searchPending])
   const list = useAsyncResource(
     (signal) => listProjectWorkspaces({ sort }, signal),
     [sort],
@@ -61,7 +70,7 @@ export function ProjectWorkspacePage() {
   const { loading, error, retry: refresh } = list
 
   const filtered = useMemo(() => {
-    const needle = search.trim().toLowerCase()
+    const needle = settledSearch.toLowerCase()
     return workspaces.filter((workspace) => {
       const archived = ["COMPLETED", "CANCELLED"].includes(workspace.status)
       const matchesView = view === "archive" ? archived : !archived
@@ -77,7 +86,7 @@ export function ProjectWorkspacePage() {
         )
       return matchesView && matchesStatus && matchesSearch
     })
-  }, [search, status, view, workspaces])
+  }, [settledSearch, status, view, workspaces])
 
   const activeCount = workspaces.filter(
     ({ status: itemStatus }) => itemStatus === "IN_PROGRESS",
@@ -322,12 +331,14 @@ export function ProjectWorkspacePage() {
               Try again
             </Button>
           </Alert>
-        ) : loading || workspaces.length ? (
+        ) : loading || workspaces.length || searchPending ? (
           <WorkspaceListTable
             workspaces={filtered}
-            loading={loading}
-            viewKey={JSON.stringify([search, view, status, sort])}
-            quickKey={search}
+            loading={loading || searchPending}
+            initialLoading={(loading && !list.data) || searchPending}
+            viewKey={JSON.stringify([settledSearch, view, status, sort])}
+            quickKey={settledSearch}
+            searching={searchPending}
             archiveView={view === "archive"}
             onChanged={refresh}
           />

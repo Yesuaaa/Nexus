@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { contentClass, focusRing } from "@/components/layout/styles"
 import { PageHeader } from "@/components/layout/page-header"
 import { Button } from "@/components/ui/button"
@@ -69,19 +69,31 @@ export function AdministrativeConversationsPage() {
 function ConversationList() {
   const [kind, setKind] = useState<BusinessConversationKind>("service")
   const [search, setSearch] = useState("")
+  const [settledSearch, setSettledSearch] = useState(search)
+  const searchPending = search !== settledSearch
+  useEffect(() => {
+    if (!searchPending) return
+    const timer = window.setTimeout(() => setSettledSearch(search), 200)
+    return () => window.clearTimeout(timer)
+  }, [search, searchPending])
   const [departmentId, setDepartmentId] = useState("")
   const [page, setPage] = useState(1)
   const { formatDate } = useDatePreferences()
   const result = useAsyncResource(
-    (signal) =>
-      listAdministrativeConversations(
-        { kind, search, departmentId, page },
+    async (signal) => ({
+      search: settledSearch,
+      data: await listAdministrativeConversations(
+        { kind, search: settledSearch, departmentId, page },
         signal,
       ),
-    [kind, search, departmentId, page],
+    }),
+    [kind, settledSearch, departmentId, page],
+    { enabled: !searchPending },
   )
-  const data = result.error ? undefined : result.data
-  const showTable = Boolean(data) || (result.loading && !result.error)
+  const data = result.error && !searchPending ? undefined : result.data?.data
+  const searchLoading =
+    searchPending || (result.loading && result.data?.search !== settledSearch)
+  const showTable = Boolean(data) || result.loading || searchLoading
   return (
     <section aria-label="Business conversation metadata">
       <p className="mb-4 text-xs text-muted-foreground">{metadataNote}</p>
@@ -123,14 +135,17 @@ function ConversationList() {
           ]}
         />
       </div>
-      {result.error && (
+      {result.error && !searchPending && (
         <p role="alert">
           {result.error} <Button onClick={result.retry}>Retry</Button>
         </p>
       )}
       {showTable && (
         <>
-          <Table aria-label="Business conversations" aria-busy={result.loading}>
+          <Table
+            aria-label="Business conversations"
+            aria-busy={result.loading || searchLoading}
+          >
             <TableHeader>
               <TableRow>
                 {[
@@ -145,7 +160,13 @@ function ConversationList() {
                 ))}
               </TableRow>
             </TableHeader>
-            {data ? (
+            {searchLoading || (result.loading && !data) ? (
+              <TableSkeletonBody
+                label="business conversations"
+                columns={6}
+                rows={5}
+              />
+            ) : data ? (
               <TableBody>
                 {data.conversations
                   .filter((item) => item.capabilities.inspectMetadata)
@@ -179,13 +200,7 @@ function ConversationList() {
                   </TableRow>
                 )}
               </TableBody>
-            ) : (
-              <TableSkeletonBody
-                label="business conversations"
-                columns={6}
-                rows={5}
-              />
-            )}
+            ) : null}
           </Table>
           {data && (
             <TablePaginationFooter
@@ -193,7 +208,7 @@ function ConversationList() {
               total={data.total}
               page={data.page}
               totalPages={Math.ceil(data.total / data.pageSize)}
-              disabled={result.loading}
+              disabled={result.loading || searchLoading}
               label="Business conversation pages"
               itemLabel="conversations"
               onPageChange={setPage}

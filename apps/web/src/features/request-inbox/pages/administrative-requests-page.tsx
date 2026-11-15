@@ -6,10 +6,9 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { SearchField } from "@/components/ui/search-field"
 import { FilterSelect } from "@/components/ui/filter-select"
-import {
-  pageRange,
-  TablePaginationFooter,
-} from "@/components/ui/table-pagination-footer"
+import { TableSearchStatus } from "@/components/ui/table-search-status"
+import { TablePaginationFooter } from "@/components/ui/table-pagination-footer"
+import { usePaginatedList } from "@/components/ui/use-paginated-list"
 import { useAsyncResource } from "@/lib/use-async-resource"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 import { RequestDetailsBody } from "@/features/bookings/components/request-details-body"
@@ -21,10 +20,26 @@ import type { InboxSort } from "../api/request-inbox-api"
 import {
   getAdministrativeRequest,
   listAdministrativeRequests,
+  type AdministrativeRequest,
 } from "../api/administrative-requests-api"
 
 const root = "/module/service-operations"
 const noop = () => {}
+
+function matchesAdministrativeRequest(
+  request: AdministrativeRequest,
+  query: string,
+) {
+  const needle = query.trim().toLocaleLowerCase()
+  return [
+    request.id,
+    request.referenceNumber,
+    request.title,
+    request.service.name,
+    request.client.fullName,
+    request.client.email,
+  ].some((value) => value?.toLocaleLowerCase().includes(needle))
+}
 
 export function AdministrativeRequestsPage() {
   const id = useSearchParams().get("request")
@@ -40,18 +55,23 @@ function AdministrativeRequestList() {
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState("")
   const [departmentId, setDepartmentId] = useState("")
-  const [page, setPage] = useState(1)
   const [sortBy, setSortBy] = useState<InboxSort>("createdAt")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
-  const result = useAsyncResource(
-    (signal) =>
+  const result = usePaginatedList({
+    params: { search, status, departmentId, sortBy, sortDir },
+    load: ({ page, signal }) =>
       listAdministrativeRequests(
         { search, status, departmentId, page, sortBy, sortDir },
         signal,
       ),
-    [search, status, departmentId, page, sortBy, sortDir],
-  )
-  const data = !result.loading && !result.error ? result.data : undefined
+    rows: (response) =>
+      response.serviceRequests.filter((request) => request.capabilities.read),
+    matches: matchesAdministrativeRequest,
+    initial: null,
+    fallbackError: "Something went wrong. Try again.",
+  })
+  const data = result.data
+  const { setPage } = result
   return (
     <section aria-label="Administrative service requests">
       <p className="mb-4 text-sm text-muted-foreground">
@@ -99,26 +119,12 @@ function AdministrativeRequestList() {
         />
       </div>
       <RequestInboxTable
-        requests={
-          data?.serviceRequests.filter(
-            (request) => request.capabilities.read,
-          ) ?? []
-        }
+        requests={result.rows}
         loading={result.loading}
         error={result.error}
-        viewKey={
-          result.loading
-            ? ""
-            : JSON.stringify([
-                search,
-                status,
-                departmentId,
-                page,
-                sortBy,
-                sortDir,
-              ])
-        }
+        viewKey={result.tableViewKey}
         quickKey={search}
+        onRowsSettled={result.onRowsSettled}
         onRetry={result.retry}
         onView={(request) =>
           router.push(`${root}?request=${encodeURIComponent(request.id)}`)
@@ -134,12 +140,15 @@ function AdministrativeRequestList() {
         }}
         readOnly
       />
-      {data && (
+      <TableSearchStatus
+        active={
+          result.loading && result.previewing && Boolean(result.preview?.length)
+        }
+        label="service requests"
+      />
+      {result.footer && (
         <TablePaginationFooter
-          {...pageRange(data.page, data.pageSize, data.total)}
-          total={data.total}
-          page={data.page}
-          totalPages={Math.ceil(data.total / data.pageSize)}
+          {...result.footer}
           label="Administrative request pages"
           itemLabel="requests"
           onPageChange={setPage}

@@ -54,9 +54,10 @@ test.describe("Superadmin account management", () => {
     await expect(table.getByText("Your account", { exact: true })).toBeVisible()
     await search.fill("Remote")
     await expect(table.getByText("Target User", { exact: true })).toHaveCount(0)
-    await expect(page.getByRole("status")).toContainText(
-      "Searching all accounts",
-    )
+    await expect(
+      table.getByRole("status").filter({ hasText: "Searching…" }),
+    ).toHaveCount(1)
+    await expect(page.getByText(/^Searching all/)).toHaveCount(0)
     await expect(
       table.getByText("No accounts match your search.", { exact: true }),
     ).toHaveCount(0)

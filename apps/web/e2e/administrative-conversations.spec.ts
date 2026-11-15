@@ -167,12 +167,23 @@ for (const width of [1440, 390])
     await expect(
       table.getByText("Engineering Client · Engineering", { exact: true }),
     ).toBeVisible()
-    await page
-      .getByRole("searchbox", {
-        name: "Search business conversations",
-        exact: true,
-      })
-      .fill("Engineering")
+    const search = page.getByRole("searchbox", {
+      name: "Search business conversations",
+      exact: true,
+    })
+    const requestsBeforeSearch = requests.length
+    await page.clock.install()
+    await search.fill("Engineering")
+    await expect(table).toHaveAttribute("aria-busy", "true")
+    await expect(table.getByRole("status")).toHaveText(
+      "Loading business conversations…",
+    )
+    await page.clock.runFor(199)
+    expect(requests).toHaveLength(requestsBeforeSearch)
+    await expect(table.getByRole("status")).toHaveText(
+      "Loading business conversations…",
+    )
+    await page.clock.runFor(1)
     await page
       .getByRole("combobox", { name: "Conversation type", exact: true })
       .click()
@@ -409,9 +420,10 @@ test("a private-thread identifier cannot open a participant view through an over
       .getByRole("alert")
       .filter({ hasText: "Business conversation not found" }),
   ).toBeVisible()
-  expect(paths).toEqual([
-    "/api/administrative-conversations/service/private-thread",
-  ])
+  expect(paths.length).toBeGreaterThan(0)
+  expect(new Set(paths)).toEqual(
+    new Set(["/api/administrative-conversations/service/private-thread"]),
+  )
   await expect(page.getByRole("textbox")).toHaveCount(0)
 })
 

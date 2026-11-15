@@ -109,6 +109,7 @@ export function AttendanceSettingsPage() {
   const table = useLocalTable(rows, {
     view: [query, archivedView],
     loading: policies.loading,
+    search: query,
   })
   function switchView(nextArchivedView: boolean) {
     if (nextArchivedView === archivedView) return
@@ -188,7 +189,7 @@ export function AttendanceSettingsPage() {
       />
       <ResponsiveDataTable
         label="Attendance policies"
-        aria-busy={policies.loading}
+        aria-busy={policies.loading || table.searchPending}
       >
         <ResponsiveDataTableHeader
           className="@max-[820px]:sr-only"
@@ -210,7 +211,8 @@ export function AttendanceSettingsPage() {
             Actions
           </ResponsiveDataTableColumnHeader>
         </ResponsiveDataTableHeader>
-        {policies.loading && !policies.data ? (
+        {!policies.error &&
+        ((policies.loading && !policies.data) || table.searchPending) ? (
           <ResponsiveDataTableBody className="relative min-w-0 overflow-x-clip">
             <DataTableSkeletonRows
               label="attendance policies"
@@ -237,7 +239,7 @@ export function AttendanceSettingsPage() {
             items={table.visible}
             viewKey={table.viewKey}
             quickKey={search}
-            animateRows
+            animateRows={false}
             getKey={(policy) => policy.id}
             onRowsSettled={table.onRowsSettled}
             rowClassName={policyRowClass}
@@ -353,11 +355,13 @@ export function AttendanceSettingsPage() {
           />
         )}
       </ResponsiveDataTable>
-      <TablePaginationFooter
-        {...table.footer}
-        label="Attendance policy pages"
-        onPageChange={table.setPage}
-      />
+      {!table.searchPending && (
+        <TablePaginationFooter
+          {...table.footer}
+          label="Attendance policy pages"
+          onPageChange={table.setPage}
+        />
+      )}
       {panel && (
         <AttendancePolicyPanel
           {...panel}

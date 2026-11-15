@@ -6,6 +6,8 @@ import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { SearchField } from "@/components/ui/search-field"
 import { FilterSelect } from "@/components/ui/filter-select"
+import { TableSearchStatus } from "@/components/ui/table-search-status"
+import { usePaginatedList } from "@/components/ui/use-paginated-list"
 import { useAsyncResource } from "@/lib/use-async-resource"
 import { WorkspaceListTable } from "@/features/project-workspace/components/workspace-list-table"
 import { WorkspaceOverview } from "@/features/project-workspace/components/workspace-overview"
@@ -14,11 +16,28 @@ import { AdministrativeWorkspaceName } from "../components/administrative-worksp
 import {
   getAdministrativeProject,
   listAdministrativeProjects,
+  type AdministrativeProject,
 } from "../api/administrative-projects-api"
 
 const root = "/module/project-management"
 const href = (id: string) => `${root}?project=${encodeURIComponent(id)}`
 const noop = () => {}
+
+function matchesAdministrativeProject(
+  project: AdministrativeProject,
+  query: string,
+) {
+  const needle = query.trim().toLocaleLowerCase()
+  return [
+    project.name,
+    project.client.fullName,
+    ...project.workstreams.flatMap((workstream) => [
+      workstream.name,
+      workstream.serviceName,
+      workstream.referenceNumber,
+    ]),
+  ].some((value) => value?.toLocaleLowerCase().includes(needle))
+}
 
 export function AdministrativeProjectsOverview() {
   const id = useSearchParams().get("project")
@@ -33,16 +52,21 @@ function AdministrativeProjectList() {
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState("")
   const [departmentId, setDepartmentId] = useState("")
-  const [page, setPage] = useState(1)
-  const result = useAsyncResource(
-    (signal) =>
+  const result = usePaginatedList({
+    params: { search, status, departmentId },
+    load: ({ page, signal }) =>
       listAdministrativeProjects(
         { search, status, departmentId, page },
         signal,
       ),
-    [search, status, departmentId, page],
-  )
-  const data = !result.error && !result.loading ? result.data : undefined
+    rows: (response) =>
+      response.projects.filter((project) => project.capabilities.read),
+    matches: matchesAdministrativeProject,
+    initial: null,
+    fallbackError: "Something went wrong. Try again.",
+  })
+  const data = result.data
+  const { page, setPage } = result
   return (
     <section aria-label="Organization projects">
       <p className="mb-4 text-sm text-muted-foreground">
@@ -92,42 +116,62 @@ function AdministrativeProjectList() {
           ]}
         />
       </div>
-      {result.error && (
+      {result.error ? (
         <p role="alert">
           {result.error} <Button onClick={result.retry}>Retry</Button>
         </p>
+      ) : (
+        <>
+          <WorkspaceListTable
+            workspaces={result.rows}
+            loading={result.loading}
+            initialLoading={
+              result.searchSkeleton ||
+              (result.loading && !result.hasCurrentData && !result.previewing)
+            }
+            searching={result.previewing}
+            viewKey={result.tableViewKey}
+            quickKey={search}
+            onRowsSettled={result.onRowsSettled}
+            archiveView={false}
+            onChanged={noop}
+            readOnly
+            projectHref={href}
+          />
+          <TableSearchStatus
+            active={
+              result.loading &&
+              result.previewing &&
+              Boolean(result.preview?.length)
+            }
+            label="projects"
+          />
+          {result.footer && (
+            <div className="mt-4 flex items-center gap-3">
+              <Button
+                variant="outline"
+                disabled={result.footer.page === 1 || result.loading}
+                onClick={() => setPage(page - 1)}
+              >
+                Previous
+              </Button>
+              <span>
+                Page {result.footer.page} · {result.footer.total} projects
+              </span>
+              <Button
+                variant="outline"
+                disabled={
+                  result.footer.page >= result.footer.totalPages ||
+                  result.loading
+                }
+                onClick={() => setPage(page + 1)}
+              >
+                Next
+              </Button>
+            </div>
+          )}
+        </>
       )}
-      <WorkspaceListTable
-        workspaces={data?.projects ?? []}
-        loading={result.loading}
-        viewKey={`${search}:${status}:${departmentId}:${page}`}
-        quickKey="administrative"
-        archiveView={false}
-        onChanged={noop}
-        readOnly
-        projectHref={href}
-      />
-      <div className="mt-4 flex items-center gap-3">
-        <Button
-          variant="outline"
-          disabled={page === 1 || result.loading}
-          onClick={() => setPage(page - 1)}
-        >
-          Previous
-        </Button>
-        <span>
-          Page {page} · {data?.total ?? 0} projects
-        </span>
-        <Button
-          variant="outline"
-          disabled={
-            !data || page * data.pageSize >= data.total || result.loading
-          }
-          onClick={() => setPage(page + 1)}
-        >
-          Next
-        </Button>
-      </div>
     </section>
   )
 }

@@ -1,5 +1,5 @@
 "use client"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { FilterSelect } from "@/components/ui/filter-select"
 import { Pill } from "@/components/ui/pill"
@@ -52,6 +52,13 @@ export function AttendanceAuditPage() {
   const [departmentId, setDepartmentId] = useState("")
   const [search, setSearch] = useState("")
   const query = search.trim()
+  const [settledQuery, setSettledQuery] = useState(query)
+  const searchPending = query !== settledQuery
+  useEffect(() => {
+    if (!searchPending) return
+    const timer = window.setTimeout(() => setSettledQuery(query), 200)
+    return () => window.clearTimeout(timer)
+  }, [query, searchPending])
   const [selected, setSelected] = useState<AttendanceAuditEvent | null>(null)
   const departments = useAsyncResource(attendanceDepartments, [], {
     fallbackError: "Couldn't load departments.",
@@ -66,11 +73,11 @@ export function AttendanceAuditPage() {
         departmentId,
         signal,
         false,
-        query,
+        settledQuery,
       ),
-    [range.from, range.to, page, departmentId, query],
+    [range.from, range.to, page, departmentId, settledQuery],
     {
-      enabled: Boolean(range.from && range.to),
+      enabled: Boolean(range.from && range.to) && !searchPending,
       fallbackError: "Couldn't load the attendance audit trail.",
     },
   )
@@ -122,12 +129,12 @@ export function AttendanceAuditPage() {
         retry={departments.retry}
       />
       <TableSearchStatus
-        active={result.loading && Boolean(query)}
+        active={searchPending || (result.loading && Boolean(query))}
         label="attendance audit events"
       />
       <ResponsiveDataTable
         label="Attendance audit events"
-        aria-busy={result.loading}
+        aria-busy={result.loading || searchPending}
       >
         <ResponsiveDataTableHeader
           className="@max-[900px]:sr-only"
@@ -207,7 +214,7 @@ export function AttendanceAuditPage() {
           )}
         </ResponsiveDataTableBody>
       </ResponsiveDataTable>
-      {data && !result.loading && (
+      {data && !result.loading && !searchPending && (
         <AttendancePagination data={data} onChange={setPage} />
       )}
       {selected && (

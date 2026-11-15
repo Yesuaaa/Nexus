@@ -90,6 +90,7 @@ function RelatedTable({
             <AnimatedTableBody<ClientServiceRequest | ClientProject>
               items={data.rows}
               viewKey={`${kind}:${data.page}`}
+              animateRows={false}
               onRowsSettled={onRowsSettled}
               columns={requests ? 4 : 3}
               rowClassName="border-t border-[#eceef1] align-top"
@@ -146,7 +147,7 @@ function RelatedTable({
           <AnimatedSlotGridBody<ClientServiceRequest | ClientProject>
             items={data.rows}
             viewKey={`${kind}:${data.page}`}
-            animateRows
+            animateRows={false}
             onRowsSettled={onRowsSettled}
             getKey={relatedRowKey}
             bodyRole="presentation"
@@ -285,7 +286,9 @@ export function ClientDetailsDrawer({
       fallbackError: "Could not load related records.",
     },
   )
-  const relatedData = related.data?.kind === tab ? related.data.data : null
+  const lastRelatedPage = related.data?.kind === tab ? related.data.data : null
+  const relatedData =
+    related.loading && lastRelatedPage?.page !== page ? null : lastRelatedPage
   const name =
     profile?.fullName?.trim() || (profile ? "Name not provided" : "Client")
 

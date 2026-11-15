@@ -88,7 +88,6 @@ export function EmployeeManagementPage() {
     Permissions.DEPARTMENTS_MANAGE,
   )
   const [archiveView, setArchiveView] = useState(false)
-  const [animateRows, setAnimateRows] = useState(true)
   const [search, setSearch] = useState("")
   const query = search.trim()
   const [departmentId, setDepartmentId] = useState("")
@@ -134,6 +133,7 @@ export function EmployeeManagementPage() {
     fallbackError: "Couldn't load employees.",
   })
   const { setPage } = list
+  const searchSkeleton = list.searchSkeleton
 
   const departmentList = useDepartments()
   const departmentOptions = [
@@ -146,14 +146,12 @@ export function EmployeeManagementPage() {
 
   function updateFilters(update: () => void) {
     update()
-    setAnimateRows(true)
     setPage(1)
   }
 
   function switchView(nextArchiveView: boolean) {
     if (nextArchiveView === archiveView) return
     setArchiveView(nextArchiveView)
-    setAnimateRows(true)
     setPage(1)
     setSearch("")
     setDepartmentId("")
@@ -217,7 +215,6 @@ export function EmployeeManagementPage() {
               value={search}
               maxLength={100}
               onChange={(event) => {
-                setAnimateRows(true)
                 setSearch(event.target.value)
                 setPage(1)
               }}
@@ -281,10 +278,9 @@ export function EmployeeManagementPage() {
         <EmployeeTable
           archiveView={archiveView}
           employees={list.rows}
-          viewKey={list.tableViewKey}
+          viewKey={searchSkeleton ? "" : list.tableViewKey}
           quickKey={query}
           onRowsSettled={list.onRowsSettled}
-          animateRows={animateRows}
           loading={list.loading}
           error={list.error}
           emptyMessage={
@@ -317,15 +313,19 @@ export function EmployeeManagementPage() {
           }
         />
         <TableSearchStatus
-          active={list.loading && list.previewing}
+          active={
+            !searchSkeleton &&
+            list.loading &&
+            list.previewing &&
+            Boolean(list.preview?.length)
+          }
           label="employees"
         />
-        {list.footer && (
+        {!searchSkeleton && list.footer && (
           <TablePaginationFooter
             {...list.footer}
             label="Employee pages"
             onPageChange={(nextPage) => {
-              setAnimateRows(true)
               setPage(nextPage)
             }}
           />

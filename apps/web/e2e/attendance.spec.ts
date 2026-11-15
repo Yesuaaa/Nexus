@@ -325,6 +325,58 @@ test("time logs employee table preserves filters and opens individual or all log
   await expect(search).toHaveValue("BROWSER-staff")
 })
 
+test("attendance employee search keeps a single pending state until results settle", async ({
+  page,
+}) => {
+  await signIn(page, "admin")
+  let releaseSearch!: () => void
+  let notifySearchStarted!: () => void
+  const searchStarted = new Promise<void>((resolve) => {
+    notifySearchStarted = resolve
+  })
+  const pendingSearch = new Promise<void>((resolve) => {
+    releaseSearch = resolve
+  })
+  await page.route("**/api/attendance/employees?**", async (route) => {
+    if (
+      new URL(route.request().url()).searchParams.get("search") ===
+      "No matching employee"
+    ) {
+      notifySearchStarted()
+      await pendingSearch
+    }
+    await route.fallback()
+  })
+  try {
+    await page.goto("/attendance/time-logs/records")
+    const table = page.getByRole("table", { name: "Employees", exact: true })
+    await expect(
+      table.getByRole("button", { name: "View logs for Attendance staff" }),
+    ).toBeVisible()
+    const search = page.getByRole("searchbox", {
+      name: "Search attendance employees",
+    })
+    await search.fill("No matching employee")
+    await searchStarted
+    await expect(table).toHaveAttribute("aria-busy", "true")
+    await expect(
+      table.getByRole("status").filter({ hasText: "Searching…" }),
+    ).toHaveCount(1)
+    await expect(
+      table.getByText("No employees match your search.", { exact: true }),
+    ).toHaveCount(0)
+    releaseSearch()
+    await expect(
+      table.getByText("No employees match your search.", { exact: true }),
+    ).toBeVisible()
+    await expect(
+      table.getByRole("status").filter({ hasText: "Searching…" }),
+    ).toHaveCount(0)
+  } finally {
+    releaseSearch()
+  }
+})
+
 for (const viewport of [
   { width: 390, height: 844 },
   { width: 820, height: 1180 },
@@ -1408,9 +1460,21 @@ for (const width of [1280, 390])
     await search.fill(`Skeleton refresh ${width}`)
     await expect(createdRow).toBeVisible()
     await expect(existingRow).toHaveCount(0)
+    await page.clock.install()
     await search.fill("missing policy for skeleton test")
+    await expect(table.getByRole("status")).toContainText(
+      "Loading attendance policies",
+    )
+    const searchSkeletonRows = table
+      .getByRole("rowgroup")
+      .nth(1)
+      .getByRole("row")
+    await expect(searchSkeletonRows).toHaveCount(5)
+    await page.clock.runFor(199)
+    await page.clock.runFor(1)
     await expect(table.getByRole("status")).toContainText("No results for")
     await search.fill("")
+    await page.clock.runFor(200)
     await expect(existingRow).toBeVisible()
 
     const policyView = page.getByRole("group", {

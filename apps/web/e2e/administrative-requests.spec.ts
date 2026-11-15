@@ -136,6 +136,67 @@ test("Superadmin inspects requests through Service Operations without head or co
   expect(prohibited).toEqual([])
 })
 
+test("administrative request search stays pending without a false empty result", async ({
+  page,
+}) => {
+  await restoreSession(page, "SUPERADMIN")
+  let releaseSearch!: () => void
+  let notifySearchStarted!: () => void
+  const searchStarted = new Promise<void>((resolve) => {
+    notifySearchStarted = resolve
+  })
+  const pendingSearch = new Promise<void>((resolve) => {
+    releaseSearch = resolve
+  })
+  await page.route("**/api/administrative-requests?**", async (route) => {
+    const url = new URL(route.request().url())
+    const search = url.searchParams.get("search") ?? ""
+    if (search === "No matching request") {
+      notifySearchStarted()
+      await pendingSearch
+    }
+    await route.fulfill({
+      json: {
+        serviceRequests: search ? [] : [request],
+        departments: [{ id: "design", name: "Design" }],
+        total: search ? 0 : 1,
+        page: 1,
+        pageSize: 10,
+      },
+    })
+  })
+  try {
+    await page.goto("/module/service-operations")
+    const table = page.getByRole("table", {
+      name: "Organization service requests",
+      exact: true,
+    })
+    await expect(
+      table.getByRole("button", { name: "Inspect request request-1" }),
+    ).toBeVisible()
+    await page
+      .getByRole("searchbox", { name: "Search service requests", exact: true })
+      .fill("No matching request")
+    await searchStarted
+    await expect(table).toHaveAttribute("aria-busy", "true")
+    await expect(table.getByRole("status")).toHaveText("Loading requests…")
+    const skeletonRows = table.getByRole("rowgroup").nth(1).getByRole("row")
+    await expect(skeletonRows).toHaveCount(10)
+    for (const row of await skeletonRows.all())
+      await expect(row.getByRole("cell")).toHaveCount(6)
+    await expect(
+      table.getByText("No requests match this view.", { exact: true }),
+    ).toHaveCount(0)
+    releaseSearch()
+    await expect(
+      table.getByText("No requests match this view.", { exact: true }),
+    ).toBeVisible()
+    await expect(table.getByRole("status")).toHaveCount(0)
+  } finally {
+    releaseSearch()
+  }
+})
+
 test("backend rejection clears request details despite a cached administrative capability", async ({
   page,
 }) => {
