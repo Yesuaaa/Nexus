@@ -416,8 +416,7 @@ test(
     assert.equal((await adminApi("/directory")).status, 403)
     const companyMixed = (
       await companyDirectory(superadminApi, "search=Shared")
-    )
-      .rows[0]
+    ).rows[0]
     assert.equal(companyMixed.rowId, `group:${mixed.id}`)
     assert.equal(companyMixed.name, "Shared workspace")
     assert.equal(companyMixed.projectCount, 3)

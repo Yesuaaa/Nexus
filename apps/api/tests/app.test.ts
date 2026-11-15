@@ -73,8 +73,7 @@ test("API routes and error responses remain available", async () => {
       databaseProbe.listen(0, "127.0.0.1", resolve),
     )
     const databaseProbePort = (databaseProbe.address() as AddressInfo).port
-    process.env.DATABASE_URL =
-      `postgresql://user:secret@127.0.0.1:${databaseProbePort}/test`
+    process.env.DATABASE_URL = `postgresql://user:secret@127.0.0.1:${databaseProbePort}/test`
     const timedReadiness = await fetch(`${base}/api/ready`, {
       signal: AbortSignal.timeout(8_000),
     })

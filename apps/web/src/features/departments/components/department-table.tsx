@@ -84,9 +84,9 @@ export function DepartmentTable({
   const trimmedSearch = search.trim()
   const searchPending = Boolean(
     projectManagement &&
-      directorySearch !== undefined &&
-      onDirectoryStateChange &&
-      trimmedSearch !== directorySearch,
+    directorySearch !== undefined &&
+    onDirectoryStateChange &&
+    trimmedSearch !== directorySearch,
   )
   useEffect(() => {
     if (
@@ -115,7 +115,7 @@ export function DepartmentTable({
   const sort = useTableSort<SortKey>("name", "asc", defaultSortDirection)
   const sortKey = directoryState?.sort ?? sort.sortKey
   const direction = directoryState?.direction ?? sort.direction
-  const query = (projectManagement ? directoryState?.search ?? "" : search)
+  const query = (projectManagement ? (directoryState?.search ?? "") : search)
     .trim()
     .toLowerCase()
   const filtered = useMemo(

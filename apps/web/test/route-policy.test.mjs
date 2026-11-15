@@ -237,10 +237,7 @@ test("department-first Project Management routes require the current global read
     "/project-management",
     "/project-management/departments/department-1/projects",
   ]
-  const allRoutes = [
-    ...departmentRoutes,
-    "/project-management/overview",
-  ]
+  const allRoutes = [...departmentRoutes, "/project-management/overview"]
 
   for (const pathname of allRoutes) {
     assert.equal(canAccessRoute(superadmin, pathname), true, pathname)
@@ -268,11 +265,7 @@ test("department-first Project Management routes require the current global read
       permissions: superadmin.permissions.filter((item) => item !== permission),
     }
     for (const pathname of allRoutes)
-      assert.equal(
-        canAccessRoute(withoutPermission, pathname),
-        false,
-        pathname,
-      )
+      assert.equal(canAccessRoute(withoutPermission, pathname), false, pathname)
   }
 
   const withoutDepartmentRead = {

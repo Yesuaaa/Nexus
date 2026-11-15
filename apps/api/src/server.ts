@@ -1,12 +1,8 @@
 import { createServer, type Server } from "node:http"
 import { createApp } from "./app.js"
 import { jwtKey } from "./features/auth/auth.jwt.js"
-import {
-  conversationRealtime,
-} from "./features/request-conversations/request-conversations.realtime.js"
-import {
-  purgeExpiredConversationMessages,
-} from "./features/request-conversations/request-conversations.service.js"
+import { conversationRealtime } from "./features/request-conversations/request-conversations.realtime.js"
+import { purgeExpiredConversationMessages } from "./features/request-conversations/request-conversations.service.js"
 import { getPrisma } from "./lib/db.js"
 import { createGracefulShutdown } from "./graceful-shutdown.js"
 
@@ -72,17 +68,14 @@ export function startApi(): {
   const messagePurgeTimer = setInterval(purgeExpiredMessages, 60 * 60 * 1000)
   messagePurgeTimer.unref()
 
-  let shutdown:
-    | ReturnType<typeof createGracefulShutdown>
-    | undefined
   const onSigterm = () => {
-    if (shutdown) void shutdown("SIGTERM")
+    void shutdown("SIGTERM")
   }
   const onSigint = () => {
-    if (shutdown) void shutdown("SIGINT")
+    void shutdown("SIGINT")
   }
 
-  shutdown = createGracefulShutdown({
+  const shutdown = createGracefulShutdown({
     server,
     onStart: () => {
       isShuttingDown = true

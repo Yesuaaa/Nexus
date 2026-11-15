@@ -231,9 +231,7 @@ function groupTransition(
   href: string,
   pathname: string,
 ): string[] | undefined {
-  const inGroup = group.links.some((link) =>
-    isGroupLinkActive(link, pathname),
-  )
+  const inGroup = group.links.some((link) => isGroupLinkActive(link, pathname))
   if (!inGroup || href === pathname) return undefined
   return [href.endsWith("/overview") ? "nav-back" : "nav-forward"]
 }

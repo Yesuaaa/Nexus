@@ -11,6 +11,8 @@ test.skip(live, "Administrative inspection tests use isolated API fixtures")
 
 const project: AdministrativeProject = {
   id: "project-1",
+  kind: "ungrouped-project",
+  rowId: "ungrouped-project:project-1",
   name: "Organization project",
   structure: "SEPARATE",
   status: "IN_PROGRESS",
@@ -22,6 +24,7 @@ const project: AdministrativeProject = {
   activity: [],
   canCreate: false,
   canManage: false,
+  canRename: false,
   capabilities: {
     read: true,
     manage: false,

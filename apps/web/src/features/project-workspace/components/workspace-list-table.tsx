@@ -156,8 +156,8 @@ export function WorkspaceListTable({
                   <Link
                     href={
                       readOnly
-                        ? projectHref?.(workspace.id) ??
-                          `/project-workspace/${encodeURIComponent(workspace.id)}`
+                        ? (projectHref?.(workspace.id) ??
+                          `/project-workspace/${encodeURIComponent(workspace.id)}`)
                         : projectWorkspaceHref(
                             workspaceKey(workspace, readOnly),
                             directoryState,

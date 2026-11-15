@@ -11,13 +11,10 @@ async function checkDatabase() {
     const prisma = getPrisma()
     if (!prisma) return "not-configured" as const
 
-    await prisma.$transaction(
-      async (transaction) => {
-        await transaction.$executeRaw`SET LOCAL statement_timeout = '2500ms'`
-        await transaction.$queryRaw`SELECT 1`
-      },
-      readinessTransactionOptions,
-    )
+    await prisma.$transaction(async (transaction) => {
+      await transaction.$executeRaw`SET LOCAL statement_timeout = '2500ms'`
+      await transaction.$queryRaw`SELECT 1`
+    }, readinessTransactionOptions)
     return "ok" as const
   } catch (error: unknown) {
     console.error(

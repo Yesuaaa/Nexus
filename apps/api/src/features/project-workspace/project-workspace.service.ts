@@ -591,7 +591,10 @@ async function workspaceDirectoryAccess(
   if (
     (user.role === Role.ADMIN || user.role === Role.SUPERADMIN) &&
     hasAdministrativeCapability(user, AdministrativeCapability.MODULE_ACCESS) &&
-    hasAdministrativeCapability(user, AdministrativeCapability.ORGANIZATION_READ)
+    hasAdministrativeCapability(
+      user,
+      AdministrativeCapability.ORGANIZATION_READ,
+    )
   )
     return {
       kind: "company",
@@ -1802,7 +1805,8 @@ export async function renameProjectWorkspaceAdministratively(
       ? `group:${target.workspaceGroupId}`
       : `ungrouped-project:${target.id}`
     const initial = await getAdministrativelyManagedWorkspace(tx, identity)
-    if (initial.groupId) await lockRows(tx, "ProjectWorkspaceGroup", initial.groupId)
+    if (initial.groupId)
+      await lockRows(tx, "ProjectWorkspaceGroup", initial.groupId)
 
     const membership = initial.groupId
       ? { workspaceGroupId: initial.groupId }
