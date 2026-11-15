@@ -134,6 +134,7 @@ function StaffProjectWorkspacePage() {
     router.replace(workspaceDirectoryHref(directoryState), { scroll: false })
   }, [canonicalSearchParams, directoryState, rawSearchParams, router])
   const trimmedSearch = search.trim()
+  const searchPending = trimmedSearch !== directoryState.search
   useEffect(() => {
     if (trimmedSearch === directoryState.search) return
     searchTimer.current = window.setTimeout(() => {
@@ -437,10 +438,11 @@ function StaffProjectWorkspacePage() {
               Try again
             </Button>
           </Alert>
-        ) : loading || filtered.length > 0 ? (
+        ) : loading || searchPending || filtered.length > 0 ? (
           <WorkspaceListTable
             workspaces={filtered}
-            loading={loading}
+            loading={loading || searchPending}
+            animateRows={false}
             viewKey={JSON.stringify([search, view, status, sort])}
             quickKey={search}
             archiveView={view === "archive"}
@@ -499,7 +501,8 @@ function StaffProjectWorkspacePage() {
         ) : (
           <WorkspaceListTable
             workspaces={filtered}
-            loading={loading}
+            loading={loading || searchPending}
+            animateRows={false}
             viewKey={JSON.stringify([search, view, status, sort])}
             quickKey={search}
             archiveView={view === "archive"}

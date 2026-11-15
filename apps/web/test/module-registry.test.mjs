@@ -40,7 +40,7 @@ test("an unassigned Superadmin enters every implemented registered module", () =
   }
   assert.equal(
     modules.find((module) => module.id === "project-management").href,
-    "/module/project-management",
+    "/project-management/overview",
   )
   assert.equal(
     modules.find((module) => module.id === "attendance-monitoring").href,
@@ -122,7 +122,7 @@ test("module entry never grants Staff participation, Client actions, or personal
   const overview = getNavigationPolicies(superadmin, "main").find(
     (policy) => policy.id === "module-project-management",
   )
-  assert.equal(overview.navigation.href, "/module/project-management")
+  assert.equal(overview, undefined)
   assert.equal(
     resolveWorkspaceModuleId(superadmin, "/calendar", "project-management"),
     "project-management",

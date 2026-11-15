@@ -43,7 +43,7 @@ test(
       assert.equal((await request(`/modules/${module.id}`)).status, 200)
     assert.equal(
       modules.find((module) => module.id === "project-management")?.href,
-      "/module/project-management",
+      "/project-management/overview",
     )
     assert.equal(
       modules.find((module) => module.id === "attendance-monitoring")?.href,

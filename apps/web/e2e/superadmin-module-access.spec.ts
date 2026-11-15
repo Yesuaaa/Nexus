@@ -10,7 +10,11 @@ test.skip(live, "Module entry coverage uses isolated API fixtures")
 
 for (const [title, path, heading] of [
   ["Service Operations", "/services", "Service Management"],
-  ["Project Management", "/module/project-management", "Project Management"],
+  [
+    "Project Management",
+    "/project-management/overview",
+    "Project Management Overview",
+  ],
   ["People & HR", "/employees", "Employee Management"],
   [
     "Attendance & Monitoring",
@@ -115,13 +119,16 @@ test("Superadmin enters Project Management without Staff reads and retains modul
   })
   await entry.focus()
   await entry.click()
-  await expect(page).toHaveURL(/\/module\/project-management$/)
+  await expect(page).toHaveURL("/project-management/overview")
   await expect(
-    page.getByRole("heading", { name: "Project Management", exact: true }),
+    page.getByRole("heading", {
+      name: "Project Management Overview",
+      exact: true,
+    }),
   ).toBeVisible()
   const menu = page.getByRole("complementary", { name: "Primary navigation" })
   await expect(
-    menu.getByRole("link", { name: "Overview", exact: true }),
+    menu.getByRole("link", { name: "Project Workspace overview", exact: true }),
   ).toHaveAttribute("aria-current", "page")
   await expect(
     menu.getByRole("link", { name: "Project Workspace", exact: true }),
@@ -133,9 +140,20 @@ test("Superadmin enters Project Management without Staff reads and retains modul
   await expect(
     menu.getByText("Project Management", { exact: true }),
   ).toBeVisible()
-  await menu.getByRole("link", { name: "Overview", exact: true }).click()
+  const projectWorkspace = menu.getByRole("button", {
+    name: "Project Workspace",
+    exact: true,
+  })
+  if ((await projectWorkspace.getAttribute("aria-expanded")) === "false")
+    await projectWorkspace.click()
+  await menu
+    .getByRole("link", { name: "Project Workspace overview", exact: true })
+    .click()
   await expect(
-    page.getByRole("heading", { name: "Project Management", exact: true }),
+    page.getByRole("heading", {
+      name: "Project Management Overview",
+      exact: true,
+    }),
   ).toBeVisible()
   expect(operationalReads).toEqual([])
 })

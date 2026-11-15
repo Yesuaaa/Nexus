@@ -11,7 +11,7 @@
     "title": "Project Management",
     "description": "Coordinate projects, milestones, and deliverables.",
     "implemented": true,
-    "administrativePath": null,
+    "administrativePath": "/project-management/overview",
     "icon": "projects",
     "color": "#5d4b9b"
   },

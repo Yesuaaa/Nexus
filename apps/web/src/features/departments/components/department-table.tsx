@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { focusRing } from "@/components/layout/styles"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
@@ -68,18 +68,56 @@ export function DepartmentTable({
   onDirectoryStateChange?: (patch: Partial<DepartmentDirectoryState>) => void
   onRetry: () => void
 }) {
-  const [search, setSearch] = useState(directoryState?.search ?? "")
-  const [syncedSearch, setSyncedSearch] = useState(directoryState?.search ?? "")
-  if (directoryState && directoryState.search !== syncedSearch) {
-    setSyncedSearch(directoryState.search)
-    setSearch(directoryState.search)
-  }
-  const sort = useTableSort<SortKey>("name", "asc", defaultSortDirection)
+  const [searchDraft, setSearchDraft] = useState({
+    source: directoryState?.search ?? "",
+    value: directoryState?.search ?? "",
+  })
+  const directorySearch = directoryState?.search
+  const search =
+    directorySearch !== undefined
+      ? searchDraft.source === directorySearch
+        ? searchDraft.value
+        : directorySearch
+      : searchDraft.value
+  const searchTimer = useRef<number | null>(null)
   const projectManagement = variant === "project-management"
+  const trimmedSearch = search.trim()
+  const searchPending = Boolean(
+    projectManagement &&
+      directorySearch !== undefined &&
+      onDirectoryStateChange &&
+      trimmedSearch !== directorySearch,
+  )
+  useEffect(() => {
+    if (
+      !projectManagement ||
+      directorySearch === undefined ||
+      !onDirectoryStateChange ||
+      trimmedSearch === directorySearch
+    )
+      return
+    searchTimer.current = window.setTimeout(() => {
+      searchTimer.current = null
+      onDirectoryStateChange({ search: trimmedSearch, page: 1 })
+    }, 200)
+    return () => {
+      if (searchTimer.current !== null) {
+        window.clearTimeout(searchTimer.current)
+        searchTimer.current = null
+      }
+    }
+  }, [
+    directorySearch,
+    onDirectoryStateChange,
+    projectManagement,
+    trimmedSearch,
+  ])
+  const sort = useTableSort<SortKey>("name", "asc", defaultSortDirection)
   const sortKey = directoryState?.sort ?? sort.sortKey
   const direction = directoryState?.direction ?? sort.direction
-  const [animateRows, setAnimateRows] = useState(true)
-  const query = search.trim().toLowerCase()
+  const query = (projectManagement ? directoryState?.search ?? "" : search)
+    .trim()
+    .toLowerCase()
   const filtered = useMemo(
     () =>
       departments
@@ -125,7 +163,7 @@ export function DepartmentTable({
   // Search and sort changes return to the first page.
   const table = useLocalTable(filtered, {
     view: [variant, query, sortKey, direction],
-    loading,
+    loading: loading || searchPending,
     controlledPage: directoryState?.page,
     onPageChange: (page) => onDirectoryStateChange?.({ page }),
   })
@@ -133,12 +171,20 @@ export function DepartmentTable({
     if (
       !directoryState ||
       loading ||
+      searchPending ||
       error ||
       directoryState.page <= table.totalPages
     )
       return
     onDirectoryStateChange?.({ page: table.totalPages })
-  }, [directoryState, error, loading, onDirectoryStateChange, table.totalPages])
+  }, [
+    directoryState,
+    error,
+    loading,
+    onDirectoryStateChange,
+    searchPending,
+    table.totalPages,
+  ])
   const rowGrid =
     variant === "project-management" ? projectManagementGrid : departmentGrid
   const directionFor = (key: SortKey) =>
@@ -148,7 +194,6 @@ export function DepartmentTable({
         : null
       : sort.directionFor(key)
   function sortBy(key: SortKey) {
-    setAnimateRows(true)
     if (directoryState) {
       const directorySort = key as DepartmentDirectorySort
       const nextDirection =
@@ -177,9 +222,11 @@ export function DepartmentTable({
             value={search}
             maxLength={100}
             onChange={(event) => {
-              setAnimateRows(true)
-              setSearch(event.target.value)
-              if (directoryState) {
+              setSearchDraft({
+                source: directoryState?.search ?? "",
+                value: event.target.value,
+              })
+              if (directoryState && !projectManagement) {
                 onDirectoryStateChange?.({
                   search: event.target.value,
                   page: 1,
@@ -196,7 +243,7 @@ export function DepartmentTable({
             ? "Project Management departments"
             : "Departments and their staffing"
         }
-        aria-busy={loading}
+        aria-busy={loading || searchPending}
       >
         <ResponsiveDataTableHeader
           className="@max-[820px]:sr-only"
@@ -270,9 +317,9 @@ export function DepartmentTable({
             </>
           )}
         </ResponsiveDataTableHeader>
-        {loading || error ? (
+        {loading || error || searchPending ? (
           <ResponsiveDataTableBody className="relative overflow-x-clip">
-            {loading ? (
+            {loading || searchPending ? (
               <DataTableSkeletonRows
                 label="departments"
                 rowClassName={cn(
@@ -329,7 +376,7 @@ export function DepartmentTable({
             items={table.visible}
             viewKey={table.viewKey}
             quickKey={query}
-            animateRows={animateRows}
+            animateRows={!projectManagement}
             getKey={tableRowKey}
             rowClassName={(_item, _index, isLast) =>
               cn(
@@ -467,12 +514,11 @@ export function DepartmentTable({
         )}
       </ResponsiveDataTable>
 
-      {!loading && !error && (
+      {!loading && !error && !searchPending && (
         <TablePaginationFooter
           {...table.footer}
           label="Department pages"
           onPageChange={(nextPage) => {
-            setAnimateRows(true)
             table.setPage(nextPage)
           }}
         />

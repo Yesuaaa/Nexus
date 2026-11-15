@@ -64,7 +64,7 @@ const scenarios = [
     role: "SUPERADMIN",
     expected: [
       ["Service Operations", "/services"],
-      ["Project Management", "/module/project-management"],
+      ["Project Management", "/project-management/overview"],
       ["People & HR", "/employees"],
       ["Attendance & Monitoring", "/attendance/dashboard"],
       ["Administration", "/accounts"],

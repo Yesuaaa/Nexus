@@ -53,6 +53,7 @@ function rowClass(_workspace: WorkspaceRow, _index: number, isLast: boolean) {
 export function WorkspaceListTable({
   workspaces,
   loading,
+  animateRows = true,
   viewKey,
   quickKey,
   archiveView,
@@ -66,6 +67,7 @@ export function WorkspaceListTable({
 }: {
   workspaces: WorkspaceRow[]
   loading: boolean
+  animateRows?: boolean
   viewKey: string
   quickKey: string
   archiveView: boolean
@@ -135,7 +137,7 @@ export function WorkspaceListTable({
           }
           viewKey={viewKey}
           quickKey={quickKey}
-          animateRows
+          animateRows={animateRows}
           defaultRowHeight={58}
           className="relative min-w-0 overflow-x-clip"
           emptyContent={
