@@ -20,7 +20,11 @@ export const Permissions = {
   SERVICES_READ: "services:read",
   SERVICES_MANAGE: "services:manage",
   CLIENTS_READ: "clients:read",
-  PROJECT_MANAGEMENT_READ: "project-management:read",
+  CLIENTS_CREATE: "clients:create",
+  MODULES_ACCESS_ALL: "modules:access-all",
+  ORGANIZATION_READ_ALL: "organization:read-all",
+  ADMINISTRATION_MANAGE_ALL: "administration:manage-all",
+  BUSINESS_CONVERSATIONS_INSPECT: "conversations:inspect-business",
 } as const
 
 export type Permission = (typeof Permissions)[keyof typeof Permissions]
@@ -47,14 +51,14 @@ export function canAccessAccountManagement(account: Account): boolean {
 
 export function canAccessDepartmentManagement(account: Account): boolean {
   return (
-    account.role === "ADMIN" &&
+    isPrivileged(account.role) &&
     hasPermission(account, Permissions.DEPARTMENTS_READ)
   )
 }
 
 export function canAccessEmployeeManagement(account: Account): boolean {
   return (
-    account.role === "ADMIN" &&
+    isPrivileged(account.role) &&
     hasPermission(account, Permissions.EMPLOYEES_READ)
   )
 }
@@ -62,30 +66,40 @@ export function canAccessEmployeeManagement(account: Account): boolean {
 export function canAccessAttendance(account: Account): boolean {
   return (
     Boolean(account.isActive) &&
-    (account.role === "STAFF" || account.role === "ADMIN")
+    (account.role === "STAFF" ||
+      account.role === "ADMIN" ||
+      (account.role === "SUPERADMIN" &&
+        hasPermission(account, Permissions.EMPLOYEES_READ)))
   )
 }
 
 export function canManageAttendance(account: Account): boolean {
   return (
     canAccessAttendance(account) &&
-    ((account.role === "ADMIN" &&
+    ((isPrivileged(account.role) &&
       hasPermission(account, Permissions.EMPLOYEES_READ)) ||
       (account.role === "STAFF" && Boolean(account.headOf)))
+  )
+}
+
+export function canAccessPersonalAttendance(account: Account): boolean {
+  return (
+    Boolean(account.isActive) &&
+    (account.role === "STAFF" || account.role === "ADMIN")
   )
 }
 
 export function canConfigureAttendance(account: Account): boolean {
   return (
     Boolean(account.isActive) &&
-    account.role === "ADMIN" &&
+    isPrivileged(account.role) &&
     hasPermission(account, Permissions.EMPLOYEES_MANAGE)
   )
 }
 
 export function canAccessServiceManagement(account: Account): boolean {
   return (
-    account.role === "ADMIN" &&
+    isPrivileged(account.role) &&
     hasPermission(account, Permissions.SERVICES_READ)
   )
 }
@@ -115,6 +129,13 @@ export function canAccessMessages(account: Account): boolean {
   )
 }
 
+export function canInspectBusinessConversations(account: Account): boolean {
+  return (
+    hasPermission(account, Permissions.ORGANIZATION_READ_ALL) &&
+    hasPermission(account, Permissions.BUSINESS_CONVERSATIONS_INSPECT)
+  )
+}
+
 export function canAccessProjects(account: Account): boolean {
   return account.role === "USER" || account.role === "STAFF"
 }
@@ -123,20 +144,14 @@ export function canAccessProjectWorkspace(account: Account): boolean {
   return account.role === "STAFF"
 }
 
-export function canAccessProjectManagementModule(account: Account): boolean {
-  return (
-    (account.role === "ADMIN" || account.role === "SUPERADMIN") &&
-    hasPermission(account, Permissions.PROJECT_MANAGEMENT_READ)
-  )
-}
-
 export function canCreateProjectWorkspace(account: Account): boolean {
   return account.role === "STAFF" && Boolean(account.headOf)
 }
 
 export function canAccessClientManagement(account: Account): boolean {
   return (
-    account.role === "ADMIN" && hasPermission(account, Permissions.CLIENTS_READ)
+    isPrivileged(account.role) &&
+    hasPermission(account, Permissions.CLIENTS_READ)
   )
 }
 

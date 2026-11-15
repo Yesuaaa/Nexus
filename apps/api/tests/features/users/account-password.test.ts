@@ -6,6 +6,7 @@ import {
   verifyPassword,
 } from "../../../src/features/auth/auth.password.js"
 import { usersRepository } from "../../../src/features/users/users.repository.js"
+import { createManagementOperation } from "../../../src/shared/management-history.js"
 import { issueSession } from "../../../src/features/auth/auth.service.js"
 import { startPgliteApp } from "../../support/pglite-app.js"
 
@@ -104,6 +105,16 @@ test(
         "target",
         initialHash,
         await hashPassword(newPassword),
+        createManagementOperation({
+          user: await prisma.user.findUniqueOrThrow({
+            where: { id: "superadmin" },
+          }),
+          sessionId: (
+            await prisma.session.findFirstOrThrow({
+              where: { userId: "superadmin" },
+            })
+          ).id,
+        }),
       ),
     )
     assert.equal(

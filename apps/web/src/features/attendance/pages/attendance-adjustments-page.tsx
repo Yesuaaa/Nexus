@@ -1,7 +1,10 @@
 "use client"
 import { useState } from "react"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
-import { canManageAttendance } from "@/features/auth/model/permissions"
+import {
+  canAccessPersonalAttendance,
+  canManageAttendance,
+} from "@/features/auth/model/permissions"
 import { useAsyncResource } from "@/lib/use-async-resource"
 import { errorMessage } from "@/lib/error-message"
 import { sileo } from "@/lib/toast"
@@ -24,12 +27,18 @@ import { UserRound, UsersRound } from "lucide-react"
 import { AttendanceAdjustmentTable } from "../components/attendance-adjustment-table"
 import { AttendanceAdjustmentReviewPanel } from "../components/attendance-adjustment-review-panel"
 
-export function AttendanceAdjustmentsPage() {
+export function AttendanceAdjustmentsPage({
+  requestType,
+}: {
+  requestType?: "CORRECTION" | "OVERTIME"
+}) {
   const account = usePortalAccount(),
     manager = canManageAttendance(account)
+  const selfService = canAccessPersonalAttendance(account)
   const [scope, setScope] = useState<"mine" | "team">(manager ? "team" : "mine")
   const [search, setSearch] = useState("")
   const [type, setType] = useState("")
+  const [status, setStatus] = useState("")
   const [page, setPage] = useState(1)
   const [requestOpen, setRequestOpen] = useState(false)
   const [review, setReview] = useState<{
@@ -42,18 +51,39 @@ export function AttendanceAdjustmentsPage() {
   const list = useAsyncResource(
     (signal) =>
       attendanceAdjustments(
-        manager ? scope : "mine",
+        manager && (!selfService || scope === "team") ? "team" : "mine",
         page,
         search,
         signal,
-        type,
+        requestType ?? type,
+        status,
       ),
-    [scope, page, manager, search, type],
+    [scope, page, manager, selfService, search, type, requestType, status],
     { fallbackError: "Couldn't load attendance requests." },
+  )
+  const data = list.error ? undefined : list.data
+  const currentReview = data?.adjustments.find(
+    (item) => item.id === review?.request.id,
+  )
+  const reviewAllowed = Boolean(
+    manager &&
+    scope === "team" &&
+    currentReview &&
+    (review?.decision === "APPROVED"
+      ? currentReview.capabilities?.approve ||
+        currentReview.capabilities?.verify
+      : review?.decision === "REJECTED" && currentReview.capabilities?.reject),
   )
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
   async function submitReview(reviewNote: string) {
-    if (!review || review.readOnly || !review.decision || pending) return false
+    if (
+      !review ||
+      review.readOnly ||
+      !review.decision ||
+      !reviewAllowed ||
+      pending
+    )
+      return false
     setPending(true)
     setError("")
     try {
@@ -74,11 +104,21 @@ export function AttendanceAdjustmentsPage() {
   }
   return (
     <AttendanceShell
-      tab="adjustments"
+      tab={
+        requestType === "OVERTIME"
+          ? "overtime"
+          : requestType === "CORRECTION"
+            ? "corrections"
+            : "adjustments"
+      }
       actions={
-        <PageHeaderButton onClick={() => setRequestOpen(true)}>
-          Request correction
-        </PageHeaderButton>
+        selfService &&
+        data?.capabilities?.requestCorrection &&
+        requestType !== "OVERTIME" ? (
+          <PageHeaderButton onClick={() => setRequestOpen(true)}>
+            Request correction
+          </PageHeaderButton>
+        ) : undefined
       }
     >
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 max-[560px]:items-stretch">
@@ -93,22 +133,44 @@ export function AttendanceAdjustmentsPage() {
               setPage(1)
             }}
           />
+          {!requestType && (
+            <FilterSelect
+              label="Request type filter"
+              value={type}
+              triggerClassName="w-[140px]"
+              options={[
+                { value: "", label: "All requests" },
+                { value: "CORRECTION", label: "Corrections" },
+                { value: "OVERTIME", label: "Overtime" },
+              ]}
+              onChange={(value) => {
+                setType(value)
+                setPage(1)
+              }}
+            />
+          )}
           <FilterSelect
-            label="Request type filter"
-            value={type}
-            triggerClassName="w-[140px]"
-            options={[
-              { value: "", label: "All requests" },
-              { value: "CORRECTION", label: "Corrections" },
-              { value: "OVERTIME", label: "Overtime" },
-            ]}
+            label="Request status filter"
+            value={status}
             onChange={(value) => {
-              setType(value)
+              setStatus(value)
               setPage(1)
             }}
+            options={[
+              { value: "", label: "All statuses" },
+              ...["PENDING", "VERIFIED", "APPROVED", "REJECTED"]
+                .filter(
+                  (value) =>
+                    requestType !== "CORRECTION" || value !== "VERIFIED",
+                )
+                .map((value) => ({
+                  value,
+                  label: value.charAt(0) + value.slice(1).toLowerCase(),
+                })),
+            ]}
           />
         </div>
-        {manager && (
+        {manager && selfService && (
           <ManagementViewToggle
             active={scope === "mine"}
             ariaLabel="Request view"
@@ -116,7 +178,7 @@ export function AttendanceAdjustmentsPage() {
               {
                 value: false,
                 label:
-                  account.role === "ADMIN"
+                  account.role !== "STAFF"
                     ? "Organization requests"
                     : "Department requests",
                 icon: UsersRound,
@@ -138,16 +200,16 @@ export function AttendanceAdjustmentsPage() {
       </p>
       <ResourceStatus
         loading={list.loading && !list.data}
-        error={list.data ? "" : list.error}
+        error={data ? "" : list.error}
         retry={list.retry}
       />
-      {list.data && (
+      {data && (
         <AttendanceAdjustmentTable
-          items={list.data.adjustments}
+          items={data.adjustments}
           zone={zone}
           canReview={manager && scope === "team"}
           actorId={account.id}
-          isHR={account.role === "ADMIN"}
+          isHR={account.role !== "STAFF"}
           loading={list.loading}
           error={list.error}
           onRetry={list.retry}
@@ -161,28 +223,27 @@ export function AttendanceAdjustmentsPage() {
           }}
         />
       )}
-      {list.data && (
+      {data && (
         <AttendancePagination
-          data={list.data}
+          data={data}
           disabled={list.loading}
           onChange={setPage}
         />
       )}
-      {requestOpen && (
+      {selfService && data?.capabilities?.requestCorrection && requestOpen && (
         <AdjustmentDialog
           session={null}
           onClose={() => setRequestOpen(false)}
           onSaved={list.retry}
         />
       )}
-      {review && (
+      {review && data && (
         <AttendanceAdjustmentReviewPanel
-          request={review.request}
+          request={currentReview ?? review.request}
           decision={review.decision}
-          readOnly={review.readOnly}
+          readOnly={review.readOnly || !reviewAllowed}
           verifying={
-            account.role !== "ADMIN" &&
-            review.request.type === "OVERTIME" &&
+            Boolean(currentReview?.capabilities?.verify) &&
             review.decision === "APPROVED"
           }
           zone={zone}

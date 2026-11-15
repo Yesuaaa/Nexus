@@ -295,5 +295,34 @@ test(
         )
       },
     )
+    await t.test(
+      "policy overview totals cover the inventory and remain configuration-only",
+      async () => {
+        assert.equal(
+          (await request("/policies", "GET", undefined, staffToken)).status,
+          403,
+        )
+        const response = await request("/policies")
+        assert.equal(response.status, 200)
+        const result = (await response.json()) as {
+          summary: {
+            totalPolicies: number
+            activePolicies: number
+            archivedPolicies: number
+            assignmentPeriods: number
+          }
+        }
+        assert.deepEqual(result.summary, {
+          totalPolicies: await prisma.attendancePolicy.count(),
+          activePolicies: await prisma.attendancePolicy.count({
+            where: { archivedAt: null },
+          }),
+          archivedPolicies: await prisma.attendancePolicy.count({
+            where: { archivedAt: { not: null } },
+          }),
+          assignmentPeriods: await prisma.attendancePolicyAssignment.count(),
+        })
+      },
+    )
   },
 )

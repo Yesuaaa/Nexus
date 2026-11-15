@@ -38,8 +38,8 @@ const cells = [
 
 type WorkspaceRow = ProjectWorkspaceSummary | WorkspaceDirectoryRow
 
-function workspaceKey(workspace: WorkspaceRow) {
-  return workspace.rowId
+function workspaceKey(workspace: WorkspaceRow, readOnly: boolean) {
+  return readOnly ? workspace.id : workspace.rowId
 }
 
 function rowClass(_workspace: WorkspaceRow, _index: number, isLast: boolean) {
@@ -61,6 +61,8 @@ export function WorkspaceListTable({
   directory = false,
   departmentScopedDirectory = false,
   directoryState,
+  readOnly = false,
+  projectHref,
 }: {
   workspaces: WorkspaceRow[]
   loading: boolean
@@ -72,6 +74,8 @@ export function WorkspaceListTable({
   directory?: boolean
   departmentScopedDirectory?: boolean
   directoryState?: WorkspaceDirectoryState
+  readOnly?: boolean
+  projectHref?: (id: string) => string
 }) {
   const { formatDate } = useDatePreferences()
   const rowGrid = grid
@@ -125,7 +129,7 @@ export function WorkspaceListTable({
       ) : (
         <AnimatedSlotGridBody
           items={workspaces}
-          getKey={workspaceKey}
+          getKey={(workspace) => workspaceKey(workspace, readOnly)}
           rowClassName={(workspace, index, isLast) =>
             rowClass(workspace, index, isLast)
           }
@@ -148,10 +152,15 @@ export function WorkspaceListTable({
                   </span>
                 ) : (
                   <Link
-                    href={projectWorkspaceHref(
-                      workspaceKey(workspace),
-                      directoryState,
-                    )}
+                    href={
+                      readOnly
+                        ? projectHref?.(workspace.id) ??
+                          `/project-workspace/${encodeURIComponent(workspace.id)}`
+                        : projectWorkspaceHref(
+                            workspaceKey(workspace, readOnly),
+                            directoryState,
+                          )
+                    }
                     className="block truncate font-semibold text-foreground no-underline hover:underline focus-visible:outline-2 focus-visible:outline-ring"
                   >
                     {workspace.name}
@@ -247,7 +256,19 @@ export function WorkspaceListTable({
                   {formatDate(workspace.updatedAt)}
                 </time>
               </ResponsiveDataTableCell>
-              {departmentScopedDirectory ? (
+              {readOnly ? (
+                <ResponsiveDataTableCell className={cells[5]}>
+                  <Link
+                    href={
+                      projectHref?.(workspace.id) ??
+                      `/project-workspace/${encodeURIComponent(workspace.id)}`
+                    }
+                    className="text-foreground underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+                  >
+                    Inspect
+                  </Link>
+                </ResponsiveDataTableCell>
+              ) : departmentScopedDirectory ? (
                 <ResponsiveDataTableCell
                   className={cells[5]}
                   aria-label={`Actions for ${workspace.name}`}
@@ -255,10 +276,10 @@ export function WorkspaceListTable({
                   {onViewDetails && (
                     <WorkspaceListRowActions
                       workspace={workspace}
-                      identity={workspaceKey(workspace)}
+                      identity={workspaceKey(workspace, readOnly)}
                       onChanged={onChanged}
                       onViewDetails={() =>
-                        onViewDetails(workspaceKey(workspace))
+                        onViewDetails(workspaceKey(workspace, readOnly))
                       }
                     />
                   )}
@@ -267,7 +288,7 @@ export function WorkspaceListTable({
                 <ResponsiveDataTableCell className={cells[5]}>
                   <WorkspaceListRowActions
                     workspace={workspace}
-                    identity={workspaceKey(workspace)}
+                    identity={workspaceKey(workspace, readOnly)}
                     returnState={directoryState}
                     onChanged={onChanged}
                     isArchived={

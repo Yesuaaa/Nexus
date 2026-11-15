@@ -55,30 +55,20 @@ const viewDetailsAction: RowActionMenuItem<"view"> = {
 function adjustmentActions(
   item: AttendanceAdjustment,
   canReview: boolean,
-  isHR: boolean,
-  actorId: string,
 ): RowActionMenuItem<TableAction>[] {
   const items: RowActionMenuItem<TableAction>[] = []
   items.push(viewDetailsAction)
 
-  if (
-    canReview &&
-    (item.status === "PENDING" || (isHR && item.status === "VERIFIED")) &&
-    item.requestedById !== actorId
-  ) {
+  if (canReview) {
     items.push(
       ...reviewActionItems
-        .filter(
-          (entry) =>
-            !(
-              entry.action === "approve" &&
-              item.type === "OVERTIME" &&
-              isHR &&
-              item.status === "PENDING"
-            ),
+        .filter((entry) =>
+          entry.action === "approve"
+            ? item.capabilities?.approve || item.capabilities?.verify
+            : item.capabilities?.reject,
         )
         .map((entry) =>
-          entry.action === "approve" && item.type === "OVERTIME" && !isHR
+          entry.action === "approve" && item.capabilities?.verify
             ? {
                 ...entry,
                 label: (
@@ -238,13 +228,12 @@ export function AttendanceAdjustmentTable({
                 </Pill>
               </ResponsiveDataTableCell>
               <ResponsiveDataTableCell className="flex min-w-0 flex-wrap gap-2 @max-[1000px]:col-start-2 @max-[1000px]:row-start-4 @max-[1000px]:justify-self-end">
-                {adjustmentActions(item, canReview, isHR, actorId).length >
-                  0 && (
+                {adjustmentActions(item, canReview).length > 0 && (
                   <RowActionsMenu
                     triggerId={`attendance-adjustment-actions-${item.id}`}
                     triggerLabel={`More actions for ${item.employee.fullName}'s request`}
                     menuLabel={`Actions for ${item.employee.fullName}'s request`}
-                    items={adjustmentActions(item, canReview, isHR, actorId)}
+                    items={adjustmentActions(item, canReview)}
                     onAction={(action) => {
                       if (action === "view") onViewDetails(item)
                       else

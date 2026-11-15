@@ -109,7 +109,7 @@ export function AttendancePolicyDetailsPanel({
             </SidePanelSection>
           </TabsContent>
           <TabsContent value="people" className="mt-0 min-w-0">
-            <AssignedPeople policyId={policy.id} />
+            <AttendancePolicyAssignments policyId={policy.id} />
           </TabsContent>
         </SidePanelBody>
       </Tabs>
@@ -120,7 +120,11 @@ export function AttendancePolicyDetailsPanel({
   )
 }
 
-function AssignedPeople({ policyId }: { policyId: string }) {
+export function AttendancePolicyAssignments({
+  policyId,
+}: {
+  policyId: string
+}) {
   const [page, setPage] = useState(1)
   const assignments = useAsyncResource(
     (signal) => attendancePolicyAssignments(policyId, page, signal),

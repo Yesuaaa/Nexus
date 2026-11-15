@@ -620,7 +620,9 @@ for (const scenario of [
   }) => {
     const state = await mockInbox(page, scenario.role, scenario.head)
     await page.goto("/request-inbox")
-    await expect(page).toHaveURL(/\/dashboard$/)
+    await expect(page).toHaveURL(
+      scenario.role === "USER" ? /\/dashboard$/ : /\/module$/,
+    )
     await expect(
       page.getByRole("link", { name: "Request Inbox", exact: true }),
     ).toHaveCount(0)

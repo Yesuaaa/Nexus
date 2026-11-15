@@ -11,9 +11,14 @@ const permissionsByRole = {
     Permissions.EMPLOYEES_READ,
     Permissions.SERVICES_READ,
     Permissions.CLIENTS_READ,
-    Permissions.PROJECT_MANAGEMENT_READ,
   ],
-  SUPERADMIN: [Permissions.ACCOUNTS_READ, Permissions.PROJECT_MANAGEMENT_READ],
+  SUPERADMIN: [
+    Permissions.MODULES_ACCESS_ALL,
+    Permissions.ACCOUNTS_READ,
+    Permissions.SERVICES_READ,
+    Permissions.EMPLOYEES_READ,
+    Permissions.DEPARTMENTS_READ,
+  ],
 }
 
 function account(
@@ -47,7 +52,8 @@ test("clients do not receive workspace selector entries", () => {
 test("Staff receive project and personal attendance workspaces", () => {
   assert.deepEqual(moduleEntries(account("STAFF")), [
     ["Project Management", "/project-workspace"],
-    ["People & HR", "/attendance/my"],
+    ["Attendance & Monitoring", "/attendance/check-ins"],
+    ["Billing & Finance", null],
   ])
 })
 
@@ -61,23 +67,29 @@ test("a current department head receives Service Operations without changing Sta
     [
       ["Service Operations", "/request-inbox"],
       ["Project Management", "/project-workspace"],
-      ["People & HR", "/attendance/overview"],
+      ["Attendance & Monitoring", "/attendance/overview"],
+      ["Billing & Finance", null],
     ],
   )
 })
 
-test("the selector returns Admin's existing modules and Project Management", () => {
+test("the selector returns only the Admin operational workspaces", () => {
   assert.deepEqual(moduleEntries(account("ADMIN")), [
     ["Service Operations", "/services"],
     ["People & HR", "/employees"],
-    ["Project Management", "/project-management"],
+    ["Attendance & Monitoring", "/attendance/overview"],
+    ["Billing & Finance", null],
   ])
 })
 
-test("the selector preserves Superadmin's Administration access and adds Project Management", () => {
+test("Superadmin receives operational modules alongside Administration", () => {
   assert.deepEqual(moduleEntries(account("SUPERADMIN")), [
+    ["Service Operations", "/services"],
+    ["Project Management", "/module/project-management"],
+    ["People & HR", "/employees"],
+    ["Attendance & Monitoring", "/attendance/dashboard"],
     ["Administration", "/accounts"],
-    ["Project Management", "/project-management"],
+    ["Billing & Finance", null],
   ])
 })
 
@@ -88,23 +100,22 @@ test("permission-limited accounts never receive a denied module entry route", ()
     ),
     [
       ["Service Operations", "/clients"],
-      ["People & HR", "/attendance/my"],
+      ["Attendance & Monitoring", "/attendance/check-ins"],
+      ["Billing & Finance", null],
     ],
   )
   assert.deepEqual(
     moduleEntries(
       account("ADMIN", { permissions: [Permissions.DEPARTMENTS_READ] }),
     ),
-    [["People & HR", "/departments"]],
+    [
+      ["People & HR", "/departments"],
+      ["Attendance & Monitoring", "/attendance/check-ins"],
+      ["Billing & Finance", null],
+    ],
   )
   assert.deepEqual(
     moduleEntries(account("SUPERADMIN", { permissions: [] })),
     [],
-  )
-  assert.deepEqual(
-    moduleEntries(
-      account("SUPERADMIN", { permissions: [Permissions.ACCOUNTS_READ] }),
-    ),
-    [["Administration", "/accounts"]],
   )
 })

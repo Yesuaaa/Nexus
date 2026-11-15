@@ -208,6 +208,7 @@ export function ServiceManagementPage() {
       aria-label="Service management"
     >
       <PageHeader
+        mobileActions="stack"
         headingId="service-management-heading"
         title="Service Management"
         description="Create and manage company services and assign responsible departments."

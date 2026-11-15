@@ -91,10 +91,12 @@ test(
       ["/auth/me", roles],
       ["/users", ["SUPERADMIN"]],
       ["/departments", ["SUPERADMIN", "ADMIN", "STAFF"]],
-      ["/employees", ["ADMIN"]],
-      ["/clients", ["ADMIN"]],
-      ["/services", ["ADMIN"]],
-      ["/services/pricing-templates", ["ADMIN"]],
+      ["/employees", ["ADMIN", "SUPERADMIN"]],
+      ["/clients", ["ADMIN", "SUPERADMIN"]],
+      ["/services", ["ADMIN", "SUPERADMIN"]],
+      ["/services/pricing-templates", ["ADMIN", "SUPERADMIN"]],
+      ["/attendance/overview", ["ADMIN", "SUPERADMIN"]],
+      ["/attendance/policies", ["ADMIN", "SUPERADMIN"]],
       ["/services/available", roles],
       ["/auth/profile", roles],
       ["/client/services", ["USER"]],
@@ -125,6 +127,19 @@ test(
         },
       )
     }
+
+    await t.test(
+      "client creation admits Admin and Superadmin and rejects other roles",
+      async () => {
+        for (const role of roles) {
+          const response = await request("/clients", role, "POST", {})
+          assert.equal(
+            response.status,
+            role === "ADMIN" || role === "SUPERADMIN" ? 400 : 403,
+          )
+        }
+      },
+    )
 
     await t.test(
       "new mutation routes reject anonymous callers before writing",

@@ -1,4 +1,5 @@
-import { AttendanceSettingsPage } from "@/features/attendance/pages/attendance-settings-page"
+import { redirect } from "next/navigation"
+
 export default function Page() {
-  return <AttendanceSettingsPage />
+  redirect("/attendance/policies/management")
 }

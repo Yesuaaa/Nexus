@@ -34,7 +34,7 @@ import { contentClass } from "@/components/layout/styles"
 import { Alert } from "@/components/ui/alert"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { Button } from "@/components/ui/button"
-import { FilterSelect } from "@/components/ui/filter-select"
+import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
 import {
   Modal,
   ModalBody,
@@ -95,7 +95,9 @@ type Project = {
   }[]
 }
 type Data = {
-  department: { id: string; name: string }
+  department: { id: string; name: string } | null
+  departments?: { id: string; name: string }[]
+  capabilities?: { read: boolean }
   week: string
   staff: Staff[]
   projects: Project[]
@@ -109,21 +111,35 @@ function monday() {
   d.setDate(d.getDate() - ((day + 6) % 7))
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
 }
-export function WorkloadPage() {
+export function WorkloadPage({
+  administrative = false,
+}: {
+  administrative?: boolean
+}) {
   const account = usePortalAccount()
   const [week, setWeek] = useState(monday)
   const workload = useAsyncResource(
-    (signal) => apiRequest<Data>(`/api/workload?week=${week}`, { signal }),
-    [week],
+    (signal) =>
+      apiRequest<Data>(
+        `/api/${administrative ? "administrative-workload" : "workload"}?week=${week}`,
+        { signal },
+      ),
+    [week, administrative],
     { fallbackError: "Unable to load workload" },
   )
-  const data = workload.data ?? null
+  const data = administrative
+    ? !workload.loading && !workload.error && workload.data?.capabilities?.read
+      ? workload.data
+      : null
+    : (workload.data ?? null)
   const error = workload.error
   // Reloads after a save keep the current rows instead of showing skeletons.
   const loading = workload.loading && !data
   const [search, setSearch] = useState("")
   const [team, setTeam] = useState("all")
   const [availability, setAvailability] = useState("all")
+  const [department, setDepartment] = useState("all")
+  const [employee, setEmployee] = useState("all")
   const [selected, setSelected] = useState("")
   const [requestsOpen, setRequestsOpen] = useState(false)
   const [capacityTarget, setCapacityTarget] = useState<Staff | null>(null)
@@ -143,6 +159,7 @@ export function WorkloadPage() {
   } | null>(null)
   const [confirmation, setConfirmation] = useState<Assignment | null>(null)
   async function mutate(path: string, method: string, body?: unknown) {
+    if (administrative) return
     setBusy(true)
     setActionError("")
     try {
@@ -171,6 +188,10 @@ export function WorkloadPage() {
     () =>
       staff.filter(
         (s) =>
+          (!administrative ||
+            department === "all" ||
+            (s.department?.id ?? "none") === department) &&
+          (!administrative || employee === "all" || s.id === employee) &&
           (team === "all" || s.team?.id === team) &&
           (availability === "all" ||
             metrics(s).availability === availability) &&
@@ -178,7 +199,7 @@ export function WorkloadPage() {
             .toLowerCase()
             .includes(search.toLowerCase()),
       ),
-    [staff, team, availability, search],
+    [staff, team, availability, search, administrative, department, employee],
   )
   const selectedProject = data?.projects.find(
     (project) => project.id === allocation?.projectId,
@@ -244,7 +265,7 @@ export function WorkloadPage() {
     else setConfirmation(assignment)
   }
   const table = useLocalTable(filtered, {
-    view: [search, team, availability, week],
+    view: [search, team, availability, week, department, employee],
     loading,
   })
   const teamOptions = [
@@ -254,15 +275,18 @@ export function WorkloadPage() {
   return (
     <main className={cn(contentClass, "p-[clamp(16px,2.1vw,32px)]")}>
       <PageHeader
+        mobileActions="stack"
         title="Staff Workload"
         description={
           <>
             Monitor capacity, assignments, and availability
-            {data
-              ? ` for ${data.department.name}`
-              : account.headOf
-                ? ` for ${account.headOf.name}`
-                : ""}
+            {administrative
+              ? " across all departments (read only)"
+              : data?.department
+                ? ` for ${data.department.name}`
+                : account.headOf
+                  ? ` for ${account.headOf.name}`
+                  : ""}
             .
           </>
         }
@@ -291,7 +315,7 @@ export function WorkloadPage() {
         scheduling conflicts.
       </p>
       <section className="mt-4 min-w-0" aria-label="Staff workload directory">
-        <div className="flex flex-wrap gap-[10px] pb-4 max-[560px]:flex-col">
+        <div className={`${filterBarClass} pb-4`}>
           <SearchField
             label="Search staff"
             placeholder="Search staff, role, or skills…"
@@ -305,6 +329,45 @@ export function WorkloadPage() {
             triggerClassName="w-[170px]"
             onChange={setTeam}
           />
+          {administrative && (
+            <>
+              <FilterSelect
+                label="Filter by department"
+                value={department}
+                options={[
+                  { value: "all", label: "All departments" },
+                  ...(data?.departments ?? []).map((item) => ({
+                    value: item.id,
+                    label: item.name,
+                  })),
+                  { value: "none", label: "No department" },
+                ]}
+                onChange={(value) => {
+                  setDepartment(value)
+                  setEmployee("all")
+                  setSelected("")
+                }}
+              />
+              <FilterSelect
+                label="Filter by employee"
+                value={employee}
+                options={[
+                  { value: "all", label: "All employees" },
+                  ...staff
+                    .filter(
+                      (item) =>
+                        department === "all" ||
+                        (item.department?.id ?? "none") === department,
+                    )
+                    .map((item) => ({ value: item.id, label: item.fullName })),
+                ]}
+                onChange={(value) => {
+                  setEmployee(value)
+                  setSelected("")
+                }}
+              />
+            </>
+          )}
           <FilterSelect
             label="Filter by availability"
             value={availability}
@@ -312,17 +375,19 @@ export function WorkloadPage() {
             triggerClassName="w-[170px]"
             onChange={setAvailability}
           />
-          <Button
-            type="button"
-            className={`${panelAssignButton} ml-auto max-[560px]:ml-0`}
-            disabled={!data || loading}
-            onClick={() => setRequestsOpen(true)}
-          >
-            Assign staff
-            <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-white px-1 text-[9px] font-semibold tabular-nums text-[#203f8c]">
-              {staffingAttention.length}
-            </span>
-          </Button>
+          {!administrative && (
+            <Button
+              type="button"
+              className={`${panelAssignButton} ml-auto max-[560px]:ml-0`}
+              disabled={!data || loading}
+              onClick={() => setRequestsOpen(true)}
+            >
+              Assign staff
+              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-white px-1 text-[9px] font-semibold tabular-nums text-[#203f8c]">
+                {staffingAttention.length}
+              </span>
+            </Button>
+          )}
         </div>
         <div
           className="overflow-x-auto rounded-lg border border-[#e8ebef]"
@@ -372,6 +437,8 @@ export function WorkloadPage() {
                       </div>
                     ) : staff.length ? (
                       "No staff match these filters."
+                    ) : administrative ? (
+                      "No staff with active logins in the organization."
                     ) : (
                       "No employees in this department yet."
                     )}
@@ -387,6 +454,9 @@ export function WorkloadPage() {
                         <div className="mt-1 text-[11px] text-[#738096]">
                           {s.position ?? "No position"}
                           {s.team ? ` · ${s.team.name}` : ""}
+                          {administrative
+                            ? ` · ${s.department?.name ?? "No department"}`
+                            : ""}
                         </div>
                       </td>
                       <td className="px-4 py-3">
@@ -438,6 +508,7 @@ export function WorkloadPage() {
                       </td>
                       <td className="px-4 py-3">
                         <WorkloadRowActions
+                          readOnly={administrative}
                           staffId={s.id}
                           name={s.fullName}
                           canAssign={
@@ -471,6 +542,7 @@ export function WorkloadPage() {
       </section>
       {current && (
         <WorkloadDetailsDrawer
+          readOnly={administrative}
           key={current.id}
           staff={current}
           week={week}
@@ -488,7 +560,10 @@ export function WorkloadPage() {
           }}
         />
       )}
-      <Modal open={requestsOpen} onClose={() => setRequestsOpen(false)}>
+      <Modal
+        open={!administrative && requestsOpen}
+        onClose={() => setRequestsOpen(false)}
+      >
         <ModalHeader
           title="Staffing attention"
           description="Assign staff to projects or resolve allocations that no longer match the active department roster."
@@ -593,7 +668,7 @@ export function WorkloadPage() {
         </ModalFooter>
       </Modal>
       <Modal
-        open={!!capacityTarget}
+        open={!administrative && !!capacityTarget}
         onClose={() => setCapacityTarget(null)}
         busy={busy}
       >
@@ -650,7 +725,7 @@ export function WorkloadPage() {
         )}
       </Modal>
       <Modal
-        open={!!allocation}
+        open={!administrative && !!allocation}
         onClose={() => setAllocation(null)}
         busy={busy}
       >
@@ -880,7 +955,7 @@ export function WorkloadPage() {
         )}
       </Modal>
       <Modal
-        open={!!assignmentPicker}
+        open={!administrative && !!assignmentPicker}
         onClose={() => setAssignmentPicker(null)}
       >
         <ModalHeader
@@ -921,7 +996,7 @@ export function WorkloadPage() {
           ))}
         </ModalBody>
       </Modal>
-      {confirmation && (
+      {!administrative && confirmation && (
         <ConfirmationDialog
           title="Unassign staff?"
           subject={confirmation.project.name}

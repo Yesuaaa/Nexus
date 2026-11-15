@@ -20,7 +20,7 @@ export const fileSelect = {
   createdAt: true,
 } as const
 
-function nextAction(state: string) {
+export function nextAction(state: string) {
   const labels: Record<string, string> = {
     PENDING_REVIEW: "A department head will review your request.",
     CONSULTATION:

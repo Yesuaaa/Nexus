@@ -127,7 +127,19 @@ test(
           ["DELETE", "/services/missing"],
         ] as const
         for (const [method, path] of protectedRoutes) {
-          for (const actor of ["superadmin", "staff", "user"]) {
+          const superadminResponse = await request(
+            path,
+            method,
+            undefined,
+            "superadmin",
+          )
+          assert.notEqual(
+            superadminResponse.status,
+            403,
+            `Superadmin: ${method} ${path}`,
+          )
+          assert.ok(superadminResponse.status < 500)
+          for (const actor of ["staff", "user"]) {
             assert.equal(
               (await request(path, method, undefined, actor)).status,
               403,
@@ -608,9 +620,17 @@ test(
       },
     )
     await t.test(
-      "only Admin may use the employee API, including direct writes",
+      "Admin and Superadmin may use the employee API, including direct writes",
       async () => {
-        for (const actor of ["superadmin", "staff", "user"]) {
+        assert.equal(
+          (await request("/employees", "GET", undefined, "superadmin")).status,
+          200,
+        )
+        assert.equal(
+          (await request("/employees", "POST", {}, "superadmin")).status,
+          400,
+        )
+        for (const actor of ["staff", "user"]) {
           assert.equal(
             (await request("/employees", "GET", undefined, actor)).status,
             403,
@@ -1131,7 +1151,7 @@ test(
           ).userId,
           null,
         )
-        for (const actor of ["staff", "user", "superadmin"]) {
+        for (const actor of ["staff", "user"]) {
           assert.equal(
             (
               await request(
@@ -1366,7 +1386,7 @@ test(
           teamId: null,
           startDate: "2026-01-15",
         }
-        for (const actor of ["staff", "user", "superadmin"])
+        for (const actor of ["staff", "user"])
           assert.equal(
             (
               await request(

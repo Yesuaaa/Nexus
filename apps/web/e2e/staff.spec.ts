@@ -68,7 +68,7 @@ test.describe("Staff and role navigation", () => {
         }
       })
       await page.goto("/departments")
-      if (role !== "ADMIN") {
+      if (role !== "ADMIN" && role !== "SUPERADMIN") {
         await expect(page).toHaveURL(landing)
         await expect(
           page.getByRole("heading", { name: "Department Management" }),
@@ -103,7 +103,7 @@ test.describe("Staff and role navigation", () => {
         }
       })
       await page.goto("/employees")
-      if (role !== "ADMIN") {
+      if (role !== "ADMIN" && role !== "SUPERADMIN") {
         await expect(page).toHaveURL(landing)
         await expect(
           page.getByRole("heading", { name: "Employee Management" }),
@@ -144,13 +144,13 @@ test.describe("Staff and role navigation", () => {
         }
       })
       await page.goto("/services")
-      if (role === "SUPERADMIN" || role === "STAFF") {
+      if (role === "STAFF") {
         await expect(page).toHaveURL(landing)
         await expect(
           page.getByRole("heading", { name: "Service Management" }),
         ).toHaveCount(0)
         expect(serviceRequests).toEqual([])
-      } else if (role === "ADMIN") {
+      } else if (role === "ADMIN" || role === "SUPERADMIN") {
         await expect(
           page.getByRole("heading", { name: "Service Management" }),
         ).toBeVisible()

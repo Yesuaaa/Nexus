@@ -20,7 +20,11 @@ export const Permission = {
   SERVICES_READ: "services:read",
   SERVICES_MANAGE: "services:manage",
   CLIENTS_READ: "clients:read",
-  PROJECT_MANAGEMENT_READ: "project-management:read",
+  CLIENTS_CREATE: "clients:create",
+  MODULES_ACCESS_ALL: "modules:access-all",
+  ORGANIZATION_READ_ALL: "organization:read-all",
+  ADMINISTRATION_MANAGE_ALL: "administration:manage-all",
+  BUSINESS_CONVERSATIONS_INSPECT: "conversations:inspect-business",
 } as const
 
 export type Permission = (typeof Permission)[keyof typeof Permission]
@@ -46,10 +50,10 @@ const adminPermissions = [
   ...departmentManagementPermissions,
   Permission.SERVICES_READ,
   Permission.SERVICES_MANAGE,
-] as const
-
-const projectManagementPermissions = [
-  Permission.PROJECT_MANAGEMENT_READ,
+  Permission.CLIENTS_READ,
+  Permission.CLIENTS_CREATE,
+  Permission.EMPLOYEES_READ,
+  Permission.EMPLOYEES_MANAGE,
 ] as const
 
 const accountManagementPermissions = [
@@ -63,20 +67,22 @@ const accountManagementPermissions = [
   Permission.ACCOUNTS_STATUS_PRIVILEGED,
 ] as const
 
+// Administrative authority only; these grants never imply operational membership.
+const globalAdministrativePermissions = [
+  Permission.MODULES_ACCESS_ALL,
+  Permission.ORGANIZATION_READ_ALL,
+  Permission.ADMINISTRATION_MANAGE_ALL,
+  Permission.BUSINESS_CONVERSATIONS_INSPECT,
+] as const
+
 const rolePermissions: Record<Role, readonly Permission[]> = {
   [Role.USER]: commonPermissions,
   [Role.STAFF]: staffPermissions,
-  [Role.ADMIN]: [
-    ...adminPermissions,
-    ...projectManagementPermissions,
-    Permission.CLIENTS_READ,
-    Permission.EMPLOYEES_READ,
-    Permission.EMPLOYEES_MANAGE,
-  ],
+  [Role.ADMIN]: adminPermissions,
   [Role.SUPERADMIN]: [
-    ...departmentManagementPermissions,
-    ...projectManagementPermissions,
+    ...adminPermissions,
     ...accountManagementPermissions,
+    ...globalAdministrativePermissions,
   ],
 }
 

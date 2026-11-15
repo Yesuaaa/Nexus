@@ -50,6 +50,7 @@ export function RequestInboxTable({
   sortBy,
   sortDir,
   onSort,
+  readOnly = false,
 }: {
   requests: InboxRequest[]
   loading: boolean
@@ -64,10 +65,14 @@ export function RequestInboxTable({
   sortBy: InboxSort
   sortDir: "asc" | "desc"
   onSort: (column: InboxSort) => void
+  readOnly?: boolean
 }) {
   const { formatDate } = useDatePreferences()
   return (
-    <ResponsiveDataTable label="Department requests" aria-busy={loading}>
+    <ResponsiveDataTable
+      label={readOnly ? "Organization service requests" : "Department requests"}
+      aria-busy={loading}
+    >
       <ResponsiveDataTableHeader
         style={{ color: "#070f1f" }}
         rowClassName={cn(
@@ -209,7 +214,7 @@ export function RequestInboxTable({
                 <button
                   type="button"
                   id={`booking-view-${request.id}`}
-                  aria-label={`Review request ${request.id}`}
+                  aria-label={`${readOnly ? "Inspect" : "Review"} request ${request.id}`}
                   className={cn(
                     rowActionButton,
                     "text-[#52627a] max-[560px]:size-11",
@@ -218,28 +223,32 @@ export function RequestInboxTable({
                 >
                   <Eye size={16} aria-hidden="true" />
                 </button>
-                <button
-                  type="button"
-                  aria-label={`Go to chat for request ${request.id}`}
-                  className={cn(
-                    rowActionButton,
-                    "text-[#52627a] max-[560px]:size-11",
-                  )}
-                  onClick={() => onGoToChat(request)}
-                >
-                  <MessageSquare size={16} aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  aria-label={`Delete request ${request.id}`}
-                  className={cn(
-                    rowActionButton,
-                    "text-[#b42318] max-[560px]:size-11",
-                  )}
-                  onClick={() => onDelete(request)}
-                >
-                  <Trash2 size={16} aria-hidden="true" />
-                </button>
+                {!readOnly && (
+                  <button
+                    type="button"
+                    aria-label={`Go to chat for request ${request.id}`}
+                    className={cn(
+                      rowActionButton,
+                      "text-[#52627a] max-[560px]:size-11",
+                    )}
+                    onClick={() => onGoToChat(request)}
+                  >
+                    <MessageSquare size={16} aria-hidden="true" />
+                  </button>
+                )}
+                {!readOnly && (
+                  <button
+                    type="button"
+                    aria-label={`Delete request ${request.id}`}
+                    className={cn(
+                      rowActionButton,
+                      "text-[#b42318] max-[560px]:size-11",
+                    )}
+                    onClick={() => onDelete(request)}
+                  >
+                    <Trash2 size={16} aria-hidden="true" />
+                  </button>
+                )}
               </div>
             </>
           )}

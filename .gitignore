@@ -5,6 +5,7 @@
 **/.next/
 **/out/
 **/test-results/
+apps/api/.test-build/
 **/playwright-report/
 .env
 .env.*

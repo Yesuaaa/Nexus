@@ -85,6 +85,9 @@ export function createAttendanceRouter(clock: () => Date = () => new Date()) {
       .status(201)
       .json(await management.assignPolicy(req.auth!.user.id, req.body))
   })
+  router.get("/adjustments/overview", async (req, res) => {
+    res.json(await management.adjustmentOverview(req.auth!.user.id, req.query))
+  })
   router.get("/adjustments", async (req, res) => {
     res.json(await management.adjustments(req.auth!.user.id, req.query))
   })
@@ -101,6 +104,9 @@ export function createAttendanceRouter(clock: () => Date = () => new Date()) {
         req.body,
       ),
     )
+  })
+  router.get("/me/overview", async (req, res) => {
+    res.json(await management.overview(req.auth!.user.id, req.query, true))
   })
   router.get("/me/current", handlers.current)
   router.get("/me/history", handlers.history)

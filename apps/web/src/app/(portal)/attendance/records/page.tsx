@@ -1,4 +1,5 @@
-import { AttendanceRecordsPage } from "@/features/attendance/pages/attendance-records-page"
+import { redirect } from "next/navigation"
+
 export default function Page() {
-  return <AttendanceRecordsPage />
+  redirect("/attendance/time-logs/records")
 }

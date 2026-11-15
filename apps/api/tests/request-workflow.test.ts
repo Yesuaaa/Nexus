@@ -123,7 +123,7 @@ type TestWorkflow = {
   } | null
   agreement: { status: string; mandatory: boolean } | null
   payment: { status: string; mandatory: boolean } | null
-  project: { id: string; status: string; workspaceId?: string } | null
+  project: { id: string; status: string } | null
   events: { type: string; summary: string; entityId: string | null }[]
   files: { id: string; name: string; size: number }[]
   internal?: {
@@ -1321,32 +1321,6 @@ test(
         assert.equal(active.project!.status, "IN_PROGRESS")
         projectId = active.project!.id
         assert.equal(
-          active.project!.workspaceId,
-          `ungrouped-project:${projectId}`,
-        )
-        await prisma!.projectWorkspaceGroup.create({
-          data: {
-            id: projectId,
-            name: "Colliding empty workspace",
-            structure: "SEPARATE",
-            clientId: client.id,
-            createdById: head.id,
-          },
-        })
-        const typedProjectDetail = await fetch(
-          `${base}/project-workspace/${encodeURIComponent(`ungrouped-project:${projectId}`)}`,
-          { headers: head.headers },
-        )
-        assert.equal(typedProjectDetail.status, 200)
-        assert.deepEqual(
-          (
-            (await typedProjectDetail.json()) as {
-              workstreams: { id: string }[]
-            }
-          ).workstreams.map(({ id }) => id),
-          [projectId],
-        )
-        assert.equal(
           await prisma!.project.count({ where: { requestId: request.id } }),
           1,
         )
@@ -1377,17 +1351,21 @@ test(
           ).status,
           404,
         )
-        const milestones = (
-          JSON.parse(workspaceJson) as {
-            milestones: { id: string; completedAt: string | null }[]
-          }
-        ).milestones
-        assert.deepEqual(milestones, [])
-        const { id: milestoneId } =
-          await prisma!.projectMilestone.findFirstOrThrow({
-            where: { projectId },
-            select: { id: true },
-          })
+        const clientProject = JSON.parse(workspaceJson) as {
+          milestones: unknown[]
+          canManage: boolean
+        }
+        assert.deepEqual(clientProject.milestones, [])
+        assert.equal(clientProject.canManage, false)
+        const staffWorkspace = await fetch(`${base}/projects/${projectId}`, {
+          headers: staff.headers,
+        })
+        assert.equal(staffWorkspace.status, 200)
+        const { milestones } = (await staffWorkspace.json()) as {
+          milestones: { id: string; completedAt: string | null }[]
+        }
+        assert.equal(milestones.length, 2)
+        const milestoneId = milestones[0]!.id
         const patchMilestone = (actor: Actor, completed: boolean) =>
           fetch(`${base}/projects/${projectId}/milestones/${milestoneId}`, {
             method: "PATCH",
@@ -2009,11 +1987,5 @@ test(
         )
       },
     )
-    await prisma!.project.update({
-      where: { id: projectId },
-      data: { workspaceGroupId: projectId },
-    })
-    const groupedWorkflow = await read(client)
-    assert.equal(groupedWorkflow.project?.workspaceId, `group:${projectId}`)
   },
 )

@@ -144,7 +144,9 @@ export function AnimatedTableBody<T extends { id: string }>({
       className="relative"
       aria-live="polite"
       aria-busy={animating}
-      transition={{ layout: { duration: reduced ? 0 : 0.22, ease: "easeOut" } }}
+      transition={{
+        layout: { duration: reduced ? 0 : 0.14, ease: [0, 0, 0.2, 1] },
+      }}
     >
       {slots.length === 0 && (
         <tr>

@@ -14,7 +14,7 @@ import { Alert } from "@/components/ui/alert"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
 import { Dropdown as AccessDropdown } from "@/components/ui/dropdown"
-import { FilterSelect } from "@/components/ui/filter-select"
+import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
 import { Pill } from "@/components/ui/pill"
 import { SearchField } from "@/components/ui/search-field"
 import {
@@ -506,7 +506,7 @@ export function AccountManagementPage() {
         aria-label="Accounts"
       >
         <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 pb-4 max-[560px]:grid-cols-1 max-[560px]:pb-3">
-          <div className="flex min-w-0 gap-[10px] max-[560px]:flex-col">
+          <div className={`${filterBarClass} min-w-0`}>
             <SearchField
               label="Search accounts"
               value={search}

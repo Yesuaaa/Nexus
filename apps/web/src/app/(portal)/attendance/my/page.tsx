@@ -1,4 +1,5 @@
-import { MyAttendancePage } from "@/features/attendance/pages/my-attendance-page"
+import { redirect } from "next/navigation"
+
 export default function Page() {
-  return <MyAttendancePage />
+  redirect("/attendance/check-ins")
 }

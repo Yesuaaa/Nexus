@@ -63,8 +63,8 @@ export function useBreadcrumbLabel(key: string, label: string | undefined) {
 const routeLabels: Record<string, string> = {
   attendance: "Attendance",
   my: "Check-Ins",
-  adjustments: "OT & Agreements",
-  records: "Time Logs",
+  adjustments: "Requests & Approvals",
+  records: "Records",
   dashboard: "Dashboard",
   profile: "My Profile",
   "billing-logs": "Billing Logs",
@@ -88,9 +88,13 @@ const routeLabels: Record<string, string> = {
 const contextualRouteLabels: Record<string, Record<string, string>> = {
   attendance: {
     my: "Check-Ins",
-    records: "Time Logs",
-    adjustments: "OT & Agreements",
-    settings: "Policies",
+    "check-ins": "Check-Ins",
+    records: "Records",
+    adjustments: "Requests & Approvals",
+    settings: "Policy Management",
+    "time-logs": "Time Logs",
+    requests: "Requests & Approvals",
+    policies: "Policies",
   },
 }
 

@@ -8,7 +8,8 @@ projectManagementRouter.use(requireAuth)
 
 projectManagementRouter.get(
   "/overview",
-  requirePermission(Permission.PROJECT_MANAGEMENT_READ),
+  requirePermission(Permission.MODULES_ACCESS_ALL),
+  requirePermission(Permission.ORGANIZATION_READ_ALL),
   async (_request, response) => {
     response.json(await getProjectManagementOverview())
   },

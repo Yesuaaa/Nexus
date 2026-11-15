@@ -1,9 +1,8 @@
 "use client"
 import Link from "next/link"
 import { useState } from "react"
-import { CircleCheck, Clock3, TriangleAlert, UsersRound } from "lucide-react"
+import { Clock3, LogIn, LogOut, UsersRound } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { FilterSelect } from "@/components/ui/filter-select"
 import {
   BreakdownList,
   ItemList,
@@ -13,6 +12,7 @@ import {
 } from "@/components/ui/overview-panel"
 import {
   ProgressMeter,
+  SegmentMeter,
   StatStrip,
   type StatStripItem,
 } from "@/components/ui/stat-strip"
@@ -20,215 +20,151 @@ import { formatDateTime } from "@/lib/format"
 import { useAsyncResource } from "@/lib/use-async-resource"
 import { AttendanceShell } from "../components/attendance-shell"
 import { RangeFields, ResourceStatus } from "../components/attendance-shared"
-import {
-  attendanceDepartments,
-  attendanceOverview,
-  type AttendanceWorkday,
-} from "../api/attendance-api"
-import { attendanceStatusLabels, defaultRange } from "../model/attendance"
+import { personalAttendanceOverview } from "../api/attendance-api"
+import { defaultRange } from "../model/attendance"
 
-function hours(value: number | undefined) {
-  return value === undefined ? "—" : `${value.toFixed(2)} h`
+const activityLabels = {
+  CLOCK_IN: "Clocked in",
+  CLOCK_OUT: "Clocked out",
+  BREAK_START: "Started break",
+  BREAK_END: "Ended break",
 }
 
 export function AttendanceOverviewPage() {
   const [range, setRange] = useState(defaultRange)
-  const [departmentId, setDepartmentId] = useState("")
-  const departments = useAsyncResource(attendanceDepartments, [], {
-    fallbackError: "Couldn't load departments.",
-  })
   const result = useAsyncResource(
-    (signal) => attendanceOverview(range.from, range.to, departmentId, signal),
-    [range.from, range.to, departmentId],
+    (signal) => personalAttendanceOverview(range.from, range.to, signal),
+    [range.from, range.to],
     {
       enabled: Boolean(range.from && range.to),
-      fallbackError: "Couldn't load attendance summaries.",
+      fallbackError: "Couldn't load check-in summaries.",
     },
   )
-  const data = result.data
-  const pending = result.loading && !data
-  const unavailable = Boolean(result.error) && !data
-  const scopeLabel =
-    data?.scope === "DEPARTMENT"
-      ? "Department"
-      : data?.scope === "ORGANIZATION"
-        ? "Organization"
-        : "Permitted scope"
-  const averageWorkedHours =
-    data && data.recordedDays > 0
-      ? data.workedHours / data.recordedDays
-      : undefined
-  const coveragePercent =
-    data && data.requiredHours > 0
-      ? Math.round((data.workedHours / data.requiredHours) * 100)
-      : undefined
-  const coverageRows =
-    data && (data.recordedDays > 0 || data.requiredHours > 0)
-      ? [
-          {
-            id: "required-hours",
-            label: "Required hours",
-            value: data.requiredHours,
-          },
-          {
-            id: "worked-hours",
-            label: "Net worked hours",
-            value: data.workedHours,
-          },
-        ]
-      : []
-  const attentionRows: ItemRow[] = []
-  if (data?.activeSessions) {
-    attentionRows.push({
-      id: "active-sessions",
-      label: "Active sessions",
-      note: `${data.activeSessions} still open`,
-      tone: "warning",
-    })
-  }
-  if (data?.excessDays) {
-    attentionRows.push({
-      id: "excess-days",
-      label: "Excess-hour workdays",
-      note: `${data.excessDays} require review`,
-      tone: "warning",
-    })
-  }
-  if (data?.pendingCorrections) {
-    attentionRows.push({
-      id: "pending-corrections",
-      label: "Pending corrections",
-      note: `${data.pendingCorrections} awaiting review`,
-      tone: "warning",
-    })
-  }
-  if (data?.overnightReviews) {
-    attentionRows.push({
-      id: "overnight-reviews",
-      label: "Overnight reviews",
-      note: `${data.overnightReviews} require review`,
-      tone: "warning",
-    })
-  }
-  const statusOrder: AttendanceWorkday["status"][] = [
-    "COMPLETE",
-    "HOURS_MET",
-    "IN_PROGRESS",
-    "INCOMPLETE",
-    "NOT_STARTED",
-    "NOT_REQUIRED",
-  ]
-  const statusRows = statusOrder.map((status) => ({
-    id: status,
-    label: attendanceStatusLabels[status],
-    value: data?.statusBreakdown[status] ?? 0,
-  }))
-  const selectedDepartment = departments.data?.departments.find(
-    (department) => department.id === departmentId,
-  )
-  const contextRows: ItemRow[] = [
-    {
-      id: "scope",
-      label: "Reporting scope",
-      note: scopeLabel,
-      tone: "muted",
-    },
-    {
-      id: "department",
-      label: "Department filter",
-      note: selectedDepartment?.name ?? "All permitted departments",
-      tone: "muted",
-    },
-    {
-      id: "range",
-      label: "Date range",
-      note: `${range.from} → ${range.to}`,
-      tone: "muted",
-    },
-    {
-      id: "missing-days",
-      label: "Missing days",
-      note: "Not classified as absences",
-      tone: "muted",
-    },
-    ...(data?.asOf
-      ? [
-          {
-            id: "updated",
-            label: "Last refreshed",
-            note: `${formatDateTime(data.asOf, "UTC")} UTC`,
-            tone: "muted" as const,
-          },
-        ]
-      : []),
-  ]
+  const data = result.loading || result.error ? undefined : result.data
+  const summary = data?.checkIns
+  const scopeLabel = "Personal"
   const metrics: StatStripItem[] = [
     {
-      label: "Employees recorded",
-      value: data?.employees.toLocaleString("en-US") ?? "0",
-      caption: "Employees with recorded workdays",
+      label: "Attendance days",
+      value: data?.recordedDays.toLocaleString("en-US") ?? "0",
+      caption: "Your recorded attendance workdays",
       icon: UsersRound,
       tone: "bg-[#e8eef8] text-[#284f9e]",
     },
     {
-      label: "Net worked hours",
-      value: data?.workedHours.toFixed(2) ?? "0.00",
-      caption: "Unpaid breaks excluded",
-      icon: Clock3,
+      label: "Check-ins",
+      value: summary?.total.toLocaleString("en-US") ?? "0",
+      caption: "Sessions started in selected workdays",
+      icon: LogIn,
       tone: "bg-[#e6f4ee] text-[#25745b]",
+      meter: (
+        <SegmentMeter
+          label="Check-in session status"
+          segments={[
+            {
+              label: "Clocked in",
+              value: summary?.working ?? 0,
+              colorClass: "bg-[#284f9e]",
+            },
+            {
+              label: "On unpaid break",
+              value: summary?.onBreak ?? 0,
+              colorClass: "bg-[#d69a24]",
+            },
+            {
+              label: "Clocked out",
+              value: summary?.closed ?? 0,
+              colorClass: "bg-[#29906b]",
+            },
+          ]}
+        />
+      ),
     },
     {
-      label: "Completed workdays",
-      value: data?.completeDays.toLocaleString("en-US") ?? "0",
-      caption: "Daily required hours met",
-      icon: CircleCheck,
+      label: "Check-outs",
+      value: summary?.closed.toLocaleString("en-US") ?? "0",
+      caption: "Sessions with a recorded clock-out",
+      captionTone: summary?.closed ? "text-[#25745b]" : undefined,
+      icon: LogOut,
       tone: "bg-[#e6f4ee] text-[#25745b]",
       meter: (
         <ProgressMeter
-          value={data?.completeDays ?? 0}
-          max={data?.recordedDays ?? 0}
-          label="Completed workdays"
+          value={summary?.closed ?? 0}
+          max={summary?.total ?? 0}
+          label="Sessions with a recorded clock-out"
           colorClass="bg-[#29906b]"
         />
       ),
     },
     {
-      label: "Excess-hour workdays",
-      value: data?.excessDays.toLocaleString("en-US") ?? "0",
-      caption: "Review required; overtime unapproved",
-      captionTone: "text-[#a45b12]",
-      icon: TriangleAlert,
+      label: "Still clocked in",
+      value: summary
+        ? (summary.working + summary.onBreak).toLocaleString("en-US")
+        : "0",
+      caption: "Open sessions, including unpaid breaks",
+      captionTone:
+        summary && summary.working + summary.onBreak > 0
+          ? "text-[#9a5b00]"
+          : undefined,
+      icon: Clock3,
       tone: "bg-[#fbf0e2] text-[#a45b12]",
+      meter: (
+        <ProgressMeter
+          value={(summary?.working ?? 0) + (summary?.onBreak ?? 0)}
+          max={summary?.total ?? 0}
+          label="Sessions still clocked in"
+          colorClass="bg-[#d69a24]"
+        />
+      ),
     },
   ]
-
+  const statuses = summary?.total
+    ? [
+        { id: "working", label: "Clocked in", value: summary.working },
+        { id: "break", label: "On unpaid break", value: summary.onBreak },
+        { id: "closed", label: "Clocked out", value: summary.closed },
+      ]
+    : []
+  const context: ItemRow[] = [
+    { id: "scope", label: "Reporting scope", note: scopeLabel },
+    {
+      id: "range",
+      label: "Attendance workdays",
+      note: range.from + " - " + range.to,
+    },
+    ...(data
+      ? [
+          {
+            id: "asOf",
+            label: "Last refreshed (UTC)",
+            note: formatDateTime(data.asOf, "UTC"),
+          },
+        ]
+      : []),
+  ]
   return (
     <AttendanceShell
       tab="overview"
       actions={
-        <Button asChild variant="brandOutline" size="header">
-          <Link href="/attendance/records">View time logs</Link>
-        </Button>
+        <>
+          <Button
+            variant="brandOutline"
+            size="header"
+            onClick={result.retry}
+            disabled={result.loading}
+          >
+            Refresh
+          </Button>
+          <Button asChild variant="brandOutline" size="header">
+            <Link href="/attendance/check-ins">Open Check-Ins</Link>
+          </Button>
+        </>
       }
     >
       <div className="mb-4 flex flex-wrap items-center gap-[10px]">
         <RangeFields
           {...range}
           onChange={(from, to) => setRange({ from, to })}
-        />
-        <FilterSelect
-          label="Attendance department"
-          value={departmentId}
-          disabled={departments.loading}
-          triggerClassName="w-[210px]"
-          options={[
-            { value: "", label: "All permitted departments" },
-            ...(departments.data?.departments ?? []).map((department) => ({
-              value: department.id,
-              label: department.name,
-            })),
-          ]}
-          onChange={setDepartmentId}
         />
       </div>
       <ResourceStatus
@@ -240,104 +176,85 @@ export function AttendanceOverviewPage() {
         <StatStrip
           items={metrics}
           label="Attendance overview"
-          pending={pending}
-          unavailable={unavailable}
+          pending={result.loading}
+          unavailable={Boolean(result.error)}
         />
         <MiniStats
-          label="Attendance figures"
-          loading={pending}
+          label="Personal check-in figures"
+          loading={result.loading}
           items={[
             {
-              label: "Recorded workdays",
-              value: data?.recordedDays.toLocaleString("en-US") ?? "—",
-              hint: "Attendance days in range",
+              label: "Working now",
+              value: summary?.working.toLocaleString("en-US") ?? "\u2014",
+              hint: "Open sessions outside unpaid breaks",
             },
             {
-              label: "Required hours",
-              value: hours(data?.requiredHours),
-              hint: "From assigned policies",
+              label: "On unpaid break",
+              value: summary?.onBreak.toLocaleString("en-US") ?? "\u2014",
+              hint: "Open sessions on a break",
             },
             {
-              label: "Average net hours",
-              value: hours(averageWorkedHours),
-              hint: "Per recorded workday",
+              label: "Sessions per day",
+              value:
+                data && data.recordedDays > 0
+                  ? (data.checkIns.total / data.recordedDays).toFixed(1)
+                  : "\u2014",
+              hint: "Across recorded attendance workdays",
             },
             {
-              label: "Active sessions",
-              value: data?.activeSessions.toLocaleString("en-US") ?? "—",
-              hint: "Currently open",
+              label: "Check-out rate",
+              value: summary?.total
+                ? `${Math.round((summary.closed / summary.total) * 100)}%`
+                : "\u2014",
+              hint: "Sessions with a recorded clock-out",
             },
           ]}
         />
         <div className="grid gap-4 lg:grid-cols-2">
           <OverviewPanel
-            title="Attendance requirement coverage"
-            description="Net worked time against policy-required hours; this is not a productivity measure."
+            title="Check-in status"
+            description="Session status as of the last refresh, within the selected attendance workdays."
           >
             <BreakdownList
-              rows={coverageRows}
-              loading={pending}
-              unit="hours"
+              rows={statuses}
+              loading={result.loading}
+              total={summary?.total}
+              unit="sessions"
               empty={
-                unavailable
-                  ? "Attendance data unavailable."
-                  : "No recorded workdays in this range."
-              }
-              colorClass="bg-[#284f9e]"
-            />
-            {data && (
-              <p className="mt-4 mb-0 text-xs text-[#738096]">
-                {coveragePercent === undefined
-                  ? "No required hours are assigned for this range."
-                  : `Net worked time covers ${coveragePercent}% of required hours. Excess hours remain review flags.`}
-              </p>
-            )}
-          </OverviewPanel>
-          <OverviewPanel
-            title="Workday status"
-            description="Recorded workdays grouped by their current attendance status."
-          >
-            <BreakdownList
-              rows={statusRows}
-              loading={pending}
-              total={data?.recordedDays ?? 0}
-              unit="workdays"
-              empty={
-                unavailable
-                  ? "Attendance data unavailable."
-                  : "No recorded workdays in this range."
+                result.error
+                  ? "Check-in summaries unavailable."
+                  : "No check-ins in this period."
               }
               colorClass="bg-[#29906b]"
             />
           </OverviewPanel>
           <OverviewPanel
-            title={`${scopeLabel} attendance`}
-            description="Figures cover recorded attendance only; missing days are not classified as absences."
+            title={scopeLabel + " attendance"}
+            description="Filters use the attendance workday. Overnight sessions retain their starting workday."
           >
             <ItemList
-              rows={contextRows}
-              loading={pending}
-              empty={
-                unavailable
-                  ? "Attendance data unavailable."
-                  : "No attendance context for this range."
-              }
+              rows={context}
+              loading={result.loading}
+              empty="No attendance context."
             />
           </OverviewPanel>
         </div>
         <OverviewPanel
-          title="Needs attention"
-          description="Attendance signals that may need follow-up before records are finalized."
+          title="Recent check-in activity"
+          description="Latest clock-in, clock-out, and break actions from the selected attendance workdays. Timestamps are shown in UTC."
         >
           <ItemList
-            rows={attentionRows}
-            loading={pending}
+            loading={result.loading}
+            rows={(summary?.recentActivity ?? []).map((event) => ({
+              id: event.id,
+              label: activityLabels[event.action] + " - " + event.employeeName,
+              note: formatDateTime(event.at, "UTC"),
+            }))}
             empty={
-              data?.recordedDays
-                ? "No attendance signals require follow-up in this range."
-                : "No recorded workdays in this range."
+              result.error
+                ? "Recent activity unavailable."
+                : "No check-in activity in this period."
             }
-            emptyTone={data?.recordedDays ? "success" : "muted"}
           />
         </OverviewPanel>
       </div>

@@ -35,7 +35,10 @@ const scenarios = [
   {
     label: "Staff",
     role: "STAFF",
-    expected: [["Project Management", "/project-workspace"]],
+    expected: [
+      ["Project Management", "/project-workspace"],
+      ["Attendance & Monitoring", "/attendance/check-ins"],
+    ],
   },
   {
     label: "department head",
@@ -44,6 +47,7 @@ const scenarios = [
     expected: [
       ["Service Operations", "/request-inbox"],
       ["Project Management", "/project-workspace"],
+      ["Attendance & Monitoring", "/attendance/overview"],
     ],
   },
   {
@@ -52,15 +56,18 @@ const scenarios = [
     expected: [
       ["Service Operations", "/services"],
       ["People & HR", "/employees"],
-      ["Project Management", "/project-management"],
+      ["Attendance & Monitoring", "/attendance/overview"],
     ],
   },
   {
     label: "Superadmin",
     role: "SUPERADMIN",
     expected: [
+      ["Service Operations", "/services"],
+      ["Project Management", "/module/project-management"],
+      ["People & HR", "/employees"],
+      ["Attendance & Monitoring", "/attendance/dashboard"],
       ["Administration", "/accounts"],
-      ["Project Management", "/project-management"],
     ],
   },
 ] as const
@@ -92,8 +99,8 @@ for (const scenario of scenarios) {
     }
 
     await expect(
-      page.getByText("Finance & Billing", { exact: true }),
-    ).toHaveCount(0)
+      page.getByRole("heading", { name: "Billing & Finance", exact: true }),
+    ).toBeVisible()
     await expect(page.getByText("Scheduling", { exact: true })).toHaveCount(0)
   })
 }
@@ -213,10 +220,16 @@ for (const width of [390, 768, 1440]) {
         expect(applicationReads).toEqual([])
         await page.reload()
         await expectLauncher(page)
-        await page
+        const workspaceName = await page
           .getByRole("link", { name: /^Open .+ workspace$/ })
           .first()
-          .click()
+          .getAttribute("aria-label")
+        const workspace = page.getByRole("link", {
+          name: workspaceName!,
+          exact: true,
+        })
+        await workspace.focus()
+        await workspace.click()
         await expect(page.locator("[data-portal-topbar]")).toBeVisible()
         if (width < 768)
           await page

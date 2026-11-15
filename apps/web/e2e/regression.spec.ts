@@ -80,7 +80,7 @@ test.describe("Authentication and session regression", () => {
       })
       await page.goto("/dashboard")
       await expect(
-        page.getByRole("button", { name: "Sign Out", exact: true }),
+        page.getByRole("button", { name: "Open account menu", exact: true }),
       ).toBeVisible()
       expect(refreshes).toBe(1)
       expect(await storedTokens(page)).toEqual([
@@ -89,7 +89,7 @@ test.describe("Authentication and session regression", () => {
       ])
       await page.reload()
       await expect(
-        page.getByRole("button", { name: "Sign Out", exact: true }),
+        page.getByRole("button", { name: "Open account menu", exact: true }),
       ).toBeVisible()
       expect(refreshes).toBe(1)
       expect(
@@ -108,7 +108,10 @@ test.describe("Authentication and session regression", () => {
       const logout = page.waitForRequest(
         (request) => new URL(request.url()).pathname === "/api/auth/logout",
       )
-      await page.getByRole("button", { name: "Sign Out", exact: true }).click()
+      await page
+        .getByRole("button", { name: "Open account menu", exact: true })
+        .click()
+      await page.getByRole("menuitem", { name: "Log out", exact: true }).click()
       expect((await logout).headers().authorization).toBe(
         `Bearer ${renewedTokens.token}`,
       )
@@ -418,7 +421,7 @@ test.describe("Authentication and session regression", () => {
     await expect(
       page.getByRole("status", { name: "Opening your account" }),
     ).toBeVisible()
-    await expect(page).toHaveURL(/\/dashboard$/)
+    await expect(page).toHaveURL(/\/module$/)
     await expect(
       page.getByRole("status", { name: "Opening your account" }),
     ).toHaveCount(0)
@@ -440,7 +443,10 @@ test.describe("Authentication and session regression", () => {
         localStorage.getItem("nexus.auth.refreshToken"),
       ),
     ).toBeNull()
-    await page.getByRole("button", { name: "Sign Out", exact: true }).click()
+    await page
+      .getByRole("button", { name: "Open account menu", exact: true })
+      .click()
+    await page.getByRole("menuitem", { name: "Log out", exact: true }).click()
     await expect(page).toHaveURL(/\/internal\/login$/)
     expect(await storedTokens(page)).toEqual([null, null])
     expect(
@@ -497,7 +503,7 @@ test.describe("Authentication and session regression", () => {
     await expect(page).toHaveURL(/\/register$/)
   })
 
-  test("duplicate email registration displays inline server error alert", async ({
+  test("duplicate email registration shows a server-error notification and retains the form", async ({
     page,
   }) => {
     await mockApi(page, "USER")
@@ -517,13 +523,30 @@ test.describe("Authentication and session regression", () => {
       .getByRole("button", { name: "Create Account", exact: true })
       .click()
 
-    // 409 Conflict triggers inline form alert
+    // Submission failures use the current notification contract; field
+    // validation remains inline and the failed request must not create a session.
     await expect(
-      page.getByRole("alert").filter({
-        hasText: "This email is already registered. Sign in instead.",
+      page.getByText("Account unavailable", { exact: true }),
+    ).toBeVisible()
+    await expect(
+      page.getByText("This email is already registered. Sign in instead.", {
+        exact: true,
       }),
     ).toBeVisible()
     await expect(page).toHaveURL(/\/register$/)
+    await expect(page.getByLabel("Full name", { exact: true })).toHaveValue(
+      "Duplicate Person",
+    )
+    await expect(page.getByLabel("Email address", { exact: true })).toHaveValue(
+      "duplicate@example.com",
+    )
+    await expect(
+      page.getByLabel("Contact number", { exact: true }),
+    ).toHaveValue("09123456789")
+    await expect(
+      page.getByRole("button", { name: "Create Account", exact: true }),
+    ).toBeEnabled()
+    expect(await storedTokens(page)).toEqual([null, null])
   })
 
   test("registration keeps the existing API contract and opens the Client dashboard", async ({
@@ -588,7 +611,9 @@ test.describe("Authentication and session regression", () => {
       await page.goto("/dashboard")
       for (const path of ["/login", "/register"]) {
         await page.goto(path)
-        await expect(page).toHaveURL(/\/dashboard$/)
+        await expect(page).toHaveURL(
+          role === "USER" ? /\/dashboard$/ : /\/module$/,
+        )
         expect(
           await page.evaluate(() => sessionStorage.getItem("nexus.auth.token")),
         ).toBe("test-session")
@@ -640,7 +665,7 @@ test.describe("Authentication and session regression", () => {
     ).toHaveCount(0)
     unavailable = false
     await page.getByRole("button", { name: "Try again", exact: true }).click()
-    await expect(page).toHaveURL(/\/dashboard$/)
+    await expect(page).toHaveURL(/\/module$/)
     expect(
       await page.evaluate(() => sessionStorage.getItem("nexus.auth.token")),
     ).toBe("test-session")

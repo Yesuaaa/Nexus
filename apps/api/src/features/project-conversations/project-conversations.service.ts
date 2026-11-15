@@ -6,7 +6,7 @@ import { readDeliverableCard } from "./deliverable-messages.js"
 import { lockRows } from "../../shared/db/locks.js"
 import { projectWorkspaceIdentity } from "../project-workspace/workspace-identity.js"
 
-const archivedStatuses = ["COMPLETED", "CANCELLED"] as const
+export const archivedStatuses = ["COMPLETED", "CANCELLED"] as const
 const messageSelect = {
   id: true,
   body: true,

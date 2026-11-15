@@ -118,7 +118,8 @@ projectWorkspaceRouter.get("/directory", async (request, response) => {
 
 projectWorkspaceRouter.get(
   "/admin/departments/:departmentId/workspaces/:identity",
-  requirePermission(Permission.PROJECT_MANAGEMENT_READ),
+  requirePermission(Permission.MODULES_ACCESS_ALL),
+  requirePermission(Permission.ORGANIZATION_READ_ALL),
   requirePermission(Permission.DEPARTMENTS_READ),
   async (request, response) => {
     response.json(

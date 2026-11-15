@@ -68,7 +68,7 @@ async function openAssignment(page: Page, failSecondAssignment = false) {
       }
     } else await route.fallback()
   })
-  await page.goto("/attendance/settings")
+  await page.goto("/attendance/policies/management")
   await page
     .getByRole("button", { name: "Assign policy to employee", exact: true })
     .click()

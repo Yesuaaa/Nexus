@@ -14,11 +14,13 @@ export function WorkspaceOverview({
   onUpdated,
   onEditPlan,
   busy,
+  readOnly = false,
 }: {
   workspace: ProjectWorkspaceDetail
   onUpdated: (workspace: ProjectWorkspaceDetail) => void
   onEditPlan: (stream: ProjectWorkspaceDetail["workstreams"][number]) => void
   busy: boolean
+  readOnly?: boolean
 }) {
   const phases = workspace.workstreams.flatMap(
     (stream) => stream.plan?.phases ?? [],
@@ -83,16 +85,18 @@ export function WorkspaceOverview({
                     ({stream.plan?.phases.length ?? 0} phases)
                   </span>
                 </h2>
-                <Button
-                  variant="outline"
-                  disabled={busy}
-                  className="h-8 text-xs"
-                  onClick={() => onEditPlan(stream)}
-                >
-                  {workspace.workstreams.length > 1
-                    ? `Edit ${stream.serviceName}`
-                    : "Edit project plan"}
-                </Button>
+                {!readOnly && (
+                  <Button
+                    variant="outline"
+                    disabled={busy}
+                    className="h-8 text-xs"
+                    onClick={() => onEditPlan(stream)}
+                  >
+                    {workspace.workstreams.length > 1
+                      ? `Edit ${stream.serviceName}`
+                      : "Edit project plan"}
+                  </Button>
+                )}
               </header>
               <div className="space-y-3 p-3">
                 {stream.plan && (
@@ -247,13 +251,17 @@ export function WorkspaceOverview({
                                     : "Not set"}
                                 </td>
                                 <td className="px-3 py-3 text-center align-middle">
-                                  <TaskRowActions
-                                    workspaceId={workspace.id}
-                                    stream={stream}
-                                    task={task}
-                                    onUpdated={onUpdated}
-                                    disabled={busy}
-                                  />
+                                  {readOnly ? (
+                                    <span>Read only</span>
+                                  ) : (
+                                    <TaskRowActions
+                                      workspaceId={workspace.id}
+                                      stream={stream}
+                                      task={task}
+                                      onUpdated={onUpdated}
+                                      disabled={busy}
+                                    />
+                                  )}
                                 </td>
                               </>
                             )}

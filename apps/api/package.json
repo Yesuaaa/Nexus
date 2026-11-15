@@ -7,7 +7,7 @@
     "dev": "prisma generate && tsx watch src/index.ts",
     "build": "prisma generate && node node_modules/typescript/lib/tsc.js",
     "typecheck": "prisma generate && node node_modules/typescript/lib/tsc.js --noEmit -p tests/tsconfig.json",
-    "test": "prisma generate && node node_modules/typescript/lib/tsc.js --noEmit -p tests/tsconfig.json && tsx --test \"tests/**/*.test.ts\"",
+    "test": "prisma generate && node scripts/run-tests.mjs",
     "start": "node dist/index.js",
     "db:generate": "prisma generate",
     "db:seed": "prisma generate && prisma db seed",
@@ -16,11 +16,11 @@
     "db:seed:attendance-requests": "prisma generate && tsx prisma/seed-attendance-requests.ts",
     "db:migrate": "prisma migrate dev",
     "db:studio": "node -e \"process.env.DATABASE_URL = process.env.DIRECT_URL; require('child_process').spawn('npx', ['prisma', 'studio'], { stdio: 'inherit', shell: true })\"",
-    "test:project-chat": "prisma generate && tsx --test tests/project-conversations.test.ts",
-    "test:calendar": "prisma generate && tsx --test tests/calendar.test.ts",
+    "test:project-chat": "prisma generate && node scripts/run-tests.mjs tests/project-conversations.test.ts",
+    "test:calendar": "prisma generate && node scripts/run-tests.mjs tests/calendar.test.ts",
     "test:regression": "pnpm test",
-    "test:smoke": "prisma generate && tsx --test tests/backend-regression.test.ts",
-    "test:api-regression": "prisma generate && tsx --test tests/backend-regression.test.ts tests/api-system-regression.test.ts"
+    "test:smoke": "prisma generate && node scripts/run-tests.mjs tests/backend-regression.test.ts",
+    "test:api-regression": "prisma generate && node scripts/run-tests.mjs tests/backend-regression.test.ts tests/api-system-regression.test.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.0.0",

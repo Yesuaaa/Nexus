@@ -1,7 +1,14 @@
 import { EmployeeStatus, Prisma, Role } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
+import {
+  readEmployeeMemberState,
+  readUserMemberState,
+  writeDepartmentMemberChanges,
+} from "./department-member-history.js"
+import type { ManagementOperation } from "../../shared/management-history.js"
 import { isUniqueConflict } from "../../lib/errors.js"
 import { publicUser, publicUserInclude } from "../users/users.dto.js"
+import { hasPermission, Permission } from "../auth/auth.permissions.js"
 import {
   syncEmployeeForUser,
   updateEmployee,
@@ -24,7 +31,12 @@ import { HttpError as DepartmentError } from "../../shared/http-error.js"
 export { DepartmentError }
 
 export const departmentsService = {
-  async listDepartments() {
+  async listDepartments(role: Role) {
+    if (!hasPermission(role, Permission.EMPLOYEES_READ)) {
+      return {
+        departments: await departmentsRepository.listDepartmentDirectory(),
+      }
+    }
     const departments = await departmentsRepository.listDepartmentsWithCounts()
     return {
       departments: departments.map((d) => ({
@@ -178,8 +190,7 @@ export const departmentsService = {
   },
 
   async getDepartmentById(id: string) {
-    const department =
-      await departmentsRepository.getDepartmentDetailsWithCleanup(id)
+    const department = await departmentsRepository.getDepartmentDetails(id)
     if (!department) {
       throw new DepartmentError(404, "Department not found")
     }
@@ -207,7 +218,7 @@ export const departmentsService = {
     }
   },
 
-  async createDepartment(body: unknown) {
+  async createDepartment(body: unknown, operation: ManagementOperation) {
     const parsed = validateDepartmentCreateInput(body)
     if (!parsed.value) {
       throw new DepartmentError(400, parsed.error)
@@ -217,13 +228,16 @@ export const departmentsService = {
 
     try {
       // The head is checked against the leadership policy inside the write.
-      const department = await departmentsRepository.createDepartment({
-        name,
-        color,
-        code,
-        description,
-        headId,
-      })
+      const department = await departmentsRepository.createDepartment(
+        {
+          name,
+          color,
+          code,
+          description,
+          headId,
+        },
+        operation,
+      )
       return {
         department: {
           ...withoutTemporaryHeadTracking(department),
@@ -238,7 +252,11 @@ export const departmentsService = {
     }
   },
 
-  async updateDepartment(id: string, body: unknown) {
+  async updateDepartment(
+    id: string,
+    body: unknown,
+    operation: ManagementOperation,
+  ) {
     const parsed = validateDepartmentUpdateInput(body)
     if (!parsed.value) {
       throw new DepartmentError(400, parsed.error)
@@ -253,13 +271,17 @@ export const departmentsService = {
 
     try {
       // A new head is checked against the leadership policy inside the write.
-      const updated = await departmentsRepository.updateDepartment(id, {
-        name,
-        color,
-        code,
-        description,
-        headId,
-      })
+      const updated = await departmentsRepository.updateDepartment(
+        id,
+        {
+          name,
+          color,
+          code,
+          description,
+          headId,
+        },
+        operation,
+      )
       return {
         department: {
           ...withoutTemporaryHeadTracking(updated),
@@ -274,7 +296,11 @@ export const departmentsService = {
     }
   },
 
-  async assignMembers(id: string, body: unknown) {
+  async assignMembers(
+    id: string,
+    body: unknown,
+    operation: ManagementOperation,
+  ) {
     const parsed = validateMemberAssignmentInput(body)
     if (!parsed.value) {
       throw new DepartmentError(400, parsed.error)
@@ -291,6 +317,7 @@ export const departmentsService = {
       id,
       employeeIds,
       userIds,
+      operation,
     )
     return {
       message: "Members assigned successfully",
@@ -298,7 +325,11 @@ export const departmentsService = {
     }
   },
 
-  async removeMember(id: string, memberId: string) {
+  async removeMember(
+    id: string,
+    memberId: string,
+    operation: ManagementOperation,
+  ) {
     const prisma = getPrisma()!
     const dept = await prisma.department.findUnique({ where: { id } })
     if (!dept) {
@@ -317,12 +348,14 @@ export const departmentsService = {
           "Cannot remove the Department Head from members. To remove or replace the head, use Edit Department.",
         )
       }
-      await prisma.$transaction((tx) =>
-        updateEmployee(tx, employee.id, {
+      await prisma.$transaction(async (tx) => {
+        const before = await readEmployeeMemberState(tx, employee.id)
+        await updateEmployee(tx, employee.id, {
           departmentId: null,
           teamId: null,
-        }),
-      )
+        })
+        await writeDepartmentMemberChanges(tx, operation, before)
+      })
       return { message: "Employee removed from department" }
     }
 
@@ -341,11 +374,13 @@ export const departmentsService = {
     }
 
     await prisma.$transaction(async (tx) => {
+      const before = await readUserMemberState(tx, user.id, true)
       await tx.user.update({
         where: { id: user.id },
         data: { departmentId: null, teamId: null },
       })
       await syncEmployeeForUser(tx, user.id)
+      await writeDepartmentMemberChanges(tx, operation, before)
     })
     return { message: "Employee removed from department" }
   },
@@ -354,6 +389,7 @@ export const departmentsService = {
     departmentId: string,
     memberId: string,
     body: { position?: unknown; teamId?: unknown },
+    operation: ManagementOperation,
   ) {
     const position =
       body.position !== undefined
@@ -446,16 +482,20 @@ export const departmentsService = {
 
     // updateEmployee applies the "Department Head" title rule in its write.
     if (employee) {
-      const updated = await prisma.$transaction((tx) =>
-        updateEmployee(tx, employee.id, {
+      const updated = await prisma.$transaction(async (tx) => {
+        const before = await readEmployeeMemberState(tx, employee.id)
+        const saved = await updateEmployee(tx, employee.id, {
           ...(position !== undefined ? { position } : {}),
           ...(teamId !== undefined ? { teamId } : {}),
-        }),
-      )
+        })
+        await writeDepartmentMemberChanges(tx, operation, before)
+        return saved
+      })
       return { employee: updated }
     }
 
     const updated = await prisma.$transaction(async (tx) => {
+      const before = await readUserMemberState(tx, user!.id, true)
       if (position !== undefined)
         await assertDepartmentHeadTitle(tx, {
           title: position,
@@ -472,36 +512,21 @@ export const departmentsService = {
         include: publicUserInclude,
       })
       await syncEmployeeForUser(tx, saved.id)
+      await writeDepartmentMemberChanges(tx, operation, before)
       return saved
     })
 
     return { user: publicUser(updated) }
   },
 
-  async deleteDepartment(id: string) {
+  async deleteDepartment(id: string, operation: ManagementOperation) {
     const dept = await departmentsRepository.findById(id)
     if (!dept) {
       throw new DepartmentError(404, "Department not found")
     }
 
-    const serviceCount = await departmentsRepository.countDepartmentServices(id)
-    if (serviceCount > 0) {
-      throw new DepartmentError(
-        409,
-        "Reassign or remove this department's services before deleting the department",
-      )
-    }
-
-    const requestHistoryCount =
-      await departmentsRepository.countDepartmentRequestHistory(id)
-    if (requestHistoryCount > 0) {
-      throw new DepartmentError(
-        409,
-        "This department has client request history and can't be deleted",
-      )
-    }
-
-    await departmentsRepository.deleteDepartment(id)
+    // Linked-record guards run under the repository transaction's parent lock.
+    await departmentsRepository.deleteDepartment(id, operation)
     return { message: "Department deleted successfully" }
   },
 }

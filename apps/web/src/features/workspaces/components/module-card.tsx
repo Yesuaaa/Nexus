@@ -1,53 +1,121 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowRight } from "lucide-react"
+import {
+  BriefcaseBusiness,
+  Clock3,
+  FolderKanban,
+  ShieldCheck,
+  UsersRound,
+  WalletCards,
+  type LucideIcon,
+} from "lucide-react"
 import { useRadialHoverFill } from "@/components/ui/use-radial-hover-fill"
+import { useHoverLabel } from "@/components/ui/use-hover-label"
 import type { WorkspaceModule } from "../../dashboard/model/workspace-modules"
+import { moduleRegistry } from "../model/module-registry"
+
+const moduleIcons: Record<string, LucideIcon> = {
+  services: BriefcaseBusiness,
+  projects: FolderKanban,
+  people: UsersRound,
+  attendance: Clock3,
+  administration: ShieldCheck,
+  finance: WalletCards,
+}
 
 export function ModuleCard({ module }: { module: WorkspaceModule }) {
   const { cardRef, fillRef, contentRef, showFill, hideFill } =
-    useRadialHoverFill<HTMLAnchorElement>()
+    useRadialHoverFill<HTMLSpanElement>()
+  const {
+    labelRef,
+    show: showHoverLabel,
+    restore: restoreHoverLabel,
+  } = useHoverLabel(module.title, "Coming Soon")
+  const appearance = moduleRegistry[module.id]
+  const Icon = moduleIcons[appearance.icon] ?? FolderKanban
+  const cardClassName =
+    "group flex w-full max-w-[280px] flex-none flex-col text-center no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#294a9b] sm:w-[280px]"
+
+  const cardContent = (
+    <>
+      <span
+        ref={cardRef}
+        className="relative flex aspect-square w-full flex-col overflow-hidden rounded-2xl border-0 p-8 text-white max-[560px]:p-6"
+        style={{ backgroundColor: appearance.color }}
+      >
+        <span
+          className="pointer-events-none absolute inset-0 bg-[linear-gradient(145deg,transparent_40%,rgb(20_54_129_/_42%))]"
+          aria-hidden="true"
+        />
+        <span
+          ref={fillRef}
+          className="pointer-events-none absolute z-10 rounded-full bg-white"
+          aria-hidden="true"
+        />
+        <span
+          ref={contentRef}
+          className="relative z-20 flex h-full min-w-0 items-center justify-center text-white"
+        >
+          <Icon
+            className="size-20 sm:size-24"
+            strokeWidth={1.35}
+            aria-hidden="true"
+          />
+        </span>
+      </span>
+      <h2 className="mt-4 min-h-[65px] min-w-0 text-[clamp(20px,1.7vw,26px)] leading-[1.25] font-bold tracking-[-0.03em] text-[#294c96]">
+        <span ref={labelRef}>{module.title}</span>
+      </h2>
+    </>
+  )
+
+  if (module.placeholder) {
+    return (
+      <div
+        aria-label={`${module.title} module coming soon`}
+        aria-disabled="true"
+        tabIndex={0}
+        className={`${cardClassName} cursor-default`}
+        onMouseEnter={(event) => {
+          showFill(event.clientX, event.clientY)
+          showHoverLabel()
+        }}
+        onMouseLeave={() => {
+          hideFill()
+          restoreHoverLabel()
+        }}
+        onFocus={() => {
+          showFill()
+          showHoverLabel()
+        }}
+        onBlur={() => {
+          hideFill()
+          restoreHoverLabel()
+        }}
+      >
+        {cardContent}
+      </div>
+    )
+  }
 
   return (
     <Link
-      ref={cardRef}
-      href={module.href}
+      href={module.href ?? "/module"}
       aria-label={`Open ${module.title} workspace`}
-      className="group relative flex min-h-[140px] w-full flex-col overflow-hidden rounded-2xl border-0 bg-[#294c96] p-6 text-white no-underline shadow-[0_8px_24px_rgb(26_58_128_/_10%)] transition-shadow duration-300 hover:shadow-[0_14px_34px_rgb(26_58_128_/_22%)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#294a9b] motion-reduce:transition-none max-[560px]:min-h-[124px] max-[560px]:p-5"
+      className={cardClassName}
       onMouseEnter={(event) => showFill(event.clientX, event.clientY)}
-      onMouseLeave={hideFill}
+      onMouseLeave={() => {
+        hideFill()
+        restoreHoverLabel()
+      }}
       onFocus={() => showFill()}
-      onBlur={hideFill}
+      onBlur={() => {
+        hideFill()
+        restoreHoverLabel()
+      }}
     >
-      <span
-        className="pointer-events-none absolute inset-0 bg-[linear-gradient(145deg,transparent_40%,rgb(20_54_129_/_42%))]"
-        aria-hidden="true"
-      />
-      <span
-        ref={fillRef}
-        className="pointer-events-none absolute z-10 rounded-full bg-white"
-        aria-hidden="true"
-      />
-      <span
-        ref={contentRef}
-        className="relative z-20 flex h-full min-w-0 items-center justify-between gap-4 text-white"
-      >
-        <span className="min-w-0">
-          <h2 className="min-w-0 text-[clamp(20px,1.7vw,26px)] leading-[1.25] font-bold tracking-[-0.03em]">
-            {module.title}
-          </h2>
-          <span className="mt-2 block text-xs leading-5 opacity-80">
-            {module.description}
-          </span>
-        </span>
-        <span
-          className="grid size-10 shrink-0 place-items-center rounded-full border-2 border-current bg-[rgb(22_48_105_/_10%)]"
-          aria-hidden="true"
-        >
-          <ArrowRight size={22} strokeWidth={1.8} />
-        </span>
-      </span>
+      {cardContent}
     </Link>
   )
 }

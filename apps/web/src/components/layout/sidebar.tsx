@@ -28,7 +28,6 @@ import { cn } from "@/lib/utils"
 import type { Account } from "@/features/auth/model/types"
 import {
   canAccessRequestInbox,
-  canAccessProjectManagementModule,
   canAccessProjectWorkspace,
   canCreateProjectWorkspace,
 } from "@/features/auth/model/permissions"
@@ -41,6 +40,7 @@ import {
   type RoutePolicy,
   type RoutePolicyId,
 } from "@/features/workspaces/model/route-policy"
+import { attendanceNavigation } from "@/features/attendance/model/navigation"
 import { useWorkspaceModuleId } from "@/features/workspaces/providers/workspace-provider"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 
@@ -96,6 +96,7 @@ function NavigationIcon({
     "request-inbox": Inbox,
     help: CircleHelp,
     employees: UsersRound,
+    "attendance-dashboard": DashboardIcon,
     "staff-workload": Gauge,
   }
   const icon = icons[policyId]
@@ -159,16 +160,7 @@ type NavGroup = {
   label: string
   icon: NavIcon
   visible: (account: Account) => boolean
-  links: {
-    href: string
-    label: string
-    ariaLabel?: string
-    match?: (pathname: string) => boolean
-  }[]
-}
-
-function isGroupLinkActive(link: NavGroup["links"][number], pathname: string) {
-  return link.match?.(pathname) ?? link.href === pathname
+  links: { href: string; label: string; ariaLabel?: string }[]
 }
 
 /**
@@ -221,6 +213,20 @@ type RowProps = {
   onNavigate: () => void
 }
 
+/**
+ * Within a module, Overview → Management slides forward and back again
+ * (see ModuleTransition); jumps between modules switch without a slide.
+ */
+function groupTransition(
+  group: NavGroup,
+  href: string,
+  pathname: string,
+): string[] | undefined {
+  const inGroup = group.links.some((link) => link.href === pathname)
+  if (!inGroup || href === pathname) return undefined
+  return [href.endsWith("/overview") ? "nav-back" : "nav-forward"]
+}
+
 /** Expandable group: a toggle row and its indented sub-links. */
 function GroupDisclosure({
   group,
@@ -234,9 +240,7 @@ function GroupDisclosure({
   onToggle: () => void
 }) {
   const panelId = useId()
-  const groupActive = group.links.some((link) =>
-    isGroupLinkActive(link, pathname),
-  )
+  const groupActive = group.links.some((link) => link.href === pathname)
   return (
     <div className="min-w-0">
       <button
@@ -271,19 +275,14 @@ function GroupDisclosure({
         <div className="min-h-0 overflow-hidden">
           <div className="mt-0.5 mb-1 ml-[19px] grid gap-0.5 border-l border-[#e6e9ee] pl-2">
             {group.links.map((link) => {
-              const active = isGroupLinkActive(link, pathname)
+              const active = link.href === pathname
               return (
                 <Link
                   key={link.href}
                   href={link.href}
+                  transitionTypes={groupTransition(group, link.href, pathname)}
                   aria-label={link.ariaLabel}
-                  aria-current={
-                    active
-                      ? link.href === pathname
-                        ? "page"
-                        : "location"
-                      : undefined
-                  }
+                  aria-current={active ? "page" : undefined}
                   onClick={onNavigate}
                   className={cn(
                     rowClass,
@@ -309,9 +308,7 @@ function GroupFlyout({
   pathname,
   onNavigate,
 }: Omit<RowProps, "collapsed"> & { group: NavGroup }) {
-  const groupActive = group.links.some((link) =>
-    isGroupLinkActive(link, pathname),
-  )
+  const groupActive = group.links.some((link) => link.href === pathname)
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -341,7 +338,7 @@ function GroupFlyout({
           {group.label}
         </DropdownMenuLabel>
         {group.links.map((link) => {
-          const active = isGroupLinkActive(link, pathname)
+          const active = link.href === pathname
           return (
             <DropdownMenuItem
               key={link.href}
@@ -353,14 +350,9 @@ function GroupFlyout({
             >
               <Link
                 href={link.href}
+                transitionTypes={groupTransition(group, link.href, pathname)}
                 aria-label={link.ariaLabel}
-                aria-current={
-                  active
-                    ? link.href === pathname
-                      ? "page"
-                      : "location"
-                    : undefined
-                }
+                aria-current={active ? "page" : undefined}
                 onClick={onNavigate}
               >
                 {link.label}
@@ -392,7 +384,7 @@ export function Sidebar({
   function renderGroup(group: NavGroup) {
     const open =
       openGroups[group.label] ??
-      group.links.some((link) => isGroupLinkActive(link, pathname))
+      group.links.some((link) => link.href === pathname)
     const disclosure = (
       <GroupDisclosure
         group={group}
@@ -426,21 +418,24 @@ export function Sidebar({
   }
 
   function renderPolicy(policy: RoutePolicy) {
-    if (
-      policy.id === "admin-project-management" &&
-      canAccessProjectManagementModule(account)
-    ) {
-      const group = moduleGroup(
-        "Project Workspace",
-        "Project Workspace",
-        FolderKanban,
-        "/project-management",
-        canAccessProjectManagementModule,
-      )
-      group.links[1].match = (path) =>
-        path !== "/project-management/overview" &&
-        isNavigationActive(policy, path)
-      return renderGroup(group)
+    const attendanceGroup = attendanceNavigation.find(
+      (group) => group.id === policy.id,
+    )
+    if (attendanceGroup && attendanceGroup.id !== "attendance-dashboard") {
+      return renderGroup({
+        kind: "group",
+        label: attendanceGroup.label,
+        icon:
+          attendanceGroup.id === "attendance"
+            ? Clock3
+            : attendanceGroup.id === "attendance-requests"
+              ? Inbox
+              : ClipboardList,
+        visible: policy.canAccess,
+        links: attendanceGroup.links.filter((link) =>
+          canAccessRoute(account, link.href),
+        ),
+      })
     }
     if (
       policy.id === "project-workspace" &&
@@ -456,25 +451,6 @@ export function Sidebar({
       group.links[1].match = (path) =>
         path !== group.links[0].href && isNavigationActive(policy, path)
       return renderGroup(group)
-    }
-    if (policy.id === "attendance") {
-      return renderGroup({
-        kind: "group",
-        label: "Attendance",
-        icon: Clock3,
-        visible: policy.canAccess,
-        links: [
-          {
-            href: "/attendance/overview",
-            label: "Overview",
-            ariaLabel: "Attendance Overview",
-          },
-          { href: "/attendance/my", label: "Check-Ins" },
-          { href: "/attendance/records", label: "Time Logs" },
-          { href: "/attendance/adjustments", label: "OT & Agreements" },
-          { href: "/attendance/settings", label: "Policies" },
-        ].filter((link) => canAccessRoute(account, link.href)),
-      })
     }
     const props = {
       policy,
@@ -552,11 +528,12 @@ export function Sidebar({
       data-drawer-open={drawerOpen}
     >
       <div className="flex h-full min-h-0 flex-col">
-        {/* Header spans the global 60px topbar band minus the aside's 1px top
-            border. The mobile drawer keeps its taller header. */}
+        {/* Header spans the topbar's band (70px minus this aside's 1px top
+            border); the menu's pt-2 mirrors the 8px gap above the main panel,
+            so the first link lines up with the panel's top edge. */}
         <div
           className={cn(
-            "flex h-[59px] flex-none items-center gap-2 pr-3 pl-5 max-[767px]:h-[69px]",
+            "flex h-[69px] flex-none items-center gap-2 pr-3 pl-5",
             collapsed &&
               "justify-center px-0 max-[767px]:justify-start max-[767px]:pr-3 max-[767px]:pl-5",
           )}

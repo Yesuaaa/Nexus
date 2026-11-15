@@ -8,7 +8,7 @@ import { contentClass } from "@/components/layout/styles"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
-import { FilterSelect } from "@/components/ui/filter-select"
+import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
 import { usePaginatedList } from "@/components/ui/use-paginated-list"
 import { TableSearchStatus } from "@/components/ui/table-search-status"
 import { TablePaginationFooter } from "@/components/ui/table-pagination-footer"
@@ -215,7 +215,7 @@ export function RequestInboxPage() {
         }.`}
       />
       <section aria-label="Department bookings" className="mt-[18px] min-w-0">
-        <div className="flex flex-wrap items-center gap-2.5 pb-4 max-[560px]:flex-col max-[560px]:items-stretch">
+        <div className={`${filterBarClass} pb-4`}>
           <SearchField
             label="Search requests"
             placeholder="Search service, client or reference…"
