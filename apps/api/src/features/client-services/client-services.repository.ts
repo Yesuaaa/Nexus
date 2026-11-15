@@ -89,12 +89,14 @@ export const clientServicesRepository = {
       if (group.status === "SUBMITTED") summary.pending += count
       if (
         group.status === "UNDER_REVIEW" ||
+        group.status === "ACTIVATED" ||
         group.status === "AWAITING_CLIENT_INFO" ||
         group.status === "READY_FOR_QUOTATION"
       )
         summary.inProgress += count
-      if (group.status === "CLOSED") summary.completed += count
-      if (group.status === "CANCELLED") summary.cancelled = count
+      if (group.status === "CONCLUDED") summary.completed += count
+      if (group.status === "CLOSED") summary.cancelled += count
+      if (group.status === "CANCELLED") summary.cancelled += count
     }
     return { requests, total, page, pageSize, summary }
   },

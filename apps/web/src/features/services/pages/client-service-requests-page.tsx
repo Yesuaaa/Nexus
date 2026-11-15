@@ -24,6 +24,7 @@ import { TableSearchStatus } from "@/components/ui/table-search-status"
 import { TablePaginationFooter } from "@/components/ui/table-pagination-footer"
 import { SearchField } from "@/components/ui/search-field"
 import type { ServiceRequestStatus } from "@/features/service-operations/model/service-request-contracts"
+import { serviceRequestStatusValues } from "@/features/service-operations/model/service-request-contracts"
 import { cn } from "@/lib/utils"
 import {
   listMyServiceRequests,
@@ -44,9 +45,9 @@ const initial: ClientRequestsResponse = {
 
 const statusOptions: { value: ServiceRequestStatus | ""; label: string }[] = [
   { value: "", label: "All Statuses" },
-  ...Object.entries(serviceRequestStatuses).map(([value, item]) => ({
-    value: value as ServiceRequestStatus,
-    label: item.label,
+  ...serviceRequestStatusValues.map((value) => ({
+    value,
+    label: serviceRequestStatuses[value].label,
   })),
 ]
 const sortOptions: { value: "asc" | "desc"; label: string }[] = [
@@ -106,23 +107,23 @@ export function ClientServiceRequestsPage() {
       iconClassName: "text-[#2058d4]",
     },
     {
-      label: "Pending Review",
+      label: "Pending",
       value: summary.pending,
-      description: "Awaiting department review",
+      description: "Waiting for Department Head acceptance",
       icon: Clock3,
       iconClassName: "text-[#b78112]",
     },
     {
-      label: "In Review",
+      label: "In Progress",
       value: summary.inProgress,
-      description: "Review and quotation preparation",
+      description: "Under review or activated",
       icon: LoaderCircle,
       iconClassName: "text-[#2058d4]",
     },
     {
-      label: "Closed",
+      label: "Concluded",
       value: summary.completed,
-      description: "Closed service requests",
+      description: "Accomplished service requests",
       icon: CheckCircle2,
       iconClassName: "text-[#159447]",
     },

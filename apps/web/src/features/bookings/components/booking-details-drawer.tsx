@@ -3,18 +3,11 @@
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 
 import type { ReactNode } from "react"
-import {
-  SidePanel,
-  SidePanelBody,
-  SidePanelError,
-  SidePanelFooter,
-  SidePanelHeader,
-  useSidePanel,
-} from "@/components/ui/side-panel"
-import { useAsyncResource } from "@/lib/use-async-resource"
 import { getBooking, type BookingDetails } from "../api/bookings-api"
 import { BookingStatusPill } from "./booking-status-pill"
 import { RequestDetailsBody } from "./request-details-body"
+import { RequestDetailsDrawer } from "./request-details-drawer"
+import { serviceRequestStatuses } from "../../services/model/service-request-status"
 
 export function BookingDetailsDrawer({
   id,
@@ -46,95 +39,56 @@ export function BookingDetailsDrawer({
   statusLabels?: Partial<Record<string, string>>
 }) {
   const { formatDate } = useDatePreferences()
-  const panel = useSidePanel(onClose)
-  const {
-    data: details,
-    error,
-    loading,
-    retry,
-  } = useAsyncResource(
-    async (signal) => {
-      const value = await loadDetails(id, signal)
-      if (!signal.aborted) onLoaded?.(value)
-      return value
-    },
-    [id, refreshKey],
-    { fallbackError: "Couldn't load your booking." },
-  )
-  const ready = loading || error ? undefined : details
-
   return (
-    <SidePanel
-      open={panel.open}
-      onOpenChange={panel.onOpenChange}
-      busy={closeDisabled}
-      fallbackFocus={() =>
-        document.getElementById(`booking-view-${id}`) ??
-        document.getElementById(fallbackFocusId)
-      }
-    >
-      <SidePanelHeader
-        title="Booking details"
-        description={description}
-        closeLabel="Close booking details"
-        closeDisabled={closeDisabled}
-      />
-      <SidePanelBody>
-        {loading ? (
-          <p role="status" className="py-8 text-center text-xs text-[#52627a]">
-            Loading booking details…
-          </p>
-        ) : error ? (
-          <SidePanelError message={error} onRetry={retry} />
-        ) : (
-          details && (
-            <RequestDetailsBody
-              title={details.service.name}
-              status={
-                <BookingStatusPill
-                  status={details.status}
-                  label={statusLabels?.[details.status]}
-                />
-              }
-              fields={[
-                ...additionalFields,
-                ["Request reference", details.referenceNumber || details.id],
-                ["Package", details.packageName || "Standard service"],
-                ["Date requested", formatDate(details.createdAt)],
-                ["Last updated", formatDate(details.updatedAt)],
-                [
-                  "Expected timeline",
-                  details.expectedTimeline || "Not specified",
-                ],
-                [
-                  "Preferred specialist",
-                  details.preferredSpecialistName || "Department to assign",
-                ],
-              ]}
-              sections={[
-                ["Project goals", details.projectGoals],
-                ["Project requirements", details.projectRequirements],
-                ["Additional details", details.additionalDetails],
-              ]}
-              note="Specialist preferences are subject to availability and department approval. An expected timeline is your requested schedule."
-              messagesRequestId={
-                (
-                  typeof showMessagesLink === "function"
-                    ? showMessagesLink(details)
-                    : showMessagesLink
-                )
-                  ? details.id
-                  : null
-              }
+    <RequestDetailsDrawer
+      id={id}
+      onClose={onClose}
+      loadDetails={loadDetails}
+      description={description}
+      closeDisabled={closeDisabled}
+      fallbackFocusId={fallbackFocusId}
+      refreshKey={refreshKey}
+      onLoaded={onLoaded}
+      renderActions={renderActions}
+      renderBody={(details) => (
+        <RequestDetailsBody
+          title={details.service.name}
+          statusNote={serviceRequestStatuses[details.status].description}
+          status={
+            <BookingStatusPill
+              status={details.status}
+              label={statusLabels?.[details.status]}
             />
-          )
-        )}
-      </SidePanelBody>
-      {ready && renderActions && (
-        <SidePanelFooter className="block">
-          {renderActions(ready)}
-        </SidePanelFooter>
+          }
+          fields={[
+            ...additionalFields,
+            ["Request reference", details.referenceNumber || details.id],
+            ["Package", details.packageName || "Standard service"],
+            ["Date requested", formatDate(details.createdAt)],
+            ["Last updated", formatDate(details.updatedAt)],
+            ["Expected timeline", details.expectedTimeline || "Not specified"],
+            [
+              "Preferred specialist",
+              details.preferredSpecialistName || "Department to assign",
+            ],
+          ]}
+          sections={[
+            ["Project goals", details.projectGoals],
+            ["Project requirements", details.projectRequirements],
+            ["Additional details", details.additionalDetails],
+          ]}
+          note="Specialist preferences are subject to availability and department approval. An expected timeline is your requested schedule."
+          messagesRequestId={
+            (
+              typeof showMessagesLink === "function"
+                ? showMessagesLink(details)
+                : showMessagesLink
+            )
+              ? details.id
+              : null
+          }
+        />
       )}
-    </SidePanel>
+    />
   )
 }

@@ -35,12 +35,11 @@ type ConfirmAction = { kind: "decline" | "delete"; request: InboxRequest }
 
 const viewOptions: { value: InboxView; label: string }[] = [
   { value: "all", label: "All statuses" },
-  { value: "pending", label: "Awaiting acceptance" },
-  { value: "under-review", label: "Under review" },
-  { value: "awaiting-information", label: "Awaiting information" },
-  { value: "ready-for-quotation", label: "Ready for quotation" },
-  { value: "closed", label: "Closed" },
+  { value: "pending", label: "Pending" },
+  { value: "under-review", label: "Under Review" },
+  { value: "activated", label: "Activated" },
   { value: "cancelled", label: "Cancelled" },
+  { value: "concluded", label: "Concluded" },
 ]
 
 function matchesTableSearch(item: InboxRequest, query: string) {

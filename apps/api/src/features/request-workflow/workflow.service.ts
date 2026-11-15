@@ -156,7 +156,7 @@ async function runAction(
   const head = request.acceptedDepartment?.head
   if (!head?.isActive || head.accountDeletedAt || head.role !== "STAFF")
     fail("An active department head must be assigned before continuing", 409)
-  if (request.status === "CANCELLED" || request.status === "CLOSED")
+  if (["CANCELLED", "CLOSED", "CONCLUDED"].includes(request.status))
     fail("This service request is closed", 409)
 
   switch (command.type) {
@@ -584,7 +584,7 @@ async function runAction(
         if (command.decision === "DECLINE")
           await tx.serviceRequest.update({
             where: { id: requestId },
-            data: { status: "CLOSED" },
+            data: { status: "CANCELLED" },
           })
         await event(
           `QUOTATION_${status}`,
@@ -1007,6 +1007,10 @@ async function runAction(
       })
       if (activated.count !== 1)
         fail("This project has already been activated", 409)
+      await tx.serviceRequest.update({
+        where: { id: requestId },
+        data: { status: "ACTIVATED" },
+      })
       await setState("ACTIVE_PROJECT")
       await event(
         "PROJECT_ACTIVATED",

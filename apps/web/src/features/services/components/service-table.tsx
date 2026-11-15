@@ -5,8 +5,7 @@ import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
 import { DepartmentPill } from "@/components/ui/department-pill.tsx"
 import { SearchEmptyState } from "@/components/ui/search-empty-state"
 import { SearchField } from "@/components/ui/search-field"
-import { Dropdown } from "@/components/ui/dropdown"
-import { filterGridClass } from "@/components/ui/filter-select"
+import { FilterSelect, filterGridClass } from "@/components/ui/filter-select"
 import { Pill } from "@/components/ui/pill"
 import { useLocalTable, useTableSort } from "@/components/ui/use-local-table"
 import { TablePaginationFooter } from "@/components/ui/table-pagination-footer"
@@ -156,9 +155,8 @@ export function ServiceTable({
           }}
         />
         <div className={`${filterGridClass} min-w-0 max-[560px]:w-full`}>
-          <Dropdown
-            className="w-[170px] max-[560px]:w-full"
-            triggerClassName="h-[34px] rounded-md border-[#e1e4ea] bg-transparent text-xs font-normal shadow-sm"
+          <FilterSelect
+            triggerClassName="w-[210px]"
             label="Filter by department"
             value={departmentId}
             options={[
@@ -173,9 +171,8 @@ export function ServiceTable({
               setDepartmentId(value)
             }}
           />
-          <Dropdown
-            className="w-[140px] max-[560px]:w-full"
-            triggerClassName="h-[34px] rounded-md border-[#e1e4ea] bg-transparent text-xs font-normal shadow-sm"
+          <FilterSelect
+            triggerClassName="w-[170px]"
             label="Filter by status"
             value={status}
             options={[

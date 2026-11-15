@@ -1,66 +1,84 @@
 "use client"
 
-import Link from "next/link"
 import { useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Button } from "@/components/ui/button"
 import { SearchField } from "@/components/ui/search-field"
-import { FilterSelect } from "@/components/ui/filter-select"
-import {
-  pageRange,
-  TablePaginationFooter,
-} from "@/components/ui/table-pagination-footer"
-import { useAsyncResource } from "@/lib/use-async-resource"
+import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
+import { TablePaginationFooter } from "@/components/ui/table-pagination-footer"
+import { usePaginatedList } from "@/components/ui/use-paginated-list"
+import { TableSearchStatus } from "@/components/ui/table-search-status"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 import { RequestDetailsBody } from "@/features/bookings/components/request-details-body"
+import { RequestDetailsDrawer } from "@/features/bookings/components/request-details-drawer"
 import { BookingStatusPill } from "@/features/bookings/components/booking-status-pill"
 import { AdministrativeWorkflowProgress } from "@/features/request-workflow/components/administrative-workflow-progress"
 import { serviceRequestStatusValues } from "@/features/service-operations/model/service-request-contracts"
+import { serviceRequestStatuses } from "@/features/services/model/service-request-status"
 import { RequestInboxTable } from "../components/request-inbox-table"
+import { SheetClose } from "@/components/ui/sheet"
+import { SidePanelButton } from "@/components/ui/side-panel"
+import { ServiceIcon } from "@/features/services/components/service-icon"
 import type { InboxSort } from "../api/request-inbox-api"
 import {
   getAdministrativeRequest,
   listAdministrativeRequests,
+  type AdministrativeRequest,
 } from "../api/administrative-requests-api"
 
 const root = "/module/service-operations"
 const noop = () => {}
 
-export function AdministrativeRequestsPage() {
-  const id = useSearchParams().get("request")
-  return id ? (
-    <AdministrativeRequestDetails id={id} />
-  ) : (
-    <AdministrativeRequestList />
-  )
+function matchesTableSearch(request: AdministrativeRequest, query: string) {
+  return [
+    request.title,
+    request.referenceNumber,
+    request.service.name,
+    request.client.fullName,
+    request.client.email,
+  ].some((value) => value?.toLowerCase().includes(query))
 }
 
-function AdministrativeRequestList() {
+async function loadAdministrativeDetails(id: string, signal: AbortSignal) {
+  const { serviceRequest } = await getAdministrativeRequest(id, signal)
+  if (!serviceRequest.capabilities.read)
+    throw new Error(
+      "This service request is no longer available for inspection.",
+    )
+  return serviceRequest
+}
+
+export function AdministrativeRequestsPage() {
+  const id = useSearchParams().get("request")
   const router = useRouter()
   const [search, setSearch] = useState("")
+  const query = search.trim()
   const [status, setStatus] = useState("")
   const [departmentId, setDepartmentId] = useState("")
-  const [page, setPage] = useState(1)
   const [sortBy, setSortBy] = useState<InboxSort>("createdAt")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
-  const result = useAsyncResource(
-    (signal) =>
+  const list = usePaginatedList({
+    params: { search: query, status, departmentId, sortBy, sortDir },
+    load: ({ page, signal }) =>
       listAdministrativeRequests(
-        { search, status, departmentId, page, sortBy, sortDir },
+        { search: query, status, departmentId, page, sortBy, sortDir },
         signal,
       ),
-    [search, status, departmentId, page, sortBy, sortDir],
-  )
-  const data = !result.loading && !result.error ? result.data : undefined
+    rows: (result) =>
+      result.serviceRequests.filter((request) => request.capabilities.read),
+    matches: matchesTableSearch,
+    initial: null,
+    refresh: "poll",
+    fallbackError: "Couldn't load service requests.",
+  })
+  const { setPage } = list
+  const data = !list.error ? list.data : undefined
   return (
     <section aria-label="Administrative service requests">
-      <p className="mb-4 text-sm text-muted-foreground">
-        Organization-wide service requests · Read only
-      </p>
-      <div className="mb-4 flex flex-wrap gap-3">
+      <div className={`${filterBarClass} mb-4`}>
         <SearchField
           label="Search service requests"
           placeholder="Search service requests"
+          containerClassName="max-[560px]:h-11"
           value={search}
           onChange={(event) => {
             setSearch(event.target.value)
@@ -70,6 +88,7 @@ function AdministrativeRequestList() {
         <FilterSelect
           label="Request status"
           value={status}
+          triggerClassName="w-[170px]"
           onChange={(value) => {
             setStatus(value)
             setPage(1)
@@ -78,13 +97,14 @@ function AdministrativeRequestList() {
             { value: "", label: "All statuses" },
             ...serviceRequestStatusValues.map((value) => ({
               value,
-              label: value.replaceAll("_", " "),
+              label: serviceRequestStatuses[value].label,
             })),
           ]}
         />
         <FilterSelect
           label="Responsible or routed department"
           value={departmentId}
+          triggerClassName="w-[210px]"
           onChange={(value) => {
             setDepartmentId(value)
             setPage(1)
@@ -99,27 +119,13 @@ function AdministrativeRequestList() {
         />
       </div>
       <RequestInboxTable
-        requests={
-          data?.serviceRequests.filter(
-            (request) => request.capabilities.read,
-          ) ?? []
-        }
-        loading={result.loading}
-        error={result.error}
-        viewKey={
-          result.loading
-            ? ""
-            : JSON.stringify([
-                search,
-                status,
-                departmentId,
-                page,
-                sortBy,
-                sortDir,
-              ])
-        }
-        quickKey={search}
-        onRetry={result.retry}
+        requests={list.rows}
+        loading={list.loading}
+        error={list.error}
+        viewKey={list.tableViewKey}
+        onRowsSettled={list.onRowsSettled}
+        quickKey={query}
+        onRetry={list.retry}
         onView={(request) =>
           router.push(`${root}?request=${encodeURIComponent(request.id)}`)
         }
@@ -134,43 +140,83 @@ function AdministrativeRequestList() {
         }}
         readOnly
       />
-      {data && (
+      <TableSearchStatus
+        active={list.loading && list.previewing}
+        label="requests"
+      />
+      {list.footer && (
         <TablePaginationFooter
-          {...pageRange(data.page, data.pageSize, data.total)}
-          total={data.total}
-          page={data.page}
-          totalPages={Math.ceil(data.total / data.pageSize)}
+          {...list.footer}
           label="Administrative request pages"
           itemLabel="requests"
           onPageChange={setPage}
+        />
+      )}
+      {id && (
+        <AdministrativeRequestDetails
+          key={id}
+          id={id}
+          onClose={() => router.replace(root, { scroll: false })}
         />
       )}
     </section>
   )
 }
 
-function AdministrativeRequestDetails({ id }: { id: string }) {
+function AdministrativeRequestDetails({
+  id,
+  onClose,
+}: {
+  id: string
+  onClose: () => void
+}) {
   const { formatDate } = useDatePreferences()
-  const result = useAsyncResource(
-    (signal) => getAdministrativeRequest(id, signal),
-    [id],
-  )
-  const request =
-    !result.loading && !result.error ? result.data?.serviceRequest : undefined
   return (
-    <section aria-label="Administrative request details">
-      <Link href={root}>Back to service requests</Link>
-      {result.loading && <p role="status">Loading request…</p>}
-      {result.error && (
-        <p role="alert">
-          {result.error} <Button onClick={result.retry}>Retry</Button>
-        </p>
+    <RequestDetailsDrawer
+      id={id}
+      onClose={onClose}
+      loadDetails={loadAdministrativeDetails}
+      title={(request) => request.title}
+      description={(request) =>
+        request.acceptedDepartment?.name ||
+        request.service.departments
+          .map((department) => department.name)
+          .join(", ") ||
+        "Organization-wide service request"
+      }
+      fallbackTitle="Request details"
+      fallbackDescription="Organization-wide service request inspection. Read only."
+      leading={
+        <span
+          className="grid size-11 flex-none place-items-center rounded-xl bg-[#e5edff] text-[#2058d4]"
+          aria-hidden="true"
+        >
+          <ServiceIcon iconKey="business" size={20} />
+        </span>
+      }
+      meta={(request) => <BookingStatusPill status={request.status} />}
+      closeLabel="Close request details"
+      loadingLabel="Loading request details…"
+      fallbackError="Couldn't load this service request."
+      fallbackFocusId="administrative-workspace-heading"
+      renderActions={() => (
+        <div className="flex justify-end">
+          <SheetClose asChild>
+            <SidePanelButton aria-label="Done viewing request details">
+              Done
+            </SidePanelButton>
+          </SheetClose>
+        </div>
       )}
-      {request?.capabilities.read && (
-        <div className="mt-5 space-y-4">
+      renderBody={(request) => (
+        <>
           <RequestDetailsBody
             title={request.title}
+            statusNote={serviceRequestStatuses[request.status].description}
             status={<BookingStatusPill status={request.status} />}
+            showIntro={false}
+            detailLayout="inline"
+            detailSectionTitle="Request information"
             fields={[
               ["Request reference", request.referenceNumber || request.id],
               ["Service", request.service.name],
@@ -230,8 +276,8 @@ function AdministrativeRequestDetails({ id }: { id: string }) {
               workflow={request.workflowInspection}
             />
           )}
-        </div>
+        </>
       )}
-    </section>
+    />
   )
 }

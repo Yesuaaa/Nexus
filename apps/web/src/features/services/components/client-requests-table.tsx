@@ -146,7 +146,7 @@ function RequestActions({
           <span className="sr-only">{chatHint}</span>
         </span>
       )}
-      {!["CLOSED", "CANCELLED"].includes(request.status) && (
+      {!["CLOSED", "CANCELLED", "CONCLUDED"].includes(request.status) && (
         <RowActionsMenu
           triggerLabel={`More actions for ${requestName}`}
           triggerClassName={

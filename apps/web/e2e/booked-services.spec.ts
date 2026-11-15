@@ -15,8 +15,8 @@ function bookingFixture(index = 1): BookingDetails {
         : index === 2
           ? "UNDER_REVIEW"
           : index === 3
-            ? "AWAITING_CLIENT_INFO"
-            : "CLOSED",
+            ? "ACTIVATED"
+            : "CONCLUDED",
     packageName: index === 1 ? "Business Website" : null,
     expectedTimeline: "Launch within six weeks",
     preferredSpecialistName: index === 1 ? "Sam Developer" : null,
@@ -37,12 +37,12 @@ test("booking row status refreshes manually and after reconnection without polli
 }) => {
   const state = await mockBookings(page, { bookings: [bookingFixture(1)] })
   await page.goto("/booked-services")
-  await expect(page.getByText("Submitted", { exact: true })).toBeVisible()
+  await expect(page.getByText("Pending", { exact: true })).toBeVisible()
   state.bookings[0]!.status = "UNDER_REVIEW"
   await page.waitForTimeout(6_000)
-  await expect(page.getByText("Submitted", { exact: true })).toBeVisible()
+  await expect(page.getByText("Pending", { exact: true })).toBeVisible()
   await page.getByRole("button", { name: "Refresh", exact: true }).click()
-  await expect(page.getByText("Under review", { exact: true })).toBeVisible({
+  await expect(page.getByText("Under Review", { exact: true })).toBeVisible({
     timeout: 10_000,
   })
   state.listError = true
@@ -58,7 +58,7 @@ test("booking row status refreshes manually and after reconnection without polli
       .getByRole("table", { name: "Booked services", exact: true })
       .getByRole("alert"),
   ).toHaveCount(0)
-  await expect(page.getByText("Under review", { exact: true })).toBeVisible()
+  await expect(page.getByText("Under Review", { exact: true })).toBeVisible()
   state.listError = false
   state.bookings[0]!.status = "CANCELLED"
   await page.evaluate(() => window.dispatchEvent(new Event("online")))
@@ -227,11 +227,9 @@ for (const width of [1440, 390]) {
     await expect(
       table.getByRole("button", { name: /^View booking / }),
     ).toHaveCount(10)
-    await expect(table.getByText("Submitted", { exact: true })).toBeVisible()
-    await expect(table.getByText("Under review", { exact: true })).toBeVisible()
-    await expect(
-      table.getByText("Awaiting information", { exact: true }),
-    ).toBeVisible()
+    await expect(table.getByText("Pending", { exact: true })).toBeVisible()
+    await expect(table.getByText("Under Review", { exact: true })).toBeVisible()
+    await expect(table.getByText("Activated", { exact: true })).toBeVisible()
     await expect(
       main.getByText("Showing 1–10 of 11", { exact: true }),
     ).toBeVisible()
@@ -293,7 +291,7 @@ for (const width of [1440, 390]) {
       .getByRole("combobox", { name: "Filter bookings by status", exact: true })
       .click()
     await page
-      .getByRole("option", { name: "Under review", exact: true })
+      .getByRole("option", { name: "Under Review", exact: true })
       .click()
     await expect(
       table.getByRole("button", { name: /^View booking / }),
@@ -370,7 +368,7 @@ for (const width of [1440, 390]) {
     await expect(
       drawer.getByText("Please use our existing brand guide.", { exact: true }),
     ).toBeVisible()
-    await expect(drawer.getByText("Submitted", { exact: true })).toBeVisible()
+    await expect(drawer.getByText("Pending", { exact: true })).toBeVisible()
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= window.innerWidth,

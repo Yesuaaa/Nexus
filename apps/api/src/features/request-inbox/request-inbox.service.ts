@@ -76,6 +76,8 @@ export async function listInbox(userId: string, filters: InboxFilters) {
       const statusByView = {
         pending: "SUBMITTED",
         "under-review": "UNDER_REVIEW",
+        activated: "ACTIVATED",
+        concluded: "CONCLUDED",
         "awaiting-information": "AWAITING_CLIENT_INFO",
         "ready-for-quotation": "READY_FOR_QUOTATION",
         closed: "CLOSED",
