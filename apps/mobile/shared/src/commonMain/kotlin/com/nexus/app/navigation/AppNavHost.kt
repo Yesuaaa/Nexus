@@ -261,7 +261,6 @@ fun AppNavHost(modifier: Modifier = Modifier) {
         Routes.MESSAGES -> "Messages"
         Routes.CHAT -> "Chat"
         Routes.WORKFLOW -> "Request details"
-        Routes.BILLING_LOGS -> "Billing Logs"
         Routes.PROFILE, Routes.SETTINGS -> accountTitle
         else -> ""
     }

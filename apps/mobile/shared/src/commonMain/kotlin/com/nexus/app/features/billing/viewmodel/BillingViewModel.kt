@@ -85,7 +85,7 @@ class BillingViewModel(
             )
         }
 
-        if (shouldLoadImage && file != null) {
+        if (shouldLoadImage) {
             previewJob = viewModelScope.launch {
                 try {
                     val downloaded = repository.downloadProofFile(payment.requestId, file)

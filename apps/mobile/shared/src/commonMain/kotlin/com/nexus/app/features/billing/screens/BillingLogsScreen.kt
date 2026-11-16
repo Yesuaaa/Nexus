@@ -73,8 +73,8 @@ private val EmeraldText = Color(0xFF065F46)
 fun BillingLogsScreen(
     onGoToChats: (requestId: String) -> Unit,
     onPay: (requestId: String) -> Unit,
-    modifier: Modifier = Modifier,
-    viewModel: BillingViewModel = koinViewModel()
+    viewModel: BillingViewModel = koinViewModel(),
+    modifier: Modifier = Modifier
 ) {
     val state by viewModel.state.collectAsState()
     val platformFiles = LocalPlatformFiles.current
