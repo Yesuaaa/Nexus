@@ -44,7 +44,15 @@ import { attendanceNavigation } from "@/features/attendance/model/navigation"
 import { useWorkspaceModuleId } from "@/features/workspaces/providers/workspace-provider"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 
-import { focusRing, iconButtonClass } from "./styles"
+import {
+  focusRing,
+  iconButtonClass,
+  sidebarActiveRowClass,
+  sidebarCollapsedRowClass,
+  sidebarNavLinkClass,
+  sidebarRowClass,
+} from "./styles"
+import { ClientProjectSidebarLinks } from "@/features/projects/components/client-project-sidebar-links"
 import {
   AccountsIcon,
   CloseIcon,
@@ -61,15 +69,10 @@ const accessLabels: Record<Account["role"], string> = {
   SUPERADMIN: "SUPERADMIN ACCESS",
 }
 
-const rowClass =
-  "flex h-9 w-full min-w-0 cursor-pointer items-center gap-2.5 rounded-lg border-0 bg-transparent px-2.5 text-left text-[13px] font-medium whitespace-nowrap text-[#3b4658] no-underline transition-colors duration-150 hover:bg-[#f3f5f8] hover:text-[#182235] motion-reduce:transition-none"
-const activeRowClass =
-  "bg-[#eef2f9] font-semibold text-[#203f8c] hover:bg-[#eef2f9] hover:text-[#203f8c]"
-/** Icon-only square in the collapsed desktop sidebar (full row in the drawer). */
-const collapsedRowClass =
-  "size-10 justify-center justify-self-center gap-0 p-0 max-[767px]:h-9 max-[767px]:w-full max-[767px]:justify-start max-[767px]:gap-2.5 max-[767px]:px-2.5"
-
-const navLinkClass = `group relative ${rowClass} ${focusRing}`
+const rowClass = sidebarRowClass
+const activeRowClass = sidebarActiveRowClass
+const collapsedRowClass = sidebarCollapsedRowClass
+const navLinkClass = sidebarNavLinkClass
 const collapsedNavLinkClass = collapsedRowClass
 
 function CollapsedTooltip({ children }: { children: string }) {
@@ -529,6 +532,10 @@ export function Sidebar({
   const searchParams = useSearchParams()
   const mainNavigation = getNavigationPolicies(account, "main")
   const isClient = account.role === "USER"
+  const clientProjectId =
+    isClient && pathname.startsWith("/projects/")
+      ? decodeURIComponent(pathname.split("/")[2] || "") || null
+      : null
   const activeModuleId = useWorkspaceModuleId()
   const dashboardPolicy = mainNavigation.find(
     (policy) => policy.id === "dashboard",
@@ -639,7 +646,15 @@ export function Sidebar({
           )}
           aria-label="Main menu"
         >
-          {dashboardPolicy && (
+          {clientProjectId && (
+            <ClientProjectSidebarLinks
+              projectId={clientProjectId}
+              collapsed={collapsed}
+              onNavigate={onCloseDrawer}
+            />
+          )}
+
+          {!clientProjectId && dashboardPolicy && (
             <SidebarNavigationLink
               policy={dashboardPolicy}
               account={account}
@@ -650,7 +665,7 @@ export function Sidebar({
             />
           )}
 
-          {activeModuleId && (
+          {!clientProjectId && activeModuleId && (
             <>
               <p className={sectionLabelClass}>
                 {workspaceModuleLabels[activeModuleId]}
@@ -731,7 +746,7 @@ export function Sidebar({
             </>
           )}
 
-          {sharedNavigation.length > 0 && (
+          {!clientProjectId && sharedNavigation.length > 0 && (
             <>
               {activeModuleId && <p className={sectionLabelClass}>Shared</p>}
               {sharedNavigation.map((policy) => (

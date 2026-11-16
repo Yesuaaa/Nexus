@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test"
 import { accountFor, configureRegressionTest } from "./regression-support"
 import type { ProjectWorkspaceDetail } from "../src/features/project-workspace/api/project-workspace-api"
+import type {
+  ProjectChangeRequest,
+  ProjectWorkspace,
+} from "../src/features/projects/api/projects-api"
 
 configureRegressionTest()
 
@@ -76,6 +80,195 @@ test("staff project routes preserve the current mixed client and staff behavior"
 })
 
 for (const width of [1440, 390]) {
+  test(`client project requests allow repeat submissions at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await page.addInitScript(() =>
+      sessionStorage.setItem("nexus.auth.token", "test-session"),
+    )
+
+    const requests: ProjectChangeRequest[] = [
+      {
+        id: "request-existing",
+        kind: "CHANGE",
+        details: "Please revise the first request detail.",
+        status: "PENDING",
+        responseNote: null,
+        createdAt: "2026-11-10T09:00:00.000Z",
+        reviewedAt: null,
+        requestedBy: { fullName: "Mara Client" },
+      },
+    ]
+    const submitted: { kind: string; details: string }[] = []
+    let releaseFirstSubmission!: () => void
+    let firstSubmissionReceived!: () => void
+    const firstSubmissionGate = new Promise<void>((resolve) => {
+      releaseFirstSubmission = resolve
+    })
+    const firstSubmissionStarted = new Promise<void>((resolve) => {
+      firstSubmissionReceived = resolve
+    })
+
+    function project(): ProjectWorkspace {
+      return {
+        id: "client-project-requests-1",
+        name: "Client project requests",
+        description: "Project description",
+        status: "IN_PROGRESS",
+        startDate: "2026-11-01T00:00:00.000Z",
+        createdAt: "2026-11-01T00:00:00.000Z",
+        workspaceManaged: false,
+        canManage: false,
+        request: {
+          id: "booking-1",
+          referenceNumber: "REQ-001",
+          service: { name: "Design" },
+        },
+        milestones: [],
+        deliverables: [],
+        changeRequests: [...requests],
+        canReviewChanges: false,
+      }
+    }
+
+    await page.route("**/api/**", async (route) => {
+      const request = route.request()
+      const path = new URL(request.url()).pathname
+      if (path === "/api/auth/me")
+        return route.fulfill({ json: { user: accountFor("USER") } })
+      const projectPath = "/api/projects/client-project-requests-1"
+      if (path === projectPath && request.method() === "GET")
+        return route.fulfill({ json: project() })
+      if (path.startsWith(`${projectPath}/`) && request.method() === "POST") {
+        const kind = path.endsWith("cancellation-requests")
+          ? "CANCELLATION"
+          : "CHANGE"
+        const body = request.postDataJSON() as { details: string }
+        submitted.push({ kind, details: body.details })
+        if (submitted.length === 1) {
+          firstSubmissionReceived()
+          await firstSubmissionGate
+        }
+        requests.unshift({
+          id: `request-${submitted.length}`,
+          kind,
+          details: body.details,
+          status: "PENDING",
+          responseNote: null,
+          createdAt: `2026-11-${String(10 + submitted.length).padStart(2, "0")}T09:00:00.000Z`,
+          reviewedAt: null,
+          requestedBy: { fullName: "Mara Client" },
+        })
+        return route.fulfill({ json: project() })
+      }
+      return route.fulfill({
+        json: { notifications: [], unreadCount: 0 },
+      })
+    })
+
+    await page.goto("/projects/client-project-requests-1")
+    const requestSection = page
+      .getByRole("heading", { name: "Project requests", exact: true })
+      .locator("xpath=../..")
+    await expect(
+      requestSection.getByRole("button", { name: "New request", exact: true }),
+    ).toBeEnabled()
+    const firstCard = requestSection.getByRole("listitem").first()
+    await expect(
+      firstCard.getByRole("heading", { name: "Change request" }),
+    ).toBeVisible()
+    await expect(
+      firstCard.getByText("Under review", { exact: true }),
+    ).toBeVisible()
+    await expect(firstCard.locator("time")).toHaveAttribute(
+      "datetime",
+      "2026-11-10T09:00:00.000Z",
+    )
+
+    await requestSection.getByRole("button", { name: "New request" }).click()
+    const firstDialog = page.getByRole("dialog")
+    await firstDialog
+      .getByRole("textbox")
+      .fill("Please revise the second request detail.")
+    const firstForm = firstDialog.locator("form")
+    await firstForm.evaluate((form) => {
+      const event = new Event("submit", { bubbles: true, cancelable: true })
+      form.dispatchEvent(event)
+      form.dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true }),
+      )
+    })
+    await firstSubmissionStarted
+    await expect.poll(() => submitted.length).toBe(1)
+    releaseFirstSubmission()
+    await expect(
+      requestSection.getByText("Please revise the second request detail.", {
+        exact: true,
+      }),
+    ).toBeVisible()
+    expect(submitted).toEqual([
+      {
+        kind: "CHANGE",
+        details: "Please revise the second request detail.",
+      },
+    ])
+
+    await requestSection.getByRole("button", { name: "New request" }).click()
+    const secondDialog = page.getByRole("dialog")
+    await secondDialog
+      .getByRole("textbox")
+      .fill("Please revise the third request detail.")
+    await secondDialog
+      .getByRole("button", { name: "Send change request" })
+      .click()
+    await expect(
+      requestSection.getByText("Please revise the third request detail.", {
+        exact: true,
+      }),
+    ).toBeVisible()
+
+    await requestSection.getByRole("button", { name: "New request" }).click()
+    const cancellationDialog = page.getByRole("dialog")
+    await cancellationDialog
+      .getByRole("combobox", { name: "Project request type" })
+      .click()
+    await page.getByRole("option", { name: "Request cancellation" }).click()
+    await cancellationDialog
+      .getByRole("textbox")
+      .fill("Please cancel this project for the stated reason.")
+    await cancellationDialog
+      .getByRole("button", { name: "Send cancellation request" })
+      .click()
+    await expect(
+      requestSection.getByText(
+        "Please cancel this project for the stated reason.",
+        {
+          exact: true,
+        },
+      ),
+    ).toBeVisible()
+
+    expect(submitted).toEqual([
+      {
+        kind: "CHANGE",
+        details: "Please revise the second request detail.",
+      },
+      {
+        kind: "CHANGE",
+        details: "Please revise the third request detail.",
+      },
+      {
+        kind: "CANCELLATION",
+        details: "Please cancel this project for the stated reason.",
+      },
+    ])
+    await expect(requestSection.getByRole("listitem")).toHaveCount(4)
+    await expect(requestSection.getByRole("listitem").first()).toContainText(
+      "Please cancel this project for the stated reason.",
+    )
+  })
+
   test(`workspace archive and search keep active and ended projects separate at ${width}px`, async ({
     page,
   }) => {

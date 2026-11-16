@@ -2,7 +2,7 @@
 
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 import Link from "next/link"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import {
   ArrowLeft,
   Clock3,
@@ -18,7 +18,7 @@ import { sileo } from "sileo"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
-import { Pill, pillToneClass, type PillTone } from "@/components/ui/pill"
+import { Pill, type PillTone } from "@/components/ui/pill"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
 import {
   ClientPageHeader,
@@ -88,6 +88,7 @@ export function ClientProjectPage({
   )
   const [tab] = useState<ClientTab>(initialTab)
   const [busy, setBusy] = useState(false)
+  const projectRequestSubmissionLock = useRef(false)
   const [briefOpen, setBriefOpen] = useState(false)
   const [requestOpen, setRequestOpen] = useState(false)
 
@@ -99,26 +100,19 @@ export function ClientProjectPage({
     : 0
   const deliverables = project?.deliverables ?? []
   const changeRequests = project?.changeRequests ?? []
-  const pendingChange = changeRequests.some(
-    (request) => request.kind === "CHANGE" && request.status === "PENDING",
-  )
   const pendingCancellation = changeRequests.some(
     (request) =>
       request.kind === "CANCELLATION" && request.status === "PENDING",
   )
   const editable =
     project?.status === "IN_PROGRESS" || project?.status === "ON_HOLD"
-  const canRequestChange = editable && !pendingChange
-  const canRequestCancellation =
-    editable && !!project?.request && !pendingCancellation
-  const cancellationDisabledReason = pendingCancellation
-    ? "A cancellation request is already under review."
-    : !project?.request
-      ? "Cancellation requests need a linked booking so the Department Head can review them."
-      : !editable
-        ? "This project is no longer active."
-        : null
-  const canStartProjectRequest = canRequestChange || canRequestCancellation
+  const canRequestChange = editable
+  const canRequestCancellation = editable && !!project?.request
+  const cancellationDisabledReason = !project?.request
+    ? "Cancellation requests need a linked booking so the Department Head can review them."
+    : !editable
+      ? "This project is no longer active."
+      : null
   const defaultRequestKind: ProjectChangeRequestKind = canRequestChange
     ? "CHANGE"
     : "CANCELLATION"
@@ -145,7 +139,8 @@ export function ClientProjectPage({
     kind: ProjectChangeRequestKind,
     details: string,
   ) {
-    if (busy) return
+    if (busy || projectRequestSubmissionLock.current) return
+    projectRequestSubmissionLock.current = true
     setBusy(true)
     try {
       const update =
@@ -169,6 +164,7 @@ export function ClientProjectPage({
         description: errorMessage(reason, "Please try again."),
       })
     } finally {
+      projectRequestSubmissionLock.current = false
       setBusy(false)
     }
   }
@@ -289,37 +285,42 @@ export function ClientProjectPage({
               {editable && (
                 <Button
                   type="button"
-                  disabled={!canStartProjectRequest || busy}
+                  disabled={busy}
                   onClick={() => setRequestOpen(true)}
                   className={clientPageHeaderActionClass}
                 >
                   <Plus size={16} aria-hidden="true" />
-                  {canStartProjectRequest
-                    ? "New project request"
-                    : "Request under review"}
+                  New request
                 </Button>
               )}
             </div>
             {changeRequests.length ? (
-              <ul className="mt-4 list-none divide-y divide-[#e9edf2] p-0">
+              <ul className="mt-3 grid list-none gap-2 p-0">
                 {changeRequests.map((request) => (
-                  <li key={request.id} className="py-4 first:pt-0 last:pb-0">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-[10px] font-medium ${pillToneClass(changeStatusTone(request))}`}
+                  <li
+                    key={request.id}
+                    className="min-w-0 rounded-lg border border-[#e5e9ee] bg-[#fcfdff] p-3"
+                  >
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                      <h3 className="m-0 text-xs font-semibold text-[#26364e]">
+                        {request.kind === "CANCELLATION"
+                          ? "Cancellation request"
+                          : "Change request"}
+                      </h3>
+                      <Pill
+                        tone={changeStatusTone(request)}
+                        className="rounded-full px-2.5 py-1"
                       >
                         {changeStatusLabel(request)}
-                      </span>
-                      <span className="text-[11px] text-[#71839d]">
+                      </Pill>
+                      <time
+                        dateTime={request.createdAt}
+                        className="ml-auto text-[11px] text-[#71839d]"
+                      >
                         Sent {formatDate(request.createdAt)}
-                      </span>
+                      </time>
                     </div>
-                    <p className="mt-3 mb-0 text-[11px] font-medium text-[#60718c]">
-                      {request.kind === "CANCELLATION"
-                        ? "Cancellation request"
-                        : "Change request"}
-                    </p>
-                    <p className="mt-3 mb-0 whitespace-pre-wrap text-xs leading-5 text-[#26364e] [overflow-wrap:anywhere]">
+                    <p className="mt-2 mb-0 whitespace-pre-wrap text-xs leading-5 text-[#26364e] [overflow-wrap:anywhere]">
                       {request.details}
                     </p>
                     {request.responseNote && (
@@ -384,56 +385,41 @@ export function ClientProjectPage({
           </div>
         </TabsContent>
         <TabsContent value="notes" className="mt-5">
-          <section aria-label="Project notes">
-            <div className="mb-4 flex items-end justify-between gap-3">
-              <div>
-                <h2 className="m-0 text-base font-semibold">Project notes</h2>
-                <p className="mt-1 mb-0 text-xs text-[#738096]">
-                  Notes and project context shared with you.
-                </p>
-              </div>
-            </div>
-            {project.description ? (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                <article className="group relative aspect-[4/5] w-full max-w-[340px] overflow-hidden rounded-2xl bg-[#294c96] p-6 text-white shadow-[0_8px_24px_rgb(26_58_128_/_10%)]">
-                  <span
-                    className="pointer-events-none absolute inset-0 bg-[linear-gradient(145deg,transparent_40%,rgb(20_54_129_/_42%))]"
-                    aria-hidden="true"
-                  />
-                  <div className="relative z-10 flex h-full min-w-0 flex-col">
-                    <span className="grid size-14 shrink-0 place-items-center rounded-2xl border-2 border-current bg-[rgb(22_48_105_/_10%)]">
-                      <FileText
-                        size={24}
-                        strokeWidth={1.8}
-                        aria-hidden="true"
-                      />
-                    </span>
-                    <div className="mt-auto min-w-0">
-                      <h3 className="m-0 text-xl leading-tight font-bold tracking-[-0.025em]">
-                        Project brief
-                      </h3>
-                      <p className="mt-2 mb-0 whitespace-pre-wrap text-sm leading-6 text-white/80 [overflow-wrap:anywhere]">
-                        {project.description}
-                      </p>
-                    </div>
-                  </div>
-                </article>
-              </div>
-            ) : (
-              <section className="grid min-h-[230px] w-full max-w-[340px] place-items-center rounded-2xl border border-dashed border-[#ccd7e8] bg-white px-6 text-center">
-                <div>
-                  <FileText
-                    size={24}
-                    className="mx-auto text-[#58729e]"
-                    aria-hidden="true"
-                  />
-                  <p className="mt-3 mb-0 text-sm font-semibold text-[#243c69]">
-                    No notes added yet
-                  </p>
-                </div>
-              </section>
-            )}
-          </section>
+          <div className="grid min-w-0 gap-4">
+            <section
+              aria-labelledby="client-project-brief-heading"
+              className="min-w-0 rounded-xl border border-[#dce3eb] bg-white p-5 md:p-6"
+            >
+              <h2
+                id="client-project-brief-heading"
+                className="m-0 border-b border-[#e5e9ee] pb-3 text-base font-semibold"
+              >
+                Project brief
+              </h2>
+              <p className="mt-3 mb-0 whitespace-pre-wrap text-xs leading-6 text-[#5f718b] [overflow-wrap:anywhere]">
+                {project.description || "No project brief has been added yet."}
+              </p>
+            </section>
+
+            <section
+              aria-labelledby="client-project-notes-heading"
+              className="min-w-0 rounded-xl border border-[#dce3eb] bg-white p-5 md:p-6"
+            >
+              <h2
+                id="client-project-notes-heading"
+                className="m-0 border-b border-[#e5e9ee] pb-3 text-base font-semibold"
+              >
+                Project notes
+              </h2>
+              <EmptyState
+                icon={FileText}
+                title="No project notes yet"
+                description="Updates and notes shared by your project team will appear here."
+                size="sm"
+                className="mt-4"
+              />
+            </section>
+          </div>
         </TabsContent>
         <TabsContent value="team" className="mt-5">
           <section aria-label="Project team">

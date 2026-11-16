@@ -11,9 +11,12 @@ import {
   UsersRound,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { focusRing } from "@/components/layout/styles"
-
-const projectNavLinkClass = `group relative flex min-h-10 w-full items-center gap-[13px] rounded-md border-0 bg-transparent px-[13px] text-left font-semibold text-foreground no-underline whitespace-nowrap cursor-pointer transition-colors duration-150 hover:bg-[#e1e3e5] motion-reduce:transition-none ${focusRing}`
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
+import {
+  sidebarActiveRowClass,
+  sidebarCollapsedRowClass,
+  sidebarNavLinkClass,
+} from "@/components/layout/styles"
 
 function ProjectNavLink({
   href,
@@ -34,12 +37,10 @@ function ProjectNavLink({
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
-      title={collapsed ? label : undefined}
       className={cn(
-        projectNavLinkClass,
-        collapsed &&
-          "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
-        active && "bg-[#e1e3e5]",
+        sidebarNavLinkClass,
+        collapsed && sidebarCollapsedRowClass,
+        active && sidebarActiveRowClass,
       )}
       onClick={onNavigate}
     >
@@ -48,12 +49,12 @@ function ProjectNavLink({
         className={cn(
           "min-w-0 truncate text-left",
           !collapsed && "flex-1",
-          collapsed &&
-            "w-0 overflow-hidden opacity-0 max-[767px]:w-auto max-[767px]:flex-1 max-[767px]:overflow-visible max-[767px]:opacity-100",
+          collapsed && "sr-only max-[767px]:not-sr-only",
         )}
       >
         {label}
       </span>
+      {collapsed && <HoverTooltip side="right">{label}</HoverTooltip>}
     </Link>
   )
 }
@@ -80,16 +81,29 @@ export function ClientProjectSidebarLinks({
       <Link
         href="/projects"
         aria-label="Back to all projects"
-        title={collapsed ? "Back to projects" : undefined}
         className={cn(
-          projectNavLinkClass,
-          "mb-2 text-[#203f8c] hover:text-[#172f70]",
-          collapsed &&
-            "aspect-square min-h-0 w-11 justify-self-center justify-center gap-0 p-0",
+          sidebarNavLinkClass,
+          "mb-2",
+          collapsed && sidebarCollapsedRowClass,
         )}
         onClick={onNavigate}
       >
-        <ArrowLeft size={20} strokeWidth={1.7} aria-hidden="true" />
+        <ArrowLeft
+          className="size-[18px] flex-none"
+          strokeWidth={1.75}
+          aria-hidden="true"
+        />
+        <span
+          className={cn(
+            "min-w-0 truncate",
+            collapsed && "sr-only max-[767px]:not-sr-only",
+          )}
+        >
+          Back to projects
+        </span>
+        {collapsed && (
+          <HoverTooltip side="right">Back to projects</HoverTooltip>
+        )}
       </Link>
       <ProjectNavLink
         href={basePath}
@@ -100,7 +114,7 @@ export function ClientProjectSidebarLinks({
         collapsed={collapsed}
         onNavigate={onNavigate}
       >
-        <FolderKanban size={20} strokeWidth={1.7} className="flex-none" />
+        <FolderKanban className="size-[18px] flex-none" strokeWidth={1.75} />
       </ProjectNavLink>
       <ProjectNavLink
         href={`${basePath}?tab=deliverables`}
@@ -109,7 +123,7 @@ export function ClientProjectSidebarLinks({
         collapsed={collapsed}
         onNavigate={onNavigate}
       >
-        <Layers3 size={20} strokeWidth={1.7} className="flex-none" />
+        <Layers3 className="size-[18px] flex-none" strokeWidth={1.75} />
       </ProjectNavLink>
       <ProjectNavLink
         href={`${basePath}?tab=notes`}
@@ -118,7 +132,7 @@ export function ClientProjectSidebarLinks({
         collapsed={collapsed}
         onNavigate={onNavigate}
       >
-        <FileText size={20} strokeWidth={1.7} className="flex-none" />
+        <FileText className="size-[18px] flex-none" strokeWidth={1.75} />
       </ProjectNavLink>
       <ProjectNavLink
         href={`${basePath}?tab=team`}
@@ -127,7 +141,7 @@ export function ClientProjectSidebarLinks({
         collapsed={collapsed}
         onNavigate={onNavigate}
       >
-        <UsersRound size={20} strokeWidth={1.7} className="flex-none" />
+        <UsersRound className="size-[18px] flex-none" strokeWidth={1.75} />
       </ProjectNavLink>
     </>
   )

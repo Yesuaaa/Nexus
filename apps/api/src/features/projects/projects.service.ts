@@ -189,7 +189,7 @@ export async function getProject(userId: string, id: string) {
                 reviewedAt: true,
                 requestedBy: { select: { fullName: true } },
               },
-              orderBy: { createdAt: "desc" },
+              orderBy: [{ createdAt: "desc" }, { id: "desc" }],
             })
           : []
       const isWorkspaceManaged = Boolean(
@@ -361,32 +361,6 @@ export async function createProjectChangeRequest(
         409,
         "Change requests are unavailable for this project",
       )
-    const cancellationPending = await tx.projectChangeRequest.count({
-      where: {
-        projectId,
-        requestedById: userId,
-        kind: "CANCELLATION",
-        status: "PENDING",
-      },
-    })
-    if (cancellationPending)
-      throw new ServiceRequestsError(
-        409,
-        "Change requests are paused while the cancellation request is under review",
-      )
-    const pending = await tx.projectChangeRequest.count({
-      where: {
-        projectId,
-        requestedById: userId,
-        kind: "CHANGE",
-        status: "PENDING",
-      },
-    })
-    if (pending)
-      throw new ServiceRequestsError(
-        409,
-        "You already have a change request under review",
-      )
     await tx.projectChangeRequest.create({
       data: { projectId, requestedById: userId, kind: "CHANGE", details },
     })
@@ -431,19 +405,6 @@ export async function createProjectCancellationRequest(
       throw new ServiceRequestsError(
         409,
         "A Department Head must be assigned before requesting cancellation",
-      )
-    const pending = await tx.projectChangeRequest.count({
-      where: {
-        projectId,
-        requestedById: userId,
-        kind: "CANCELLATION",
-        status: "PENDING",
-      },
-    })
-    if (pending)
-      throw new ServiceRequestsError(
-        409,
-        "A cancellation request is already under review",
       )
     await tx.projectChangeRequest.create({
       data: {
@@ -636,6 +597,20 @@ export async function reviewProjectCancellationRequest(
           status: "NOT_APPROVED",
           responseNote:
             "This project was cancelled after the client's cancellation request was approved.",
+          reviewedById: userId,
+          reviewedAt: new Date(),
+        },
+      })
+      await tx.projectChangeRequest.updateMany({
+        where: {
+          projectId,
+          kind: "CANCELLATION",
+          status: "PENDING",
+        },
+        data: {
+          status: "NOT_APPROVED",
+          responseNote:
+            "This project was cancelled after another cancellation request was approved.",
           reviewedById: userId,
           reviewedAt: new Date(),
         },
