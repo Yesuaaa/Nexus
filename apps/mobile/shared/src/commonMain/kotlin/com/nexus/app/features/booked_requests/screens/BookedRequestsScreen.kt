@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nexus.app.core.components.LocalNexusToast
 import com.nexus.app.core.components.NexusButton
+import com.nexus.app.core.components.NexusButtonVariant
 import com.nexus.app.core.components.StatusBadge
 import com.nexus.app.core.theme.NexusColors
 import com.nexus.app.features.booking.components.*
@@ -33,6 +34,7 @@ fun BookedRequestsScreen(
     onNewRequestClick: () -> Unit = {},
     initialRequestId: String? = null,
     onBackFromDetails: (() -> Unit)? = null,
+    onOpenMessages: (String) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: RequestsViewModel = koinViewModel()
 ) {
@@ -80,6 +82,13 @@ fun BookedRequestsScreen(
                     InfoLine("Submitted", detail.createdAt.take(10))
                     InfoLine("Last updated", detail.updatedAt.take(10))
                 } }
+                item {
+                    NexusButton(
+                        text = "Open in Messages",
+                        onClick = { onOpenMessages(detail.id) },
+                        variant = NexusButtonVariant.OUTLINE,
+                    )
+                }
                 if (detail.canCancel) item {
                     Button(onClick = { confirmCancellation = true },
                         shape = NexusButtonShape,

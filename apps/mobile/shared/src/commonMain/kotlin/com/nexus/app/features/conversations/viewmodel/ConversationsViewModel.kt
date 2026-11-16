@@ -9,6 +9,11 @@ import androidx.lifecycle.viewModelScope
 import com.nexus.app.features.booking.model.newSubmissionKey
 import com.nexus.app.features.conversations.api.*
 import com.nexus.app.features.conversations.model.*
+import com.nexus.app.features.projects.model.ProjectChatHistory
+import com.nexus.app.features.projects.model.ProjectChatMessage
+import com.nexus.app.features.projects.model.ProjectConversationPage
+import com.nexus.app.features.projects.model.mergeProjectMessages
+import com.nexus.app.features.projects.model.reconcileProjectPending
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
@@ -21,7 +26,14 @@ data class ConversationsState(
     val loading: Boolean = false, val error: String? = null, val id: String? = null,
     val attachments: List<ConversationAttachment> = emptyList(), val attachmentError: String? = null,
     val history: History? = null, val messages: List<ChatMessage> = emptyList(),
-    val pending: List<PendingMessage> = emptyList(), val reconnecting: Boolean = false, val profile: SpecialistProfile? = null, val profileLoading: Boolean = false, val profileError: String? = null
+    val pending: List<PendingMessage> = emptyList(), val reconnecting: Boolean = false, val profile: SpecialistProfile? = null, val profileLoading: Boolean = false, val profileError: String? = null,
+    val projectPage: ProjectConversationPage = ProjectConversationPage(),
+    val projectId: String? = null,
+    val projectHistory: ProjectChatHistory? = null,
+    val projectMessages: List<ProjectChatMessage> = emptyList(),
+    val projectPending: List<PendingMessage> = emptyList(),
+    val projectLoading: Boolean = false,
+    val projectError: String? = null,
 )
 class ConversationsViewModel(private val repository: ClientCommunicationRepository, private val booking: BookingGateway? = null, private val workflows: WorkflowRepository? = null) : ViewModel() {
     private val mutable = MutableStateFlow(ConversationsState())
@@ -29,6 +41,7 @@ class ConversationsViewModel(private val repository: ClientCommunicationReposito
     private var listJob: Job? = null
     private var streamJob: Job? = null
     private val historyMutex = Mutex()
+    private val projectMutex = Mutex()
     private var foreground = false
     fun closeProfile() { mutable.update { it.copy(profile = null, profileLoading = false, profileError = null) } }
     fun profile() {
@@ -51,16 +64,45 @@ class ConversationsViewModel(private val repository: ClientCommunicationReposito
             catch (_: Exception) { if (state.value.id == id && state.value.profile != null) mutable.update { it.copy(profileLoading = false, profileError = "Couldn't load this profile. Please try again.") } }
         }
     }
+    fun setArchived(archived: Boolean) {
+        if (state.value.archived == archived && !state.value.loading && state.value.error == null) {
+            refresh(archived = archived, more = false)
+            return
+        }
+        refresh(archived = archived, more = false)
+    }
     fun refresh(archived: Boolean = state.value.archived, more: Boolean = false) {
-        if (more && (state.value.loading || state.value.page.nextCursor == null)) return
+        val hasMoreRequests = state.value.page.nextCursor != null
+        val hasMoreProjects = state.value.projectPage.nextCursor != null
+        if (more && (state.value.loading || (!hasMoreRequests && !hasMoreProjects))) return
         listJob?.cancel()
-        val before = if (more) state.value.page.nextCursor else null
+        val reqBefore = if (more) state.value.page.nextCursor else null
+        val projBefore = if (more) state.value.projectPage.nextCursor else null
         mutable.update { it.copy(archived = archived, loading = true, error = null) }
         listJob = viewModelScope.launch {
             try {
-                val page = repository.conversations(archived, before)
-                mutable.update { it.copy(page = if (more) page.copy(conversations =
-                    (it.page.conversations + page.conversations).distinctBy { row -> row.id }) else page, loading = false) }
+                coroutineScope {
+                    val reqDeferred = if (!more || hasMoreRequests) {
+                        async { repository.conversations(archived, reqBefore) }
+                    } else null
+                    val projDeferred = if (!more || hasMoreProjects) {
+                        async { repository.projectConversations(archived, projBefore) }
+                    } else null
+
+                    val reqPage = reqDeferred?.await()
+                    val projPage = projDeferred?.await()
+                    mutable.update { current ->
+                        val nextReqPage = if (reqPage != null) {
+                            if (more) reqPage.copy(conversations = (current.page.conversations + reqPage.conversations).distinctBy { row -> row.id })
+                            else reqPage
+                        } else current.page
+                        val nextProjPage = if (projPage != null) {
+                            if (more) projPage.copy(conversations = (current.projectPage.conversations + projPage.conversations).distinctBy { row -> row.id })
+                            else projPage
+                        } else current.projectPage
+                        current.copy(page = nextReqPage, projectPage = nextProjPage, loading = false)
+                    }
+                }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { mutable.update { it.copy(loading = false, error = e.message) } }
         }
@@ -84,6 +126,153 @@ class ConversationsViewModel(private val repository: ClientCommunicationReposito
         else if (active) refresh()
     }
     fun close() { streamJob?.cancel(); mutable.update { it.copy(id = null, history = null, attachments = emptyList(), attachmentError = null, messages = emptyList(), pending = emptyList()) }; refresh() }
+    fun openProject(projectId: String) {
+        mutable.update {
+            if (it.projectId == projectId) it
+            else it.copy(
+                projectId = projectId,
+                projectHistory = null,
+                projectMessages = emptyList(),
+                projectPending = emptyList(),
+                projectError = null,
+            )
+        }
+        refreshProject(projectId, older = false)
+    }
+    fun closeProject() {
+        mutable.update {
+            it.copy(
+                projectId = null,
+                projectHistory = null,
+                projectMessages = emptyList(),
+                projectPending = emptyList(),
+                projectError = null,
+            )
+        }
+        refresh()
+    }
+    fun refreshProject(projectId: String? = state.value.projectId, older: Boolean = false) {
+        val targetId = projectId ?: return
+        if (state.value.projectLoading) return
+        val before = if (older) state.value.projectHistory?.nextCursor ?: return else null
+        mutable.update { it.copy(projectId = targetId, projectLoading = true, projectError = null) }
+        viewModelScope.launch {
+            projectMutex.withLock {
+                try {
+                    val history = repository.projectHistory(targetId, before)
+                    if (state.value.projectId != targetId) return@withLock
+                    mutable.update { current ->
+                        val messages = mergeProjectMessages(current.projectMessages, history.messages)
+                        val nextCursor = if (older || current.projectHistory == null) history.nextCursor else current.projectHistory.nextCursor
+                        current.copy(
+                            projectHistory = history.copy(messages = messages, nextCursor = nextCursor),
+                            projectMessages = messages,
+                            projectPending = reconcileProjectPending(current.projectPending, messages),
+                            projectError = null,
+                        )
+                    }
+                    if (!older) {
+                        try {
+                            repository.readProject(targetId)
+                            mutable.update { current ->
+                                current.copy(
+                                    projectPage = current.projectPage.copy(
+                                        conversations = current.projectPage.conversations.map { row ->
+                                            if (row.id == targetId) row.copy(unreadCount = 0) else row
+                                        },
+                                    ),
+                                )
+                            }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                            // Read receipt failures should not hide loaded messages.
+                        }
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: CommunicationException) {
+                    mutable.update {
+                        it.copy(
+                            projectHistory = if (e.status in setOf(401, 403, 404)) null else it.projectHistory,
+                            projectError = e.message,
+                        )
+                    }
+                } catch (e: Exception) {
+                    mutable.update { it.copy(projectError = e.message ?: "Unable to load project messages.") }
+                } finally {
+                    mutable.update { it.copy(projectLoading = false) }
+                }
+            }
+        }
+    }
+    fun sendProject(body: String) {
+        val current = state.value
+        val projectId = current.projectId ?: return
+        if (body.isBlank() || body.length > 4000 || '\u0000' in body || current.projectHistory?.canSend != true) return
+        val pending = PendingMessage(newSubmissionKey(), body.trim())
+        mutable.update { it.copy(projectPending = it.projectPending + pending) }
+        deliverProject(projectId, pending)
+    }
+    fun retryProject(pending: PendingMessage) {
+        val current = state.value
+        val projectId = current.projectId ?: return
+        if (pending.failed && current.projectHistory?.canSend == true) {
+            deliverProject(projectId, pending)
+        }
+    }
+    private fun deliverProject(projectId: String, pending: PendingMessage) {
+        mutable.update {
+            it.copy(
+                projectPending = it.projectPending.map { row ->
+                    if (row.clientMessageId == pending.clientMessageId) row.copy(failed = false, failureReason = null) else row
+                },
+            )
+        }
+        viewModelScope.launch {
+            try {
+                val message = repository.sendProjectMessage(projectId, pending.body, pending.clientMessageId)
+                if (state.value.projectId == projectId) {
+                    mutable.update { current ->
+                        val messages = mergeProjectMessages(current.projectMessages, listOf(message))
+                        current.copy(
+                            projectHistory = current.projectHistory?.copy(messages = messages),
+                            projectMessages = messages,
+                            projectPending = reconcileProjectPending(current.projectPending, messages),
+                            projectPage = current.projectPage.copy(
+                                conversations = current.projectPage.conversations.map { row ->
+                                    if (row.id == projectId) {
+                                        row.copy(
+                                            lastMessage = message,
+                                            updatedAt = if (message.createdAt > row.updatedAt) message.createdAt else row.updatedAt,
+                                        )
+                                    } else row
+                                },
+                            ),
+                        )
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (state.value.projectId == projectId) {
+                    mutable.update { current ->
+                        current.copy(
+                            projectPending = current.projectPending.map { row ->
+                                if (row.clientMessageId == pending.clientMessageId) {
+                                    row.copy(
+                                        failed = true,
+                                        failureReason = (e as? CommunicationException)?.message
+                                            ?: "Couldn't reach the server. Check your connection and retry.",
+                                    )
+                                } else row
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
     private fun connect() {
         val id = state.value.id ?: return
         streamJob = viewModelScope.launch {
