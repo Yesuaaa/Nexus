@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, test, type Locator } from "@playwright/test"
 import {
   configureRegressionTest,
   live,
@@ -15,6 +15,25 @@ test.skip(
 
 const stamp = "2026-11-14T08:00:00Z"
 const person = { id: "admin", fullName: "Assigned Approver" }
+const longDescription =
+  "Consultation review details require additional follow-up. ".repeat(7).trim()
+const longActor = "Department Head with an intentionally long displayed name "
+  .repeat(4)
+  .trim()
+const additionalEvents: AdministrativeWorkflow["events"] = Array.from(
+  { length: 8 },
+  (_, index) => ({
+    id: `event-extra-${index + 1}`,
+    type: "CONSULTATION_COMPLETED",
+    summary: `Consultation follow-up ${index + 1}`,
+    entityId: null,
+    createdAt: new Date(
+      Date.parse("2026-11-14T10:00:00Z") + index * 60_000,
+    ).toISOString(),
+    actor: person,
+    internal: false,
+  }),
+)
 const workflow: AdministrativeWorkflow = {
   state: "AGREEMENT_PAYMENT_PENDING",
   previousState: null,
@@ -139,6 +158,16 @@ const workflow: AdministrativeWorkflow = {
       actor: person,
       internal: false,
     },
+    {
+      id: "event-4",
+      type: "CONSULTATION_COMPLETED",
+      summary: longDescription,
+      entityId: null,
+      createdAt: "2026-11-14T09:00:00Z",
+      actor: { id: "long-name", fullName: longActor },
+      internal: false,
+    },
+    ...additionalEvents,
   ],
 }
 const request: AdministrativeRequest = {
@@ -183,11 +212,35 @@ const request: AdministrativeRequest = {
   },
 }
 
-for (const width of [1440, 390])
-  test(`Superadmin inspects workflow metadata and history without participation at ${width}px`, async ({
+async function expectContentAboveFooter(
+  content: Locator,
+  panel: Locator,
+  footer: Locator,
+) {
+  await content.scrollIntoViewIfNeeded()
+  const [contentBox, panelBox, footerBox] = await Promise.all([
+    content.boundingBox(),
+    panel.boundingBox(),
+    footer.boundingBox(),
+  ])
+  if (!contentBox || !panelBox || !footerBox)
+    throw new Error("Drawer content should be measurable.")
+  expect(contentBox.y).toBeGreaterThanOrEqual(panelBox.y)
+  expect(contentBox.y + contentBox.height).toBeLessThanOrEqual(
+    panelBox.y + panelBox.height,
+  )
+  expect(panelBox.y + panelBox.height).toBeLessThanOrEqual(footerBox.y)
+}
+
+for (const viewport of [
+  { width: 1440, height: 1000 },
+  { width: 390, height: 1000 },
+  { width: 390, height: 560 },
+])
+  test(`Superadmin inspects workflow metadata and history without participation at ${viewport.width}x${viewport.height}`, async ({
     page,
   }) => {
-    await page.setViewportSize({ width, height: 1000 })
+    await page.setViewportSize(viewport)
     await restoreSession(page, "SUPERADMIN")
     const prohibited: string[] = []
     page.on("request", (request) => {
@@ -207,66 +260,276 @@ for (const width of [1440, 390])
       }),
     )
     await page.goto("/module/service-operations?request=request-1")
-    const oversight = page.getByRole("region", {
-      name: "Administrative workflow oversight",
+    const drawer = page.getByRole("dialog", {
+      name: "Workflow inspection",
       exact: true,
     })
+    const drawerHeader = drawer.locator(":scope > header")
+    const drawerBody = drawer.locator(":scope > div")
+    const drawerTabs = drawer.getByRole("tablist", {
+      name: "Request details sections",
+    })
+    const drawerFooter = drawer.locator(":scope > footer")
+    const doneButton = drawerFooter.getByRole("button", {
+      name: "Done viewing request details",
+    })
+    await expect(drawerHeader).toBeVisible()
+    await expect(drawerFooter).toBeVisible()
+    await expect(doneButton).toBeInViewport()
+    await expect
+      .poll(() =>
+        drawerTabs.evaluate((tabs) => getComputedStyle(tabs).backgroundColor),
+      )
+      .not.toBe("rgba(0, 0, 0, 0)")
     await expect(
-      oversight.getByRole("heading", {
-        name: "Workflow progress and history",
+      drawerTabs.getByRole("tab", { name: "Overview", exact: true }),
+    ).toHaveAttribute("aria-selected", "true")
+    const overviewPanel = drawer.getByRole("tabpanel")
+    const [overviewTabBox, overviewPanelBox, overviewFooterBox] =
+      await Promise.all([
+        drawerTabs.boundingBox(),
+        overviewPanel.boundingBox(),
+        drawerFooter.boundingBox(),
+      ])
+    if (!overviewTabBox || !overviewPanelBox || !overviewFooterBox)
+      throw new Error("Overview drawer layout should be measurable.")
+    expect(overviewPanelBox.y).toBeGreaterThanOrEqual(
+      overviewTabBox.y + overviewTabBox.height,
+    )
+    expect(overviewPanelBox.y + overviewPanelBox.height).toBeLessThanOrEqual(
+      overviewFooterBox.y,
+    )
+    if (viewport.height <= 560) {
+      const overviewSize = await overviewPanel.evaluate((panel) => ({
+        clientHeight: panel.clientHeight,
+        scrollHeight: panel.scrollHeight,
+      }))
+      expect(overviewSize.scrollHeight).toBeGreaterThan(
+        overviewSize.clientHeight,
+      )
+      const overviewNote = overviewPanel.getByText(
+        "Administrative inspection only. Department actions, private conversations, and restricted files remain unavailable.",
+        { exact: true },
+      )
+      await expectContentAboveFooter(overviewNote, overviewPanel, drawerFooter)
+    }
+    await drawer.getByRole("tab", { name: "Workflow", exact: true }).click()
+    const workflowPanel = drawer.getByRole("tabpanel")
+    const [workflowTabBox, workflowPanelBox, workflowFooterBox] =
+      await Promise.all([
+        drawerTabs.boundingBox(),
+        workflowPanel.boundingBox(),
+        drawerFooter.boundingBox(),
+      ])
+    if (!workflowTabBox || !workflowPanelBox || !workflowFooterBox)
+      throw new Error("Workflow drawer layout should be measurable.")
+    expect(workflowPanelBox.y).toBeGreaterThanOrEqual(
+      workflowTabBox.y + workflowTabBox.height,
+    )
+    expect(workflowPanelBox.y + workflowPanelBox.height).toBeLessThanOrEqual(
+      workflowFooterBox.y,
+    )
+    const initialChrome = {
+      header: await drawerHeader.boundingBox(),
+      tabs: workflowTabBox,
+      footer: workflowFooterBox,
+    }
+    const workflowSize = await workflowPanel.evaluate((panel) => ({
+      clientHeight: panel.clientHeight,
+      overflowY: getComputedStyle(panel).overflowY,
+      scrollHeight: panel.scrollHeight,
+    }))
+    expect(workflowSize.overflowY).toBe("auto")
+    await expect
+      .poll(() =>
+        drawerBody.evaluate((body) => getComputedStyle(body).overflowY),
+      )
+      .toBe("hidden")
+    if (viewport.height <= 560)
+      expect(workflowSize.scrollHeight).toBeGreaterThan(
+        workflowSize.clientHeight,
+      )
+    await expect(
+      workflowPanel.getByRole("heading", {
+        name: "Current workflow",
         exact: true,
       }),
     ).toBeVisible()
     await expect(
-      oversight.getByLabel("Request progress").locator('[aria-current="step"]'),
-    ).toHaveText("Agreement / payment")
+      workflowPanel.getByText(workflow.nextAction, { exact: true }),
+    ).toBeVisible()
+    await expect(
+      workflowPanel.getByRole("heading", {
+        name: "Workflow history",
+        exact: true,
+      }),
+    ).toBeVisible()
+    await expect(
+      workflowPanel.getByLabel("Recorded workflow timeline").locator("li"),
+    ).toHaveCount(13)
+    await expect(
+      workflowPanel.getByText("Payment verification reviewed", { exact: true }),
+    ).toBeVisible()
+    const history = workflowPanel.getByRole("list", {
+      name: "Recorded workflow timeline",
+      exact: true,
+    })
+    await expect(history.getByRole("listitem")).toHaveCount(13)
+    await expect(history.getByRole("listitem").nth(1)).toContainText(
+      "Consultation opened",
+    )
+    await expect(history.getByRole("listitem").nth(2)).toContainText(
+      "Internal workflow event",
+    )
+    const longEvent = history
+      .getByRole("listitem")
+      .filter({ hasText: longDescription })
+    await expect(longEvent).toHaveCount(1)
+    await expect(longEvent).toContainText(longDescription)
+    await expect(longEvent).toContainText(longActor)
+    await expect(
+      longEvent.getByText("Consultation", { exact: true }),
+    ).toBeVisible()
+    await expect(
+      history.getByText("Consultation", { exact: true }),
+    ).toHaveCount(10)
+    const descriptionBox = await longEvent
+      .getByText(longDescription, { exact: true })
+      .boundingBox()
+    const actorBox = await longEvent
+      .getByText(longActor, { exact: true })
+      .boundingBox()
+    expect(descriptionBox?.height ?? 0).toBeGreaterThan(20)
+    expect(actorBox?.height ?? 0).toBeGreaterThan(16)
+    const timelineBox = await history.boundingBox()
+    const firstMarker = await history
+      .getByRole("listitem")
+      .first()
+      .locator(":scope > span")
+      .boundingBox()
+    const lastMarker = await history
+      .getByRole("listitem")
+      .last()
+      .locator(":scope > span")
+      .boundingBox()
+    const lineWidth = await history.evaluate(
+      (list) => getComputedStyle(list).borderLeftWidth,
+    )
+    expect(lineWidth).toBe("1px")
+    if (!timelineBox || !firstMarker || !lastMarker)
+      throw new Error("Workflow timeline markers should be measurable.")
+    const lineCenterX = timelineBox.x + Number.parseFloat(lineWidth) / 2
+    expect(
+      Math.abs(firstMarker.x + firstMarker.width / 2 - lineCenterX),
+    ).toBeLessThanOrEqual(1)
+    expect(
+      Math.abs(lastMarker.x + lastMarker.width / 2 - lineCenterX),
+    ).toBeLessThanOrEqual(1)
+    expect(firstMarker.y).toBeGreaterThanOrEqual(timelineBox.y)
+    expect(lastMarker.y + lastMarker.height).toBeLessThanOrEqual(
+      timelineBox.y + timelineBox.height,
+    )
+    if (workflowSize.scrollHeight > workflowSize.clientHeight) {
+      await workflowPanel.evaluate(
+        (panel) =>
+          (panel.scrollTop = Math.floor(
+            (panel.scrollHeight - panel.clientHeight) / 2,
+          )),
+      )
+      await expect
+        .poll(() => workflowPanel.evaluate((panel) => panel.scrollTop))
+        .toBeGreaterThan(0)
+      const middleChrome = {
+        header: await drawerHeader.boundingBox(),
+        tabs: await drawerTabs.boundingBox(),
+        footer: await drawerFooter.boundingBox(),
+      }
+      for (const [before, after] of [
+        [initialChrome.header, middleChrome.header],
+        [initialChrome.tabs, middleChrome.tabs],
+        [initialChrome.footer, middleChrome.footer],
+      ]) {
+        if (!before || !after)
+          throw new Error(
+            "Drawer chrome should remain measurable while scrolling.",
+          )
+        expect(Math.abs(before.y - after.y)).toBeLessThanOrEqual(1)
+      }
+    }
+    await expectContentAboveFooter(
+      history.getByRole("listitem").last(),
+      workflowPanel,
+      drawerFooter,
+    )
+    await expect(doneButton).toBeInViewport()
+    await drawer.getByRole("tab", { name: "Records", exact: true }).click()
+    const recordsPanel = drawer.getByRole("tabpanel")
+    const [recordsTabBox, recordsPanelBox, recordsFooterBox] =
+      await Promise.all([
+        drawerTabs.boundingBox(),
+        recordsPanel.boundingBox(),
+        drawerFooter.boundingBox(),
+      ])
+    if (!recordsTabBox || !recordsPanelBox || !recordsFooterBox)
+      throw new Error("Records drawer layout should be measurable.")
+    expect(recordsPanelBox.y).toBeGreaterThanOrEqual(
+      recordsTabBox.y + recordsTabBox.height,
+    )
+    expect(recordsPanelBox.y + recordsPanelBox.height).toBeLessThanOrEqual(
+      recordsFooterBox.y,
+    )
+    expect(Math.abs(recordsTabBox.y - workflowTabBox.y)).toBeLessThanOrEqual(1)
+    const recordsSize = await recordsPanel.evaluate((panel) => ({
+      clientHeight: panel.clientHeight,
+      scrollHeight: panel.scrollHeight,
+    }))
+    if (viewport.height <= 560)
+      expect(recordsSize.scrollHeight).toBeGreaterThan(recordsSize.clientHeight)
     for (const title of [
       "Consultation",
       "Requirements",
-      "Quotations and approvals",
-      "Agreement and payment verification",
-      "Staffing and project activation",
-      "Workflow history",
+      "Quotations",
+      "Approvals",
+      "Agreements",
+      "Payments",
+      "Project and activation",
     ])
       await expect(
-        oversight.getByRole("heading", { name: title, exact: true }),
+        recordsPanel.getByRole("heading", { name: title, exact: true }),
       ).toBeVisible()
     await expect(
-      oversight.getByText("Pending review", { exact: true }),
+      recordsPanel.getByText("Quotation version 1", { exact: true }),
     ).toBeVisible()
     await expect(
-      oversight.getByText("Quotation version 1", { exact: true }),
+      recordsPanel.getByText("Assigned Designer · Team lead", { exact: true }),
     ).toBeVisible()
     await expect(
-      oversight.getByText("Assigned Approver", { exact: true }),
-    ).toHaveCount(2)
-    await expect(
-      oversight.getByText("Assigned Designer · Team lead", { exact: true }),
+      recordsPanel.getByText(/Pending reschedule proposal:/),
     ).toBeVisible()
+    if (viewport.height <= 560) {
+      await expectContentAboveFooter(
+        recordsPanel.getByText("No project has been created yet.", {
+          exact: true,
+        }),
+        recordsPanel,
+        drawerFooter,
+      )
+      await expect(doneButton).toBeInViewport()
+    }
+    await doneButton.focus()
+    await expect(doneButton).toBeFocused()
+    await expect(doneButton).toBeInViewport()
     await expect(
-      oversight.getByText(/Pending reschedule proposal:/),
-    ).toBeVisible()
-    await expect(
-      oversight.getByText("Payment verification reviewed", { exact: true }),
-    ).toBeVisible()
-    const history = oversight.getByRole("list", {
-      name: "Workflow history events",
-      exact: true,
-    })
-    await expect(history.getByRole("listitem")).toHaveCount(3)
-    await expect(history.getByRole("listitem").first()).toContainText(
-      "Consultation opened",
-    )
-    await expect(history.getByRole("listitem").nth(1)).toContainText(
-      "Internal workflow event",
-    )
-    await expect(oversight.getByRole("button")).toHaveCount(0)
-    await expect(oversight.getByRole("link")).toHaveCount(0)
-    await expect(oversight.getByRole("textbox")).toHaveCount(0)
+      drawer.getByRole("button", {
+        name: /accept|reject|decline|delete|chat|approve|verify|staff/i,
+      }),
+    ).toHaveCount(0)
+    await expect(drawer.getByRole("link")).toHaveCount(0)
+    await expect(drawer.getByRole("textbox")).toHaveCount(0)
     await page.reload()
     await expect(
-      oversight.getByRole("heading", { name: "Workflow history", exact: true }),
-    ).toBeVisible()
+      drawer.getByRole("tab", { name: "Overview", exact: true }),
+    ).toHaveAttribute("aria-selected", "true")
     expect(prohibited).toEqual([])
   })
 
@@ -297,13 +560,18 @@ test("on-hold workflow retains its prior stage while revoked backend access clea
         }),
   )
   await page.goto("/module/service-operations?request=request-1")
-  const oversight = page.getByRole("region", {
-    name: "Administrative workflow oversight",
+  const drawer = page.getByRole("dialog", {
+    name: "Workflow inspection",
     exact: true,
   })
+  await drawer.getByRole("tab", { name: "Workflow", exact: true }).click()
+  const workflowPanel = drawer.getByRole("tabpanel")
   await expect(
-    oversight.getByLabel("Request progress").locator('[aria-current="step"]'),
-  ).toHaveText("Activation")
+    workflowPanel.getByText("Previous stage", { exact: true }),
+  ).toBeVisible()
+  await expect(
+    workflowPanel.getByText("Ready For Activation", { exact: true }),
+  ).toBeVisible()
   denied = true
   await page.reload()
   await expect(
@@ -311,5 +579,5 @@ test("on-hold workflow retains its prior stage while revoked backend access clea
       .getByRole("alert")
       .getByText("Organization-wide service request read access is required"),
   ).toBeVisible()
-  await expect(oversight).toHaveCount(0)
+  await expect(drawer.getByRole("tabpanel")).toHaveCount(0)
 })

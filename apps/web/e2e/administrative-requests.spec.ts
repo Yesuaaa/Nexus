@@ -5,6 +5,7 @@ import {
   restoreSession,
 } from "./regression-support"
 import type { AdministrativeRequest } from "../src/features/request-inbox/api/administrative-requests-api"
+import type { AdministrativeWorkflow } from "../src/features/request-workflow/model/administrative-workflow"
 
 configureRegressionTest()
 test.skip(live, "Administrative request coverage uses isolated API fixtures")
@@ -65,6 +66,67 @@ const request: AdministrativeRequest = {
   },
 }
 
+const secondRequest: AdministrativeRequest = {
+  ...request,
+  id: "request-2",
+  referenceNumber: "SR-2",
+  title: "Second organization request",
+  status: "SUBMITTED",
+  acceptedDepartmentId: null,
+  acceptedBy: null,
+  acceptedDepartment: null,
+  expectedTimeline: "DD",
+  workflow: { state: "PENDING_REVIEW", updatedAt: "2026-11-14T00:00:00Z" },
+  project: null,
+}
+
+const workflowInspection: AdministrativeWorkflow = {
+  state: "CONSULTATION",
+  previousState: null,
+  version: 1,
+  nextAction: "Schedule the consultation.",
+  createdAt: "2026-11-14T00:00:00Z",
+  updatedAt: "2026-11-14T00:00:00Z",
+  consultationRequired: true,
+  consultationComplete: false,
+  quotationApprovalRequired: false,
+  paymentRequired: false,
+  permissions: {
+    manage: false,
+    isClient: false,
+    approveQuotation: false,
+    verifyPayment: false,
+  },
+  capabilities: {
+    read: true,
+    mutateWorkflow: false,
+    participate: false,
+    downloadFiles: false,
+    activateProject: false,
+  },
+  quotationApprover: null,
+  paymentVerifier: null,
+  requirements: [],
+  consultations: [],
+  meetings: [],
+  quotations: [],
+  approval: null,
+  agreement: null,
+  payment: null,
+  project: null,
+  events: [
+    {
+      id: "event-1",
+      type: "CONSULTATION_OPENED",
+      summary: "Consultation opened",
+      entityId: null,
+      createdAt: "2026-11-14T00:00:00Z",
+      actor: { id: "head", fullName: "Accepting head" },
+      internal: false,
+    },
+  ],
+}
+
 for (const width of [390, 1440]) {
   test(`Superadmin inspects requests in the shared drawer at ${width}px without operational actions`, async ({
     page,
@@ -73,8 +135,10 @@ for (const width of [390, 1440]) {
     await page.emulateMedia({ reducedMotion: "reduce" })
     await restoreSession(page, "SUPERADMIN")
     const prohibited: string[] = []
+    let detailLoads = 0
     page.on("request", (req) => {
       const path = new URL(req.url()).pathname
+      if (path === "/api/administrative-requests/request-1") detailLoads += 1
       if (
         path.startsWith("/api/") &&
         (req.method() !== "GET" ||
@@ -88,14 +152,31 @@ for (const width of [390, 1440]) {
       const url = new URL(route.request().url())
       return route.fulfill({
         json: url.pathname.endsWith("/request-1")
-          ? { serviceRequest: request }
-          : {
-              serviceRequests: [request],
-              departments: [{ id: "design", name: "Design" }],
-              total: 1,
-              page: 1,
-              pageSize: 10,
-            },
+          ? {
+              serviceRequest: {
+                ...request,
+                workflowInspection,
+              },
+            }
+          : url.pathname.endsWith("/request-2")
+            ? {
+                serviceRequest: {
+                  ...secondRequest,
+                  workflowInspection: {
+                    ...workflowInspection,
+                    state: "PENDING_REVIEW",
+                    nextAction: "Wait for department review.",
+                    events: [],
+                  },
+                },
+              }
+            : {
+                serviceRequests: [request, secondRequest],
+                departments: [{ id: "design", name: "Design" }],
+                total: 2,
+                page: 1,
+                pageSize: 10,
+              },
       })
     })
     await page.goto("/services")
@@ -144,15 +225,45 @@ for (const width of [390, 1440]) {
     await expect(
       page.getByRole("heading", { name: "Organization request", exact: true }),
     ).toBeVisible()
+    const tabs = drawer.getByRole("tablist", {
+      name: "Request details sections",
+    })
+    const overviewTab = tabs.getByRole("tab", { name: "Overview", exact: true })
+    await expect(overviewTab).toHaveAttribute("aria-selected", "true")
+    const overview = drawer.getByRole("tabpanel")
+    await expect(overview.getByText("SR-1", { exact: true })).toBeVisible()
     await expect(
-      page.getByText("Assigned Designer (Designer) · Team lead", {
+      overview.getByText("Assigned Designer (Designer) · Team lead", {
         exact: true,
       }),
     ).toBeVisible()
-    await expect(page.getByText("CONSULTATION", { exact: true })).toBeVisible()
     await page.screenshot({
       path: test.info().outputPath("request-drawer.png"),
     })
+    const workflowTab = tabs.getByRole("tab", { name: "Workflow", exact: true })
+    await overviewTab.focus()
+    await page.keyboard.press("ArrowRight")
+    await expect(workflowTab).toHaveAttribute("aria-selected", "true")
+    await expect(
+      drawer.getByRole("tabpanel").getByText("Schedule the consultation.", {
+        exact: true,
+      }),
+    ).toBeVisible()
+    await expect(
+      drawer
+        .getByRole("tabpanel")
+        .getByRole("list", { name: "Recorded workflow timeline" })
+        .getByRole("listitem"),
+    ).toHaveCount(2)
+    const recordsTab = tabs.getByRole("tab", { name: "Records", exact: true })
+    await recordsTab.click()
+    await expect(recordsTab).toHaveAttribute("aria-selected", "true")
+    await expect(
+      drawer.getByRole("tabpanel").getByText("No consultation records yet.", {
+        exact: true,
+      }),
+    ).toBeVisible()
+    expect(detailLoads).toBe(1)
     await expect(
       page.getByRole("button", {
         name: /accept|reject|decline|delete|chat|approve|verify|staff/i,
@@ -178,8 +289,46 @@ for (const width of [390, 1440]) {
     await expect(
       page.getByRole("heading", { name: "Organization request", exact: true }),
     ).toBeVisible()
+    await expect(
+      drawer.getByRole("tab", { name: "Overview", exact: true }),
+    ).toHaveAttribute("aria-selected", "true")
+    await drawer.getByRole("tab", { name: "Records", exact: true }).click()
     await drawer.getByRole("button", { name: "Close request details" }).click()
     await expect(drawer).toHaveCount(0)
+    await page
+      .getByRole("button", { name: "Inspect request request-2", exact: true })
+      .click()
+    const secondDrawer = page.getByRole("dialog", {
+      name: "Second organization request",
+      exact: true,
+    })
+    await expect(secondDrawer).toBeVisible()
+    await expect(
+      secondDrawer.getByRole("tab", { name: "Overview", exact: true }),
+    ).toHaveAttribute("aria-selected", "true")
+    await expect(
+      secondDrawer.getByRole("tabpanel").getByText("Not available", {
+        exact: true,
+      }),
+    ).toBeVisible()
+    await secondDrawer
+      .getByRole("tab", { name: "Workflow", exact: true })
+      .click()
+    const singleEntryTimeline = secondDrawer
+      .getByRole("tabpanel")
+      .getByRole("list", { name: "Recorded workflow timeline" })
+    await expect(singleEntryTimeline.getByRole("listitem")).toHaveCount(1)
+    await expect
+      .poll(() =>
+        singleEntryTimeline.evaluate(
+          (list) => getComputedStyle(list).borderLeftWidth,
+        ),
+      )
+      .toBe("0px")
+    await secondDrawer
+      .getByRole("button", { name: "Done viewing request details" })
+      .click()
+    await expect(secondDrawer).toHaveCount(0)
     expect(prohibited).toEqual([])
   })
 }

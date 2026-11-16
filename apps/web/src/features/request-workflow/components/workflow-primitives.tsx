@@ -1,15 +1,8 @@
 import type { ReactNode } from "react"
-import {
-  Check,
-  Circle,
-  ClipboardList,
-  LoaderCircle,
-  type LucideIcon,
-} from "lucide-react"
+import { Check, Circle, ClipboardList, type LucideIcon } from "lucide-react"
 import { humanizeEnum } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { formFieldClass } from "@/components/ui/form-control-styles"
-import type { Workflow, WorkflowState } from "../model/workflow"
 
 export const workflowInput =
   "w-full min-w-0 rounded-lg border border-[#dfe5ee] bg-background px-3 py-2 text-xs leading-5 outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
@@ -117,73 +110,67 @@ export function WorkflowCard({
   )
 }
 
+export type WorkflowProgressEntry = {
+  id: string
+  stage: string
+  status: string
+  summary: string
+  createdAt: string
+  actor: string
+  internal: boolean
+}
+
 export function WorkflowProgress({
-  workflow,
+  entries,
+  formatDateTime,
 }: {
-  workflow: Pick<Workflow, "state" | "previousState">
+  entries: WorkflowProgressEntry[]
+  formatDateTime: (value: string) => string
 }) {
-  const steps = [
-    "Consultation",
-    "Quotation",
-    "Approval",
-    "Agreement / payment",
-    "Activation",
-  ]
-  const positions: Record<WorkflowState, number> = {
-    PENDING_REVIEW: -1,
-    CONSULTATION: 0,
-    QUOTATION_PENDING: 1,
-    CLIENT_APPROVAL: 2,
-    AGREEMENT_PAYMENT_PENDING: 3,
-    READY_FOR_ACTIVATION: 4,
-    ACTIVE_PROJECT: 5,
-    DECLINED: 2,
-    CANCELLED: -1,
-    REVISION_REQUESTED: 1,
-    ON_HOLD: -1,
-  }
-  const current =
-    positions[
-      workflow.state === "ON_HOLD" && workflow.previousState
-        ? workflow.previousState
-        : workflow.state
-    ]
+  const orderedEntries = [...entries].sort(
+    (first, second) =>
+      new Date(first.createdAt).getTime() -
+      new Date(second.createdAt).getTime(),
+  )
   return (
-    <div className="shrink-0 border-b border-[#e8ebef] px-5 py-3">
-      <ol
-        aria-label="Request progress"
-        className="m-0 flex list-none gap-2 overflow-x-auto p-0"
-      >
-        {steps.map((step, index) => (
-          <li
-            key={step}
-            aria-current={current === index ? "step" : undefined}
-            className={cn(
-              "flex min-w-fit flex-1 items-center gap-1.5 text-[10px] font-semibold",
-              index <= current ? "text-[#203f8c]" : "text-[#8791a2]",
-            )}
-          >
-            {index < current ? (
-              <Check size={13} aria-hidden="true" />
-            ) : index === current ? (
-              <LoaderCircle size={13} aria-hidden="true" />
-            ) : (
-              <Circle size={12} aria-hidden="true" />
-            )}
-            <span>{step}</span>
-            {index !== steps.length - 1 && (
-              <span
-                aria-hidden="true"
-                className={cn(
-                  "ml-1 h-0.5 min-w-2 flex-1 rounded-full",
-                  index < current ? "bg-[#203f8c]" : "bg-[#cbd5e1]",
-                )}
-              />
-            )}
-          </li>
-        ))}
-      </ol>
-    </div>
+    <ol
+      aria-label="Recorded workflow timeline"
+      className={cn(
+        "m-0 ml-1 grid list-none p-0",
+        orderedEntries.length > 1 && "border-l border-[#d8e0eb]",
+      )}
+    >
+      {orderedEntries.map((entry) => (
+        <li key={entry.id} className="relative grid gap-1 pb-4 pl-4 last:pb-0">
+          <span
+            aria-hidden="true"
+            className="absolute top-1 left-[-5px] size-2.5 rounded-full border-2 border-[#6c83b5] bg-background"
+          />
+          <div className="min-w-0 border-b border-[#eceef1] pb-3 last:border-b-0 last:pb-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-medium text-foreground">
+                {entry.stage}
+              </span>
+              <WorkflowBadge value={entry.status} />
+              {entry.internal && (
+                <span className="text-[10px] text-[#65718a]">
+                  Internal workflow event
+                </span>
+              )}
+            </div>
+            <p className="mt-1 mb-0 text-xs leading-5 [overflow-wrap:anywhere]">
+              {entry.summary}
+            </p>
+            <p className="mt-1 mb-0 text-[10px] leading-4 text-[#65718a]">
+              <time dateTime={entry.createdAt}>
+                {formatDateTime(entry.createdAt)}
+              </time>{" "}
+              · {entry.actor}
+            </p>
+          </div>
+        </li>
+      ))}
+    </ol>
   )
 }
 

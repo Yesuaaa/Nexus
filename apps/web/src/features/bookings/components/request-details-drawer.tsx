@@ -20,6 +20,7 @@ export function RequestDetailsDrawer<T extends object>({
   loadDetails,
   renderBody,
   renderActions,
+  bodyClassName,
   title = "Booking details",
   description,
   fallbackTitle = "Booking details",
@@ -39,6 +40,7 @@ export function RequestDetailsDrawer<T extends object>({
   loadDetails: (id: string, signal: AbortSignal) => Promise<T>
   renderBody: (details: T) => ReactNode
   renderActions?: (details: T) => ReactNode
+  bodyClassName?: string
   title?: DrawerValue<T>
   description: DrawerValue<T>
   fallbackTitle?: ReactNode
@@ -111,7 +113,7 @@ export function RequestDetailsDrawer<T extends object>({
         closeLabel={closeLabel}
         closeDisabled={closeDisabled}
       />
-      <SidePanelBody>
+      <SidePanelBody className={ready ? bodyClassName : undefined}>
         {loading ? (
           <p role="status" className="py-8 text-center text-xs text-[#52627a]">
             {loadingLabel}

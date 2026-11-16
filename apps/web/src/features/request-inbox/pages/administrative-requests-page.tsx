@@ -8,17 +8,27 @@ import { TablePaginationFooter } from "@/components/ui/table-pagination-footer"
 import { usePaginatedList } from "@/components/ui/use-paginated-list"
 import { TableSearchStatus } from "@/components/ui/table-search-status"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
-import { RequestDetailsBody } from "@/features/bookings/components/request-details-body"
 import { RequestDetailsDrawer } from "@/features/bookings/components/request-details-drawer"
 import { BookingStatusPill } from "@/features/bookings/components/booking-status-pill"
-import { AdministrativeWorkflowProgress } from "@/features/request-workflow/components/administrative-workflow-progress"
+import {
+  DetailItem,
+  DetailList,
+  SidePanelSection,
+  SidePanelButton,
+} from "@/components/ui/side-panel"
+import { EmptyState } from "@/components/ui/empty-state"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { WorkflowBadge } from "@/features/request-workflow/components/workflow-primitives"
 import { serviceRequestStatusValues } from "@/features/service-operations/model/service-request-contracts"
 import { serviceRequestStatuses } from "@/features/services/model/service-request-status"
 import { RequestInboxTable } from "../components/request-inbox-table"
 import { SheetClose } from "@/components/ui/sheet"
-import { SidePanelButton } from "@/components/ui/side-panel"
 import { ServiceIcon } from "@/features/services/components/service-icon"
 import type { InboxSort } from "../api/request-inbox-api"
+import {
+  AdministrativeWorkflowProgress,
+  AdministrativeWorkflowRecords,
+} from "@/features/request-workflow/components/administrative-workflow-progress"
 import {
   getAdministrativeRequest,
   listAdministrativeRequests,
@@ -27,6 +37,15 @@ import {
 
 const root = "/module/service-operations"
 const noop = () => {}
+const requestTabPanelClassName =
+  "mt-0 grid min-h-0 min-w-0 flex-1 gap-5 overflow-y-auto overscroll-contain px-6 py-5 max-[560px]:px-5"
+
+function expectedTimeline(value: string | null | undefined) {
+  const timeline = value?.trim()
+  if (!timeline) return "Not specified"
+  if (/^dd$/i.test(timeline)) return "Not available"
+  return timeline
+}
 
 function matchesTableSearch(request: AdministrativeRequest, query: string) {
   const needle = query.trim().toLocaleLowerCase()
@@ -203,6 +222,7 @@ function AdministrativeRequestDetails({
       loadingLabel="Loading request details…"
       fallbackError="Couldn't load this service request."
       fallbackFocusId="administrative-workspace-heading"
+      bodyClassName="flex flex-col gap-0 overflow-hidden p-0"
       renderActions={() => (
         <div className="flex justify-end">
           <SheetClose asChild>
@@ -213,74 +233,144 @@ function AdministrativeRequestDetails({
         </div>
       )}
       renderBody={(request) => (
-        <>
-          <RequestDetailsBody
-            title={request.title}
-            statusNote={serviceRequestStatuses[request.status].description}
-            status={<BookingStatusPill status={request.status} />}
-            showIntro={false}
-            detailLayout="inline"
-            detailSectionTitle="Request information"
-            fields={[
-              ["Request reference", request.referenceNumber || request.id],
-              ["Service", request.service.name],
-              ["Client", request.client.fullName || "Client"],
-              ["Package", request.packageName || "Standard service"],
-              [
-                "Responsible department",
-                request.acceptedDepartment?.name ?? "Not yet accepted",
-              ],
-              [
-                "Routed departments",
-                request.service.departments
-                  .map((department) => department.name)
-                  .join(", ") || "None",
-              ],
-              [
-                "Current department head",
-                request.acceptedDepartment?.head?.fullName ?? "Not assigned",
-              ],
-              ["Accepted by", request.acceptedBy?.fullName ?? "Not accepted"],
-              [
-                "Workflow stage",
-                request.workflow?.state.replaceAll("_", " ") ?? "Not started",
-              ],
-              ["Requested", formatDate(request.createdAt)],
-              ["Updated", formatDate(request.updatedAt)],
-              [
-                "Expected timeline",
-                request.expectedTimeline || "Not specified",
-              ],
-              [
-                "Specialist preference (not an assignment)",
-                request.preferredSpecialistName || "Not specified",
-              ],
-              [
-                "Assigned personnel",
-                request.project?.staff
-                  .map(
-                    ({ employee, isTeamLead }) =>
-                      `${employee.fullName}${employee.position ? ` (${employee.position})` : ""}${isTeamLead ? " · Team lead" : ""}`,
-                  )
-                  .join(", ") || "None",
-              ],
-              [
-                "Related project",
-                request.project
-                  ? `${request.project.name} · ${request.project.status}`
-                  : "Not created",
-              ],
-            ]}
-            sections={[]}
-            note="Administrative inspection only. Department actions, private conversations and restricted files remain unavailable."
-            messagesRequestId={null}
-          />
-          {request.workflowInspection && (
-            <AdministrativeWorkflowProgress
-              workflow={request.workflowInspection}
-            />
-          )}
-        </>
+        <Tabs
+          defaultValue="overview"
+          className="flex min-h-0 min-w-0 flex-1 flex-col"
+        >
+          <div className="flex-none px-6 max-[560px]:px-5">
+            <TabsList aria-label="Request details sections" className="w-full">
+              <TabsTrigger className="flex-1" value="overview">
+                Overview
+              </TabsTrigger>
+              <TabsTrigger className="flex-1" value="workflow">
+                Workflow
+              </TabsTrigger>
+              <TabsTrigger className="flex-1" value="records">
+                Records
+              </TabsTrigger>
+            </TabsList>
+          </div>
+          <TabsContent value="overview" className={requestTabPanelClassName}>
+            <SidePanelSection title="Request information">
+              <DetailList>
+                <DetailItem label="Request reference">
+                  {request.referenceNumber || request.id}
+                </DetailItem>
+                <DetailItem label="Service">{request.service.name}</DetailItem>
+                <DetailItem label="Package">
+                  {request.packageName || "Not available"}
+                </DetailItem>
+                <DetailItem label="Client">
+                  {request.client.fullName || "Not available"}
+                </DetailItem>
+                <DetailItem label="Current status">
+                  <BookingStatusPill status={request.status} />
+                </DetailItem>
+                <DetailItem label="Submitted">
+                  {formatDate(request.createdAt)}
+                </DetailItem>
+                <DetailItem label="Last updated">
+                  {formatDate(request.updatedAt)}
+                </DetailItem>
+                <DetailItem label="Expected timeline">
+                  {expectedTimeline(request.expectedTimeline)}
+                </DetailItem>
+              </DetailList>
+              <p className="m-0 text-xs leading-5 text-[#52627a]">
+                {serviceRequestStatuses[request.status].description}
+              </p>
+            </SidePanelSection>
+            <SidePanelSection title="Department and assignment">
+              <DetailList>
+                <DetailItem label="Responsible department">
+                  {request.acceptedDepartment?.name ??
+                    (request.status === "SUBMITTED"
+                      ? "Not yet accepted"
+                      : "Not available")}
+                </DetailItem>
+                <DetailItem label="Routed departments">
+                  {request.service.departments
+                    .map((department) => department.name)
+                    .join(", ") || "None"}
+                </DetailItem>
+                <DetailItem label="Department Head">
+                  {request.acceptedDepartment?.head?.fullName ?? "Not assigned"}
+                </DetailItem>
+                <DetailItem label="Accepted by">
+                  {request.acceptedBy?.fullName ??
+                    (request.status === "SUBMITTED"
+                      ? "Not yet accepted"
+                      : "Not available")}
+                </DetailItem>
+                <DetailItem label="Assigned personnel">
+                  {request.project?.staff
+                    .map(
+                      ({ employee, isTeamLead }) =>
+                        `${employee.fullName}${employee.position ? ` (${employee.position})` : ""}${isTeamLead ? " · Team lead" : ""}`,
+                    )
+                    .join(", ") || "Not assigned"}
+                </DetailItem>
+                <DetailItem label="Specialist preference">
+                  {request.preferredSpecialistName || "Not specified"}
+                  <span className="block text-[10px] font-normal text-[#738096]">
+                    Preference only; this is not an assignment.
+                  </span>
+                </DetailItem>
+              </DetailList>
+            </SidePanelSection>
+            <SidePanelSection title="Related project">
+              {request.project ? (
+                <DetailList>
+                  <DetailItem label="Project reference">
+                    {request.project.id}
+                  </DetailItem>
+                  <DetailItem label="Project name">
+                    {request.project.name}
+                  </DetailItem>
+                  <DetailItem label="Project status">
+                    <WorkflowBadge value={request.project.status} />
+                  </DetailItem>
+                </DetailList>
+              ) : (
+                <EmptyState
+                  size="sm"
+                  title="No project has been created yet."
+                />
+              )}
+            </SidePanelSection>
+            <p className="m-0 rounded-lg bg-[#f8fafd] p-3 text-[11px] leading-relaxed text-[#52627a]">
+              Administrative inspection only. Department actions, private
+              conversations, and restricted files remain unavailable.
+            </p>
+          </TabsContent>
+          <TabsContent value="workflow" className={requestTabPanelClassName}>
+            {request.workflowInspection ? (
+              <AdministrativeWorkflowProgress
+                workflow={request.workflowInspection}
+                request={request}
+              />
+            ) : (
+              <EmptyState
+                role="status"
+                size="sm"
+                title="Workflow details are not available."
+              />
+            )}
+          </TabsContent>
+          <TabsContent value="records" className={requestTabPanelClassName}>
+            {request.workflowInspection ? (
+              <AdministrativeWorkflowRecords
+                workflow={request.workflowInspection}
+              />
+            ) : (
+              <EmptyState
+                role="status"
+                size="sm"
+                title="Workflow records are not available."
+              />
+            )}
+          </TabsContent>
+        </Tabs>
       )}
     />
   )
