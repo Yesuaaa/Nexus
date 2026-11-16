@@ -13,7 +13,10 @@ import { Button } from "@/components/ui/button"
 import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
 import { usePaginatedList } from "@/components/ui/use-paginated-list"
 import { TableSearchStatus } from "@/components/ui/table-search-status"
-import { TablePaginationFooter } from "@/components/ui/table-pagination-footer"
+import {
+  pageRange,
+  TablePaginationFooter,
+} from "@/components/ui/table-pagination-footer"
 import { SearchEmptyState } from "@/components/ui/search-empty-state"
 import { SearchField } from "@/components/ui/search-field"
 import { cn } from "@/lib/utils"
@@ -170,6 +173,20 @@ export function EmployeeManagementPage() {
 
   const hasFilters = Boolean(query || departmentId || employmentType || status)
   const shownRows = list.data?.employees.length ?? 0
+  const previewFooter =
+    list.previewing && list.preview?.length && list.data?.total
+      ? {
+          ...pageRange(list.data.page, list.data.pageSize, list.data.total),
+          total: list.data.total,
+          page: list.data.page,
+          totalPages: Math.max(
+            1,
+            Math.ceil(list.data.total / list.data.pageSize),
+          ),
+          disabled: true,
+        }
+      : null
+  const paginationFooter = list.footer ?? previewFooter
 
   return (
     <main
@@ -321,9 +338,9 @@ export function EmployeeManagementPage() {
           }
           label="employees"
         />
-        {!searchSkeleton && list.footer && (
+        {!searchSkeleton && paginationFooter && (
           <TablePaginationFooter
-            {...list.footer}
+            {...paginationFooter}
             label="Employee pages"
             onPageChange={(nextPage) => {
               setPage(nextPage)
