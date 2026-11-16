@@ -1,3 +1,7 @@
+import {
+  publicServicesRouter,
+  serviceInquiriesRouter,
+} from "./features/public-services/public-services.controller.js"
 import cors from "cors"
 import { trustedProxyAddresses } from "./features/auth/session-location.js"
 import { requireAuth } from "./features/auth/auth.middleware.js"
@@ -43,6 +47,8 @@ export function createApp(
   app.use(cors({ origin: process.env.WEB_ORIGIN || "http://localhost:5173" }))
   app.use("/api", noStore)
   app.use(devErrorInterceptor)
+  app.use("/api/public", publicServicesRouter)
+  app.use("/api/service-inquiries", serviceInquiriesRouter)
   app.use("/api/services", servicesRouter)
   app.use(
     "/api/service-requests",

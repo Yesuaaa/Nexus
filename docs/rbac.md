@@ -97,3 +97,9 @@ All active portal roles may open `/calendar`. Clients receive only their own cal
 - `/api/project-conversations` checks the owning client or current staff assignment for every list, history, read, and send request. Booking conversations between clients and Department Heads remain separate.
 - Assigned staff can submit a file and optional note to an existing deliverable from project chat, using the workspace upload endpoint and the same file validation. The workspace submission and staff-only chat card commit atomically. Retry upload IDs do not create duplicate files or cards. Private submission cards are excluded from client history, previews, cursors, and unread counts.
 - Department Heads retain deliverable review and client-sharing permissions. Sharing an approved deliverable publishes a separate client-visible card linking to the existing deliverable. Clients cannot submit work through the staff tool. Archived projects reject new submissions; existing delivery cards remain readable.
+
+## Guest service inquiry permissions
+
+ADMIN and SUPERADMIN receive service-inquiries:read and service-inquiries:manage. STAFF and USER receive neither. The API enforces these permissions on authenticated, current active accounts; portal visibility mirrors the grants. Read permission exposes visitor contact details and messages in the administrative inbox; manage permission allows status and internal-note review with optimistic version checks.
+
+Public service discovery and guest inquiry submission require no account. Public service data is explicitly projected and private pricing, organization/employee records, and management metadata are omitted. Inquiry review does not grant booking ownership or access to operational conversations. See [public Services and inquiries](features/public-services-inquiries.md).

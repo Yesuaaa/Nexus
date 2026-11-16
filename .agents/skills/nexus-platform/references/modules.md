@@ -54,3 +54,11 @@ Read `docs/features/attendance-foundation.md`, `attendance-backend.md`, `attenda
 - Sandbox payments and demo billing presentation retain their test/demo qualification; do not present them as production settlement/accounting.
 
 Support authorized future modules and changed requirements. Extend registration, route/access policy, domain code, tests, and references as needed; this document need not list a feature before implementation starts.
+
+## Public service discovery and guest inquiries
+
+The public Services module is implemented in source under API features/public-services and web features/public-services, with public routes at /explore/services and an authenticated administrative inbox at /service-inquiries. A new independent ServiceInquiry entity stores visitor correspondence; it is not ServiceRequest or a booking. Dedicated read/manage permissions are granted only to ADMIN and SUPERADMIN. Service Management and portal navigation link to the inquiry inbox.
+
+Public responses omit private prices, internal consultation flags/notes, departments, and employee data. New inquiries require an active service and start PENDING. Submission uses unique retry keys, transactional duplicate checks, sender limits, a honeypot, and process-local IP rate limits. Review uses optimistic version checks. No booking, project, assignment, or payment is created by these endpoints.
+
+See docs/features/public-services-inquiries.md for contracts, schema and migration. Prisma client generation was run; application test/quality gates were intentionally not run at the user's request. Source implementation does not imply a deployed migration or verified end-to-end behavior.

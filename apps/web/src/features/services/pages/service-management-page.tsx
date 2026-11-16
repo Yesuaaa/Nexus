@@ -1,5 +1,7 @@
 "use client"
 
+import Link from "next/link"
+
 import { useState } from "react"
 import dynamic from "next/dynamic"
 import { SidePanelLoading } from "@/components/ui/panel-loading"
@@ -215,6 +217,11 @@ export function ServiceManagementPage() {
         actions={
           canManage && (
             <>
+              {hasPermission(actor, Permissions.SERVICE_INQUIRIES_READ) && (
+                <Button asChild variant="brandOutline" size="header">
+                  <Link href="/service-inquiries">Guest Inquiries</Link>
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="brandOutline"
