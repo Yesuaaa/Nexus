@@ -32,21 +32,16 @@ test("fixed roles have the expected permissions", () => {
     Permission.DEPARTMENTS_DELETE,
     Permission.SERVICES_READ,
     Permission.SERVICES_MANAGE,
+    Permission.CLIENTS_READ,
+    Permission.CLIENTS_CREATE,
+    Permission.EMPLOYEES_READ,
+    Permission.EMPLOYEES_MANAGE,
   ]
   assert.deepEqual(permissionsFor(Role.USER), common)
   assert.deepEqual(permissionsFor(Role.STAFF), staff)
-  assert.deepEqual(permissionsFor(Role.ADMIN), [
-    ...admin,
-    Permission.CLIENTS_READ,
-    Permission.EMPLOYEES_READ,
-    Permission.EMPLOYEES_MANAGE,
-  ])
+  assert.deepEqual(permissionsFor(Role.ADMIN), admin)
   assert.deepEqual(permissionsFor(Role.SUPERADMIN), [
-    ...admin.filter(
-      (permission) =>
-        permission !== Permission.SERVICES_READ &&
-        permission !== Permission.SERVICES_MANAGE,
-    ),
+    ...admin,
     Permission.ACCOUNTS_READ,
     Permission.ACCOUNTS_RESET_PASSWORD,
     Permission.ACCOUNTS_CREATE_BASIC,
@@ -55,10 +50,19 @@ test("fixed roles have the expected permissions", () => {
     Permission.ACCOUNTS_ASSIGN_PRIVILEGED,
     Permission.ACCOUNTS_STATUS_BASIC,
     Permission.ACCOUNTS_STATUS_PRIVILEGED,
+    Permission.MODULES_ACCESS_ALL,
+    Permission.ORGANIZATION_READ_ALL,
+    Permission.ADMINISTRATION_MANAGE_ALL,
+    Permission.BUSINESS_CONVERSATIONS_INSPECT,
   ])
   assert.equal(hasPermission(Role.USER, Permission.ACCOUNTS_READ), false)
   assert.equal(hasPermission(Role.ADMIN, Permission.ACCOUNTS_READ), false)
   assert.equal(hasPermission(Role.SUPERADMIN, Permission.ACCOUNTS_READ), true)
+  assert.equal(hasPermission(Role.ADMIN, Permission.MODULES_ACCESS_ALL), false)
+  assert.equal(
+    hasPermission(Role.SUPERADMIN, Permission.MODULES_ACCESS_ALL),
+    true,
+  )
   assert.deepEqual(
     publicUser({ role: Role.ADMIN } as User).permissions,
     permissionsFor(Role.ADMIN),
@@ -124,7 +128,7 @@ test("permission middleware denies missing permissions", async () => {
       [Role.USER, 403],
       [Role.STAFF, 403],
       [Role.ADMIN, 200],
-      [Role.SUPERADMIN, 403],
+      [Role.SUPERADMIN, 200],
     ] as const) {
       const readResponse = await fetch(servicesUrl, {
         headers: role ? { "x-test-role": role } : {},

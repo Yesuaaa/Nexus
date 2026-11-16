@@ -1,4 +1,4 @@
-import { AttendanceAuditPage } from "@/features/attendance/pages/attendance-audit-page"
+import { redirect } from "next/navigation"
 export default function Page() {
-  return <AttendanceAuditPage />
+  redirect("/attendance/audit")
 }

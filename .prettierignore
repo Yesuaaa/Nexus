@@ -5,6 +5,7 @@
 **/.next/
 **/out/
 **/test-results/
+apps/api/.test-build/
 **/playwright-report/
 apps/web/next-env.d.ts
 apps/api/src/generated/

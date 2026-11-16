@@ -14,11 +14,13 @@ export function WorkspaceOverview({
   onUpdated,
   onEditPlan,
   busy,
+  readOnly = false,
 }: {
   workspace: ProjectWorkspaceDetail
   onUpdated: (workspace: ProjectWorkspaceDetail) => void
   onEditPlan: (stream: ProjectWorkspaceDetail["workstreams"][number]) => void
   busy: boolean
+  readOnly?: boolean
 }) {
   const phases = workspace.workstreams.flatMap(
     (stream) => stream.plan?.phases ?? [],
@@ -83,16 +85,18 @@ export function WorkspaceOverview({
                     ({stream.plan?.phases.length ?? 0} phases)
                   </span>
                 </h2>
-                <Button
-                  variant="outline"
-                  disabled={busy}
-                  className="h-8 text-xs"
-                  onClick={() => onEditPlan(stream)}
-                >
-                  {workspace.workstreams.length > 1
-                    ? `Edit ${stream.serviceName}`
-                    : "Edit project plan"}
-                </Button>
+                {!readOnly && (
+                  <Button
+                    variant="outline"
+                    disabled={busy}
+                    className="h-8 text-xs"
+                    onClick={() => onEditPlan(stream)}
+                  >
+                    {workspace.workstreams.length > 1
+                      ? `Edit ${stream.serviceName}`
+                      : "Edit project plan"}
+                  </Button>
+                )}
               </header>
               <div className="space-y-3 p-3">
                 {stream.plan && (
@@ -106,7 +110,7 @@ export function WorkspaceOverview({
                   </div>
                 )}
                 {!stream.plan && (
-                  <p className="p-3 text-xs text-[#738096]">
+                  <p className="p-3 text-xs text-[#65718a]">
                     A delivery template has not been selected yet.
                   </p>
                 )}
@@ -200,12 +204,12 @@ export function WorkspaceOverview({
                                 task.dueDate,
                               ]),
                             )}
+                            animateRows={false}
                             columns={5}
                             rowClassName="border-t border-[#edf0f4]"
                             emptyContent="No tasks in this phase yet."
                             renderRow={(task) => (
                               <>
-                                {" "}
                                 <td className="px-4 py-3">
                                   <div className="flex items-start gap-2">
                                     {task.status === "DONE" ? (
@@ -221,7 +225,7 @@ export function WorkspaceOverview({
                                     )}
                                     <div>
                                       <p className="m-0">{task.title}</p>
-                                      <p className="mt-1 mb-0 text-[10px] text-[#738096]">
+                                      <p className="mt-1 mb-0 text-[10px] text-[#65718a]">
                                         {task.role}
                                       </p>
                                     </div>
@@ -239,7 +243,7 @@ export function WorkspaceOverview({
                                     {taskStatusLabels[task.status]}
                                   </span>
                                 </td>
-                                <td className="whitespace-nowrap px-3 py-3 text-center align-middle text-[#738096]">
+                                <td className="whitespace-nowrap px-3 py-3 text-center align-middle text-[#65718a]">
                                   {task.dueDate
                                     ? new Date(
                                         `${task.dueDate}T00:00:00`,
@@ -247,20 +251,24 @@ export function WorkspaceOverview({
                                     : "Not set"}
                                 </td>
                                 <td className="px-3 py-3 text-center align-middle">
-                                  <TaskRowActions
-                                    workspaceId={workspace.id}
-                                    stream={stream}
-                                    task={task}
-                                    onUpdated={onUpdated}
-                                    disabled={busy}
-                                  />
+                                  {readOnly ? (
+                                    <span>Read only</span>
+                                  ) : (
+                                    <TaskRowActions
+                                      workspaceId={workspace.id}
+                                      stream={stream}
+                                      task={task}
+                                      onUpdated={onUpdated}
+                                      disabled={busy}
+                                    />
+                                  )}
                                 </td>
                               </>
                             )}
                           />
                         </table>
                         {!phase.tasks.length && (
-                          <p className="text-xs text-[#738096]">
+                          <p className="text-xs text-[#65718a]">
                             No tasks in this phase yet.
                           </p>
                         )}

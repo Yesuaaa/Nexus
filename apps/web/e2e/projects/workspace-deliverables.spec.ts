@@ -64,6 +64,8 @@ test("[NEX-009] assigned staff upload and department head review deliverables be
     const isHead = actor === "HEAD"
     return {
       id: "workspace-1",
+      rowId: "group:workspace-1",
+      kind: "group",
       name: "Website launch",
       structure: "SEPARATE",
       status: "IN_PROGRESS",
@@ -72,6 +74,7 @@ test("[NEX-009] assigned staff upload and department head review deliverables be
       activityCount: 0,
       canCreate: false,
       canManage: isHead,
+      canRename: false,
       activity: [],
       workstreams: [
         {

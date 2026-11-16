@@ -39,7 +39,9 @@ type ManagementTableProps = Parameters<typeof EmployeeManagementTable>[0] & {
 type DirectoryTableProps = {
   mode: "attendance"
   employees: DirectoryEmployee[]
+  initialLoading: boolean
   loading: boolean
+  previewing: boolean
   error: string
   emptyMessage: ReactNode
   onRetry: () => void
@@ -65,11 +67,17 @@ export function EmployeeTable(
         ))}
       </ResponsiveDataTableHeader>
       <ResponsiveDataTableBody>
-        {props.loading ? (
+        {props.initialLoading ? (
           <DataTableSkeletonRows
             label="employees"
             rowClassName={`${grid} min-h-[58px] px-4 py-3`}
             cellClassNames={["", "", "", ""]}
+          />
+        ) : props.error ? (
+          <DataTableErrorRow
+            message={props.error}
+            onRetry={props.onRetry}
+            colSpan={4}
           />
         ) : props.error ? (
           <DataTableErrorRow
@@ -113,7 +121,13 @@ export function EmployeeTable(
               aria-colspan={4}
               className="p-6 text-center text-xs text-muted-foreground"
             >
-              {props.emptyMessage}
+              {props.loading ? (
+                <span role="status">
+                  {props.previewing ? "Searching…" : "Loading employees…"}
+                </span>
+              ) : (
+                props.emptyMessage
+              )}
             </ResponsiveDataTableCell>
           </ResponsiveDataTableRow>
         )}
@@ -162,7 +176,7 @@ function EmployeeManagementTable({
   archiveView = false,
   viewKey,
   quickKey,
-  animateRows,
+  animateRows = true,
   loading,
   error,
   emptyMessage,
@@ -177,7 +191,7 @@ function EmployeeManagementTable({
   archiveView?: boolean
   viewKey: string
   quickKey: string
-  animateRows: boolean
+  animateRows?: boolean
   loading: boolean
   error: string
   emptyMessage: ReactNode
@@ -235,13 +249,13 @@ function EmployeeManagementTable({
               )}
               cellClassNames={[
                 "@max-[1000px]:col-start-1 @max-[1000px]:row-start-1",
-                "@max-[1000px]:col-span-2 @max-[1000px]:row-start-2",
+                "@max-[1000px]:col-start-1 @max-[1000px]:row-start-2",
                 "@max-[1000px]:col-span-2 @max-[1000px]:row-start-3",
-                "@max-[1000px]:col-start-1 @max-[1000px]:row-start-4",
+                "@max-[1000px]:col-span-2 @max-[1000px]:row-start-4",
                 "@max-[1000px]:col-start-1 @max-[1000px]:row-start-5",
                 "@max-[1000px]:col-start-2 @max-[1000px]:row-start-5 @max-[1000px]:justify-self-end",
                 "@max-[1000px]:col-start-2 @max-[1000px]:row-start-1 @max-[1000px]:justify-self-end",
-                "@max-[1000px]:col-start-2 @max-[1000px]:row-start-4 @max-[1000px]:justify-self-end",
+                "@max-[1000px]:col-start-2 @max-[1000px]:row-start-2 @max-[1000px]:justify-self-end",
               ]}
               cellSkeletonClassNames={[
                 "h-3 w-16",
@@ -283,7 +297,7 @@ function EmployeeManagementTable({
               </div>
               <div
                 role="cell"
-                className="flex min-w-0 items-center gap-2.5 @max-[1000px]:col-span-2 @max-[1000px]:row-start-2"
+                className="flex min-w-0 items-center gap-2.5 @max-[1000px]:col-start-1 @max-[1000px]:row-start-2"
               >
                 <Avatar
                   name={employee.fullName}
@@ -326,7 +340,7 @@ function EmployeeManagementTable({
               </div>
               <div
                 role="cell"
-                className="min-w-0 text-[#52627a] @max-[1000px]:col-start-1 @max-[1000px]:row-start-4"
+                className="min-w-0 text-[#52627a] @max-[1000px]:col-span-2 @max-[1000px]:row-start-4"
               >
                 <span className="hidden text-[#738096] @max-[1000px]:inline">
                   Position / team{" "}
@@ -384,7 +398,7 @@ function EmployeeManagementTable({
               </div>
               <div
                 role="cell"
-                className="flex justify-start @max-[1000px]:col-start-2 @max-[1000px]:row-start-4 @max-[1000px]:justify-self-end"
+                className="flex justify-start @max-[1000px]:col-start-2 @max-[1000px]:row-start-2 @max-[1000px]:justify-self-end"
               >
                 <EmployeeRowActions
                   open={

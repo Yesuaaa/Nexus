@@ -547,6 +547,12 @@ test.describe("Client service requests", () => {
           .locator('[data-sileo-viewport][aria-live="polite"]')
           .getByText("Service request submitted for review", { exact: true }),
       ).toBeVisible()
+      await expect(
+        page.getByRole("heading", {
+          name: "Request submitted",
+          exact: true,
+        }),
+      ).toBeVisible()
       await expect(page.getByText("request-123", { exact: true })).toBeVisible()
       await expect(
         page.getByText("Pending review", { exact: true }),

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import type { ProjectWorkspaceSummary } from "../../src/features/project-workspace/api/project-workspace-api"
+import type { WorkspaceDirectoryRow } from "../../src/features/project-workspace/api/project-workspace-api"
 import { configureRegressionTest, restoreSession } from "../regression-support"
 
 configureRegressionTest()
@@ -11,17 +11,19 @@ test("[NEX-007] manager can rename and archive a workspace with confirmation and
     account: { headOf: { id: "dept-1", name: "Engineering" } },
   })
 
-  let workspace: ProjectWorkspaceSummary = {
+  let workspace: WorkspaceDirectoryRow = {
+    rowId: "group:workspace-nex007",
     id: "workspace-nex007",
+    kind: "group",
     name: "Website launch",
-    structure: "SEPARATE",
-    status: "IN_PROGRESS",
-    client: { id: "client-1", fullName: "Casey Client" },
+    clientName: "Casey Client",
+    statuses: ["IN_PROGRESS"],
+    projectCount: 1,
+    departmentNames: ["Engineering"],
     updatedAt: "2026-11-10T08:00:00.000Z",
-    activityCount: 0,
-    canCreate: false,
+    progress: null,
     canManage: true,
-    workstreams: [],
+    canRename: true,
   }
   let renameAttempts = 0
   let cancellationCount = 0
@@ -30,13 +32,30 @@ test("[NEX-007] manager can rename and archive a workspace with confirmation and
     const request = route.request()
     const { pathname } = new URL(request.url())
 
-    if (pathname === "/api/project-workspace" && request.method() === "GET")
+    if (
+      pathname === "/api/project-workspace/directory" &&
+      request.method() === "GET"
+    ) {
+      const archived =
+        new URL(request.url()).searchParams.get("view") === "archive"
+      const isCancelled = workspace.statuses.includes("CANCELLED")
+      const rows =
+        isCancelled === archived ? [workspace] : ([] as WorkspaceDirectoryRow[])
       return route.fulfill({
-        json: { workspaces: [workspace], canCreate: false },
+        json: {
+          rows,
+          page: 1,
+          pageSize: 20,
+          total: rows.length,
+          totalPages: rows.length ? 1 : 0,
+          hasWorkspaces: true,
+        },
       })
+    }
 
     if (
-      pathname === `/api/project-workspace/${workspace.id}` &&
+      pathname ===
+        `/api/project-workspace/${encodeURIComponent(workspace.rowId)}` &&
       request.method() === "PATCH"
     ) {
       renameAttempts += 1
@@ -51,11 +70,16 @@ test("[NEX-007] manager can rename and archive a workspace with confirmation and
     }
 
     if (
-      pathname === `/api/project-workspace/${workspace.id}/cancel` &&
+      pathname ===
+        `/api/project-workspace/${encodeURIComponent(workspace.rowId)}/cancel` &&
       request.method() === "POST"
     ) {
       cancellationCount += 1
-      workspace = { ...workspace, status: "CANCELLED" }
+      workspace = {
+        ...workspace,
+        statuses: ["CANCELLED"],
+        canRename: false,
+      }
       return route.fulfill({ json: { saved: true } })
     }
 

@@ -36,6 +36,8 @@ function workspace({
   ]
   return {
     id: workspaceId,
+    rowId: `group:${workspaceId}`,
+    kind: "group",
     name: "Website launch",
     structure: "SEPARATE",
     status,
@@ -44,6 +46,7 @@ function workspace({
     activityCount: includeActivity ? 2 : 0,
     canCreate: false,
     canManage,
+    canRename: canManage && status !== "COMPLETED" && status !== "CANCELLED",
     activity: includeActivity
       ? [
           {
@@ -159,7 +162,7 @@ test("[P15-001] a failed detail request clears loading while showing its error",
 
   await page.goto("/project-workspace/missing-workspace")
   const main = page.getByRole("main")
-  await expect(main.getByRole("alert")).toHaveText(
+  await expect(main.getByRole("alert")).toContainText(
     "Project workspace not found",
   )
   await expect(main.getByRole("status")).toHaveCount(0)
@@ -223,7 +226,7 @@ test("[P15-003] the plan editor adds a phase and task through a saved plan", asy
   )
 
   await page.goto(`/project-workspace/${workspaceId}`)
-  await page.getByRole("button", { name: "Work", exact: true }).click()
+  await page.getByRole("tab", { name: "Work", exact: true }).click()
   await page.getByRole("button", { name: "Edit project plan" }).click()
   await page.getByRole("button", { name: "+ Add phase" }).click()
   await page.getByLabel("Phase 2 name").fill("Quality review")
@@ -285,7 +288,7 @@ test("[P15-004] a department head can assign a task to an approved project membe
   )
 
   await page.goto(`/project-workspace/${workspaceId}`)
-  await page.getByRole("button", { name: "Work", exact: true }).click()
+  await page.getByRole("tab", { name: "Work", exact: true }).click()
   await page
     .getByRole("button", { name: "More actions for Prepare launch" })
     .click()
@@ -409,7 +412,7 @@ test("[P15-006] team lead replacement is reflected in project team details", asy
   )
 
   await page.goto(`/project-workspace/${workspaceId}`)
-  await page.getByRole("button", { name: "Team", exact: true }).click()
+  await page.getByRole("tab", { name: "Team", exact: true }).click()
   await page.getByRole("button", { name: "View Jordan Staff" }).click()
   await page.getByRole("button", { name: "Assign as team lead" }).click()
 
@@ -429,7 +432,7 @@ test("[P15-007] activity search and type filters keep workspace events scoped", 
   )
 
   await page.goto(`/project-workspace/${workspaceId}`)
-  await page.getByRole("button", { name: "Activity", exact: true }).click()
+  await page.getByRole("tab", { name: "Activity", exact: true }).click()
   await page
     .getByRole("searchbox", { name: "Search activity" })
     .fill("brand audit")

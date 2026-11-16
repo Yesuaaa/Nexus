@@ -17,13 +17,14 @@ import { contentClass } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
 import { ClientTableSkeleton } from "@/components/ui/client-table-skeleton"
 import { EmptyState } from "@/components/ui/empty-state"
-import { FilterSelect } from "@/components/ui/filter-select"
+import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
 import { KpiCards } from "@/components/ui/kpi-cards"
 import { usePaginatedList } from "@/components/ui/use-paginated-list"
 import { TableSearchStatus } from "@/components/ui/table-search-status"
 import { TablePaginationFooter } from "@/components/ui/table-pagination-footer"
 import { SearchField } from "@/components/ui/search-field"
 import type { ServiceRequestStatus } from "@/features/service-operations/model/service-request-contracts"
+import { serviceRequestStatusValues } from "@/features/service-operations/model/service-request-contracts"
 import { cn } from "@/lib/utils"
 import {
   listMyServiceRequests,
@@ -44,9 +45,9 @@ const initial: ClientRequestsResponse = {
 
 const statusOptions: { value: ServiceRequestStatus | ""; label: string }[] = [
   { value: "", label: "All Statuses" },
-  ...Object.entries(serviceRequestStatuses).map(([value, item]) => ({
-    value: value as ServiceRequestStatus,
-    label: item.label,
+  ...serviceRequestStatusValues.map((value) => ({
+    value,
+    label: serviceRequestStatuses[value].label,
   })),
 ]
 const sortOptions: { value: "asc" | "desc"; label: string }[] = [
@@ -106,23 +107,23 @@ export function ClientServiceRequestsPage() {
       iconClassName: "text-[#2058d4]",
     },
     {
-      label: "Pending Review",
+      label: "Pending",
       value: summary.pending,
-      description: "Awaiting department review",
+      description: "Waiting for Department Head acceptance",
       icon: Clock3,
       iconClassName: "text-[#b78112]",
     },
     {
-      label: "In Review",
+      label: "In Progress",
       value: summary.inProgress,
-      description: "Review and quotation preparation",
+      description: "Under review or activated",
       icon: LoaderCircle,
       iconClassName: "text-[#2058d4]",
     },
     {
-      label: "Closed",
+      label: "Concluded",
       value: summary.completed,
-      description: "Closed service requests",
+      description: "Accomplished service requests",
       icon: CheckCircle2,
       iconClassName: "text-[#159447]",
     },
@@ -157,7 +158,7 @@ export function ClientServiceRequestsPage() {
         />
       </div>
       <section className="@container mt-6 min-w-0" aria-label="Request history">
-        <div className="flex flex-wrap items-center gap-2.5 pb-4 max-[560px]:flex-col max-[560px]:items-stretch">
+        <div className={`${filterBarClass} pb-4`}>
           <SearchField
             label="Search service requests"
             placeholder="Search reference, service or package…"
@@ -198,13 +199,7 @@ export function ClientServiceRequestsPage() {
             </Button>
           )}
         </div>
-        {!list.hasLoaded ? (
-          <ClientTableSkeleton
-            label="your service requests"
-            columns={6}
-            gridClassName="grid grid-cols-[76px_minmax(180px,1.25fr)_minmax(180px,1.25fr)_minmax(120px,.8fr)_minmax(130px,.9fr)_140px] items-center gap-3.5"
-          />
-        ) : list.error ? (
+        {list.error ? (
           <div
             role="alert"
             className="grid min-h-64 place-content-center gap-4 rounded-lg border border-[#e1e4ea] p-6 text-center text-sm text-[#52627a]"
@@ -214,15 +209,24 @@ export function ClientServiceRequestsPage() {
               Try again
             </Button>
           </div>
+        ) : !list.hasLoaded ||
+          list.searchSkeleton ||
+          (list.loading && !list.hasCurrentData && !list.previewing) ? (
+          <ClientTableSkeleton
+            label="your service requests"
+            columns={6}
+            gridClassName="grid grid-cols-[76px_minmax(180px,1.25fr)_minmax(180px,1.25fr)_minmax(120px,.8fr)_minmax(130px,.9fr)_140px] items-center gap-3.5"
+          />
         ) : (
           <ClientRequestsTable
             requests={list.rows}
             viewKey={list.tableViewKey}
             quickKey={query}
             onRowsSettled={list.onRowsSettled}
+            loading={list.loading}
             emptyMessage={
-              list.loading ? (
-                "Searching requests…"
+              list.loading && list.previewing ? (
+                <span role="status">Searching…</span>
               ) : (
                 <EmptyState
                   headingLevel={2}
@@ -254,7 +258,9 @@ export function ClientServiceRequestsPage() {
           />
         )}
         <TableSearchStatus
-          active={list.loading && list.previewing}
+          active={
+            list.loading && list.previewing && Boolean(list.preview?.length)
+          }
           label="requests"
         />
         {list.footer && (

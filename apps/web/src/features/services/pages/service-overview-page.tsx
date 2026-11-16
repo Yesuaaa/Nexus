@@ -1,16 +1,17 @@
 "use client"
 
-import Link from "next/link"
 import { PageHeader } from "@/components/layout/page-header"
+import { PageHeaderLink } from "@/components/layout/page-header-link"
 import { contentClass } from "@/components/layout/styles"
 import { Alert } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
 import {
-  BreakdownList,
-  ItemList,
-  MiniStats,
-  OverviewPanel,
-  type BreakdownRow,
+  cellClass,
+  FiguresRow,
+  headCellClass,
+  InlineBar,
+  RowsSkeleton,
+  Section,
+  tableClass,
 } from "@/components/ui/overview-panel"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 import { useAsyncResource } from "@/lib/use-async-resource"
@@ -22,7 +23,6 @@ import {
   type PricingTemplate,
   type Service,
 } from "../api/services-api"
-import { ServiceKpiCards } from "../components/service-kpi-cards"
 import { pricingModelLabels } from "../model/service-pricing"
 
 type Catalog = { services: Service[]; templates: PricingTemplate[] }
@@ -37,9 +37,29 @@ async function loadCatalog(signal: AbortSignal): Promise<Catalog> {
   return { services, templates }
 }
 
-function byCount(counts: Map<string, BreakdownRow>) {
-  return [...counts.values()].sort(
-    (a, b) => b.value - a.value || a.label.localeCompare(b.label),
+const requirementColumns = [
+  { key: "requiresConsultation", label: "Consultation", short: "Consult" },
+  { key: "requiresAgreement", label: "Agreement", short: "Agree" },
+  { key: "requiresPayment", label: "Payment", short: "Pay" },
+  { key: "requiresQuotationApproval", label: "Quotation", short: "Quote" },
+] as const
+
+/** Columns that phones drop; their values move under the service name. */
+const wideOnly = "max-[640px]:hidden"
+
+const pricingModels = Object.keys(pricingModelLabels) as PricingModel[]
+
+function Mark({ on }: { on: boolean }) {
+  return on ? (
+    <span className="font-semibold text-[#203f8c]">
+      <span aria-hidden="true">✓</span>
+      <span className="sr-only">Required</span>
+    </span>
+  ) : (
+    <span className="text-[#c3cad5]">
+      <span aria-hidden="true">–</span>
+      <span className="sr-only">Not required</span>
+    </span>
   )
 }
 
@@ -51,85 +71,28 @@ export function ServiceOverviewPage() {
   const { services, templates } = catalog.data ?? emptyCatalog
   const loading = catalog.loading && !catalog.data
   const count = services.length
-
-  const departments = new Map<string, BreakdownRow>()
-  const models = new Map<string, BreakdownRow>()
-  const templateUse = new Map<string, number>()
-  let packages = 0
-  for (const service of services) {
-    packages += service.packages.length
-    for (const department of service.departments) {
-      const row = departments.get(department.id)
-      departments.set(department.id, {
-        id: department.id,
-        label: department.name,
-        value: (row?.value ?? 0) + 1,
-      })
-    }
-    const model: PricingModel | "NONE" =
-      service.pricingTemplate?.pricingModel ?? "NONE"
-    models.set(model, {
+  const active = services.filter((s) => s.isActive).length
+  const packages = services.reduce((sum, s) => sum + s.packages.length, 0)
+  const priced = services.filter((s) => s.pricingTemplate).length
+  const usedTemplates = new Set(
+    services.flatMap((s) => (s.pricingTemplateId ? [s.pricingTemplateId] : [])),
+  )
+  const sorted = [...services].sort(
+    (a, b) =>
+      Number(b.isActive) - Number(a.isActive) || a.name.localeCompare(b.name),
+  )
+  const pricing = [
+    ...pricingModels.map((model) => ({
       id: model,
-      label:
-        model === "NONE" ? "No pricing template" : pricingModelLabels[model],
-      value: (models.get(model)?.value ?? 0) + 1,
-    })
-    if (service.pricingTemplateId)
-      templateUse.set(
-        service.pricingTemplateId,
-        (templateUse.get(service.pricingTemplateId) ?? 0) + 1,
-      )
-  }
-  const usedTemplates = templates.filter((t) => templateUse.has(t.id)).length
-  const newest = [...services].sort((a, b) =>
-    b.createdAt.localeCompare(a.createdAt),
-  )[0]
+      label: pricingModelLabels[model],
+      value: services.filter((s) => s.pricingTemplate?.pricingModel === model)
+        .length,
+    })),
+    { id: "none", label: "No pricing template", value: count - priced },
+  ].filter((row) => row.value > 0)
   const recent = [...services]
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-    .slice(0, 5)
-  const requirements = [
-    {
-      id: "consultation",
-      label: "Consultation",
-      value: services.filter((s) => s.requiresConsultation).length,
-    },
-    {
-      id: "agreement",
-      label: "Signed agreement",
-      value: services.filter((s) => s.requiresAgreement).length,
-    },
-    {
-      id: "payment",
-      label: "Payment",
-      value: services.filter((s) => s.requiresPayment).length,
-    },
-    {
-      id: "quotation",
-      label: "Quotation approval",
-      value: services.filter((s) => s.requiresQuotationApproval).length,
-    },
-  ]
-  const attention = [...services]
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .flatMap((service) => {
-      const issues = [
-        !service.isActive && "inactive",
-        service.packages.length === 0 && "no packages",
-        service.departments.length === 0 && "no department",
-      ].filter(Boolean)
-      return issues.length
-        ? [
-            {
-              id: service.id,
-              label: service.name,
-              note: issues.join(", ").replace(/^./, (c) => c.toUpperCase()),
-              tone: service.isActive
-                ? ("warning" as const)
-                : ("danger" as const),
-            },
-          ]
-        : []
-    })
+    .slice(0, 6)
 
   return (
     <main
@@ -138,11 +101,9 @@ export function ServiceOverviewPage() {
     >
       <PageHeader
         title="Service Overview"
-        description="Catalog size, availability, pricing, client requirements, and department coverage."
+        description="What each service requires, how it is priced, and what changed recently."
         actions={
-          <Button asChild variant="brandOutline" size="header">
-            <Link href="/services">Manage services</Link>
-          </Button>
+          <PageHeaderLink href="/services">Manage services</PageHeaderLink>
         }
       />
       {catalog.error && !count && (
@@ -157,140 +118,262 @@ export function ServiceOverviewPage() {
           </button>
         </Alert>
       )}
-      <div className="mt-[18px] grid gap-4 max-[560px]:mt-[14px]">
-        <ServiceKpiCards
-          services={services}
-          loading={loading}
-          unavailable={Boolean(catalog.error)}
-        />
-        <MiniStats
-          label="Service figures"
-          loading={loading}
-          items={[
-            {
-              label: "Packages",
-              value: packages.toLocaleString("en-US"),
-              hint: count
-                ? `${(packages / count).toFixed(1)} per service`
+      <FiguresRow
+        label="Service figures"
+        loading={loading}
+        items={[
+          {
+            label: "Services",
+            value: String(count),
+            note: count > active ? `${count - active} inactive` : undefined,
+          },
+          { label: "Packages", value: String(packages) },
+          {
+            label: "Priced",
+            value: `${priced}/${count}`,
+            tone: priced < count ? "warning" : undefined,
+          },
+          {
+            label: "Templates in use",
+            value: `${usedTemplates.size}/${templates.length}`,
+            note:
+              templates.length > usedTemplates.size
+                ? `${templates.length - usedTemplates.size} unused`
                 : undefined,
-            },
-            {
-              label: "Pricing templates in use",
-              value: `${usedTemplates}/${templates.length}`,
-              hint:
-                templates.length - usedTemplates > 0
-                  ? `${templates.length - usedTemplates} unused`
-                  : "All templates used",
-            },
-            {
-              label: "Departments covered",
-              value: departments.size.toLocaleString("en-US"),
-              hint: "Deliver at least one service",
-            },
-            {
-              label: "Newest service",
-              value: newest?.name ?? "—",
-              hint: newest
-                ? `Added ${formatDate(newest.createdAt)}`
-                : undefined,
-            },
-          ]}
-        />
-        <div className="grid gap-4 lg:grid-cols-2">
-          <OverviewPanel
-            title="Services by department"
-            description="Departments delivering each service"
-          >
-            <BreakdownList
-              rows={byCount(departments).slice(0, 8)}
-              loading={loading}
-              unit="services"
-              empty="No services are linked to a department yet."
-            />
-          </OverviewPanel>
-          <OverviewPanel
-            title="Client requirements"
-            description="Steps clients complete before work starts"
-          >
-            <BreakdownList
-              rows={requirements}
-              total={count}
-              loading={loading}
-              unit="services"
-              empty="No services yet."
-              colorClass="bg-[#6552a6]"
-            />
-          </OverviewPanel>
-          <OverviewPanel
-            title="Pricing models"
-            description="Share of services by pricing template"
-          >
-            <BreakdownList
-              rows={byCount(models)}
-              total={count}
-              loading={loading}
-              unit="services"
-              empty="No services yet."
-              colorClass="bg-[#25745b]"
-            />
-          </OverviewPanel>
-          <OverviewPanel
-            title="Pricing templates"
-            description="How often each template is used"
-          >
-            <ItemList
-              rows={[...templates]
-                .sort(
-                  (a, b) =>
-                    (templateUse.get(b.id) ?? 0) -
-                      (templateUse.get(a.id) ?? 0) ||
-                    a.name.localeCompare(b.name),
-                )
-                .map((template) => {
-                  const uses = templateUse.get(template.id) ?? 0
-                  return {
-                    id: template.id,
-                    label: template.name,
-                    note: uses
-                      ? `${uses} ${uses === 1 ? "service" : "services"}`
-                      : "Unused",
-                    tone: uses ? ("muted" as const) : ("warning" as const),
-                  }
+          },
+        ]}
+      />
+
+      <Section title="Requirements" aside="Before work starts" className="mt-7">
+        {loading ? (
+          <RowsSkeleton rows={6} />
+        ) : count ? (
+          <div className="overflow-x-auto">
+            <table className={cn(tableClass, "sm:min-w-[720px]")}>
+              <thead>
+                <tr>
+                  <th className={headCellClass}>Service</th>
+                  {requirementColumns.map((column) => (
+                    <th
+                      key={column.key}
+                      className={cn(
+                        headCellClass,
+                        "px-2 text-center max-[640px]:px-1",
+                      )}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="hidden max-[640px]:inline"
+                      >
+                        {column.short}
+                      </span>
+                      <span className="max-[640px]:sr-only">
+                        {column.label}
+                      </span>
+                    </th>
+                  ))}
+                  <th
+                    className={cn(headCellClass, "px-2 text-right", wideOnly)}
+                  >
+                    Packages
+                  </th>
+                  <th className={cn(headCellClass, "pl-5", wideOnly)}>
+                    Pricing
+                  </th>
+                  <th className={cn(headCellClass, "pl-5", wideOnly)}>
+                    Department
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((service) => (
+                  <tr
+                    key={service.id}
+                    className={service.isActive ? undefined : "text-[#8a94a6]"}
+                  >
+                    <td className={cn(cellClass, "pr-3")}>
+                      <span
+                        className={
+                          service.isActive
+                            ? "font-medium text-[#182235]"
+                            : "font-medium"
+                        }
+                      >
+                        {service.name}
+                      </span>
+                      {!service.isActive && (
+                        <span className="ml-2 text-[11px] text-[#b4234d]">
+                          inactive
+                        </span>
+                      )}
+                      <span className="mt-0.5 hidden text-[11px] text-[#8a94a6] max-[640px]:block">
+                        {service.packages.length}{" "}
+                        {service.packages.length === 1 ? "package" : "packages"}
+                        {" · "}
+                        {service.pricingTemplate
+                          ? pricingModelLabels[
+                              service.pricingTemplate.pricingModel
+                            ]
+                          : "No pricing"}
+                        {" · "}
+                        {service.departments.length
+                          ? service.departments.map((d) => d.name).join(", ")
+                          : "No department"}
+                      </span>
+                    </td>
+                    {requirementColumns.map((column) => (
+                      <td
+                        key={column.key}
+                        className={cn(
+                          cellClass,
+                          "px-2 text-center max-[640px]:px-1",
+                        )}
+                      >
+                        <Mark on={Boolean(service[column.key])} />
+                      </td>
+                    ))}
+                    <td
+                      className={cn(
+                        cellClass,
+                        "px-2 text-right tabular-nums",
+                        wideOnly,
+                        service.packages.length === 0 && "text-[#a45b12]",
+                      )}
+                    >
+                      {service.packages.length}
+                    </td>
+                    <td
+                      className={cn(
+                        cellClass,
+                        "pl-5 whitespace-nowrap",
+                        wideOnly,
+                      )}
+                    >
+                      {service.pricingTemplate ? (
+                        pricingModelLabels[service.pricingTemplate.pricingModel]
+                      ) : (
+                        <span className="text-[#a45b12]">None</span>
+                      )}
+                    </td>
+                    <td className={cn(cellClass, "pl-5", wideOnly)}>
+                      {service.departments.length ? (
+                        service.departments.map((d) => d.name).join(", ")
+                      ) : (
+                        <span className="text-[#a45b12]">None</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="text-[11px] text-[#738096]">
+                  <td className="pt-2.5">Total</td>
+                  {requirementColumns.map((column) => (
+                    <td
+                      key={column.key}
+                      className="px-2 pt-2.5 text-center tabular-nums max-[640px]:px-1"
+                    >
+                      {services.filter((s) => s[column.key]).length}
+                    </td>
+                  ))}
+                  <td
+                    className={cn(
+                      "px-2 pt-2.5 text-right tabular-nums",
+                      wideOnly,
+                    )}
+                  >
+                    {packages}
+                  </td>
+                  <td className={cn("pt-2.5 pl-5", wideOnly)}>
+                    {priced} of {count} priced
+                  </td>
+                  <td className={cn("pt-2.5 pl-5", wideOnly)} />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        ) : (
+          <p className="m-0 py-6 text-xs text-[#8a94a6]">No services yet.</p>
+        )}
+      </Section>
+
+      <div className="mt-9 grid gap-x-12 gap-y-9 lg:grid-cols-2">
+        <Section title="Pricing">
+          {loading ? (
+            <RowsSkeleton />
+          ) : pricing.length ? (
+            <table className={tableClass}>
+              <tbody>
+                {pricing.map((row) => {
+                  const pct =
+                    count > 0 ? Math.round((row.value / count) * 100) : 0
+                  return (
+                    <tr key={row.id}>
+                      <td
+                        className={cn(
+                          cellClass,
+                          "w-[42%] pr-3",
+                          row.id === "none"
+                            ? "text-[#a45b12]"
+                            : "text-[#182235]",
+                        )}
+                      >
+                        {row.label}
+                      </td>
+                      <td
+                        className={cn(
+                          cellClass,
+                          "w-10 text-right font-medium text-[#182235] tabular-nums",
+                        )}
+                      >
+                        {row.value}
+                      </td>
+                      <td className={cn(cellClass, "pl-4")}>
+                        <span className="flex items-center gap-3">
+                          <InlineBar
+                            value={row.value}
+                            max={count}
+                            label={`${row.label}: ${pct}% of services`}
+                            className="min-w-12 flex-1"
+                          />
+                          <span className="w-8 text-right text-[#8a94a6] tabular-nums">
+                            {pct}%
+                          </span>
+                        </span>
+                      </td>
+                    </tr>
+                  )
                 })}
-              loading={loading}
-              empty="No pricing templates yet."
-            />
-          </OverviewPanel>
-          <OverviewPanel
-            title="Recently updated"
-            description="Latest catalog changes"
-          >
-            <ItemList
-              rows={recent.map((service) => ({
-                id: service.id,
-                label: service.name,
-                note: formatDate(service.updatedAt),
-              }))}
-              loading={loading}
-              empty="No services yet."
-            />
-          </OverviewPanel>
-          <OverviewPanel
-            title="Needs attention"
-            description="Inactive, or missing packages or a department"
-          >
-            <ItemList
-              rows={attention}
-              loading={loading}
-              empty={
-                count
-                  ? "Every service is active, packaged, and assigned."
-                  : "No services yet."
-              }
-              emptyTone={count ? "success" : "muted"}
-            />
-          </OverviewPanel>
-        </div>
+              </tbody>
+            </table>
+          ) : (
+            <p className="m-0 py-6 text-xs text-[#8a94a6]">No services yet.</p>
+          )}
+        </Section>
+
+        <Section title="Recently updated">
+          {loading ? (
+            <RowsSkeleton />
+          ) : recent.length ? (
+            <ul className="m-0 list-none p-0 text-xs">
+              {recent.map((service) => (
+                <li
+                  key={service.id}
+                  className="flex items-baseline justify-between gap-4 border-b border-[#f0f2f5] py-2.5"
+                >
+                  <span className="min-w-0 truncate text-[#182235]">
+                    {service.name}
+                  </span>
+                  <span className="shrink-0 text-[#8a94a6] tabular-nums">
+                    {formatDate(service.updatedAt)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="m-0 py-6 text-xs text-[#8a94a6]">No services yet.</p>
+          )}
+        </Section>
       </div>
     </main>
   )

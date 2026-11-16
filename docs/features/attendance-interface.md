@@ -2,11 +2,13 @@
 
 Developed: 2026-11-13
 
-Attendance belongs to the standalone **Attendance & Monitoring** module, separate from **People & HR**. It reuses the existing sidebar disclosures/flyouts, shared topbar, workspace provider, route policy, tabs, confirmation dialogs, date inputs, cards, and responsive tables. Staff enter Attendance & Monitoring without access to People & HR or Employee Management. Existing Admin module entry routes remain unchanged.
+2026-11-14: [Phase 3C.1](superadmin-attendance-administration.md) confirms Superadmin organization-wide administration without an Employee identity, removes unsupported personal request controls, and aligns review actions with backend capabilities. Existing attendance calculations, Head verification and HR approval remain unchanged.
+
+Attendance belongs to the standalone **Workforce Compliance** module, separate from **People & HR**. It reuses the existing sidebar disclosures/flyouts, shared topbar, workspace provider, route policy, tabs, confirmation dialogs, date inputs, cards, and responsive tables. Staff enter Workforce Compliance without access to People & HR or Employee Management. Existing Admin module entry routes remain unchanged.
 
 ## Module separation (2026-11-14)
 
-Attendance & Monitoring reuses the existing workspace cards, sidebar disclosure/flyout, workspace provider, and shared topbar. Admin and current Department Heads enter Overview; ordinary Staff and Admin without management access enter Check-Ins. People & HR retains department and employee management. Existing `/attendance/*` routes, permissions, attendance components, and APIs are preserved.
+Workforce Compliance reuses the existing workspace cards, sidebar disclosure/flyout, workspace provider, and shared topbar. Admin and current Department Heads enter Overview; ordinary Staff and Admin without management access enter Check-Ins. People & HR retains department and employee management. Existing `/attendance/*` routes, permissions, attendance components, and APIs are preserved.
 
 ## Grouped workspace pages (2026-11-14)
 
@@ -18,13 +20,12 @@ The module keeps the shared ModuleCard, workspace provider, sidebar disclosures/
 | Attendance           | Check-Ins   | `/attendance/check-ins`            | Active Staff/Admin      |
 | Time Logs            | Overview    | `/attendance/time-logs/overview`   | Attendance managers     |
 | Time Logs            | Records     | `/attendance/time-logs/records`    | Attendance managers     |
-| Time Logs            | Audit Trail | `/attendance/time-logs/audit`      | Attendance managers     |
+| Audit Trail          | Audit Trail | `/attendance/audit`                | Attendance managers     |
 | Requests & Approvals | Overview    | `/attendance/requests/overview`    | Active Staff/Admin      |
 | Requests & Approvals | Overtime    | `/attendance/requests/overtime`    | Active Staff/Admin      |
 | Requests & Approvals | Corrections | `/attendance/requests/corrections` | Active Staff/Admin      |
 | Policies             | Overview    | `/attendance/policies/overview`    | Authorized policy Admin |
 | Policies             | Management  | `/attendance/policies/management`  | Authorized policy Admin |
-| Policies             | Assignments | `/attendance/policies/assignments` | Authorized policy Admin |
 
 Attendance managers retain the existing organization or current-department scope. Staff request pages remain personal. The legacy `/attendance/adjustments` route still provides the combined request directory for existing links. Clients and Superadmins do not gain attendance access.
 
@@ -32,7 +33,7 @@ Time Logs Overview summarizes the selected historical workday period, using the 
 
 Requests Overview uses `GET /api/attendance/adjustments/overview?scope=mine|team` to aggregate all authorized rows by type and status. It does not total only the displayed page. Overtime and Corrections share the existing request table, review panel, pagination, and scope toggle; the existing list endpoint additionally accepts a validated `status` filter. Overtime remains automatic at clock-out with department verification before HR approval. Corrections reuse the existing submission dialog and approval validation.
 
-Policies Overview uses full-inventory counts returned alongside `GET /api/attendance/policies`. Assignment-period totals include current, scheduled, and ended history and do not claim employee coverage. The existing recent-policy directory remains limited to 200 entries, explicitly labeled in the new inventory and assignment views. Assignments selects a policy and reuses the assigned-people view from policy details, including server-calculated statuses and pagination. Assignment creation reuses the existing form, confirmation, effective-date validation, and archived-policy restrictions.
+Policies Overview uses full-inventory counts returned alongside `GET /api/attendance/policies`. Assignment-period totals include current, scheduled, and ended history and do not claim employee coverage. The existing recent-policy directory remains limited to 200 entries, explicitly labeled in the inventory. Policy Management opens policy details in a side panel, where current, scheduled, and ended assignments use the assigned-people view with server-calculated statuses and pagination. Assignment creation reuses the existing form, confirmation, effective-date validation, and archived-policy restrictions.
 
 Implementation proceeded through navigation/access unit checks; existing clocking/foundation checks; records/audit scope checks; request summary/status and overtime tests; policy inventory/lifecycle tests; then integrated browser and responsive regression checks. Backend tests use isolated PGlite without live data or schema changes.
 
@@ -66,6 +67,8 @@ History is grouped by attendance workday and shows complete actual clock-in/out 
 
 ## Corrections and approvals
 
+2026-11-16: Overtime and corrections both require Department Head verification followed by HR's final decision. Pending requests are excluded from HR's organization queue, counts, and notifications; personal submissions remain visible under My requests. Head verification of a correction does not modify attendance. Superadmin can inspect all requests and approve or reject pending or verified requests directly, with a review reason and audit attribution. Self-review remains prohibited. Apply migration `20261116120000_attendance_correction_verification` before using correction verification.
+
 Employees can request a correction from a recorded session or submit a missing closed session. The form explicitly labels its device timezone and sends complete offset-derived instants. It requires a reason, ordered timestamps, and an end no later than server time.
 
 Requests are separate records until reviewed. Approval updates the existing session or creates the missing session atomically with the decision and audit trail. Rejection records a note without changing attendance. The service prevents:
@@ -80,6 +83,8 @@ Requests are separate records until reviewed. Approval updates the existing sess
 Existing-session corrections retain their starting local date and original workday association. Recorded break timestamps are preserved; editing break timestamps or moving a session between attendance dates is outside this workflow. Audit history retains original values and the submitting/reviewing account.
 
 ## Policy settings
+
+Policy details → Assigned people offers Unassign with confirmation for policy administrators. Current assignments end tomorrow in the policy timezone, preserving today's workday; scheduled assignments without recorded attendance are cancelled. Ended assignments remain as history. The operation uses the employee lock, administrative permission checks, and transactional audit context through `POST /api/attendance/assignments/:assignmentId/unassign`.
 
 Policies define all seven weekday working flags and integer-minute targets, a named timezone, unpaid-break availability, and whether overnight work requires review. There is no fixed clock-in window. Overnight work is always recorded across midnight; the review flag does not silently end a session or approve payroll overtime.
 
@@ -120,7 +125,7 @@ Overview queries are limited to 10,000 records and policy listings to the latest
 
 Attendance was compared with the rendered Department Management and Employee Management pages. It now follows their page composition as well as their component palette: each subtab has a specific `PageHeader`, compact segmented navigation, navy header actions, 34px toolbar controls, and the same table typography, borders, header tint, and responsive container breakpoints. Time Logs places employee, department, and date filters in one wrapping toolbar and renders its directory directly, without nested overview cards. Record loading/errors use `DataTableSkeletonRows` and `DataTableErrorRow` inside the shared table.
 
-Policies is a searchable, paginated policy directory using `ResponsiveDataTable`, `AnimatedSlotGridBody`, `useLocalTable`, and `TablePaginationFooter`. Creating, editing, or assigning a policy opens the same `SidePanel`/`Form`/section/body/footer pattern used by Department and Employee Management. Fields use the existing panel styles and validation; assignment still requires confirmation and preserves recorded workdays. Archive, restore, and permanent deletion reuse `RowActionsMenu` and `ConfirmationDialog`. Adjustments use a directory table with `MemberIdentity`, status pills, and the existing authorized approval actions, replacing the standalone request cards.
+Policies is a searchable, paginated policy directory using `ResponsiveDataTable`, `AnimatedSlotGridBody`, `useLocalTable`, and `TablePaginationFooter`. Creating, editing, assigning, or viewing a policy opens the same `SidePanel`/`Form`/section/body/footer pattern used by Department and Employee Management. Fields use the existing panel styles and validation; assignment still requires confirmation and preserves recorded workdays. Archive, restore, and permanent deletion reuse `RowActionsMenu` and `ConfirmationDialog`. Adjustments use a directory table with `MemberIdentity`, status pills, and the existing authorized approval actions, replacing the standalone request cards.
 
 Check-Ins keeps its live timer and clock/break actions. Its daily requirement uses the shared `ProgressMeter` and `DetailList`; history tables no longer sit inside another bordered overview card. Existing RBAC, routes, sidebar, topbar, actual timestamps, API calls, and attendance calculations are unchanged.
 
@@ -148,4 +153,8 @@ The existing notification inbox alerts the current Department Head and active HR
 
 ## Personal overview and module dashboard (2026-11-14)
 
-Attendance Overview now uses `/api/attendance/me/overview`, deriving the employee from the authenticated account. It has no department selector and accepts no scope overrides. `/attendance/dashboard` is a separate Dashboard sidebar group for authorized attendance managers. It reuses the attendance, record-audit, request, and policy summaries with links to all permitted pages. Admin sees organization data; Department Heads retain their current department scope and cannot access policy summaries. Attendance/audit filters apply to those sections; requests cover all permitted history and policies cover the current organization inventory.
+Attendance Overview now uses `/api/attendance/me/overview`, deriving the employee from the authenticated account. It has no department selector and accepts no scope overrides. Authorized attendance managers enter through Time Logs Overview; Admin sees organization data, while Department Heads retain their current department scope and cannot access policy summaries. Attendance/audit filters apply to those sections; requests cover all permitted history and policies cover the current organization inventory.
+
+## Standalone audit navigation (2026-11-16)
+
+Audit Trail is a standalone item within Workforce Compliance at `/attendance/audit`, covering attendance records, overtime, corrections, review decisions, and policy changes within the existing attendance management scope. The former `/attendance/time-logs/audit` route redirects to it. Time Logs Overview now contains session figures, session status distribution, and employee coverage; it no longer fetches or displays audit summaries or recent change history.

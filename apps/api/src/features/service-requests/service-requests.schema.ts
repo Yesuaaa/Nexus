@@ -13,6 +13,8 @@ const statuses: ServiceRequestStatus[] = [
   "CANCELLED",
   "SUBMITTED",
   "UNDER_REVIEW",
+  "ACTIVATED",
+  "CONCLUDED",
   "CLOSED",
   "AWAITING_CLIENT_INFO",
   "READY_FOR_QUOTATION",

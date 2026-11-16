@@ -12,7 +12,7 @@ import {
   clientPageHeaderActionClass,
 } from "@/components/layout/client-page-header"
 import { EmptyState } from "@/components/ui/empty-state"
-import { FilterSelect } from "@/components/ui/filter-select"
+import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
 import { KpiCards } from "@/components/ui/kpi-cards"
 import { ClientTableSkeleton } from "@/components/ui/client-table-skeleton"
 import { SearchField } from "@/components/ui/search-field"
@@ -96,6 +96,7 @@ export function ClientProjectsPage() {
   const table = useLocalTable(visibleProjects, {
     view: [filter, sort, query],
     loading,
+    search: query,
   })
 
   const projectStats = [
@@ -152,7 +153,7 @@ export function ClientProjectsPage() {
           className="grid-cols-3 max-[900px]:grid-cols-2 max-[560px]:grid-cols-1"
         />
 
-        <div className="flex flex-wrap items-center gap-2.5 pb-1 max-[560px]:flex-col max-[560px]:items-stretch">
+        <div className={`${filterBarClass} pb-1`}>
           <SearchField
             label="Search projects"
             placeholder="Search project, service or reference…"
@@ -180,7 +181,7 @@ export function ClientProjectsPage() {
           <Alert as="div" className="rounded-xl px-5 py-6 text-sm">
             {error}
           </Alert>
-        ) : loading ? (
+        ) : loading || table.searchPending ? (
           <ClientTableSkeleton
             label="your projects"
             columns={7}

@@ -20,6 +20,85 @@ enum Role {
   USER
 }
 
+enum AccountManagementAction {
+  CREATED
+  PROFILE_UPDATED
+  ROLE_CHANGED
+  STATUS_CHANGED
+  PASSWORD_RESET
+  ARCHIVED
+  RESTORED
+  DELETED
+}
+
+enum AccountManagementOrigin {
+  ACCOUNT_MANAGEMENT
+  CLIENT_MANAGEMENT
+  EMPLOYEE_MANAGEMENT
+}
+
+enum WorkforceManagementSubject {
+  EMPLOYEE
+  DEPARTMENT
+  TEAM
+}
+
+enum WorkforceManagementAction {
+  CREATED
+  PROFILE_UPDATED
+  STATUS_CHANGED
+  ASSIGNMENT_CHANGED
+  HEAD_CHANGED
+  TEMPORARY_HEAD_CHANGED
+  LEAD_CHANGED
+  TITLE_CLEARED
+  DELETED
+}
+
+enum WorkforceManagementOrigin {
+  ACCOUNT_MANAGEMENT
+  EMPLOYEE_MANAGEMENT
+  DEPARTMENT_MANAGEMENT
+  TEAM_MANAGEMENT
+}
+
+// Immutable identity snapshots deliberately have no User/HR foreign keys.
+// Domain writers append within their caller's transaction; no history API.
+model AccountManagementChange {
+  id               String                  @id @default(cuid())
+  actorAccountId   String                  @db.VarChar(80)
+  actorRoleAtTime  Role
+  operationId      String                  @db.Uuid
+  subjectAccountId String                  @db.VarChar(80)
+  action           AccountManagementAction
+  origin           AccountManagementOrigin
+  changedFields    String[]
+  changes          Json
+  createdAt        DateTime                @default(now()) @db.Timestamptz(3)
+
+  @@index([subjectAccountId, createdAt, id], map: "account_change_subject_time_idx")
+  @@index([actorAccountId, createdAt, id], map: "account_change_actor_time_idx")
+  @@index([operationId], map: "account_change_operation_idx")
+}
+
+model WorkforceManagementChange {
+  id              String                     @id @default(cuid())
+  actorAccountId  String                     @db.VarChar(80)
+  actorRoleAtTime Role
+  operationId     String                     @db.Uuid
+  subjectType     WorkforceManagementSubject
+  subjectId       String                     @db.VarChar(80)
+  action          WorkforceManagementAction
+  origin          WorkforceManagementOrigin
+  changedFields   String[]
+  changes         Json
+  createdAt       DateTime                   @default(now()) @db.Timestamptz(3)
+
+  @@index([subjectType, subjectId, createdAt, id], map: "workforce_change_subject_time_idx")
+  @@index([actorAccountId, createdAt, id], map: "workforce_change_actor_time_idx")
+  @@index([operationId], map: "workforce_change_operation_idx")
+}
+
 enum EmploymentType {
   FULL_TIME
   PART_TIME
@@ -36,6 +115,8 @@ enum EmployeeStatus {
 enum ServiceRequestStatus {
   SUBMITTED
   UNDER_REVIEW
+  ACTIVATED
+  CONCLUDED
   AWAITING_CLIENT_INFO
   READY_FOR_QUOTATION
   CLOSED

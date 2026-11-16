@@ -8,7 +8,10 @@ test(
   "backend regression: real HTTP, authentication, authorization and persistence",
   { timeout: 120_000 },
   async (t) => {
-    const { prisma, origin } = await startPgliteApp(t)
+    let isShuttingDown = false
+    const { prisma, origin } = await startPgliteApp(t, {
+      app: { isShuttingDown: () => isShuttingDown },
+    })
     const base = `${origin}/api`
     const password = "RegressionPassword123!"
     const passwordHash = await hashPassword(password)
@@ -71,11 +74,16 @@ test(
     await t.test(
       "health and database readiness use the isolated database",
       async () => {
-        for (const path of ["/health", "/db-check"]) {
+        for (const path of ["/health", "/db-check", "/ready"]) {
           const response = await request(path)
           assert.equal(response.status, 200)
           assert.deepEqual(await response.json(), { status: "ok" })
         }
+
+        isShuttingDown = true
+        const readiness = await request("/ready")
+        assert.equal(readiness.status, 503)
+        assert.deepEqual(await readiness.json(), { status: "unavailable" })
       },
     )
 
@@ -83,10 +91,12 @@ test(
       ["/auth/me", roles],
       ["/users", ["SUPERADMIN"]],
       ["/departments", ["SUPERADMIN", "ADMIN", "STAFF"]],
-      ["/employees", ["ADMIN"]],
-      ["/clients", ["ADMIN"]],
-      ["/services", ["ADMIN"]],
-      ["/services/pricing-templates", ["ADMIN"]],
+      ["/employees", ["ADMIN", "SUPERADMIN"]],
+      ["/clients", ["ADMIN", "SUPERADMIN"]],
+      ["/services", ["ADMIN", "SUPERADMIN"]],
+      ["/services/pricing-templates", ["ADMIN", "SUPERADMIN"]],
+      ["/attendance/overview", ["ADMIN", "SUPERADMIN"]],
+      ["/attendance/policies", ["ADMIN", "SUPERADMIN"]],
       ["/services/available", roles],
       ["/auth/profile", roles],
       ["/client/services", ["USER"]],
@@ -117,6 +127,19 @@ test(
         },
       )
     }
+
+    await t.test(
+      "client creation admits Admin and Superadmin and rejects other roles",
+      async () => {
+        for (const role of roles) {
+          const response = await request("/clients", role, "POST", {})
+          assert.equal(
+            response.status,
+            role === "ADMIN" || role === "SUPERADMIN" ? 400 : 403,
+          )
+        }
+      },
+    )
 
     await t.test(
       "new mutation routes reject anonymous callers before writing",

@@ -80,6 +80,20 @@ test("account status, deletion, and authentication enforce access", async (t) =>
   const originalUser = prisma.user
   const originalSession = prisma.session
   const originalTransaction = prisma.$transaction
+  const originalDepartment = prisma.department
+  const originalEmployee = prisma.employee
+  const originalTeam = prisma.team
+  const originalQuery = prisma.$queryRaw
+  const originalHistory = prisma.accountManagementChange
+  // Keep this legacy delegate unit test isolated; real history atomicity and
+  // authorization are exercised through offline PGlite in account-attribution.
+  Reflect.set(prisma, "department", { findMany: async () => [] })
+  Reflect.set(prisma, "employee", { findUnique: async () => null })
+  Reflect.set(prisma, "team", { findMany: async () => [] })
+  Reflect.set(prisma, "$queryRaw", async () => [])
+  Reflect.set(prisma, "accountManagementChange", {
+    create: async (args: Prisma.AccountManagementChangeCreateArgs) => args.data,
+  })
   Reflect.set(prisma, "session", {
     findUnique: async () => ({
       id: "session",
@@ -108,6 +122,11 @@ test("account status, deletion, and authentication enforce access", async (t) =>
     Reflect.set(prisma, "user", originalUser)
     Reflect.set(prisma, "session", originalSession)
     Reflect.set(prisma, "$transaction", originalTransaction)
+    Reflect.set(prisma, "department", originalDepartment)
+    Reflect.set(prisma, "employee", originalEmployee)
+    Reflect.set(prisma, "team", originalTeam)
+    Reflect.set(prisma, "$queryRaw", originalQuery)
+    Reflect.set(prisma, "accountManagementChange", originalHistory)
   })
 
   const server = createApp().listen(0)

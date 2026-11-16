@@ -1,0 +1,50 @@
+{
+  "service-operations": {
+    "title": "Service Operations",
+    "description": "Browse services and manage service requests.",
+    "implemented": true,
+    "administrativePath": "/services",
+    "icon": "services",
+    "color": "#294c96"
+  },
+  "project-management": {
+    "title": "Project Management",
+    "description": "Coordinate projects, milestones, and deliverables.",
+    "implemented": true,
+    "administrativePath": "/project-management/overview",
+    "icon": "projects",
+    "color": "#5d4b9b"
+  },
+  "people-hr": {
+    "title": "People & HR",
+    "description": "Manage employee records and department structure.",
+    "implemented": true,
+    "administrativePath": "/employees",
+    "icon": "people",
+    "color": "#237d83"
+  },
+  "attendance-monitoring": {
+    "title": "Workforce Compliance",
+    "description": "Review attendance, time logs, and attendance policies.",
+    "implemented": true,
+    "administrativePath": "/attendance/time-logs/overview",
+    "icon": "attendance",
+    "color": "#ad6b2b"
+  },
+  "administration": {
+    "title": "Administration",
+    "description": "Manage user accounts, roles, and access controls.",
+    "implemented": true,
+    "administrativePath": "/accounts",
+    "icon": "administration",
+    "color": "#4a5975"
+  },
+  "billing-finance": {
+    "title": "Billing & Finance",
+    "description": "Billing and finance tools are coming soon.",
+    "implemented": false,
+    "administrativePath": null,
+    "icon": "finance",
+    "color": "#667085"
+  }
+}

@@ -17,7 +17,7 @@ usersRouter.post(
   requirePermission(Permission.ACCOUNTS_RESET_PASSWORD),
   async (request, response) => {
     await usersService.changePassword(
-      request.auth!.user,
+      request.auth!,
       String(request.params.id),
       request.body?.newPassword,
     )
@@ -30,7 +30,7 @@ usersRouter.patch(
   requirePermission(Permission.ACCOUNTS_STATUS_BASIC),
   async (request, response) => {
     const result = await usersService.changeStatus(
-      request.auth!.user,
+      request.auth!,
       String(request.params.id),
       request.body?.isActive,
     )
@@ -43,7 +43,7 @@ usersRouter.post(
   requirePermission(Permission.ACCOUNTS_STATUS_BASIC),
   async (request, response) => {
     const result = await usersService.restoreUser(
-      request.auth!.user,
+      request.auth!,
       String(request.params.id),
     )
     return response.json(result)
@@ -55,7 +55,7 @@ usersRouter.delete(
   requirePermission(Permission.ACCOUNTS_STATUS_BASIC),
   async (request, response) => {
     const result = await usersService.softDeleteUser(
-      request.auth!.user,
+      request.auth!,
       String(request.params.id),
     )
     return response.json(result)
@@ -67,7 +67,7 @@ usersRouter.delete(
   requirePermission(Permission.ACCOUNTS_STATUS_BASIC),
   async (request, response) => {
     const result = await usersService.permanentlyDeleteUser(
-      request.auth!.user,
+      request.auth!,
       String(request.params.id),
     )
     return response.json(result)
@@ -88,10 +88,24 @@ usersRouter.post(
   requirePermission(Permission.ACCOUNTS_CREATE_BASIC),
   async (request, response) => {
     const result = await usersService.createUser(
-      request.auth!.user,
+      request.auth!,
       request.body ?? {},
     )
     return response.status(201).json(result)
+  },
+)
+
+usersRouter.patch(
+  "/:id",
+  requirePermission(Permission.ACCOUNTS_ASSIGN_BASIC),
+  async (request, response) => {
+    return response.json(
+      await usersService.updateUser(
+        request.auth!,
+        String(request.params.id),
+        request.body ?? {},
+      ),
+    )
   },
 )
 
@@ -100,7 +114,7 @@ usersRouter.patch(
   requirePermission(Permission.ACCOUNTS_ASSIGN_BASIC),
   async (request, response) => {
     const result = await usersService.changeRole(
-      request.auth!.user,
+      request.auth!,
       String(request.params.id),
       request.body?.role,
     )

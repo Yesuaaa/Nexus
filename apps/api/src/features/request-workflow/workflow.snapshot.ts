@@ -1,6 +1,7 @@
 import { readTransaction } from "../../lib/database-read.js"
 import { activeStaff } from "../../shared/query/accounts.js"
 import { workflowAccess, type WorkflowTx } from "./workflow.access.js"
+import { projectWorkspaceIdentity } from "../project-workspace/workspace-identity.js"
 
 const eventSelect = {
   id: true,
@@ -19,7 +20,7 @@ export const fileSelect = {
   createdAt: true,
 } as const
 
-function nextAction(state: string) {
+export function nextAction(state: string) {
   const labels: Record<string, string> = {
     PENDING_REVIEW: "A department head will review your request.",
     CONSULTATION:
@@ -376,7 +377,7 @@ export async function snapshot(
       project && (!permissions.isClient || project.startDate)
         ? {
             id: project.id,
-            workspaceId: project.workspaceGroupId ?? project.id,
+            workspaceId: projectWorkspaceIdentity(project),
             name: project.name,
             status: project.status,
           }

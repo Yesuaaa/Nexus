@@ -73,6 +73,7 @@ for (const width of [1440, 390]) {
     await page.goto("/login")
     const email = page.locator("#email")
     const password = page.locator("#password")
+    // Auth fields deliberately override the shared 40px management control.
     await expectBaseStyle(email, false, "48px")
     await expectBaseStyle(password, false, "48px")
     await email.fill("user@example.com")
@@ -90,7 +91,6 @@ for (const width of [1440, 390]) {
     await toggle.press("Space")
     await expect(password).toHaveAttribute("type", "text")
     await expectBaseStyle(password, false, "48px")
-
     await page.goto("/register")
     const fullName = page.getByLabel("Full name", { exact: true })
     const contactNumber = page.getByLabel("Contact number", { exact: true })

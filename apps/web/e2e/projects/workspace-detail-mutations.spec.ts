@@ -16,6 +16,8 @@ test("[NEX-008] plan and task edits reflect saved reads and preserve data after 
 
   let workspace: ProjectWorkspaceDetail = {
     id: "workspace-nex008",
+    rowId: "group:workspace-nex008",
+    kind: "group",
     name: "Website launch",
     structure: "SEPARATE",
     status: "IN_PROGRESS",
@@ -24,6 +26,7 @@ test("[NEX-008] plan and task edits reflect saved reads and preserve data after 
     activityCount: 0,
     canCreate: false,
     canManage: true,
+    canRename: true,
     activity: [],
     workstreams: [
       {
@@ -108,7 +111,7 @@ test("[NEX-008] plan and task edits reflect saved reads and preserve data after 
   })
 
   await page.goto(`/project-workspace/${workspace.id}`)
-  await page.getByRole("button", { name: "Work", exact: true }).click()
+  await page.getByRole("tab", { name: "Work", exact: true }).click()
   await page.getByRole("button", { name: "Edit project plan" }).click()
   await page.getByLabel("Phase 1 name").fill("Discovery and design")
   await page.getByRole("button", { name: "Save plan" }).click()
@@ -156,7 +159,7 @@ test("[NEX-008] plan and task edits reflect saved reads and preserve data after 
   expect(writes[2]?.phases[0]?.tasks[0]?.status).toBe("DONE")
 
   await page.reload()
-  await page.getByRole("button", { name: "Work", exact: true }).click()
+  await page.getByRole("tab", { name: "Work", exact: true }).click()
   await expect(
     page.getByText("Discovery and design", { exact: true }),
   ).toBeVisible()

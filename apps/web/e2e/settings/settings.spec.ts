@@ -139,6 +139,13 @@ for (const role of ["USER", "STAFF", "ADMIN", "SUPERADMIN"] as const) {
           ? ["Profile", "Billing Logs", "Settings", "Log out"]
           : ["Profile", "Settings", "Log out"],
       )
+      const billing = page.getByRole("menuitem", {
+        name: "Billing Logs",
+        exact: true,
+      })
+      if (role === "USER")
+        await expect(billing).toHaveAttribute("href", "/billing-logs")
+      else await expect(billing).toHaveCount(0)
       await page.keyboard.press("Escape")
       await page.getByRole("button", { name: "Sign out", exact: true }).click()
       await expect(page.getByRole("dialog")).toBeVisible()

@@ -58,7 +58,7 @@ async function projectChat(page: Page, role: "USER" | "STAFF") {
     }),
   )
   await page.route(
-    "**/api/project-workspace/workspace-1/projects/project-1/deliverables/guide/attachment",
+    "**/api/project-workspace/group%3Aworkspace-1/projects/project-1/deliverables/guide/attachment",
     async (route) => {
       const input = route.request().postDataJSON() as {
         uploadId: string
@@ -169,7 +169,7 @@ async function projectChat(page: Page, role: "USER" | "STAFF") {
           description: "Build an accessible company website.",
           status: state.archived ? "COMPLETED" : "IN_PROGRESS",
           startDate: "2026-11-09T08:00:00Z",
-          workspaceId: "workspace-1",
+          workspaceId: "group:workspace-1",
           serviceName: "Website Development",
           referenceNumber: "SR-WEB-001",
         },
@@ -477,7 +477,7 @@ for (const role of ["USER", "STAFF"] as const) {
       "href",
       role === "USER"
         ? "/projects/project-1"
-        : "/project-workspace/workspace-1",
+        : "/project-workspace/group%3Aworkspace-1",
     )
     await expect(
       details.getByText("Sam Designer", { exact: false }),
@@ -633,7 +633,10 @@ for (const width of [1440, 390]) {
     await expect(chat.getByText("guide.txt", { exact: true })).toBeVisible()
     await expect(
       chat.getByRole("link", { name: "View deliverable", exact: true }),
-    ).toHaveAttribute("href", "/project-workspace/workspace-1?tab=deliverables")
+    ).toHaveAttribute(
+      "href",
+      "/project-workspace/group%3Aworkspace-1?tab=deliverables",
+    )
     await page.reload()
     await expect(
       chat.getByText("Draft ready for review.", { exact: true }),

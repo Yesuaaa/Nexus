@@ -23,7 +23,9 @@ export function resolveWorkspaceModuleId(
   const routeModuleId = getActiveWorkspaceModuleId(account, pathname)
   return (
     getWorkspaceModules(account).find(
-      (module) => module.id === (routeModuleId ?? rememberedModuleId),
+      (module) =>
+        !module.placeholder &&
+        module.id === (routeModuleId ?? rememberedModuleId),
     )?.id ?? null
   )
 }

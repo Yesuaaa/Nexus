@@ -14,6 +14,8 @@ function workspace(
 ): ProjectWorkspaceSummary {
   return {
     id,
+    rowId: `group:${id}`,
+    kind: "group",
     name,
     structure: "SEPARATE",
     status,
@@ -22,6 +24,7 @@ function workspace(
     activityCount,
     canCreate: false,
     canManage: false,
+    canRename: false,
     workstreams: [
       {
         id: `project-${id}`,
@@ -86,7 +89,7 @@ test("[P14-001] workspace directory sends the selected activity sort and renders
   await expect(table.getByRole("link").first()).toHaveText("Recent project")
   await expect(
     table.getByRole("link", { name: "Recent project", exact: true }),
-  ).toHaveAttribute("href", "/project-workspace/workspace-recent")
+  ).toHaveAttribute("href", "/project-workspace/group%3Aworkspace-recent")
 
   await page.getByRole("combobox", { name: "Sort projects" }).click()
   await page.getByRole("option", { name: "Most activity", exact: true }).click()
@@ -110,8 +113,20 @@ test("[NEX-006] department heads are redirected away from the unmounted workspac
     const path = new URL(request.url()).pathname
     workspaceRequests.push({ method: request.method(), path })
 
-    if (path === "/api/project-workspace" && request.method() === "GET")
-      return route.fulfill({ json: { canCreate: true, workspaces: [] } })
+    if (
+      path === "/api/project-workspace/directory" &&
+      request.method() === "GET"
+    )
+      return route.fulfill({
+        json: {
+          rows: [],
+          page: 1,
+          pageSize: 10,
+          total: 0,
+          totalPages: 0,
+          hasWorkspaces: false,
+        },
+      })
 
     return route.fulfill({ status: 404, json: { error: "Unexpected request" } })
   })
@@ -119,7 +134,10 @@ test("[NEX-006] department heads are redirected away from the unmounted workspac
   await page.goto("/project-workspace/new")
   await expect(page).toHaveURL(/\/project-workspace$/)
   await expect(
-    page.getByRole("heading", { name: "Project Workspace", exact: true }),
+    page.getByRole("heading", {
+      name: "Project Workspace Management",
+      exact: true,
+    }),
   ).toBeVisible()
   await expect(
     page.getByRole("button", { name: "Create workspace", exact: true }),

@@ -125,6 +125,16 @@ test("department head manages capacity and reviews real allocation state", async
       .getByRole("region", { name: "Staff workload table", exact: true })
       .getByText("Needs setup", { exact: true }),
   ).toBeVisible()
+  const workloadTable = page.getByRole("region", {
+    name: "Staff workload table",
+    exact: true,
+  })
+  const staffSearch = page.getByRole("searchbox", { name: "Search staff" })
+  await staffSearch.fill("  Maria Santos  ")
+  await expect(
+    workloadTable.getByText("Maria Santos", { exact: true }),
+  ).toBeVisible()
+  await staffSearch.fill("")
   const overview = page.getByRole("region", { name: "Staff workload overview" })
   const checkCardHeights = async () => {
     for (const height of await overview

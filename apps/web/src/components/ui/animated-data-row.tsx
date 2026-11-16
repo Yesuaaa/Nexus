@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import {
   forwardRef,
@@ -8,23 +8,9 @@ import {
   useRef,
   useState,
   type AriaRole,
-  type CSSProperties,
   type ReactNode,
 } from "react"
-import {
-  motion,
-  useIsPresent,
-  usePresenceData,
-  useReducedMotion,
-} from "framer-motion"
-
-type AnimatedRowProps = {
-  children: ReactNode
-  className?: string
-  animateRows: boolean
-  rowIndex?: number
-  role?: AriaRole
-}
+import { motion, useReducedMotion } from "framer-motion"
 
 export type AccountRowMotionPhase = "steady" | "enter" | "exit"
 
@@ -43,44 +29,51 @@ export type AnimatedRowSlot<T> = {
   entering: AnimatedRowItem<T> | null
 }
 
+/**
+ * Row swap timing: a short in-place crossfade (opacity only, no movement, no
+ * stagger). The outgoing row fades out on top while the incoming row fades
+ * in beneath it, so the whole table updates as one quiet change.
+ */
+const EXIT_MS = 100
+const ENTER_MS = 140
+const REDUCED_MS = 80
+// Standard "accelerate" / "decelerate" curves.
+const EASE_OUT_EXIT = [0.4, 0, 1, 1] as const
+const EASE_IN_ENTER = [0, 0, 0.2, 1] as const
+
 export function accountRowMotion({
   phase,
   reduceMotion,
-  quick = false,
   delayMs = 0,
 }: {
   phase: AccountRowMotionPhase
   reduceMotion: boolean
+  /** Kept for API compatibility; quick and normal swaps now share timing. */
   quick?: boolean
   delayMs?: number
 }) {
   const delay = reduceMotion ? 0 : delayMs / 1000
-  const initial =
-    phase === "enter"
-      ? { opacity: 0, x: reduceMotion ? 0 : quick ? -36 : -48 }
-      : false
+  const initial = phase === "enter" ? { opacity: 0 } : false
   const animate =
     phase === "exit"
       ? {
           opacity: 0,
-          x: reduceMotion ? 0 : quick ? 36 : 48,
           transition: {
             delay,
-            duration: reduceMotion ? 0.12 : quick ? 0.14 : 0.22,
-            ease: "easeIn" as const,
+            duration: (reduceMotion ? REDUCED_MS : EXIT_MS) / 1000,
+            ease: EASE_OUT_EXIT,
           },
         }
       : phase === "enter"
         ? {
             opacity: 1,
-            x: 0,
             transition: {
               delay,
-              duration: reduceMotion ? 0.12 : quick ? 0.17 : 0.26,
-              ease: "easeOut" as const,
+              duration: (reduceMotion ? REDUCED_MS : ENTER_MS) / 1000,
+              ease: EASE_IN_ENTER,
             },
           }
-        : { opacity: 1, x: 0, transition: { duration: 0 } }
+        : { opacity: 1, transition: { duration: 0 } }
 
   return { initial, animate }
 }
@@ -123,22 +116,15 @@ export function swapAnimatedRows<T>({
         current !== null &&
         next !== null &&
         getKey(current.item) === getKey(next)
-      const stagger = reduceMotion
-        ? 0
-        : Math.min(index, quick ? 5 : 9) * (quick ? 20 : 40)
-      const enterDelay =
-        stagger + (current && next && !reduceMotion ? (quick ? 50 : 100) : 0)
-      const exitDuration = reduceMotion ? 120 : quick ? 140 : 220
-      const enterDuration = reduceMotion ? 120 : quick ? 170 : 260
+      // Every row swaps at once (no stagger); exit and enter overlap.
+      const exitDuration = reduceMotion ? REDUCED_MS : EXIT_MS
+      const enterDuration = reduceMotion ? REDUCED_MS : ENTER_MS
 
       if (current && !unchanged) {
-        animationDuration = Math.max(animationDuration, stagger + exitDuration)
+        animationDuration = Math.max(animationDuration, exitDuration)
       }
       if (next && !unchanged) {
-        animationDuration = Math.max(
-          animationDuration,
-          enterDelay + enterDuration,
-        )
+        animationDuration = Math.max(animationDuration, enterDuration)
       }
 
       return {
@@ -151,7 +137,7 @@ export function swapAnimatedRows<T>({
                 phase: "exit",
                 runId,
                 quick,
-                delayMs: stagger,
+                delayMs: 0,
               }
             : null,
         entering: next
@@ -160,7 +146,7 @@ export function swapAnimatedRows<T>({
               index,
               phase: unchanged ? "steady" : "enter",
               quick,
-              delayMs: enterDelay,
+              delayMs: 0,
             }
           : null,
       }
@@ -208,6 +194,7 @@ export const AnimatedSlotRow = forwardRef<
       role={role}
       className={className}
       data-animated-slot-row
+      data-slot-grid-row
       initial={values.initial}
       animate={values.animate}
       onAnimationComplete={phase === "exit" ? onExitComplete : undefined}
@@ -320,7 +307,7 @@ export function AnimatedSlotGridBody<T>({
 
   useLayoutEffect(() => {
     const firstRow = bodyRef.current?.querySelector<HTMLElement>(
-      "[data-animated-slot-row]",
+      "[data-slot-grid-row]",
     )
     if (!firstRow) return
 
@@ -333,10 +320,16 @@ export function AnimatedSlotGridBody<T>({
     const observer = new ResizeObserver(updateHeight)
     observer.observe(firstRow)
     return () => observer.disconnect()
-  }, [rowSlots])
+  }, [animateRows, items, rowSlots])
+
+  useLayoutEffect(() => {
+    if (!animateRows) onRowsSettled?.()
+  }, [animateRows, ariaBusy, items, onRowsSettled, quickKey, viewKey])
 
   useEffect(() => {
     latestItemsRef.current = items
+    if (!animateRows) return
+
     const settle = () => {
       animationGenerationRef.current += 1
       const nextSlots = settledAnimatedRows(latestItemsRef.current)
@@ -427,221 +420,104 @@ export function AnimatedSlotGridBody<T>({
     }, animationDuration)
   }, [animateRows, getKey, items, quickKey, reduceMotion, viewKey])
 
+  const visibleRowCount = animateRows ? rowSlots.length : items.length
   const bodyHeight =
-    rowSlots.length > 0 ? rowSlots.length * rowHeight : emptyHeight
+    visibleRowCount > 0 ? visibleRowCount * rowHeight : emptyHeight
 
   return (
     <div
       ref={bodyRef}
       role={bodyRole}
       aria-live="polite"
-      aria-busy={ariaBusy || isAnimating}
+      aria-busy={ariaBusy || (animateRows && isAnimating)}
       className={className}
       style={{
         height: bodyHeight,
-        transition: animateBodyHeight ? "height 220ms ease-out" : "none",
+        transition:
+          animateRows && animateBodyHeight
+            ? "height " +
+              (reduceMotion ? 0 : ENTER_MS) +
+              "ms cubic-bezier(0, 0, 0.2, 1)"
+            : "none",
       }}
     >
-      {rowSlots.length === 0 && !isAnimating && (
+      {visibleRowCount === 0 && (!animateRows || !isAnimating) && (
         <div
           role="row"
           className="grid h-full place-content-center p-6 text-center text-xs text-[#7183a2]"
         >
-          <div role="cell">{ariaBusy ? "Searching…" : emptyContent}</div>
+          <div role="cell">
+            {ariaBusy ? <span role="status">Searching…</span> : emptyContent}
+          </div>
         </div>
       )}
-      {rowSlots.map((slot) => {
-        const quick = slot.entering?.quick ?? slot.exiting?.quick ?? false
-        const stagger = reduceMotion
-          ? 0
-          : Math.min(slot.index, quick ? 5 : 9) * (quick ? 20 : 40)
-        const renderSlotRow = (
-          row: AnimatedRowItem<T>,
-          delayMs: number,
-          phase: "entering" | "exiting",
-        ) => (
-          <AnimatedSlotRow
-            key={`${getKey(row.item)}:${phase}`}
-            role={rowRole}
-            className={rowClassName(
-              row.item,
-              slot.index,
-              slot.index === rowSlots.length - 1,
-            )}
-            delayMs={delayMs}
-            phase={row.phase}
-            reduceMotion={reduceMotion}
-            quick={row.quick ?? false}
-            onExitComplete={
-              phase === "exiting" ? () => removeExitedRow(row) : undefined
-            }
-          >
-            {renderRow(row.item)}
-          </AnimatedSlotRow>
-        )
+      {animateRows
+        ? rowSlots.map((slot) => {
+            const renderSlotRow = (
+              row: AnimatedRowItem<T>,
+              delayMs: number,
+              phase: "entering" | "exiting",
+            ) => (
+              <AnimatedSlotRow
+                key={`${getKey(row.item)}:${phase}`}
+                role={rowRole}
+                className={rowClassName(
+                  row.item,
+                  slot.index,
+                  slot.index === rowSlots.length - 1,
+                )}
+                delayMs={delayMs}
+                phase={row.phase}
+                reduceMotion={reduceMotion}
+                quick={row.quick ?? false}
+                onExitComplete={
+                  phase === "exiting" ? () => removeExitedRow(row) : undefined
+                }
+              >
+                {renderRow(row.item)}
+              </AnimatedSlotRow>
+            )
 
-        return (
-          <div
-            key={slot.index}
-            className="relative"
-            style={{ height: rowHeight }}
-          >
-            {slot.exiting &&
-              renderSlotRow(
-                slot.exiting,
-                slot.exiting.delayMs ?? stagger,
-                "exiting",
-              )}
-            {slot.entering &&
-              renderSlotRow(
-                slot.entering,
-                slot.entering.delayMs ??
-                  stagger +
-                    (slot.exiting && !reduceMotion ? (quick ? 50 : 100) : 0),
-                "entering",
-              )}
-          </div>
-        )
-      })}
+            return (
+              <div
+                key={slot.index}
+                className="relative"
+                style={{ height: rowHeight }}
+              >
+                {slot.exiting &&
+                  renderSlotRow(
+                    slot.exiting,
+                    slot.exiting.delayMs ?? 0,
+                    "exiting",
+                  )}
+                {slot.entering &&
+                  renderSlotRow(
+                    slot.entering,
+                    slot.entering.delayMs ?? 0,
+                    "entering",
+                  )}
+              </div>
+            )
+          })
+        : items.map((item, index) => (
+            <div
+              key={getKey(item)}
+              className="relative"
+              style={{ height: rowHeight }}
+            >
+              <div
+                data-slot-grid-row
+                role={rowRole}
+                className={rowClassName(
+                  item,
+                  index,
+                  index === items.length - 1,
+                )}
+              >
+                {renderRow(item)}
+              </div>
+            </div>
+          ))}
     </div>
   )
 }
-
-function presenceMotionValues(
-  reduceMotion: boolean,
-  animateRows: boolean,
-  rowIndex: number,
-) {
-  if (!animateRows) {
-    return {
-      ...accountRowMotion({ phase: "steady", reduceMotion }),
-      exit: undefined,
-    }
-  }
-
-  const staggerMs = reduceMotion ? 0 : Math.min(rowIndex, 9) * 40
-  const entering = accountRowMotion({
-    phase: "enter",
-    reduceMotion,
-    delayMs: staggerMs + (reduceMotion ? 0 : 100),
-  })
-  const exiting = accountRowMotion({
-    phase: "exit",
-    reduceMotion,
-    delayMs: staggerMs,
-  })
-
-  return {
-    initial: entering.initial,
-    animate: entering.animate,
-    exit: exiting.animate,
-  }
-}
-
-export const AnimatedGridRow = forwardRef<HTMLDivElement, AnimatedRowProps>(
-  function AnimatedGridRow(
-    { children, className, animateRows, rowIndex = 0, role = "row" },
-    ref,
-  ) {
-    const present = useIsPresent()
-    const presenceData = usePresenceData() as boolean | null
-    const reduceMotion = useReducedMotion() ?? false
-    const shouldAnimate = present ? animateRows : (presenceData ?? animateRows)
-    const values = presenceMotionValues(reduceMotion, shouldAnimate, rowIndex)
-
-    return (
-      <motion.div
-        ref={ref}
-        role={role}
-        className={className}
-        aria-hidden={!present}
-        inert={!present}
-        style={{ pointerEvents: present ? "auto" : "none" }}
-        initial={values.initial}
-        animate={values.animate}
-        exit={values.exit}
-      >
-        {children}
-      </motion.div>
-    )
-  },
-)
-
-export const AnimatedTableRow = forwardRef<
-  HTMLTableRowElement,
-  AnimatedRowProps
->(function AnimatedTableRow(
-  { children, className, animateRows, rowIndex = 0 },
-  ref,
-) {
-  const present = useIsPresent()
-  const presenceData = usePresenceData() as boolean | null
-  const reduceMotion = useReducedMotion() ?? false
-  const rowRef = useRef<HTMLTableRowElement>(null)
-  const [cachedLayout, setCachedLayout] = useState<{
-    isTableRow: boolean
-    columns: number[]
-  }>({
-    isTableRow: false,
-    columns: [],
-  })
-  const setRowRef = useCallback(
-    (row: HTMLTableRowElement | null) => {
-      rowRef.current = row
-      if (typeof ref === "function") ref(row)
-      else if (ref) ref.current = row
-    },
-    [ref],
-  )
-  useLayoutEffect(() => {
-    const row = rowRef.current
-    if (!present || !row) return
-
-    const measure = () => {
-      const display = window.getComputedStyle(row).display
-      setCachedLayout({
-        isTableRow: display === "table-row",
-        columns: Array.from(
-          row.cells,
-          (cell) => cell.getBoundingClientRect().width,
-        ),
-      })
-    }
-
-    measure()
-    const observer = new ResizeObserver(measure)
-    observer.observe(row)
-    return () => observer.disconnect()
-  }, [present])
-  const shouldAnimate = present ? animateRows : (presenceData ?? animateRows)
-  const values = presenceMotionValues(reduceMotion, shouldAnimate, rowIndex)
-  const frozenLayout: CSSProperties =
-    !present && cachedLayout.isTableRow
-      ? {
-          display: "grid",
-          gridTemplateColumns: cachedLayout.columns
-            .map((width) => width + "px")
-            .join(" "),
-          alignItems: "center",
-          boxSizing: "border-box",
-        }
-      : {}
-
-  return (
-    <motion.tr
-      ref={setRowRef}
-      className={className}
-      aria-hidden={!present}
-      inert={!present}
-      style={{
-        ...frozenLayout,
-        pointerEvents: present ? "auto" : "none",
-      }}
-      initial={values.initial}
-      animate={values.animate}
-      exit={values.exit}
-    >
-      {children}
-    </motion.tr>
-  )
-})

@@ -10,6 +10,7 @@ for (const width of [1440, 390]) {
     let employee: Employee = {
       id: "account:account-1",
       accountId: "account-1",
+      accountRole: "STAFF",
       hasEmployeeRecord: false,
       employeeId: "",
       fullName: "Alex Employee",

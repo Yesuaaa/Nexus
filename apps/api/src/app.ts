@@ -6,7 +6,7 @@ import express from "express"
 import { authRouter } from "./features/auth/auth.controller.js"
 import { departmentsRouter } from "./features/departments/departments.controller.js"
 import { employeesRouter } from "./features/employees/employees.controller.js"
-import { healthRouter } from "./features/health/health.controller.js"
+import { createHealthRouter } from "./features/health/health.controller.js"
 import { usersRouter } from "./features/users/users.controller.js"
 import { servicesRouter } from "./features/services/services.controller.js"
 import { clientsRouter } from "./features/clients/clients.controller.js"
@@ -19,16 +19,23 @@ import type { ConversationRealtime } from "./features/request-conversations/requ
 import { requestWorkflowRouter } from "./features/request-workflow/workflow.controller.js"
 import { projectsRouter } from "./features/projects/projects.controller.js"
 import { projectWorkspaceRouter } from "./features/project-workspace/project-workspace.controller.js"
+import { projectManagementRouter } from "./features/admin-project-management/project-management.controller.js"
 import { projectConversationsRouter } from "./features/project-conversations/project-conversations.controller.js"
 import { devErrorInterceptor, handleError } from "./shared/error-handler.js"
 
 import { workloadRouter } from "./features/workload/workload.controller.js"
 import { createAttendanceRouter } from "./features/attendance/routes.js"
+import { modulesRouter } from "./features/modules/modules.controller.js"
+import { administrativeProjectsRouter } from "./features/projects/administrative-projects.js"
+import { administrativeRequestsRouter } from "./features/request-inbox/administrative-requests.js"
+import { administrativeWorkloadRouter } from "./features/workload/administrative-workload.controller.js"
+import { administrativeConversationsRouter } from "./features/request-conversations/administrative-conversations.controller.js"
 
 export function createApp(
   options: {
     conversationRealtime?: ConversationRealtime
     attendanceClock?: () => Date
+    isShuttingDown?: () => boolean
   } = {},
 ) {
   const app = express()
@@ -78,12 +85,21 @@ export function createApp(
   app.use(express.json({ limit: "16kb" }))
   app.use("/api/auth", authRouter)
   app.use("/api/users", usersRouter)
+  app.use("/api/modules", modulesRouter)
+  app.use("/api/administrative-projects", administrativeProjectsRouter)
+  app.use("/api/administrative-requests", administrativeRequestsRouter)
+  app.use("/api/administrative-workload", administrativeWorkloadRouter)
+  app.use(
+    "/api/administrative-conversations",
+    administrativeConversationsRouter,
+  )
   app.use("/api/departments", departmentsRouter)
   app.use("/api/employees", employeesRouter)
   app.use("/api/clients", clientsRouter)
   app.use("/api/request-inbox", requestInboxRouter)
   app.use("/api/projects", projectsRouter)
   app.use("/api/project-workspace", projectWorkspaceRouter)
+  app.use("/api/project-management", projectManagementRouter)
   app.use("/api/project-conversations", projectConversationsRouter)
   app.use("/api/workload", workloadRouter)
   app.use("/api/attendance", createAttendanceRouter(options.attendanceClock))
@@ -96,7 +112,7 @@ export function createApp(
     express.json({ limit: "16kb" }),
     internalConversationsRouter,
   )
-  app.use("/api", healthRouter)
+  app.use("/api", createHealthRouter(options.isShuttingDown))
   app.use(handleError)
   return app
 }

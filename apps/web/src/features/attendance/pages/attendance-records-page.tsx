@@ -3,6 +3,8 @@ import { useState } from "react"
 import { Download } from "lucide-react"
 import { PageHeaderButton } from "@/components/layout/page-header"
 import { FilterSelect } from "@/components/ui/filter-select"
+import { TableSearchStatus } from "@/components/ui/table-search-status"
+import { usePaginatedList } from "@/components/ui/use-paginated-list"
 import { useAsyncResource } from "@/lib/use-async-resource"
 import { AttendanceShell } from "../components/attendance-shell"
 import {
@@ -15,12 +17,19 @@ import {
   attendanceMonitoring,
   attendanceDepartments,
   attendanceEmployees,
+  type AttendanceEmployee,
 } from "../api/attendance-api"
 import { EmployeeTable } from "@/features/employees/components/employee-table"
 import { SearchField } from "@/components/ui/search-field"
 import { Button } from "@/components/ui/button"
-import { OverviewPanel } from "@/components/ui/overview-panel"
 import { defaultRange } from "../model/attendance"
+
+function matchesAttendanceEmployee(item: AttendanceEmployee, query: string) {
+  const needle = query.trim().toLocaleLowerCase()
+  return [item.fullName, item.employeeId].some((value) =>
+    value.toLocaleLowerCase().includes(needle),
+  )
+}
 
 export function AttendanceRecordsPage() {
   const [view, setView] = useState<"employees" | "logs">("employees")
@@ -30,18 +39,22 @@ export function AttendanceRecordsPage() {
   } | null>(null)
   const employeeId = selected?.id ?? ""
   const [search, setSearch] = useState("")
-  const [employeePage, setEmployeePage] = useState(1)
   const [range, setRange] = useState(defaultRange)
   const [page, setPage] = useState(1)
   const [departmentId, setDepartmentId] = useState("")
   const departments = useAsyncResource(attendanceDepartments, [], {
     fallbackError: "Couldn't load departments.",
   })
-  const employees = useAsyncResource(
-    (signal) => attendanceEmployees(search, employeePage, signal, departmentId),
-    [search, employeePage, departmentId],
-    { fallbackError: "Couldn't load employees." },
-  )
+  const employees = usePaginatedList({
+    params: { search, departmentId },
+    load: ({ page, signal }) =>
+      attendanceEmployees(search, page, signal, departmentId),
+    rows: (result) => result.employees,
+    matches: matchesAttendanceEmployee,
+    initial: null,
+    fallbackError: "Couldn't load employees.",
+  })
+  const { setPage: setEmployeePage } = employees
   const history = useAsyncResource(
     (signal) =>
       attendanceMonitoring(
@@ -135,6 +148,11 @@ export function AttendanceRecordsPage() {
   return (
     <AttendanceShell
       tab="records"
+      title={
+        view === "logs" && selected
+          ? `Time Logs for ${selected.fullName}`
+          : undefined
+      }
       actions={
         view === "employees" ? (
           <PageHeaderButton
@@ -174,20 +192,22 @@ export function AttendanceRecordsPage() {
           </div>
           <EmployeeTable
             mode="attendance"
-            employees={
-              employees.loading || employees.error
-                ? []
-                : (employees.data?.employees ?? []).map((employee) => ({
-                    ...employee,
-                    departmentName: employee.departmentId
-                      ? (departments.data?.departments.find(
-                          (department) =>
-                            department.id === employee.departmentId,
-                        )?.name ?? "Department unavailable")
-                      : "Unassigned",
-                  }))
+            employees={employees.rows.map((employee) => ({
+              ...employee,
+              departmentName: employee.departmentId
+                ? (departments.data?.departments.find(
+                    (department) => department.id === employee.departmentId,
+                  )?.name ?? "Department unavailable")
+                : "Unassigned",
+            }))}
+            initialLoading={
+              employees.searchSkeleton ||
+              (employees.loading &&
+                !employees.hasCurrentData &&
+                !employees.previewing)
             }
             loading={employees.loading}
+            previewing={employees.previewing}
             error={employees.error}
             onRetry={employees.retry}
             emptyMessage="No employees match your search."
@@ -197,35 +217,27 @@ export function AttendanceRecordsPage() {
               setView("logs")
             }}
           />
-          {employees.data && !employees.error && (
-            <AttendancePagination
-              data={employees.data}
-              disabled={employees.loading}
-              onChange={setEmployeePage}
-            />
-          )}
+          <TableSearchStatus
+            active={
+              employees.loading &&
+              employees.previewing &&
+              Boolean(employees.preview?.length)
+            }
+            label="attendance employees"
+          />
+          {employees.data &&
+            employees.hasCurrentData &&
+            !employees.previewing &&
+            !employees.error && (
+              <AttendancePagination
+                data={employees.data}
+                disabled={employees.loading}
+                onChange={setEmployeePage}
+              />
+            )}
         </>
       ) : (
-        <OverviewPanel
-          className="border-[#dce3ed] bg-background shadow-[0_14px_36px_rgb(20_45_97_/_10%)]"
-          titleClassName="text-lg"
-          title={
-            selected
-              ? `Logs for ${selected.fullName}`
-              : "All permitted employees"
-          }
-          action={
-            <Button
-              variant="outline"
-              size="panel"
-              disabled={!matching?.workdays.length || history.loading}
-              onClick={exportPage}
-            >
-              <Download size={15} aria-hidden="true" />
-              Export
-            </Button>
-          }
-        >
+        <>
           <div className="mb-4 flex flex-wrap items-center gap-[10px]">
             {!selected && departmentFilter}
             <RangeFields
@@ -247,6 +259,16 @@ export function AttendanceRecordsPage() {
                 All logs
               </Button>
             )}
+            <Button
+              variant="outline"
+              size="panel"
+              className="ml-auto"
+              disabled={!matching?.workdays.length || history.loading}
+              onClick={exportPage}
+            >
+              <Download size={15} aria-hidden="true" />
+              Export
+            </Button>
           </div>
           <AttendanceHistoryTable
             days={matching?.workdays ?? []}
@@ -262,7 +284,7 @@ export function AttendanceRecordsPage() {
               onChange={setPage}
             />
           )}
-        </OverviewPanel>
+        </>
       )}
     </AttendanceShell>
   )

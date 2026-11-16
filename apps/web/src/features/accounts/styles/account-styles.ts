@@ -11,4 +11,4 @@ export const accountButtonPrimary = buttonTones.brand
 export const accountButtonSecondary = buttonTones.brandOutline
 
 export const accountGrid =
-  "grid grid-cols-[minmax(180px,1.5fr)_minmax(70px,0.6fr)_minmax(70px,0.6fr)_minmax(100px,0.8fr)_minmax(112px,1fr)_minmax(90px,0.7fr)] items-center gap-3.5 @max-[900px]:grid-cols-[minmax(0,1fr)_auto] @max-[530px]:grid-cols-[minmax(0,1fr)]"
+  "grid grid-cols-[minmax(220px,2fr)_minmax(90px,0.8fr)_minmax(100px,0.8fr)_minmax(130px,1fr)_64px] items-center gap-3.5 @max-[900px]:grid-cols-[minmax(0,1fr)_auto] @max-[530px]:grid-cols-[minmax(0,1fr)]"

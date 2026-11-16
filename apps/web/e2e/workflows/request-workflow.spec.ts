@@ -1124,6 +1124,7 @@ for (const width of [1440, 390]) {
         id: "project-1",
         name: "Business website",
         status: "PLANNED",
+        workspaceId: "ungrouped-project:project-1",
       }
       workflow.events = [
         {
@@ -1324,7 +1325,10 @@ for (const width of [1440, 390]) {
       })
       await expect(
         page.getByRole("link", { name: "View Project", exact: true }),
-      ).toHaveAttribute("href", "/project-workspace/project-1")
+      ).toHaveAttribute(
+        "href",
+        "/project-workspace/ungrouped-project%3Aproject-1",
+      )
       await expect(
         page.getByRole("checkbox", { name: /Dani Worker/ }),
       ).toHaveCount(0)

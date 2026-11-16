@@ -11,7 +11,11 @@ import {
   useState,
   type ReactNode,
 } from "react"
-import { getProjectWorkspace } from "@/features/project-workspace/api/project-workspace-api"
+import { useSearchParams } from "next/navigation"
+import {
+  parseWorkspaceDirectoryState,
+  serializeWorkspaceDirectoryState,
+} from "@/features/project-workspace/model/workspace-directory-state"
 import { ChevronRightIcon, HomeIcon } from "./icons"
 import { focusRing } from "./styles"
 
@@ -68,6 +72,7 @@ const routeLabels: Record<string, string> = {
   messages: "Messages",
   projects: "Projects",
   "project-workspace": "Project Workspace",
+  "project-management": "Project Workspace",
   accounts: "Account Management",
   departments: "Department Management",
   employees: "Employee Management",
@@ -108,54 +113,69 @@ function labelFor(segment: string, parentSegment?: string) {
 
 export function Breadcrumbs() {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const { labels } = useContext(BreadcrumbLabelContext)
   const segments = pathname.split("/").filter(Boolean)
-  const projectId =
-    segments[0] === "project-workspace" && segments[1] !== "new"
-      ? segments[1]
-      : undefined
-  const [projectLabel, setProjectLabel] = useState<{
-    id: string
-    name: string
-  } | null>(null)
-
-  useEffect(() => {
-    if (!projectId) return
-    const controller = new AbortController()
-    getProjectWorkspace(projectId, controller.signal)
-      .then((project) => {
-        if (!controller.signal.aborted)
-          setProjectLabel({ id: projectId, name: project.name })
-      })
-      .catch(() => {
-        // Keep the breadcrumb readable when the page reports a load error.
-      })
-    return () => controller.abort()
-  }, [projectId])
+  const decodedSegments = segments.map(decodeURIComponent)
+  const isProjectManagementDepartmentProjects =
+    decodedSegments.length === 4 &&
+    decodedSegments[0] === "project-management" &&
+    decodedSegments[1] === "departments" &&
+    decodedSegments[3] === "projects"
+  const isWorkspaceDetail =
+    decodedSegments.length === 2 &&
+    decodedSegments[0] === "project-workspace" &&
+    decodedSegments[1] !== "new" &&
+    decodedSegments[1] !== "overview"
+  const directoryQuery = isWorkspaceDetail
+    ? serializeWorkspaceDirectoryState(
+        parseWorkspaceDirectoryState(
+          new URLSearchParams(searchParams.toString()),
+        ),
+      )
+    : ""
 
   return (
-    <nav className="min-w-0 overflow-hidden" aria-label="Breadcrumb">
+    <nav
+      className="min-w-0 overflow-hidden text-[13px]"
+      aria-label="Breadcrumb"
+    >
       <ol className="flex min-w-0 list-none gap-[7px] p-0 whitespace-nowrap">
         <li className="flex min-w-0 items-center gap-[7px] text-[#8a9ab3]">
           <Link
             href="/"
             className={`flex items-center gap-[5px] text-[#647a9c] no-underline hover:text-[#203a78] ${focusRing}`}
           >
-            <HomeIcon width="15" height="15" />
+            <HomeIcon className="size-[18px]" strokeWidth={1.75} />
             <span className="max-[560px]:sr-only">Home</span>
           </Link>
         </li>
         {segments.map((segment, index) => {
+          const decodedSegment = decodedSegments[index]
+          const projectManagementLabel =
+            isProjectManagementDepartmentProjects && index === 1
+              ? "Management"
+              : isProjectManagementDepartmentProjects && index === 3
+                ? "Project Workspaces"
+                : undefined
           const label =
+            projectManagementLabel ??
             labels[segment] ??
-            (index === 1 && projectId
-              ? projectLabel?.id === projectId
-                ? projectLabel.name
-                : "Project"
-              : index === 1 && segments[0] === "projects"
-                ? "Project"
-                : labelFor(segment, segments[index - 1]))
+            labels[decodedSegment] ??
+            (index === 1 && (isWorkspaceDetail || segments[0] === "projects")
+              ? "Project"
+              : labelFor(segment, segments[index - 1]))
           const isCurrent = index === segments.length - 1
+          const isDepartmentContext =
+            isProjectManagementDepartmentProjects && index === 2
+          const baseHref = `/${segments.slice(0, index + 1).join("/")}`
+          const href = isProjectManagementDepartmentProjects
+            ? index === 0
+              ? "/project-management/overview"
+              : "/project-management"
+            : index === 0 && directoryQuery
+              ? `${baseHref}?${directoryQuery}`
+              : baseHref
           return (
             <li
               key={`${index}-${segment}`}
@@ -163,7 +183,10 @@ export function Breadcrumbs() {
               // otherwise squeeze into each other.
               className={`flex min-w-0 items-center gap-[7px] text-[#8a9ab3] ${isCurrent ? "" : "max-[560px]:hidden"}`}
             >
-              <ChevronRightIcon width="14" height="14" className="flex-none" />
+              <ChevronRightIcon
+                className="size-[18px] flex-none"
+                strokeWidth={1.75}
+              />
               {isCurrent ? (
                 <span
                   aria-current="page"
@@ -171,9 +194,13 @@ export function Breadcrumbs() {
                 >
                   {label}
                 </span>
+              ) : isDepartmentContext ? (
+                <span className="block min-w-0 truncate text-[#647a9c]">
+                  {label}
+                </span>
               ) : (
                 <Link
-                  href={`/${segments.slice(0, index + 1).join("/")}`}
+                  href={href}
                   className={`block min-w-0 truncate text-[#647a9c] no-underline hover:text-[#203a78] ${focusRing}`}
                 >
                   {label}

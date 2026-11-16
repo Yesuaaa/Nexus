@@ -87,7 +87,7 @@ test(
     }
 
     await t.test(
-      "loading department detail keeps an on-leave head's title",
+      "department reads preserve titles; explicit employee edits correct legacy titles",
       async () => {
         const leave = await request("/employees/emp-head", "PUT", {
           status: "ON_LEAVE",
@@ -110,13 +110,23 @@ test(
         })
         assert.equal(head.position, "Department Head")
         assert.equal(head.employee?.position, "Department Head")
-        // Stale titles on everyone else are still cleaned up.
+        // Reading does not repair unrelated legacy titles.
         const stale = await prisma.user.findUniqueOrThrow({
           where: { id: "stale" },
           include: { employee: true },
         })
-        assert.equal(stale.position, null)
-        assert.equal(stale.employee?.position, null)
+        assert.equal(stale.position, "Department Head")
+        assert.equal(stale.employee?.position, "Department Head")
+        const corrected = await request("/employees/emp-stale", "PUT", {
+          position: "Designer",
+        })
+        assert.equal(corrected.status, 200, JSON.stringify(corrected.payload))
+        const saved = await prisma.user.findUniqueOrThrow({
+          where: { id: "stale" },
+          include: { employee: true },
+        })
+        assert.equal(saved.position, "Designer")
+        assert.equal(saved.employee?.position, "Designer")
       },
     )
 

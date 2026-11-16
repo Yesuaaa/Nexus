@@ -2,11 +2,10 @@
 
 import { LayoutGrid } from "lucide-react"
 import { PageHeader } from "@/components/layout/page-header"
-import { contentClass } from "@/components/layout/styles"
 import { EmptyState } from "@/components/ui/empty-state"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
-import { cn } from "@/lib/utils"
 import { getWorkspaceModules } from "../../dashboard/model/workspace-modules"
+import { ModuleCarousel } from "../components/module-carousel"
 import { ModuleCard } from "../components/module-card"
 
 export function ModulePage() {
@@ -16,13 +15,13 @@ export function ModulePage() {
 
   return (
     <main
-      className={cn(contentClass, "px-[clamp(16px,2.1vw,32px)] py-6")}
+      className="mt-2 flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto rounded-[13px] border border-[#dedede] bg-background px-[clamp(16px,2.1vw,32px)] py-6 max-[767px]:mt-1.5"
       aria-label="Workspace selector"
     >
       <PageHeader
         title="Module"
         description="Select a module to continue. Only workspaces available to your account are shown."
-        className="justify-center text-center max-[560px]:items-center"
+        className="justify-center text-center max-[560px]:items-center [&>div>h1]:text-[clamp(28px,3vw,36px)] [&>div>p]:text-sm"
       />
 
       {modules.length === 0 ? (
@@ -34,14 +33,22 @@ export function ModulePage() {
           role="status"
           className="mt-6 max-w-[960px]"
         />
+      ) : modules.length > 5 ? (
+        <div className="-mx-[clamp(16px,2.1vw,32px)] flex min-h-0 flex-1">
+          <ModuleCarousel modules={modules} />
+        </div>
       ) : (
         <section
-          className="mx-auto grid w-full max-w-[1000px] grid-cols-1 gap-5 pt-6 sm:grid-cols-2"
           aria-label="Available workspaces"
+          className="mx-auto my-auto w-full max-w-[1616px] shrink-0 overflow-x-auto py-6"
         >
-          {modules.map((module) => {
-            return <ModuleCard key={module.id} module={module} />
-          })}
+          <div className="flex w-max min-w-full justify-center gap-5 px-1">
+            {modules.map((module) => (
+              <div key={module.id} className="w-[280px] shrink-0">
+                <ModuleCard module={module} />
+              </div>
+            ))}
+          </div>
         </section>
       )}
     </main>

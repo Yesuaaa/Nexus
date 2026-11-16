@@ -1,0 +1,252 @@
+import {
+  WorkforceManagementAction as Action,
+  WorkforceManagementOrigin as Origin,
+  WorkforceManagementSubject as Subject,
+  EmployeeStatus,
+  EmploymentType,
+  type Prisma,
+} from "../../generated/prisma/client.js"
+import {
+  assertHistoryObject,
+  assertManagementOperation,
+  historyNullableId,
+  historyTransition,
+  validateHistoryPayload,
+  type HistoryTransition as Transition,
+  type ManagementOperation,
+  type HistoryValueCheck,
+} from "../../shared/management-history.js"
+import { isRecordId } from "../../shared/validation.js"
+
+type Assignments = {
+  departmentId?: Transition<string | null>
+  teamId?: Transition<string | null>
+  userId?: Transition<string | null>
+}
+type Heads = {
+  headId?: Transition<string | null>
+  temporaryHeadOriginalId?: Transition<string | null>
+  temporaryHeadAssignedId?: Transition<string | null>
+}
+type Payloads = {
+  CREATED: Assignments &
+    Heads & {
+      status?: Transition<EmployeeStatus | null>
+      employmentType?: Transition<EmploymentType | null>
+      leadId?: Transition<string | null>
+    }
+  PROFILE_UPDATED: { employmentType?: Transition<EmploymentType> }
+  STATUS_CHANGED: { status: Transition<EmployeeStatus> }
+  ASSIGNMENT_CHANGED: Assignments & { affectedAccountId?: string }
+  HEAD_CHANGED: Heads & { headId: Transition<string | null> }
+  TEMPORARY_HEAD_CHANGED: Heads
+  LEAD_CHANGED: { leadId: Transition<string | null> }
+  TITLE_CLEARED: { cause: "FORMER_DEPARTMENT_HEAD"; affectedAccountId?: string }
+  DELETED: Heads & {
+    departmentId?: Transition<string | null>
+    leadId?: Transition<string | null>
+  }
+}
+
+type WorkforceField =
+  | "employeeId"
+  | "fullName"
+  | "email"
+  | "contactNumber"
+  | "position"
+  | "employmentType"
+  | "startDate"
+  | "status"
+  | "departmentId"
+  | "teamId"
+  | "userId"
+  | "name"
+  | "code"
+  | "color"
+  | "description"
+  | "headId"
+  | "temporaryHeadOriginalId"
+  | "temporaryHeadAssignedId"
+  | "leadId"
+
+type ActionSubjects = {
+  CREATED: Subject
+  PROFILE_UPDATED: Subject
+  STATUS_CHANGED: "EMPLOYEE"
+  ASSIGNMENT_CHANGED: "EMPLOYEE" | "DEPARTMENT"
+  HEAD_CHANGED: "DEPARTMENT"
+  TEMPORARY_HEAD_CHANGED: "DEPARTMENT"
+  LEAD_CHANGED: "TEAM"
+  TITLE_CLEARED: "EMPLOYEE" | "DEPARTMENT"
+  DELETED: "DEPARTMENT" | "TEAM"
+}
+
+export type WorkforceManagementChangeInput = {
+  [A in Action]: {
+    action: A
+    origin: Origin
+    subjectType: ActionSubjects[A]
+    subjectId: string
+    changedFields: readonly WorkforceField[]
+    changes: Payloads[A]
+  }
+}[Action]
+
+const profile = {
+  EMPLOYEE: [
+    "employeeId",
+    "fullName",
+    "email",
+    "contactNumber",
+    "position",
+    "employmentType",
+    "startDate",
+  ],
+  DEPARTMENT: ["name", "code", "color", "description"],
+  TEAM: ["name", "description"],
+}
+const id = historyTransition(historyNullableId)
+// Deletion can remove an existing relationship, never create or reassign one.
+const removedId: HistoryValueCheck = (value) => {
+  if (!id(value)) return false
+  const transition = value as Transition<string | null>
+  return transition.before !== null && transition.after === null
+}
+const assignments = { departmentId: id, teamId: id, userId: id }
+const heads = {
+  headId: id,
+  temporaryHeadOriginalId: id,
+  temporaryHeadAssignedId: id,
+}
+const status: HistoryValueCheck = (v) =>
+  Object.values(EmployeeStatus).some((s) => s === v)
+const employment: HistoryValueCheck = (v) =>
+  Object.values(EmploymentType).some((s) => s === v)
+
+/** Append only, within the same transaction as the future workforce mutation. */
+export async function writeWorkforceManagementChange(
+  tx: Prisma.TransactionClient,
+  operation: ManagementOperation,
+  input: WorkforceManagementChangeInput,
+) {
+  assertManagementOperation(operation)
+  assertHistoryObject(input, [
+    "action",
+    "origin",
+    "subjectType",
+    "subjectId",
+    "changedFields",
+    "changes",
+  ])
+  if (
+    !Object.values(Action).includes(input.action) ||
+    !Object.values(Origin).includes(input.origin) ||
+    !Object.values(Subject).includes(input.subjectType)
+  )
+    throw new Error("Invalid workforce history classification")
+
+  let fields: readonly string[] = []
+  let checks: Record<string, HistoryValueCheck> = {}
+  let required: string[] = []
+  const employee = input.subjectType === Subject.EMPLOYEE
+  const department = input.subjectType === Subject.DEPARTMENT
+  switch (input.action) {
+    case Action.CREATED:
+      checks = employee
+        ? {
+            ...assignments,
+            status: historyTransition((v) => v === null || status(v)),
+            employmentType: historyTransition(
+              (v) => v === null || employment(v),
+            ),
+          }
+        : department
+          ? heads
+          : { departmentId: id, leadId: id }
+      fields = [...profile[input.subjectType], ...Object.keys(checks)]
+      break
+    case Action.PROFILE_UPDATED:
+      fields = profile[input.subjectType]
+      checks = employee ? { employmentType: historyTransition(employment) } : {}
+      break
+    case Action.STATUS_CHANGED:
+      if (!employee) throw new Error("Only Employee has HR status history")
+      fields = ["status"]
+      checks = { status: historyTransition(status) }
+      required = ["status"]
+      break
+    case Action.ASSIGNMENT_CHANGED:
+      if (!employee && !department)
+        throw new Error("Invalid assignment history subject")
+      checks = employee
+        ? assignments
+        : { departmentId: id, teamId: id, affectedAccountId: isRecordId }
+      fields = employee
+        ? Object.keys(assignments)
+        : ["departmentId", "teamId", "position"]
+      required = employee ? [] : ["affectedAccountId"]
+      break
+    case Action.HEAD_CHANGED:
+    case Action.TEMPORARY_HEAD_CHANGED:
+      if (!department) throw new Error("Head history requires a Department")
+      fields = Object.keys(heads)
+      checks = heads
+      required = input.action === Action.HEAD_CHANGED ? ["headId"] : []
+      if (
+        input.action === Action.TEMPORARY_HEAD_CHANGED &&
+        !Object.hasOwn(input.changes, "temporaryHeadOriginalId") &&
+        !Object.hasOwn(input.changes, "temporaryHeadAssignedId")
+      ) {
+        throw new Error("Temporary head history requires a tracking transition")
+      }
+      break
+    case Action.LEAD_CHANGED:
+      if (input.subjectType !== Subject.TEAM)
+        throw new Error("Lead history requires a Team")
+      fields = ["leadId"]
+      checks = { leadId: id }
+      required = ["leadId"]
+      break
+    case Action.TITLE_CLEARED:
+      if (!employee && !department)
+        throw new Error("Invalid title cleanup subject")
+      fields = ["position"]
+      checks = {
+        cause: (v) => v === "FORMER_DEPARTMENT_HEAD",
+        ...(department ? { affectedAccountId: isRecordId } : {}),
+      }
+      required = department ? ["cause", "affectedAccountId"] : ["cause"]
+      break
+    case Action.DELETED:
+      if (employee)
+        throw new Error("No Employee deletion management operation exists")
+      checks = department
+        ? {
+            headId: removedId,
+            temporaryHeadOriginalId: removedId,
+            temporaryHeadAssignedId: removedId,
+          }
+        : { departmentId: removedId, leadId: removedId }
+      fields = Object.keys(checks)
+      break
+  }
+  const payload = validateHistoryPayload(
+    input,
+    "subjectId",
+    fields,
+    checks,
+    required,
+  )
+  return tx.workforceManagementChange.create({
+    data: {
+      actorAccountId: operation.actorAccountId,
+      actorRoleAtTime: operation.actorRoleAtTime,
+      operationId: operation.operationId,
+      subjectType: input.subjectType,
+      subjectId: input.subjectId,
+      action: input.action,
+      origin: input.origin,
+      ...payload,
+    },
+  })
+}

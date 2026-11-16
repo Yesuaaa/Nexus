@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { LoaderCircle, Trash2, UsersRound } from "lucide-react"
+import { Trash2, UsersRound } from "lucide-react"
 import { Avatar } from "@/components/ui/avatar"
 import { ManagementViewToggle } from "@/components/layout/management-view-toggle"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
@@ -10,11 +10,9 @@ import { sileo } from "@/lib/toast"
 import { cn } from "@/lib/utils"
 import { contentClass } from "@/components/layout/styles"
 import { PageHeader, PageHeaderButton } from "@/components/layout/page-header"
-import { Alert } from "@/components/ui/alert"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
-import { Dropdown as AccessDropdown } from "@/components/ui/dropdown"
-import { FilterSelect } from "@/components/ui/filter-select"
+import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
 import { Pill } from "@/components/ui/pill"
 import { SearchField } from "@/components/ui/search-field"
 import {
@@ -31,13 +29,11 @@ import { ApiError, clearToken } from "@/features/auth/api/auth-api"
 import { roleLabels } from "@/features/auth/model/roles"
 import type { Account } from "@/features/auth/model/types"
 import {
-  canAssignRole,
   canChangeAccountStatus,
   canChangeAccountPassword,
   canCreateRole,
 } from "@/features/auth/model/permissions"
 import {
-  changeAccountRole,
   changeAccountStatus,
   listAccounts,
   moveAccountToTrash,
@@ -52,11 +48,8 @@ import { AccountRowActions } from "../components/account-row-actions"
 import { CreateAccountDialog } from "../components/create-account-dialog"
 import { ChangePasswordDialog } from "../components/change-password-dialog"
 import { DeleteAccountDialog } from "../components/delete-account-dialog"
-import {
-  accountButton,
-  accountButtonPrimary,
-  accountGrid,
-} from "../styles/account-styles"
+import { accountGrid } from "../styles/account-styles"
+import { EditAccountPanel } from "../components/edit-account-panel"
 import { errorMessage } from "@/lib/error-message"
 
 const allRoles: AccountRole[] = ["USER", "STAFF", "ADMIN", "SUPERADMIN"]
@@ -68,9 +61,8 @@ const roleFilterOptions: { value: string; label: string }[] = [
 function AccountRowContents({
   user,
   actor,
-  selectedRole,
   disabled,
-  onRoleChange,
+  onEdit,
   onChangeStatus,
   onChangePassword,
   onDelete,
@@ -78,20 +70,13 @@ function AccountRowContents({
 }: {
   user: Account
   actor: Account
-  selectedRole: AccountRole
   disabled: boolean
-  onRoleChange: (user: Account, role: AccountRole) => void
+  onEdit: (user: Account) => void
   onChangeStatus: (user: Account) => void
   onChangePassword: (user: Account) => void
   onDelete: (user: Account) => void
   trashView: boolean
 }) {
-  const assignableRoles = allRoles.filter((role) =>
-    canAssignRole(actor, user.role, role),
-  )
-  const editable =
-    !trashView && user.id !== actor.id && assignableRoles.length > 0
-
   return (
     <>
       <div className="flex min-w-0 items-center gap-2.5 @max-[900px]:col-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto">
@@ -135,37 +120,20 @@ function AccountRowContents({
             : user.createdAt,
         )}
       </div>
-      <div className="flex min-w-0 items-center @max-[900px]:col-start-1 @max-[900px]:row-start-3 @max-[530px]:col-start-1 @max-[530px]:row-auto">
-        {trashView ? (
-          <span className="text-[11px] text-[#738096]">Removed</span>
-        ) : editable ? (
-          <AccessDropdown
-            className="w-full max-w-[112px]"
-            triggerClassName="h-8 border-[#e1e4ea] text-xs"
-            align="right"
-            label={`Role for ${user.email}`}
-            value={selectedRole}
-            disabled={disabled}
-            options={assignableRoles.map((role) => ({
-              value: role,
-              label: roleLabels[role],
-            }))}
-            onChange={(role) => onRoleChange(user, role)}
-          />
-        ) : (
-          <span className="text-[11px] text-[#738096]">
-            {user.id === actor.id ? "Your account" : "View only"}
-          </span>
-        )}
-      </div>
-      <div className="flex min-w-0 items-center gap-2 @max-[900px]:col-start-2 @max-[900px]:row-start-3 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+      <div className="flex min-w-0 items-center justify-end gap-2 @max-[900px]:col-start-2 @max-[900px]:row-start-3 @max-[530px]:col-start-1 @max-[530px]:row-auto">
         <span className="hidden text-[#738096] @max-[530px]:inline">
           Actions
         </span>
-        {canChangeAccountStatus(actor, user) ||
+        {(!trashView && actor.role === "SUPERADMIN") ||
+        canChangeAccountStatus(actor, user) ||
         (!trashView && canChangeAccountPassword(actor, user)) ? (
           <AccountRowActions
             account={user}
+            onEdit={
+              !trashView && actor.role === "SUPERADMIN"
+                ? () => onEdit(user)
+                : undefined
+            }
             disabled={disabled}
             onChangeStatus={() => onChangeStatus(user)}
             canChangeStatus={canChangeAccountStatus(actor, user)}
@@ -223,11 +191,7 @@ export function AccountManagementPage() {
   const [trashView, setTrashView] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [passwordTarget, setPasswordTarget] = useState<Account | null>(null)
-  const [draftRoles, setDraftRoles] = useState<
-    Record<string, { role: AccountRole; email: string }>
-  >({})
-  const [savingAccess, setSavingAccess] = useState(false)
-  const [accessError, setAccessError] = useState("")
+  const [editTarget, setEditTarget] = useState<Account | null>(null)
   const [statusTarget, setStatusTarget] = useState<Account | null>(null)
   const [statusSaving, setStatusSaving] = useState(false)
   const [statusError, setStatusError] = useState("")
@@ -272,7 +236,7 @@ export function AccountManagementPage() {
   })
   const { page, setPage, retry } = list
   const busy = list.loading
-  const mutating = savingAccess || statusSaving || deleting
+  const mutating = statusSaving || deleting
 
   function updateSearch(value: string) {
     setSearch(value)
@@ -299,59 +263,6 @@ export function AccountManagementPage() {
     if ((list.data?.users.length ?? 0) === 1 && page > 1)
       setPage((current) => current - 1)
     else retry()
-  }
-
-  async function saveAccessChanges() {
-    const changes = Object.entries(draftRoles)
-    if (
-      changes.length === 0 ||
-      savingAccess ||
-      statusSaving ||
-      deleting ||
-      busy
-    )
-      return
-    setSavingAccess(true)
-    setAccessError("")
-    const savedIds: string[] = []
-    const failures: string[] = []
-    try {
-      for (const [id, change] of changes) {
-        try {
-          await changeAccountRole(id, change.role)
-          savedIds.push(id)
-        } catch (caught) {
-          if (caught instanceof ApiError && caught.status === 401) {
-            clearToken()
-            router.replace("/login")
-            return
-          }
-          failures.push(
-            `${change.email}: ${errorMessage(caught, "Please try again.")}`,
-          )
-        }
-      }
-      if (failures.length > 0) {
-        setAccessError(
-          `${savedIds.length > 0 ? `Saved ${savedIds.length} access ${savedIds.length === 1 ? "change" : "changes"}. ` : ""}Couldn't save ${failures.length} ${failures.length === 1 ? "change" : "changes"}. ${failures.join(" ")}`,
-        )
-      } else {
-        sileo.success({
-          title: "Access updated",
-          description: `Saved ${savedIds.length} access ${savedIds.length === 1 ? "change" : "changes"}.`,
-        })
-      }
-    } finally {
-      if (savedIds.length > 0) {
-        setDraftRoles((current) => {
-          const next = { ...current }
-          for (const id of savedIds) delete next[id]
-          return next
-        })
-        retry()
-      }
-      setSavingAccess(false)
-    }
   }
 
   async function saveStatus() {
@@ -407,11 +318,6 @@ export function AccountManagementPage() {
         await moveAccountToTrash(deleteTarget.id)
       }
       const deletedEmail = deleteTarget.email
-      setDraftRoles((current) => {
-        const next = { ...current }
-        delete next[deleteTarget.id]
-        return next
-      })
       setDeleteTarget(null)
       sileo.success({
         title: trashView
@@ -444,17 +350,8 @@ export function AccountManagementPage() {
       <AccountRowContents
         user={user}
         actor={actor}
-        selectedRole={draftRoles[user.id]?.role ?? user.role}
         disabled={busy || mutating}
-        onRoleChange={(account, role) => {
-          setAccessError("")
-          setDraftRoles((current) => {
-            const next = { ...current }
-            if (role === account.role) delete next[account.id]
-            else next[account.id] = { role, email: account.email }
-            return next
-          })
-        }}
+        onEdit={setEditTarget}
         onChangeStatus={(account) => {
           setStatusError("")
           setStatusTarget(account)
@@ -506,7 +403,7 @@ export function AccountManagementPage() {
         aria-label="Accounts"
       >
         <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 pb-4 max-[560px]:grid-cols-1 max-[560px]:pb-3">
-          <div className="flex min-w-0 gap-[10px] max-[560px]:flex-col">
+          <div className={`${filterBarClass} min-w-0`}>
             <SearchField
               label="Search accounts"
               value={search}
@@ -543,42 +440,10 @@ export function AccountManagementPage() {
                 setSortKey(nextTrashView ? "deletedAt" : "createdAt")
                 setSortDirection("desc")
                 setPage(1)
-                setDraftRoles({})
-                setAccessError("")
               }}
             />
-            <button
-              type="button"
-              className={cn(
-                accountButton,
-                accountButtonPrimary,
-                "min-h-[34px] rounded-lg px-[13px] text-xs",
-              )}
-              disabled={
-                trashView ||
-                Object.keys(draftRoles).length === 0 ||
-                savingAccess ||
-                statusSaving ||
-                deleting ||
-                busy
-              }
-              aria-busy={savingAccess}
-              onClick={() => void saveAccessChanges()}
-            >
-              {savingAccess && (
-                <LoaderCircle
-                  size={14}
-                  className="animate-spin motion-reduce:animate-none"
-                  aria-hidden="true"
-                />
-              )}
-              Save Changes
-            </button>
           </div>
         </div>
-        {accessError && (
-          <Alert className="mb-3 break-words">{accessError}</Alert>
-        )}
 
         <ResponsiveDataTable label="Accounts" aria-busy={busy}>
           <ResponsiveDataTableHeader
@@ -617,8 +482,7 @@ export function AccountManagementPage() {
                 onClick={() => sortBy(trashView ? "deletedAt" : "createdAt")}
               />
             </span>
-            <span>Access</span>
-            <span>Actions</span>
+            <span className="text-right">Actions</span>
           </ResponsiveDataTableHeader>
           {initialLoading || list.error ? (
             <ResponsiveDataTableBody className="relative min-w-0">
@@ -633,7 +497,7 @@ export function AccountManagementPage() {
                     "@max-[900px]:col-start-1 @max-[900px]:row-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto",
                     "@max-[900px]:col-start-2 @max-[900px]:row-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto",
                     "@max-[900px]:col-start-2 @max-[900px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto",
-                    "@max-[900px]:col-start-1 @max-[900px]:row-start-3 @max-[530px]:col-start-1 @max-[530px]:row-auto",
+                    "@max-[900px]:col-start-1 @max-[900px]:row-start-2 @max-[530px]:row-auto",
                     "@max-[900px]:col-start-2 @max-[900px]:row-start-3 @max-[530px]:col-start-1 @max-[530px]:row-auto",
                   ]}
                   cellSkeletonClassNames={[
@@ -641,14 +505,13 @@ export function AccountManagementPage() {
                     "h-3 w-3/5",
                     "h-5 w-16 rounded",
                     "h-3 w-20",
-                    "h-3 w-20",
-                    "h-8 w-24",
+                    "size-8",
                   ]}
                 />
               ) : (
                 <DataTableErrorRow
                   message={list.error}
-                  colSpan={6}
+                  colSpan={5}
                   onRetry={retry}
                 />
               )}
@@ -659,7 +522,7 @@ export function AccountManagementPage() {
               viewKey={list.tableViewKey}
               quickKey={query}
               onRowsSettled={list.onRowsSettled}
-              animateRows
+              animateRows={false}
               getKey={accountKey}
               rowClassName={accountRowClass}
               emptyContent={
@@ -673,7 +536,10 @@ export function AccountManagementPage() {
             />
           )}
         </ResponsiveDataTable>
-        <TableSearchStatus active={busy && list.previewing} label="accounts" />
+        <TableSearchStatus
+          active={busy && list.previewing && Boolean(list.preview?.length)}
+          label="accounts"
+        />
         {list.footer && (
           <TablePaginationFooter
             {...list.footer}
@@ -684,6 +550,15 @@ export function AccountManagementPage() {
         )}
       </section>
 
+      {editTarget && (
+        <EditAccountPanel
+          key={editTarget.id}
+          account={editTarget}
+          actor={actor}
+          onClose={() => setEditTarget(null)}
+          onSaved={retry}
+        />
+      )}
       {passwordTarget && (
         <ChangePasswordDialog
           key={passwordTarget.id}

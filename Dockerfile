@@ -25,6 +25,8 @@ CMD ["pnpm", "dev"]
 
 FROM deps AS web-dev
 COPY apps/web apps/web
+# The web module selector imports the API's shared registration data.
+COPY apps/api/src/features/modules/module-registry.json apps/api/src/features/modules/module-registry.json
 WORKDIR /workspace/apps/web
 EXPOSE 5173
 # Watchpack polling supports source mounts on Docker Desktop.
@@ -36,6 +38,7 @@ RUN pnpm --filter @nexus/api build
 
 FROM deps AS web-build
 COPY apps/web apps/web
+COPY apps/api/src/features/modules/module-registry.json apps/api/src/features/modules/module-registry.json
 # Next.js rewrites are resolved at build time for the internal API service.
 ARG API_PROXY_TARGET=http://api:3001
 ENV API_PROXY_TARGET=$API_PROXY_TARGET

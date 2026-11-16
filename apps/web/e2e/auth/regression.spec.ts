@@ -528,6 +528,19 @@ test.describe("Authentication and session regression", () => {
       page.getByText("This email is already registered. Sign in instead."),
     ).toBeVisible()
     await expect(page).toHaveURL(/\/register$/)
+    await expect(page.getByLabel("Full name", { exact: true })).toHaveValue(
+      "Duplicate Person",
+    )
+    await expect(page.getByLabel("Email address", { exact: true })).toHaveValue(
+      "duplicate@example.com",
+    )
+    await expect(
+      page.getByLabel("Contact number", { exact: true }),
+    ).toHaveValue("09123456789")
+    await expect(
+      page.getByRole("button", { name: "Create Account", exact: true }),
+    ).toBeEnabled()
+    expect(await storedTokens(page)).toEqual([null, null])
   })
 
   test("registration keeps the existing API contract and opens the Client dashboard", async ({

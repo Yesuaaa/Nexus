@@ -8,13 +8,15 @@ import { sileo } from "@/lib/toast"
 import { PageHeader, PageHeaderButton } from "@/components/layout/page-header"
 import { contentClass } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
-import { FilterSelect } from "@/components/ui/filter-select"
+import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
 import { usePaginatedList } from "@/components/ui/use-paginated-list"
 import { TableSearchStatus } from "@/components/ui/table-search-status"
 import { TablePaginationFooter } from "@/components/ui/table-pagination-footer"
 import { SearchEmptyState } from "@/components/ui/search-empty-state"
 import { SearchField } from "@/components/ui/search-field"
 import { cn } from "@/lib/utils"
+import { usePortalAccount } from "@/features/auth/providers/account-context"
+import { hasPermission, Permissions } from "@/features/auth/model/permissions"
 import {
   listClients,
   type ClientSort,
@@ -66,6 +68,8 @@ function matchesTableSearch(item: Client, query: string) {
 }
 
 export function ClientManagementPage() {
+  const account = usePortalAccount()
+  const canCreate = hasPermission(account, Permissions.CLIENTS_CREATE)
   const [formTarget, setFormTarget] = useState<Client | "create" | null>(null)
   const [selectedClient, setSelectedClient] = useState<{
     client: Client
@@ -74,7 +78,6 @@ export function ClientManagementPage() {
   const [search, setSearch] = useState("")
   const query = search.trim()
   const [status, setStatus] = useState<ClientStatus>("")
-  const [animateRows, setAnimateRows] = useState(true)
   const [sortBy, setSortBy] = useState<ClientSort>("createdAt")
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
   const filtered = Boolean(query || status)
@@ -91,13 +94,11 @@ export function ClientManagementPage() {
   const { setPage } = list
 
   function sort(key: ClientSort) {
-    setAnimateRows(true)
     setSortOrder(sortBy === key && sortOrder === "asc" ? "desc" : "asc")
     setSortBy(key)
     setPage(1)
   }
   function clearFilters() {
-    setAnimateRows(true)
     setSearch("")
     setStatus("")
     setPage(1)
@@ -113,26 +114,27 @@ export function ClientManagementPage() {
         title="Client Management"
         description="Create and manage client accounts and contact information."
         actions={
-          <PageHeaderButton
-            type="button"
-            onClick={() => setFormTarget("create")}
-          >
-            <Plus size={16} aria-hidden="true" />
-            Create Client
-          </PageHeaderButton>
+          canCreate && (
+            <PageHeaderButton
+              type="button"
+              onClick={() => setFormTarget("create")}
+            >
+              <Plus size={16} aria-hidden="true" />
+              Create Client
+            </PageHeaderButton>
+          )
         }
       />
       <section
         aria-label="Client directory"
         className="@container mt-[18px] min-w-0 max-[767px]:mt-[14px]"
       >
-        <div className="flex flex-wrap items-center gap-2.5 pb-4 max-[560px]:flex-col max-[560px]:items-stretch">
+        <div className={`${filterBarClass} pb-4`}>
           <SearchField
             label="Search clients"
             value={search}
             maxLength={100}
             onChange={(event) => {
-              setAnimateRows(true)
               setSearch(event.target.value)
               setPage(1)
             }}
@@ -144,7 +146,6 @@ export function ClientManagementPage() {
             options={statusOptions}
             triggerClassName="w-[135px]"
             onChange={(value) => {
-              setAnimateRows(true)
               setStatus(value)
               setPage(1)
             }}
@@ -156,7 +157,6 @@ export function ClientManagementPage() {
               options={sortOptions}
               triggerClassName="w-[180px]"
               onChange={(value) => {
-                setAnimateRows(true)
                 const [key, order] = value.split(":")
                 setSortBy(key as ClientSort)
                 setSortOrder(order as "asc" | "desc")
@@ -179,7 +179,6 @@ export function ClientManagementPage() {
           viewKey={list.tableViewKey}
           onRowsSettled={list.onRowsSettled}
           quickKey={query}
-          animateRows={animateRows}
           loading={list.loading}
           error={list.error}
           emptyMessage={
@@ -198,7 +197,9 @@ export function ClientManagementPage() {
           onView={(client) => setSelectedClient({ client, tab: "overview" })}
         />
         <TableSearchStatus
-          active={list.loading && list.previewing}
+          active={
+            list.loading && list.previewing && Boolean(list.preview?.length)
+          }
           label="clients"
         />
         {list.footer && (
@@ -206,13 +207,12 @@ export function ClientManagementPage() {
             {...list.footer}
             label="Client pages"
             onPageChange={(nextPage) => {
-              setAnimateRows(true)
               setPage(nextPage)
             }}
           />
         )}
       </section>
-      {formTarget && (
+      {formTarget && (formTarget !== "create" || canCreate) && (
         <ClientFormDialog
           client={formTarget === "create" ? null : formTarget}
           onClose={() => setFormTarget(null)}

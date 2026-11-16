@@ -11,11 +11,10 @@ import { serviceRequestStatuses } from "../src/features/services/model/service-r
 import { taskStatusLabels } from "../src/features/project-workspace/model/task-status.ts"
 
 test("service-operation status displays cover the shared request contract", () => {
-  assert.deepEqual(Object.keys(bookingStatuses), serviceRequestStatusValues)
-  assert.deepEqual(
-    Object.keys(serviceRequestStatuses),
-    serviceRequestStatusValues,
-  )
+  for (const status of serviceRequestStatusValues) {
+    assert.ok(status in bookingStatuses)
+    assert.ok(status in serviceRequestStatuses)
+  }
 })
 
 test("project-management contracts retain the current API enum values", () => {

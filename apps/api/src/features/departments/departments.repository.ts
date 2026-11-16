@@ -1,9 +1,28 @@
 import { EmployeeStatus, Prisma, Role } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
+import {
+  readEmployeeMemberState,
+  readUserMemberState,
+  writeDepartmentMemberChanges,
+  type MemberState,
+} from "./department-member-history.js"
+import {
+  readDepartmentDeletionWorkforce,
+  writeDepartmentDeletionWorkforce,
+} from "./department-deletion-history.js"
+import type { ManagementOperation } from "../../shared/management-history.js"
+import {
+  recordDepartmentChanges,
+  synchronizeDepartmentEmployee,
+  userUpdateSelect,
+} from "./department-management-history.js"
+import { readTransaction } from "../../lib/database-read.js"
 import { lockRows } from "../../shared/db/locks.js"
 import { paginate } from "../../shared/query/pagination.js"
+import { departmentSummarySelect } from "../../shared/query/selects.js"
 import {
   employeeInclude,
+  clearFormerDepartmentHeadTitle,
   syncEmployeeForUser,
   updateEmployee,
   EmployeeError,
@@ -11,7 +30,6 @@ import {
 import type { DepartmentInput } from "./departments.schema.js"
 import {
   assertLeadershipCandidate,
-  isDepartmentHeadTitle,
   leadershipCandidateWhere,
 } from "./leadership.policy.js"
 
@@ -50,25 +68,122 @@ export function withoutTemporaryHeadTracking<
   return fields
 }
 
+const departmentListInclude = {
+  head: {
+    select: {
+      id: true,
+      email: true,
+      fullName: true,
+      role: true,
+    },
+  },
+  _count: {
+    select: { employees: true, teams: true, services: true },
+  },
+} satisfies Prisma.DepartmentInclude
+
+async function findDepartmentsWithCounts() {
+  const prisma = getPrisma()!
+  return prisma.department.findMany({
+    orderBy: { name: "asc" },
+    include: departmentListInclude,
+  })
+}
+
+async function countProjectsByDepartmentIds(departmentIds: string[]) {
+  if (!departmentIds.length) return new Map<string, number>()
+  const prisma = getPrisma()!
+  const counts = await prisma.$queryRaw<
+    { departmentId: string; projectCount: number }[]
+  >(Prisma.sql`
+    SELECT r."acceptedDepartmentId" AS "departmentId",
+      COUNT(DISTINCT p.id)::int AS "projectCount"
+    FROM "Project" p
+    INNER JOIN "ServiceRequest" r ON r.id = p."requestId"
+    WHERE r."acceptedDepartmentId" IN (${Prisma.join(departmentIds)})
+    GROUP BY r."acceptedDepartmentId"
+  `)
+  return new Map(
+    counts.map(({ departmentId, projectCount }) => [
+      departmentId,
+      projectCount,
+    ]),
+  )
+}
+
 export const departmentsRepository = {
-  async listDepartmentsWithCounts() {
-    const prisma = getPrisma()!
-    return prisma.department.findMany({
+  async listDepartmentDirectory() {
+    // Cross-department coordination needs identifiers and Head names, not HR
+    // records, contacts, membership counts or account lifecycle information.
+    return getPrisma()!.department.findMany({
+      select: {
+        ...departmentSummarySelect,
+        head: { select: { id: true, fullName: true } },
+      },
       orderBy: { name: "asc" },
-      include: {
-        head: {
-          select: {
-            id: true,
-            email: true,
-            fullName: true,
-            role: true,
+    })
+  },
+
+  async listDepartmentsWithCounts() {
+    return findDepartmentsWithCounts()
+  },
+
+  async listProjectManagementDepartmentsWithCounts() {
+    const departments = await findDepartmentsWithCounts()
+    const projectCounts = await countProjectsByDepartmentIds(
+      departments.map(({ id }) => id),
+    )
+    return departments.map((department) => ({
+      ...department,
+      projectCount: projectCounts.get(department.id) ?? 0,
+    }))
+  },
+
+  async getProjectManagementDepartmentDetails(departmentId: string) {
+    const prisma = getPrisma()!
+    const [department, projectCounts] = await Promise.all([
+      prisma.department.findUnique({
+        where: { id: departmentId },
+        select: {
+          id: true,
+          name: true,
+          color: true,
+          code: true,
+          description: true,
+          headId: true,
+          createdAt: true,
+          updatedAt: true,
+          head: {
+            select: {
+              id: true,
+              fullName: true,
+              role: true,
+              position: true,
+            },
+          },
+          employees: {
+            select: {
+              id: true,
+              userId: true,
+              fullName: true,
+              position: true,
+              user: {
+                select: { id: true, fullName: true, role: true },
+              },
+            },
+            orderBy: [{ fullName: "asc" }, { employeeId: "asc" }],
           },
         },
-        _count: {
-          select: { employees: true, teams: true, services: true },
-        },
-      },
-    })
+      }),
+      countProjectsByDepartmentIds([departmentId]),
+    ])
+    if (!department) return null
+    return {
+      ...department,
+      members: department.employees,
+      memberCount: department.employees.length,
+      projectCount: projectCounts.get(departmentId) ?? 0,
+    }
   },
 
   /**
@@ -134,54 +249,10 @@ export const departmentsRepository = {
     })
   },
 
-  async getDepartmentDetailsWithCleanup(departmentId: string) {
-    const prisma = getPrisma()!
-    return prisma.$transaction(async (tx) => {
-      const existing = await tx.department.findUnique({
-        where: { id: departmentId },
-        select: { id: true, headId: true, temporaryHeadOriginalId: true },
-      })
-      if (!existing) return null
-
-      // An on-leave original head keeps their title until they return.
-      const titleHolderIds = [
-        existing.headId,
-        existing.temporaryHeadOriginalId,
-      ].filter((id): id is string => Boolean(id))
-      const titledMembers = await tx.user.findMany({
-        where: {
-          departmentId,
-          id: { notIn: titleHolderIds },
-          position: { not: null },
-        },
-        select: { id: true, position: true },
-      })
-      const staleMembers = titledMembers.filter((member) =>
-        isDepartmentHeadTitle(member.position),
-      )
-      for (const member of staleMembers) {
-        await tx.user.update({
-          where: { id: member.id },
-          data: { position: null },
-        })
-        await syncEmployeeForUser(tx, member.id)
-      }
-
-      if (existing.headId) {
-        const headWithTeam = await tx.user.findFirst({
-          where: { id: existing.headId, teamId: { not: null } },
-          select: { id: true },
-        })
-        if (headWithTeam) {
-          await tx.user.update({
-            where: { id: headWithTeam.id },
-            data: { teamId: null },
-          })
-          await syncEmployeeForUser(tx, headWithTeam.id)
-        }
-      }
-
-      return tx.department.findUnique({
+  async getDepartmentDetails(departmentId: string) {
+    // Read the department and its relations from one snapshot. No HR repairs.
+    return readTransaction((tx) =>
+      tx.department.findUnique({
         where: { id: departmentId },
         include: {
           head: {
@@ -215,8 +286,8 @@ export const departmentsRepository = {
             orderBy: { name: "asc" },
           },
         },
-      })
-    })
+      }),
+    )
   },
 
   async findById(id: string) {
@@ -224,7 +295,10 @@ export const departmentsRepository = {
     return prisma.department.findUnique({ where: { id } })
   },
 
-  async createDepartment(data: DepartmentInput) {
+  async createDepartment(
+    data: DepartmentInput,
+    operation: ManagementOperation,
+  ) {
     const prisma = getPrisma()!
     return prisma.$transaction(async (tx) => {
       if (data.headId)
@@ -243,12 +317,23 @@ export const departmentsRepository = {
       })
 
       if (data.headId) {
+        const beforeUser = await tx.user.findUniqueOrThrow({
+          where: { id: data.headId },
+          select: userUpdateSelect,
+        })
         await tx.user.update({
           where: { id: data.headId },
           data: { departmentId: created.id, teamId: null },
         })
-        await syncEmployeeForUser(tx, data.headId)
+        await synchronizeDepartmentEmployee(
+          tx,
+          operation,
+          data.headId,
+          beforeUser,
+        )
       }
+
+      await recordDepartmentChanges(tx, operation, null, created)
 
       return tx.department.findUniqueOrThrow({
         where: { id: created.id },
@@ -271,6 +356,7 @@ export const departmentsRepository = {
       description?: string | null
       headId?: string | null
     },
+    operation: ManagementOperation,
   ) {
     const prisma = getPrisma()!
     return prisma.$transaction(async (tx) => {
@@ -303,28 +389,49 @@ export const departmentsRepository = {
       })
 
       if (data.headId !== undefined) {
-        if (current.headId && current.headId !== data.headId) {
-          const oldHead = await tx.user.findUnique({
-            where: { id: current.headId },
-            select: { id: true, position: true },
-          })
-          if (oldHead && isDepartmentHeadTitle(oldHead.position)) {
-            await tx.user.update({
-              where: { id: oldHead.id },
-              data: { position: null },
+        if (headChanged) {
+          // An explicit replacement also ends a reserved original Head's tenure.
+          const formerIds = new Set([
+            current.headId,
+            current.temporaryHeadOriginalId,
+          ])
+          for (const formerId of [...formerIds]
+            .filter(
+              (userId): userId is string =>
+                Boolean(userId) && userId !== data.headId,
+            )
+            .sort()) {
+            await clearFormerDepartmentHeadTitle(tx, formerId, {
+              operation,
+              departmentId: id,
+              origin: "DEPARTMENT_MANAGEMENT",
             })
+            await synchronizeDepartmentEmployee(tx, operation, formerId)
           }
-          await syncEmployeeForUser(tx, current.headId)
         }
 
         if (data.headId) {
+          // The changed candidate is locked by eligibility; unchanged Heads
+          // previously acquired this same User lock via the UPDATE below.
+          await lockRows(tx, "User", data.headId)
+          const beforeUser = await tx.user.findUniqueOrThrow({
+            where: { id: data.headId },
+            select: userUpdateSelect,
+          })
           await tx.user.update({
             where: { id: data.headId },
             data: { departmentId: id, teamId: null },
           })
-          await syncEmployeeForUser(tx, data.headId)
+          await synchronizeDepartmentEmployee(
+            tx,
+            operation,
+            data.headId,
+            beforeUser,
+          )
         }
       }
+
+      await recordDepartmentChanges(tx, operation, current, saved)
 
       return tx.department.findUniqueOrThrow({
         where: { id: saved.id },
@@ -338,13 +445,10 @@ export const departmentsRepository = {
     })
   },
 
-  async deleteDepartment(id: string) {
+  async deleteDepartment(id: string, operation: ManagementOperation) {
     const prisma = getPrisma()!
     return prisma.$transaction(async (tx) => {
-      const linkedUsers = await tx.user.findMany({
-        where: { departmentId: id },
-        select: { id: true },
-      })
+      const before = await readDepartmentDeletionWorkforce(tx, id)
       await tx.user.updateMany({
         where: { departmentId: id },
         data: { departmentId: null, teamId: null },
@@ -353,36 +457,29 @@ export const departmentsRepository = {
         where: { departmentId: id },
         data: { departmentId: null, teamId: null },
       })
-      for (const user of linkedUsers) {
-        await syncEmployeeForUser(tx, user.id)
+      for (const userId of before.syncUserIds) {
+        await syncEmployeeForUser(tx, userId)
       }
       await tx.department.delete({ where: { id } })
+      await writeDepartmentDeletionWorkforce(tx, operation, before)
     })
-  },
-
-  async countDepartmentServices(id: string) {
-    const prisma = getPrisma()!
-    return prisma.service.count({
-      where: { departments: { some: { id } } },
-    })
-  },
-
-  async countDepartmentRequestHistory(id: string) {
-    const prisma = getPrisma()!
-    const [acceptedRequests, conversations] = await prisma.$transaction([
-      prisma.serviceRequest.count({ where: { acceptedDepartmentId: id } }),
-      prisma.requestConversation.count({ where: { departmentId: id } }),
-    ])
-    return acceptedRequests + conversations
   },
 
   async assignMembers(
     departmentId: string,
-    employeeIds?: string[],
-    userIds?: string[],
+    employeeIds: string[] | undefined,
+    userIds: string[] | undefined,
+    operation: ManagementOperation,
   ) {
     const prisma = getPrisma()!
     return prisma.$transaction(async (tx) => {
+      const beforeStates = new Map<string, MemberState>()
+      const remember = (state: MemberState) => {
+        const key = state.user
+          ? `user:${state.user.id}`
+          : `employee:${state.employee!.id}`
+        if (!beforeStates.has(key)) beforeStates.set(key, state)
+      }
       const requestedEmployeeIds = [...new Set(employeeIds ?? [])]
       if (requestedEmployeeIds.length > 0) {
         const eligibleEmployees = await tx.employee.findMany({
@@ -479,6 +576,7 @@ export const departmentsRepository = {
               select: { departmentId: true },
             })
           : null
+        remember(await readEmployeeMemberState(tx, employee.id))
         await updateEmployee(tx, employee.id, {
           departmentId,
           ...(currentTeam?.departmentId !== departmentId
@@ -495,6 +593,7 @@ export const departmentsRepository = {
         if (!user) {
           throw new EmployeeError(404, "User not found")
         }
+        remember(await readUserMemberState(tx, user.id, false))
         await syncEmployeeForUser(tx, user.id)
         const employee = await tx.employee.findUnique({
           where: { userId: user.id },
@@ -533,6 +632,8 @@ export const departmentsRepository = {
         }
       }
 
+      for (const before of beforeStates.values())
+        await writeDepartmentMemberChanges(tx, operation, before)
       return tx.employee.findMany({
         where: { departmentId },
         include: employeeInclude,

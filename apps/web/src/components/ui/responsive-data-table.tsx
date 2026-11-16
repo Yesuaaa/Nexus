@@ -99,7 +99,7 @@ function DataTableErrorRow({
       <ResponsiveDataTableCell
         aria-colspan={colSpan}
         className={cn(
-          "grid min-h-[150px] place-content-center gap-3 p-6 text-center text-xs text-[#7183a2]",
+          "grid min-h-[150px] place-content-center gap-3 p-6 text-center text-xs text-[#65718a]",
           className,
         )}
       >

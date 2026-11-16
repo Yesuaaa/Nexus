@@ -4,10 +4,8 @@ import { ProgressMeter } from "@/components/ui/stat-strip"
 import { cn } from "@/lib/utils"
 
 /**
- * Building blocks for module overview pages: a titled panel, a ranked
- * single-hue bar list (value always visible beside each bar, so the list
- * doubles as its own table view), a plain item list, and a row of
- * at-a-glance figures.
+ * Shared building blocks for overview pages: titled panels and lists used
+ * by Attendance, plus figures, unboxed sections, and inline table bars.
  */
 
 /** A titled card for an overview page's secondary stats. */
@@ -47,7 +45,7 @@ export function OverviewPanel({
             {title}
           </h2>
           {description && (
-            <p className="mt-0.5 mb-0 text-xs leading-5 text-[#8a94a6]">
+            <p className="mt-0.5 mb-0 text-xs leading-5 text-[#65718a]">
               {description}
             </p>
           )}
@@ -59,7 +57,7 @@ export function OverviewPanel({
   )
 }
 
-function RowsSkeleton({ meters = true }: { meters?: boolean }) {
+function ListRowsSkeleton({ meters = true }: { meters?: boolean }) {
   return (
     <div className="grid gap-4" aria-hidden="true">
       {[0, 1, 2, 3].map((row) => (
@@ -73,10 +71,15 @@ function RowsSkeleton({ meters = true }: { meters?: boolean }) {
 }
 
 function EmptyText({ children }: { children: ReactNode }) {
-  return <p className="m-0 text-xs leading-5 text-[#8a94a6]">{children}</p>
+  return <p className="m-0 text-xs leading-5 text-[#65718a]">{children}</p>
 }
 
-export type BreakdownRow = { id: string; label: string; value: number }
+export type BreakdownRow = {
+  id: string
+  label: string
+  value: number
+  colorClass?: string
+}
 
 /**
  * Ranked rows with a proportional meter. Without `total` bars are relative
@@ -99,7 +102,7 @@ export function BreakdownList({
   total?: number
   colorClass?: string
 }) {
-  if (loading) return <RowsSkeleton />
+  if (loading) return <ListRowsSkeleton />
   if (rows.length === 0) return <EmptyText>{empty}</EmptyText>
   const max = total ?? Math.max(...rows.map((row) => row.value))
   return (
@@ -113,11 +116,11 @@ export function BreakdownList({
               <span className="min-w-0 truncate font-medium text-[#182235]">
                 {row.label}
               </span>
-              <span className="shrink-0 text-[#738096] tabular-nums">
+              <span className="shrink-0 text-[#65718a] tabular-nums">
                 {row.value.toLocaleString("en-US")}
                 <span className="sr-only"> {unit}</span>
                 {share !== null && (
-                  <span className="ml-1.5 text-[#a3acba]">{share}%</span>
+                  <span className="ml-1.5 text-[#65718a]">{share}%</span>
                 )}
               </span>
             </div>
@@ -125,7 +128,7 @@ export function BreakdownList({
               value={row.value}
               max={max}
               label={`${row.label}: ${row.value} ${unit}`}
-              colorClass={colorClass}
+              colorClass={row.colorClass ?? colorClass}
             />
           </li>
         )
@@ -144,7 +147,7 @@ export type ItemRow = {
 const noteTones = {
   warning: "text-[#a45b12]",
   danger: "text-[#b4234d]",
-  muted: "text-[#738096]",
+  muted: "text-[#65718a]",
 }
 
 /** Named items with a short status note, e.g. departments needing a head. */
@@ -161,13 +164,13 @@ export function ItemList({
   emptyTone?: "success" | "muted"
   limit?: number
 }) {
-  if (loading) return <RowsSkeleton meters={false} />
+  if (loading) return <ListRowsSkeleton meters={false} />
   if (rows.length === 0)
     return (
       <p
         className={cn(
           "m-0 text-xs leading-5",
-          emptyTone === "success" ? "text-[#25745b]" : "text-[#8a94a6]",
+          emptyTone === "success" ? "text-[#25745b]" : "text-[#65718a]",
         )}
       >
         {empty}
@@ -192,7 +195,7 @@ export function ItemList({
         ))}
       </ul>
       {rows.length > shown.length && (
-        <p className="mt-3 mb-0 text-[11px] text-[#8a94a6]">
+        <p className="mt-3 mb-0 text-[11px] text-[#65718a]">
           +{rows.length - shown.length} more
         </p>
       )}
@@ -200,15 +203,107 @@ export function ItemList({
   )
 }
 
-export type MiniStat = { label: string; value: string; hint?: string }
+export type MiniStat = {
+  label: string
+  value: string
+  hint?: string
+  emphasis?: "attention"
+}
 
 /** A quiet row of secondary figures under the KPI strip. */
 export function MiniStats({
   items,
   loading,
   label,
+  columns = 4,
+  variant = "boxed",
 }: {
   items: MiniStat[]
+  loading: boolean
+  label: string
+  columns?: 2 | 4
+  variant?: "boxed" | "plain"
+}) {
+  const boxed = variant === "boxed"
+  return (
+    <dl
+      aria-label={label}
+      aria-busy={loading}
+      className={cn(
+        "m-0 grid",
+        boxed &&
+          "gap-px overflow-hidden rounded-xl border border-[#eceef1] bg-[#eceef1]",
+        !boxed && "gap-x-6 gap-y-3",
+        columns === 2
+          ? "grid-cols-2 max-[480px]:grid-cols-1"
+          : "grid-cols-4 max-[1050px]:grid-cols-2 max-[480px]:grid-cols-1",
+      )}
+    >
+      {items.map((item) => {
+        const attention = item.emphasis === "attention"
+        return (
+          <div
+            key={item.label}
+            className={cn(
+              boxed ? "min-w-0 px-4 py-3" : "min-w-0",
+              boxed && (attention ? "bg-[#fffaf0]" : "bg-background"),
+            )}
+          >
+            <dt
+              className={cn(
+                "truncate text-[11px]",
+                attention ? "text-[#805316]" : "text-[#65718a]",
+              )}
+            >
+              {item.label}
+            </dt>
+            <dd
+              className={cn(
+                "m-0 mt-1 truncate text-base font-semibold tabular-nums",
+                attention ? "text-[#805316]" : "text-[#101d35]",
+              )}
+            >
+              {loading ? <Skeleton className="mt-1 h-4 w-12" /> : item.value}
+            </dd>
+            {item.hint && !loading && (
+              <dd className="m-0 mt-0.5 truncate text-[11px] text-[#65718a]">
+                {item.hint}
+              </dd>
+            )}
+          </div>
+        )
+      })}
+    </dl>
+  )
+}
+
+export type Figure = {
+  label: string
+  value: string
+  /** Short qualifier under the value, e.g. "2 without a head". */
+  note?: string
+  /** Colors the value and note (e.g. something needs action). */
+  tone?: "warning" | "danger"
+}
+
+const figureTones = {
+  warning: "text-[#a45b12]",
+  danger: "text-[#b4234d]",
+}
+
+/**
+ * Four key numbers in one contained grid under the page header: equal
+ * columns divided by hairlines, one row at every width. On phones the
+ * numbers shrink a step and notes are hidden (the value's tone still flags
+ * anything that needs action).
+ */
+export function FiguresRow({
+  items,
+  loading,
+  label,
+}: {
+  /** Designed for exactly four figures. */
+  items: [Figure, Figure, Figure, Figure]
   loading: boolean
   label: string
 }) {
@@ -216,21 +311,123 @@ export function MiniStats({
     <dl
       aria-label={label}
       aria-busy={loading}
-      className="m-0 grid grid-cols-4 gap-px overflow-hidden rounded-xl border border-[#eceef1] bg-[#eceef1] max-[1050px]:grid-cols-2 max-[480px]:grid-cols-1"
+      className="m-0 mt-5 grid grid-cols-4 divide-x divide-[#eceef1] overflow-hidden rounded-xl border border-[#eceef1] max-[560px]:mt-4"
     >
       {items.map((item) => (
-        <div key={item.label} className="min-w-0 bg-background px-4 py-3">
-          <dt className="truncate text-[11px] text-[#8a94a6]">{item.label}</dt>
-          <dd className="m-0 mt-1 truncate text-base font-semibold text-[#101d35] tabular-nums">
-            {loading ? <Skeleton className="mt-1 h-4 w-12" /> : item.value}
+        <div
+          key={item.label}
+          className="min-w-0 px-4 py-3.5 max-[560px]:px-2.5 max-[560px]:py-3"
+        >
+          <dt className="truncate text-xs text-[#738096] max-[560px]:text-[11px]">
+            {item.label}
+          </dt>
+          <dd className="m-0 mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            {loading ? (
+              <Skeleton className="mt-1 h-6 w-12" />
+            ) : (
+              <>
+                <span
+                  className={cn(
+                    "text-2xl leading-tight font-semibold tracking-[-0.02em] text-[#101d35] tabular-nums max-[560px]:text-xl",
+                    item.tone && figureTones[item.tone],
+                  )}
+                >
+                  {item.value}
+                </span>
+                {item.note && (
+                  <span
+                    className={cn(
+                      "min-w-0 text-[11px] leading-tight text-[#8a94a6] max-[560px]:hidden",
+                      item.tone && figureTones[item.tone],
+                    )}
+                  >
+                    {item.note}
+                  </span>
+                )}
+              </>
+            )}
           </dd>
-          {item.hint && !loading && (
-            <dd className="m-0 mt-0.5 truncate text-[11px] text-[#738096]">
-              {item.hint}
-            </dd>
-          )}
         </div>
       ))}
     </dl>
   )
 }
+
+/** An unboxed section: a small heading, an optional aside, the content. */
+export function Section({
+  title,
+  aside,
+  description,
+  className,
+  children,
+}: {
+  title: string
+  aside?: ReactNode
+  description?: ReactNode
+  className?: string
+  children: ReactNode
+}) {
+  const headingId = useId()
+  return (
+    <section aria-labelledby={headingId} className={cn("min-w-0", className)}>
+      <div className="mb-2.5 flex items-baseline justify-between gap-3">
+        <h2 id={headingId} className="m-0 text-sm font-semibold text-[#101d35]">
+          {title}
+        </h2>
+        {aside && <span className="text-xs text-[#8a94a6]">{aside}</span>}
+      </div>
+      {description && (
+        <p className="mt-0.5 mb-0 text-xs leading-5 text-[#65718a]">
+          {description}
+        </p>
+      )}
+      {description ? <div className="mt-4">{children}</div> : children}
+    </section>
+  )
+}
+
+/** Thin proportional bar for a table cell; the number sits beside it. */
+export function InlineBar({
+  value,
+  max,
+  label,
+  className,
+}: {
+  value: number
+  max: number
+  label: string
+  className?: string
+}) {
+  const percent = max > 0 ? Math.min((value / max) * 100, 100) : 0
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      className={cn(
+        "block h-1 w-full overflow-hidden rounded-full bg-[#e8ecf1]",
+        className,
+      )}
+    >
+      <span
+        className="block h-full rounded-full bg-[#284f9e]"
+        style={{ width: `${percent}%` }}
+      />
+    </span>
+  )
+}
+
+/** Placeholder rows while a table or list loads. */
+export function RowsSkeleton({ rows = 4 }: { rows?: number }) {
+  return (
+    <div className="grid gap-3 py-2" aria-hidden="true">
+      {Array.from({ length: rows }, (_, row) => (
+        <Skeleton key={row} className="h-4 w-full" />
+      ))}
+    </div>
+  )
+}
+
+export const tableClass = "w-full border-collapse text-xs"
+export const headCellClass =
+  "border-b border-[#e3e7ed] pb-2 text-left text-[11px] font-medium text-[#738096]"
+export const cellClass = "border-b border-[#f0f2f5] py-2.5"

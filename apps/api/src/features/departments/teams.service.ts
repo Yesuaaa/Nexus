@@ -1,5 +1,19 @@
 import { EmployeeStatus, Role } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
+import type { ManagementOperation } from "../../shared/management-history.js"
+import { lockRows } from "../../shared/db/locks.js"
+import {
+  readEmployeeMemberState,
+  readUserMemberState,
+  writeDepartmentMemberChanges,
+  type MemberState,
+} from "./department-member-history.js"
+import {
+  teamHistorySelect,
+  rememberTeamMember,
+  recordTeamChanges,
+  readTeamDeletionState,
+} from "./team-management-history.js"
 import { isUniqueConflict } from "../../lib/errors.js"
 import {
   syncEmployeeForUser,
@@ -16,7 +30,11 @@ import { HttpError as TeamError } from "../../shared/http-error.js"
 export { TeamError }
 
 export const teamsService = {
-  async createTeam(departmentId: string, body: unknown) {
+  async createTeam(
+    departmentId: string,
+    body: unknown,
+    operation: ManagementOperation,
+  ) {
     const parsed = validateTeamCreateInput(body)
     if (!parsed.value) {
       throw new TeamError(400, parsed.error)
@@ -34,6 +52,7 @@ export const teamsService = {
 
     try {
       const team = await prisma.$transaction(async (tx) => {
+        const states = new Map<string, MemberState>()
         if (leadId) {
           await assertLeadershipCandidate(tx, leadId, {
             kind: "lead",
@@ -87,6 +106,10 @@ export const teamsService = {
         })
 
         if (leadId) {
+          rememberTeamMember(
+            states,
+            await readUserMemberState(tx, leadId, true),
+          )
           await tx.user.update({
             where: { id: leadId },
             data: { departmentId, teamId: created.id },
@@ -96,9 +119,22 @@ export const teamsService = {
 
         if (memberIds) {
           for (const memberId of memberIds) {
+            rememberTeamMember(
+              states,
+              await readEmployeeMemberState(tx, memberId),
+            )
             await updateEmployee(tx, memberId, { teamId: created.id })
           }
         }
+
+        for (const before of states.values())
+          await writeDepartmentMemberChanges(
+            tx,
+            operation,
+            before,
+            "TEAM_MANAGEMENT",
+          )
+        await recordTeamChanges(tx, operation, null, created)
 
         return tx.team.findUniqueOrThrow({
           where: { id: created.id },
@@ -134,7 +170,12 @@ export const teamsService = {
     }
   },
 
-  async updateTeam(departmentId: string, teamId: string, body: unknown) {
+  async updateTeam(
+    departmentId: string,
+    teamId: string,
+    body: unknown,
+    operation: ManagementOperation,
+  ) {
     const parsed = validateTeamUpdateInput(body)
     if (!parsed.value) {
       throw new TeamError(400, parsed.error)
@@ -152,6 +193,7 @@ export const teamsService = {
 
     try {
       const updated = await prisma.$transaction(async (tx) => {
+        const states = new Map<string, MemberState>()
         if (leadId) {
           await assertLeadershipCandidate(tx, leadId, {
             kind: "lead",
@@ -161,7 +203,13 @@ export const teamsService = {
           })
         }
 
-        await tx.team.update({
+        // Same point as the existing UPDATE lock, after candidate User checks.
+        await lockRows(tx, "Team", teamId)
+        const beforeTeam = await tx.team.findFirstOrThrow({
+          where: { id: teamId, departmentId },
+          select: teamHistorySelect,
+        })
+        const saved = await tx.team.update({
           where: { id: teamId },
           data: {
             ...(name !== undefined ? { name } : {}),
@@ -170,17 +218,34 @@ export const teamsService = {
           },
         })
 
-        if (existing.leadId && existing.leadId !== leadId) {
-          await syncEmployeeForUser(tx, existing.leadId)
+        if (beforeTeam.leadId && beforeTeam.leadId !== leadId) {
+          rememberTeamMember(
+            states,
+            await readUserMemberState(tx, beforeTeam.leadId, false),
+          )
+          await syncEmployeeForUser(tx, beforeTeam.leadId)
         }
 
         if (leadId) {
+          rememberTeamMember(
+            states,
+            await readUserMemberState(tx, leadId, true),
+          )
           await tx.user.update({
             where: { id: leadId },
             data: { departmentId, teamId },
           })
           await syncEmployeeForUser(tx, leadId)
         }
+
+        for (const before of states.values())
+          await writeDepartmentMemberChanges(
+            tx,
+            operation,
+            before,
+            "TEAM_MANAGEMENT",
+          )
+        await recordTeamChanges(tx, operation, beforeTeam, saved)
 
         return tx.team.findUniqueOrThrow({
           where: { id: teamId },
@@ -216,7 +281,11 @@ export const teamsService = {
     }
   },
 
-  async deleteTeam(departmentId: string, teamId: string) {
+  async deleteTeam(
+    departmentId: string,
+    teamId: string,
+    operation: ManagementOperation,
+  ) {
     const prisma = getPrisma()!
     const existing = await prisma.team.findFirst({
       where: { id: teamId, departmentId },
@@ -226,10 +295,7 @@ export const teamsService = {
     }
 
     await prisma.$transaction(async (tx) => {
-      const linkedUsers = await tx.user.findMany({
-        where: { teamId },
-        select: { id: true },
-      })
+      const before = await readTeamDeletionState(tx, departmentId, teamId)
       await tx.user.updateMany({
         where: { teamId },
         data: { teamId: null },
@@ -238,10 +304,18 @@ export const teamsService = {
         where: { teamId },
         data: { teamId: null },
       })
-      for (const user of linkedUsers) {
-        await syncEmployeeForUser(tx, user.id)
+      for (const userId of before.syncUserIds) {
+        await syncEmployeeForUser(tx, userId)
       }
       await tx.team.delete({ where: { id: teamId } })
+      for (const state of before.states.values())
+        await writeDepartmentMemberChanges(
+          tx,
+          operation,
+          state,
+          "TEAM_MANAGEMENT",
+        )
+      await recordTeamChanges(tx, operation, before.team, null)
     })
 
     return { message: "Team deleted successfully" }

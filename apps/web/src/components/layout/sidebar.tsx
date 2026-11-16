@@ -12,6 +12,7 @@ import {
   Contact,
   FolderKanban,
   Gauge,
+  History,
   Inbox,
   MessageSquareText,
   MessagesSquare,
@@ -29,6 +30,7 @@ import type { Account } from "@/features/auth/model/types"
 import {
   canAccessRequestInbox,
   canAccessProjectWorkspace,
+  canCreateProjectWorkspace,
 } from "@/features/auth/model/permissions"
 import {
   getNavigationLabel,
@@ -89,14 +91,16 @@ function NavigationIcon({
     departments: DepartmentIcon,
     services: ServiceIcon,
     "service-requests": ClipboardList,
+    "module-service-operations": ClipboardList,
     calendar: CalendarDays,
     projects: FolderKanban,
     "project-workspace": FolderKanban,
     "request-inbox": Inbox,
     help: CircleHelp,
     employees: UsersRound,
-    "attendance-dashboard": DashboardIcon,
     "staff-workload": Gauge,
+    "administrative-workload": Gauge,
+    "attendance-audit": History,
   }
   const icon = icons[policyId]
   return icon ? <RowIcon icon={icon} active={active} /> : null
@@ -159,7 +163,16 @@ type NavGroup = {
   label: string
   icon: NavIcon
   visible: (account: Account) => boolean
-  links: { href: string; label: string; ariaLabel?: string }[]
+  links: {
+    href: string
+    label: string
+    ariaLabel?: string
+    match?: (pathname: string) => boolean
+  }[]
+}
+
+function isGroupLinkActive(link: NavGroup["links"][number], pathname: string) {
+  return link.match?.(pathname) ?? link.href === pathname
 }
 
 /**
@@ -212,6 +225,20 @@ type RowProps = {
   onNavigate: () => void
 }
 
+/**
+ * Within a module, Overview → Management slides forward and back again
+ * (see ModuleTransition); jumps between modules switch without a slide.
+ */
+function groupTransition(
+  group: NavGroup,
+  href: string,
+  pathname: string,
+): string[] | undefined {
+  const inGroup = group.links.some((link) => isGroupLinkActive(link, pathname))
+  if (!inGroup || href === pathname) return undefined
+  return [href.endsWith("/overview") ? "nav-back" : "nav-forward"]
+}
+
 /** Expandable group: a toggle row and its indented sub-links. */
 function GroupDisclosure({
   group,
@@ -225,7 +252,9 @@ function GroupDisclosure({
   onToggle: () => void
 }) {
   const panelId = useId()
-  const groupActive = group.links.some((link) => link.href === pathname)
+  const groupActive = group.links.some((link) =>
+    isGroupLinkActive(link, pathname),
+  )
   return (
     <div className="min-w-0">
       <button
@@ -260,11 +289,12 @@ function GroupDisclosure({
         <div className="min-h-0 overflow-hidden">
           <div className="mt-0.5 mb-1 ml-[19px] grid gap-0.5 border-l border-[#e6e9ee] pl-2">
             {group.links.map((link) => {
-              const active = link.href === pathname
+              const active = isGroupLinkActive(link, pathname)
               return (
                 <Link
                   key={link.href}
                   href={link.href}
+                  transitionTypes={groupTransition(group, link.href, pathname)}
                   aria-label={link.ariaLabel}
                   aria-current={active ? "page" : undefined}
                   onClick={onNavigate}
@@ -292,7 +322,9 @@ function GroupFlyout({
   pathname,
   onNavigate,
 }: Omit<RowProps, "collapsed"> & { group: NavGroup }) {
-  const groupActive = group.links.some((link) => link.href === pathname)
+  const groupActive = group.links.some((link) =>
+    isGroupLinkActive(link, pathname),
+  )
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -322,7 +354,7 @@ function GroupFlyout({
           {group.label}
         </DropdownMenuLabel>
         {group.links.map((link) => {
-          const active = link.href === pathname
+          const active = isGroupLinkActive(link, pathname)
           return (
             <DropdownMenuItem
               key={link.href}
@@ -334,6 +366,7 @@ function GroupFlyout({
             >
               <Link
                 href={link.href}
+                transitionTypes={groupTransition(group, link.href, pathname)}
                 aria-label={link.ariaLabel}
                 aria-current={active ? "page" : undefined}
                 onClick={onNavigate}
@@ -362,19 +395,29 @@ export function Sidebar({
   onCloseDrawer: () => void
 }) {
   const pathname = usePathname()
-  // Groups follow the current page unless the user toggled them.
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
+  // Groups follow the current page until the user toggles one. Once toggled,
+  // the accordion keeps only the selected group open until navigation changes.
+  const [openGroupState, setOpenGroupState] = useState<{
+    pathname: string
+    group: string | null
+  } | null>(null)
+  const openGroup =
+    openGroupState?.pathname === pathname ? openGroupState.group : undefined
   function renderGroup(group: NavGroup) {
     const open =
-      openGroups[group.label] ??
-      group.links.some((link) => link.href === pathname)
+      openGroup === undefined
+        ? group.links.some((link) => isGroupLinkActive(link, pathname))
+        : openGroup === group.label
     const disclosure = (
       <GroupDisclosure
         group={group}
         pathname={pathname}
         open={open}
         onToggle={() =>
-          setOpenGroups((current) => ({ ...current, [group.label]: !open }))
+          setOpenGroupState({
+            pathname,
+            group: open ? null : group.label,
+          })
         }
         onNavigate={onCloseDrawer}
       />
@@ -401,10 +444,17 @@ export function Sidebar({
   }
 
   function renderPolicy(policy: RoutePolicy) {
+    if (
+      account.role === "SUPERADMIN" &&
+      policy.id === "module-service-operations" &&
+      mainNavigation.some((entry) => entry.id === "services")
+    )
+      return null
+
     const attendanceGroup = attendanceNavigation.find(
       (group) => group.id === policy.id,
     )
-    if (attendanceGroup && attendanceGroup.id !== "attendance-dashboard") {
+    if (attendanceGroup) {
       return renderGroup({
         kind: "group",
         label: attendanceGroup.label,
@@ -419,6 +469,34 @@ export function Sidebar({
           canAccessRoute(account, link.href),
         ),
       })
+    }
+    if (policy.id === "admin-project-management" && policy.canAccess(account)) {
+      const group = moduleGroup(
+        "Project Workspace",
+        "Project Workspace",
+        FolderKanban,
+        "/project-management",
+        policy.canAccess,
+      )
+      group.links[1].match = (path) =>
+        path !== "/project-management/overview" &&
+        isNavigationActive(policy, path)
+      return renderGroup(group)
+    }
+    if (
+      policy.id === "project-workspace" &&
+      canCreateProjectWorkspace(account)
+    ) {
+      const group = moduleGroup(
+        "Project Workspace",
+        "Project Workspace",
+        FolderKanban,
+        "/project-workspace",
+        canCreateProjectWorkspace,
+      )
+      group.links[1].match = (path) =>
+        path !== group.links[0].href && isNavigationActive(policy, path)
+      return renderGroup(group)
     }
     const props = {
       policy,
@@ -436,12 +514,26 @@ export function Sidebar({
       const names = {
         departments: ["Departments", "Department", DepartmentIcon],
         employees: ["Employees", "Employee", UsersRound],
-        services: ["Services", "Service", ServiceIcon],
+        services: ["Service", "Service", ServiceIcon],
       } as const
       const [label, singular, icon] = names[policy.id]
-      return renderGroup(
-        moduleGroup(label, singular, icon, `/${policy.id}`, policy.canAccess),
+      const group = moduleGroup(
+        label,
+        singular,
+        icon,
+        `/${policy.id}`,
+        policy.canAccess,
       )
+      if (
+        policy.id === "services" &&
+        account.role === "SUPERADMIN" &&
+        mainNavigation.some((entry) => entry.id === "module-service-operations")
+      )
+        group.links.push({
+          href: "/module/service-operations",
+          label: "Requests",
+        })
+      return renderGroup(group)
     }
     return <SidebarNavigationLink key={policy.id} {...props} />
   }

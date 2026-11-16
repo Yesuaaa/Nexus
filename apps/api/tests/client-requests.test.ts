@@ -10,6 +10,15 @@ import {
 import { issueSession } from "../src/features/auth/auth.service.js"
 import { readMigration, startPgliteApp } from "./support/pglite-app.js"
 
+const historicalStatusLabels = [
+  "SUBMITTED",
+  "UNDER_REVIEW",
+  "AWAITING_CLIENT_INFO",
+  "READY_FOR_QUOTATION",
+  "CLOSED",
+  "CANCELLED",
+]
+
 test("request lifecycle migration preserves legacy records and supports already upgraded databases", async () => {
   const db = new PGlite()
   try {
@@ -36,7 +45,7 @@ test("request lifecycle migration preserves legacy records and supports already 
     )
     assert.deepEqual(
       statuses.rows.map((row) => row.enumlabel).sort(),
-      Object.values(ServiceRequestStatus).sort(),
+      [...historicalStatusLabels].sort(),
     )
   } finally {
     await db.close()
@@ -96,7 +105,7 @@ test("combined inbox and client lifecycle migrations preserve status history and
     )
     assert.deepEqual(
       labels.rows.map((row) => row.enumlabel).sort(),
-      Object.values(ServiceRequestStatus).sort(),
+      [...historicalStatusLabels].sort(),
     )
   } finally {
     await db.close()
@@ -531,7 +540,7 @@ test(
               clientId: users.get("USER")!.id,
               serviceId: activeService.id,
               title: `Historical request ${index}`,
-              status: "CLOSED",
+              status: "CONCLUDED",
               createdAt: new Date(2026, 0, index + 1),
             },
           })
@@ -555,7 +564,7 @@ test(
         )
         const filtered = (await (
           await request(
-            "/service-requests?status=CLOSED&search=Historical%20request%201&sortOrder=asc",
+            "/service-requests?status=CONCLUDED&search=Historical%20request%201&sortOrder=asc",
           )
         ).json()) as {
           requests: { title: string }[]
@@ -607,11 +616,11 @@ test(
           assert.equal(history.total, status === "SUBMITTED" ? 2 : 1)
           assert.ok(history.requests.every((row) => row.status === status))
           assert.deepEqual(history.summary, {
-            total: 7,
+            total: 9,
             pending: 2,
-            inProgress: 3,
+            inProgress: 4,
             completed: 1,
-            cancelled: 1,
+            cancelled: 2,
           })
         }
       },

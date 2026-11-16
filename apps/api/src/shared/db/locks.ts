@@ -19,6 +19,9 @@
  * Account rows keep the order of their existing call sites: employee writes
  * lock Department → Employee → User, and `syncEmployeeForUser` locks the
  * Employee row (by `userId`) before falling back to the User row.
+ * Department deletion retains its existing User -> Employee -> cascaded Team
+ * write order after locking its Department. Team locks protect cascade snapshots;
+ * this is not a new lock-order convention for standalone Team/Employee writes.
  */
 import { Prisma } from "../../generated/prisma/client.js"
 
@@ -26,6 +29,7 @@ export type LockableTable =
   | "AttendanceAdjustment"
   | "ServiceRequest"
   | "Department"
+  | "Team"
   | "Project"
   | "ProjectMilestone"
   | "ProjectWorkspaceGroup"
@@ -49,6 +53,7 @@ const lockableTables: ReadonlySet<string> = new Set<LockableTable>([
   "AttendanceAdjustment",
   "ServiceRequest",
   "Department",
+  "Team",
   "Project",
   "ProjectMilestone",
   "ProjectWorkspaceGroup",

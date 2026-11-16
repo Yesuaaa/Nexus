@@ -12,6 +12,7 @@ import { passwordIssue } from "../../shared/password-policy.js"
 import { parsePage } from "../../shared/query/pagination.js"
 import { isRecordId } from "../../shared/validation.js"
 import { mapPrismaErrors } from "../../shared/http-error.js"
+import { createManagementOperation } from "../../shared/management-history.js"
 
 export const clientsRouter = Router()
 clientsRouter.use(requireAuth, requirePermission(Permission.CLIENTS_READ))
@@ -19,7 +20,9 @@ clientsRouter.use(requireAuth, requirePermission(Permission.CLIENTS_READ))
 for (const method of ["post", "patch"] as const) {
   clientsRouter[method](
     method === "post" ? "/" : "/:id",
-    requireRole(method === "post" ? Role.ADMIN : Role.SUPERADMIN),
+    method === "post"
+      ? requirePermission(Permission.CLIENTS_CREATE)
+      : requireRole(Role.SUPERADMIN),
     async (request, response) => {
       const creating = method === "post"
       if (!creating && !isRecordId(String(request.params.id)))
@@ -34,6 +37,7 @@ for (const method of ["post", "patch"] as const) {
       const client = await clientsRepository.save(
         input,
         creating ? null : String(request.params.id),
+        createManagementOperation(request.auth!),
       )
       if (!client)
         return response.status(404).json({ error: "Client not found" })
@@ -49,7 +53,10 @@ clientsRouter.delete(
     const id = String(request.params.id)
     if (!isRecordId(id))
       return response.status(400).json({ error: "Invalid client id" })
-    const result = await clientsRepository.delete(id)
+    const result = await clientsRepository.delete(
+      id,
+      createManagementOperation(request.auth!),
+    )
     if (result === "missing")
       return response.status(404).json({ error: "Client not found" })
     if (result === "linked")

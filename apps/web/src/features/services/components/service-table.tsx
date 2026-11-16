@@ -5,7 +5,7 @@ import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
 import { DepartmentPill } from "@/components/ui/department-pill.tsx"
 import { SearchEmptyState } from "@/components/ui/search-empty-state"
 import { SearchField } from "@/components/ui/search-field"
-import { Dropdown } from "@/components/ui/dropdown"
+import { FilterSelect, filterGridClass } from "@/components/ui/filter-select"
 import { Pill } from "@/components/ui/pill"
 import { useLocalTable, useTableSort } from "@/components/ui/use-local-table"
 import { TablePaginationFooter } from "@/components/ui/table-pagination-footer"
@@ -69,6 +69,7 @@ export function ServiceTable({
   services,
   departments,
   loading,
+  initialLoading,
   error,
   canManage,
   onView,
@@ -80,6 +81,7 @@ export function ServiceTable({
   services: Service[]
   departments: Department[]
   loading: boolean
+  initialLoading: boolean
   error: string
   canManage: boolean
   onView: (service: Service) => void
@@ -94,7 +96,6 @@ export function ServiceTable({
   const [status, setStatus] = useState("")
   const sort = useTableSort<SortKey>("createdAt", "desc", defaultSortDirection)
   const { sortKey, direction } = sort
-  const [animateRows, setAnimateRows] = useState(true)
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase()
@@ -132,9 +133,9 @@ export function ServiceTable({
   const table = useLocalTable(filtered, {
     view: [query, departmentId, status, sortKey, direction],
     loading,
+    search: query,
   })
   function sortBy(key: SortKey) {
-    setAnimateRows(true)
     sort.toggle(key)
   }
 
@@ -150,14 +151,12 @@ export function ServiceTable({
           value={search}
           maxLength={100}
           onChange={(event) => {
-            setAnimateRows(true)
             setSearch(event.target.value)
           }}
         />
-        <div className="flex min-w-0 flex-wrap gap-[10px] max-[560px]:w-full max-[560px]:flex-col">
-          <Dropdown
-            className="w-[170px] max-[560px]:w-full"
-            triggerClassName="h-[34px] rounded-md border-[#e1e4ea] bg-transparent text-xs font-normal shadow-sm"
+        <div className={`${filterGridClass} min-w-0 max-[560px]:w-full`}>
+          <FilterSelect
+            triggerClassName="w-[210px]"
             label="Filter by department"
             value={departmentId}
             options={[
@@ -168,13 +167,11 @@ export function ServiceTable({
               })),
             ]}
             onChange={(value) => {
-              setAnimateRows(true)
               setDepartmentId(value)
             }}
           />
-          <Dropdown
-            className="w-[140px] max-[560px]:w-full"
-            triggerClassName="h-[34px] rounded-md border-[#e1e4ea] bg-transparent text-xs font-normal shadow-sm"
+          <FilterSelect
+            triggerClassName="w-[170px]"
             label="Filter by status"
             value={status}
             options={[
@@ -183,14 +180,16 @@ export function ServiceTable({
               { value: "inactive", label: "Inactive" },
             ]}
             onChange={(value) => {
-              setAnimateRows(true)
               setStatus(value)
             }}
           />
         </div>
       </div>
 
-      <ResponsiveDataTable label="Services">
+      <ResponsiveDataTable
+        label="Services"
+        aria-busy={loading || table.searchPending}
+      >
         <ResponsiveDataTableHeader
           className="@max-[920px]:sr-only"
           rowClassName={serviceGrid}
@@ -220,9 +219,9 @@ export function ServiceTable({
           </span>
           <span role="columnheader">Actions</span>
         </ResponsiveDataTableHeader>
-        {loading || error ? (
+        {initialLoading || error || table.searchPending ? (
           <ResponsiveDataTableBody className="relative overflow-x-clip">
-            {loading ? (
+            {initialLoading || (table.searchPending && !error) ? (
               <DataTableSkeletonRows
                 label="services"
                 rowClassName={cn(
@@ -260,7 +259,7 @@ export function ServiceTable({
             items={table.visible}
             viewKey={table.viewKey}
             quickKey={query}
-            animateRows={animateRows}
+            animateRows={false}
             getKey={tableRowKey}
             rowClassName={(_item, _index, isLast) =>
               cn(
@@ -271,15 +270,15 @@ export function ServiceTable({
             }
             emptyHeight={170}
             emptyContent={
-              <>
-                {query.trim() ? (
-                  <SearchEmptyState query={query.trim()} />
-                ) : filteredState ? (
-                  "No services match the selected filters."
-                ) : (
-                  "No services have been created yet."
-                )}
-              </>
+              loading ? (
+                <span role="status">Refreshing services…</span>
+              ) : query.trim() ? (
+                <SearchEmptyState query={query.trim()} />
+              ) : filteredState ? (
+                "No services match the selected filters."
+              ) : (
+                "No services have been created yet."
+              )
             }
             className="relative overflow-x-clip"
             onRowsSettled={table.onRowsSettled}
@@ -351,13 +350,12 @@ export function ServiceTable({
         )}
       </ResponsiveDataTable>
 
-      {!loading && !error && (
+      {!loading && !error && !table.searchPending && (
         <TablePaginationFooter
           {...table.footer}
           itemLabel="services"
           label="Service pages"
           onPageChange={(nextPage) => {
-            setAnimateRows(true)
             table.setPage(nextPage)
           }}
         />

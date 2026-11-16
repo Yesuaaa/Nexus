@@ -65,6 +65,7 @@ export type AttendanceEmployee = {
   departmentId: string | null
 }
 export type AttendanceAdjustment = {
+  capabilities: { approve: boolean; verify: boolean; reject: boolean }
   type: "CORRECTION" | "OVERTIME"
   overtimeMinutes: number
   verifiedById: string | null
@@ -219,16 +220,23 @@ export function attendanceAudit(
   departmentId: string,
   signal?: AbortSignal,
   recordsOnly = false,
+  search = "",
 ) {
+  const query = new URLSearchParams({
+    from,
+    to,
+    page: String(page),
+    employeeId,
+    departmentId,
+    ...(recordsOnly ? { recordsOnly: "true" } : {}),
+    ...(search.trim() ? { search: search.trim() } : {}),
+  })
   return apiRequest<
     Paging & {
       events: AttendanceAuditEvent[]
       actionCounts: { action: string; count: number }[]
     }
-  >(
-    `${root}/audit?${new URLSearchParams({ from, to, page: String(page), employeeId, departmentId, ...(recordsOnly ? { recordsOnly: "true" } : {}) })}`,
-    { signal },
-  )
+  >(`${root}/audit?${query}`, { signal })
 }
 export const attendanceOverview = (
   from: string,
@@ -299,6 +307,10 @@ export const assignAttendancePolicy = (input: {
     method: "POST",
     body: JSON.stringify(input),
   })
+export const unassignAttendancePolicy = (id: string) =>
+  apiRequest(`${root}/assignments/${encodeURIComponent(id)}/unassign`, {
+    method: "POST",
+  })
 export const attendanceAdjustments = (
   scope: "mine" | "team",
   page: number,
@@ -307,7 +319,12 @@ export const attendanceAdjustments = (
   type = "",
   status = "",
 ) =>
-  apiRequest<Paging & { adjustments: AttendanceAdjustment[] }>(
+  apiRequest<
+    Paging & {
+      adjustments: AttendanceAdjustment[]
+      capabilities: { requestCorrection: boolean }
+    }
+  >(
     `${root}/adjustments?${new URLSearchParams({
       scope,
       page: String(page),

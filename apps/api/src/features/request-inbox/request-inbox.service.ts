@@ -6,7 +6,7 @@ import { ServiceRequestsError } from "../service-requests/service-requests.servi
 import { initializeWorkflow } from "../request-workflow/workflow.access.js"
 import type { InboxFilters } from "./request-inbox.schema.js"
 
-const requestSelect = {
+export const requestSelect = {
   id: true,
   referenceNumber: true,
   title: true,
@@ -76,6 +76,8 @@ export async function listInbox(userId: string, filters: InboxFilters) {
       const statusByView = {
         pending: "SUBMITTED",
         "under-review": "UNDER_REVIEW",
+        activated: "ACTIVATED",
+        concluded: "CONCLUDED",
         "awaiting-information": "AWAITING_CLIENT_INFO",
         "ready-for-quotation": "READY_FOR_QUOTATION",
         closed: "CLOSED",

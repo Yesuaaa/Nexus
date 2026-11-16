@@ -1,6 +1,6 @@
 # Client Management
 
-The directory at `/clients` gives Admin accounts access to create and view client accounts. Superadmin, Staff and User accounts cannot access it. It follows Employee Management's layout with name/email search, Active/Inactive filtering, sorting and server pagination (10 records per page). The default order is newest registered first; an account ID tie-breaker keeps equal values ordered consistently. Narrow screens use stacked rows and a sort selector.
+The directory at `/clients` gives Admin and Superadmin accounts access to client records with `clients:read`. Creation additionally requires `clients:create`, granted to these same two roles. Staff and User accounts cannot access it. It follows Employee Management's layout with name/email search, Active/Inactive filtering, sorting and server pagination (10 records per page). The default order is newest registered first; an account ID tie-breaker keeps equal values ordered consistently. Narrow screens use stacked rows and a sort selector.
 
 The eye action opens the client's details drawer. The drawer loads current account details, displays related record counts in Overview, and provides working tabs with paginated records. It preserves directory filters, sorting and page, closes with Escape or its close button, and restores focus to the row action. On phones it fills the screen. Each read has loading, empty and retryable error states; superseded responses cannot overwrite a newer selection. The header provides Create Client; rows provide view details only. Forms use the existing admin dialog styling and retain entered values on failure. Successful creation refreshes the directory and displays a confirmation toast.
 
@@ -20,7 +20,7 @@ The response contains only `id`, `fullName`, `email`, `contactNumber`, `isActive
 
 ## API
 
-`GET /api/clients` requires a valid bearer session and `clients:read`. Only Admin receives that permission. Superadmin, Staff and User receive 403, missing/invalid sessions receive 401, malformed filters receive 400, and an unavailable database receives 503. Responses use `Cache-Control: no-store`.
+`GET /api/clients` requires a valid bearer session and `clients:read`. Admin and Superadmin receive that permission. Staff and User receive 403, missing/invalid sessions receive 401, malformed filters receive 400, and an unavailable database receives 503. Responses use `Cache-Control: no-store`.
 
 | Parameter   | Accepted values                                                            | Default     |
 | ----------- | -------------------------------------------------------------------------- | ----------- |
@@ -34,7 +34,7 @@ Repeated or structured values for supported parameters are invalid. Unknown para
 
 ## Related records API
 
-All endpoints below require the same `clients:read` permission and valid bearer session. Only Admin has access; Superadmin, Staff and User receive 403. Unknown, deleted or non-USER client IDs return 404. IDs must contain 1-80 ASCII letters, digits, hyphens or underscores; malformed IDs return 400. Related lists accept `page` using the same bounds as the directory, reject repeated/structured pagination values, and use 10 records per page, newest first with an ID tie-breaker. Unknown query parameters are ignored. Out-of-range pages return empty arrays. Reads validate the parent and query within one repeatable-read transaction. None expose credentials or records owned by a different client.
+All endpoints below require the same `clients:read` permission and valid bearer session. Admin and Superadmin have access; Staff and User receive 403. Unknown, deleted or non-USER client IDs return 404. IDs must contain 1-80 ASCII letters, digits, hyphens or underscores; malformed IDs return 400. Related lists accept `page` using the same bounds as the directory, reject repeated/structured pagination values, and use 10 records per page, newest first with an ID tie-breaker. Unknown query parameters are ignored. Out-of-range pages return empty arrays. Reads validate the parent and query within one repeatable-read transaction. None expose credentials or records owned by a different client.
 
 | Endpoint                                       | Response                                                                               |
 | ---------------------------------------------- | -------------------------------------------------------------------------------------- |
@@ -59,11 +59,13 @@ The migration adds two enums, two tables, indexes and foreign keys without chang
 
 ## Verification
 
-`apps/api/src/client-integration.test.ts` uses a temporary PGlite database to exercise authentication, read permissions, safe field projection, filtering, sorting, pagination, related-record ownership, input validation, admin-only creation, duplicate emails and mutation restrictions. `apps/web/e2e/clients.spec.ts` checks directory controls, related tabs, states, focus and role restrictions. No production database is seeded or modified by these tests.
+2026-11-15: [Phase 4B.4B.3A](client-management-actor-attribution.md) adds transaction-local actor attribution to Client creation, profile updates and archival. It preserves existing authorization, validation, fixed `USER` creation and response contracts; personal profile values and credentials are excluded from history.
+
+`apps/api/tests/client-integration.test.ts` uses a temporary PGlite database to exercise authentication, read permissions, safe field projection, filtering, sorting, pagination, related-record ownership, input validation, Admin/Superadmin creation, duplicate emails and mutation restrictions. `apps/api/tests/features/auth/client-create-permission.test.ts` additionally checks creation permission separation, including an isolated read-only catalog against real endpoints. Browser permission coverage is in `apps/web/e2e/client-create-permission.spec.ts`; existing Client specs check directory controls, related tabs, states, focus and role restrictions. No production database is seeded or modified by these tests.
 
 ## Client account changes
 
 - `POST /api/clients` creates a USER account from fullName (2–100 characters), normalized email, contactNumber (7–20 characters, digits/spaces/hyphens with an optional leading +), isActive and an initial password (at least 12 characters, up to 1024 UTF-8 bytes). Passwords use the existing scrypt hashing implementation.
 - `PATCH /api/clients/:id` and `DELETE /api/clients/:id` are reserved and unavailable to Admin accounts. Client details, status and account deletion are not editable from Client Management.
 
-Client creation requires an authenticated Admin. Other roles receive 403. Missing/deleted/non-client targets return 404. Duplicate emails (case-insensitive across all accounts, including retired accounts) return 409. Validation errors return 400. Serializable transactions protect creation; responses never expose credentials. No database migration is needed.
+Client creation requires an active authenticated account with both `clients:read` and `clients:create`; the fixed mappings grant both to Admin and Superadmin only. The UI shows Create and mounts its dialog only with `clients:create`; read-only access does not grant creation. Client PATCH/DELETE retain the existing Superadmin-only guard and linked-history/lifecycle rules. Missing/deleted/non-client targets return 404. Duplicate emails (case-insensitive across all accounts, including retired accounts) return 409. Validation errors return 400. Serializable transactions protect creation; responses never expose credentials and new accounts always receive `USER`, regardless of submitted role. No database migration is needed. See [Phase 4B.3](client-creation-permission-separation.md).

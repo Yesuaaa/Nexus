@@ -1,5 +1,7 @@
 # Staff Workload
 
+2026-11-14: [Phase 3B.2 Superadmin oversight](superadmin-workload-oversight.md) adds a separate organization-wide read-only view under Service Operations. The Department Head page and mutation permissions described below remain unchanged.
+
 HR planning integration developed: 2026-11-13.
 
 Department Heads open **Staff Workload** from the portal sidebar. Access is limited to the current active STAFF department head; admin roles do not bypass department scope.
@@ -20,7 +22,7 @@ Employee Management is the design reference: shared EXP shell, Inter typography,
 
 ### Verified sources and supported behavior
 
-The existing route remains `/staff-workload` in Project Management. Service Operations staffing decisions use this existing view; no module, sidebar, staffing authorization, or project activation behavior was moved. Attendance records and policy administration belong to Attendance & Monitoring.
+The existing route remains `/staff-workload` in Project Management. Service Operations staffing decisions use this existing view; no module, sidebar, staffing authorization, or project activation behavior was moved. Attendance records and policy administration belong to Workforce Compliance.
 
 | Existing implementation                                                                             | Integration                                                                                                                                                                                                                                                                               |
 | --------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

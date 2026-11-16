@@ -1,6 +1,5 @@
 import { test, expect, type Page } from "@playwright/test"
 import { spawn, type ChildProcess } from "node:child_process"
-import { createRequire } from "node:module"
 import { randomUUID } from "node:crypto"
 import path from "node:path"
 import { defaultPreferences } from "../src/features/settings/api/settings-api"
@@ -19,11 +18,11 @@ const api = "http://127.0.0.1:5391"
 test.beforeAll(async () => {
   test.setTimeout(90000)
   const root = path.resolve(import.meta.dirname, "../../..")
-  const requireApi = createRequire(path.join(root, "apps/api/package.json"))
   server = spawn(
     process.execPath,
     [
-      requireApi.resolve("tsx/cli"),
+      path.join(root, "apps/api/scripts/run-tests.mjs"),
+      "--fixture",
       "tests/support/attendance-browser-server.ts",
     ],
     {
@@ -91,6 +90,15 @@ test.afterEach(async ({ page }) => {
 })
 test.afterAll(() => {
   server?.kill()
+})
+
+test.beforeEach(async ({ context }) => {
+  // Forward same-origin requests to this test's real offline API rather than
+  // whichever backend target was baked into the shared Next production build.
+  await context.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url())
+    await route.continue({ url: `${api}${url.pathname}${url.search}` })
+  })
 })
 
 async function signIn(page: Page, actor: string) {
@@ -170,7 +178,7 @@ test("real employee clocks overnight and never receives Employee Management", as
   await page.goto("/module")
   await page
     .getByRole("link", {
-      name: "Open Attendance & Monitoring workspace",
+      name: "Open Workforce Compliance workspace",
       exact: true,
     })
     .click()
@@ -295,7 +303,7 @@ test("department head reviews scoped requests and HR policy settings work", asyn
     .getByRole("button", { name: /More actions for .* request/ })
     .click()
   await page
-    .getByRole("menuitem", { name: "Approve request", exact: true })
+    .getByRole("menuitem", { name: "Verify correction", exact: true })
     .click()
   await page
     .getByRole("textbox", { name: "Review note", exact: true })
@@ -303,7 +311,7 @@ test("department head reviews scoped requests and HR policy settings work", asyn
   await page
     .getByRole("button", { name: "Confirm decision", exact: true })
     .click()
-  await expect(page.getByText("Approved", { exact: true })).toBeVisible()
+  await expect(page.getByText("Verified", { exact: true })).toBeVisible()
   await page.goto("/attendance/time-logs/records")
   await page
     .getByRole("button", {
@@ -367,7 +375,7 @@ test("time logs employee table preserves filters and opens individual or all log
   await individual
   await expect(
     page.getByRole("heading", {
-      name: "Logs for Attendance staff",
+      name: "Time Logs for Attendance staff",
       exact: true,
     }),
   ).toBeVisible()
@@ -388,7 +396,7 @@ test("time logs employee table preserves filters and opens individual or all log
   await page.getByRole("button", { name: "All logs", exact: true }).click()
   await all
   await expect(
-    page.getByRole("heading", { name: "All permitted employees", exact: true }),
+    page.getByRole("heading", { name: "Time Log Records", exact: true }),
   ).toBeVisible()
   for (const width of [390, 820, 1440]) {
     await page.setViewportSize({ width, height: 1000 })
@@ -422,6 +430,62 @@ test("time logs employee table preserves filters and opens individual or all log
       page.getByRole("table", { name: "Attendance history" }),
     ).toBeVisible()
     await assertNoPageOverflow(page)
+  }
+})
+
+test("attendance employee search keeps a single pending state until results settle", async ({
+  page,
+}) => {
+  await signIn(page, "admin")
+  let releaseSearch!: () => void
+  let notifySearchStarted!: () => void
+  const searchStarted = new Promise<void>((resolve) => {
+    notifySearchStarted = resolve
+  })
+  const pendingSearch = new Promise<void>((resolve) => {
+    releaseSearch = resolve
+  })
+  await page.route("**/api/attendance/employees?**", async (route) => {
+    if (
+      new URL(route.request().url()).searchParams.get("search") ===
+      "No matching employee"
+    ) {
+      notifySearchStarted()
+      await pendingSearch
+    }
+    await route.fallback()
+  })
+  try {
+    await page.goto("/attendance/time-logs/records")
+    const table = page.getByRole("table", { name: "Employees", exact: true })
+    await expect(
+      table.getByRole("button", { name: "View logs for Attendance staff" }),
+    ).toBeVisible()
+    const search = page.getByRole("searchbox", {
+      name: "Search attendance employees",
+    })
+    await search.fill("No matching employee")
+    await searchStarted
+    await expect(table).toHaveAttribute("aria-busy", "true")
+    const searchSkeletons = table.getByRole("rowgroup").nth(1).getByRole("row")
+    await expect(searchSkeletons).toHaveCount(10)
+    for (const skeleton of await searchSkeletons.all())
+      await expect(skeleton.getByRole("cell")).toHaveCount(4)
+    await expect(table.getByRole("status")).toContainText("Loading employees…")
+    await expect(
+      table.getByRole("button", { name: "View logs for Attendance staff" }),
+    ).toHaveCount(0)
+    await expect(
+      table.getByText("No employees match your search.", { exact: true }),
+    ).toHaveCount(0)
+    releaseSearch()
+    await expect(table).toHaveAttribute("aria-busy", "false")
+    await expect(
+      table.getByText("No employees match your search.", { exact: true }),
+    ).toBeVisible()
+    await expect(table.getByRole("status")).toHaveCount(0)
+  } finally {
+    releaseSearch()
   }
 })
 
@@ -674,10 +738,7 @@ for (const viewport of [
     await page.setViewportSize(viewport)
     await signIn(page, "admin")
     await page.goto("/attendance/overview")
-    const overview = page.getByRole("region", {
-      name: "Attendance overview",
-      exact: true,
-    })
+    const overview = page.locator('[aria-label="Attendance figures"]')
     await expect(overview).toHaveAttribute("aria-busy", "false")
     await expect(
       page.getByRole("heading", {
@@ -1014,11 +1075,6 @@ for (const width of [390, 820, 1440]) {
       await signIn(page, "admin")
       const pages = [
         ["overview", "Attendance Overview", "/api/attendance/me/overview"],
-        [
-          "dashboard",
-          "Attendance & Monitoring Dashboard",
-          "/api/attendance/overview",
-        ],
         ["my", "Check-Ins", "/api/attendance/me/current"],
         [
           "time-logs/overview",
@@ -1026,7 +1082,7 @@ for (const width of [390, 820, 1440]) {
           "/api/attendance/overview",
         ],
         ["records", "Time Log Records", "/api/attendance/employees"],
-        ["time-logs/audit", "Attendance Audit Trail", "/api/attendance/audit"],
+        ["audit", "Attendance Audit Trail", "/api/attendance/audit"],
         [
           "requests/overview",
           "Requests & Approvals Overview",
@@ -1040,11 +1096,6 @@ for (const width of [390, 820, 1440]) {
         ],
         ["policies/overview", "Policies Overview", "/api/attendance/policies"],
         ["settings", "Policy Management", "/api/attendance/policies"],
-        [
-          "policies/assignments",
-          "Policy Assignments",
-          "/api/attendance/policies",
-        ],
       ]
       for (const [path, title, endpoint] of pages) {
         const read = page.waitForResponse(
@@ -1052,16 +1103,6 @@ for (const width of [390, 820, 1440]) {
             new URL(response.url()).pathname === endpoint &&
             response.request().method() === "GET",
         )
-        const recordAudit =
-          path === "time-logs/overview"
-            ? page.waitForResponse(
-                (response) =>
-                  new URL(response.url()).pathname ===
-                    "/api/attendance/audit" &&
-                  new URL(response.url()).searchParams.get("recordsOnly") ===
-                    "true",
-              )
-            : null
         await page.goto("/attendance/" + path)
         expect((await read).status()).toBe(200)
         await expect(
@@ -1070,48 +1111,18 @@ for (const width of [390, 820, 1440]) {
         await expect(
           page.getByRole("button", { name: "Retry", exact: true }),
         ).toHaveCount(0)
-        if (recordAudit) {
-          expect((await recordAudit).status()).toBe(200)
+        if (path === "time-logs/overview") {
           const main = page.getByRole("main", { name: "Attendance workspace" })
-          for (const title of [
-            "Recorded session status",
-            "Record-change summary",
-            "Recent record activity",
-          ])
+          for (const title of ["Recorded session status", "Coverage"])
             await expect(
               main.getByRole("heading", { name: title, exact: true }),
             ).toBeVisible()
-          await expect(
-            main.getByText("Check-ins", { exact: true }),
-          ).toBeVisible()
-          await expect(
-            main.getByText("Check-outs", { exact: true }),
-          ).toBeVisible()
           await expect(
             main.getByRole("link", { name: "View records", exact: true }),
           ).toHaveAttribute("href", "/attendance/time-logs/records")
           await expect(
             main.getByRole("link", { name: "Open audit trail", exact: true }),
-          ).toHaveAttribute("href", "/attendance/time-logs/audit")
-          await expect(main.getByRole("table")).toHaveCount(0)
-          await expect(
-            main.getByText(
-              /overtime|correction|requests|polic|required hours|net worked hours|average net hours/i,
-            ),
           ).toHaveCount(0)
-          const refreshed = page.waitForResponse(
-            (response) =>
-              new URL(response.url()).pathname === "/api/attendance/audit" &&
-              new URL(response.url()).searchParams.get("recordsOnly") ===
-                "true",
-          )
-          await main
-            .getByRole("button", { name: "Refresh", exact: true })
-            .click()
-          expect((await refreshed).status()).toBe(200)
-          await expect(
-            main.getByRole("region", { name: "Record-change summary" }),
-          ).toBeVisible()
         }
         if (
           [
@@ -1164,7 +1175,7 @@ for (const width of [390, 820, 1440]) {
             ),
           ).toBe(true)
         }
-        if (path === "time-logs/audit") {
+        if (path === "audit") {
           await page
             .getByRole("button", { name: /View audit event/ })
             .first()
@@ -1176,7 +1187,7 @@ for (const width of [390, 820, 1440]) {
             }),
           ).toBeVisible()
           await expect(
-            page.getByRole("heading", { name: "Before", exact: true }),
+            page.getByRole("heading", { name: "Change details", exact: true }),
           ).toBeVisible()
           await page.getByRole("button", { name: "Done", exact: true }).click()
           await expect(
@@ -1184,18 +1195,6 @@ for (const width of [390, 820, 1440]) {
               name: "Audit event details",
               exact: true,
             }),
-          ).toHaveCount(0)
-        }
-        if (path === "policies/assignments") {
-          await page
-            .getByRole("combobox", { name: "Assignment policy" })
-            .click()
-          await page.getByRole("option").nth(1).click()
-          await expect(
-            page.getByRole("heading", { name: "Assigned people", exact: true }),
-          ).toBeVisible()
-          await expect(
-            page.getByText("Loading attendance", { exact: true }),
           ).toHaveCount(0)
         }
         await page.screenshot({
@@ -1249,7 +1248,7 @@ for (const width of [390, 820, 1440]) {
           .click()
         await expect(
           page.getByRole("menuitem", { name: "Assignments", exact: true }),
-        ).toBeVisible()
+        ).toHaveCount(0)
       }
     },
   )
@@ -1262,10 +1261,9 @@ test("grouped attendance routes enforce staff and department-head boundaries", a
   for (const path of [
     "time-logs/overview",
     "records",
-    "time-logs/audit",
+    "audit",
     "policies/overview",
     "settings",
-    "policies/assignments",
     "dashboard",
   ]) {
     await page.goto("/attendance/" + path)
@@ -1351,3 +1349,225 @@ test("time log overview preserves available figures during partial failures and 
     await assertNoPageOverflow(page)
   }
 })
+
+test("attendance audit search stays in sync with pagination and keeps rows during refresh", async ({
+  page,
+}) => {
+  await signIn(page, "admin")
+  const queries: string[] = []
+  let releaseSearch!: () => void
+  let notifySearchStarted!: () => void
+  let failRetry = true
+  const searchStarted = new Promise<void>((resolve) => {
+    notifySearchStarted = resolve
+  })
+  const pendingSearch = new Promise<void>((resolve) => {
+    releaseSearch = resolve
+  })
+  await page.route("**/api/attendance/audit?**", async (route) => {
+    const url = new URL(route.request().url())
+    queries.push(url.search)
+    const search = url.searchParams.get("search") ?? ""
+    if (search === "payroll") {
+      notifySearchStarted()
+      await pendingSearch
+    }
+    if (search === "retry" && failRetry) {
+      failRetry = false
+      return route.fulfill({
+        status: 503,
+        json: { error: "Audit temporarily unavailable." },
+      })
+    }
+    const pageNumber = Number(url.searchParams.get("page") ?? "1")
+    const events =
+      search === "no-match"
+        ? []
+        : search
+          ? [auditEvent(search === "latest" ? "latest-match" : "payroll-match")]
+          : Array.from({ length: 10 }, (_, index) =>
+              auditEvent(`event-${(pageNumber - 1) * 10 + index + 1}`),
+            )
+    return route.fulfill({
+      json: {
+        asOf: "2026-11-15T00:00:00.000Z",
+        total: search === "no-match" ? 0 : search ? 1 : 21,
+        page: pageNumber,
+        pageSize: 10,
+        events,
+        actionCounts:
+          search === "no-match"
+            ? []
+            : [{ action: "UPDATE", count: search ? 1 : 21 }],
+      },
+    })
+  })
+  await page.goto("/attendance/audit")
+  const table = page.getByRole("table", { name: "Attendance audit events" })
+  await expect(table.getByText("event-1", { exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Page 2", exact: true }).click()
+  await expect(table.getByText("event-11", { exact: true })).toBeVisible()
+
+  const search = page.getByRole("searchbox", { name: "Search audit events" })
+  await search.fill("payroll")
+  await searchStarted
+  await expect(table).toHaveAttribute("aria-busy", "true")
+  await expect(table.getByText("event-11", { exact: true })).toBeVisible()
+  expect(queries.at(-1)).toContain("page=1")
+  expect(queries.at(-1)).toContain("search=payroll")
+  await search.fill("latest")
+  await expect(table.getByText("latest-match", { exact: true })).toBeVisible()
+  releaseSearch()
+  await expect(table.getByText("latest-match", { exact: true })).toBeVisible()
+  await expect(table.getByText("payroll-match", { exact: true })).toHaveCount(0)
+
+  await search.fill("")
+  await expect(table.getByText("event-1", { exact: true })).toBeVisible()
+  expect(queries.at(-1)).toContain("page=1")
+  expect(queries.at(-1)).not.toContain("search=")
+
+  await search.fill("no-match")
+  await expect(table.getByRole("status")).toContainText("No results for")
+  await expect(table.getByRole("status")).toContainText("no-match")
+
+  await search.fill("retry")
+  await expect(table.getByRole("alert")).toContainText(
+    "Audit temporarily unavailable.",
+  )
+  await table.getByRole("button", { name: "Try again", exact: true }).click()
+  await expect(table.getByText("payroll-match", { exact: true })).toBeVisible()
+})
+
+function auditEvent(id: string) {
+  return {
+    id,
+    entityType: "AttendanceWorkday",
+    action: "UPDATE",
+    reason: "",
+    createdAt: "2026-11-13T08:00:00.000Z",
+    actorId: "actor-1",
+    actor: { fullName: "Audit Actor" },
+    employee: { fullName: id },
+    before: null,
+    after: null,
+  }
+}
+
+for (const width of [1280, 390])
+  test(`attendance policy skeletons match the responsive grid and retain rows during refresh at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await signIn(page, "admin")
+    const initial = requestGate()
+    const refreshed = requestGate()
+    let holdingRefresh = false
+    await page.route("**/api/attendance/policies**", async (route) => {
+      if (route.request().method() === "GET") {
+        const gate = holdingRefresh ? refreshed : initial
+        gate.start()
+        await gate.pending
+      }
+      await route.fallback()
+    })
+
+    await page.goto("/attendance/settings")
+    const table = page.getByRole("table", { name: "Attendance policies" })
+    await initial.started
+    await expect(table).toHaveAttribute("aria-busy", "true")
+    const skeletonRows = table.getByRole("rowgroup").nth(1).getByRole("row")
+    await expect(skeletonRows).toHaveCount(5)
+    for (const row of await skeletonRows.all())
+      await expect(row.getByRole("cell")).toHaveCount(5)
+    await expect(table.getByRole("status")).toContainText(
+      "Loading attendance policies",
+    )
+    await expect(
+      page.getByRole("status", { name: "Loading attendance", exact: true }),
+    ).toHaveCount(0)
+    initial.release()
+
+    const existingRow = table
+      .getByRole("row")
+      .filter({ hasText: "Browser flexible policy" })
+    await expect(existingRow).toBeVisible()
+    await page
+      .getByRole("button", { name: "Create policy", exact: true })
+      .click()
+    const dialog = page.getByRole("dialog")
+    await dialog
+      .getByLabel("Policy name", { exact: true })
+      .fill(`Skeleton refresh ${width}`)
+    holdingRefresh = true
+    await dialog
+      .getByRole("button", { name: "Create policy", exact: true })
+      .click()
+
+    await refreshed.started
+    await expect(table).toHaveAttribute("aria-busy", "true")
+    await expect(existingRow).toBeVisible()
+    await expect(
+      table
+        .getByRole("status")
+        .filter({ hasText: "Loading attendance policies" }),
+    ).toHaveCount(0)
+    await expect(
+      page.getByRole("status", { name: "Loading attendance", exact: true }),
+    ).toHaveCount(0)
+    refreshed.release()
+    await expect(
+      table.getByRole("row").filter({ hasText: `Skeleton refresh ${width}` }),
+    ).toBeVisible()
+
+    const createdRow = table
+      .getByRole("row")
+      .filter({ hasText: `Skeleton refresh ${width}` })
+    const search = page.getByRole("searchbox", {
+      name: "Search attendance policies",
+      exact: true,
+    })
+    await search.fill(`Skeleton refresh ${width}`)
+    await expect(createdRow).toBeVisible()
+    await expect(existingRow).toHaveCount(0)
+    await page.clock.install()
+    await search.fill("missing policy for skeleton test")
+    await expect(table.getByRole("status")).toContainText(
+      "Loading attendance policies",
+    )
+    const searchSkeletonRows = table
+      .getByRole("rowgroup")
+      .nth(1)
+      .getByRole("row")
+    await expect(searchSkeletonRows).toHaveCount(5)
+    await page.clock.runFor(199)
+    await page.clock.runFor(1)
+    await expect(table.getByRole("status")).toContainText("No results for")
+    await search.fill("")
+    await page.clock.runFor(200)
+    await expect(existingRow).toBeVisible()
+
+    const policyView = page.getByRole("group", {
+      name: "Policy view",
+      exact: true,
+    })
+    await policyView
+      .getByRole("button", { name: "Archived policies", exact: true })
+      .click()
+    await expect(createdRow).toHaveCount(0)
+    await policyView
+      .getByRole("button", { name: "Active policies", exact: true })
+      .click()
+    await expect(createdRow).toBeVisible()
+  })
+
+function requestGate() {
+  let start!: () => void
+  let release!: () => void
+  const started = new Promise<void>((resolve) => {
+    start = resolve
+  })
+  const pending = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  return { started, pending, start, release: () => release() }
+}

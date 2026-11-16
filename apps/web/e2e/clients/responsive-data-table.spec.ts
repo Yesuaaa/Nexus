@@ -33,17 +33,15 @@ const clients: Client[] = [
 async function mockClientTable(page: Page, holdFirstRequest = false) {
   await restoreSession(page, "ADMIN")
   let failNextRequest = false
-  let releaseFirstRequest: (() => void) | null = null
-  let firstRequest = holdFirstRequest
+  let holdRequests = holdFirstRequest
+  let releaseHeldRequests: (() => void) | null = null
+  const heldRequestsReleased = new Promise<void>((resolve) => {
+    releaseHeldRequests = resolve
+  })
 
   await page.route("**/api/clients?**", async (route) => {
     const url = new URL(route.request().url())
-    if (firstRequest) {
-      firstRequest = false
-      await new Promise<void>((resolve) => {
-        releaseFirstRequest = resolve
-      })
-    }
+    if (holdRequests) await heldRequestsReleased
     if (failNextRequest) {
       failNextRequest = false
       await route.fulfill({
@@ -101,8 +99,9 @@ async function mockClientTable(page: Page, holdFirstRequest = false) {
     failNextRequest() {
       failNextRequest = true
     },
-    releaseFirstRequest() {
-      releaseFirstRequest?.()
+    releaseHeldRequests() {
+      holdRequests = false
+      releaseHeldRequests?.()
     },
   }
 }
@@ -120,8 +119,12 @@ test.describe("Responsive data table pilot", () => {
     const table = page.getByRole("table", { name: "Clients" })
     await expect(table).toHaveAttribute("aria-busy", "true")
     await expect(table.getByRole("status")).toHaveText("Loading clients…")
+    const skeletonRows = table.getByRole("rowgroup").nth(1).getByRole("row")
+    await expect(skeletonRows).toHaveCount(10)
+    for (const row of await skeletonRows.all())
+      await expect(row.getByRole("cell")).toHaveCount(6)
 
-    state.releaseFirstRequest()
+    state.releaseHeldRequests()
     await expect(table).toHaveAttribute("aria-busy", "false")
     await expect(table.getByText("Zeta Client", { exact: true })).toBeVisible()
     await expect(

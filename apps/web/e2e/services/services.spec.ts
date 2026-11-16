@@ -73,6 +73,30 @@ test.describe("Service management", () => {
     expect(panelBounds?.width).toBeLessThan(620)
   })
 
+  test("service search shows aligned skeleton rows before its empty result", async ({
+    page,
+  }) => {
+    await restoreSession(page, "ADMIN")
+    await page.goto("/services")
+    const table = page.getByRole("table", { name: "Services", exact: true })
+    await expect(
+      table.getByRole("rowheader", { name: "Test Service", exact: true }),
+    ).toBeVisible()
+
+    await page.clock.install()
+    await page
+      .getByRole("searchbox", { name: "Search services", exact: true })
+      .fill("missing service for skeleton test")
+    await expect(table).toHaveAttribute("aria-busy", "true")
+    await expect(table.getByRole("status")).toHaveText("Loading services…")
+    const skeletonRows = table.getByRole("rowgroup").nth(1).getByRole("row")
+    await expect(skeletonRows).toHaveCount(10)
+    await expect(skeletonRows.first().getByRole("cell")).toHaveCount(6)
+
+    await page.clock.runFor(200)
+    await expect(table.getByRole("status")).toContainText("No results for")
+  })
+
   test("service wizard persists consultation and single recurring pricing after reload", async ({
     page,
   }) => {
@@ -384,15 +408,18 @@ test.describe("Service management", () => {
       page,
     }) => {
       await restoreSession(page, "ADMIN")
-      await page.route(
-        "**/api/services",
-        (route) =>
-          route.fulfill({
-            status,
-            json: { error: "Service list unavailable" },
-          }),
-        { times: 1 },
-      )
+      let allowRetry = false
+      await page.route("**/api/services", async (route) => {
+        if (allowRetry) {
+          await route.fallback()
+          return
+        }
+
+        await route.fulfill({
+          status,
+          json: { error: "Service list unavailable" },
+        })
+      })
       await page.goto("/services")
       await expect(
         page.getByRole("table", { name: "Services" }).getByRole("alert"),
@@ -401,6 +428,7 @@ test.describe("Service management", () => {
       await expect(
         page.getByRole("rowheader", { name: "Test Service" }),
       ).toHaveCount(0)
+      allowRetry = true
       await page.getByRole("button", { name: "Try again" }).click()
       await expect(
         page.getByRole("rowheader", { name: "Test Service" }),

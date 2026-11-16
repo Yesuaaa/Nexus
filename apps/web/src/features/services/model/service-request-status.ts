@@ -6,37 +6,46 @@ export const serviceRequestStatuses: Record<
   { label: string; tone: PillTone; description: string }
 > = {
   SUBMITTED: {
-    label: "Pending review",
+    label: "Pending",
     tone: "warning",
-    description:
-      "Your request is waiting for review by the responsible department.",
+    description: "Waiting for Department Head to Accept Request",
   },
   UNDER_REVIEW: {
-    label: "Under review",
+    label: "Under Review",
+    tone: "info",
+    description: "Department Head has accepted request",
+  },
+  ACTIVATED: {
+    label: "Activated",
     tone: "info",
     description:
-      "The responsible department is reviewing your service request.",
+      "Service Request has been assigned to a staff/team and has a workspace",
+  },
+  CONCLUDED: {
+    label: "Concluded",
+    tone: "success",
+    description: "Service Request has been accomplished",
   },
   AWAITING_CLIENT_INFO: {
-    label: "Awaiting your information",
+    label: "Under Review",
     tone: "warning",
     description:
       "The department needs more information from you to continue reviewing your request.",
   },
   READY_FOR_QUOTATION: {
-    label: "Ready for quotation",
+    label: "Under Review",
     tone: "info",
     description: "Your request has been reviewed and is ready for a quotation.",
   },
   CLOSED: {
-    label: "Closed",
-    tone: "success",
-    description: "The review of this service request has been closed.",
+    label: "Cancelled",
+    tone: "danger",
+    description: "Service Request has been cancelled",
   },
   CANCELLED: {
     label: "Cancelled",
-    tone: "neutral",
-    description: "This service request has been cancelled.",
+    tone: "danger",
+    description: "Service Request has been cancelled",
   },
 }
 

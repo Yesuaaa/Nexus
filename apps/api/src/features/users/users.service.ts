@@ -1,8 +1,14 @@
-import { Prisma, Role, type User } from "../../generated/prisma/client.js"
+import { Prisma, Role } from "../../generated/prisma/client.js"
+import type { AuthContext } from "../auth/auth.middleware.js"
+import { createManagementOperation } from "../../shared/management-history.js"
 import { isUniqueConflict, isWriteConflict } from "../../lib/errors.js"
 import { assertStrongPassword } from "../../shared/password-policy.js"
 import { insensitive, parsePage } from "../../shared/query/pagination.js"
-import { isContactNumber, normalizedEmail } from "../../shared/validation.js"
+import {
+  isContactNumber,
+  isPlainObject,
+  normalizedEmail,
+} from "../../shared/validation.js"
 import { hashPassword } from "../auth/auth.password.js"
 import { isDepartmentHeadTitle } from "../departments/leadership.policy.js"
 import { syncEmployeeForUser } from "../employees/employees.service.js"
@@ -23,7 +29,12 @@ const CHANGED = "Account changed; refresh and retry"
 
 export const usersService = {
   // Only Superadmins may reset another account's password.
-  async changePassword(actor: User, targetId: string, newPassword: unknown) {
+  async changePassword(
+    auth: AuthContext,
+    targetId: string,
+    newPassword: unknown,
+  ) {
+    const actor = auth.user
     if (actor.role !== Role.SUPERADMIN) {
       throw new UsersError(403, "Only Superadmins can change account passwords")
     }
@@ -40,11 +51,13 @@ export const usersService = {
       target.id,
       target.passwordHash,
       await hashPassword(newPassword),
+      createManagementOperation(auth),
     )
     if (!updated) throw new UsersError(409, CHANGED)
   },
 
-  async changeStatus(actor: User, targetId: string, isActive: unknown) {
+  async changeStatus(auth: AuthContext, targetId: string, isActive: unknown) {
+    const actor = auth.user
     if (typeof isActive !== "boolean") {
       throw new UsersError(400, "Provide an active status")
     }
@@ -57,12 +70,14 @@ export const usersService = {
       target.role,
       target.isActive,
       isActive,
+      createManagementOperation(auth),
     )
     if (!user) throw new UsersError(409, CHANGED)
     return { user: publicUser(user) }
   },
 
-  async softDeleteUser(actor: User, targetId: string) {
+  async softDeleteUser(auth: AuthContext, targetId: string) {
+    const actor = auth.user
     const target = await accountForManagement(actor, targetId, {
       self: "You cannot move your own account to trash",
       denied: "You cannot move this account to trash",
@@ -76,12 +91,14 @@ export const usersService = {
     const moved = await usersRepository.softDeleteInactiveUser(
       targetId,
       target.role,
+      createManagementOperation(auth),
     )
     if (!moved) throw new UsersError(409, CHANGED)
     return { message: "Account moved to trash" }
   },
 
-  async restoreUser(actor: User, targetId: string) {
+  async restoreUser(auth: AuthContext, targetId: string) {
+    const actor = auth.user
     const target = await accountForManagement(actor, targetId, {
       self: "You cannot restore your own account",
       denied: "You cannot restore this account",
@@ -97,12 +114,14 @@ export const usersService = {
       target.id,
       target.role,
       target.accountDeletedAt,
+      createManagementOperation(auth),
     )
     if (!user) throw new UsersError(409, CHANGED)
     return { user: publicUser(user) }
   },
 
-  async permanentlyDeleteUser(actor: User, targetId: string) {
+  async permanentlyDeleteUser(auth: AuthContext, targetId: string) {
+    const actor = auth.user
     const target = await accountForManagement(actor, targetId, {
       self: "You cannot permanently delete your own account",
       denied: "You cannot permanently delete this account",
@@ -117,6 +136,7 @@ export const usersService = {
     const deleted = await usersRepository.permanentlyDeleteUser(
       targetId,
       target.role,
+      createManagementOperation(auth),
     )
     if (!deleted) throw new UsersError(409, CHANGED)
     return { message: "Account permanently deleted" }
@@ -192,7 +212,7 @@ export const usersService = {
   },
 
   async createUser(
-    actor: User,
+    auth: AuthContext,
     input: {
       email?: unknown
       password?: unknown
@@ -204,6 +224,7 @@ export const usersService = {
       teamId?: unknown
     },
   ) {
+    const actor = auth.user
     const email = normalizedEmail(input.email)
     const password = input.password
     const role = input.role
@@ -289,6 +310,7 @@ export const usersService = {
           teamId: teamId ? String(teamId) : null,
         },
         syncEmployeeForUser,
+        createManagementOperation(auth),
       )
       return { user: publicUser(user) }
     } catch (error) {
@@ -299,7 +321,8 @@ export const usersService = {
     }
   },
 
-  async changeRole(actor: User, targetId: string, role: unknown) {
+  async changeRole(auth: AuthContext, targetId: string, role: unknown) {
+    const actor = auth.user
     if (
       typeof role !== "string" ||
       !Object.values(Role).includes(role as Role)
@@ -319,9 +342,67 @@ export const usersService = {
         target.role,
         role as Role,
         syncEmployeeForUser,
+        createManagementOperation(auth),
       )
       return { user: publicUser(updated) }
     } catch (error) {
+      if (isWriteConflict(error)) throw new UsersError(409, CHANGED)
+      throw error
+    }
+  },
+
+  async updateUser(auth: AuthContext, targetId: string, input: unknown) {
+    if (auth.user.role !== Role.SUPERADMIN)
+      throw new UsersError(403, "Insufficient permissions")
+    if (!isPlainObject(input))
+      throw new UsersError(400, "Provide account details")
+    const allowed = ["fullName", "email", "contactNumber", "role"]
+    if (Object.keys(input).some((key) => !allowed.includes(key)))
+      throw new UsersError(400, "Unsupported account field")
+    const target = await findManageableAccount(auth.user.role, targetId)
+    const email = normalizedEmail(input.email)
+    if (!email) throw new UsersError(400, "Provide a valid email")
+    if (
+      typeof input.fullName !== "string" ||
+      input.fullName.trim().length < 2 ||
+      input.fullName.trim().length > 100
+    )
+      throw new UsersError(400, "Provide a full name of 2 to 100 characters")
+    if (
+      input.contactNumber !== null &&
+      input.contactNumber !== undefined &&
+      (typeof input.contactNumber !== "string" ||
+        (input.contactNumber.trim() !== "" &&
+          !isContactNumber(input.contactNumber.trim())))
+    )
+      throw new UsersError(400, "Provide a valid contact number")
+    const role = input.role ?? target.role
+    if (typeof role !== "string" || !Object.values(Role).includes(role as Role))
+      throw new UsersError(400, "Invalid role")
+    if (role !== target.role)
+      assertNotSelf(auth.user.id, targetId, "You cannot change your own role")
+    if (!canAssignRole(auth.user.role, target.role, role as Role))
+      throw new UsersError(403, "You cannot assign that role")
+    try {
+      const user = await usersRepository.changeUserRoleWithSync(
+        targetId,
+        target.role,
+        role as Role,
+        syncEmployeeForUser,
+        createManagementOperation(auth),
+        {
+          fullName: input.fullName.trim(),
+          email,
+          contactNumber:
+            typeof input.contactNumber === "string"
+              ? input.contactNumber.trim() || null
+              : null,
+        },
+      )
+      return { user: publicUser(user) }
+    } catch (error) {
+      if (isUniqueConflict(error))
+        throw new UsersError(409, "Email is already registered")
       if (isWriteConflict(error)) throw new UsersError(409, CHANGED)
       throw error
     }

@@ -68,7 +68,7 @@ test.describe("Staff and role navigation", () => {
         }
       })
       await page.goto("/departments")
-      if (role !== "ADMIN") {
+      if (role !== "ADMIN" && role !== "SUPERADMIN") {
         await expect(page).toHaveURL(landing)
         await expect(
           page.getByRole("heading", { name: "Department Management" }),
@@ -88,7 +88,7 @@ test.describe("Staff and role navigation", () => {
           menu.getByRole("link", { name: "Department overview", exact: true }),
         ).toHaveAttribute("href", "/departments/overview")
         await expect(
-          menu.getByRole("button", { name: "Services", exact: true }),
+          menu.getByRole("button", { name: "Service", exact: true }),
         ).toHaveCount(0)
         await page.reload()
         await expect(
@@ -103,7 +103,7 @@ test.describe("Staff and role navigation", () => {
         }
       })
       await page.goto("/employees")
-      if (role !== "ADMIN") {
+      if (role !== "ADMIN" && role !== "SUPERADMIN") {
         await expect(page).toHaveURL(landing)
         await expect(
           page.getByRole("heading", { name: "Employee Management" }),
@@ -144,13 +144,13 @@ test.describe("Staff and role navigation", () => {
         }
       })
       await page.goto("/services")
-      if (role === "SUPERADMIN" || role === "STAFF") {
+      if (role === "STAFF") {
         await expect(page).toHaveURL(landing)
         await expect(
           page.getByRole("heading", { name: "Service Management" }),
         ).toHaveCount(0)
         expect(serviceRequests).toEqual([])
-      } else if (role === "ADMIN") {
+      } else if (role === "ADMIN" || role === "SUPERADMIN") {
         await expect(
           page.getByRole("heading", { name: "Service Management" }),
         ).toBeVisible()
@@ -161,7 +161,7 @@ test.describe("Staff and role navigation", () => {
           page.getByRole("button", { name: "Create Service", exact: true }),
         ).toHaveCount(1)
         await expect(
-          menu.getByRole("button", { name: "Services", exact: true }),
+          menu.getByRole("button", { name: "Service", exact: true }),
         ).toBeVisible()
         await expect(
           menu.getByRole("link", { name: "Service overview", exact: true }),

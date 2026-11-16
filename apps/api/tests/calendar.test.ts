@@ -172,6 +172,15 @@ test(
         },
       },
     })
+    await database.projectWorkspaceGroup.create({
+      data: {
+        id: project.id,
+        name: "Colliding empty workspace",
+        structure: "SEPARATE",
+        clientId: client.id,
+        createdById: head.id,
+      },
+    })
     await database.project.create({
       data: {
         clientId: otherClient.id,
@@ -209,6 +218,10 @@ test(
         .find((event) => event.type === "task")
         ?.startsAt.toISOString(),
       "2030-02-02T16:00:00.000Z",
+    )
+    assert.equal(
+      mine.events.find((event) => event.type === "task")?.href,
+      `/project-workspace/ungrouped-project%3A${project.id}`,
     )
     assert.equal(
       mine.events.some(
@@ -321,6 +334,15 @@ test(
     assert.equal(
       clientEvents.some((event) => event.id.startsWith("task-")),
       false,
+    )
+    await database.project.update({
+      where: { id: project.id },
+      data: { workspaceGroupId: project.id },
+    })
+    const groupedCalendar = await listInternalCalendar(staff.id, "mine")
+    assert.equal(
+      groupedCalendar.events.find((event) => event.type === "task")?.href,
+      `/project-workspace/group%3A${project.id}`,
     )
     await database.user.update({
       where: { id: staff.id },

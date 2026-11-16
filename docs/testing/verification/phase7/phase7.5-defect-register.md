@@ -57,6 +57,20 @@ These items remain unclassified as product defects until the expected contract i
 | Settings throttling/preferences | Settings                               | Page 18 report                                                    | Rate-limit/session semantics and preference concurrency are not fully specified                     | Document API/UI behavior before classifying                                         |
 | Workload quarter-hour boundary  | Staff Workload                         | Page 16 report                                                    | UI accepts a boundary whose server-side increment requirement is not established                    | Do not invent a server validation rule                                              |
 
+## Development merge verification checkpoint (2026-11-16)
+
+### Request lifecycle status contract
+
+Incoming development commit `e8bc3048c628d974ac7b7c24950337a11b90f0f5` introduces the five-state UI lifecycle **Pending**, **Under Review**, **Activated**, **Concluded**, and **Cancelled**. The lifecycle migrations add `ACTIVATED` and `CONCLUDED` and normalize existing rows. Historical `AWAITING_CLIENT_INFO`, `READY_FOR_QUOTATION`, and `CLOSED` are not verified equivalents of incoming states; their mapping and migration semantics remain pending administrative review. Keep the incoming labels provisional, preserve PW-022, PW-023, PW-025, PW-050, and PW-051, and do not alter the migration pending contract resolution.
+
+## Development merge verification checkpoint (2026-11-16)
+
+The reported full execution checkpoint preceded restoration of the historical status assertions. Results were API **447/461 passed (14 failed)**, web unit **123/123 passed**, and Playwright **588 passed, 35 failed, 5 skipped, 15 not run**. These results do not represent a passing regression suite. The full suite was not rerun after the historical assertions were restored.
+
+Focused browser runs after restoration reproduced the preserved-label discrepancies in PW-022, PW-023 (1440px), and PW-025 (390px); a combined Booked Services filter spec also expects `Under review` while the incoming UI displays `Under Review`. A focused run reported PW-050 and PW-051 mismatches between the retained `Pending review` assertion and the incoming `Pending` label. These are pending lifecycle-contract decisions, not approved assertion replacements. The focused PGlite lifecycle/migration checks passed; BOOK-001 projection failures and the BOOK-002 pre-acceptance conversation contract remained open.
+
+The lifecycle mapping and its data-normalization semantics remain unresolved. No equivalence is asserted for `AWAITING_CLIENT_INFO`, `READY_FOR_QUOTATION`, or `CLOSED`. The Phase 4 baseline and its assertion artifacts remain immutable. The existing preservation limitations remain: PW-149 is an unresolved identity/title mapping, and the Phase 7.5 consolidated report records historical assertion sites without exact mappings and additional current assertion sites requiring review. PW-053–PW-056 and PW-281–PW-282 remain covered by the existing approved-delta ledger. BOOK-001, BOOK-002, S15-002, and P21-WEB-006 remain open findings; Phase 7.5.1 has not started.
+
 ## Source reports
 
 Detailed evidence and expected/actual descriptions remain in the accepted reports under `docs/testing/verification/phase7/page-by-page/`. This register adds no changes to those reports or to the approved regression-delta ledger.

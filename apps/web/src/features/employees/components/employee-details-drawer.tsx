@@ -24,6 +24,8 @@ import {
   employmentTypeLabels,
 } from "../model/employment"
 import { useAsyncResource } from "@/lib/use-async-resource"
+import { usePortalAccount } from "@/features/auth/providers/account-context"
+import { hasPermission, Permissions } from "@/features/auth/model/permissions"
 
 function DetailsSkeleton() {
   return (
@@ -59,6 +61,10 @@ export function EmployeeDetailsDrawer({
   onEdit: (employee: Employee) => void
   onManageDepartment?: (departmentId: string) => void
 }) {
+  const canManage = hasPermission(
+    usePortalAccount(),
+    Permissions.EMPLOYEES_MANAGE,
+  )
   const panel = useSidePanel(onClose)
   const resource = useAsyncResource(
     (signal) => getEmployee(employeeId, signal),
@@ -188,13 +194,15 @@ export function EmployeeDetailsDrawer({
         )}
       </SidePanelBody>
       <SidePanelFooter className="justify-between">
-        <SidePanelButton
-          variant="secondary"
-          disabled={!employee || loading}
-          onClick={() => employee && panel.close(() => onEdit(employee))}
-        >
-          Edit employee
-        </SidePanelButton>
+        {canManage && (
+          <SidePanelButton
+            variant="secondary"
+            disabled={!employee || loading}
+            onClick={() => employee && panel.close(() => onEdit(employee))}
+          >
+            Edit employee
+          </SidePanelButton>
+        )}
         <SheetClose asChild>
           <SidePanelButton aria-label="Done viewing employee details">
             Done
