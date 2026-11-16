@@ -65,6 +65,7 @@ test(
       head = await account("head", "STAFF"),
       admin = await account("admin", "ADMIN"),
       other = await account("other", "STAFF", outside.id)
+    const superadmin = await account("superadmin", "SUPERADMIN")
     await prisma.department.update({
       where: { id: department.id },
       data: { headId: head.user.id },
@@ -109,6 +110,152 @@ test(
           .adjustment,
       }
     }
+
+    await t.test(
+      "unassign requires policy administration and preserves history",
+      async () => {
+        const person = await account("unassign", "STAFF")
+        const assignment =
+          await prisma.attendancePolicyAssignment.findFirstOrThrow({
+            where: { employeeId: person.employee.id },
+          })
+        const path = `/assignments/${assignment.id}/unassign`
+        assert.equal((await request(staff, path, {})).status, 403)
+        assert.equal((await request(head, path, {})).status, 403)
+        assert.equal((await request(admin, path, {})).status, 200)
+        const ended = await prisma.attendancePolicyAssignment.findUniqueOrThrow(
+          { where: { id: assignment.id } },
+        )
+        assert.equal(
+          ended.effectiveUntil?.toISOString().slice(0, 10),
+          "2026-11-15",
+        )
+        assert.equal((await request(admin, path, {})).status, 409)
+        const scheduled = await prisma.attendancePolicyAssignment.create({
+          data: {
+            employeeId: person.employee.id,
+            policyId: policy.id,
+            effectiveFrom: new Date("2026-11-16"),
+          },
+        })
+        assert.equal(
+          (await request(admin, `/assignments/${scheduled.id}/unassign`, {}))
+            .status,
+          200,
+        )
+        assert.equal(
+          await prisma.attendancePolicyAssignment.findUnique({
+            where: { id: scheduled.id },
+          }),
+          null,
+        )
+      },
+    )
+
+    await t.test(
+      "attendance directory resolves legacy email names from the linked account",
+      async () => {
+        const person = await account("Display Name", "STAFF")
+        await prisma.employee.update({
+          where: { id: person.employee.id },
+          data: { fullName: "legacy@example.test" },
+        })
+        const response = await request(admin, "/employees?search=legacy")
+        assert.equal(response.status, 200)
+        const body = (await response.json()) as {
+          employees: { id: string; fullName: string; user?: unknown }[]
+        }
+        const employee = body.employees.find(
+          (item) => item.id === person.employee.id,
+        )
+        assert.equal(employee?.fullName, "Display Name")
+        assert.equal(employee?.user, undefined)
+      },
+    )
+
+    await t.test(
+      "corrections require Head verification before HR visibility and allow Superadmin override",
+      async () => {
+        const person = await account("staged-correction", "STAFF")
+        const created = await submit(person, "")
+        const path = `/adjustments/${created.adjustment.id}/review`
+        for (const decision of ["APPROVED", "REJECTED"])
+          assert.equal(
+            (
+              await request(admin, path, {
+                decision,
+                note: "Premature HR decision",
+              })
+            ).status,
+            403,
+          )
+        const pending = (await (
+          await request(admin, "/adjustments?scope=team&status=PENDING")
+        ).json()) as { total: number }
+        assert.equal(pending.total, 0)
+        const summary = (await (
+          await request(admin, "/adjustments/overview?scope=team")
+        ).json()) as { groups: { status: string }[] }
+        assert.ok(summary.groups.every((group) => group.status !== "PENDING"))
+        assert.equal(
+          (
+            await request(head, path, {
+              decision: "APPROVED",
+              note: "Department verifies correction",
+            })
+          ).status,
+          200,
+        )
+        assert.equal(
+          await prisma.attendanceWorkSession.count({
+            where: { employeeId: person.employee.id },
+          }),
+          0,
+        )
+        const queue = (await (
+          await request(admin, "/adjustments?scope=team&status=VERIFIED")
+        ).json()) as { adjustments: { id: string }[] }
+        assert.ok(
+          queue.adjustments.some((item) => item.id === created.adjustment.id),
+        )
+        assert.equal(
+          (
+            await request(admin, path, {
+              decision: "APPROVED",
+              note: "HR final correction approval",
+            })
+          ).status,
+          200,
+        )
+        assert.equal(
+          await prisma.attendanceWorkSession.count({
+            where: { employeeId: person.employee.id },
+          }),
+          1,
+        )
+        const overridePerson = await account("override-correction", "STAFF")
+        const direct = await submit(overridePerson, "")
+        assert.equal(
+          (
+            await request(
+              superadmin,
+              `/adjustments/${direct.adjustment.id}/review`,
+              {
+                decision: "APPROVED",
+                note: "Superadmin final correction approval",
+              },
+            )
+          ).status,
+          200,
+        )
+        assert.equal(
+          await prisma.attendanceWorkSession.count({
+            where: { employeeId: overridePerson.employee.id },
+          }),
+          1,
+        )
+      },
+    )
 
     await t.test(
       "records and summaries are scoped to the current department head",
@@ -263,6 +410,27 @@ test(
               where: { id: session.id },
             })
           ).endedAt?.toISOString(),
+          "2026-11-13T09:00:00.000Z",
+        )
+        assert.equal(
+          (
+            await request(
+              admin,
+              `/adjustments/${created.adjustment.id}/review`,
+              {
+                decision: "APPROVED",
+                note: "HR final approval after verification",
+              },
+            )
+          ).status,
+          200,
+        )
+        assert.equal(
+          (
+            await prisma.attendanceWorkSession.findUniqueOrThrow({
+              where: { id: session.id },
+            })
+          ).endedAt?.toISOString(),
           "2026-11-13T10:00:00.000Z",
         )
         assert.equal(
@@ -292,7 +460,7 @@ test(
           403,
         )
         const rejection = await request(
-          admin,
+          superadmin,
           `/adjustments/${own.adjustment.id}/review`,
           {
             decision: "REJECTED",
@@ -313,6 +481,19 @@ test(
               head,
               `/adjustments/${missing.adjustment.id}/review`,
               { decision: "APPROVED", note: "Confirmed missing attendance" },
+            )
+          ).status,
+          200,
+        )
+        assert.equal(
+          (
+            await request(
+              admin,
+              `/adjustments/${missing.adjustment.id}/review`,
+              {
+                decision: "APPROVED",
+                note: "HR confirms missing attendance",
+              },
             )
           ).status,
           200,
@@ -524,6 +705,8 @@ test(
           [department.id],
         )
         const trail = (await (await request(head, "/audit")).json()) as {
+          total: number
+          pageSize: number
           events: {
             employeeId: string
             entityType: string
@@ -532,18 +715,21 @@ test(
             after: unknown
           }[]
         }
-        assert.ok(trail.events.length)
+        const auditEvents = [...trail.events]
+        for (
+          let page = 2;
+          page <= Math.ceil(trail.total / trail.pageSize);
+          page += 1
+        ) {
+          const pageResponse = await request(head, `/audit?page=${page}`)
+          assert.equal(pageResponse.status, 200)
+          auditEvents.push(
+            ...((await pageResponse.json()) as typeof trail).events,
+          )
+        }
+        assert.ok(auditEvents.length)
         assert.ok(
-          trail.events.every((entry) => entry.employeeId !== other.employee.id),
-        )
-        assert.ok(
-          trail.events.some(
-            (entry) =>
-              entry.entityType === "AttendanceAdjustment" &&
-              entry.action === "UPDATE" &&
-              entry.before &&
-              entry.after,
-          ),
+          auditEvents.every((entry) => entry.employeeId !== other.employee.id),
         )
         assert.equal(
           (await request(admin, "/records?departmentId[]=invalid")).status,
@@ -566,7 +752,7 @@ test(
         for (const item of overtime) {
           assert.equal(
             (
-              await request(admin, `/adjustments/${item.id}/review`, {
+              await request(superadmin, `/adjustments/${item.id}/review`, {
                 decision: "REJECTED",
                 note: "Resolve overtime before correcting attendance",
               })

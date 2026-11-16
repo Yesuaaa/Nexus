@@ -44,7 +44,7 @@ test("an unassigned Superadmin enters every implemented registered module", () =
   )
   assert.equal(
     modules.find((module) => module.id === "attendance-monitoring").href,
-    "/attendance/dashboard",
+    "/attendance/time-logs/overview",
   )
 })
 
@@ -54,6 +54,7 @@ test("registration alone adds a future implemented administrative entry and rout
     "future-module": {
       ...moduleRegistry["project-management"],
       title: "Future Module",
+      administrativePath: null,
     },
     unfinished: { ...moduleRegistry["billing-finance"] },
   }

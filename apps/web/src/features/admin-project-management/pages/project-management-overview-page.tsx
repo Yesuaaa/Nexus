@@ -2,21 +2,23 @@
 
 import { useEffect } from "react"
 import Link from "next/link"
-import { Activity, CheckCircle2, FolderKanban, PauseCircle } from "lucide-react"
 import { PageHeader } from "@/components/layout/page-header"
+import { PageHeaderLink } from "@/components/layout/page-header-link"
 import { contentClass } from "@/components/layout/styles"
 import { Alert } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
 import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
 import { EmptyState } from "@/components/ui/empty-state"
-import { KpiCards, type KpiMetric } from "@/components/ui/kpi-cards"
-import { KpiDonutChart } from "@/components/ui/kpi-donut-chart"
 import { MemberIdentity } from "@/components/ui/member-identity"
 import {
-  BreakdownList,
+  cellClass,
+  FiguresRow,
+  headCellClass,
+  InlineBar,
   ItemList,
   MiniStats,
-  OverviewPanel,
+  RowsSkeleton,
+  Section,
+  tableClass,
 } from "@/components/ui/overview-panel"
 import { Pill } from "@/components/ui/pill"
 import {
@@ -389,11 +391,6 @@ export function ProjectManagementOverviewPage() {
   const loading = overview.loading && !data
   const unavailable = Boolean(overview.error) && !data
   const totals = data?.totals ?? emptyTotals
-  const statusSegments = (data?.statusDistribution ?? []).map((item) => ({
-    label: statusLabel(item.status),
-    value: item.count,
-    color: projectStatusColors[item.status],
-  }))
   const totalTasks = totals.totalTasks
   const completionPercent = totalTasks
     ? Math.round((totals.completedTasks / totalTasks) * 100)
@@ -407,157 +404,158 @@ export function ProjectManagementOverviewPage() {
     ...displayedStaffAssignments.map((staff) => staff.activeProjects),
   )
 
-  const kpis: KpiMetric[] = [
-    {
-      label: "Total projects",
-      value: totals.totalProjects,
-      description: "All departments and statuses",
-      icon: FolderKanban,
-      iconClassName: "text-[#284f9e]",
-    },
-    {
-      label: "In progress",
-      value: totals.inProgress,
-      description: `${totals.activeProjects.toLocaleString("en-US")} active projects total`,
-      icon: Activity,
-      iconClassName: "text-[#25745b]",
-    },
-    {
-      label: "Completed",
-      value: totals.completed,
-      description: "Completed project records",
-      icon: CheckCircle2,
-      iconClassName: "text-[#4169bd]",
-    },
-    {
-      label: "On hold",
-      value: totals.onHold,
-      description: "Projects currently on hold",
-      icon: PauseCircle,
-      iconClassName: "text-[#805316]",
-    },
-  ]
-
   return (
     <main
       className={cn(contentClass, "p-[clamp(16px,2.1vw,32px)]")}
-      aria-label="Project Management Overview"
+      aria-label="Project Overview"
     >
       <PageHeader
-        title="Project Management Overview"
+        title="Project Overview"
         description="Current project status, department distribution, work-plan progress, and active assignments across the company."
         actions={
-          <Button asChild variant="brandOutline" size="header">
-            <Link href="/project-management">View project management</Link>
-          </Button>
+          <PageHeaderLink href="/project-management">
+            View project management
+          </PageHeaderLink>
         }
       />
       {overview.error && (
-        <Alert className="mt-[18px] flex flex-wrap items-center justify-between gap-3">
-          <span>{overview.error}</span>
-          <Button
+        <Alert className="mt-[18px]">
+          {overview.error}{" "}
+          <button
             type="button"
-            variant="brandOutline"
-            size="sm"
+            className="cursor-pointer font-semibold underline"
             onClick={overview.retry}
           >
             Try again
-          </Button>
+          </button>
         </Alert>
       )}
 
-      <div className="mt-[18px] grid min-w-0 gap-4 max-[560px]:mt-[14px]">
-        <KpiCards
-          metrics={kpis}
-          label="Company-wide project summary"
-          pending={loading}
-          unavailable={unavailable}
-          showCharts={false}
-          className="grid-cols-4 max-[1200px]:grid-cols-2 max-[560px]:grid-cols-1"
-        />
-        <MiniStats
-          label="Project management figures"
+      <div className="min-w-0">
+        <FiguresRow
+          label="Project figures"
           loading={loading}
           items={[
+            { label: "Projects", value: String(totals.totalProjects) },
+            { label: "Active", value: String(totals.activeProjects) },
+            { label: "Completed", value: String(totals.completed) },
             {
-              label: "Workspace groups",
-              value: unavailable
-                ? "—"
-                : totals.workspaceGroups.toLocaleString("en-US"),
-              hint: "Persisted groups",
-            },
-            {
-              label: "Departments with projects",
-              value: unavailable
-                ? "—"
-                : totals.departmentsWithProjects.toLocaleString("en-US"),
-              hint: "Based on accepted department",
-            },
-            {
-              label: "Projects without a department",
-              value: unavailable
-                ? "—"
-                : totals.projectsWithoutDepartment.toLocaleString("en-US"),
-              hint: "Includes missing or unaccepted requests",
-            },
-            {
-              label: "Active staff assignments",
-              value: unavailable
-                ? "—"
-                : totals.activeAssignments.toLocaleString("en-US"),
-              hint: "Planned, in progress, or on hold projects",
+              label: "On hold",
+              value: String(totals.onHold),
+              note: totals.onHold ? "Needs attention" : undefined,
+              tone: totals.onHold ? "warning" : undefined,
             },
           ]}
         />
+        <div className="mt-4">
+          <MiniStats
+            label="Project management figures"
+            loading={loading}
+            variant="plain"
+            items={[
+              {
+                label: "Workspace groups",
+                value: unavailable
+                  ? "—"
+                  : totals.workspaceGroups.toLocaleString("en-US"),
+                hint: "Persisted groups",
+              },
+              {
+                label: "Departments with projects",
+                value: unavailable
+                  ? "—"
+                  : totals.departmentsWithProjects.toLocaleString("en-US"),
+                hint: "Based on accepted department",
+              },
+              {
+                label: "Projects without a department",
+                value: unavailable
+                  ? "—"
+                  : totals.projectsWithoutDepartment.toLocaleString("en-US"),
+                hint: "Includes missing or unaccepted requests",
+              },
+              {
+                label: "Active staff assignments",
+                value: unavailable
+                  ? "—"
+                  : totals.activeAssignments.toLocaleString("en-US"),
+                hint: "Planned, in progress, or on hold projects",
+              },
+            ]}
+          />
+        </div>
 
-        <div className="grid min-w-0 items-start gap-4 lg:grid-cols-2">
-          <OverviewPanel
+        <div className="mt-9 grid min-w-0 items-start gap-x-12 gap-y-9 lg:grid-cols-2">
+          <Section
             title="Project status distribution"
             description="Current status across individual project records."
           >
             {unavailable ? (
-              <EmptyState
-                title="Project status data unavailable"
-                description="Retry the overview to load project status counts."
-                size="sm"
-                role="status"
-              />
+              <p className="m-0 text-xs leading-5 text-[#65718a]" role="status">
+                Project status data unavailable. Retry the overview to load the
+                counts.
+              </p>
+            ) : loading ? (
+              <RowsSkeleton rows={5} />
+            ) : totals.totalProjects === 0 ? (
+              <p className="m-0 text-xs text-[#65718a]">
+                No project records yet.
+              </p>
             ) : (
-              <div className="grid min-w-0 items-center gap-5 sm:grid-cols-[10rem_minmax(0,1fr)]">
-                {loading ? (
-                  <Skeleton className="mx-auto size-40 rounded-full" />
-                ) : totals.totalProjects > 0 ? (
-                  <KpiDonutChart
-                    label={`Project status distribution: ${(data?.statusDistribution ?? []).map(({ status, count }) => `${statusLabel(status)} ${count}`).join(", ")}`}
-                    segments={statusSegments}
-                    size="dashboard"
-                  />
-                ) : (
-                  <p className="m-0 text-center text-xs text-[#65718a]">
-                    No project records yet.
-                  </p>
-                )}
-                <BreakdownList
-                  rows={
-                    totals.totalProjects > 0
-                      ? (data?.statusDistribution ?? []).map((item) => ({
-                          id: item.status,
-                          label: statusLabel(item.status),
-                          value: item.count,
-                          colorClass: projectStatusBarClasses[item.status],
-                        }))
-                      : []
-                  }
-                  total={totals.totalProjects}
-                  loading={loading}
-                  unit="projects"
-                  empty="No project records yet."
-                />
-              </div>
+              <table className={tableClass}>
+                <thead>
+                  <tr>
+                    <th className={headCellClass}>Status</th>
+                    <th className={cn(headCellClass, "text-right")}>
+                      Projects
+                    </th>
+                    <th className={cn(headCellClass, "w-[45%] pl-5")}>Share</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {projectStatusValues.map((status) => {
+                    const count =
+                      data?.statusDistribution.find(
+                        (item) => item.status === status,
+                      )?.count ?? 0
+                    return (
+                      <tr key={status}>
+                        <td
+                          className={cn(
+                            cellClass,
+                            "font-medium text-[#182235]",
+                          )}
+                        >
+                          {statusLabel(status)}
+                        </td>
+                        <td
+                          className={cn(cellClass, "text-right tabular-nums")}
+                        >
+                          {count}
+                        </td>
+                        <td className={cn(cellClass, "pl-5")}>
+                          <span className="flex items-center gap-3">
+                            <InlineBar
+                              value={count}
+                              max={totals.totalProjects}
+                              label={`${statusLabel(status)}: ${count} projects`}
+                              className="min-w-12 flex-1"
+                            />
+                            <span className="w-8 text-right text-[#8a94a6] tabular-nums">
+                              {Math.round((count / totals.totalProjects) * 100)}
+                              %
+                            </span>
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             )}
-          </OverviewPanel>
+          </Section>
 
-          <OverviewPanel
+          <Section
             title="Task progress"
             description="Completion across valid work-plan tasks from projects in every status. Projects without tasks are excluded from the task denominator."
           >
@@ -641,9 +639,9 @@ export function ProjectManagementOverviewPage() {
                 />
               </div>
             )}
-          </OverviewPanel>
+          </Section>
 
-          <OverviewPanel
+          <Section
             title="Projects by department"
             description="Projects are assigned by their accepted department; records without one are grouped as Unassigned."
             className="lg:col-span-2"
@@ -653,9 +651,9 @@ export function ProjectManagementOverviewPage() {
               loading={loading}
               unavailable={unavailable}
             />
-          </OverviewPanel>
+          </Section>
 
-          <OverviewPanel
+          <Section
             title="Workload & staffing"
             description="Active includes planned, in progress, and on hold. Assignment bars compare counts among the staff shown, not utilization."
           >
@@ -756,9 +754,9 @@ export function ProjectManagementOverviewPage() {
                 </div>
               </div>
             )}
-          </OverviewPanel>
+          </Section>
 
-          <OverviewPanel
+          <Section
             title="Recently updated projects"
             description="Latest recorded project updates by timestamp."
           >
@@ -768,7 +766,7 @@ export function ProjectManagementOverviewPage() {
               unavailable={unavailable}
               formatDate={formatDate}
             />
-          </OverviewPanel>
+          </Section>
         </div>
       </div>
     </main>

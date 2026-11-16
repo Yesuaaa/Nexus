@@ -1,6 +1,10 @@
 "use client"
 
 import { useState } from "react"
+import { Button } from "@/components/ui/button"
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
+import { errorMessage } from "@/lib/error-message"
+import { sileo } from "@/lib/toast"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { focusRing } from "@/components/layout/styles"
 import { Pill } from "@/components/ui/pill"
@@ -21,6 +25,8 @@ import {
 } from "@/components/ui/side-panel"
 import {
   attendancePolicyAssignments,
+  unassignAttendancePolicy,
+  type AttendancePolicyAssignment,
   type AttendancePolicy,
 } from "../api/attendance-api"
 import { attendanceWeekNames } from "./attendance-policy-panel"
@@ -126,6 +132,11 @@ export function AttendancePolicyAssignments({
   policyId: string
 }) {
   const [page, setPage] = useState(1)
+  const [selected, setSelected] = useState<AttendancePolicyAssignment | null>(
+    null,
+  )
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState("")
   const assignments = useAsyncResource(
     (signal) => attendancePolicyAssignments(policyId, page, signal),
     [policyId, page],
@@ -181,6 +192,18 @@ export function AttendancePolicyAssignments({
                             ? "Scheduled"
                             : "Ended"}
                       </Pill>
+                      {assignment.status !== "ENDED" && (
+                        <Button
+                          variant="brandOutline"
+                          size="panel"
+                          onClick={() => {
+                            setError("")
+                            setSelected(assignment)
+                          }}
+                        >
+                          Unassign
+                        </Button>
+                      )}
                     </div>
                   </li>
                 ))}
@@ -197,6 +220,39 @@ export function AttendancePolicyAssignments({
             disabled={assignments.loading}
           />
         </>
+      )}
+      {selected && (
+        <ConfirmationDialog
+          title="Unassign attendance policy?"
+          subject={selected.employee.fullName}
+          description={
+            selected.status === "SCHEDULED"
+              ? "Cancel this scheduled assignment. This employee will need another policy assignment to record attendance during that period."
+              : "End this assignment tomorrow in the policy timezone. Today's attendance is preserved. The employee will need another policy assignment to record future attendance."
+          }
+          confirmLabel="Unassign"
+          pendingLabel="Unassigning…"
+          pending={pending}
+          error={error}
+          onClose={() => {
+            if (!pending) setSelected(null)
+          }}
+          onConfirm={async () => {
+            if (pending) return
+            setPending(true)
+            setError("")
+            try {
+              await unassignAttendancePolicy(selected.id)
+              sileo.success({ title: "Policy assignment removed" })
+              setSelected(null)
+              assignments.retry()
+            } catch (failure) {
+              setError(errorMessage(failure, "Couldn't unassign the policy."))
+            } finally {
+              setPending(false)
+            }
+          }}
+        />
       )}
     </SidePanelSection>
   )

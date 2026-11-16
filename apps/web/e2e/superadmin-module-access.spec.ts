@@ -10,16 +10,12 @@ test.skip(live, "Module entry coverage uses isolated API fixtures")
 
 for (const [title, path, heading] of [
   ["Service Operations", "/services", "Service Management"],
-  [
-    "Project Management",
-    "/project-management/overview",
-    "Project Management Overview",
-  ],
+  ["Project Management", "/project-management/overview", "Project Overview"],
   ["People & HR", "/employees", "Employee Management"],
   [
-    "Attendance & Monitoring",
-    "/attendance/dashboard",
-    "Attendance & Monitoring Dashboard",
+    "Workforce Compliance",
+    "/attendance/time-logs/overview",
+    "Time Logs Overview",
   ],
   ["Administration", "/accounts", "Account Management"],
 ] as const) {
@@ -85,9 +81,9 @@ for (const [title, path, heading] of [
     await expect(
       page.getByRole("heading", { name: heading, exact: true }),
     ).toBeVisible()
-    if (path === "/attendance/dashboard") {
+    if (path === "/attendance/time-logs/overview") {
       await page.goto("/attendance")
-      await expect(page).toHaveURL(/\/attendance\/dashboard$/)
+      await expect(page).toHaveURL(/\/attendance\/time-logs\/overview$/)
     }
     expect(personalReads).toEqual([])
   })
@@ -122,7 +118,7 @@ test("Superadmin enters Project Management without Staff reads and retains modul
   await expect(page).toHaveURL("/project-management/overview")
   await expect(
     page.getByRole("heading", {
-      name: "Project Management Overview",
+      name: "Project Overview",
       exact: true,
     }),
   ).toBeVisible()
@@ -151,7 +147,7 @@ test("Superadmin enters Project Management without Staff reads and retains modul
     .click()
   await expect(
     page.getByRole("heading", {
-      name: "Project Management Overview",
+      name: "Project Overview",
       exact: true,
     }),
   ).toBeVisible()

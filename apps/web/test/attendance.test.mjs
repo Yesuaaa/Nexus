@@ -43,7 +43,12 @@ test("attendance navigation grants self-service independently of employee manage
     )
   }
   assert.equal(canAccessRoute(staff, "/employees"), false)
-  for (const path of ["/attendance/dashboard", "/attendance/records"]) {
+  for (const path of [
+    "/attendance/time-logs/overview",
+    "/attendance/records",
+    "/attendance/audit",
+    "/attendance/time-logs/audit",
+  ]) {
     assert.equal(canAccessRoute(staff, path), false)
     assert.equal(canAccessRoute(head, path), true)
     assert.equal(canAccessRoute(admin, path), true)

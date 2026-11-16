@@ -22,7 +22,7 @@ Employee Management is the design reference: shared EXP shell, Inter typography,
 
 ### Verified sources and supported behavior
 
-The existing route remains `/staff-workload` in Project Management. Service Operations staffing decisions use this existing view; no module, sidebar, staffing authorization, or project activation behavior was moved. Attendance records and policy administration belong to Attendance & Monitoring.
+The existing route remains `/staff-workload` in Project Management. Service Operations staffing decisions use this existing view; no module, sidebar, staffing authorization, or project activation behavior was moved. Attendance records and policy administration belong to Workforce Compliance.
 
 | Existing implementation                                                                             | Integration                                                                                                                                                                                                                                                                               |
 | --------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

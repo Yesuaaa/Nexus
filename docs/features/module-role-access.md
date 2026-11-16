@@ -8,14 +8,14 @@ This document describes module access after [Phase 2B registration](superadmin-m
 
 The table assumes an active account with its role's normal API permissions. “Placeholder” means a visible card with no destination or finance functionality.
 
-| Module                  | Client (`USER`)                              | Staff                       | Department Head (`STAFF`)                     | Admin                                           | Superadmin                                                |
-| ----------------------- | -------------------------------------------- | --------------------------- | --------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------- |
-| Service Operations      | Own services and requests, direct navigation | No                          | Department Request Inbox                      | Services and client management                  | Services, clients, global requests and workload oversight |
-| Project Management      | Own projects, direct navigation              | Assigned project workspaces | Department projects and workload              | No                                              | Safe administrative entry                                 |
-| People & HR             | No                                           | No management module        | No management module                          | Employee and department management              | Employee and department management                        |
-| Attendance & Monitoring | No                                           | Personal attendance         | Personal attendance and department monitoring | Organization management and personal attendance | Organization management                                   |
-| Administration          | No                                           | No                          | No                                            | No                                              | Account management                                        |
-| Billing & Finance       | No selector card                             | Placeholder                 | Placeholder                                   | Placeholder                                     | Placeholder                                               |
+| Module               | Client (`USER`)                              | Staff                       | Department Head (`STAFF`)                     | Admin                                           | Superadmin                                                |
+| -------------------- | -------------------------------------------- | --------------------------- | --------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------- |
+| Service Operations   | Own services and requests, direct navigation | No                          | Department Request Inbox                      | Services and client management                  | Services, clients, global requests and workload oversight |
+| Project Management   | Own projects, direct navigation              | Assigned project workspaces | Department projects and workload              | No                                              | Safe administrative entry                                 |
+| People & HR          | No                                           | No management module        | No management module                          | Employee and department management              | Employee and department management                        |
+| Workforce Compliance | No                                           | Personal attendance         | Personal attendance and department monitoring | Organization management and personal attendance | Organization management                                   |
+| Administration       | No                                           | No                          | No                                            | No                                              | Account management                                        |
+| Billing & Finance    | No selector card                             | Placeholder                 | Placeholder                                   | Placeholder                                     | Placeholder                                               |
 
 Superadmin access to operational modules does not override Staff assignment checks for project workspaces, Request Inbox, Staff Workload, or private conversations.
 
@@ -23,18 +23,18 @@ Superadmin access to operational modules does not override Staff assignment chec
 
 Internal users land on `/module`. Clients land on `/dashboard` and navigate directly to their services and projects without choosing a workspace.
 
-| Module                  | Eligible selector users                              | Entry route                                                              |
-| ----------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------ |
-| Service Operations      | Admin, Superadmin                                    | `/services`; `/clients` if only client-directory permission is available |
-| Service Operations      | Current Staff Department Head                        | `/request-inbox`                                                         |
-| Project Management      | Staff, including Department Heads                    | `/project-workspace`                                                     |
-| Project Management      | Superadmin                                           | `/module/project-management`                                             |
-| People & HR             | Admin, Superadmin                                    | `/employees`; `/departments` if only department permission is available  |
-| Attendance & Monitoring | Ordinary Staff                                       | `/attendance/check-ins`                                                  |
-| Attendance & Monitoring | Department Head, Admin                               | `/attendance/overview`                                                   |
-| Attendance & Monitoring | Superadmin                                           | `/attendance/dashboard`                                                  |
-| Administration          | Superadmin                                           | `/accounts`                                                              |
-| Billing & Finance       | Internal users with at least one available workspace | No route; placeholder                                                    |
+| Module               | Eligible selector users                              | Entry route                                                              |
+| -------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------ |
+| Service Operations   | Admin, Superadmin                                    | `/services`; `/clients` if only client-directory permission is available |
+| Service Operations   | Current Staff Department Head                        | `/request-inbox`                                                         |
+| Project Management   | Staff, including Department Heads                    | `/project-workspace`                                                     |
+| Project Management   | Superadmin                                           | `/module/project-management`                                             |
+| People & HR          | Admin, Superadmin                                    | `/employees`; `/departments` if only department permission is available  |
+| Workforce Compliance | Ordinary Staff                                       | `/attendance/check-ins`                                                  |
+| Workforce Compliance | Department Head, Admin                               | `/attendance/overview`                                                   |
+| Workforce Compliance | Superadmin                                           | `/attendance/time-logs/overview`                                         |
+| Administration       | Superadmin                                           | `/accounts`                                                              |
+| Billing & Finance    | Internal users with at least one available workspace | No route; placeholder                                                    |
 
 Cards are derived from effective permissions and current assignments. Accounts without any available workspace see the empty state. Billing & Finance uses the shared radial-fill and typing animations to show “Coming Soon” on hover or keyboard focus; it grants no finance access.
 
@@ -65,7 +65,7 @@ Module selection displays five or fewer cards in a single row, centered when the
 - HR records and login accounts have separate lifecycles. Superadmin accounts are not automatically assigned Employee records.
 - [Phase 3C.2](superadmin-people-hr-administration.md) verifies existing organization-wide employee, department and team administration without operational identity. Employee mutation controls follow effective feature permissions and target eligibility; Admin credentials remain in Account Management. Existing Staff department API scope is preserved.
 
-### Attendance & Monitoring
+### Workforce Compliance
 
 - Staff and Admin personal clock actions require a linked Employee record, with applicable status and policy rules.
 - Department Heads monitor their current department. Admin and Superadmin use `employees:read` for organization monitoring and `employees:manage` for policy configuration.

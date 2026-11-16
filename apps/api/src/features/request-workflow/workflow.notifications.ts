@@ -20,6 +20,11 @@ export function notificationScope(
       {
         attendanceAdjustmentId: { not: null },
         user: { ...activeAccount, role: "ADMIN" },
+        attendanceAdjustment: { status: { not: "PENDING" } },
+      },
+      {
+        attendanceAdjustmentId: { not: null },
+        user: { ...activeAccount, role: "SUPERADMIN" },
       },
       {
         workflow: {

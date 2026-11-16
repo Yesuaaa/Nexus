@@ -52,7 +52,7 @@ test("clients do not receive workspace selector entries", () => {
 test("Staff receive project and personal attendance workspaces", () => {
   assert.deepEqual(moduleEntries(account("STAFF")), [
     ["Project Management", "/project-workspace"],
-    ["Attendance & Monitoring", "/attendance/check-ins"],
+    ["Workforce Compliance", "/attendance/check-ins"],
     ["Billing & Finance", null],
   ])
 })
@@ -67,7 +67,7 @@ test("a current department head receives Service Operations without changing Sta
     [
       ["Service Operations", "/request-inbox"],
       ["Project Management", "/project-workspace"],
-      ["Attendance & Monitoring", "/attendance/overview"],
+      ["Workforce Compliance", "/attendance/overview"],
       ["Billing & Finance", null],
     ],
   )
@@ -77,7 +77,7 @@ test("the selector returns only the Admin operational workspaces", () => {
   assert.deepEqual(moduleEntries(account("ADMIN")), [
     ["Service Operations", "/services"],
     ["People & HR", "/employees"],
-    ["Attendance & Monitoring", "/attendance/overview"],
+    ["Workforce Compliance", "/attendance/overview"],
     ["Billing & Finance", null],
   ])
 })
@@ -87,7 +87,7 @@ test("Superadmin receives operational modules alongside Administration", () => {
     ["Service Operations", "/services"],
     ["Project Management", "/project-management/overview"],
     ["People & HR", "/employees"],
-    ["Attendance & Monitoring", "/attendance/dashboard"],
+    ["Workforce Compliance", "/attendance/time-logs/overview"],
     ["Administration", "/accounts"],
     ["Billing & Finance", null],
   ])
@@ -100,7 +100,7 @@ test("permission-limited accounts never receive a denied module entry route", ()
     ),
     [
       ["Service Operations", "/clients"],
-      ["Attendance & Monitoring", "/attendance/check-ins"],
+      ["Workforce Compliance", "/attendance/check-ins"],
       ["Billing & Finance", null],
     ],
   )
@@ -110,7 +110,7 @@ test("permission-limited accounts never receive a denied module entry route", ()
     ),
     [
       ["People & HR", "/departments"],
-      ["Attendance & Monitoring", "/attendance/check-ins"],
+      ["Workforce Compliance", "/attendance/check-ins"],
       ["Billing & Finance", null],
     ],
   )

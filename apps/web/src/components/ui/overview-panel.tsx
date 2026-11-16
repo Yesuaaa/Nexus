@@ -216,18 +216,24 @@ export function MiniStats({
   loading,
   label,
   columns = 4,
+  variant = "boxed",
 }: {
   items: MiniStat[]
   loading: boolean
   label: string
   columns?: 2 | 4
+  variant?: "boxed" | "plain"
 }) {
+  const boxed = variant === "boxed"
   return (
     <dl
       aria-label={label}
       aria-busy={loading}
       className={cn(
-        "m-0 grid gap-px overflow-hidden rounded-xl border border-[#eceef1] bg-[#eceef1]",
+        "m-0 grid",
+        boxed &&
+          "gap-px overflow-hidden rounded-xl border border-[#eceef1] bg-[#eceef1]",
+        !boxed && "gap-x-6 gap-y-3",
         columns === 2
           ? "grid-cols-2 max-[480px]:grid-cols-1"
           : "grid-cols-4 max-[1050px]:grid-cols-2 max-[480px]:grid-cols-1",
@@ -239,8 +245,8 @@ export function MiniStats({
           <div
             key={item.label}
             className={cn(
-              "min-w-0 px-4 py-3",
-              attention ? "bg-[#fffaf0]" : "bg-background",
+              boxed ? "min-w-0 px-4 py-3" : "min-w-0",
+              boxed && (attention ? "bg-[#fffaf0]" : "bg-background"),
             )}
           >
             <dt
@@ -351,21 +357,31 @@ export function FiguresRow({
 export function Section({
   title,
   aside,
+  description,
   className,
   children,
 }: {
   title: string
   aside?: ReactNode
+  description?: ReactNode
   className?: string
   children: ReactNode
 }) {
+  const headingId = useId()
   return (
-    <section className={cn("min-w-0", className)}>
+    <section aria-labelledby={headingId} className={cn("min-w-0", className)}>
       <div className="mb-2.5 flex items-baseline justify-between gap-3">
-        <h2 className="m-0 text-sm font-semibold text-[#101d35]">{title}</h2>
+        <h2 id={headingId} className="m-0 text-sm font-semibold text-[#101d35]">
+          {title}
+        </h2>
         {aside && <span className="text-xs text-[#8a94a6]">{aside}</span>}
       </div>
-      {children}
+      {description && (
+        <p className="mt-0.5 mb-0 text-xs leading-5 text-[#65718a]">
+          {description}
+        </p>
+      )}
+      {description ? <div className="mt-4">{children}</div> : children}
     </section>
   )
 }

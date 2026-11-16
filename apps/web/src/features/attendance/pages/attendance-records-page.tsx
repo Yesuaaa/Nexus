@@ -22,7 +22,6 @@ import {
 import { EmployeeTable } from "@/features/employees/components/employee-table"
 import { SearchField } from "@/components/ui/search-field"
 import { Button } from "@/components/ui/button"
-import { OverviewPanel } from "@/components/ui/overview-panel"
 import { defaultRange } from "../model/attendance"
 
 function matchesAttendanceEmployee(item: AttendanceEmployee, query: string) {
@@ -149,6 +148,11 @@ export function AttendanceRecordsPage() {
   return (
     <AttendanceShell
       tab="records"
+      title={
+        view === "logs" && selected
+          ? `Time Logs for ${selected.fullName}`
+          : undefined
+      }
       actions={
         view === "employees" ? (
           <PageHeaderButton
@@ -233,26 +237,7 @@ export function AttendanceRecordsPage() {
             )}
         </>
       ) : (
-        <OverviewPanel
-          className="border-[#dce3ed] bg-background shadow-[0_14px_36px_rgb(20_45_97_/_10%)]"
-          titleClassName="text-lg"
-          title={
-            selected
-              ? `Logs for ${selected.fullName}`
-              : "All permitted employees"
-          }
-          action={
-            <Button
-              variant="outline"
-              size="panel"
-              disabled={!matching?.workdays.length || history.loading}
-              onClick={exportPage}
-            >
-              <Download size={15} aria-hidden="true" />
-              Export
-            </Button>
-          }
-        >
+        <>
           <div className="mb-4 flex flex-wrap items-center gap-[10px]">
             {!selected && departmentFilter}
             <RangeFields
@@ -274,6 +259,16 @@ export function AttendanceRecordsPage() {
                 All logs
               </Button>
             )}
+            <Button
+              variant="outline"
+              size="panel"
+              className="ml-auto"
+              disabled={!matching?.workdays.length || history.loading}
+              onClick={exportPage}
+            >
+              <Download size={15} aria-hidden="true" />
+              Export
+            </Button>
           </div>
           <AttendanceHistoryTable
             days={matching?.workdays ?? []}
@@ -289,7 +284,7 @@ export function AttendanceRecordsPage() {
               onChange={setPage}
             />
           )}
-        </OverviewPanel>
+        </>
       )}
     </AttendanceShell>
   )

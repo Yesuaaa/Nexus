@@ -23,7 +23,8 @@ export async function notifyOvertime(
       ...activeAccount,
       id: { not: request.requestedById },
       OR: [
-        { role: "ADMIN" },
+        { role: "SUPERADMIN" },
+        ...(stage !== "PENDING" ? [{ role: "ADMIN" as const }] : []),
         ...(stage === "PENDING" && department?.headId
           ? [{ ...activeStaff, id: department.headId }]
           : []),
@@ -35,8 +36,8 @@ export async function notifyOvertime(
     data: recipients.map(({ id }) => ({
       userId: id,
       attendanceAdjustmentId: request.id,
-      type: `ATTENDANCE_OVERTIME_${stage}`,
-      summary: `${request.employee.fullName}: ${request.overtimeMinutes} overtime minutes ${stage === "PENDING" ? "awaiting department verification" : stage === "VERIFIED" ? "verified, awaiting HR approval" : stage.toLowerCase()}.`,
+      type: `ATTENDANCE_${request.type}_${stage}`,
+      summary: `${request.employee.fullName}: ${request.type === "OVERTIME" ? `${request.overtimeMinutes} overtime minutes` : "attendance correction"} ${stage === "PENDING" ? "awaiting department verification" : stage === "VERIFIED" ? "verified, awaiting HR approval" : stage.toLowerCase()}.`,
     })),
     skipDuplicates: true,
   })
@@ -63,7 +64,7 @@ export async function submitRecordedOvertime(
       where: {
         employeeId,
         type: "CORRECTION",
-        status: "PENDING",
+        status: { in: ["PENDING", "VERIFIED"] },
         session: { workdayId: session.workdayId },
       },
     })

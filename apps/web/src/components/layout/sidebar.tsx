@@ -12,6 +12,7 @@ import {
   Contact,
   FolderKanban,
   Gauge,
+  History,
   Inbox,
   MessageSquareText,
   MessagesSquare,
@@ -97,9 +98,9 @@ function NavigationIcon({
     "request-inbox": Inbox,
     help: CircleHelp,
     employees: UsersRound,
-    "attendance-dashboard": DashboardIcon,
     "staff-workload": Gauge,
     "administrative-workload": Gauge,
+    "attendance-audit": History,
   }
   const icon = icons[policyId]
   return icon ? <RowIcon icon={icon} active={active} /> : null
@@ -394,19 +395,29 @@ export function Sidebar({
   onCloseDrawer: () => void
 }) {
   const pathname = usePathname()
-  // Groups follow the current page unless the user toggled them.
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
+  // Groups follow the current page until the user toggles one. Once toggled,
+  // the accordion keeps only the selected group open until navigation changes.
+  const [openGroupState, setOpenGroupState] = useState<{
+    pathname: string
+    group: string | null
+  } | null>(null)
+  const openGroup =
+    openGroupState?.pathname === pathname ? openGroupState.group : undefined
   function renderGroup(group: NavGroup) {
     const open =
-      openGroups[group.label] ??
-      group.links.some((link) => isGroupLinkActive(link, pathname))
+      openGroup === undefined
+        ? group.links.some((link) => isGroupLinkActive(link, pathname))
+        : openGroup === group.label
     const disclosure = (
       <GroupDisclosure
         group={group}
         pathname={pathname}
         open={open}
         onToggle={() =>
-          setOpenGroups((current) => ({ ...current, [group.label]: !open }))
+          setOpenGroupState({
+            pathname,
+            group: open ? null : group.label,
+          })
         }
         onNavigate={onCloseDrawer}
       />
@@ -443,7 +454,7 @@ export function Sidebar({
     const attendanceGroup = attendanceNavigation.find(
       (group) => group.id === policy.id,
     )
-    if (attendanceGroup && attendanceGroup.id !== "attendance-dashboard") {
+    if (attendanceGroup) {
       return renderGroup({
         kind: "group",
         label: attendanceGroup.label,

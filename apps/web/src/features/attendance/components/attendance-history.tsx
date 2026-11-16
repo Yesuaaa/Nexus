@@ -128,9 +128,7 @@ export function AttendanceHistoryTable({
                     {day.employee && (
                       <MemberIdentity
                         member={day.employee}
-                        secondaryText={
-                          day.employee.department?.name ?? "No department"
-                        }
+                        secondaryText={day.employee.employeeId}
                       />
                     )}
                     {!day.employee && (

@@ -270,14 +270,18 @@ export const usersRepository = {
       userId: string,
     ) => Promise<unknown>,
     operation: ManagementOperation,
+    profile?: { fullName: string; email: string; contactNumber: string | null },
   ) {
     const prisma = getPrisma()!
     return prisma.$transaction(async (tx) => {
       await lockRowsReturning(tx, "Employee", targetId, "update", "userId")
       await lockRows(tx, "User", targetId)
+      const before = await tx.user.findUniqueOrThrow({
+        where: { id: targetId },
+      })
       // Department heads and team leads must stay STAFF; otherwise their
       // department's requests become unroutable and the roster goes stale.
-      if (nextRole !== Role.STAFF) {
+      if (nextRole !== currentRole && nextRole !== Role.STAFF) {
         const department = await tx.department.findFirst({
           where: { headId: targetId },
           select: { name: true },
@@ -301,6 +305,7 @@ export const usersRepository = {
       }
       if (
         nextRole === Role.SUPERADMIN &&
+        nextRole !== currentRole &&
         (await tx.employee.findUnique({ where: { userId: targetId } }))
       ) {
         throw new HttpError(
@@ -310,7 +315,7 @@ export const usersRepository = {
       }
       const result = await tx.user.updateMany({
         where: { id: targetId, role: currentRole, accountDeletedAt: null },
-        data: { role: nextRole },
+        data: { role: nextRole, ...profile },
       })
       if (result.count === 0) {
         throw new HttpError(409, "Role changed; refresh and retry")
@@ -327,6 +332,19 @@ export const usersRepository = {
           changedFields: ["role"],
           changes: { role: { before: currentRole, after: after.role } },
         })
+      if (profile) {
+        const changedFields = (
+          ["fullName", "email", "contactNumber"] as const
+        ).filter((field) => before[field] !== profile[field])
+        if (changedFields.length)
+          await writeAccountManagementChange(tx, operation, {
+            subjectAccountId: targetId,
+            action: "PROFILE_UPDATED",
+            origin: "ACCOUNT_MANAGEMENT",
+            changedFields,
+            changes: {},
+          })
+      }
       await syncAccountWorkforce(tx, operation, targetId, syncEmployee)
       return tx.user.findUniqueOrThrow({
         where: { id: targetId },

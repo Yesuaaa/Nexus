@@ -96,6 +96,20 @@ usersRouter.post(
 )
 
 usersRouter.patch(
+  "/:id",
+  requirePermission(Permission.ACCOUNTS_ASSIGN_BASIC),
+  async (request, response) => {
+    return response.json(
+      await usersService.updateUser(
+        request.auth!,
+        String(request.params.id),
+        request.body ?? {},
+      ),
+    )
+  },
+)
+
+usersRouter.patch(
   "/:id/role",
   requirePermission(Permission.ACCOUNTS_ASSIGN_BASIC),
   async (request, response) => {

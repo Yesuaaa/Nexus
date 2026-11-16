@@ -1,4 +1,5 @@
-import { AttendancePolicyAssignmentsPage } from "@/features/attendance/pages/attendance-policy-assignments-page"
+import { redirect } from "next/navigation"
+
 export default function Page() {
-  return <AttendancePolicyAssignmentsPage />
+  redirect("/attendance/policies/management")
 }

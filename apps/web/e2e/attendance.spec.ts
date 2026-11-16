@@ -106,7 +106,7 @@ test("real employee clocks overnight and never receives Employee Management", as
   await page.goto("/module")
   await page
     .getByRole("link", {
-      name: "Open Attendance & Monitoring workspace",
+      name: "Open Workforce Compliance workspace",
       exact: true,
     })
     .click()
@@ -280,7 +280,7 @@ test("time logs employee table preserves filters and opens individual or all log
   await individual
   await expect(
     page.getByRole("heading", {
-      name: "Logs for Attendance staff",
+      name: "Time Logs for Attendance staff",
       exact: true,
     }),
   ).toBeVisible()
@@ -298,7 +298,7 @@ test("time logs employee table preserves filters and opens individual or all log
   await page.getByRole("button", { name: "All logs", exact: true }).click()
   await all
   await expect(
-    page.getByRole("heading", { name: "All permitted employees", exact: true }),
+    page.getByRole("heading", { name: "Time Log Records", exact: true }),
   ).toBeVisible()
   for (const width of [390, 820, 1440]) {
     await page.setViewportSize({ width, height: 1000 })
@@ -621,10 +621,7 @@ for (const viewport of [
     await page.setViewportSize(viewport)
     await signIn(page, "admin")
     await page.goto("/attendance/overview")
-    const overview = page.getByRole("region", {
-      name: "Attendance overview",
-      exact: true,
-    })
+    const overview = page.locator('[aria-label="Attendance figures"]')
     await expect(overview).toHaveAttribute("aria-busy", "false")
     await expect(
       page.getByRole("heading", {
@@ -948,11 +945,6 @@ for (const width of [390, 820, 1440]) {
       await signIn(page, "admin")
       const pages = [
         ["overview", "Attendance Overview", "/api/attendance/me/overview"],
-        [
-          "dashboard",
-          "Attendance & Monitoring Dashboard",
-          "/api/attendance/overview",
-        ],
         ["my", "Check-Ins", "/api/attendance/me/current"],
         [
           "time-logs/overview",
@@ -960,7 +952,7 @@ for (const width of [390, 820, 1440]) {
           "/api/attendance/overview",
         ],
         ["records", "Time Log Records", "/api/attendance/employees"],
-        ["time-logs/audit", "Attendance Audit Trail", "/api/attendance/audit"],
+        ["audit", "Attendance Audit Trail", "/api/attendance/audit"],
         [
           "requests/overview",
           "Requests & Approvals Overview",
@@ -974,11 +966,6 @@ for (const width of [390, 820, 1440]) {
         ],
         ["policies/overview", "Policies Overview", "/api/attendance/policies"],
         ["settings", "Policy Management", "/api/attendance/policies"],
-        [
-          "policies/assignments",
-          "Policy Assignments",
-          "/api/attendance/policies",
-        ],
       ]
       for (const [path, title, endpoint] of pages) {
         const read = page.waitForResponse(
@@ -986,16 +973,6 @@ for (const width of [390, 820, 1440]) {
             new URL(response.url()).pathname === endpoint &&
             response.request().method() === "GET",
         )
-        const recordAudit =
-          path === "time-logs/overview"
-            ? page.waitForResponse(
-                (response) =>
-                  new URL(response.url()).pathname ===
-                    "/api/attendance/audit" &&
-                  new URL(response.url()).searchParams.get("recordsOnly") ===
-                    "true",
-              )
-            : null
         await page.goto("/attendance/" + path)
         expect((await read).status()).toBe(200)
         await expect(
@@ -1004,48 +981,18 @@ for (const width of [390, 820, 1440]) {
         await expect(
           page.getByRole("button", { name: "Retry", exact: true }),
         ).toHaveCount(0)
-        if (recordAudit) {
-          expect((await recordAudit).status()).toBe(200)
+        if (path === "time-logs/overview") {
           const main = page.getByRole("main", { name: "Attendance workspace" })
-          for (const title of [
-            "Recorded session status",
-            "Record-change summary",
-            "Recent record activity",
-          ])
+          for (const title of ["Recorded session status", "Coverage"])
             await expect(
               main.getByRole("heading", { name: title, exact: true }),
             ).toBeVisible()
-          await expect(
-            main.getByText("Check-ins", { exact: true }),
-          ).toBeVisible()
-          await expect(
-            main.getByText("Check-outs", { exact: true }),
-          ).toBeVisible()
           await expect(
             main.getByRole("link", { name: "View records", exact: true }),
           ).toHaveAttribute("href", "/attendance/time-logs/records")
           await expect(
             main.getByRole("link", { name: "Open audit trail", exact: true }),
-          ).toHaveAttribute("href", "/attendance/time-logs/audit")
-          await expect(main.getByRole("table")).toHaveCount(0)
-          await expect(
-            main.getByText(
-              /overtime|correction|requests|polic|required hours|net worked hours|average net hours/i,
-            ),
           ).toHaveCount(0)
-          const refreshed = page.waitForResponse(
-            (response) =>
-              new URL(response.url()).pathname === "/api/attendance/audit" &&
-              new URL(response.url()).searchParams.get("recordsOnly") ===
-                "true",
-          )
-          await main
-            .getByRole("button", { name: "Refresh", exact: true })
-            .click()
-          expect((await refreshed).status()).toBe(200)
-          await expect(
-            main.getByRole("region", { name: "Record-change summary" }),
-          ).toBeVisible()
         }
         if (
           [
@@ -1098,7 +1045,7 @@ for (const width of [390, 820, 1440]) {
             ),
           ).toBe(true)
         }
-        if (path === "time-logs/audit") {
+        if (path === "audit") {
           await page
             .getByRole("button", { name: /View audit event/ })
             .first()
@@ -1110,7 +1057,7 @@ for (const width of [390, 820, 1440]) {
             }),
           ).toBeVisible()
           await expect(
-            page.getByRole("heading", { name: "Before", exact: true }),
+            page.getByRole("heading", { name: "Change details", exact: true }),
           ).toBeVisible()
           await page.getByRole("button", { name: "Done", exact: true }).click()
           await expect(
@@ -1118,18 +1065,6 @@ for (const width of [390, 820, 1440]) {
               name: "Audit event details",
               exact: true,
             }),
-          ).toHaveCount(0)
-        }
-        if (path === "policies/assignments") {
-          await page
-            .getByRole("combobox", { name: "Assignment policy" })
-            .click()
-          await page.getByRole("option").nth(1).click()
-          await expect(
-            page.getByRole("heading", { name: "Assigned people", exact: true }),
-          ).toBeVisible()
-          await expect(
-            page.getByText("Loading attendance", { exact: true }),
           ).toHaveCount(0)
         }
         await page.screenshot({
@@ -1183,7 +1118,7 @@ for (const width of [390, 820, 1440]) {
           .click()
         await expect(
           page.getByRole("menuitem", { name: "Assignments", exact: true }),
-        ).toBeVisible()
+        ).toHaveCount(0)
       }
     },
   )
@@ -1196,10 +1131,9 @@ test("grouped attendance routes enforce staff and department-head boundaries", a
   for (const path of [
     "time-logs/overview",
     "records",
-    "time-logs/audit",
+    "audit",
     "policies/overview",
     "settings",
-    "policies/assignments",
     "dashboard",
   ]) {
     await page.goto("/attendance/" + path)
@@ -1337,7 +1271,7 @@ test("attendance audit search stays in sync with pagination and keeps rows durin
       },
     })
   })
-  await page.goto("/attendance/time-logs/audit")
+  await page.goto("/attendance/audit")
   const table = page.getByRole("table", { name: "Attendance audit events" })
   await expect(table.getByText("event-1", { exact: true })).toBeVisible()
   await page.getByRole("button", { name: "Page 2", exact: true }).click()

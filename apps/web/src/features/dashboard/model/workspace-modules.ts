@@ -55,7 +55,7 @@ export function getWorkspaceModules(account: Account): WorkspaceModule[] {
     if (canAccessRoute(account, "/attendance/check-ins"))
       add(
         "attendance-monitoring",
-        canAccessRoute(account, "/attendance/dashboard")
+        canAccessRoute(account, "/attendance/time-logs/overview")
           ? "/attendance/overview"
           : "/attendance/check-ins",
       )

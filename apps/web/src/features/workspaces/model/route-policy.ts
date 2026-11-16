@@ -38,8 +38,10 @@ export const workspaceModuleLabels = Object.fromEntries(
 export type RoutePolicyId =
   | `module-${string}`
   | "employees-overview"
-  | "attendance-dashboard"
   | "attendance-time-logs"
+  | "attendance-audit"
+  | "attendance-audit-legacy"
+  | "attendance-policy-assignments-legacy"
   | "attendance-requests"
   | "attendance-policies"
   | (typeof attendanceNavigation)[number]["links"][number]["id"]
@@ -155,6 +157,12 @@ export const routePolicies: readonly RoutePolicy[] = [
     canAccess: (account) =>
       canAccessAdministrativeModules(account) &&
       hasPermission(account, Permissions.ORGANIZATION_READ_ALL),
+    navigation: {
+      href: "/project-management/overview",
+      label: "Project Overview",
+      location: "main",
+      order: 2,
+    },
   },
   {
     id: "admin-project-management",
@@ -223,10 +231,34 @@ export const routePolicies: readonly RoutePolicy[] = [
             : group.links[0].href,
         label: group.label,
         location: "main",
-        order: group.id === "attendance-dashboard" ? 34 : 35 + index,
+        order: 35 + index,
       },
     },
   ]),
+  {
+    id: "attendance-audit",
+    match: { kind: "exact", path: "/attendance/audit" },
+    moduleId: "attendance-monitoring",
+    canAccess: canManageAttendance,
+    navigation: {
+      href: "/attendance/audit",
+      label: "Audit Trail",
+      location: "main",
+      order: 39,
+    },
+  },
+  {
+    id: "attendance-audit-legacy",
+    match: { kind: "exact", path: "/attendance/time-logs/audit" },
+    moduleId: "attendance-monitoring",
+    canAccess: canManageAttendance,
+  },
+  {
+    id: "attendance-policy-assignments-legacy",
+    match: { kind: "exact", path: "/attendance/policies/assignments" },
+    moduleId: "attendance-monitoring",
+    canAccess: canConfigureAttendance,
+  },
   {
     id: "attendance-adjustments",
     match: { kind: "exact", path: "/attendance/adjustments" },

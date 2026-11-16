@@ -24,10 +24,10 @@
     "color": "#237d83"
   },
   "attendance-monitoring": {
-    "title": "Attendance & Monitoring",
+    "title": "Workforce Compliance",
     "description": "Review attendance, time logs, and attendance policies.",
     "implemented": true,
-    "administrativePath": "/attendance/dashboard",
+    "administrativePath": "/attendance/time-logs/overview",
     "icon": "attendance",
     "color": "#ad6b2b"
   },

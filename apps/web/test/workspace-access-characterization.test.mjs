@@ -146,7 +146,7 @@ const expectedAccess = {
     messages: true,
     projects: true,
     projectWorkspace: true,
-    projectManagementModule: false,
+    administrativeModules: false,
     requestInbox: true,
     serviceCatalog: false,
     serviceManagement: false,

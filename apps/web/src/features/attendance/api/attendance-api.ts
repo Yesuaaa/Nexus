@@ -307,6 +307,10 @@ export const assignAttendancePolicy = (input: {
     method: "POST",
     body: JSON.stringify(input),
   })
+export const unassignAttendancePolicy = (id: string) =>
+  apiRequest(`${root}/assignments/${encodeURIComponent(id)}/unassign`, {
+    method: "POST",
+  })
 export const attendanceAdjustments = (
   scope: "mine" | "team",
   page: number,

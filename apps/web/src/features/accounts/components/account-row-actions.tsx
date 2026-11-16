@@ -4,7 +4,7 @@ import {
 } from "@/components/ui/row-actions-menu"
 import type { Account } from "@/features/auth/model/types"
 
-type AccountRowAction = "status" | "delete" | "password"
+type AccountRowAction = "edit" | "status" | "delete" | "password"
 
 export function AccountRowActions({
   account,
@@ -12,6 +12,7 @@ export function AccountRowActions({
   onChangeStatus,
   onDelete,
   onChangePassword,
+  onEdit,
   canChangeStatus = true,
   trashView = false,
 }: {
@@ -20,6 +21,7 @@ export function AccountRowActions({
   onChangeStatus: () => void
   onDelete: () => void
   onChangePassword?: () => void
+  onEdit?: () => void
   canChangeStatus?: boolean
   trashView?: boolean
 }) {
@@ -30,6 +32,8 @@ export function AccountRowActions({
       : "Reactivate"
 
   const items: RowActionMenuItem<AccountRowAction>[] = []
+  if (!trashView && onEdit)
+    items.push({ action: "edit", label: "Edit account" })
   if (!trashView && onChangePassword)
     items.push({ action: "password", label: "Change password" })
   if (canChangeStatus)
@@ -55,7 +59,8 @@ export function AccountRowActions({
       items={items}
       disabled={disabled}
       onAction={(selectedAction) => {
-        if (selectedAction === "status") onChangeStatus()
+        if (selectedAction === "edit") onEdit?.()
+        else if (selectedAction === "status") onChangeStatus()
         else if (selectedAction === "password") onChangePassword?.()
         else onDelete()
       }}

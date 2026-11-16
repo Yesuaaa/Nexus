@@ -1,10 +1,10 @@
-# Superadmin Attendance & Monitoring administration (Phase 3C.1)
+# Superadmin Workforce Compliance administration (Phase 3C.1)
 
 Developed: 2026-11-14
 
 ## Audit and confirmed issues
 
-The Phase 2B registry already enters Attendance & Monitoring at `/attendance/dashboard`. Superadmin has organization-wide management reads through the existing `employees:read` permission and policy configuration through `employees:manage`. Management services resolve the active account without requiring an Employee record. Personal endpoints use `selfEmployee`, which independently limits self-service to Staff/Admin and requires their linked Employee. Existing summaries, records, employee history, adjustments, policies and policy assignments already support legitimate Superadmin access; no new page, global bypass or wider scope is needed.
+The module registry enters Workforce Compliance at `/attendance/time-logs/overview`. Superadmin has organization-wide management reads through the existing `employees:read` permission and policy configuration through `employees:manage`. Management services resolve the active account without requiring an Employee record. Personal endpoints use `selfEmployee`, which independently limits self-service to Staff/Admin and requires their linked Employee. Existing summaries, records, employee history, adjustments, policies and policy assignments already support legitimate Superadmin access; no new page, global bypass or wider scope is needed.
 
 Confirmed UI gaps: correction lists offered **Request correction**, and both request lists and summaries offered **My requests** to Superadmin even though the backend rejects self-service. Review menus also inferred action eligibility from role/status/requester fields rather than backend capabilities, missing the backend's additional employee-ownership guard for legacy/delegated records.
 
@@ -20,7 +20,7 @@ Do not change calculations, overnight attribution, policy rules, attendance elig
 
 | Function                                 | Existing administrative route/API                                                                   | Result without Superadmin Employee                                                                   |
 | ---------------------------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Administrative entry/check-in monitoring | `/attendance/dashboard`, `/api/attendance/overview`                                                 | Organization summaries, session statuses and recent activity                                         |
+| Administrative entry/check-in monitoring | `/attendance/time-logs/overview`, `/api/attendance/overview`                                        | Organization summaries, session statuses and recent activity                                         |
 | Time logs and individual history         | `/attendance/time-logs/records`, `/api/attendance/records`, `/api/attendance/employees/:id/history` | Records across departments with existing range/filter/pagination rules                               |
 | Attendance corrections                   | `/attendance/requests/corrections`, `/api/attendance/adjustments?scope=team&type=CORRECTION`        | Organization request visibility and existing authorized correction review                            |
 | Overtime                                 | `/attendance/requests/overtime`, `/api/attendance/adjustments?scope=team&type=OVERTIME`             | Organization visibility; pending overtime cannot be HR-approved before Head verification             |
