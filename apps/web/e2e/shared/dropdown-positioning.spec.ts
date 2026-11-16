@@ -122,15 +122,18 @@ test.describe("Dropdown positioning", () => {
     }))
     await restoreSession(page, "ADMIN", { initialDepartments: departments })
     await page.goto("/services")
-    const trigger = page.getByRole("button", { name: /^Filter by department:/ })
-    const menu = page.getByRole("menu", {
+    const trigger = page.getByRole("combobox", {
       name: "Filter by department",
       exact: true,
     })
-    await expectAnchoredPopup(trigger, menu)
+    const listbox = page.getByRole("listbox")
+    const viewport = listbox.locator("[data-radix-select-viewport]")
+    await expectAnchoredPopup(trigger, listbox)
     await expect
       .poll(() =>
-        menu.evaluate((element) => element.scrollHeight > element.clientHeight),
+        viewport.evaluate(
+          (element) => element.scrollHeight > element.clientHeight,
+        ),
       )
       .toBe(true)
     await page.screenshot({
@@ -138,7 +141,7 @@ test.describe("Dropdown positioning", () => {
     })
     await page.keyboard.press("End")
     await expect(
-      menu.getByRole("menuitemradio", { name: "Department 18", exact: true }),
+      listbox.getByRole("option", { name: "Department 18", exact: true }),
     ).toBeInViewport()
     await page.keyboard.press("Enter")
     await expect(trigger).toContainText("Department 18")

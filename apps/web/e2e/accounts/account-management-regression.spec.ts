@@ -252,10 +252,19 @@ test.describe("Account management regression coverage", () => {
     let statusAttempts = 0
 
     await restoreSession(page, "SUPERADMIN", { initialUsers: users })
-    await page.route("**/api/users/user-target/role", async (route) => {
+    await page.route("**/api/users/user-target", async (route) => {
+      if (route.request().method() !== "PATCH") {
+        await route.fallback()
+        return
+      }
       roleAttempts += 1
       expect(route.request().method()).toBe("PATCH")
-      expect(route.request().postDataJSON()).toEqual({ role: "STAFF" })
+      expect(route.request().postDataJSON()).toEqual({
+        fullName: "Target User",
+        email: "target@example.com",
+        contactNumber: "",
+        role: "STAFF",
+      })
       if (roleAttempts === 1) {
         await route.fulfill({
           status: 503,
@@ -285,18 +294,29 @@ test.describe("Account management regression coverage", () => {
     const table = page.getByRole("table", { name: "Accounts", exact: true })
     await expect(table.getByText("Target User", { exact: true })).toBeVisible()
     await page
-      .getByRole("button", { name: "Role for target@example.com: Client" })
+      .getByRole("button", { name: "More actions for target@example.com" })
       .click()
-    await page.getByRole("menuitemradio", { name: "Staff" }).click()
+    await page
+      .getByRole("menuitem", { name: "Edit account", exact: true })
+      .click()
+    await page
+      .getByRole("combobox", { name: "Account role", exact: true })
+      .click()
+    await page.getByRole("option", { name: "Staff", exact: true }).click()
     const save = page.getByRole("button", { name: "Save changes" })
     await save.click()
-    await expect(page.locator("p[role=alert]")).toContainText(
-      "Couldn't save 1 change. target@example.com: Role update is temporarily unavailable.",
-    )
+    await expect(
+      page
+        .getByRole("alert")
+        .filter({ hasText: "Role update is temporarily unavailable." }),
+    ).toHaveText("Role update is temporarily unavailable.")
     await expect(save).toBeEnabled()
     await save.click()
     await expect(
-      page.getByRole("button", { name: "Role for target@example.com: Staff" }),
+      table
+        .getByRole("row")
+        .filter({ hasText: "target@example.com" })
+        .getByText("Staff", { exact: true }),
     ).toBeVisible()
     expect(roleAttempts).toBe(2)
 

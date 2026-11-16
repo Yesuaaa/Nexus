@@ -17,7 +17,10 @@ test.describe("Superadmin account management", () => {
     await restoreSession(page, "SUPERADMIN")
     await page.goto("/accounts")
     const table = page.getByRole("table", { name: "Accounts", exact: true })
-    await expect(table.getByText("Your account", { exact: true })).toBeVisible()
+    const ownAccount = table
+      .getByRole("row")
+      .filter({ hasText: "testsuperadmin@nexus.com" })
+    await expect(ownAccount).toBeVisible()
     await expect(table.getByText("Target User", { exact: true })).toBeVisible()
 
     let releaseSearch: () => void = () => {}
@@ -49,14 +52,12 @@ test.describe("Superadmin account management", () => {
     // No search response can arrive during these edits. Visible rows must
     // therefore react to the input itself, including clearing/backspacing.
     await search.fill("Tar")
-    await expect(table.getByText("Your account", { exact: true })).toHaveCount(
-      0,
-    )
+    await expect(ownAccount).toHaveCount(0)
     await expect(table.getByText("Target User", { exact: true })).toBeVisible()
     await search.pressSequentially("get")
     await expect(table.getByText("Target User", { exact: true })).toBeVisible()
     await search.fill("")
-    await expect(table.getByText("Your account", { exact: true })).toBeVisible()
+    await expect(ownAccount).toBeVisible()
     await search.fill("Remote")
     await remoteSearchStarted
     await expect(table.getByText("Target User", { exact: true })).toHaveCount(0)
@@ -64,9 +65,7 @@ test.describe("Superadmin account management", () => {
     const searchSkeletons = table.getByRole("rowgroup").nth(1).getByRole("row")
     await expect(searchSkeletons).toHaveCount(10)
     await expect(table.getByRole("status")).toContainText("Loading accounts…")
-    await expect(table.getByText("Your account", { exact: true })).toHaveCount(
-      0,
-    )
+    await expect(ownAccount).toHaveCount(0)
     await expect(page.getByText(/^Searching all/)).toHaveCount(0)
     await expect(
       table.getByText("No accounts match your search.", { exact: true }),
@@ -84,9 +83,7 @@ test.describe("Superadmin account management", () => {
       table.getByRole("rowgroup").nth(1).getByRole("row"),
     ).toHaveCount(1)
     await expect(table.getByText("Target User", { exact: true })).toHaveCount(0)
-    await expect(table.getByText("Your account", { exact: true })).toHaveCount(
-      0,
-    )
+    await expect(ownAccount).toHaveCount(0)
     await expect(
       page.getByText("Searching all accounts…", { exact: true }),
     ).toHaveCount(0)
@@ -222,15 +219,35 @@ test.describe("Superadmin account management", () => {
   }) => {
     await restoreSession(page, "SUPERADMIN")
     await page.goto("/accounts")
-    await expect(page.getByText("Your account", { exact: true })).toBeVisible()
-    await expect(
-      page.getByRole("button", { name: /Role for testsuperadmin@nexus.com/ }),
-    ).toHaveCount(0)
-    await expect(
-      page.getByRole("button", {
+    const ownAccount = page
+      .getByRole("table", { name: "Accounts", exact: true })
+      .getByRole("row")
+      .filter({ hasText: "testsuperadmin@nexus.com" })
+    await expect(ownAccount).toBeVisible()
+    await ownAccount
+      .getByRole("button", {
         name: "More actions for testsuperadmin@nexus.com",
-      }),
+      })
+      .click()
+    await expect(
+      page.getByRole("menuitem", { name: "Deactivate account", exact: true }),
     ).toHaveCount(0)
+    await expect(
+      page.getByRole("menuitem", { name: "Reactivate account", exact: true }),
+    ).toHaveCount(0)
+    await page
+      .getByRole("menuitem", { name: "Edit account", exact: true })
+      .click()
+    const ownRole = page.getByRole("combobox", {
+      name: "Account role",
+      exact: true,
+    })
+    await expect(ownRole).toBeDisabled()
+    await expect(ownRole).toContainText("Superadmin")
+    await expect(
+      page.getByText("You cannot change your own role.", { exact: true }),
+    ).toBeVisible()
+    await page.getByRole("button", { name: "Cancel", exact: true }).click()
     await page
       .getByRole("button", { name: "More actions for target@example.com" })
       .click()
@@ -258,17 +275,25 @@ test.describe("Superadmin account management", () => {
     ).toBeVisible()
 
     // 2. Modify Role
-    const roleDropdown = page.getByRole("button", {
-      name: "Role for target@example.com: Client",
-    })
-    await roleDropdown.click()
-    await page.getByRole("menuitemradio", { name: "Staff" }).click()
+    await page
+      .getByRole("button", { name: "More actions for target@example.com" })
+      .click()
+    await page
+      .getByRole("menuitem", { name: "Edit account", exact: true })
+      .click()
+    await page
+      .getByRole("combobox", { name: "Account role", exact: true })
+      .click()
+    await page.getByRole("option", { name: "Staff", exact: true }).click()
 
     const saveButton = page.getByRole("button", { name: "Save changes" })
     await expect(saveButton).toBeEnabled()
     await saveButton.click()
     await expect(
-      page.getByRole("button", { name: "Role for target@example.com: Staff" }),
+      page
+        .getByRole("row")
+        .filter({ hasText: "target@example.com" })
+        .getByText("Staff", { exact: true }),
     ).toBeVisible()
 
     // 3. Deactivate User via Row Actions
