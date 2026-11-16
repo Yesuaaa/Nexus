@@ -15,7 +15,7 @@ const noVisibleShadow = /^(none|(?:rgba\(0, 0, 0, 0\) 0px 0px 0px 0px,? ?)+)$/
 async function expectBaseStyle(
   field: Locator,
   multiline = false,
-  height = "40px",
+  expectedHeight = "40px",
 ) {
   await expect(field).toHaveCSS("font-size", "14px")
   await expect(field).toHaveCSS("font-weight", "400")
@@ -24,7 +24,7 @@ async function expectBaseStyle(
   await expect(field).toHaveCSS("padding-left", "12px")
   await expect(field).toHaveCSS("outline-style", "none")
   await expect(field).toHaveCSS("box-shadow", noVisibleShadow)
-  if (!multiline) await expect(field).toHaveCSS("height", height)
+  if (!multiline) await expect(field).toHaveCSS("height", expectedHeight)
 }
 
 for (const width of [1440, 390]) {
@@ -91,6 +91,25 @@ for (const width of [1440, 390]) {
     await toggle.press("Space")
     await expect(password).toHaveAttribute("type", "text")
     await expectBaseStyle(password, false, "48px")
+    await page.goto("/register")
+    const fullName = page.getByLabel("Full name", { exact: true })
+    const contactNumber = page.getByLabel("Contact number", { exact: true })
+    const registrationEmail = page.getByLabel("Email address", { exact: true })
+    const registrationPassword = page.getByLabel("Password", { exact: true })
+    const confirmation = page.getByLabel("Confirm Password", { exact: true })
+    for (const field of [
+      fullName,
+      contactNumber,
+      registrationEmail,
+      registrationPassword,
+      confirmation,
+    ]) {
+      await expectBaseStyle(field, false, "48px")
+    }
+    await contactNumber.focus()
+    await expect(contactNumber).toBeFocused()
+    await expect(contactNumber).toHaveCSS("border-color", "rgb(154, 174, 203)")
+    await expectBaseStyle(contactNumber, false, "48px")
   })
 
   test(`service text and multiline fields share styling at ${width}px`, async ({

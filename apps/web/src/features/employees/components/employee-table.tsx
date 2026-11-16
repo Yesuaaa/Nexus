@@ -176,6 +176,7 @@ function EmployeeManagementTable({
   archiveView = false,
   viewKey,
   quickKey,
+  animateRows = true,
   loading,
   error,
   emptyMessage,
@@ -190,6 +191,7 @@ function EmployeeManagementTable({
   archiveView?: boolean
   viewKey: string
   quickKey: string
+  animateRows?: boolean
   loading: boolean
   error: string
   emptyMessage: ReactNode
@@ -276,7 +278,7 @@ function EmployeeManagementTable({
           items={employees}
           viewKey={viewKey}
           quickKey={quickKey}
-          animateRows={false}
+          animateRows={animateRows}
           getKey={employeeKey}
           rowClassName={employeeRowClass}
           emptyContent={emptyMessage}

@@ -130,6 +130,70 @@ test(
           departmentId: marketing.id,
         }),
       })
+    const assertUnsupportedInboxMutation = async (
+      method: "POST" | "DELETE",
+      suffix: string,
+    ) => {
+      const request = await prisma.serviceRequest.create({
+        data: {
+          clientId: client.id,
+          serviceId: service.id,
+          title: `Unsupported ${method} request mutation`,
+        },
+      })
+      const path = `/request-inbox/${request.id}${suffix}`
+      try {
+        assert.equal((await fetch(base + path, { method })).status, 401)
+        for (const actor of [client, staff, admin, superadmin])
+          assert.equal(
+            (await fetch(base + path, { method, headers: actor.headers }))
+              .status,
+            403,
+          )
+        assert.equal(
+          (await fetch(base + path, { method, headers: head.headers })).status,
+          404,
+        )
+        const persisted = await prisma.serviceRequest.findUniqueOrThrow({
+          where: { id: request.id },
+          select: {
+            status: true,
+            acceptedDepartmentId: true,
+            acceptedById: true,
+            acceptedAt: true,
+            conversationId: true,
+          },
+        })
+        assert.deepEqual(persisted, {
+          status: "SUBMITTED",
+          acceptedDepartmentId: null,
+          acceptedById: null,
+          acceptedAt: null,
+          conversationId: null,
+        })
+        assert.equal(
+          await prisma.requestWorkflow.count({
+            where: { requestId: request.id },
+          }),
+          0,
+        )
+      } finally {
+        await prisma.serviceRequest.delete({ where: { id: request.id } })
+      }
+    }
+
+    await t.test(
+      "decline route is unsupported and preserves the request for every actor",
+      async () => {
+        await assertUnsupportedInboxMutation("POST", "/decline")
+      },
+    )
+    await t.test(
+      "delete route is unsupported and preserves the request for every actor",
+      async () => {
+        await assertUnsupportedInboxMutation("DELETE", "")
+      },
+    )
 
     await t.test(
       "all status filters and stable column sorting work across pages",
