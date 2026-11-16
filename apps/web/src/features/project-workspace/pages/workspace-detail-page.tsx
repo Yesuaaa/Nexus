@@ -5,15 +5,16 @@ import { WorkspaceDeliverables } from "../components/workspace-deliverables"
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { CheckCircle2, ChevronDown, Pause, Play } from "lucide-react"
 import { contentClass } from "@/components/layout/styles"
 import { ProjectSummary } from "../components/project-summary"
 import { WorkspaceOverview } from "../components/workspace-overview"
+import { WorkspaceNotes } from "../components/workspace-notes"
+import { WorkspaceRequests } from "../components/workspace-requests"
 import { PlanEditor, emptyPlan } from "../components/plan-editor"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { pillToneClass } from "@/components/ui/pill"
 import { statusTone } from "@/features/projects/model/project-status"
 import { humanizeEnum } from "@/lib/format"
@@ -42,17 +43,36 @@ import { errorMessage } from "@/lib/error-message"
 import { useAsyncResource } from "@/lib/use-async-resource"
 import { useBreadcrumbLabel } from "@/components/layout/breadcrumbs"
 
-const detailTabs = [
-  "Overview",
-  "Work",
-  "Deliverables",
-  "Team",
-  "Activity",
-] as const
-type DetailTab = (typeof detailTabs)[number]
+type DetailTab =
+  | "overview"
+  | "work"
+  | "deliverables"
+  | "notes"
+  | "requests"
+  | "team"
+  | "activity"
+
+const detailTabs: DetailTab[] = [
+  "overview",
+  "work",
+  "deliverables",
+  "notes",
+  "requests",
+  "team",
+  "activity",
+]
+
+function readDetailTab(value: string | null): DetailTab {
+  const normalized = value?.toLowerCase()
+  return detailTabs.includes(normalized as DetailTab)
+    ? (normalized as DetailTab)
+    : "overview"
+}
 
 export function WorkspaceDetailPage({ id }: { id: string }) {
   const searchParams = useSearchParams()
+  const pathname = usePathname()
+  const router = useRouter()
   const project = useAsyncResource<{
     workspace: ProjectWorkspaceDetail | null
     error: string
@@ -93,9 +113,15 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
   const [actionError, setError] = useState("")
   const loadError = project.data?.error || project.error
   const error = actionError || (project.loading ? "" : loadError)
-  const [tab, setTab] = useState<DetailTab>(
-    searchParams.get("tab") === "deliverables" ? "Deliverables" : "Overview",
-  )
+  const tab = readDetailTab(searchParams.get("tab"))
+  function setTab(next: DetailTab) {
+    const query = new URLSearchParams(searchParams.toString())
+    if (next === "overview") query.delete("tab")
+    else query.set("tab", next)
+    router.push(`${pathname}${query.size ? `?${query}` : ""}`, {
+      scroll: false,
+    })
+  }
   const [busy, setBusy] = useState(false)
   const [statusBusy, setStatusBusy] = useState(false)
   const [editing, setEditing] = useState<{
@@ -309,100 +335,90 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
                 ))}
             </div>
           )}
-          <Tabs
-            value={tab}
-            onValueChange={(value) => setTab(value as DetailTab)}
-          >
-            <TabsList
-              aria-label="Project sections"
-              className="my-6 h-auto max-w-full justify-start gap-6 overflow-x-auto rounded-none border-b border-[#e1e4ea] bg-transparent p-0"
-            >
-              {detailTabs.map((item) => (
-                <TabsTrigger
-                  key={item}
-                  value={item}
-                  className="h-auto shrink-0 rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 text-xs text-[#65718a] shadow-none data-[state=active]:border-[#203f8c] data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-[#203f8c] data-[state=active]:shadow-none"
-                >
-                  {item}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-            <TabsContent value="Overview" className="m-0 outline-none">
-              <ProjectSummary
-                workspace={workspace}
-                onViewTeam={() => setTab("Team")}
-                onViewDeliverables={() => setTab("Deliverables")}
-              />
-            </TabsContent>
-            <TabsContent value="Work" className="m-0 outline-none">
-              {editing ? (
-                <section className="mb-5 rounded-xl border border-[#dfe4ec] p-5">
-                  <h2 className="text-sm font-semibold">
-                    Edit plan · {editing.name}
-                  </h2>
-                  <p className="text-xs text-[#65718a]">
-                    Rename phases and tasks, add work, or remove items. Removing
-                    a phase also removes its tasks when you save.
-                  </p>
-                  <PlanEditor
-                    plan={editing.plan}
-                    onChange={(plan) =>
-                      setEditing((current) =>
-                        current ? { ...current, plan } : null,
-                      )
-                    }
-                    disabled={busy}
-                  />
-                  <div className="mt-4 flex justify-end gap-2">
-                    <Button
-                      variant="outline"
-                      disabled={busy}
-                      onClick={() => setEditing(null)}
-                    >
-                      Discard changes
-                    </Button>
-                    <Button
-                      variant="brand"
-                      disabled={busy}
-                      onClick={() => void savePlan()}
-                    >
-                      {busy ? "Saving…" : "Save plan"}
-                    </Button>
-                  </div>
-                </section>
-              ) : (
-                <WorkspaceOverview
-                  workspace={workspace}
-                  busy={busy}
-                  onUpdated={updateWorkspaceAndNotify}
-                  onEditPlan={(stream) =>
-                    setEditing({
-                      projectId: stream.id,
-                      name: stream.serviceName,
-                      updatedAt: stream.updatedAt,
-                      plan: structuredClone(stream.plan ?? emptyPlan()),
-                    })
+          {tab === "overview" && (
+            <ProjectSummary
+              workspace={workspace}
+              onViewTeam={() => setTab("team")}
+              onViewDeliverables={() => setTab("deliverables")}
+            />
+          )}
+          {tab === "work" &&
+            (editing ? (
+              <section className="mb-5 rounded-xl border border-[#dfe4ec] p-5">
+                <h2 className="text-sm font-semibold">
+                  Edit plan · {editing.name}
+                </h2>
+                <p className="text-xs text-[#65718a]">
+                  Rename phases and tasks, add work, or remove items. Removing a
+                  phase also removes its tasks when you save.
+                </p>
+                <PlanEditor
+                  plan={editing.plan}
+                  onChange={(plan) =>
+                    setEditing((current) =>
+                      current ? { ...current, plan } : null,
+                    )
                   }
+                  disabled={busy}
                 />
-              )}
-            </TabsContent>
-            <TabsContent value="Deliverables" className="m-0 outline-none">
-              <WorkspaceDeliverables
+                <div className="mt-4 flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => setEditing(null)}
+                  >
+                    Discard changes
+                  </Button>
+                  <Button
+                    variant="brand"
+                    disabled={busy}
+                    onClick={() => void savePlan()}
+                  >
+                    {busy ? "Saving…" : "Save plan"}
+                  </Button>
+                </div>
+              </section>
+            ) : (
+              <WorkspaceOverview
                 workspace={workspace}
-                onUpdated={setWorkspace}
-              />
-            </TabsContent>
-            <TabsContent value="Team" className="m-0 outline-none">
-              <WorkspaceTeam
-                workspace={workspace}
+                busy={busy}
                 onUpdated={updateWorkspaceAndNotify}
-                onChanged={project.retry}
+                onEditPlan={(stream) =>
+                  setEditing({
+                    projectId: stream.id,
+                    name: stream.serviceName,
+                    updatedAt: stream.updatedAt,
+                    plan: structuredClone(stream.plan ?? emptyPlan()),
+                  })
+                }
               />
-            </TabsContent>
-            <TabsContent value="Activity" className="m-0 outline-none">
-              <WorkspaceActivity workspace={workspace} />
-            </TabsContent>
-          </Tabs>
+            ))}
+          {tab === "deliverables" && (
+            <WorkspaceDeliverables
+              workspace={workspace}
+              onUpdated={setWorkspace}
+            />
+          )}
+          {tab === "notes" && (
+            <WorkspaceNotes
+              workspace={workspace}
+              onUpdated={updateWorkspaceAndNotify}
+            />
+          )}
+          {tab === "requests" && (
+            <WorkspaceRequests
+              workspace={workspace}
+              onChanged={project.retry}
+            />
+          )}
+          {tab === "team" && (
+            <WorkspaceTeam
+              workspace={workspace}
+              onUpdated={updateWorkspaceAndNotify}
+              onChanged={project.retry}
+            />
+          )}
+          {tab === "activity" && <WorkspaceActivity workspace={workspace} />}
         </>
       )}
     </main>

@@ -154,6 +154,23 @@ enum ProjectDeliverableStatus {
   SENT_TO_CLIENT
 }
 
+enum ProjectDeliverableSubmissionStatus {
+  IN_REVIEW
+  ESCALATED
+  REJECTED
+  APPROVED
+  SENT_TO_CLIENT
+  WITHDRAWN
+}
+
+enum ProjectNoteRevisionStatus {
+  SUBMITTED
+  ESCALATED
+  APPROVED
+  REVISION_REQUIRED
+  REJECTED
+}
+
 enum ProjectClientReviewStatus {
   APPROVED
   REVISION_REQUESTED
@@ -263,6 +280,13 @@ model User {
   projectMessages                   ProjectMessage[]
   projectConversationReads          ProjectConversationRead[]
   projects                          Project[]
+  authoredProjectNotes              ProjectNote[]                     @relation("ProjectNoteAuthor")
+  authoredProjectNoteRevisions      ProjectNoteRevision[]             @relation("ProjectNoteRevisionAuthor")
+  reviewedProjectNoteRevisions      ProjectNoteRevision[]             @relation("ProjectNoteRevisionReviewer")
+  publishedProjectNoteRevisions     ProjectNoteRevision[]             @relation("ProjectNoteRevisionPublisher")
+  unpublishedProjectNoteRevisions   ProjectNoteRevision[]             @relation("ProjectNoteRevisionUnpublisher")
+  submittedProjectDeliverables      ProjectDeliverableSubmission[]    @relation("ProjectDeliverableSubmissionAuthor")
+  reviewedProjectDeliverableHistory ProjectDeliverableSubmission[]    @relation("ProjectDeliverableSubmissionReviewer")
   createdProjectWorkspaces          ProjectWorkspaceGroup[]           @relation("ProjectWorkspaceCreator")
   clientProjectWorkspaces           ProjectWorkspaceGroup[]           @relation("ProjectWorkspaceClient")
   projectChangeRequests             ProjectChangeRequest[]            @relation("ProjectChangeRequester")
@@ -565,27 +589,28 @@ model InternalMessage {
 }
 
 model Project {
-  id               String                 @id @default(cuid())
-  clientId         String
-  client           User                   @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  name             String
-  description      String?
-  status           ProjectStatus          @default(PLANNED)
-  startDate        DateTime?
-  createdAt        DateTime               @default(now())
-  updatedAt        DateTime               @updatedAt
-  requestId        String?                @unique
-  request          ServiceRequest?        @relation(fields: [requestId], references: [id], onDelete: Restrict)
-  quotationId      String?                @unique
-  quotation        WorkflowQuotation?     @relation(fields: [quotationId], references: [id], onDelete: Restrict)
-  templateKey      String?                @db.VarChar(60)
-  workPlan         Json?
-  workspaceGroupId String?
-  workspaceGroup   ProjectWorkspaceGroup? @relation(fields: [workspaceGroupId], references: [id], onDelete: SetNull)
-  staff            ProjectStaff[]
-  milestones       ProjectMilestone[]
-  changeRequests   ProjectChangeRequest[]
-  messages         ProjectMessage[]
+  id                String                    @id @default(cuid())
+  clientId          String
+  client            User                      @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  name              String
+  description       String?
+  status            ProjectStatus             @default(PLANNED)
+  startDate         DateTime?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  requestId         String?                   @unique
+  request           ServiceRequest?           @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  quotationId       String?                   @unique
+  quotation         WorkflowQuotation?        @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+  templateKey       String?                   @db.VarChar(60)
+  workPlan          Json?
+  workspaceGroupId  String?
+  workspaceGroup    ProjectWorkspaceGroup?    @relation(fields: [workspaceGroupId], references: [id], onDelete: SetNull)
+  staff             ProjectStaff[]
+  milestones        ProjectMilestone[]
+  changeRequests    ProjectChangeRequest[]
+  notes             ProjectNote[]
+  messages          ProjectMessage[]
   conversationReads ProjectConversationRead[]
 
   @@index([clientId, createdAt, id])
@@ -610,9 +635,9 @@ model ProjectMessage {
 
 model ProjectConversationRead {
   projectId String
-  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   readAt    DateTime
 
   @@id([projectId, userId])
@@ -759,7 +784,9 @@ model WorkflowFile {
   signatures               WorkflowAgreement[]              @relation("AgreementSignature")
   payments                 WorkflowPayment[]
   deliverableMilestone     ProjectMilestone?
+  deliverableSubmission    ProjectDeliverableSubmission?
   clientDeliverableReviews ProjectDeliverableClientReview[]
+
   @@unique([requestId, uploaderId, uploadId])
   @@index([requestId, createdAt])
 }
@@ -876,19 +903,19 @@ model WorkflowActionReceipt {
 }
 
 model WorkflowNotification {
-  id        String          @id @default(cuid())
-  userId    String
-  user      User            @relation(fields: [userId], references: [id], onDelete: Restrict)
-  requestId String?
-  workflow  RequestWorkflow? @relation(fields: [requestId], references: [requestId], onDelete: Restrict)
-  eventId   String?
-  event     WorkflowEvent?   @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  id                     String                @id @default(cuid())
+  userId                 String
+  user                   User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  requestId              String?
+  workflow               RequestWorkflow?      @relation(fields: [requestId], references: [requestId], onDelete: Restrict)
+  eventId                String?
+  event                  WorkflowEvent?        @relation(fields: [eventId], references: [id], onDelete: Restrict)
   attendanceAdjustmentId String?
-  attendanceAdjustment AttendanceAdjustment? @relation(fields: [attendanceAdjustmentId], references: [id], onDelete: Restrict)
-  type String?
-  summary String?
-  readAt    DateTime?
-  createdAt DateTime        @default(now())
+  attendanceAdjustment   AttendanceAdjustment? @relation(fields: [attendanceAdjustmentId], references: [id], onDelete: Restrict)
+  type                   String?
+  summary                String?
+  readAt                 DateTime?
+  createdAt              DateTime              @default(now())
 
   @@unique([userId, eventId])
   @@unique([userId, attendanceAdjustmentId, type])
@@ -943,8 +970,83 @@ model ProjectMilestone {
   displayOrder     Int                              @default(0)
   updatedAt        DateTime                         @default(now()) @updatedAt
   clientReviews    ProjectDeliverableClientReview[]
+  submissions      ProjectDeliverableSubmission[]
 
   @@index([projectId, displayOrder])
+}
+
+model ProjectDeliverableSubmission {
+  id             String                             @id @default(cuid())
+  milestoneId    String
+  milestone      ProjectMilestone                   @relation(fields: [milestoneId], references: [id], onDelete: Restrict)
+  workflowFileId String                             @unique
+  workflowFile   WorkflowFile                       @relation(fields: [workflowFileId], references: [id], onDelete: Restrict)
+  submittedById  String
+  submittedBy    User                               @relation("ProjectDeliverableSubmissionAuthor", fields: [submittedById], references: [id], onDelete: Restrict)
+  version        Int
+  note           String?                            @db.VarChar(2000)
+  status         ProjectDeliverableSubmissionStatus
+  submittedAt    DateTime                           @default(now())
+  reviewedById   String?
+  reviewedBy     User?                              @relation("ProjectDeliverableSubmissionReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt     DateTime?
+  feedback       String?                            @db.VarChar(2000)
+  escalatedAt    DateTime?
+  updatedAt      DateTime                           @updatedAt
+
+  @@unique([milestoneId, version])
+  @@index([milestoneId, submittedAt, id])
+  @@index([status, escalatedAt])
+}
+
+model ProjectNote {
+  id          String                @id @default(cuid())
+  projectId   String
+  project     Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User                  @relation("ProjectNoteAuthor", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  revisions   ProjectNoteRevision[]
+
+  @@index([projectId, updatedAt, id])
+}
+
+model ProjectNoteRevision {
+  id                     String                    @id @default(cuid())
+  noteId                 String
+  note                   ProjectNote               @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  revision               Int
+  content                String                    @db.VarChar(4000)
+  authorId               String
+  author                 User                      @relation("ProjectNoteRevisionAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  status                 ProjectNoteRevisionStatus @default(SUBMITTED)
+  submittedAt            DateTime                  @default(now())
+  reviewedById           String?
+  reviewedBy             User?                     @relation("ProjectNoteRevisionReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt             DateTime?
+  feedback               String?                   @db.VarChar(2000)
+  escalatedAt            DateTime?
+  clientVisible          Boolean                   @default(false)
+  publishedAt            DateTime?
+  publishedById          String?
+  publishedBy            User?                     @relation("ProjectNoteRevisionPublisher", fields: [publishedById], references: [id], onDelete: SetNull)
+  supersededAt           DateTime?
+  supersededByRevisionId String?
+  supersededByRevision   ProjectNoteRevision?      @relation("ProjectNoteRevisionSupersession", fields: [supersededByRevisionId], references: [id], onDelete: SetNull)
+  supersededRevisions    ProjectNoteRevision[]     @relation("ProjectNoteRevisionSupersession")
+  unpublishedAt          DateTime?
+  unpublishedById        String?
+  unpublishedBy          User?                     @relation("ProjectNoteRevisionUnpublisher", fields: [unpublishedById], references: [id], onDelete: SetNull)
+  createdAt              DateTime                  @default(now())
+
+  @@unique([noteId, revision])
+  @@index([noteId, createdAt, id])
+  @@index([status, escalatedAt])
+  @@index([clientVisible, status])
+  @@index([publishedById])
+  @@index([supersededByRevisionId])
+  @@index([unpublishedById])
 }
 
 model ProjectDeliverableClientReview {
@@ -1156,7 +1258,7 @@ enum AttendanceAdjustmentStatus {
 }
 
 model AttendanceAdjustment {
-  notifications WorkflowNotification[]
+  notifications     WorkflowNotification[]
   type              String                     @default("CORRECTION") @db.VarChar(20)
   overtimeMinutes   Int                        @default(0)
   verifiedById      String?

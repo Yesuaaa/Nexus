@@ -14,10 +14,12 @@ export function ProjectSummary({
   workspace,
   onViewTeam,
   onViewDeliverables,
+  readOnly = false,
 }: {
   workspace: ProjectWorkspaceDetail
   onViewTeam: () => void
   onViewDeliverables: () => void
+  readOnly?: boolean
 }) {
   const tasks = workspace.workstreams.flatMap(
     (stream) => stream.plan?.phases.flatMap((phase) => phase.tasks) ?? [],
@@ -199,8 +201,9 @@ export function ProjectSummary({
           </div>
         ) : (
           <p className="mb-0 mt-3 text-xs text-[#65718a]">
-            No staff assigned yet. The department head can approve staffing from
-            Team.
+            {readOnly
+              ? "No staff are assigned to this project."
+              : "No staff assigned yet. The department head can approve staffing from Team."}
           </p>
         )}
       </section>

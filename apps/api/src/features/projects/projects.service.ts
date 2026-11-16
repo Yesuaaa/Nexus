@@ -192,6 +192,23 @@ export async function getProject(userId: string, id: string) {
               orderBy: { createdAt: "desc" },
             })
           : []
+      const notes = isClient
+        ? await tx.projectNoteRevision.findMany({
+            where: {
+              note: { projectId: id },
+              status: "APPROVED",
+              clientVisible: true,
+            },
+            select: {
+              id: true,
+              content: true,
+              submittedAt: true,
+              reviewedAt: true,
+              author: { select: { fullName: true } },
+            },
+            orderBy: [{ submittedAt: "desc" }, { id: "desc" }],
+          })
+        : []
       const isWorkspaceManaged = Boolean(
         project.templateKey || project.workspaceGroupId,
       )
@@ -216,6 +233,7 @@ export async function getProject(userId: string, id: string) {
         canReviewChanges,
         deliverables,
         changeRequests,
+        notes,
       }
     },
     { isolationLevel: "RepeatableRead" },

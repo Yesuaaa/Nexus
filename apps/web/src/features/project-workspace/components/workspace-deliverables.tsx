@@ -5,14 +5,12 @@ import { FormInput, FormTextarea } from "@/components/ui/form-input"
 import {
   useEffect,
   useMemo,
-  useRef,
   useState,
-  type ChangeEvent,
   type FormEvent,
-  type MouseEventHandler,
   type ReactNode,
 } from "react"
 import {
+  ArrowUpRight,
   Check,
   Download,
   Eye,
@@ -38,7 +36,7 @@ import {
 } from "@/components/ui/modal"
 import { SearchField } from "@/components/ui/search-field"
 import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
-import { rowActionButton } from "@/components/ui/row-action-styles"
+import { Pill } from "@/components/ui/pill"
 import {
   Select,
   SelectContent,
@@ -57,14 +55,19 @@ import {
   useSidePanel,
 } from "@/components/ui/side-panel"
 import { cn } from "@/lib/utils"
+import { usePortalAccount } from "@/features/auth/providers/account-context"
+import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
+import { ProjectDeliverableSubmissionDialog } from "./project-deliverable-submission-dialog"
 import {
   approveProjectDeliverable,
   downloadProjectDeliverableAttachment,
+  downloadProjectDeliverableSubmissionAttachment,
+  escalateProjectDeliverable,
+  getProjectWorkspace,
   rejectProjectDeliverable,
   removeProjectDeliverableAttachment,
   sendProjectDeliverableToClient,
   updateProjectDeliverable,
-  uploadProjectDeliverable,
   type ProjectDeliverable,
   type ProjectWorkspaceDetail,
   type ProjectWorkspaceWorkstream,
@@ -91,30 +94,69 @@ function ActionIcon({
   label,
   onClick,
   children,
-  className,
+  variant = "outline",
   disabled = false,
   id,
 }: {
   label: string
-  onClick: MouseEventHandler<HTMLButtonElement>
+  onClick: () => void
   children: ReactNode
-  className?: string
+  variant?: "outline" | "brand" | "danger"
   disabled?: boolean
   id?: string
 }) {
   return (
-    <button
+    <Button
       type="button"
       id={id}
       aria-label={label}
       title={label}
       disabled={disabled}
-      className={cn(rowActionButton, "max-[560px]:size-10", className)}
+      variant={variant}
+      size="sm"
+      className="size-8 p-0 max-[560px]:size-10"
       onClick={onClick}
     >
       {children}
-    </button>
+    </Button>
   )
+}
+
+function submissionStatusLabel(
+  status: NonNullable<ProjectDeliverable["submissions"]>[number]["status"],
+) {
+  switch (status) {
+    case "IN_REVIEW":
+      return "In review"
+    case "ESCALATED":
+      return "Head review"
+    case "REJECTED":
+      return "Rejected"
+    case "APPROVED":
+      return "Approved"
+    case "SENT_TO_CLIENT":
+      return "Shared with client"
+    case "WITHDRAWN":
+      return "Withdrawn"
+  }
+}
+
+function submissionStatusTone(
+  status: NonNullable<ProjectDeliverable["submissions"]>[number]["status"],
+) {
+  switch (status) {
+    case "IN_REVIEW":
+    case "ESCALATED":
+      return "warning" as const
+    case "REJECTED":
+      return "danger" as const
+    case "APPROVED":
+      return "success" as const
+    case "SENT_TO_CLIENT":
+      return "info" as const
+    case "WITHDRAWN":
+      return "neutral" as const
+  }
 }
 
 function EditDeliverableDialog({
@@ -304,25 +346,49 @@ function RejectDeliverableDialog({
 function DeliverableDetailsPanel({
   row,
   busy,
+  administrativeReadOnly,
   onClose,
   onUpload,
   onRemove,
   onDownload,
+  onDownloadVersion,
   onApprove,
   onReject,
+  onEscalate,
   onSend,
 }: {
   row: DeliverableRow
   busy: boolean
+  administrativeReadOnly: boolean
   onClose: () => void
   onUpload: () => void
   onRemove: () => void
   onDownload: () => void
+  onDownloadVersion: (submissionId: string, fileName: string) => void
   onApprove: () => void
   onReject: () => void
+  onEscalate: () => void
   onSend: () => void
 }) {
   const panel = useSidePanel(onClose)
+  const account = usePortalAccount()
+  const { formatDate } = useDatePreferences()
+  const submissions = row.deliverable.submissions ?? []
+  const currentSubmission = submissions.find(
+    ({ workflowFile }) => workflowFile.id === row.deliverable.workflowFile?.id,
+  )
+  const canReview =
+    !administrativeReadOnly &&
+    currentSubmission?.submittedById !== account.id &&
+    ((row.stream.isTeamLead && currentSubmission?.status === "IN_REVIEW") ||
+      (row.stream.isDepartmentHead &&
+        (currentSubmission?.status === "ESCALATED" ||
+          (!row.stream.hasTeamLead &&
+            currentSubmission?.status === "IN_REVIEW"))))
+  const canEscalate =
+    !administrativeReadOnly &&
+    row.stream.isTeamLead &&
+    currentSubmission?.status === "IN_REVIEW"
 
   return (
     <SidePanel
@@ -376,13 +442,20 @@ function DeliverableDetailsPanel({
           </section>
         )}
         <SidePanelSection title="Attachment">
-          {row.deliverable.workflowFile &&
-          (row.stream.canAssign || row.stream.canUploadDeliverables) ? (
-            <button
+          {administrativeReadOnly ? (
+            <p className="m-0 text-xs text-[#65718a]">
+              Attachment details are not included in organization-wide project
+              inspection.
+            </p>
+          ) : row.deliverable.workflowFile &&
+            (row.stream.canAssign || row.stream.canUploadDeliverables) ? (
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               disabled={busy}
               onClick={onDownload}
-              className="flex w-full items-center gap-3 rounded-lg border border-[#dfe4ec] bg-[#f8fafd] px-3 py-3 text-left hover:bg-[#f1f5fa] disabled:opacity-60"
+              className="h-auto w-full justify-start gap-3 rounded-lg border-[#dfe4ec] bg-[#f8fafd] px-3 py-3 text-left text-[#182235] hover:bg-[#f1f5fa]"
             >
               <FileText
                 size={18}
@@ -402,7 +475,7 @@ function DeliverableDetailsPanel({
                 className="shrink-0 text-[#52627a]"
                 aria-hidden="true"
               />
-            </button>
+            </Button>
           ) : row.deliverable.workflowFile ? (
             <p className="m-0 rounded-lg border border-[#dfe4ec] bg-[#f8fafd] px-3 py-3 text-xs text-[#52627a]">
               {row.deliverable.workflowFile.name} ·{" "}
@@ -412,25 +485,92 @@ function DeliverableDetailsPanel({
             <EmptyState size="sm" description="No file attached" />
           )}
         </SidePanelSection>
+        <SidePanelSection title="Submission history">
+          {administrativeReadOnly ? (
+            <p className="m-0 text-xs text-[#65718a]">
+              Submission versions and approval history are not included in
+              organization-wide project inspection.
+            </p>
+          ) : submissions.length ? (
+            <ol className="m-0 list-none space-y-3 p-0">
+              {submissions.map((submission) => (
+                <li
+                  key={submission.id}
+                  className="min-w-0 rounded-lg border border-[#e6eaf0] bg-[#fbfcfe] p-3"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Pill tone="neutral">Version {submission.version}</Pill>
+                      <Pill tone={submissionStatusTone(submission.status)}>
+                        {submissionStatusLabel(submission.status)}
+                      </Pill>
+                    </div>
+                    <span className="text-[11px] text-[#738096]">
+                      {submission.submittedBy.fullName || "Project staff"} ·{" "}
+                      {formatDate(submission.submittedAt)}
+                    </span>
+                  </div>
+                  {submission.note && (
+                    <p className="mt-2 mb-0 whitespace-pre-wrap text-xs leading-5 text-[#52627a]">
+                      {submission.note}
+                    </p>
+                  )}
+                  {submission.reviewedBy && (
+                    <p className="mt-2 mb-0 text-[11px] text-[#738096]">
+                      Reviewed by {submission.reviewedBy.fullName || "reviewer"}
+                      {submission.reviewedAt &&
+                        ` · ${formatDate(submission.reviewedAt)}`}
+                    </p>
+                  )}
+                  {submission.feedback && (
+                    <p className="mt-2 mb-0 whitespace-pre-wrap rounded-md bg-white p-2 text-xs leading-5 text-[#52627a]">
+                      {submission.feedback}
+                    </p>
+                  )}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy}
+                    className="mt-2 h-auto max-w-full justify-start p-0 text-left text-[#203f8c] hover:bg-transparent hover:underline"
+                    onClick={() =>
+                      onDownloadVersion(
+                        submission.id,
+                        submission.workflowFile.name,
+                      )
+                    }
+                  >
+                    <Download size={14} aria-hidden="true" />
+                    <span className="truncate">
+                      {submission.workflowFile.name} ·{" "}
+                      {formatBytes(submission.workflowFile.size)}
+                    </span>
+                  </Button>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <EmptyState size="sm" description="No submissions recorded" />
+          )}
+        </SidePanelSection>
       </SidePanelBody>
       <SidePanelFooter className="flex-wrap justify-between gap-3">
-        {row.stream.canAssign &&
-        row.deliverable.deliveryStatus === "IN_REVIEW" ? (
-          <div className="flex w-full justify-end gap-2">
-            <Button
-              variant="outline"
-              disabled={busy}
-              className="text-[#b3343b] hover:bg-[#fff5f5]"
-              onClick={onReject}
-            >
+        {administrativeReadOnly ? (
+          <span className="mr-auto text-[11px] text-[#65718a]">
+            Read-only project inspection.
+          </span>
+        ) : canReview ? (
+          <div className="flex w-full flex-wrap justify-end gap-2">
+            {canEscalate && (
+              <Button variant="outline" disabled={busy} onClick={onEscalate}>
+                Escalate to Department Head
+              </Button>
+            )}
+            <Button variant="danger" disabled={busy} onClick={onReject}>
               <X size={14} aria-hidden="true" />
               Reject
             </Button>
-            <Button
-              disabled={busy}
-              className="bg-[#13743b] text-white hover:bg-[#0e6030]"
-              onClick={onApprove}
-            >
+            <Button variant="brand" disabled={busy} onClick={onApprove}>
               <Check size={14} aria-hidden="true" />
               Approve
             </Button>
@@ -449,12 +589,7 @@ function DeliverableDetailsPanel({
           ) ? (
           <div className="flex w-full justify-end gap-2">
             {row.deliverable.workflowFile && (
-              <Button
-                variant="outline"
-                disabled={busy}
-                className="text-[#b3343b] hover:bg-[#fff5f5]"
-                onClick={onRemove}
-              >
+              <Button variant="danger" disabled={busy} onClick={onRemove}>
                 <Trash2 size={14} aria-hidden="true" />
                 Remove attachment
               </Button>
@@ -488,10 +623,13 @@ const deliverableRowKey = (row: DeliverableRow) =>
 export function WorkspaceDeliverables({
   workspace,
   onUpdated,
+  administrativeReadOnly = false,
 }: {
   workspace: ProjectWorkspaceDetail
   onUpdated: (workspace: ProjectWorkspaceDetail) => void
+  administrativeReadOnly?: boolean
 }) {
+  const account = usePortalAccount()
   const [query, setQuery] = useState("")
   const [settledQuery, setSettledQuery] = useState("")
   const searchPending = query.trim() !== settledQuery
@@ -507,6 +645,7 @@ export function WorkspaceDeliverables({
     projectId: string
     deliverableId: string
   } | null>(null)
+  const [uploadProjectId, setUploadProjectId] = useState<string | null>(null)
   const [editingIds, setEditingIds] = useState<{
     projectId: string
     deliverableId: string
@@ -520,11 +659,6 @@ export function WorkspaceDeliverables({
     deliverableId: string
   } | null>(null)
   const [busy, setBusy] = useState(false)
-  const fileInput = useRef<HTMLInputElement>(null)
-  const uploadTarget = useRef<{
-    projectId: string
-    deliverableId: string
-  } | null>(null)
   const rows = useMemo<DeliverableRow[]>(
     () =>
       workspace.workstreams.flatMap((stream) =>
@@ -592,28 +726,23 @@ export function WorkspaceDeliverables({
   }
 
   function startUpload(row: DeliverableRow) {
-    uploadTarget.current = {
-      projectId: row.stream.id,
-      deliverableId: row.deliverable.id,
-    }
-    fileInput.current?.click()
+    setUploadProjectId(row.stream.id)
   }
 
-  async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.currentTarget.files?.[0]
-    event.currentTarget.value = ""
-    const target = uploadTarget.current
-    uploadTarget.current = null
-    if (!file || !target) return
-    await saveResult(
-      uploadProjectDeliverable(
-        workspace.id,
-        target.projectId,
-        target.deliverableId,
-        file,
-      ),
-      "Attachment sent for review",
-    )
+  async function refreshAfterSubmission() {
+    setBusy(true)
+    try {
+      onUpdated(await getProjectWorkspace(workspace.id))
+    } catch (reason) {
+      sileo.error({
+        title: errorMessage(
+          reason,
+          "The submission was saved, but the list could not refresh.",
+        ),
+      })
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function handleDownload(row: DeliverableRow | null) {
@@ -629,6 +758,29 @@ export function WorkspaceDeliverables({
     } catch (reason) {
       sileo.error({
         title: errorMessage(reason, "Could not download attachment."),
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleDownloadVersion(
+    row: DeliverableRow,
+    submissionId: string,
+    fileName: string,
+  ) {
+    setBusy(true)
+    try {
+      await downloadProjectDeliverableSubmissionAttachment(
+        workspace.id,
+        row.stream.id,
+        row.deliverable.id,
+        submissionId,
+        fileName,
+      )
+    } catch (reason) {
+      sileo.error({
+        title: errorMessage(reason, "Could not download this submission."),
       })
     } finally {
       setBusy(false)
@@ -692,6 +844,18 @@ export function WorkspaceDeliverables({
     )
   }
 
+  async function handleEscalate(row: DeliverableRow | null) {
+    if (!row) return
+    await saveResult(
+      escalateProjectDeliverable(
+        workspace.id,
+        row.stream.id,
+        row.deliverable.id,
+      ),
+      "Deliverable escalated to the Department Head",
+    )
+  }
+
   async function handleSend(row: DeliverableRow | null) {
     if (!row) return
     await saveResult(
@@ -706,13 +870,6 @@ export function WorkspaceDeliverables({
 
   return (
     <section aria-label="Project deliverables" className="space-y-4">
-      <input
-        ref={fileInput}
-        type="file"
-        className="hidden"
-        accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.txt"
-        onChange={(event) => void handleFileChange(event)}
-      />
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="m-0 text-sm font-semibold">
           Project deliverables{" "}
@@ -810,10 +967,29 @@ export function WorkspaceDeliverables({
                 className="relative overflow-x-clip"
                 renderRow={({ workspaceId, stream, deliverable }) => {
                   const row = { workspaceId, stream, deliverable }
-                  const canReview = stream.canAssign
-                  const canUpload = stream.canUploadDeliverables
+                  const currentSubmission = deliverable.submissions?.find(
+                    ({ workflowFile }) =>
+                      workflowFile.id === deliverable.workflowFile?.id,
+                  )
+                  const canReview =
+                    !administrativeReadOnly &&
+                    currentSubmission?.submittedById !== account.id &&
+                    ((stream.isTeamLead &&
+                      currentSubmission?.status === "IN_REVIEW") ||
+                      (stream.isDepartmentHead &&
+                        (currentSubmission?.status === "ESCALATED" ||
+                          (!stream.hasTeamLead &&
+                            currentSubmission?.status === "IN_REVIEW"))))
+                  const canEscalate =
+                    !administrativeReadOnly &&
+                    stream.isTeamLead &&
+                    currentSubmission?.status === "IN_REVIEW"
+                  const canUpload =
+                    !administrativeReadOnly && stream.canUploadDeliverables
                   const canEdit =
-                    canReview && deliverable.deliveryStatus !== "SENT_TO_CLIENT"
+                    !administrativeReadOnly &&
+                    stream.canAssign &&
+                    deliverable.deliveryStatus !== "SENT_TO_CLIENT"
                   const actions = (
                     <div className="flex items-center justify-end gap-2 pr-4">
                       <ActionIcon
@@ -831,7 +1007,7 @@ export function WorkspaceDeliverables({
                       {canReview && canEdit && (
                         <ActionIcon
                           label={`Edit ${deliverable.title}`}
-                          className="border-[#203f8c] bg-[#203f8c] text-white hover:bg-[#172f70]"
+                          variant="brand"
                           onClick={() =>
                             setEditingIds({
                               projectId: stream.id,
@@ -847,7 +1023,7 @@ export function WorkspaceDeliverables({
                           <>
                             <ActionIcon
                               label={`Approve ${deliverable.title}`}
-                              className="text-[#13743b]"
+                              variant="brand"
                               disabled={busy}
                               onClick={() => void handleApprove(row)}
                             >
@@ -855,7 +1031,7 @@ export function WorkspaceDeliverables({
                             </ActionIcon>
                             <ActionIcon
                               label={`Reject ${deliverable.title}`}
-                              className="text-[#b3343b]"
+                              variant="danger"
                               disabled={busy}
                               onClick={() =>
                                 setRejectingIds({
@@ -868,11 +1044,20 @@ export function WorkspaceDeliverables({
                             </ActionIcon>
                           </>
                         )}
-                      {canReview &&
+                      {canEscalate && (
+                        <ActionIcon
+                          label={`Escalate ${deliverable.title} to the Department Head`}
+                          disabled={busy}
+                          onClick={() => void handleEscalate(row)}
+                        >
+                          <ArrowUpRight size={16} aria-hidden="true" />
+                        </ActionIcon>
+                      )}
+                      {stream.canAssign &&
                         deliverable.deliveryStatus === "APPROVED" && (
                           <ActionIcon
                             label={`Send ${deliverable.title} to client`}
-                            className="border-[#203f8c] bg-[#203f8c] text-white hover:bg-[#172f70]"
+                            variant="brand"
                             disabled={busy}
                             onClick={() => void handleSend(row)}
                           >
@@ -903,14 +1088,20 @@ export function WorkspaceDeliverables({
                       <div role="cell" className="min-w-0 px-3 py-3.5">
                         {deliverable.workflowFile &&
                         (canReview || canUpload) ? (
-                          <button
+                          <Button
                             type="button"
+                            variant="ghost"
+                            size="sm"
                             disabled={busy}
-                            className="max-w-full truncate text-left text-[#294c96] hover:underline disabled:opacity-60"
+                            className="h-auto max-w-full justify-start truncate p-0 text-left text-[#294c96] hover:bg-transparent hover:underline"
                             onClick={() => void handleDownload(row)}
                           >
                             {deliverable.workflowFile.name}
-                          </button>
+                          </Button>
+                        ) : administrativeReadOnly ? (
+                          <span className="text-[#738096]">
+                            Not included in project inspection
+                          </span>
                         ) : (
                           <span className="text-[#738096]">
                             {deliverable.workflowFile?.name ?? "No attachment"}
@@ -948,9 +1139,13 @@ export function WorkspaceDeliverables({
           key={deliverableRowKey(selected)}
           row={selected}
           busy={busy}
+          administrativeReadOnly={administrativeReadOnly}
           onClose={() => setSelectedIds(null)}
           onUpload={() => startUpload(selected)}
           onDownload={() => void handleDownload(selected)}
+          onDownloadVersion={(submissionId, fileName) =>
+            void handleDownloadVersion(selected, submissionId, fileName)
+          }
           onRemove={() =>
             setRemovingIds({
               projectId: selected.stream.id,
@@ -958,6 +1153,7 @@ export function WorkspaceDeliverables({
             })
           }
           onApprove={() => void handleApprove(selected)}
+          onEscalate={() => void handleEscalate(selected)}
           onReject={() =>
             setRejectingIds({
               projectId: selected.stream.id,
@@ -992,6 +1188,17 @@ export function WorkspaceDeliverables({
         onClose={() => setRemovingIds(null)}
         onConfirm={() => void handleRemove()}
       />
+      {uploadProjectId && (
+        <ProjectDeliverableSubmissionDialog
+          workspaceId={workspace.id}
+          projectId={uploadProjectId}
+          deliverables={rows
+            .filter(({ stream }) => stream.id === uploadProjectId)
+            .map(({ deliverable }) => deliverable)}
+          onClose={() => setUploadProjectId(null)}
+          onSubmitted={() => void refreshAfterSubmission()}
+        />
+      )}
     </section>
   )
 }

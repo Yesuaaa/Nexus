@@ -4,9 +4,11 @@ import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import type { ReactNode } from "react"
 import {
+  ClipboardList,
   ArrowLeft,
   FileText,
   FolderKanban,
+  History,
   Layers3,
   UsersRound,
 } from "lucide-react"
@@ -129,6 +131,88 @@ export function ClientProjectSidebarLinks({
       >
         <UsersRound size={20} strokeWidth={1.7} className="flex-none" />
       </ProjectNavLink>
+    </>
+  )
+}
+
+export function StaffProjectSidebarLinks({
+  projectId,
+  collapsed,
+  onNavigate,
+}: {
+  projectId: string
+  collapsed: boolean
+  onNavigate: () => void
+}) {
+  const searchParams = useSearchParams()
+  const basePath = `/project-workspace/${encodeURIComponent(projectId)}`
+  const backQuery = new URLSearchParams(searchParams.toString())
+  backQuery.delete("tab")
+  const backHref = `/project-workspace${backQuery.size ? `?${backQuery}` : ""}`
+
+  return (
+    <ProjectWorkspaceSidebarLinks
+      projectBaseHref={basePath}
+      backHref={backHref}
+      collapsed={collapsed}
+      onNavigate={onNavigate}
+    />
+  )
+}
+
+const workspaceSections = [
+  { id: "overview", label: "Overview", icon: FolderKanban },
+  { id: "work", label: "Work", icon: ClipboardList },
+  { id: "deliverables", label: "Deliverables", icon: Layers3 },
+  { id: "notes", label: "Notes", icon: FileText },
+  { id: "requests", label: "Requests", icon: ClipboardList },
+  { id: "team", label: "Team", icon: UsersRound },
+  { id: "activity", label: "Activity", icon: History },
+] as const
+
+export function ProjectWorkspaceSidebarLinks({
+  projectBaseHref,
+  backHref,
+  collapsed,
+  onNavigate,
+}: {
+  projectBaseHref: string
+  backHref: string
+  collapsed: boolean
+  onNavigate: () => void
+}) {
+  const searchParams = useSearchParams()
+  const activeTab = searchParams.get("tab")?.toLowerCase() ?? "overview"
+
+  return (
+    <>
+      <ProjectNavLink
+        href={backHref}
+        label="Back to projects"
+        active={false}
+        collapsed={collapsed}
+        onNavigate={onNavigate}
+      >
+        <ArrowLeft size={20} strokeWidth={1.7} className="flex-none" />
+      </ProjectNavLink>
+      {workspaceSections.map(({ id, label, icon: Icon }) => {
+        const query = new URLSearchParams(searchParams.toString())
+        if (id === "overview") query.delete("tab")
+        else query.set("tab", id)
+        const href = `${projectBaseHref}${query.size ? `?${query}` : ""}`
+        return (
+          <ProjectNavLink
+            key={id}
+            href={href}
+            label={label}
+            active={activeTab === id}
+            collapsed={collapsed}
+            onNavigate={onNavigate}
+          >
+            <Icon size={20} strokeWidth={1.7} className="flex-none" />
+          </ProjectNavLink>
+        )
+      })}
     </>
   )
 }

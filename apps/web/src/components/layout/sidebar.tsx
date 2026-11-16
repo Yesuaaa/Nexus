@@ -44,6 +44,10 @@ import {
 import { attendanceNavigation } from "@/features/attendance/model/navigation"
 import { useWorkspaceModuleId } from "@/features/workspaces/providers/workspace-provider"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
+import {
+  ProjectWorkspaceSidebarLinks,
+  StaffProjectSidebarLinks,
+} from "@/features/projects/components/client-project-sidebar-links"
 
 import { focusRing, iconButtonClass } from "./styles"
 import {
@@ -540,6 +544,19 @@ export function Sidebar({
   const searchParams = useSearchParams()
   const mainNavigation = getNavigationPolicies(account, "main")
   const isClient = account.role === "USER"
+  const staffWorkspaceMatch =
+    account.role === "STAFF" &&
+    pathname !== "/project-workspace/overview" &&
+    pathname !== "/project-workspace/new"
+      ? pathname.match(/^\/project-workspace\/([^/]+)$/)
+      : null
+  const staffProjectId = staffWorkspaceMatch?.[1]
+    ? decodeURIComponent(staffWorkspaceMatch[1])
+    : null
+  const administrativeProjectId =
+    account.role === "SUPERADMIN" && pathname === "/module/project-management"
+      ? searchParams.get("project")
+      : null
   const activeModuleId = useWorkspaceModuleId()
   const dashboardPolicy = mainNavigation.find(
     (policy) => policy.id === "dashboard",
@@ -650,140 +667,162 @@ export function Sidebar({
           )}
           aria-label="Main menu"
         >
-          {dashboardPolicy && (
-            <SidebarNavigationLink
-              policy={dashboardPolicy}
-              account={account}
-              pathname={pathname}
+          {staffProjectId ? (
+            <StaffProjectSidebarLinks
+              projectId={staffProjectId}
               collapsed={collapsed}
               onNavigate={onCloseDrawer}
-              labelOverride={isClient ? undefined : "Switch Workspace"}
             />
-          )}
-
-          {activeModuleId && (
+          ) : administrativeProjectId ? (
+            <ProjectWorkspaceSidebarLinks
+              projectBaseHref={pathname}
+              backHref="/module/project-management"
+              collapsed={collapsed}
+              onNavigate={onCloseDrawer}
+            />
+          ) : (
             <>
-              <p className={sectionLabelClass}>
-                {workspaceModuleLabels[activeModuleId]}
-              </p>
-              {workspaceNavigation.map(renderPolicy)}
-              {activeModuleId === "project-management" &&
-                canAccessProjectWorkspace(account) && (
-                  <Link
-                    href="/messages?scope=project"
-                    aria-current={
-                      pathname === "/messages" &&
-                      searchParams.get("scope") === "project" &&
-                      searchParams.get("mode") !== "internal" &&
-                      !searchParams.has("request")
-                        ? "page"
-                        : undefined
-                    }
-                    className={cn(
-                      navLinkClass,
-                      collapsed && collapsedNavLinkClass,
-                      projectMessagesActive && activeRowClass,
-                    )}
-                    onClick={onCloseDrawer}
-                  >
-                    <RowIcon
-                      icon={MessagesSquare}
-                      active={projectMessagesActive}
-                    />
-                    <span
-                      className={cn(
-                        "min-w-0 truncate",
-                        collapsed && "sr-only max-[767px]:not-sr-only",
-                      )}
-                    >
-                      Project Messages
-                    </span>
-                    {collapsed && (
-                      <CollapsedTooltip>Project Messages</CollapsedTooltip>
-                    )}
-                  </Link>
-                )}
-              {activeModuleId === "service-operations" &&
-                canAccessRequestInbox(account) && (
-                  <Link
-                    href="/messages?scope=service"
-                    aria-current={
-                      pathname === "/messages" &&
-                      searchParams.get("scope") === "service" &&
-                      searchParams.get("mode") !== "internal" &&
-                      !searchParams.has("project")
-                        ? "page"
-                        : undefined
-                    }
-                    className={cn(
-                      navLinkClass,
-                      collapsed && collapsedNavLinkClass,
-                      serviceMessagesActive && activeRowClass,
-                    )}
-                    onClick={onCloseDrawer}
-                  >
-                    <RowIcon
-                      icon={MessageSquareText}
-                      active={serviceMessagesActive}
-                    />
-                    <span
-                      className={cn(
-                        "min-w-0 truncate",
-                        collapsed && "sr-only max-[767px]:not-sr-only",
-                      )}
-                    >
-                      Service Messages
-                    </span>
-                    {collapsed && (
-                      <CollapsedTooltip>Service Messages</CollapsedTooltip>
-                    )}
-                  </Link>
-                )}
-            </>
-          )}
-
-          {sharedNavigation.length > 0 && (
-            <>
-              {activeModuleId && <p className={sectionLabelClass}>Shared</p>}
-              {sharedNavigation.map((policy) => (
+              {dashboardPolicy && (
                 <SidebarNavigationLink
-                  key={policy.id}
-                  policy={policy}
+                  policy={dashboardPolicy}
                   account={account}
                   pathname={pathname}
                   collapsed={collapsed}
                   onNavigate={onCloseDrawer}
+                  labelOverride={isClient ? undefined : "Switch Workspace"}
                 />
-              ))}
-              {!isClient && (
-                <Link
-                  href="/messages?mode=internal"
-                  aria-current={
-                    pathname === "/messages" &&
-                    searchParams.get("mode") === "internal"
-                      ? "page"
-                      : undefined
-                  }
-                  className={cn(
-                    navLinkClass,
-                    collapsed && collapsedNavLinkClass,
-                    internalMessagesActive && activeRowClass,
-                  )}
-                  onClick={onCloseDrawer}
-                >
-                  <RowIcon icon={UsersRound} active={internalMessagesActive} />
-                  <span
-                    className={cn(
-                      "min-w-0 truncate",
-                      collapsed && "sr-only max-[767px]:not-sr-only",
+              )}
+
+              {activeModuleId && (
+                <>
+                  <p className={sectionLabelClass}>
+                    {workspaceModuleLabels[activeModuleId]}
+                  </p>
+                  {workspaceNavigation.map(renderPolicy)}
+                  {activeModuleId === "project-management" &&
+                    canAccessProjectWorkspace(account) && (
+                      <Link
+                        href="/messages?scope=project"
+                        aria-current={
+                          pathname === "/messages" &&
+                          searchParams.get("scope") === "project" &&
+                          searchParams.get("mode") !== "internal" &&
+                          !searchParams.has("request")
+                            ? "page"
+                            : undefined
+                        }
+                        className={cn(
+                          navLinkClass,
+                          collapsed && collapsedNavLinkClass,
+                          projectMessagesActive && activeRowClass,
+                        )}
+                        onClick={onCloseDrawer}
+                      >
+                        <RowIcon
+                          icon={MessagesSquare}
+                          active={projectMessagesActive}
+                        />
+                        <span
+                          className={cn(
+                            "min-w-0 truncate",
+                            collapsed && "sr-only max-[767px]:not-sr-only",
+                          )}
+                        >
+                          Project Messages
+                        </span>
+                        {collapsed && (
+                          <CollapsedTooltip>Project Messages</CollapsedTooltip>
+                        )}
+                      </Link>
                     )}
-                  >
-                    Internal Messages
-                  </span>
-                  {collapsed && (
-                    <CollapsedTooltip>Internal Messages</CollapsedTooltip>
+                  {activeModuleId === "service-operations" &&
+                    canAccessRequestInbox(account) && (
+                      <Link
+                        href="/messages?scope=service"
+                        aria-current={
+                          pathname === "/messages" &&
+                          searchParams.get("scope") === "service" &&
+                          searchParams.get("mode") !== "internal" &&
+                          !searchParams.has("project")
+                            ? "page"
+                            : undefined
+                        }
+                        className={cn(
+                          navLinkClass,
+                          collapsed && collapsedNavLinkClass,
+                          serviceMessagesActive && activeRowClass,
+                        )}
+                        onClick={onCloseDrawer}
+                      >
+                        <RowIcon
+                          icon={MessageSquareText}
+                          active={serviceMessagesActive}
+                        />
+                        <span
+                          className={cn(
+                            "min-w-0 truncate",
+                            collapsed && "sr-only max-[767px]:not-sr-only",
+                          )}
+                        >
+                          Service Messages
+                        </span>
+                        {collapsed && (
+                          <CollapsedTooltip>Service Messages</CollapsedTooltip>
+                        )}
+                      </Link>
+                    )}
+                </>
+              )}
+
+              {sharedNavigation.length > 0 && (
+                <>
+                  {activeModuleId && (
+                    <p className={sectionLabelClass}>Shared</p>
                   )}
-                </Link>
+                  {sharedNavigation.map((policy) => (
+                    <SidebarNavigationLink
+                      key={policy.id}
+                      policy={policy}
+                      account={account}
+                      pathname={pathname}
+                      collapsed={collapsed}
+                      onNavigate={onCloseDrawer}
+                    />
+                  ))}
+                  {!isClient && (
+                    <Link
+                      href="/messages?mode=internal"
+                      aria-current={
+                        pathname === "/messages" &&
+                        searchParams.get("mode") === "internal"
+                          ? "page"
+                          : undefined
+                      }
+                      className={cn(
+                        navLinkClass,
+                        collapsed && collapsedNavLinkClass,
+                        internalMessagesActive && activeRowClass,
+                      )}
+                      onClick={onCloseDrawer}
+                    >
+                      <RowIcon
+                        icon={UsersRound}
+                        active={internalMessagesActive}
+                      />
+                      <span
+                        className={cn(
+                          "min-w-0 truncate",
+                          collapsed && "sr-only max-[767px]:not-sr-only",
+                        )}
+                      >
+                        Internal Messages
+                      </span>
+                      {collapsed && (
+                        <CollapsedTooltip>Internal Messages</CollapsedTooltip>
+                      )}
+                    </Link>
+                  )}
+                </>
               )}
             </>
           )}

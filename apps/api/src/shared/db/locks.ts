@@ -10,7 +10,8 @@
  * A transaction that locks rows in several of these tables must take them in
  * this order, which every existing transaction follows:
  *
- *   ServiceRequest → Department → Project → ProjectMilestone
+ *   ServiceRequest → Department → Project → ProjectMilestone → ProjectNote
+ *   → ProjectNoteRevision
  *
  * (A ProjectWorkspaceGroup is locked before its Projects.) Within one table,
  * `lockRows` locks ids one statement at a time in sorted order, so two
@@ -32,6 +33,8 @@ export type LockableTable =
   | "Team"
   | "Project"
   | "ProjectMilestone"
+  | "ProjectNote"
+  | "ProjectNoteRevision"
   | "ProjectWorkspaceGroup"
   | "RequestConversation"
   | "PricingTemplate"
@@ -56,6 +59,8 @@ const lockableTables: ReadonlySet<string> = new Set<LockableTable>([
   "Team",
   "Project",
   "ProjectMilestone",
+  "ProjectNote",
+  "ProjectNoteRevision",
   "ProjectWorkspaceGroup",
   "RequestConversation",
   "PricingTemplate",

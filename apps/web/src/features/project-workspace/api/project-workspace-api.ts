@@ -61,7 +61,80 @@ export type ProjectTask = {
   status: ProjectTaskStatus
 }
 
-export type ProjectDeliverable = ManagedProjectDeliverable
+export type ProjectDeliverableSubmission = {
+  id: string
+  version: number
+  note: string | null
+  status:
+    | "IN_REVIEW"
+    | "ESCALATED"
+    | "REJECTED"
+    | "APPROVED"
+    | "SENT_TO_CLIENT"
+    | "WITHDRAWN"
+  submittedAt: string
+  submittedById: string
+  submittedBy: { id: string; fullName: string | null }
+  reviewedAt: string | null
+  feedback: string | null
+  escalatedAt: string | null
+  reviewedBy: { id: string; fullName: string | null } | null
+  workflowFile: {
+    id: string
+    name: string
+    mimeType: string
+    size: number
+    createdAt: string
+  }
+}
+
+export type ProjectDeliverable = ManagedProjectDeliverable & {
+  submissions?: ProjectDeliverableSubmission[]
+}
+
+export type ProjectNoteRevision = {
+  id: string
+  revision: number
+  content: string
+  authorId: string
+  status:
+    "SUBMITTED" | "ESCALATED" | "APPROVED" | "REVISION_REQUIRED" | "REJECTED"
+  submittedAt: string
+  reviewedAt: string | null
+  feedback: string | null
+  escalatedAt: string | null
+  clientVisible: boolean
+  publishedAt: string | null
+  publishedById: string | null
+  publishedBy: { id: string; fullName: string | null } | null
+  supersededAt: string | null
+  supersededByRevisionId: string | null
+  supersededByRevision: { id: string; revision: number } | null
+  unpublishedAt: string | null
+  unpublishedById: string | null
+  unpublishedBy: { id: string; fullName: string | null } | null
+  author: { id: string; fullName: string | null }
+  reviewedBy: { id: string; fullName: string | null } | null
+}
+
+export type ProjectWorkspaceNote = {
+  id: string
+  createdAt: string
+  updatedAt: string
+  createdBy: { id: string; fullName: string | null }
+  revisions: ProjectNoteRevision[]
+}
+
+export type ProjectWorkspaceChangeRequest = {
+  id: string
+  kind: "CHANGE" | "CANCELLATION"
+  details: string
+  status: "PENDING" | "ACCEPTED" | "NOT_APPROVED"
+  responseNote: string | null
+  createdAt: string
+  reviewedAt: string | null
+  requestedBy: { fullName: string | null }
+}
 
 export type ProjectWorkPlan = {
   phases: { id: string; title: string; tasks: ProjectTask[] }[]
@@ -104,6 +177,13 @@ export type ProjectWorkspaceWorkstream = {
   completedTaskCount: number
   plan?: ProjectWorkPlan | null
   milestones?: ProjectDeliverable[]
+  notes?: ProjectWorkspaceNote[]
+  changeRequests?: ProjectWorkspaceChangeRequest[]
+  isTeamLead?: boolean
+  hasTeamLead?: boolean
+  isDepartmentHead?: boolean
+  canReviewDeliverables?: boolean
+  canReviewRequests?: boolean
   canUploadDeliverables: boolean
   staff?: {
     id: string
@@ -132,7 +212,7 @@ export type ProjectWorkspaceSummary = {
   canRename: boolean
   workstreams: Omit<
     ProjectWorkspaceWorkstream,
-    "plan" | "milestones" | "staff"
+    "plan" | "milestones" | "staff" | "notes" | "changeRequests"
   >[]
 }
 
@@ -424,6 +504,76 @@ const deliverablePath = (
 ) =>
   `/api/project-workspace/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/deliverables/${encodeURIComponent(deliverableId)}`
 
+const notePath = (workspaceId: string, projectId: string) =>
+  `/api/project-workspace/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/notes`
+
+const noteRevisionPath = (
+  workspaceId: string,
+  projectId: string,
+  noteId: string,
+  revisionId: string,
+) =>
+  `${notePath(workspaceId, projectId)}/${encodeURIComponent(noteId)}/revisions/${encodeURIComponent(revisionId)}`
+
+export const createProjectNote = (
+  workspaceId: string,
+  projectId: string,
+  content: string,
+) =>
+  apiRequest<ProjectWorkspaceDetail>(notePath(workspaceId, projectId), {
+    method: "POST",
+    body: JSON.stringify({ content }),
+  })
+
+export const createProjectNoteRevision = (
+  workspaceId: string,
+  projectId: string,
+  noteId: string,
+  content: string,
+) =>
+  apiRequest<ProjectWorkspaceDetail>(
+    `${notePath(workspaceId, projectId)}/${encodeURIComponent(noteId)}/revisions`,
+    { method: "POST", body: JSON.stringify({ content }) },
+  )
+
+export const reviewProjectNoteRevision = (
+  workspaceId: string,
+  projectId: string,
+  noteId: string,
+  revisionId: string,
+  input: {
+    action: "APPROVE" | "REQUEST_REVISION" | "REJECT"
+    feedback?: string
+    clientVisible?: boolean
+  },
+) =>
+  apiRequest<ProjectWorkspaceDetail>(
+    `${noteRevisionPath(workspaceId, projectId, noteId, revisionId)}/review`,
+    { method: "PATCH", body: JSON.stringify(input) },
+  )
+
+export const escalateProjectNoteRevision = (
+  workspaceId: string,
+  projectId: string,
+  noteId: string,
+  revisionId: string,
+) =>
+  apiRequest<ProjectWorkspaceDetail>(
+    `${noteRevisionPath(workspaceId, projectId, noteId, revisionId)}/escalate`,
+    { method: "POST" },
+  )
+
+export const unpublishProjectNoteRevision = (
+  workspaceId: string,
+  projectId: string,
+  noteId: string,
+  revisionId: string,
+) =>
+  apiRequest<ProjectWorkspaceDetail>(
+    `${noteRevisionPath(workspaceId, projectId, noteId, revisionId)}/unpublish`,
+    { method: "POST" },
+  )
+
 export const updateProjectDeliverable = (
   workspaceId: string,
   projectId: string,
@@ -519,6 +669,16 @@ export const rejectProjectDeliverable = (
     { method: "POST", body: JSON.stringify({ reason }) },
   )
 
+export const escalateProjectDeliverable = (
+  workspaceId: string,
+  projectId: string,
+  deliverableId: string,
+) =>
+  apiRequest<ProjectWorkspaceDetail>(
+    `${deliverablePath(workspaceId, projectId, deliverableId)}/escalate`,
+    { method: "POST" },
+  )
+
 export const sendProjectDeliverableToClient = (
   workspaceId: string,
   projectId: string,
@@ -535,9 +695,27 @@ export async function downloadProjectDeliverableAttachment(
   deliverableId: string,
   fileName: string,
 ) {
-  const response = await apiStreamRequest(
+  await downloadProjectWorkspaceFile(
     `${deliverablePath(workspaceId, projectId, deliverableId)}/attachment`,
+    fileName,
   )
+}
+
+export async function downloadProjectDeliverableSubmissionAttachment(
+  workspaceId: string,
+  projectId: string,
+  deliverableId: string,
+  submissionId: string,
+  fileName: string,
+) {
+  await downloadProjectWorkspaceFile(
+    `${deliverablePath(workspaceId, projectId, deliverableId)}/submissions/${encodeURIComponent(submissionId)}/attachment`,
+    fileName,
+  )
+}
+
+async function downloadProjectWorkspaceFile(path: string, fileName: string) {
+  const response = await apiStreamRequest(path)
   const url = URL.createObjectURL(await response.blob())
   const anchor = document.createElement("a")
   anchor.href = url
