@@ -1,29 +1,5 @@
 import { Router } from "express"
-import { getPrisma } from "../../lib/db.js"
-
-const readinessTransactionOptions = {
-  maxWait: 2_500,
-  timeout: 3_500,
-}
-
-async function checkDatabase() {
-  try {
-    const prisma = getPrisma()
-    if (!prisma) return "not-configured" as const
-
-    await prisma.$transaction(async (transaction) => {
-      await transaction.$executeRaw`SET LOCAL statement_timeout = '2500ms'`
-      await transaction.$queryRaw`SELECT 1`
-    }, readinessTransactionOptions)
-    return "ok" as const
-  } catch (error: unknown) {
-    console.error(
-      "Database health check failed",
-      error instanceof Error ? error.name : "unknown error",
-    )
-    return "unavailable" as const
-  }
-}
+import { checkDatabase } from "./database-readiness.js"
 
 export function createHealthRouter(
   isShuttingDown: () => boolean = () => false,

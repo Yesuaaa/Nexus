@@ -1,4 +1,5 @@
 import { attendanceNavigation } from "../../attendance/model/navigation.ts"
+import { canReadSystemLogs } from "../../system-logs/model/management-history.ts"
 import {
   hasPermission,
   Permissions,
@@ -36,6 +37,7 @@ export const workspaceModuleLabels = Object.fromEntries(
 ) as Record<WorkspaceModuleId, string>
 
 export type RoutePolicyId =
+  | "system-logs"
   | `module-${string}`
   | "employees-overview"
   | "attendance-time-logs"
@@ -317,6 +319,18 @@ export const routePolicies: readonly RoutePolicy[] = [
       label: "Account Management",
       location: "main",
       order: 10,
+    },
+  },
+  {
+    id: "system-logs",
+    match: { kind: "exact", path: "/system-logs" },
+    moduleId: null,
+    canAccess: canReadSystemLogs,
+    navigation: {
+      href: "/system-logs",
+      label: "System Logs (Unavailable)",
+      location: "main",
+      order: 65,
     },
   },
   {

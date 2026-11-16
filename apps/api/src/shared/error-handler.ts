@@ -7,6 +7,7 @@ import type {
 } from "express"
 import { isTemporaryDatabaseError } from "../lib/database-read.js"
 import { HttpError, prismaHttpError } from "./http-error.js"
+import { errorLogs } from "../features/error-logs/error-log.js"
 
 /**
  * Extracts the file path and line number of the caller or the error source,
@@ -240,12 +241,16 @@ export const handleError: ErrorRequestHandler = (
   response: Response,
   next: NextFunction,
 ) => {
-  if (response.headersSent) return next(error)
+  if (response.headersSent) {
+    errorLogs.captureRequest(request, 500, error, response.statusCode)
+    return next(error)
+  }
   ;(response.locals as Record<string, unknown>)._devErrorLogged = true
   const isDev = process.env.NODE_ENV === "development"
 
   const { status, message, details, retryAfter } = resolveError(error)
   if (status >= 500) {
+    errorLogs.captureRequest(request, status, error)
     console.error("API request failed:", request.method, request.path, error)
   }
 

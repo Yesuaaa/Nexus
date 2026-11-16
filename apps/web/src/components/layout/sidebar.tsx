@@ -87,6 +87,7 @@ function NavigationIcon({
   const icons: Partial<Record<RoutePolicyId, NavIcon>> = {
     dashboard: DashboardIcon,
     accounts: AccountsIcon,
+    "system-logs": History,
     clients: Contact,
     departments: DepartmentIcon,
     services: ServiceIcon,

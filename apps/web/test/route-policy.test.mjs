@@ -468,6 +468,7 @@ test("navigation is generated from the same policies without changing role visib
       "Audit Trail",
       "Service Management",
       "Calendar",
+      "System Logs (Unavailable)",
       "Staff Workload",
       "Client Management",
       "Project Workspace Management",

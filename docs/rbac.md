@@ -1,5 +1,11 @@
 # Role-based access control
 
+The [System Logs Shared navigation refinement (Phase 2C.1)](features/system-logs-shared-navigation.md) places the centralized route alongside Calendar/Internal Messages for active Superadmin across workspaces. Origin context initializes the module filter; unsupported modules remain visibly unintegrated. Backend authorization and production disablement are unchanged.
+
+The [System Logs UI (Phase 2C)](features/system-logs-superadmin-ui.md) adds `/system-logs` within Administration for active Superadmin only, with navigation explicitly marked unavailable for release. Other roles cannot mount or request this view. The backend's disabled-production gate and current-session Superadmin checks remain authoritative and unchanged.
+
+The [System Logs management API (Phase 2B)](features/system-logs-superadmin-api.md) requires current Superadmin authentication on every list, detail and operation read. It remains disabled in production and default apps. [Controlled local activation (Phase 5A)](features/system-logs-local-demo.md) adds an explicitly launched, loopback-only demonstration with fresh owned synthetic PGlite data and opaque process ownership alongside the unchanged native offline-test composition. Neither path authorizes production or access to an existing configured database. No environment flag proves durable access evidence or database protection. Existing administrative/operational privacy boundaries below remain unchanged.
+
 Superadmin has [Phase 3D.1 business-conversation metadata oversight](features/superadmin-messaging-oversight.md) through the existing organization-read and business-inspection capabilities. Service/project metadata reads grant no message content, files, private DM visibility, participant identity, sending or read-marker authority. Existing personal internal chat participation remains independent.
 
 Superadmin uses existing organization-wide employee, department and team management for [Phase 3C.2 People & HR administration](features/superadmin-people-hr-administration.md), without an Employee or Head identity. Existing feature permissions and target eligibility remain authoritative. Employee mutation controls mirror those permissions; Staff login lifecycle controls exclude Admin credentials and self-targeted actions.

@@ -5,6 +5,12 @@ import { conversationRealtime } from "./features/request-conversations/request-c
 import { purgeExpiredConversationMessages } from "./features/request-conversations/request-conversations.service.js"
 import { getPrisma } from "./lib/db.js"
 import { createGracefulShutdown } from "./graceful-shutdown.js"
+import { errorLogs } from "./features/error-logs/error-log.js"
+import { messageExpiryObservation } from "./features/health/message-expiry-observation.js"
+import {
+  verifyLocalDemo,
+  type LocalDemoAccess,
+} from "./features/system-logs/local-demo.js"
 
 type DatabaseEnvironment = {
   NODE_ENV?: string
@@ -42,26 +48,43 @@ export function validateProductionDatabaseConfig(
   }
 }
 
-export function startApi(): {
+export function startApi(
+  options: { systemLogsLocalDemo?: LocalDemoAccess } = {},
+): {
   server: Server
   shutdown: (signal: NodeJS.Signals) => Promise<void>
 } {
   validateProductionDatabaseConfig()
   jwtKey()
+  if (
+    options.systemLogsLocalDemo &&
+    !verifyLocalDemo(options.systemLogsLocalDemo)
+  )
+    throw new Error("Invalid local demonstration ownership")
 
   const port = Number(process.env.PORT || 3001)
   let isShuttingDown = false
   const server = createServer(
-    createApp({ isShuttingDown: () => isShuttingDown }),
+    createApp({ isShuttingDown: () => isShuttingDown, ...options }),
   )
-  server.listen(port, () =>
-    console.log(`API listening on http://localhost:${port}`),
-  )
+  const listening = () => {
+    const address = server.address()
+    console.log(
+      options.systemLogsLocalDemo
+        ? `Local demonstration API listening on port ${address && typeof address === "object" ? address.port : port}`
+        : `API listening on http://localhost:${port}`,
+    )
+  }
+  if (options.systemLogsLocalDemo) server.listen(port, "127.0.0.1", listening)
+  else server.listen(port, listening)
 
   function purgeExpiredMessages() {
-    void purgeExpiredConversationMessages().catch(() => {
-      console.error("Unable to purge expired conversation messages")
-    })
+    void messageExpiryObservation
+      .run(purgeExpiredConversationMessages)
+      .catch((error: unknown) => {
+        errorLogs.captureInternal(error, "platform", "messages.expire")
+        console.error("Unable to purge expired conversation messages")
+      })
   }
 
   purgeExpiredMessages()

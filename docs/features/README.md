@@ -6,6 +6,46 @@ Use the date the feature was completed, and keep later implementation changes in
 
 ## Records
 
+- [Controlled local System Logs activation (Phase 5A)](system-logs-local-demo.md), developed 2026-11-16; ordinary Next/Express demonstration using owned synthetic in-memory data and current Superadmin sessions; default and production access remain closed.
+
+- [System Logs filter compatibility fix](system-logs-filter-compatibility.md), developed 2026-11-16; contextual conflicts and explicit minimal filter correction on scope changes; production remains disabled.
+
+- [Service Operations audit integration (Phase 4C)](system-logs-service-audit.md), developed 2026-11-16; six metadata-only non-internal request workflow event types, retained Client Management coverage and disjoint Project subset in one source; production remains disabled.
+
+- [Project Management audit integration (Phase 4B)](system-logs-project-audit.md), developed 2026-11-16; metadata-only non-internal milestone/staffing WorkflowEvents, explicit partial project coverage and unknown historical role/operation attribution; production remains disabled.
+
+- [Workforce Compliance audit integration (Phase 4A)](system-logs-attendance-audit.md), developed 2026-11-16; read-only Attendance audit metadata, explicit partial coverage, null historical role/operation attribution and existing pagination/details; production remains disabled.
+
+- [System Logs UI/UX refinement (Phase 3D)](system-logs-ui-refinement.md), developed 2026-11-16; workspace-scoped dates/search default, specialist side panel, compact notices, purposeful empty states and clearer status/count presentation; no API or production activation change.
+
+- [System Health (Phase 3C)](system-logs-system-health.md), developed 2026-11-16; reused bounded readiness probe, observed existing job outcomes and recent error summary in the third offline-gated System Logs view; production remains disabled.
+
+- [Errors & Exceptions UI (Phase 3B)](system-logs-error-ui.md), developed 2026-11-16; existing System Logs tabs/table/panel with offline-gated error reads, bounded filters and instance-local coverage warnings; production remains disabled.
+
+- [Error & Exception Logging foundation (Phase 3A)](system-logs-error-foundation.md), developed 2026-11-16; bounded instance-local sanitized error collection and internal Superadmin read contract; no endpoint/UI or production activation.
+
+- [System Logs durable access evidence foundation (Phase 2D.2A)](system-logs-durable-access-evidence.md), designed 2026-11-16; staged durable acknowledgement contract and fail-closed disclosure design; provider choice unresolved, production remains disabled.
+
+- [System Logs real offline integration (Phase 2D.3A)](system-logs-offline-integration.md), developed 2026-11-16; real Express/PGlite and built Next rewrite tests, distinct from mocked UI evidence; production remains disabled.
+
+- [System Logs deployment privilege assessment (Phase 2D.1B)](system-logs-deployment-privileges.md), assessed 2026-11-16; read-only operator pack and isolated role validation; actual deployed privilege verification blocked pending authorized evidence.
+
+- [System Logs local database security hardening (Phase 2D.1A)](system-logs-local-database-hardening.md), developed 2026-11-16; forward-only management-history guards validated locally, not deployed; production access remains disabled.
+
+- [System Logs production readiness and infrastructure audit (Phase 2D.0)](system-logs-production-readiness-audit.md), audited 2026-11-16; repository evidence and proposed release prerequisites only, production access remains disabled.
+
+- [System Logs Shared navigation and module-aware filters (Phase 2C.1)](system-logs-shared-navigation.md), developed 2026-11-16; UI-only refinement, production access remains disabled.
+
+- [System Logs & Diagnostics Superadmin UI (Phase 2C)](system-logs-superadmin-ui.md), developed 2026-11-16; management Activity & Audit, production API remains disabled.
+
+- [System Logs & Diagnostics Superadmin API (Phase 2B)](system-logs-superadmin-api.md), developed 2026-11-16; controlled offline validation only, production exposure disabled.
+
+- [System Logs backend regression contract reconciliation (Phase 2A.1)](system-logs-backend-regression-reconciliation.md), developed 2026-11-16; test-only corrections, no Phase 2B implementation.
+
+- [System Logs & Diagnostics management read adapters (Phase 2A)](system-logs-management-read-adapters.md), developed 2026-11-16; internal backend only, no API/UI exposure.
+
+- [System Logs & Diagnostics contracts and policies (Phase 1)](system-logs-contracts.md), documented 2026-11-16; design only, with [mutation endpoint coverage](system-logs-endpoint-coverage.md). No APIs, UI, emitters or schema changes implemented.
+
 - [Browser regression baseline and contract remediation (Phase 4C.1)](browser-regression-contract-remediation.md), developed 2026-11-15; [preserved initial baseline](browser-regression-baseline.md).
 
 - [Team management actor attribution (Phase 4B.4B.5D)](team-management-attribution.md), developed 2026-11-15.

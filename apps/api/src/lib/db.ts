@@ -7,6 +7,11 @@ import { PrismaClient } from "../generated/prisma/client.js"
 
 let client: PrismaClient | undefined
 
+/** Local demo ownership must be established before any application pool exists. */
+export function hasDatabaseClient() {
+  return client !== undefined
+}
+
 const trustedDatabaseCas = [
   ...new Set([
     ...getCACertificates("bundled"),

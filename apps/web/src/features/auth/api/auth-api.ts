@@ -12,10 +12,12 @@ let sessionVersion = 0
 
 export class ApiError extends Error {
   readonly status: number
+  readonly responseBody: unknown
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, responseBody?: unknown) {
     super(message)
     this.status = status
+    this.responseBody = responseBody
   }
 }
 
@@ -67,7 +69,7 @@ async function responseError(response: Response) {
       : "Something went wrong. Please try again."
   const code =
     "code" in body && typeof body.code === "string" ? body.code : undefined
-  return { error: new ApiError(message, response.status), code }
+  return { error: new ApiError(message, response.status, payload), code }
 }
 
 async function refreshSession(version: number) {

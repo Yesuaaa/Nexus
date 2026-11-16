@@ -379,11 +379,16 @@ test(
     assert.equal((ungrouped.payload as WorkspaceDetails).projectCount, 1)
 
     for (const actor of [admin, staff, client]) {
-      const denied = await request(
-        actor,
-        detailsPath(design.id, `group:${shared.id}`),
-      )
-      assert.equal(denied.status, 403)
+      // Ordinary roles are denied before workspace lookup, regardless of existence.
+      for (const identity of [
+        `group:${shared.id}`,
+        `group:${otherOnly.id}`,
+        "group:missing-workspace",
+      ]) {
+        const denied = await request(actor, detailsPath(design.id, identity))
+        assert.equal(denied.status, 403)
+        assert.deepEqual(denied.payload, { error: "Insufficient permissions" })
+      }
     }
     assert.equal(
       (
@@ -407,21 +412,26 @@ test(
       )
     }
     assert.equal(
-      (await request(admin, detailsPath(design.id, `group:${otherOnly.id}`)))
-        .status,
+      (
+        await request(
+          superadmin,
+          detailsPath(design.id, `group:${otherOnly.id}`),
+        )
+      ).status,
       404,
     )
     assert.equal(
       (
         await request(
-          admin,
+          superadmin,
           detailsPath(design.id, `ungrouped-project:${designProject.id}`),
         )
       ).status,
       404,
     )
     assert.equal(
-      (await request(admin, detailsPath(design.id, `legacy-bare-id`))).status,
+      (await request(superadmin, detailsPath(design.id, `legacy-bare-id`)))
+        .status,
       400,
     )
   },

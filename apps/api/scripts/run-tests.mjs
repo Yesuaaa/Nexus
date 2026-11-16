@@ -72,8 +72,14 @@ await cp(
   join(apiRoot, "../../certs/supabase-root-2021.crt"),
   join(runRoot, "certs/supabase-root-2021.crt"),
 )
-
 const args = process.argv.slice(2)
+// Only the explicit PostgreSQL fixture requires this operator asset. Ordinary
+// API tests (including app-only Docker checkouts) keep their existing inputs.
+if (args.includes("tests/support/management-history-postgres.ts"))
+  await cp(
+    join(apiRoot, "../../docs/operations/system-logs-privilege-inspection.sql"),
+    join(compiledApi, "tests/support/system-logs-privilege-inspection.sql"),
+  )
 if (args[0] === "--fixture") {
   const entry = args[1]
   if (args.length !== 2 || !/^tests\/support\/[\w-]+\.ts$/.test(entry ?? ""))

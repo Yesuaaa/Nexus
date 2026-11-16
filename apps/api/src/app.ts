@@ -30,12 +30,19 @@ import { administrativeProjectsRouter } from "./features/projects/administrative
 import { administrativeRequestsRouter } from "./features/request-inbox/administrative-requests.js"
 import { administrativeWorkloadRouter } from "./features/workload/administrative-workload.controller.js"
 import { administrativeConversationsRouter } from "./features/request-conversations/administrative-conversations.controller.js"
+import { createSystemLogsRouter } from "./features/system-logs/system-logs.controller.js"
+import { errorLogs } from "./features/error-logs/error-log.js"
+import type { LocalDemoAccess } from "./features/system-logs/local-demo.js"
 
 export function createApp(
   options: {
     conversationRealtime?: ConversationRealtime
     attendanceClock?: () => Date
     isShuttingDown?: () => boolean
+    /** Native offline tests only; production is unconditionally denied. */
+    systemLogsOfflineFixture?: () => boolean
+    /** Process-owned synthetic database only; never an environment enable flag. */
+    systemLogsLocalDemo?: LocalDemoAccess
   } = {},
 ) {
   const app = express()
@@ -44,6 +51,15 @@ export function createApp(
   app.use(securityHeaders)
   app.use(cors({ origin: process.env.WEB_ORIGIN || "http://localhost:5173" }))
   app.use("/api", noStore)
+  app.use(errorLogs.middleware)
+  app.use(
+    "/api/system-logs",
+    createSystemLogsRouter(
+      options.systemLogsOfflineFixture,
+      options.isShuttingDown,
+      options.systemLogsLocalDemo,
+    ),
+  )
   app.use(devErrorInterceptor)
   app.use("/api/services", servicesRouter)
   app.use(
