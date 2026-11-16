@@ -37,7 +37,7 @@ const scenarios = [
     role: "STAFF",
     expected: [
       ["Project Management", "/project-workspace"],
-      ["Attendance & Monitoring", "/attendance/check-ins"],
+      ["Workforce Compliance", "/attendance/check-ins"],
     ],
   },
   {
@@ -47,7 +47,7 @@ const scenarios = [
     expected: [
       ["Service Operations", "/request-inbox"],
       ["Project Management", "/project-workspace"],
-      ["Attendance & Monitoring", "/attendance/overview"],
+      ["Workforce Compliance", "/attendance/overview"],
     ],
   },
   {
@@ -56,7 +56,7 @@ const scenarios = [
     expected: [
       ["Service Operations", "/services"],
       ["People & HR", "/employees"],
-      ["Attendance & Monitoring", "/attendance/overview"],
+      ["Workforce Compliance", "/attendance/overview"],
     ],
   },
   {
@@ -66,7 +66,7 @@ const scenarios = [
       ["Service Operations", "/services"],
       ["Project Management", "/project-management/overview"],
       ["People & HR", "/employees"],
-      ["Attendance & Monitoring", "/attendance/dashboard"],
+      ["Workforce Compliance", "/attendance/time-logs/overview"],
       ["Administration", "/accounts"],
     ],
   },

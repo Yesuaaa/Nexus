@@ -47,7 +47,7 @@ test(
     )
     assert.equal(
       modules.find((module) => module.id === "attendance-monitoring")?.href,
-      "/attendance/dashboard",
+      "/attendance/time-logs/overview",
     )
     for (const id of [
       "unknown",
@@ -62,6 +62,7 @@ test(
       future: {
         ...moduleRegistry["project-management"],
         title: "Future Module",
+        administrativePath: null,
       },
     }
     assert.equal(

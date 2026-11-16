@@ -178,15 +178,12 @@ export function AttendanceAdjustmentsPage({
             }}
             options={[
               { value: "", label: "All statuses" },
-              ...["PENDING", "VERIFIED", "APPROVED", "REJECTED"]
-                .filter(
-                  (value) =>
-                    requestType !== "CORRECTION" || value !== "VERIFIED",
-                )
-                .map((value) => ({
+              ...["PENDING", "VERIFIED", "APPROVED", "REJECTED"].map(
+                (value) => ({
                   value,
                   label: value.charAt(0) + value.slice(1).toLowerCase(),
-                })),
+                }),
+              ),
             ]}
           />
         </div>
@@ -215,8 +212,10 @@ export function AttendanceAdjustmentsPage({
       </div>
       <p className="mb-4 text-xs text-[#738096]">
         Overtime is submitted automatically at clock-out for Department Head
-        verification and HR approval. Corrections update attendance after
-        approval. Session details show your device timezone: {zone}.
+        verification and HR approval. Corrections follow the same review stages
+        and update attendance only after final approval. Superadmin can approve
+        or reject at either stage. Session details show your device timezone:{" "}
+        {zone}.
       </p>
       <ResourceStatus
         loading={false}

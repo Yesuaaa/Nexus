@@ -12,7 +12,7 @@ export function AttendanceEntryPage() {
     router.replace(
       canAccessPersonalAttendance(account)
         ? "/attendance/check-ins"
-        : "/attendance/dashboard",
+        : "/attendance/time-logs/overview",
     )
   }, [account, router])
   return <p role="status">Opening attendance…</p>

@@ -72,7 +72,11 @@ function adjustmentActions(
             ? {
                 ...entry,
                 label: (
-                  <RowActionLabel icon={Check}>Verify overtime</RowActionLabel>
+                  <RowActionLabel icon={Check}>
+                    {item.type === "OVERTIME"
+                      ? "Verify overtime"
+                      : "Verify correction"}
+                  </RowActionLabel>
                 ),
               }
             : entry,

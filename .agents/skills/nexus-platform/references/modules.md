@@ -4,6 +4,8 @@ Verified against the working tree on 2026-11-15, including uncommitted implement
 
 ## Accounts and module access
 
+Account editing (2026-11-16): Superadmin Account Management uses a row-action edit panel for name, email, contact number and permitted role changes. `PATCH /api/users/:id` saves profile and role atomically with management history; self-role changes and leadership/promotion restrictions remain enforced. Employee HR fields and department/team assignment remain in People & HR. The inline Access column and bulk role save are removed.
+
 Implemented: account administration, JWT/session/refresh handling, fixed permissions, administrative capabilities, module registration, and route policy. Start with API `src/features/auth`, `users`, `modules`, and web `src/features/auth`, `accounts`, `workspaces`.
 
 - `SUPERADMIN` has account-management and global administrative grants. Current `ADMIN` permissions include people/departments/services and separate `clients:read` / `clients:create`, but no `accounts:*`. Feature-specific Employee/Client provisioning has separate authorization.
@@ -14,6 +16,8 @@ Implemented: account administration, JWT/session/refresh handling, fixed permiss
 Read `docs/rbac.md` and these records under `docs/features/`: `module-role-access.md`, `superadmin-authorization-foundation.md`, `superadmin-module-registration.md`, `client-creation-permission-separation.md`. Trace both permission maps and affected controllers/services before changing access.
 
 ## People, departments, clients, and attribution
+
+Attendance review update (2026-11-16): overtime and corrections share Head verification → HR final decision. HR organization queues/counts/notifications exclude pending Head reviews; Superadmin can decide at either stage, preserving self-review denials, validation, and audit attribution. Correction verification does not mutate sessions. See migration `20261116120000_attendance_correction_verification` and `docs/features/attendance-interface.md`.
 
 Implemented: HR records distinct from login accounts, account/employee lifecycle, client management, department/team structure and leadership, temporary head handoff/restoration, and scoped management attribution. Sources: API `src/features/employees`, `users`, `departments`, `clients`, and `src/shared/management-history.ts`; schema `AccountManagementChange` / `WorkforceManagementChange`.
 

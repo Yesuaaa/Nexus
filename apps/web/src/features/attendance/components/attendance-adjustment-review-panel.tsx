@@ -4,7 +4,6 @@ import { useState } from "react"
 import { Alert } from "@/components/ui/alert"
 import { Form } from "@/components/ui/form"
 import { FormTextarea } from "@/components/ui/form-input"
-import { MemberIdentity } from "@/components/ui/member-identity"
 import { Pill } from "@/components/ui/pill"
 import {
   DetailItem,
@@ -57,6 +56,15 @@ export function AttendanceAdjustmentReviewPanel({
     request.status === "VERIFIED"
       ? "Verified — awaiting HR"
       : request.status.charAt(0) + request.status.slice(1).toLowerCase()
+  const requestTitle =
+    request.type === "OVERTIME" ? "Overtime request" : "Attendance correction"
+  const workflowNote = verifying
+    ? "Verification sends this request to HR for final approval."
+    : request.status === "VERIFIED"
+      ? "This request has been verified by the Department Head and is awaiting HR's final decision."
+      : request.type === "OVERTIME"
+        ? "Overtime approval records approved minutes without modifying attendance timestamps."
+        : "Attendance changes are applied only after final approval."
 
   return (
     <SidePanel
@@ -70,12 +78,12 @@ export function AttendanceAdjustmentReviewPanel({
       <SidePanelHeader
         title={
           readOnlyView
-            ? "Request details"
+            ? requestTitle
             : `${verifying ? "Verify" : approving ? "Approve" : "Reject"} ${request.type === "OVERTIME" ? "overtime" : "attendance correction"}`
         }
         description={
           readOnlyView
-            ? `View ${request.employee.fullName}'s request details.`
+            ? `Submitted by ${request.employee.fullName}.`
             : `Review ${request.employee.fullName}'s request before recording your decision.`
         }
         closeLabel="Close request details"
@@ -92,18 +100,31 @@ export function AttendanceAdjustmentReviewPanel({
       >
         <SidePanelBody>
           {error && <Alert>{error}</Alert>}
-          <SidePanelSection title="Request details">
-            <MemberIdentity
-              member={request.employee}
-              secondaryText={
-                request.type === "OVERTIME"
-                  ? `${request.overtimeMinutes} overtime minutes`
-                  : request.sessionId
+          <SidePanelSection title="Request summary">
+            <DetailList>
+              <DetailItem label="Employee">
+                {request.employee.fullName}
+              </DetailItem>
+              {request.type === "OVERTIME" && (
+                <DetailItem label="Requested duration">
+                  {request.overtimeMinutes} minutes
+                </DetailItem>
+              )}
+              {request.type === "CORRECTION" && (
+                <DetailItem label="Attendance source">
+                  {request.sessionId
                     ? "Session correction"
-                    : "Missing attendance"
-              }
-            />
-            <DetailList layout="stacked">
+                    : "Missing attendance"}
+                </DetailItem>
+              )}
+              <DetailItem label="Request type">
+                {request.type === "OVERTIME"
+                  ? "Overtime"
+                  : "Attendance correction"}
+              </DetailItem>
+              <DetailItem label="Status">
+                <Pill tone={statusTone}>{statusLabel}</Pill>
+              </DetailItem>
               <DetailItem
                 label={
                   request.type === "OVERTIME"
@@ -117,13 +138,6 @@ export function AttendanceAdjustmentReviewPanel({
                 <span className="mt-1 block">
                   {attendanceDate(request.proposedEndedAt, zone)}
                 </span>
-              </DetailItem>
-              <DetailItem label="Status">
-                <Pill tone={statusTone}>
-                  {request.status === "VERIFIED"
-                    ? "Verified — awaiting HR"
-                    : statusLabel}
-                </Pill>
               </DetailItem>
               <DetailItem label="Reason">
                 <span className="whitespace-pre-wrap text-[#65718a]">
@@ -147,13 +161,9 @@ export function AttendanceAdjustmentReviewPanel({
                 </DetailItem>
               )}
             </DetailList>
-            {request.type === "OVERTIME" && (
-              <p className="m-0 text-xs text-[#738096]">
-                {verifying
-                  ? "Verification sends this request to HR for final approval."
-                  : "Overtime approval records approved minutes without modifying attendance timestamps."}
-              </p>
-            )}
+            <p className="m-0 text-xs leading-relaxed break-words text-[#52627a]">
+              {workflowNote}
+            </p>
           </SidePanelSection>
           {!readOnlyView && (
             <SidePanelSection

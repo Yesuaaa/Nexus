@@ -46,7 +46,7 @@ Use the date the feature was completed, and keep later implementation changes in
 
 - [Superadmin People & HR administrative access (Phase 3C.2)](superadmin-people-hr-administration.md), developed 2026-11-14.
 
-- [Superadmin Attendance & Monitoring administration (Phase 3C.1)](superadmin-attendance-administration.md), developed 2026-11-14.
+- [Superadmin Workforce Compliance administration (Phase 3C.1)](superadmin-attendance-administration.md), developed 2026-11-14.
 
 - [Superadmin service request workflow oversight (Phase 3B.3A)](superadmin-workflow-oversight.md), developed 2026-11-14.
 

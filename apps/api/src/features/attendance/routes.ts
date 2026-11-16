@@ -85,6 +85,14 @@ export function createAttendanceRouter(clock: () => Date = () => new Date()) {
       .status(201)
       .json(await management.assignPolicy(req.auth!.user.id, req.body))
   })
+  router.post("/assignments/:assignmentId/unassign", async (req, res) => {
+    res.json(
+      await management.unassignPolicy(
+        req.auth!.user.id,
+        String(req.params.assignmentId),
+      ),
+    )
+  })
   router.get("/adjustments/overview", async (req, res) => {
     res.json(await management.adjustmentOverview(req.auth!.user.id, req.query))
   })

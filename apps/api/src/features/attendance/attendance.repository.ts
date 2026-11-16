@@ -2,7 +2,7 @@ import type { Prisma } from "../../generated/prisma/client.js"
 
 export const attendanceSessionInclude = {
   adjustments: {
-    where: { status: "PENDING", type: "CORRECTION" },
+    where: { status: { in: ["PENDING", "VERIFIED"] }, type: "CORRECTION" },
     select: { id: true },
   },
   breaks: { orderBy: [{ startedAt: "asc" }, { id: "asc" }] },

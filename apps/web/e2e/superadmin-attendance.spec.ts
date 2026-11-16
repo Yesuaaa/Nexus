@@ -258,19 +258,19 @@ for (const width of [1440, 390])
     await page.goto("/module")
     await page
       .getByRole("link", {
-        name: "Open Attendance & Monitoring workspace",
+        name: "Open Workforce Compliance workspace",
         exact: true,
       })
       .click()
-    await expect(page).toHaveURL(/\/attendance\/dashboard$/)
+    await expect(page).toHaveURL(/\/attendance\/time-logs\/overview$/)
     await expect(
       page.getByRole("heading", {
-        name: "Attendance & Monitoring Dashboard",
+        name: "Time Logs Overview",
         exact: true,
       }),
     ).toBeVisible()
     await page.goto("/attendance")
-    await expect(page).toHaveURL(/\/attendance\/dashboard$/)
+    await expect(page).toHaveURL(/\/attendance\/time-logs\/overview$/)
     await page.goto("/attendance/time-logs/records")
     await page.getByRole("button", { name: "All logs", exact: true }).click()
     await expect(
@@ -322,12 +322,15 @@ for (const width of [1440, 390])
       page.getByRole("menuitem", { name: "Reject request", exact: true }),
     ).toBeVisible()
     await page.keyboard.press("Escape")
-    await page.goto("/attendance/policies/assignments")
+    await page.goto("/attendance/policies/management")
     await page
-      .getByRole("combobox", { name: "Assignment policy", exact: true })
+      .getByRole("button", {
+        name: "More actions for Flexible policy",
+        exact: true,
+      })
       .click()
     await page
-      .getByRole("option", { name: "Flexible policy", exact: true })
+      .getByRole("menuitem", { name: "View policy details", exact: true })
       .click()
     await expect(
       page.getByText("Engineering Employee", { exact: true }),

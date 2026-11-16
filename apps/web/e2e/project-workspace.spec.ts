@@ -1961,7 +1961,7 @@ test("Superadmin Overview refreshes after a project cancellation in another tab"
 
   await page.goto("/project-management/overview")
   await expect(
-    page.getByRole("heading", { name: "Project Management Overview" }),
+    page.getByRole("heading", { name: "Project Overview" }),
   ).toBeVisible()
   await expect(
     page.getByText("Cross-tab project", { exact: true }),
