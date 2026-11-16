@@ -1,212 +1,316 @@
-import { ArrowRight, CheckCircle2, Circle } from "lucide-react"
-import { Avatar } from "@/components/ui/avatar"
-import { pillToneClass } from "@/components/ui/pill"
-import { ProgressMeter } from "@/components/ui/stat-strip"
-import { statusTone } from "@/features/projects/model/project-status"
-import { humanizeEnum } from "@/lib/format"
+"use client"
+
+import {
+  ArrowRight,
+  ClipboardList,
+  FileText,
+  ListChecks,
+  MessageSquareText,
+} from "lucide-react"
+import Link from "next/link"
+import { usePortalAccount } from "@/features/auth/providers/account-context"
+import { Button } from "@/components/ui/button"
+import { EmptyState } from "@/components/ui/empty-state"
+import { MemberIdentity } from "@/components/ui/member-identity"
+import { Pill } from "@/components/ui/pill"
+import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
+import {
+  ProgressMeter,
+  StatStrip,
+  type StatStripItem,
+} from "@/components/ui/stat-strip"
 import type { ProjectWorkspaceDetail } from "../api/project-workspace-api"
 import {
-  deliverableStatusClass,
-  deliverableStatusLabel,
-} from "./deliverable-status"
+  getProjectOverviewAttention,
+  summarizeProjectOverview,
+  type ProjectOverviewSection,
+} from "../model/project-overview-summary"
 
 export function ProjectSummary({
   workspace,
-  onViewTeam,
-  onViewDeliverables,
+  sectionHref,
+  departmentName,
+  workspaceName,
   readOnly = false,
 }: {
   workspace: ProjectWorkspaceDetail
-  onViewTeam: () => void
-  onViewDeliverables: () => void
+  sectionHref: (section: ProjectOverviewSection) => string
+  departmentName?: string | null
+  workspaceName?: string | null
   readOnly?: boolean
 }) {
-  const tasks = workspace.workstreams.flatMap(
-    (stream) => stream.plan?.phases.flatMap((phase) => phase.tasks) ?? [],
+  const account = usePortalAccount()
+  const { formatDate } = useDatePreferences()
+  const summary = summarizeProjectOverview(workspace)
+  const attention = getProjectOverviewAttention(
+    workspace,
+    account.id,
+    account.role,
   )
-  const done = tasks.filter((task) => task.status === "DONE").length
-  const percent = tasks.length ? Math.round((done / tasks.length) * 100) : 0
+  const percent = summary.tasks.total
+    ? Math.round((summary.tasks.completed / summary.tasks.total) * 100)
+    : 0
+  const streamDates = workspace.workstreams
+    .flatMap((stream) => (stream.startDate ? [stream.startDate] : []))
+    .sort()
+  const serviceNames = [
+    ...new Set(workspace.workstreams.map((stream) => stream.serviceName)),
+  ]
   const staff = [
     ...new Map(
       workspace.workstreams.flatMap((stream) =>
-        (stream.staff ?? []).map((person) => [person.id, person] as const),
+        (stream.staff ?? []).map((person) => [
+          person.id,
+          {
+            ...person,
+            isTeamLead: person.isTeamLead || false,
+          },
+        ]),
       ),
     ).values(),
   ]
-  const dates = workspace.workstreams
-    .flatMap((stream) => (stream.startDate ? [stream.startDate] : []))
-    .sort()
+  const items: StatStripItem[] = [
+    {
+      label: "Task Progress",
+      value: summary.tasks.total ? percent + "%" : "No tasks",
+      caption: summary.tasks.total
+        ? summary.tasks.completed +
+          " of " +
+          summary.tasks.total +
+          " tasks complete"
+        : "No tasks are recorded",
+      icon: ListChecks,
+      tone: "bg-[#e7eefb] text-[#294c96]",
+      href: sectionHref("work"),
+      ariaLabel: "View task progress",
+      meter: summary.tasks.total ? (
+        <ProgressMeter
+          value={summary.tasks.completed}
+          max={summary.tasks.total}
+          label="Overall task progress"
+          colorClass="bg-[#294c96]"
+        />
+      ) : undefined,
+    },
+    {
+      label: "Deliverables",
+      value:
+        summary.deliverables.sentToClient +
+        " / " +
+        summary.deliverables.total +
+        " sent to client",
+      caption:
+        summary.deliverables.pendingReview +
+        " internal reviews pending · " +
+        summary.deliverables.revisionRequired +
+        " needs changes",
+      icon: ClipboardList,
+      tone: "bg-[#e8f3ed] text-[#267449]",
+      href: sectionHref("deliverables"),
+      ariaLabel: "View deliverables",
+      unavailable: !summary.deliverables.available,
+    },
+    {
+      label: "Project Notes",
+      value: summary.notes.total + " unique notes",
+      caption:
+        summary.notes.awaitingReview +
+        " awaiting review · " +
+        summary.notes.published +
+        " published",
+      icon: FileText,
+      tone: "bg-[#f2ecfb] text-[#7044a4]",
+      href: sectionHref("notes"),
+      ariaLabel: "View project notes",
+      unavailable: !summary.notes.available,
+    },
+    {
+      label: "Client Requests",
+      value: summary.requests.total + " requests",
+      caption:
+        account.role === "SUPERADMIN"
+          ? summary.requests.pending + " pending · read-only project inspection"
+          : summary.requests.actionable
+            ? summary.requests.pending +
+              " pending · " +
+              summary.requests.actionable +
+              " need your decision"
+            : summary.requests.pending +
+              " pending · no decisions assigned to you",
+      icon: MessageSquareText,
+      tone: "bg-[#fff2e2] text-[#986018]",
+      href: sectionHref("requests"),
+      ariaLabel: "View client requests",
+      unavailable: !summary.requests.available,
+    },
+  ]
+  const metadata = [
+    ["Client", workspace.client.fullName || "Client"],
+    ["Service", serviceNames.length ? serviceNames.join(", ") : "Unavailable"],
+    ["Started", streamDates[0] ? formatDate(streamDates[0]) : "Not started"],
+    ["Department", departmentName ?? account.department?.name],
+    ["Workspace", workspaceName],
+  ].filter((item): item is [string, string] => Boolean(item[1]))
+
   return (
-    <div className="space-y-5">
-      <section
-        className="grid overflow-hidden rounded-xl border border-[#dfe5ec] bg-[#fbfcfd] shadow-[0_2px_8px_rgb(24_41_68_/_4%)] lg:grid-cols-[minmax(0,1fr)_320px]"
-        aria-labelledby="project-details-heading"
+    <div className="min-w-0">
+      <dl
+        aria-label="Project details"
+        className="m-0 flex flex-wrap gap-x-7 gap-y-3 rounded-xl border border-[#dfe5ec] bg-white px-4 py-3.5"
       >
-        <div className="p-5 sm:p-6">
-          <h2
-            id="project-details-heading"
-            className="mt-0 mb-5 text-sm font-semibold"
-          >
-            Project details
-          </h2>
-          <dl className="m-0 grid gap-x-8 gap-y-5 text-xs sm:grid-cols-2">
-            {[
-              ["Client", workspace.client.fullName || "Client"],
-              [
-                "Services",
-                workspace.workstreams
-                  .map((stream) => stream.serviceName)
-                  .join(", "),
-              ],
-              ["Status", humanizeEnum(workspace.status, { capitalize: false })],
-              [
-                "Started",
-                dates[0]
-                  ? new Date(dates[0]).toLocaleDateString()
-                  : "Not started",
-              ],
-            ].map(([label, value]) => (
-              <div key={label}>
-                <dt className="text-[#65718a]">{label}</dt>
-                <dd className="m-0 mt-1.5 leading-5 font-medium">
-                  {label === "Status" ? (
-                    <span
-                      className={`inline-flex rounded-md px-2 py-0.5 text-[11px] capitalize ${pillToneClass(statusTone(workspace.status))}`}
-                    >
-                      {value}
-                    </span>
-                  ) : (
-                    value
-                  )}
-                </dd>
-              </div>
+        {metadata.map(([label, value]) => (
+          <div key={label} className="min-w-0">
+            <dt className="text-[10px] font-medium uppercase tracking-wide text-[#738096]">
+              {label}
+            </dt>
+            <dd className="m-0 mt-1 max-w-[280px] text-xs font-medium text-[#26364e] [overflow-wrap:anywhere]">
+              {value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+
+      <StatStrip
+        items={items}
+        label="Project overview summary"
+        pending={false}
+        unavailable={false}
+        compact
+        variant="cards"
+        className="mt-4"
+      />
+
+      <section
+        aria-label={attention.heading}
+        className="mt-5 rounded-xl border border-[#dfe5ec] bg-white p-4 sm:p-5"
+      >
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="grid size-7 place-items-center rounded-lg bg-[#f2f5fa] text-[#415b83]">
+              <ClipboardList size={15} aria-hidden="true" />
+            </span>
+            <h2 className="m-0 text-sm font-semibold">{attention.heading}</h2>
+          </div>
+          {account.role === "SUPERADMIN" && (
+            <Pill tone="neutral">Read only</Pill>
+          )}
+        </header>
+        {attention.items.length ? (
+          <ul className="mt-3 grid list-none gap-2 p-0 sm:grid-cols-2">
+            {attention.items.map((item) => (
+              <li key={item.id} className="min-w-0">
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  className="h-auto min-h-10 w-full justify-between gap-3 whitespace-normal px-3 py-2 text-left"
+                >
+                  <Link href={sectionHref(item.section)}>
+                    <span className="min-w-0 flex-1">{item.label}</span>
+                    <ArrowRight
+                      size={14}
+                      className="shrink-0"
+                      aria-hidden="true"
+                    />
+                  </Link>
+                </Button>
+              </li>
             ))}
-          </dl>
-        </div>
-        <div className="flex flex-col justify-center border-t border-[#e5e9ef] bg-[#f5f7fb] p-5 sm:p-6 lg:border-t-0 lg:border-l">
-          <p className="m-0 text-xs font-medium text-[#60718c]">
-            Overall task progress
-          </p>
-          <p className="mt-3 mb-2 text-[32px] leading-none font-semibold tracking-tight text-[#203f8c]">
-            {percent}
-            <span className="text-xl">%</span>
-          </p>
-          <p className="mt-0 mb-4 text-xs text-[#65718a]">
-            {done} of {tasks.length} tasks complete
-          </p>
-          <ProgressMeter
-            value={percent}
-            max={100}
-            label="Overall task progress"
-            colorClass="bg-[#294c96]"
-          />
-        </div>
-      </section>
-      {workspace.workstreams.map((stream) => (
-        <section
-          key={stream.id}
-          className="grid overflow-hidden rounded-xl border border-[#dfe5ec] lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
-        >
-          <div className="p-5 sm:p-6">
-            <h2 className="mt-0 mb-3 text-sm font-semibold">
-              {workspace.workstreams.length > 1
-                ? stream.serviceName
-                : "Project scope"}
-            </h2>
-            <p className="m-0 max-w-prose whitespace-pre-wrap text-xs leading-6 text-[#60718c]">
-              {stream.description ||
-                "No project description has been provided."}
-            </p>
-          </div>
-          <div className="border-t border-[#e5e9ef] p-5 sm:p-6 lg:border-t-0 lg:border-l">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <h3 className="m-0 text-xs font-semibold">
-                Expected deliverables
-              </h3>
-              <span className="text-[11px] text-[#65718a]">
-                {stream.milestones?.filter(
-                  (item) => item.deliveryStatus === "SENT_TO_CLIENT",
-                ).length ?? 0}{" "}
-                / {stream.milestones?.length ?? 0} sent
-              </span>
-            </div>
-            {stream.milestones?.length ? (
-              <ul className="m-0 list-none divide-y divide-[#edf0f4] p-0">
-                {stream.milestones.map((item) => (
-                  <li
-                    key={item.id}
-                    className="flex items-center gap-3 py-3 text-xs"
-                  >
-                    {item.deliveryStatus === "SENT_TO_CLIENT" ? (
-                      <CheckCircle2
-                        size={17}
-                        className="shrink-0 text-[#294c96]"
-                      />
-                    ) : (
-                      <Circle size={17} className="shrink-0 text-[#94a3b8]" />
-                    )}
-                    <span className="flex-1">{item.title}</span>
-                    <span
-                      className={`rounded-md px-2 py-0.5 text-[10px] ${deliverableStatusClass(item.deliveryStatus)}`}
-                    >
-                      {deliverableStatusLabel(item.deliveryStatus)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-xs text-[#65718a]">
-                No deliverables recorded yet.
-              </p>
-            )}
-            <button
-              type="button"
-              onClick={onViewDeliverables}
-              className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-[#294c96] hover:underline"
-            >
-              View deliverables <ArrowRight size={14} aria-hidden="true" />
-            </button>
-          </div>
-        </section>
-      ))}
-      <section className="rounded-xl border border-[#dfe5ec] p-5 sm:p-6">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="m-0 text-sm font-semibold">
-            Assigned staff{" "}
-            <span className="font-normal text-[#65718a]">({staff.length})</span>
-          </h2>
-          <button
-            onClick={onViewTeam}
-            className="text-xs font-semibold text-[#294c96] hover:underline"
-          >
-            View team
-          </button>
-        </div>
-        {staff.length ? (
-          <div className="mt-4 divide-y divide-[#e9edf1] overflow-hidden rounded-lg border border-[#e2e6ec]">
-            {staff.map((person) => (
-              <div
-                key={person.id}
-                className="flex min-h-16 items-center gap-3 px-4 py-3 text-xs transition-colors hover:bg-[#fafbfd]"
-              >
-                <Avatar name={person.fullName} />
-                <div className="min-w-0">
-                  <p className="m-0 truncate font-medium">{person.fullName}</p>
-                  <p className="mt-1 mb-0 truncate text-[11px] text-[#65718a]">
-                    {person.position || "Staff"}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
+          </ul>
         ) : (
-          <p className="mb-0 mt-3 text-xs text-[#65718a]">
-            {readOnly
-              ? "No staff are assigned to this project."
-              : "No staff assigned yet. The department head can approve staffing from Team."}
-          </p>
+          <EmptyState
+            role="status"
+            title={
+              account.role === "SUPERADMIN"
+                ? "No outstanding oversight items"
+                : "Nothing needs your attention"
+            }
+            description={
+              account.role === "SUPERADMIN"
+                ? "No current reviews, escalations, or requests are available to inspect."
+                : "Your current review and revision queues are clear."
+            }
+            size="xs"
+            className="mt-2 border-0 bg-transparent"
+          />
         )}
       </section>
+
+      <div className="mt-5 grid min-w-0 gap-4 lg:grid-cols-2">
+        <section className="min-w-0 rounded-xl border border-[#dfe5ec] bg-white p-4 sm:p-5">
+          <header className="border-b border-[#e9edf2] pb-3">
+            <h2 className="m-0 text-sm font-semibold">Project brief</h2>
+          </header>
+          {workspace.workstreams.length ? (
+            <div className="divide-y divide-[#edf0f4]">
+              {workspace.workstreams.map((stream) => {
+                const description = stream.description?.trim()
+                return (
+                  <article key={stream.id} className="py-3.5 last:pb-0">
+                    {workspace.workstreams.length > 1 && (
+                      <h3 className="m-0 mb-1.5 text-xs font-semibold">
+                        {stream.serviceName}
+                      </h3>
+                    )}
+                    <p className="m-0 whitespace-pre-wrap text-xs leading-5 text-[#5f718b] [overflow-wrap:anywhere]">
+                      {description
+                        ? stream.description
+                        : "No project goals have been provided."}
+                    </p>
+                  </article>
+                )
+              })}
+            </div>
+          ) : (
+            <p className="mb-0 mt-3 text-xs leading-5 text-[#65718a]">
+              No project goals have been provided.
+            </p>
+          )}
+        </section>
+
+        <section className="min-w-0 rounded-xl border border-[#dfe5ec] bg-white p-4 sm:p-5">
+          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e9edf2] pb-3">
+            <div>
+              <h2 className="m-0 text-sm font-semibold">Assigned team</h2>
+              <p className="mt-1 mb-0 text-[11px] text-[#738096]">
+                {staff.length} {staff.length === 1 ? "person" : "people"}{" "}
+                assigned
+              </p>
+            </div>
+            <Button asChild variant="outline" size="sm">
+              <Link href={sectionHref("team")}>View team</Link>
+            </Button>
+          </header>
+          {staff.length ? (
+            <ul className="m-0 mt-1 list-none divide-y divide-[#edf0f4] p-0">
+              {staff.map((person) => (
+                <li key={person.id} className="py-3">
+                  <MemberIdentity
+                    member={{ fullName: person.fullName }}
+                    secondaryText={person.position || "Staff"}
+                    nameAdornment={
+                      person.isTeamLead ? (
+                        <Pill tone="brand">Team Lead</Pill>
+                      ) : undefined
+                    }
+                  />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <EmptyState
+              title="No assigned personnel"
+              description={
+                readOnly
+                  ? "No team members are listed in the available project data."
+                  : "The department head can approve staffing from Team."
+              }
+              size="sm"
+              className="mt-3"
+            />
+          )}
+        </section>
+      </div>
     </div>
   )
 }

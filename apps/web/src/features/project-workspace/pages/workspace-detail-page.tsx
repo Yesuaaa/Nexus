@@ -5,8 +5,14 @@ import { WorkspaceDeliverables } from "../components/workspace-deliverables"
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { CheckCircle2, ChevronDown, Pause, Play } from "lucide-react"
+import { useSearchParams } from "next/navigation"
+import {
+  CheckCircle2,
+  ChevronDown,
+  MessageSquare,
+  Pause,
+  Play,
+} from "lucide-react"
 import { contentClass } from "@/components/layout/styles"
 import { ProjectSummary } from "../components/project-summary"
 import { WorkspaceOverview } from "../components/workspace-overview"
@@ -39,6 +45,7 @@ import {
   getProjectWorkspace,
   type ProjectWorkspaceDetail,
 } from "../api/project-workspace-api"
+import type { ProjectOverviewSection } from "../model/project-overview-summary"
 import { errorMessage } from "@/lib/error-message"
 import { useAsyncResource } from "@/lib/use-async-resource"
 import { useBreadcrumbLabel } from "@/components/layout/breadcrumbs"
@@ -71,8 +78,6 @@ function readDetailTab(value: string | null): DetailTab {
 
 export function WorkspaceDetailPage({ id }: { id: string }) {
   const searchParams = useSearchParams()
-  const pathname = usePathname()
-  const router = useRouter()
   const project = useAsyncResource<{
     workspace: ProjectWorkspaceDetail | null
     error: string
@@ -114,13 +119,12 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
   const loadError = project.data?.error || project.error
   const error = actionError || (project.loading ? "" : loadError)
   const tab = readDetailTab(searchParams.get("tab"))
-  function setTab(next: DetailTab) {
+  const detailPath = `/project-workspace/${encodeURIComponent(id)}`
+  function tabHref(next: DetailTab) {
     const query = new URLSearchParams(searchParams.toString())
     if (next === "overview") query.delete("tab")
     else query.set("tab", next)
-    router.push(`${pathname}${query.size ? `?${query}` : ""}`, {
-      scroll: false,
-    })
+    return `${detailPath}${query.size ? `?${query}` : ""}`
   }
   const [busy, setBusy] = useState(false)
   const [statusBusy, setStatusBusy] = useState(false)
@@ -169,6 +173,9 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
     (stream) => stream.plan?.phases.flatMap((phase) => phase.tasks) ?? [],
   )
   const deliverables = workstreams.flatMap((stream) => stream.milestones ?? [])
+  const chatWorkstreams = workstreams.filter(
+    (stream) => stream.canUploadDeliverables && stream.startDate,
+  )
   const terminal =
     workstreams.length > 0 &&
     workstreams.every((stream) =>
@@ -231,116 +238,102 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
         )
       ) : (
         <>
-          <header className="min-w-0">
-            <div className="flex min-w-0 items-start justify-between gap-4">
-              <h1 className="m-0 break-words text-[clamp(21px,2vw,25px)] leading-[1.25] font-[650] tracking-[-0.03em]">
+          <header className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+              <h1 className="m-0 min-w-0 break-words text-[clamp(21px,2vw,25px)] leading-[1.25] font-[650] tracking-[-0.03em]">
                 {workspace.name}
               </h1>
-              <div className="flex shrink-0 items-center gap-2">
-                <span
-                  className={`inline-flex items-center rounded-md px-2.5 py-1 text-[11px] font-medium capitalize ${pillToneClass(statusTone(workspace.status))}`}
-                >
-                  {humanizeEnum(workspace.status, { capitalize: false })}
-                </span>
-                {workspace.canManage && !terminal && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="brandOutline"
-                        size="sm"
-                        disabled={statusBusy}
-                        aria-label="Manage project status"
-                      >
-                        Manage status{" "}
-                        <ChevronDown size={14} aria-hidden="true" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="end"
-                      sideOffset={6}
-                      className={`${dropdownMenuClass} w-64 text-xs outline-none`}
+              <span
+                className={`inline-flex items-center rounded-md px-2.5 py-1 text-[11px] font-medium capitalize ${pillToneClass(statusTone(workspace.status))}`}
+              >
+                {humanizeEnum(workspace.status, { capitalize: false })}
+              </span>
+            </div>
+            <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
+              {chatWorkstreams.map((stream) => (
+                <Button key={stream.id} asChild variant="outline" size="sm">
+                  <Link
+                    href={`/messages?project=${encodeURIComponent(stream.id)}`}
+                    aria-label={`Chat with client · ${stream.name}`}
+                  >
+                    <MessageSquare size={15} aria-hidden="true" />
+                    Chat with client
+                  </Link>
+                </Button>
+              ))}
+              {workspace.canManage && !terminal && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="brandOutline"
+                      size="sm"
+                      disabled={statusBusy}
+                      aria-label="Manage project status"
                     >
-                      {workstreams.some(
-                        (stream) => stream.status === "IN_PROGRESS",
-                      ) && (
-                        <DropdownMenuItem
-                          disabled={statusBusy}
-                          className={dropdownItemClass}
-                          onSelect={() => void changeWorkspaceStatus("ON_HOLD")}
-                        >
-                          <span className="flex items-center gap-2">
-                            <Pause size={14} aria-hidden="true" /> Put on hold
-                          </span>
-                        </DropdownMenuItem>
-                      )}
-                      {workstreams.some(
-                        (stream) => stream.status === "ON_HOLD",
-                      ) && (
-                        <DropdownMenuItem
-                          disabled={statusBusy}
-                          className={dropdownItemClass}
-                          onSelect={() => void changeWorkspaceStatus("RESUME")}
-                        >
-                          <span className="flex items-center gap-2">
-                            <Play size={14} aria-hidden="true" /> Resume project
-                          </span>
-                        </DropdownMenuItem>
-                      )}
+                      Manage status <ChevronDown size={14} aria-hidden="true" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    sideOffset={6}
+                    className={`${dropdownMenuClass} w-64 text-xs outline-none`}
+                  >
+                    {workstreams.some(
+                      (stream) => stream.status === "IN_PROGRESS",
+                    ) && (
                       <DropdownMenuItem
-                        disabled={statusBusy || !canComplete}
+                        disabled={statusBusy}
                         className={dropdownItemClass}
-                        onSelect={() => void changeWorkspaceStatus("COMPLETE")}
+                        onSelect={() => void changeWorkspaceStatus("ON_HOLD")}
                       >
                         <span className="flex items-center gap-2">
-                          <CheckCircle2 size={14} aria-hidden="true" /> Mark
-                          complete
+                          <Pause size={14} aria-hidden="true" /> Put on hold
                         </span>
                       </DropdownMenuItem>
-                      {!canComplete && (
-                        <p className="m-0 px-2.5 py-2 text-[11px] leading-4 text-[#65718a]">
-                          {completionBlockReason}
-                        </p>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
-              </div>
+                    )}
+                    {workstreams.some(
+                      (stream) => stream.status === "ON_HOLD",
+                    ) && (
+                      <DropdownMenuItem
+                        disabled={statusBusy}
+                        className={dropdownItemClass}
+                        onSelect={() => void changeWorkspaceStatus("RESUME")}
+                      >
+                        <span className="flex items-center gap-2">
+                          <Play size={14} aria-hidden="true" /> Resume project
+                        </span>
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem
+                      disabled={statusBusy || !canComplete}
+                      className={dropdownItemClass}
+                      onSelect={() => void changeWorkspaceStatus("COMPLETE")}
+                    >
+                      <span className="flex items-center gap-2">
+                        <CheckCircle2 size={14} aria-hidden="true" /> Mark
+                        complete
+                      </span>
+                    </DropdownMenuItem>
+                    {!canComplete && (
+                      <p className="m-0 px-2.5 py-2 text-[11px] leading-4 text-[#65718a]">
+                        {completionBlockReason}
+                      </p>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </div>
           </header>
-          {workstreams.some(
-            (stream) => stream.canUploadDeliverables && stream.startDate,
-          ) && (
-            <div
-              className="mt-4 flex flex-wrap gap-2"
-              aria-label="Project chats"
-            >
-              {workstreams
-                .filter(
-                  (stream) => stream.canUploadDeliverables && stream.startDate,
-                )
-                .map((stream) => (
-                  <Button
-                    key={stream.id}
-                    asChild
-                    variant="outline"
-                    className="text-xs"
-                  >
-                    <Link
-                      href={`/messages?project=${encodeURIComponent(stream.id)}`}
-                    >
-                      Chat with client · {stream.name}
-                    </Link>
-                  </Button>
-                ))}
-            </div>
-          )}
           {tab === "overview" && (
-            <ProjectSummary
-              workspace={workspace}
-              onViewTeam={() => setTab("team")}
-              onViewDeliverables={() => setTab("deliverables")}
-            />
+            <div className="mt-3">
+              <ProjectSummary
+                workspace={workspace}
+                sectionHref={(section: ProjectOverviewSection) =>
+                  tabHref(section)
+                }
+              />
+            </div>
           )}
           {tab === "work" &&
             (editing ? (

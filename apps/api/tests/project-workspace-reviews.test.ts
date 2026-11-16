@@ -189,6 +189,96 @@ test(
     )
     assert.equal(selfReview.status, 403)
 
+    await t.test(
+      "Department Heads and assigned Team Leads can approve or reject their own submitted notes",
+      async () => {
+        for (const reviewer of [head, lead]) {
+          for (const action of ["APPROVE", "REJECT"] as const) {
+            const note = await prisma.projectNote.create({
+              data: {
+                projectId: project.id,
+                createdById: reviewer.id,
+                revisions: {
+                  create: {
+                    revision: 1,
+                    content: `${reviewer.fullName} authored note ${action}.`,
+                    authorId: reviewer.id,
+                    status: "SUBMITTED",
+                  },
+                },
+              },
+              select: {
+                id: true,
+                revisions: { select: { id: true } },
+              },
+            })
+            const revision = note.revisions[0]
+            assert.ok(revision)
+
+            const response = await api(
+              reviewer.id,
+              `${notePath}/${note.id}/revisions/${revision.id}/review`,
+              "PATCH",
+              {
+                action,
+                ...(action === "REJECT"
+                  ? { feedback: "This needs another pass." }
+                  : {}),
+                clientVisible: false,
+              },
+            )
+            assert.equal(response.status, 200, `${reviewer.fullName} ${action}`)
+
+            const reviewed = await prisma.projectNoteRevision.findUniqueOrThrow(
+              {
+                where: { id: revision.id },
+                select: { status: true, reviewedById: true },
+              },
+            )
+            assert.equal(
+              reviewed.status,
+              action === "APPROVE" ? "APPROVED" : "REJECTED",
+            )
+            assert.equal(reviewed.reviewedById, reviewer.id)
+          }
+
+          const ownNote = await prisma.projectNote.create({
+            data: {
+              projectId: project.id,
+              createdById: reviewer.id,
+              revisions: {
+                create: {
+                  revision: 1,
+                  content: `${reviewer.fullName} authored a note for revision testing.`,
+                  authorId: reviewer.id,
+                  status: "SUBMITTED",
+                },
+              },
+            },
+            select: { id: true, revisions: { select: { id: true } } },
+          })
+          const ownRevision = ownNote.revisions[0]
+          assert.ok(ownRevision)
+          const revisionRequest = await api(
+            reviewer.id,
+            `${notePath}/${ownNote.id}/revisions/${ownRevision.id}/review`,
+            "PATCH",
+            {
+              action: "REQUEST_REVISION",
+              feedback: "This needs another pass.",
+            },
+          )
+          assert.equal(revisionRequest.status, 403)
+          const unchangedRevision =
+            await prisma.projectNoteRevision.findUniqueOrThrow({
+              where: { id: ownRevision.id },
+              select: { status: true },
+            })
+          assert.equal(unchangedRevision.status, "SUBMITTED")
+        }
+      },
+    )
+
     const reviewPath = `${notePath}/${createdNote.id}/revisions/${createdNote.revisions[0]?.id}/review`
     const approved = await api(lead.id, reviewPath, "PATCH", {
       action: "APPROVE",

@@ -58,7 +58,12 @@ function canReviewRevision(
   revision: ProjectNoteRevision,
   userId: string,
 ) {
-  if (revision.authorId === userId) return false
+  if (revision.authorId === userId) {
+    return (
+      revision.status === "SUBMITTED" &&
+      (stream.isTeamLead || stream.isDepartmentHead)
+    )
+  }
   return (
     (stream.isTeamLead && revision.status === "SUBMITTED") ||
     (stream.isDepartmentHead &&
@@ -213,6 +218,7 @@ export function WorkspaceNotes({
                   >
                     <ol className="m-0 list-none space-y-4 p-0">
                       {note.revisions.map((revision) => {
+                        const isOwnReview = revision.authorId === account.id
                         const canReview = canReviewRevision(
                           stream,
                           revision,
@@ -322,15 +328,16 @@ export function WorkspaceNotes({
                                     disabled={
                                       busyKey === `review-${revision.id}`
                                     }
-                                    onChange={(event) =>
+                                    onChange={(event) => {
+                                      const feedback = event.currentTarget.value
                                       setReviewDrafts((current) => ({
                                         ...current,
                                         [revision.id]: {
                                           ...reviewDraft,
-                                          feedback: event.currentTarget.value,
+                                          feedback,
                                         },
                                       }))
-                                    }
+                                    }}
                                     placeholder="Add feedback when requesting changes or rejecting."
                                   />
                                 </label>
@@ -340,37 +347,40 @@ export function WorkspaceNotes({
                                     disabled={
                                       busyKey === `review-${revision.id}`
                                     }
-                                    onChange={(event) =>
+                                    onChange={(event) => {
+                                      const clientVisible =
+                                        event.currentTarget.checked
                                       setReviewDrafts((current) => ({
                                         ...current,
                                         [revision.id]: {
                                           ...reviewDraft,
-                                          clientVisible:
-                                            event.currentTarget.checked,
+                                          clientVisible,
                                         },
                                       }))
-                                    }
+                                    }}
                                   />
                                   Share with the client after approval
                                 </label>
                                 <div className="flex flex-wrap justify-end gap-2">
-                                  <Button
-                                    variant="outline"
-                                    disabled={
-                                      Boolean(busyKey) ||
-                                      reviewDraft.feedback.trim().length < 3
-                                    }
-                                    onClick={() =>
-                                      void review(
-                                        stream,
-                                        note,
-                                        revision,
-                                        "REQUEST_REVISION",
-                                      )
-                                    }
-                                  >
-                                    Request changes
-                                  </Button>
+                                  {!isOwnReview && (
+                                    <Button
+                                      variant="outline"
+                                      disabled={
+                                        Boolean(busyKey) ||
+                                        reviewDraft.feedback.trim().length < 3
+                                      }
+                                      onClick={() =>
+                                        void review(
+                                          stream,
+                                          note,
+                                          revision,
+                                          "REQUEST_REVISION",
+                                        )
+                                      }
+                                    >
+                                      Request changes
+                                    </Button>
+                                  )}
                                   <Button
                                     variant="danger"
                                     disabled={
@@ -441,12 +451,13 @@ export function WorkspaceNotes({
                             maxLength={4000}
                             rows={3}
                             disabled={Boolean(busyKey)}
-                            onChange={(event) =>
+                            onChange={(event) => {
+                              const content = event.currentTarget.value
                               setRevisionDrafts((current) => ({
                                 ...current,
-                                [note.id]: event.currentTarget.value,
+                                [note.id]: content,
                               }))
-                            }
+                            }}
                             placeholder="Update the note based on review feedback."
                           />
                         </label>
@@ -485,12 +496,13 @@ export function WorkspaceNotes({
                   maxLength={4000}
                   rows={3}
                   disabled={Boolean(busyKey)}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const content = event.currentTarget.value
                     setNoteDrafts((current) => ({
                       ...current,
-                      [stream.id]: event.currentTarget.value,
+                      [stream.id]: content,
                     }))
-                  }
+                  }}
                   placeholder="Write an internal project note for review."
                 />
               </label>

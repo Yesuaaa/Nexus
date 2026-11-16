@@ -1822,20 +1822,26 @@ export async function reviewProjectNoteRevision(
     })
     if (!revision)
       throw new ServiceRequestsError(404, "Project note revision not found")
-    if (revision.authorId === userId)
-      throw new ServiceRequestsError(403, "You cannot review your own note")
     const access = await projectWorkspaceReviewAccess(
       tx,
       context,
       project.id,
       acceptedDepartmentId,
     )
+    const isOwnReview = revision.authorId === userId
+    const canReviewOwnSubmission =
+      isOwnReview &&
+      revision.status === "SUBMITTED" &&
+      review.action !== "REQUEST_REVISION" &&
+      (access.isTeamLead || access.isDepartmentHead)
+    if (isOwnReview && !canReviewOwnSubmission)
+      throw new ServiceRequestsError(403, "You cannot review your own note")
     const leadCanReview = access.isTeamLead && revision.status === "SUBMITTED"
     const headCanReview =
       access.isDepartmentHead &&
       (revision.status === "ESCALATED" ||
         (!access.hasTeamLead && revision.status === "SUBMITTED"))
-    if (!leadCanReview && !headCanReview)
+    if (!canReviewOwnSubmission && !leadCanReview && !headCanReview)
       throw new ServiceRequestsError(
         403,
         access.hasTeamLead

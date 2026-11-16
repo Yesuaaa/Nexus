@@ -340,53 +340,33 @@ test("Superadmin project sections share navigation and remain read-only", async 
   expect(writes).toEqual([])
 })
 
-test("only backend-authorized workspace renaming is offered and failed writes retain input", async ({
+test("Superadmin project inspection does not expose workspace rename controls", async ({
   page,
 }) => {
   await restoreSession(page, "SUPERADMIN")
-  const managed = {
-    ...project,
-    capabilities: { ...project.capabilities, rename: true },
-  }
-  let attempts = 0
-  await page.route("**/api/administrative-projects/**", async (route) => {
-    if (route.request().method() === "PATCH") {
-      attempts++
-      expect(new URL(route.request().url()).pathname).toBe(
-        "/api/administrative-projects/project-1/workspace-name",
-      )
-      const payload = route.request().postDataJSON() as { name: string }
-      if (attempts === 1)
-        return route.fulfill({
-          status: 409,
-          json: { error: "Archived projects cannot be renamed" },
-        })
-      managed.name = payload.name
-      return route.fulfill({ json: { saved: true } })
-    }
-    return route.fulfill({ json: { project: managed } })
+  const writes: string[] = []
+  page.on("request", (request) => {
+    if (request.method() !== "GET") writes.push(request.url())
   })
-  await page.goto("/module/project-management?project=project-1")
-  await page
-    .getByLabel("Workspace name", { exact: true })
-    .fill("New workspace name")
-  await page
-    .getByRole("button", { name: "Rename workspace", exact: true })
-    .click()
-  await expect(
-    page.getByRole("alert").getByText("Archived projects cannot be renamed"),
-  ).toBeVisible()
-  await expect(page.getByLabel("Workspace name", { exact: true })).toHaveValue(
-    "New workspace name",
+  await page.route("**/api/administrative-projects/**", (route) =>
+    route.fulfill({
+      json: {
+        project: {
+          ...project,
+          capabilities: { ...project.capabilities, rename: true },
+        },
+      },
+    }),
   )
-  await page
-    .getByRole("button", { name: "Rename workspace", exact: true })
-    .click()
+  await page.goto("/module/project-management?project=project-1")
   await expect(
-    page.getByRole("heading", { name: "New workspace name", exact: true }),
+    page.getByRole("heading", { name: "Organization project", exact: true }),
   ).toBeVisible()
+  await expect(page.getByLabel("Workspace name", { exact: true })).toHaveCount(
+    0,
+  )
   await expect(
-    page.getByRole("button", { name: /approve|release|upload|cancel|assign/i }),
+    page.getByRole("button", { name: "Rename workspace", exact: true }),
   ).toHaveCount(0)
-  expect(attempts).toBe(2)
+  expect(writes).toEqual([])
 })

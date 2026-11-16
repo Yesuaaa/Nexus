@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
 import { MemberIdentity } from "@/components/ui/member-identity"
@@ -24,8 +24,8 @@ import {
   type AdminProjectManagementWorkspaceDetails,
   type ProjectWorkspaceDetail,
 } from "@/features/project-workspace/api/project-workspace-api"
-import { statusLabel } from "../model/project-status"
-import { AdministrativeWorkspaceName } from "../components/administrative-workspace-name"
+import { statusLabel, statusTone } from "../model/project-status"
+import type { ProjectOverviewSection } from "@/features/project-workspace/model/project-overview-summary"
 import {
   getAdministrativeProject,
   listAdministrativeProjects,
@@ -313,7 +313,6 @@ function AdministrativeProjectList() {
 }
 
 function AdministrativeProjectDetails({ id }: { id: string }) {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const result = useAsyncResource(
     (signal) => getAdministrativeProject(id, signal),
@@ -350,12 +349,12 @@ function AdministrativeProjectDetails({ id }: { id: string }) {
     )
   useBreadcrumbLabel(id, project?.name)
 
-  function setSection(next: ProjectSection) {
+  function sectionHref(next: ProjectSection) {
     const query = new URLSearchParams(searchParams.toString())
     query.set("project", id)
     if (next === "overview") query.delete("tab")
     else query.set("tab", next)
-    router.push(`${root}?${query}`, { scroll: false })
+    return `${root}?${query}`
   }
 
   const activityWorkspace: ProjectWorkspaceDetail | null =
@@ -386,46 +385,27 @@ function AdministrativeProjectDetails({ id }: { id: string }) {
       )}
       {project?.capabilities.read && (
         <>
-          <header className="mt-5 flex flex-wrap items-start justify-between gap-3">
-            <div>
+          <header className="mt-5 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <h2 className="m-0 text-xl font-semibold">{project.name}</h2>
-              <p className="mt-1 mb-0 text-sm text-muted-foreground">
-                {statusLabel(project.status)} ·{" "}
-                {project.department?.name ?? "No responsible department"} ·{" "}
-                {project.capabilities.rename
-                  ? "Workspace metadata management"
-                  : "Read only"}
-              </p>
+              <Pill tone={statusTone(project.status)}>
+                {statusLabel(project.status)}
+              </Pill>
             </div>
+            <Pill tone="neutral">Read only</Pill>
           </header>
           {section === "overview" ? (
-            <div className="mt-5 space-y-4">
-              <section className="rounded-xl border border-[#dfe4ec] p-4 sm:p-5">
-                <p className="m-0 text-xs text-[#65718a]">
-                  Workspace:{" "}
-                  {project.workspaceGroup?.name ?? "Standalone project"} (
-                  {project.workspaceGroup?.structure ?? "SEPARATE"})
-                </p>
-                {project.capabilities.rename && (
-                  <AdministrativeWorkspaceName
-                    key={project.workspaceGroup?.name ?? project.name}
-                    projectId={project.id}
-                    name={project.workspaceGroup?.name ?? project.name}
-                    grouped={Boolean(project.workspaceGroup)}
-                    onSaved={result.retry}
-                  />
-                )}
-                {project.workstreams[0]?.description && (
-                  <p className="mt-4 mb-0 whitespace-pre-wrap text-sm leading-6 text-[#52627a]">
-                    {project.workstreams[0].description}
-                  </p>
-                )}
-              </section>
+            <div className="mt-3">
               <ProjectSummary
                 workspace={project}
                 readOnly
-                onViewTeam={() => setSection("team")}
-                onViewDeliverables={() => setSection("deliverables")}
+                departmentName={project.department?.name}
+                workspaceName={
+                  project.workspaceGroup?.name ?? "Standalone project"
+                }
+                sectionHref={(next: ProjectOverviewSection) =>
+                  sectionHref(next)
+                }
               />
             </div>
           ) : section === "work" ? (
