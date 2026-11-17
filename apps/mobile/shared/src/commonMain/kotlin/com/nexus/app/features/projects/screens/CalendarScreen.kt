@@ -77,25 +77,26 @@ fun CalendarScreen(onBooking: () -> Unit, onEvent: (CalendarEvent) -> Unit, view
                         val chosen = date == selected
                         val events = byDate[date].orEmpty()
                         Column(Modifier.weight(1f).heightIn(min = 44.dp).clip(RoundedCornerShape(6.dp))
-                            .background(if (chosen) NexusColors.PrimaryBlue else Color.Transparent)
+                            .background(if (chosen) NexusColors.PrimaryBlue else if (events.isNotEmpty()) Color(0xFFE2ECFF) else Color.Transparent)
                             .semantics { contentDescription = "$date, ${events.size} events${if (chosen) ", selected" else ""}" }
                             .clickable { selectedValue = date.toString(); if (date.monthNumber != month.monthNumber) monthValue = LocalDate(date.year, date.monthNumber, 1).toString() }
                             .padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                            Text(date.dayOfMonth.toString(), fontSize = 13.sp, fontWeight = if (chosen || date == today) FontWeight.Bold else FontWeight.Normal,
+                            Text(date.dayOfMonth.toString(), fontSize = 13.sp, fontWeight = if (chosen || date == today || events.isNotEmpty()) FontWeight.Bold else FontWeight.Normal,
                                 color = if (chosen) Color.White else if (date.monthNumber != month.monthNumber) NexusColors.TextMuted else NexusColors.TextPrimary)
                             Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                                events.map { it.type }.distinct().take(3).forEach { type -> Box(Modifier.size(4.dp).background(if (chosen) Color.White else eventColor(type), CircleShape)) }
+                                events.map { it.type }.distinct().take(3).forEach { type -> Box(Modifier.size(6.dp).background(if (chosen) Color.White else eventColor(type), CircleShape)) }
                             }
                         }
                     }
                 }
             }
+            ProjectCopy("Highlighted dates have bookings or scheduled events.")
             HorizontalDivider(color = NexusColors.Border)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 listOf("consultation", "meeting", "milestone").forEach { type ->
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Box(Modifier.size(5.dp).background(eventColor(type), CircleShape))
-                        Text(statusLabel(type), fontSize = 10.sp, color = NexusColors.TextSecondary)
+                        Text(statusLabel(type), fontSize = 12.sp, color = NexusColors.TextSecondary)
                     }
                 }
             }

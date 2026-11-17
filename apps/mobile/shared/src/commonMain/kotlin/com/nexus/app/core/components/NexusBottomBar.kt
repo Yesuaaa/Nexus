@@ -18,6 +18,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -31,6 +32,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nexus.app.core.theme.NexusColors
 import com.nexus.app.navigation.BottomTab
+
+val LocalNexusBottomPadding = staticCompositionLocalOf { 0.dp }
 
 @Composable
 fun NexusBottomBar(
@@ -71,6 +74,7 @@ fun NexusBottomBar(
 
     Box(
         modifier = modifier
+            .background(Color.Transparent)
             .fillMaxWidth()
             .navigationBarsPadding()
             .padding(horizontal = 16.dp, vertical = if (layout.short) 6.dp else 10.dp),
