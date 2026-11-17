@@ -10,6 +10,9 @@ const staticAssetCsp = [
 ].join("; ")
 
 const nextConfig: NextConfig = {
+  experimental: {
+    agentUpgrade: "security",
+  },
   output: "standalone",
   poweredByHeader: false,
   outputFileTracingRoot: path.resolve(import.meta.dirname, "../.."),
