@@ -1,6 +1,6 @@
 export type CalendarEvent = {
   id: string
-  type: "consultation" | "meeting" | "milestone" | "task"
+  type: "consultation" | "meeting" | "milestone" | "task" | "leave"
   title: string
   context: string
   startsAt: string
@@ -12,6 +12,9 @@ export type CalendarEvent = {
   completed?: boolean
   deadline?: boolean
   unassigned?: boolean
+  allDay?: boolean
+  startDate?: string
+  endDateExclusive?: string
   staffMembers?: { id: string; name: string }[]
   department?: { id: string; name: string } | null
   project?: { id: string; name: string } | null
@@ -21,6 +24,14 @@ export type CalendarResponse = {
   events: CalendarEvent[]
   canViewTeam: boolean
   organization: boolean
+}
+
+export function calendarEventDate(event: CalendarEvent) {
+  return event.allDay && event.startDate
+    ? event.startDate
+    : new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Manila" }).format(
+        new Date(event.startsAt),
+      )
 }
 
 export function calendarEventStatus(event: CalendarEvent, today: string) {
@@ -40,7 +51,10 @@ export function calendarConflicts(events: CalendarEvent[], now: number) {
   const timed = events
     .filter(
       (event) =>
-        !event.completed && event.endsAt && Date.parse(event.endsAt) > now,
+        !event.allDay &&
+        !event.completed &&
+        event.endsAt &&
+        Date.parse(event.endsAt) > now,
     )
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt))
   for (let index = 0; index < timed.length; index++) {

@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import {
   calendarConflicts,
+  calendarEventDate,
   calendarEventStatus,
 } from "../src/features/calendar/model/calendar.ts"
 
@@ -10,6 +11,19 @@ const deadline = {
   deadline: true,
   startsAt: "2030-02-02T16:00:00.000Z",
 }
+
+test("all-day leave keeps its business date across timezones and DST boundaries", () => {
+  for (const date of ["2026-03-08", "2026-11-01"]) {
+    assert.equal(
+      calendarEventDate({
+        allDay: true,
+        startDate: date,
+        startsAt: `${date}T23:00:00Z`,
+      }),
+      date,
+    )
+  }
+})
 
 test("calendar deadlines use the Philippine due date and actual completion state", () => {
   assert.equal(calendarEventStatus(deadline, "2030-02-03"), null)

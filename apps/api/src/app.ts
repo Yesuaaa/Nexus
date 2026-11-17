@@ -25,6 +25,7 @@ import { devErrorInterceptor, handleError } from "./shared/error-handler.js"
 
 import { workloadRouter } from "./features/workload/workload.controller.js"
 import { createAttendanceRouter } from "./features/attendance/routes.js"
+import { createLeaveRouter } from "./features/leave/routes.js"
 import { modulesRouter } from "./features/modules/modules.controller.js"
 import { administrativeProjectsRouter } from "./features/projects/administrative-projects.js"
 import { administrativeRequestsRouter } from "./features/request-inbox/administrative-requests.js"
@@ -103,6 +104,7 @@ export function createApp(
   app.use("/api/project-conversations", projectConversationsRouter)
   app.use("/api/workload", workloadRouter)
   app.use("/api/attendance", createAttendanceRouter(options.attendanceClock))
+  app.use("/api/leave", createLeaveRouter(options.attendanceClock))
   app.use(
     "/api/request-conversations",
     createRequestConversationsRouter(options.conversationRealtime),

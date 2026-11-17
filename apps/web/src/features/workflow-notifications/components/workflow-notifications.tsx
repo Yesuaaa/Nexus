@@ -145,15 +145,17 @@ export function WorkflowNotifications() {
                 href={
                   item.type.startsWith("ATTENDANCE_OVERTIME_")
                     ? "/attendance/adjustments"
-                    : item.entityId &&
-                        [
-                          "PROJECT_ACTIVATED",
-                          "PROJECT_CANCELLATION_REQUESTED",
-                          "PROJECT_CANCELLATION_APPROVED",
-                          "PROJECT_CANCELLATION_DECLINED",
-                        ].includes(item.type)
-                      ? `/projects/${encodeURIComponent(item.entityId)}`
-                      : `/messages?request=${encodeURIComponent(item.requestId ?? "")}`
+                    : item.type.startsWith("LEAVE_")
+                      ? "/attendance/requests/leave"
+                      : item.entityId &&
+                          [
+                            "PROJECT_ACTIVATED",
+                            "PROJECT_CANCELLATION_REQUESTED",
+                            "PROJECT_CANCELLATION_APPROVED",
+                            "PROJECT_CANCELLATION_DECLINED",
+                          ].includes(item.type)
+                        ? `/projects/${encodeURIComponent(item.entityId)}`
+                        : `/messages?request=${encodeURIComponent(item.requestId ?? "")}`
                 }
                 onClick={() => {
                   if (!item.readAt) void read(item.id)

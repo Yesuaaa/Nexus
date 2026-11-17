@@ -27,6 +27,7 @@ import { Prisma } from "../../generated/prisma/client.js"
 
 export type LockableTable =
   | "AttendanceAdjustment"
+  | "LeaveRequest"
   | "ServiceRequest"
   | "Department"
   | "Team"
@@ -51,6 +52,7 @@ type LockIds =
 
 const lockableTables: ReadonlySet<string> = new Set<LockableTable>([
   "AttendanceAdjustment",
+  "LeaveRequest",
   "ServiceRequest",
   "Department",
   "Team",

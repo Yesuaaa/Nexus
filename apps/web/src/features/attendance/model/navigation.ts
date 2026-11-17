@@ -63,6 +63,12 @@ export const attendanceNavigation = [
         label: "Corrections",
         access: "self",
       },
+      {
+        id: "attendance-leave",
+        href: "/attendance/requests/leave",
+        label: "Leave",
+        access: "self",
+      },
     ],
   },
   {

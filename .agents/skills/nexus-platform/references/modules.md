@@ -45,11 +45,15 @@ Read records under `docs/features/`: `client-service-requests.md`, `department-r
 
 ## Attendance and calendar
 
-Implemented: attendance policies/assignments, workdays/sessions/breaks, adjustments/review/audit, attendance web screens, and role-aware calendar composition. Sources: API `src/features/attendance`, web `src/features/attendance` and `calendar`. Trace calendar API composition before assuming a dedicated backend calendar router.
+Implemented: attendance policies/assignments, workdays/sessions/breaks, adjustments/review/audit, whole-day leave requests, attendance web screens, and role-aware calendar composition. Sources: API `src/features/attendance` and `src/features/leave`, web `src/features/attendance`, `leave`, and `calendar`. Trace calendar API composition before assuming a dedicated backend calendar router.
+
+Leave requests (2026-11-17) use immutable request/day records and audited decisions. Linked employees submit annual, sick, emergency, unpaid, or other leave; current eligible Heads verify department requests, HR/Admin decides verified or Headless exception-routed requests, and Superadmin retains organization oversight without gaining Employee self-service identity. Self-review is denied. Approved policy snapshots reduce required attendance minutes, block covered clock-ins/corrections, generate private all-day calendar projections, and appear separately in workload planning without mutating manual capacity or `Employee.status`. See migration `20261117120000_leave_requests` and `docs/features/leave-requests-plan.md`.
 
 Preserve administrative versus Employee self-service/Head review boundaries, eligibility, time/policy rules, audit history, and clock-injection fixtures. Attendance does not imply salary/payroll processing.
 
-Read `docs/features/attendance-foundation.md`, `attendance-backend.md`, `attendance-interface.md`, `superadmin-attendance-administration.md`, and `calendar.md` in that folder. `attendance-availability-plan.md` is planning context; verify proposed integrations against current attendance/workload code.
+Leave review fixes (2026-11-17): transferred verified requests require receiving-Head re-verification before final approval. Future approved leave guards policy edits and assignment replacement/removal. Corrections reject intervals crossing leave dates; clock-out recovery preserves recorded work with an audit reason, employee warning, and HR conflict notification. Calendar leave uses explicit date-only boundaries rather than a fixed timezone offset.
+
+Read `docs/features/attendance-foundation.md`, `attendance-backend.md`, `attendance-interface.md`, `leave-requests-plan.md`, `superadmin-attendance-administration.md`, and `calendar.md` in that folder. `attendance-availability-plan.md` is planning context; verify proposed integrations against current attendance/workload code.
 
 ## Planned, partial, and experimental
 
