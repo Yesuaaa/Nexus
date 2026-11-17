@@ -94,10 +94,14 @@ test("service directory combines department and status filters, then sorts", asy
   await expect(summary).toHaveText("Showing 1–1 of 1 services")
   await search.fill("")
 
-  await page.getByRole("button", { name: /^Filter by department:/ }).click()
-  await page.getByRole("menuitemradio", { name: "Design" }).click()
-  await page.getByRole("button", { name: /^Filter by status:/ }).click()
-  await page.getByRole("menuitemradio", { name: "Inactive" }).click()
+  await page
+    .getByRole("combobox", { name: "Filter by department", exact: true })
+    .click()
+  await page.getByRole("option", { name: "Design", exact: true }).click()
+  await page
+    .getByRole("combobox", { name: "Filter by status", exact: true })
+    .click()
+  await page.getByRole("option", { name: "Inactive", exact: true }).click()
 
   await expect(rows).toHaveCount(2)
   await expect(summary).toHaveText("Showing 1–2 of 2 services")
