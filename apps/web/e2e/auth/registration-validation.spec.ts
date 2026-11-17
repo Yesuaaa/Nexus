@@ -131,7 +131,7 @@ test("registration renders required fields, password controls, and Login navigat
   await expect(fullName).toHaveAttribute("maxlength", "100")
   await expect(contactNumber).toHaveAttribute("type", "tel")
   await expect(contactNumber).toHaveAttribute("autocomplete", "tel")
-  await expect(contactNumber).toHaveAttribute("maxlength", "11")
+  await expect(contactNumber).not.toHaveAttribute("maxlength")
   await expect(contactNumber).toHaveJSProperty("required", true)
   await expect(email).toHaveAttribute("type", "email")
   await expect(email).toHaveAttribute("autocomplete", "email")
@@ -319,9 +319,30 @@ test("registration enforces the contact prefix and email suffix rules", async ({
 test("registration strips separators from a formatted contact number", async ({
   page,
 }) => {
+  await mockApi(page, "USER")
+  await page.goto("/register")
+  await fillRegistration(page, { contactNumber: "08-1234 56789" })
+  const contactNumber = page.getByLabel("Contact number", { exact: true })
+  await expect(contactNumber).toHaveValue("08123456789")
+
+  const submitted = page.waitForRequest("**/api/auth/register")
+  await createAccountButton(page).click()
+  expect((await submitted).postDataJSON()).toMatchObject({
+    contactNumber: "08123456789",
+  })
+  await expect(page).toHaveURL(/\/dashboard$/)
+})
+
+test("registration limits contact digits after removing formatting", async ({
+  page,
+}) => {
   await page.goto("/register")
   const contactNumber = page.getByLabel("Contact number", { exact: true })
-  await contactNumber.fill("08-1234 56789")
+  await contactNumber.fill("09-1234 56789012")
+  await expect(contactNumber).toHaveValue("09123456789")
+
+  await contactNumber.fill("")
+  await contactNumber.pressSequentially("08-1234 56789012")
   await expect(contactNumber).toHaveValue("08123456789")
 })
 
