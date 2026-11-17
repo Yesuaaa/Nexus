@@ -45,7 +45,7 @@ const scenarios = [
     role: "STAFF",
     account: { headOf: { id: "design", name: "Design" } },
     expected: [
-      ["Service Operations", "/request-inbox"],
+      ["Service Operations", "/request-inbox/overview"],
       ["Project Management", "/project-workspace"],
       ["Workforce Compliance", "/attendance/overview"],
     ],

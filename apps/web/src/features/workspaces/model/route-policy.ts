@@ -82,6 +82,8 @@ export type RoutePolicyId =
   | "booked-services"
   | "staff-workload"
   | "administrative-workload"
+  | "service-operation-logs"
+  | "request-inbox-overview"
   | "request-inbox"
   | "profile"
   | "settings"
@@ -125,7 +127,7 @@ export function administrativeModulePolicies(
             navigation: {
               href: `/module/${id}`,
               label:
-                id === "service-operations" ? "Service Requests" : "Overview",
+                id === "service-operations" ? "Request Overview" : "Overview",
               location: "main" as const,
               order: 1,
             },
@@ -135,6 +137,21 @@ export function administrativeModulePolicies(
 }
 
 export const routePolicies: readonly RoutePolicy[] = [
+  {
+    id: "service-operation-logs",
+    match: { kind: "exact", path: "/module/service-operations/logs" },
+    moduleId: "service-operations",
+    canAccess: (account) =>
+      account.role === "SUPERADMIN" &&
+      canAccessAdministrativeModules(account) &&
+      hasPermission(account, Permissions.ORGANIZATION_READ_ALL),
+    navigation: {
+      href: "/module/service-operations/logs",
+      label: "Logs",
+      location: "main",
+      order: 90,
+    },
+  },
   ...administrativeModulePolicies(),
   {
     id: "administrative-workload",
@@ -482,6 +499,12 @@ export const routePolicies: readonly RoutePolicy[] = [
       location: "main",
       order: 80,
     },
+  },
+  {
+    id: "request-inbox-overview",
+    match: { kind: "exact", path: "/request-inbox/overview" },
+    moduleId: "service-operations",
+    canAccess: canAccessRequestInbox,
   },
   {
     id: "request-inbox",

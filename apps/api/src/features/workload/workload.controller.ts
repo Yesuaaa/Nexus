@@ -1,4 +1,6 @@
 import { Router } from "express"
+import { writeServiceLog } from "../service-operation-logs/log-writer.js"
+import { auditDate } from "../service-operation-logs/audit-context.js"
 import { requireAuth } from "../auth/auth.middleware.js"
 import { getPrisma } from "../../lib/db.js"
 import { activeStaff } from "../../shared/query/accounts.js"
@@ -116,6 +118,14 @@ workloadRouter.put("/capacity", async (req, res) => {
   const employeeId = input.employeeId
   await getPrisma()!.$transaction(async (tx) => {
     const department = await scope(tx, req.auth!.user.id)
+    const employee = await tx.employee.findFirst({
+      where: { id: employeeId, ...staffAccountWhere(department.id) },
+      select: { fullName: true },
+    })
+    const before = await tx.workloadCapacity.findUnique({
+      where: { employeeId_week: { employeeId, week } },
+      select: { scheduledHours: true, timeOffHours: true },
+    })
     const member = await tx.employee.updateMany({
       where: { id: employeeId, ...staffAccountWhere(department.id) },
       data: { updatedAt: new Date() },
@@ -133,6 +143,30 @@ workloadRouter.put("/capacity", async (req, res) => {
       },
       update: { scheduledHours, timeOffHours, updatedById: req.auth!.user.id },
     })
+    await writeServiceLog(
+      tx,
+      "CAPACITY_UPDATED",
+      employeeId,
+      undefined,
+      req.auth!.user.id,
+      undefined,
+      {
+        targetLabel: employee?.fullName,
+        changes: [
+          { field: "Week", before: before ? week : null, after: week },
+          {
+            field: "Scheduled hours",
+            before: before?.scheduledHours ?? null,
+            after: scheduledHours,
+          },
+          {
+            field: "Time off hours",
+            before: before?.timeOffHours ?? null,
+            after: timeOffHours,
+          },
+        ],
+      },
+    )
   })
   res.json({ saved: true })
 })
@@ -204,6 +238,14 @@ workloadRouter.put("/assignment", async (req, res) => {
       approvedById: req.auth!.user.id,
       approvedAt: new Date(),
     }
+    const before = await tx.projectStaff.findUnique({
+      where: { projectId_employeeId: { projectId, employeeId } },
+      select: {
+        weeklyHours: true,
+        allocationStart: true,
+        allocationEnd: true,
+      },
+    })
     await tx.projectStaff.upsert({
       where: { projectId_employeeId: { projectId, employeeId } },
       create: { projectId, employeeId, ...data },
@@ -213,7 +255,52 @@ workloadRouter.put("/assignment", async (req, res) => {
       where: { id: projectId },
       select: { requestId: true, name: true },
     })
+    const employee = await tx.employee.findUniqueOrThrow({
+      where: { id: employeeId },
+      select: { fullName: true },
+    })
+    const previousEmployee = previousEmployeeId
+      ? await tx.employee.findUnique({
+          where: { id: previousEmployeeId },
+          select: { fullName: true },
+        })
+      : null
     if (projectRecord.requestId) {
+      await writeServiceLog(
+        tx,
+        "STAFF_ALLOCATED",
+        projectId,
+        projectRecord.requestId,
+        req.auth!.user.id,
+        undefined,
+        {
+          targetLabel: projectRecord.name,
+          changes: [
+            {
+              field: "Staff member",
+              before:
+                previousEmployee?.fullName ??
+                (before ? employee.fullName : null),
+              after: employee.fullName,
+            },
+            {
+              field: "Weekly hours",
+              before: before?.weeklyHours ?? null,
+              after: weeklyHours,
+            },
+            {
+              field: "Allocation start",
+              before: auditDate(before?.allocationStart),
+              after: auditDate(allocationStart),
+            },
+            {
+              field: "Allocation end",
+              before: auditDate(before?.allocationEnd),
+              after: auditDate(allocationEnd),
+            },
+          ],
+        },
+      )
       const event = await tx.workflowEvent.create({
         data: {
           requestId: projectRecord.requestId,
@@ -265,6 +352,20 @@ workloadRouter.put("/assignment", async (req, res) => {
 workloadRouter.delete("/assignment/:id", async (req, res) => {
   await getPrisma()!.$transaction(async (tx) => {
     const department = await scope(tx, req.auth!.user.id)
+    const assignment = await tx.projectStaff.findFirst({
+      where: {
+        id: String(req.params.id),
+        project: { request: { acceptedDepartmentId: department.id } },
+      },
+      select: {
+        projectId: true,
+        weeklyHours: true,
+        allocationStart: true,
+        allocationEnd: true,
+        employee: { select: { fullName: true } },
+        project: { select: { requestId: true, name: true } },
+      },
+    })
     const removed = await tx.projectStaff.deleteMany({
       where: {
         id: String(req.params.id),
@@ -272,6 +373,39 @@ workloadRouter.delete("/assignment/:id", async (req, res) => {
       },
     })
     if (!removed.count) return fail(404, "Assignment not found")
+    await writeServiceLog(
+      tx,
+      "STAFF_REMOVED",
+      assignment!.projectId,
+      assignment!.project.requestId ?? undefined,
+      req.auth!.user.id,
+      undefined,
+      {
+        targetLabel: assignment!.project.name,
+        changes: [
+          {
+            field: "Staff member",
+            before: assignment!.employee.fullName,
+            after: null,
+          },
+          {
+            field: "Weekly hours",
+            before: assignment!.weeklyHours,
+            after: null,
+          },
+          {
+            field: "Allocation start",
+            before: auditDate(assignment!.allocationStart),
+            after: null,
+          },
+          {
+            field: "Allocation end",
+            before: auditDate(assignment!.allocationEnd),
+            after: null,
+          },
+        ],
+      },
+    )
   })
   res.json({ saved: true })
 })

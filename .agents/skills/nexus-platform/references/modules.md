@@ -32,6 +32,10 @@ Read these `docs/features/` records: `employee-management.md`, `client-managemen
 
 ## Services, workflow, projects, workload, and messaging
 
+Abandoned branch 266 (2026-11-17): its applied management-history immutability migration is retained for ledger compatibility and compensated by `20261117160000_revert_branch266_history_guards`. Both management-history tables/data and the current Service Operations log foundation remain. See `docs/features/branch266-database-rollback.md` for verified target scope and deployment result.
+
+Service Operations logs (2026-11-17): `/module/service-operations/logs` and `/api/service-operation-logs` provide Superadmin-only structured activity and safe 5xx incident inspection with actor attribution, affected-record labels, allowlisted before/after or attempted changes, operation-specific messages, closed diagnostic codes/reasons, correlation-aware server output, 30-day expiry and startup/hourly pruning. Success writes share domain transactions. See `docs/features/service-operation-logs.md` for precise coverage, privacy, legacy and outage limitations; this is not universal mutation or messaging history.
+
 Implemented: catalog/pricing/packages, public active-service discovery at `/api/services/available`, client requests/booked services, Head inbox, conversation-centered requirements/consultation/quotation/agreement/payment workflow, project workspaces/milestones/deliverables/review/change requests, workload, and administrative oversight.
 
 Start with `apps/api/src/app.ts` and mounted controllers in `services`, `client-services`, `service-requests`, `request-inbox`, `request-workflow`, `projects`, `project-workspace`, `workload`, and conversation features. Trace corresponding web features/route entry points and API/PGlite/browser tests.

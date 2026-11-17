@@ -100,6 +100,7 @@ function NavigationIcon({
     employees: UsersRound,
     "staff-workload": Gauge,
     "administrative-workload": Gauge,
+    "service-operation-logs": History,
     "attendance-audit": History,
   }
   const icon = icons[policyId]
@@ -204,6 +205,38 @@ function moduleGroup(
         ariaLabel: `${singular} Management`,
       },
     ],
+  }
+}
+
+function requestGroup(account: Account): NavGroup {
+  const links: NavGroup["links"] = []
+  if (canAccessRoute(account, "/module/service-operations")) {
+    links.push({
+      href: "/module/service-operations",
+      label: "Overview",
+      ariaLabel: "Request overview",
+    })
+  }
+  if (canAccessRoute(account, "/request-inbox/overview")) {
+    links.push({
+      href: "/request-inbox/overview",
+      label: "Overview",
+      ariaLabel: "Request overview",
+    })
+  }
+  if (canAccessRoute(account, "/request-inbox")) {
+    links.push({
+      href: "/request-inbox",
+      label: "Inbox",
+      ariaLabel: "Request Inbox",
+    })
+  }
+  return {
+    kind: "group",
+    label: "Request",
+    icon: Inbox,
+    visible: () => links.length > 0,
+    links,
   }
 }
 
@@ -444,13 +477,6 @@ export function Sidebar({
   }
 
   function renderPolicy(policy: RoutePolicy) {
-    if (
-      account.role === "SUPERADMIN" &&
-      policy.id === "module-service-operations" &&
-      mainNavigation.some((entry) => entry.id === "services")
-    )
-      return null
-
     const attendanceGroup = attendanceNavigation.find(
       (group) => group.id === policy.id,
     )
@@ -498,6 +524,23 @@ export function Sidebar({
         path !== group.links[0].href && isNavigationActive(policy, path)
       return renderGroup(group)
     }
+    if (
+      policy.id === "module-service-operations" ||
+      policy.id === "request-inbox"
+    ) {
+      const group = requestGroup(account)
+      const hasAdministrativeOverview = group.links.some(
+        (link) => link.href === "/module/service-operations",
+      )
+      // If a role can access both links, the overview policy renders the
+      // group once and the inbox policy is intentionally suppressed.
+      if (
+        policy.id === "module-service-operations" ||
+        (policy.id === "request-inbox" && !hasAdministrativeOverview)
+      )
+        return renderGroup(group)
+      return null
+    }
     const props = {
       policy,
       account,
@@ -524,15 +567,6 @@ export function Sidebar({
         `/${policy.id}`,
         policy.canAccess,
       )
-      if (
-        policy.id === "services" &&
-        account.role === "SUPERADMIN" &&
-        mainNavigation.some((entry) => entry.id === "module-service-operations")
-      )
-        group.links.push({
-          href: "/module/service-operations",
-          label: "Requests",
-        })
       return renderGroup(group)
     }
     return <SidebarNavigationLink key={policy.id} {...props} />
@@ -545,8 +579,15 @@ export function Sidebar({
     (policy) => policy.id === "dashboard",
   )
   const workspaceNavigation = activeModuleId
-    ? mainNavigation.filter((policy) => policy.moduleId === activeModuleId)
+    ? mainNavigation.filter(
+        (policy) =>
+          policy.moduleId === activeModuleId &&
+          policy.id !== "service-operation-logs",
+      )
     : []
+  const logsNavigation = mainNavigation.filter(
+    (policy) => policy.id === "service-operation-logs",
+  )
   const sharedNavigation = mainNavigation.filter(
     (policy) =>
       policy.id !== "dashboard" && (isClient || policy.moduleId === null),
@@ -739,6 +780,22 @@ export function Sidebar({
                     )}
                   </Link>
                 )}
+            </>
+          )}
+
+          {logsNavigation.length > 0 && (
+            <>
+              <p className={sectionLabelClass}>System Tool</p>
+              {logsNavigation.map((policy) => (
+                <SidebarNavigationLink
+                  key={policy.id}
+                  policy={policy}
+                  account={account}
+                  pathname={pathname}
+                  collapsed={collapsed}
+                  onNavigate={onCloseDrawer}
+                />
+              ))}
             </>
           )}
 

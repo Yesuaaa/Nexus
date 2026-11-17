@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto"
+import { writeServiceLog } from "../service-operation-logs/log-writer.js"
+import { auditCode } from "../service-operation-logs/audit-context.js"
 import {
   Prisma,
   Role,
@@ -1382,6 +1384,7 @@ export async function getProjectWorkspace(userId: string, workspaceId: string) {
 
 type MutableWorkspaceProject = {
   id: string
+  name: string
   status: ProjectStatus
   requestId: string | null
   request: { acceptedDepartmentId: string | null } | null
@@ -1406,6 +1409,7 @@ async function getMutableWorkspace(
               where: scope,
               select: {
                 id: true,
+                name: true,
                 status: true,
                 requestId: true,
                 request: { select: { acceptedDepartmentId: true } },
@@ -1427,6 +1431,7 @@ async function getMutableWorkspace(
           },
           select: {
             id: true,
+            name: true,
             status: true,
             requestId: true,
             request: { select: { acceptedDepartmentId: true } },
@@ -2070,6 +2075,7 @@ export async function updateProjectWorkspaceStatus(
         where: { id: { in: workspace.projects.map(({ id }) => id) } },
         select: {
           id: true,
+          name: true,
           workPlan: true,
           milestones: { select: { deliveryStatus: true } },
         },
@@ -2133,11 +2139,30 @@ export async function updateProjectWorkspaceStatus(
       )
 
     for (const project of affected) {
-      if (project.requestId && status === "COMPLETED")
+      if (project.requestId && status === "COMPLETED") {
         await tx.serviceRequest.update({
           where: { id: project.requestId },
           data: { status: "CONCLUDED" },
         })
+        await writeServiceLog(
+          tx,
+          "REQUEST_CONCLUDED",
+          project.requestId,
+          project.requestId,
+          userId,
+          undefined,
+          {
+            targetLabel: project.name,
+            changes: [
+              {
+                field: "Status",
+                before: auditCode(project.status),
+                after: "Concluded",
+              },
+            ],
+          },
+        )
+      }
       if (project.requestId)
         await writeWorkspaceEvent(
           tx,
