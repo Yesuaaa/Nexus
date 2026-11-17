@@ -12,6 +12,8 @@ pnpm-lock.yaml
 *.tsbuildinfo
 .pnpm-store/
 .localappdata/
+.local-testing/
+.claude/
 .tmp/performance/
 .env
 .env.*

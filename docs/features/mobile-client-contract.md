@@ -125,7 +125,7 @@ request ID as fallback. Private prices remain undisclosed snapshots.
 ### Queries and pagination
 
 Client history: page defaults to 1, fixed pageSize 10; integer decimal digits only,
-range 1-1,000,000. search is trimmed, at most 100 characters. status is empty or
+range 1-100,000. search is trimmed, at most 100 characters. status is empty or
 SUBMITTED, UNDER_REVIEW, AWAITING_CLIENT_INFO, READY_FOR_QUOTATION, CLOSED,
 CANCELLED. sortOrder defaults to desc, accepts asc/desc; empty means default.
 Repeated known fields, structured/bracketed fields, malformed/empty page and
