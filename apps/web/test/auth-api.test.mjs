@@ -10,7 +10,92 @@ import {
   clearToken,
   apiRequest,
   apiStreamRequest,
+  ApiError,
+  register,
 } from "../src/features/auth/api/auth-api.ts"
+
+for (const operation of ["login", "register"]) {
+  test(`${operation} rejects malformed authentication responses before writing credentials`, async (t) => {
+    const values = new Map()
+    let writes = 0
+    const descriptor = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "sessionStorage",
+    )
+    Object.defineProperty(globalThis, "sessionStorage", {
+      configurable: true,
+      value: {
+        getItem: (key) => values.get(key) ?? null,
+        setItem: (key, value) => {
+          writes++
+          values.set(key, String(value))
+        },
+        removeItem: (key) => values.delete(key),
+      },
+    })
+    t.after(() => {
+      if (descriptor)
+        Object.defineProperty(globalThis, "sessionStorage", descriptor)
+      else delete globalThis.sessionStorage
+    })
+
+    const valid = {
+      token: "valid-access",
+      refreshToken: "valid-refresh",
+      expiresIn: 900,
+      user: { id: "user-1", role: "USER" },
+    }
+    let payload = valid
+    t.mock.method(globalThis, "fetch", async (url) => {
+      assert.equal(url, `/api/auth/${operation}`)
+      return Response.json(payload, {
+        status: operation === "register" ? 201 : 200,
+      })
+    })
+    const authenticate = () =>
+      operation === "login"
+        ? signIn("member@example.com", "CorrectHorse123!")
+        : register({
+            fullName: "Member",
+            contactNumber: "08123456789",
+            email: "member@example.com",
+            password: "CorrectHorse123!",
+          })
+
+    const invalid = [
+      null,
+      [],
+      {},
+      { ...valid, user: null },
+      { ...valid, user: [] },
+    ]
+    for (const field of ["token", "refreshToken", "expiresIn"]) {
+      for (const value of [null, undefined, "", "   ", 0, -1, true, {}, []]) {
+        invalid.push({ ...valid, [field]: value })
+      }
+    }
+    for (const existing of [false, true]) {
+      values.clear()
+      if (existing) {
+        values.set("nexus.auth.token", "existing-access")
+        values.set("nexus.auth.refreshToken", "existing-refresh")
+      }
+      const before = new Map(values)
+      for (payload of invalid) {
+        await assert.rejects(
+          authenticate(),
+          (error) => error instanceof ApiError && error.status === 502,
+        )
+        assert.deepEqual(values, before)
+        assert.equal(writes, 0)
+      }
+    }
+    payload = valid
+    assert.deepEqual(await authenticate(), valid.user)
+    assert.equal(values.get("nexus.auth.token"), valid.token)
+    assert.equal(values.get("nexus.auth.refreshToken"), valid.refreshToken)
+  })
+}
 
 test("sign-in through the wrong portal revokes and clears the new session", async (t) => {
   const values = new Map()

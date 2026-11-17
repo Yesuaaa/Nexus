@@ -714,4 +714,12 @@ test("a malformed successful registration response cannot establish a session", 
   expect((await response).status()).toBe(201)
 
   await expect.poll(() => storedTokens(page)).toEqual([null, null])
+  await expect(page).toHaveURL(/\/register$/)
+  await expect(
+    page.getByText("Account unavailable", { exact: true }),
+  ).toBeVisible()
+  await expect(createAccountButton(page)).toBeEnabled()
+  await expect(page.getByLabel("Email address", { exact: true })).toHaveValue(
+    validRegistration.email,
+  )
 })
