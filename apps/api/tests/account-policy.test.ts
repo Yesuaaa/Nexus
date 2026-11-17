@@ -112,11 +112,51 @@ test(
           await prisma.user.count({ where: { email: registration.email } }),
           0,
         )
+        const invalidContact = await api("/auth/register", {
+          method: "POST",
+          body: {
+            ...registration,
+            email: "invalid-contact@policy.example",
+            contactNumber: "not a phone number",
+            password: strongPassword,
+          },
+        })
+        assert.equal(invalidContact.status, 400)
+        assert.equal(
+          await errorOf(invalidContact),
+          "Provide a valid name and contact number",
+        )
+
         const created = await api("/auth/register", {
+          method: "POST",
+          body: {
+            ...registration,
+            password: strongPassword,
+            role: "SUPERADMIN",
+          },
+        })
+        assert.equal(created.status, 201)
+        const session = (await created.json()) as {
+          token: string
+          refreshToken: string
+          expiresIn: number
+          user: PublicUser
+        }
+        assert.ok(session.token)
+        assert.ok(session.refreshToken)
+        assert.ok(session.expiresIn > 0)
+        assert.equal(session.user.email, registration.email)
+        assert.equal(session.user.contactNumber, registration.contactNumber)
+        assert.equal(session.user.role, "USER")
+        assert.equal(session.user.isActive, true)
+        assert.equal("passwordHash" in session.user, false)
+
+        const duplicate = await api("/auth/register", {
           method: "POST",
           body: { ...registration, password: strongPassword },
         })
-        assert.equal(created.status, 201)
+        assert.equal(duplicate.status, 409)
+        assert.equal(await errorOf(duplicate), "Email is already registered")
       },
     )
 

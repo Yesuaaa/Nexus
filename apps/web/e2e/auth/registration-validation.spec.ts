@@ -346,6 +346,21 @@ test("registration limits contact digits after removing formatting", async ({
   await expect(contactNumber).toHaveValue("08123456789")
 })
 
+test("registration normalizes a formatted contact number pasted from the clipboard", async ({
+  page,
+}) => {
+  await page.goto("/register")
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"])
+  await page.evaluate(async () => {
+    await navigator.clipboard.writeText("08-1234 56789abc123")
+  })
+
+  const contactNumber = page.getByLabel("Contact number", { exact: true })
+  await contactNumber.focus()
+  await page.keyboard.press("Control+V")
+  await expect(contactNumber).toHaveValue("08123456789")
+})
+
 test("registration accepts the 254-character email boundary", async ({
   page,
 }) => {
@@ -722,4 +737,59 @@ test("a malformed successful registration response cannot establish a session", 
   await expect(page.getByLabel("Email address", { exact: true })).toHaveValue(
     validRegistration.email,
   )
+})
+
+test("malformed registration user data shows an error and permits a safe retry", async ({
+  page,
+}) => {
+  await mockApi(page, "USER")
+  let attempts = 0
+  await page.route("**/api/auth/register", async (route) => {
+    attempts += 1
+    if (attempts === 1) {
+      await route.fulfill({
+        status: 201,
+        json: {
+          token: "malformed-registration-access",
+          refreshToken: "malformed-registration-refresh",
+          expiresIn: 900,
+          user: {
+            id: null,
+            email: validRegistration.email,
+            fullName: validRegistration.fullName,
+            contactNumber: validRegistration.contactNumber,
+            role: "USER",
+            isActive: true,
+            permissions: [],
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+        },
+      })
+      return
+    }
+    await route.fallback()
+  })
+
+  await page.goto("/register")
+  await fillRegistration(page)
+  const submit = createAccountButton(page)
+  await submit.click()
+
+  await expect(
+    page.getByText("Account unavailable", { exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.getByText("The server is having trouble. Please try again shortly."),
+  ).toBeVisible()
+  await expect(page).toHaveURL(/\/register$/)
+  await expect(page.getByLabel("Email address", { exact: true })).toHaveValue(
+    validRegistration.email,
+  )
+  await expect(submit).toBeEnabled()
+  expect(await storedTokens(page)).toEqual([null, null])
+
+  await submit.click()
+  await expect(page).toHaveURL(/\/dashboard$/)
+  expect(attempts).toBe(2)
+  expect(await storedTokens(page)).toEqual(["test-session", "test-refresh"])
 })
