@@ -76,6 +76,7 @@ import com.nexus.app.features.notifications.viewmodel.NotificationsViewModel
 import com.nexus.app.features.projects.screens.*
 
 object Routes {
+    const val BILLING_LOGS = "billing_logs"
     const val CHECKING = "checking"
     const val LOGIN = "login"
     const val REGISTER = "register"
@@ -98,7 +99,7 @@ object Routes {
     const val HELP = "help"
     const val REQUEST_DETAIL = "request/{requestId}"
 
-    val main = setOf(NOTIFICATIONS, MESSAGES, CHAT, WORKFLOW, DASHBOARD, SERVICES, BOOKED_REQUESTS, PROFILE, SETTINGS, HELP, REQUEST_DETAIL, CALENDAR, PROJECTS, PROJECT_DETAILS, PROJECT_OVERVIEW, PROJECT_BRIEF, PROJECT_REQUEST, PROJECT_CHAT)
+    val main = setOf(BILLING_LOGS, NOTIFICATIONS, MESSAGES, CHAT, WORKFLOW, DASHBOARD, SERVICES, BOOKED_REQUESTS, PROFILE, SETTINGS, HELP, REQUEST_DETAIL, CALENDAR, PROJECTS, PROJECT_DETAILS, PROJECT_OVERVIEW, PROJECT_BRIEF, PROJECT_REQUEST, PROJECT_CHAT)
 }
 
 private fun BottomTab.route() = when (this) {
@@ -265,6 +266,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
         mutableStateOf(if (route == Routes.SETTINGS) "Settings" else "Profile")
     }
     val pageTitle = when (route) {
+        Routes.BILLING_LOGS -> "Billing Logs"
         Routes.DASHBOARD -> "Dashboard"
         Routes.SERVICES -> "Services"
         Routes.BOOKED_REQUESTS -> "Booked Requests"
@@ -310,13 +312,16 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                         }
                     },
                     onSettingsClick = { if (route != Routes.SETTINGS) navController.navigate(Routes.SETTINGS) { launchSingleTop = true } },
+                    onBillingLogsClick = { if (route != Routes.BILLING_LOGS) navController.navigate(Routes.BILLING_LOGS) { launchSingleTop = true } },
                     onHelpClick = { if (route != Routes.HELP) navController.navigate(Routes.HELP) { launchSingleTop = true } },
                     onLogoutClick = { logout() },
                     accountName = user.fullName ?: "Your account",
                     accountEmail = user.email,
-                    accountPageOpen = route in setOf(Routes.PROFILE, Routes.SETTINGS),
+                    accountPageOpen = route in setOf(Routes.PROFILE, Routes.SETTINGS, Routes.BILLING_LOGS),
                     onCloseAccountPage = {
-                        if (route == Routes.PROFILE && accountTitle == "Profile" &&
+                        if (route == Routes.BILLING_LOGS) {
+                            closeHeaderPage()
+                        } else if (route == Routes.PROFILE && accountTitle == "Profile" &&
                             profileOriginEntry != null && navController.previousBackStackEntry?.id == profileOriginEntry) {
                             profileOriginEntry = null
                             closeHeaderPage()
@@ -500,6 +505,12 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                             initialRequestId = entry.arguments?.getString("requestId"),
                             onBackFromDetails = { navController.popBackStack() },
                             onOpenMessages = { navController.navigate("chat/$it") },
+                        )
+                    }
+                    composable(Routes.BILLING_LOGS) {
+                        com.nexus.app.features.billing.screens.BillingLogsScreen(
+                            onGoToChats = { navController.navigate("chat/$it") },
+                            onPay = { navController.navigate("workflow/$it?documents=true") },
                         )
                     }
                     composable(Routes.SETTINGS) {
