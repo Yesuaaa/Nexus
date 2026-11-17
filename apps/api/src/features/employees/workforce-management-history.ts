@@ -3,6 +3,8 @@ import {
   WorkforceManagementOrigin as Origin,
   WorkforceManagementSubject as Subject,
   EmployeeStatus,
+  PayrollRequestStatus,
+  PayrollRequestType,
   EmploymentType,
   type Prisma,
 } from "../../generated/prisma/client.js"
@@ -10,6 +12,7 @@ import {
   assertHistoryObject,
   assertManagementOperation,
   historyNullableId,
+  historyTimestamp,
   historyTransition,
   validateHistoryPayload,
   type HistoryTransition as Transition,
@@ -34,6 +37,15 @@ export type PayrollApprovalAuditAction =
   | "PAYROLL_REJECTED"
   | "PAYROLL_RETURNED_FOR_REVISION"
   | "PAYROLL_RESUBMITTED"
+
+type PayrollDocumentActivity =
+  | "GENERATED"
+  | "PUBLISHED"
+  | "REQUEST_CREATED"
+  | "REQUEST_UPDATED"
+  | "REQUEST_MESSAGE"
+  | "REQUEST_EDITED"
+  | "REQUEST_WITHDRAWN"
 
 type Payloads = Record<
   PayrollApprovalAuditAction,
@@ -66,6 +78,17 @@ type Payloads = Record<
     startDate: string
     endDate: string
     frequency: "MONTHLY" | "SEMI_MONTHLY"
+  }
+  PAYROLL_DOCUMENT_ACTIVITY: {
+    requestStatus?: Transition<PayrollRequestStatus>
+    correctionFlag?: Transition<boolean>
+    type?: Transition<PayrollRequestType>
+    description?: Transition<string>
+    payslipId?: Transition<string | null>
+    withdrawnAt?: Transition<string | null>
+    withdrawnBy?: Transition<string | null>
+    activity: PayrollDocumentActivity
+    calculationId?: string
   }
   PAYROLL_RUN_CREATED: { periodId: string }
   PAYROLL_CALCULATED: {
@@ -118,15 +141,29 @@ type WorkforceField =
   | "revision"
   | "attemptId"
   | "failureCode"
+  | "type"
+  | "requestStatus"
+  | "correctionFlag"
+  | "payslipId"
+  | "withdrawnAt"
+  | "withdrawnBy"
 
 type ActionSubjects = Record<PayrollApprovalAuditAction, "PAYROLL_RUN"> & {
   CREATED: Exclude<
     Subject,
-    "COMPENSATION" | "PAYROLL_CONFIGURATION" | "PAYROLL_PERIOD" | "PAYROLL_RUN"
+    | "COMPENSATION"
+    | "PAYROLL_CONFIGURATION"
+    | "PAYROLL_PERIOD"
+    | "PAYROLL_RUN"
+    | "PAYROLL_REQUEST"
   >
   PROFILE_UPDATED: Exclude<
     Subject,
-    "COMPENSATION" | "PAYROLL_CONFIGURATION" | "PAYROLL_PERIOD" | "PAYROLL_RUN"
+    | "COMPENSATION"
+    | "PAYROLL_CONFIGURATION"
+    | "PAYROLL_PERIOD"
+    | "PAYROLL_RUN"
+    | "PAYROLL_REQUEST"
   >
   STATUS_CHANGED: "EMPLOYEE"
   ASSIGNMENT_CHANGED: "EMPLOYEE" | "DEPARTMENT"
@@ -137,6 +174,7 @@ type ActionSubjects = Record<PayrollApprovalAuditAction, "PAYROLL_RUN"> & {
   DELETED: "DEPARTMENT" | "TEAM"
   VERSION_CREATED: "COMPENSATION" | "PAYROLL_CONFIGURATION"
   PAYROLL_PERIOD_CREATED: "PAYROLL_PERIOD"
+  PAYROLL_DOCUMENT_ACTIVITY: "PAYROLL_RUN" | "PAYROLL_REQUEST"
   PAYROLL_RUN_CREATED: "PAYROLL_RUN"
   PAYROLL_CALCULATED: "PAYROLL_RUN"
   PAYROLL_RECALCULATED: "PAYROLL_RUN"
@@ -191,7 +229,12 @@ export async function writeWorkforceManagementChange(
   operation: ManagementOperation,
   input: WorkforceManagementChangeInput,
 ) {
-  assertManagementOperation(operation)
+  assertManagementOperation(
+    operation,
+    input?.action === Action.PAYROLL_DOCUMENT_ACTIVITY
+      ? "staff-payroll"
+      : "management",
+  )
   assertHistoryObject(input, [
     "action",
     "origin",
@@ -347,6 +390,74 @@ export async function writeWorkforceManagementChange(
       }
       required = [...fields]
       break
+    case Action.PAYROLL_DOCUMENT_ACTIVITY: {
+      const run = input.subjectType === Subject.PAYROLL_RUN
+      const request = input.subjectType === Subject.PAYROLL_REQUEST
+      if ((!run && !request) || input.origin !== Origin.PAYROLL_MANAGEMENT)
+        throw new Error("Invalid payroll activity subject")
+      fields = request
+        ? [
+            "type",
+            "description",
+            "requestStatus",
+            "correctionFlag",
+            "payslipId",
+            "withdrawnAt",
+            "withdrawnBy",
+          ]
+        : []
+      required = run ? ["activity", "calculationId"] : ["activity"]
+      checks = {
+        activity: (v) =>
+          run
+            ? operation.actorRoleAtTime === "ADMIN" &&
+              (v === "GENERATED" || v === "PUBLISHED")
+            : operation.actorRoleAtTime === "STAFF"
+              ? v === "REQUEST_CREATED" ||
+                v === "REQUEST_MESSAGE" ||
+                v === "REQUEST_EDITED" ||
+                v === "REQUEST_WITHDRAWN"
+              : operation.actorRoleAtTime === "ADMIN" &&
+                v === "REQUEST_UPDATED",
+        ...(run ? { calculationId: isRecordId } : {}),
+        ...(request
+          ? {
+              type: historyTransition((value) =>
+                Object.values(PayrollRequestType).some(
+                  (item) => item === value,
+                ),
+              ),
+              description: historyTransition(
+                (value) =>
+                  typeof value === "string" &&
+                  value.trim().length >= 5 &&
+                  value.length <= 2000,
+              ),
+              payslipId: historyTransition(historyNullableId),
+              withdrawnAt: historyTransition(historyTimestamp),
+              withdrawnBy: historyTransition(historyNullableId),
+            }
+          : {}),
+        ...(input.changes.activity === "REQUEST_UPDATED" ||
+        input.changes.activity === "REQUEST_WITHDRAWN"
+          ? {
+              requestStatus: historyTransition((value) =>
+                Object.values(PayrollRequestStatus).some(
+                  (item) => item === value,
+                ),
+              ),
+              ...(input.changes.activity === "REQUEST_UPDATED"
+                ? {
+                    correctionFlag: historyTransition(
+                      (value) => typeof value === "boolean",
+                    ),
+                  }
+                : {}),
+            }
+          : {}),
+      }
+      break
+    }
     case Action.PAYROLL_SUBMITTED:
     case Action.PAYROLL_APPROVED:
     case Action.PAYROLL_REJECTED:

@@ -65,6 +65,12 @@ export function canAccessEmployeeManagement(account: Account): boolean {
   )
 }
 
+export function canAccessMyPayroll(account: Account): boolean {
+  return Boolean(
+    account.isActive && !account.accountDeletedAt && account.role === "STAFF",
+  )
+}
+
 export function canAccessPayroll(account: Account): boolean {
   return (
     Boolean(account.isActive) &&

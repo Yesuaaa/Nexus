@@ -13,6 +13,7 @@ import {
   findRoutePolicy,
   getActiveWorkspaceModuleId,
   getNavigationPolicies,
+  getNavigationLabel,
 } from "../src/features/workspaces/model/route-policy.ts"
 import { resolveWorkspaceModuleId } from "../src/features/workspaces/model/workspace-selection.ts"
 const payrollAccess = await import("../src/features/auth/model/permissions.ts")
@@ -212,6 +213,64 @@ test("Payroll route and write capability follow the Payroll-specific role split"
     }),
     false,
   )
+})
+
+test("Staff My Payroll sits inside Workforce Compliance without altering Admin Payroll", () => {
+  for (const role of ["STAFF", "ADMIN", "SUPERADMIN", "USER"]) {
+    const actor = {
+      ...superadmin,
+      role,
+      permissions: role === "STAFF" ? [] : superadmin.permissions,
+    }
+    const staff = role === "STAFF"
+    const entries = getWorkspaceModules(actor).filter(
+      (module) => module.id === "payroll",
+    )
+    assert.equal(entries.length, staff || role === "USER" ? 0 : 1)
+    if (staff) {
+      assert.ok(
+        getWorkspaceModules(actor).some(
+          (module) =>
+            module.id === "attendance-monitoring" &&
+            module.title === "Workforce Compliance",
+        ),
+      )
+      assert.equal(
+        getWorkspaceModules(actor).some(
+          (module) => module.title === "My Payroll",
+        ),
+        false,
+      )
+    }
+    for (const path of [
+      "/my-payroll",
+      "/attendance/my-payroll",
+      "/staff/my-payroll",
+    ]) {
+      assert.equal(canAccessRoute(actor, path), staff)
+      assert.equal(
+        resolveWorkspaceModuleId(actor, path, "payroll"),
+        staff ? "attendance-monitoring" : null,
+      )
+    }
+    if (staff) {
+      const policy = getNavigationPolicies(actor, "main").find(
+        (entry) => entry.id === "staff-my-payroll",
+      )
+      assert.ok(policy)
+      assert.equal(policy.navigation.href, "/my-payroll")
+      assert.equal(getNavigationLabel(policy, actor), "My Payroll")
+      assert.equal(canAccessRoute(actor, "/module/payroll"), false)
+    }
+  }
+  for (const state of [
+    { isActive: false },
+    { accountDeletedAt: "2026-11-17" },
+  ]) {
+    const actor = { ...superadmin, role: "STAFF", ...state }
+    assert.equal(canAccessRoute(actor, "/my-payroll"), false)
+    assert.equal(getWorkspaceModules(actor).length, 0)
+  }
 })
 
 test("all implemented portal pages have explicit authorization policies", async () => {

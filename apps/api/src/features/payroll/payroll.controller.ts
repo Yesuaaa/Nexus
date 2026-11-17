@@ -21,8 +21,11 @@ import {
   validatePayrollRunCreation,
 } from "./payroll-runs.schema.js"
 
+import { payrollDocumentsRouter } from "./payroll-documents.controller.js"
+
 export const payrollRouter = Router()
 payrollRouter.use(requireAuth)
+payrollRouter.use(payrollDocumentsRouter)
 
 payrollRouter.get(
   "/periods/current",

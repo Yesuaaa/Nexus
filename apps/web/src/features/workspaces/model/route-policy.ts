@@ -14,6 +14,7 @@ import {
   canAccessEmployeeManagement,
   canAccessMessages,
   canAccessPayroll,
+  canAccessMyPayroll,
   canInspectBusinessConversations,
   canAccessProjects,
   canAccessProjectWorkspace,
@@ -41,6 +42,10 @@ export type RoutePolicyId =
   | "payroll-compensation"
   | "payroll-runs"
   | "payroll-approvals"
+  | "payroll-payslips"
+  | "staff-my-payroll"
+  | "staff-my-payroll-legacy"
+  | "staff-my-payroll-attendance-legacy"
   | "payroll-settings"
   | "employees-overview"
   | "attendance-time-logs"
@@ -159,6 +164,36 @@ export const routePolicies: readonly RoutePolicy[] = [
     match: { kind: "exact", path: "/module/payroll/approvals" },
     moduleId: "payroll",
     canAccess: canAccessPayroll,
+  },
+  {
+    id: "payroll-payslips",
+    match: { kind: "exact", path: "/module/payroll/payslips" },
+    moduleId: "payroll",
+    canAccess: canAccessPayroll,
+  },
+  {
+    id: "staff-my-payroll",
+    match: { kind: "exact", path: "/my-payroll" },
+    moduleId: "attendance-monitoring",
+    canAccess: canAccessMyPayroll,
+    navigation: {
+      label: "My Payroll",
+      href: "/my-payroll",
+      location: "main",
+      order: 55,
+    },
+  },
+  {
+    id: "staff-my-payroll-legacy",
+    match: { kind: "exact", path: "/staff/my-payroll" },
+    moduleId: "attendance-monitoring",
+    canAccess: canAccessMyPayroll,
+  },
+  {
+    id: "staff-my-payroll-attendance-legacy",
+    match: { kind: "exact", path: "/attendance/my-payroll" },
+    moduleId: "attendance-monitoring",
+    canAccess: canAccessMyPayroll,
   },
   {
     id: "payroll-settings",

@@ -38,6 +38,7 @@ enum AccountManagementOrigin {
 }
 
 enum WorkforceManagementSubject {
+  PAYROLL_REQUEST
   EMPLOYEE
   DEPARTMENT
   TEAM
@@ -48,6 +49,7 @@ enum WorkforceManagementSubject {
 }
 
 enum WorkforceManagementAction {
+  PAYROLL_DOCUMENT_ACTIVITY
   PAYROLL_SUBMITTED
   PAYROLL_APPROVED
   PAYROLL_REJECTED
@@ -761,6 +763,7 @@ model Employee {
   workloadCapacities       WorkloadCapacity[]
   compensations            EmployeeCompensation[]
   payrollRunItems          PayrollRunItem[]
+  payrollRequests          PayrollEmployeeRequest[]
 
   @@index([departmentId])
   @@index([teamId])
@@ -911,6 +914,7 @@ model PayrollRunItem {
   warnings               Json
   blocks                 Json
   components             PayrollRunItemComponent[]
+  payslip                PayrollPayslip?
 
   @@unique([calculationId, employeeId], map: "payroll_run_item_calculation_employee_uq")
   @@index([calculationId, status], map: "payroll_run_item_status_idx")
@@ -1426,4 +1430,65 @@ model AttendanceAdjustment {
 
   @@index([employeeId, createdAt, id])
   @@index([status, createdAt, id])
+}
+
+enum PayrollRequestType {
+  MISSING_PAYSLIP
+  PAYSLIP_CORRECTION
+  PAYROLL_DISCREPANCY
+  MISSING_SALARY_PAYMENT
+}
+
+enum PayrollRequestStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+  CLOSED
+}
+
+model PayrollPayslip {
+  id          String                   @id @default(cuid())
+  itemId      String                   @unique
+  item        PayrollRunItem           @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  reference   String                   @unique
+  document    Bytes
+  generatedAt DateTime                 @default(now()) @db.Timestamptz(3)
+  generatedBy String
+  publishedAt DateTime?                @db.Timestamptz(3)
+  publishedBy String?
+  requests    PayrollEmployeeRequest[]
+}
+
+model PayrollEmployeeRequest {
+  id                       String                  @id @default(cuid())
+  employeeId               String
+  employee                 Employee                @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  payslipId                String?
+  payslip                  PayrollPayslip?         @relation(fields: [payslipId], references: [id], onDelete: Restrict)
+  type                     PayrollRequestType
+  status                   PayrollRequestStatus    @default(OPEN)
+  needsFinancialCorrection Boolean                 @default(false)
+  createdBy                String
+  createdAt                DateTime                @default(now()) @db.Timestamptz(3)
+  updatedAt                DateTime                @updatedAt @db.Timestamptz(3)
+  resolvedAt               DateTime?               @db.Timestamptz(3)
+  withdrawnAt              DateTime?               @db.Timestamptz(3)
+  withdrawnBy              String?
+  messages                 PayrollRequestMessage[]
+
+  @@index([employeeId, createdAt])
+  @@index([employeeId, withdrawnAt, createdAt, id])
+  @@index([status, type, createdAt])
+}
+
+model PayrollRequestMessage {
+  id        String                 @id @default(cuid())
+  requestId String
+  request   PayrollEmployeeRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  actorId   String
+  isAdmin   Boolean
+  body      String                 @db.VarChar(2000)
+  createdAt DateTime               @default(now()) @db.Timestamptz(3)
+
+  @@index([requestId, createdAt])
 }

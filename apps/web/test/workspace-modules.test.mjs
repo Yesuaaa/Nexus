@@ -52,7 +52,7 @@ test("clients do not receive workspace selector entries", () => {
   assert.deepEqual(moduleEntries(account("USER")), [])
 })
 
-test("Staff receive project and personal attendance workspaces", () => {
+test("Staff receive project and Workforce Compliance workspaces", () => {
   assert.deepEqual(moduleEntries(account("STAFF")), [
     ["Project Management", "/project-workspace"],
     ["Workforce Compliance", "/attendance/check-ins"],

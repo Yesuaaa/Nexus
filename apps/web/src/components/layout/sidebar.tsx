@@ -101,6 +101,7 @@ function NavigationIcon({
     help: CircleHelp,
     employees: UsersRound,
     "staff-workload": Gauge,
+    "staff-my-payroll": WalletCards,
     "administrative-workload": Gauge,
     "attendance-audit": History,
   }
@@ -237,9 +238,8 @@ function payrollModuleGroup(visible: (account: Account) => boolean): NavGroup {
         disabled: true,
       },
       {
-        href: "/module/payroll/history",
+        href: "/module/payroll/payslips",
         label: "Payslips & History",
-        disabled: true,
       },
       { href: "/module/payroll/settings", label: "Settings" },
     ],

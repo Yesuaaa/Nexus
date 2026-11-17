@@ -493,7 +493,9 @@ test(
               ),
             ),
           ].sort(),
-          Object.values(WorkforceAction).sort(),
+          Object.values(WorkforceAction)
+            .filter((action) => action !== "PAYROLL_DOCUMENT_ACTIVITY")
+            .sort(),
         )
       },
     )

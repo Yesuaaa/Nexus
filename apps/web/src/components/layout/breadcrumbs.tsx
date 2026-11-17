@@ -62,6 +62,7 @@ export function useBreadcrumbLabel(key: string, label: string | undefined) {
 
 const routeLabels: Record<string, string> = {
   attendance: "Attendance",
+  "my-payroll": "My Payroll",
   my: "Check-Ins",
   adjustments: "Requests & Approvals",
   records: "Records",
