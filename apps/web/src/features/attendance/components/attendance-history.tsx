@@ -85,6 +85,14 @@ export function AttendanceHistoryTable({
               label="attendance records"
               rows={5}
               rowClassName={`${historyGrid} min-h-[68px] px-4 py-4 @max-[820px]:grid-cols-1 @max-[820px]:gap-y-3.5`}
+              cellSkeletonClassNames={[
+                "h-3 w-28 max-w-full",
+                "h-3 w-36 max-w-full",
+                "h-3 w-36 max-w-full",
+                "h-3 w-24 max-w-full",
+                "h-6 w-24 max-w-full rounded-full",
+                "size-8 rounded-md",
+              ]}
               cellClassNames={[
                 "",
                 "",
