@@ -46,6 +46,33 @@ type Payloads = {
     departmentId?: Transition<string | null>
     leadId?: Transition<string | null>
   }
+  VERSION_CREATED: {
+    previousVersionId: string | null
+    versionId: string
+    reason: string
+  }
+  PAYROLL_PERIOD_CREATED: {
+    configurationId: string
+    startDate: string
+    endDate: string
+    frequency: "MONTHLY" | "SEMI_MONTHLY"
+  }
+  PAYROLL_RUN_CREATED: { periodId: string }
+  PAYROLL_CALCULATED: {
+    calculationId: string
+    previousCalculationId: string | null
+    revision: number
+  }
+  PAYROLL_RECALCULATED: {
+    calculationId: string
+    previousCalculationId: string | null
+    revision: number
+  }
+  PAYROLL_CALCULATION_FAILED: {
+    attemptId: string
+    revision: number
+    failureCode: "CALCULATION_INPUT_INVALID" | "CALCULATION_FAILED"
+  }
 }
 
 type WorkforceField =
@@ -68,10 +95,29 @@ type WorkforceField =
   | "temporaryHeadOriginalId"
   | "temporaryHeadAssignedId"
   | "leadId"
+  | "previousVersionId"
+  | "versionId"
+  | "reason"
+  | "configurationId"
+  | "periodId"
+  | "startDate"
+  | "endDate"
+  | "frequency"
+  | "calculationId"
+  | "previousCalculationId"
+  | "revision"
+  | "attemptId"
+  | "failureCode"
 
 type ActionSubjects = {
-  CREATED: Subject
-  PROFILE_UPDATED: Subject
+  CREATED: Exclude<
+    Subject,
+    "COMPENSATION" | "PAYROLL_CONFIGURATION" | "PAYROLL_PERIOD" | "PAYROLL_RUN"
+  >
+  PROFILE_UPDATED: Exclude<
+    Subject,
+    "COMPENSATION" | "PAYROLL_CONFIGURATION" | "PAYROLL_PERIOD" | "PAYROLL_RUN"
+  >
   STATUS_CHANGED: "EMPLOYEE"
   ASSIGNMENT_CHANGED: "EMPLOYEE" | "DEPARTMENT"
   HEAD_CHANGED: "DEPARTMENT"
@@ -79,6 +125,12 @@ type ActionSubjects = {
   LEAD_CHANGED: "TEAM"
   TITLE_CLEARED: "EMPLOYEE" | "DEPARTMENT"
   DELETED: "DEPARTMENT" | "TEAM"
+  VERSION_CREATED: "COMPENSATION" | "PAYROLL_CONFIGURATION"
+  PAYROLL_PERIOD_CREATED: "PAYROLL_PERIOD"
+  PAYROLL_RUN_CREATED: "PAYROLL_RUN"
+  PAYROLL_CALCULATED: "PAYROLL_RUN"
+  PAYROLL_RECALCULATED: "PAYROLL_RUN"
+  PAYROLL_CALCULATION_FAILED: "PAYROLL_RUN"
 }
 
 export type WorkforceManagementChangeInput = {
@@ -228,6 +280,75 @@ export async function writeWorkforceManagementChange(
           }
         : { departmentId: removedId, leadId: removedId }
       fields = Object.keys(checks)
+      break
+    case Action.VERSION_CREATED:
+      if (
+        input.subjectType !== "COMPENSATION" &&
+        input.subjectType !== "PAYROLL_CONFIGURATION"
+      )
+        throw new Error("Version history requires a payroll subject")
+      fields = ["previousVersionId", "versionId", "reason"]
+      checks = {
+        previousVersionId: historyNullableId,
+        versionId: isRecordId,
+        reason: (value) =>
+          typeof value === "string" && value.length >= 3 && value.length <= 500,
+      }
+      required = [...fields]
+      break
+    case Action.PAYROLL_PERIOD_CREATED:
+      if (input.subjectType !== Subject.PAYROLL_PERIOD)
+        throw new Error("Payroll period history requires a PayrollPeriod")
+      fields = ["configurationId", "startDate", "endDate", "frequency"]
+      checks = {
+        configurationId: isRecordId,
+        startDate: (value) =>
+          typeof value === "string" &&
+          /^\d{4}-\d\d-\d\d$/.test(value) &&
+          Number.isFinite(Date.parse(`${value}T00:00:00.000Z`)) &&
+          new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) ===
+            value,
+        endDate: (value) =>
+          typeof value === "string" &&
+          /^\d{4}-\d\d-\d\d$/.test(value) &&
+          Number.isFinite(Date.parse(`${value}T00:00:00.000Z`)) &&
+          new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) ===
+            value,
+        frequency: (value) => value === "MONTHLY" || value === "SEMI_MONTHLY",
+      }
+      required = [...fields]
+      break
+    case Action.PAYROLL_RUN_CREATED:
+      if (input.subjectType !== Subject.PAYROLL_RUN)
+        throw new Error("Payroll run history requires a PayrollRun")
+      fields = ["periodId"]
+      checks = { periodId: isRecordId }
+      required = [...fields]
+      break
+    case Action.PAYROLL_CALCULATED:
+    case Action.PAYROLL_RECALCULATED:
+      if (input.subjectType !== Subject.PAYROLL_RUN)
+        throw new Error("Payroll calculation history requires a PayrollRun")
+      fields = ["calculationId", "previousCalculationId", "revision"]
+      checks = {
+        calculationId: isRecordId,
+        previousCalculationId: historyNullableId,
+        revision: (value) => Number.isInteger(value) && Number(value) > 0,
+      }
+      required = [...fields]
+      break
+    case Action.PAYROLL_CALCULATION_FAILED:
+      if (input.subjectType !== Subject.PAYROLL_RUN)
+        throw new Error("Payroll calculation history requires a PayrollRun")
+      fields = ["attemptId", "revision", "failureCode"]
+      checks = {
+        attemptId: isRecordId,
+        revision: (value) => Number.isInteger(value) && Number(value) > 0,
+        failureCode: (value) =>
+          value === "CALCULATION_INPUT_INVALID" ||
+          value === "CALCULATION_FAILED",
+      }
+      required = [...fields]
       break
   }
   const payload = validateHistoryPayload(

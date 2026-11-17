@@ -46,5 +46,13 @@
     "administrativePath": null,
     "icon": "finance",
     "color": "#667085"
+  },
+  "payroll": {
+    "title": "Payroll",
+    "description": "Manage employee compensation, payroll processing, approvals, and salary disbursements.",
+    "implemented": true,
+    "administrativePath": null,
+    "icon": "payroll",
+    "color": "#237d83"
   }
 }

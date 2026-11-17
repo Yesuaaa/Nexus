@@ -2,6 +2,8 @@ import moduleRegistry from "./module-registry.json" with { type: "json" }
 import {
   AdministrativeCapability,
   hasAdministrativeCapability,
+  hasPayrollCapability,
+  PayrollCapability,
   type AuthorizationActor,
 } from "../auth/auth.capabilities.js"
 import { fail } from "../../shared/http-error.js"
@@ -15,7 +17,10 @@ export function getAdministrativeModule(
   id: string,
   registry: ModuleRegistry = moduleRegistry,
 ) {
+  const canReadPayroll =
+    id === "payroll" && hasPayrollCapability(actor, PayrollCapability.READ)
   if (
+    !canReadPayroll &&
     !hasAdministrativeCapability(actor, AdministrativeCapability.MODULE_ACCESS)
   )
     fail(403, "Administrative module access is required")

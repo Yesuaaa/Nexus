@@ -13,6 +13,7 @@ import {
   canAccessDepartmentManagement,
   canAccessEmployeeManagement,
   canAccessMessages,
+  canAccessPayroll,
   canInspectBusinessConversations,
   canAccessProjects,
   canAccessProjectWorkspace,
@@ -37,6 +38,9 @@ export const workspaceModuleLabels = Object.fromEntries(
 
 export type RoutePolicyId =
   | `module-${string}`
+  | "payroll-compensation"
+  | "payroll-runs"
+  | "payroll-settings"
   | "employees-overview"
   | "attendance-time-logs"
   | "attendance-audit"
@@ -119,7 +123,8 @@ export function administrativeModulePolicies(
       id: `module-${id}`,
       match: { kind: "exact", path: `/module/${id}` },
       moduleId: id as WorkspaceModuleId,
-      canAccess: canAccessAdministrativeModules,
+      canAccess:
+        id === "payroll" ? canAccessPayroll : canAccessAdministrativeModules,
       ...(module.administrativePath === null || id === "service-operations"
         ? {
             navigation: {
@@ -136,6 +141,24 @@ export function administrativeModulePolicies(
 
 export const routePolicies: readonly RoutePolicy[] = [
   ...administrativeModulePolicies(),
+  {
+    id: "payroll-compensation",
+    match: { kind: "exact", path: "/module/payroll/compensation" },
+    moduleId: "payroll",
+    canAccess: canAccessPayroll,
+  },
+  {
+    id: "payroll-runs",
+    match: { kind: "exact", path: "/module/payroll/runs" },
+    moduleId: "payroll",
+    canAccess: canAccessPayroll,
+  },
+  {
+    id: "payroll-settings",
+    match: { kind: "exact", path: "/module/payroll/settings" },
+    moduleId: "payroll",
+    canAccess: canAccessPayroll,
+  },
   {
     id: "administrative-workload",
     match: { kind: "exact", path: "/module/service-operations/workload" },

@@ -11,6 +11,8 @@ const permissionsByRole = {
     Permissions.EMPLOYEES_READ,
     Permissions.SERVICES_READ,
     Permissions.CLIENTS_READ,
+    "payroll:read",
+    "payroll:manage",
   ],
   SUPERADMIN: [
     Permissions.MODULES_ACCESS_ALL,
@@ -18,6 +20,7 @@ const permissionsByRole = {
     Permissions.SERVICES_READ,
     Permissions.EMPLOYEES_READ,
     Permissions.DEPARTMENTS_READ,
+    "payroll:read",
   ],
 }
 
@@ -78,6 +81,7 @@ test("the selector returns only the Admin operational workspaces", () => {
     ["Service Operations", "/services"],
     ["People & HR", "/employees"],
     ["Workforce Compliance", "/attendance/overview"],
+    ["Payroll", "/module/payroll"],
     ["Billing & Finance", null],
   ])
 })
@@ -89,6 +93,7 @@ test("Superadmin receives operational modules alongside Administration", () => {
     ["People & HR", "/employees"],
     ["Workforce Compliance", "/attendance/time-logs/overview"],
     ["Administration", "/accounts"],
+    ["Payroll", "/module/payroll"],
     ["Billing & Finance", null],
   ])
 })

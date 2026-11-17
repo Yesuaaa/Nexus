@@ -34,6 +34,8 @@ const permissionsByRole = {
     Permissions.SERVICES_READ,
     Permissions.SERVICES_MANAGE,
     Permissions.CLIENTS_READ,
+    Permissions.PAYROLL_READ,
+    Permissions.PAYROLL_MANAGE,
   ],
   SUPERADMIN: [
     Permissions.MODULES_ACCESS_ALL,
@@ -49,6 +51,7 @@ const permissionsByRole = {
     Permissions.DEPARTMENTS_READ,
     Permissions.DEPARTMENTS_MANAGE,
     Permissions.DEPARTMENTS_DELETE,
+    Permissions.PAYROLL_READ,
     Permissions.ACCOUNTS_READ,
     Permissions.ACCOUNTS_RESET_PASSWORD,
     Permissions.ACCOUNTS_CREATE_BASIC,
@@ -123,6 +126,7 @@ const routeMatrix = {
     "/clients",
     "/departments",
     "/employees",
+    "/module/payroll/runs",
     "/calendar",
     "/profile",
     "/settings",
@@ -133,6 +137,7 @@ const routeMatrix = {
     "/clients",
     "/departments",
     "/employees",
+    "/module/payroll/runs",
     "/messages",
     "/accounts",
     "/module/project-management",
@@ -164,6 +169,7 @@ const protectedRoutes = [
   "/booked-services",
   "/staff-workload",
   "/request-inbox",
+  "/module/payroll/runs",
 ]
 
 for (const [actor, allowedRoutes] of Object.entries(routeMatrix)) {
@@ -229,6 +235,14 @@ test("dynamic project routes are explicit and unknown descendants are denied", (
     ),
     undefined,
   )
+})
+
+test("Payroll Runs is an explicit reader route for Admin and Superadmin", () => {
+  assert.equal(findRoutePolicy("/module/payroll/runs")?.id, "payroll-runs")
+  for (const role of ["ADMIN", "SUPERADMIN"])
+    assert.equal(canAccessRoute(account(role), "/module/payroll/runs"), true)
+  for (const role of ["STAFF", "USER"])
+    assert.equal(canAccessRoute(account(role), "/module/payroll/runs"), false)
 })
 
 test("department-first Project Management routes require the current global read grants", () => {
@@ -444,6 +458,7 @@ test("navigation is generated from the same policies without changing role visib
     ],
     ADMIN: [
       "Module",
+      "Overview",
       "Department Management",
       "Employee Management",
       "Attendance",
@@ -458,6 +473,7 @@ test("navigation is generated from the same policies without changing role visib
     SUPERADMIN: [
       "Module",
       "Service Requests",
+      "Overview",
       "Project Overview",
       "Account Management",
       "Department Management",

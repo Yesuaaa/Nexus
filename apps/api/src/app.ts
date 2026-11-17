@@ -6,6 +6,7 @@ import express from "express"
 import { authRouter } from "./features/auth/auth.controller.js"
 import { departmentsRouter } from "./features/departments/departments.controller.js"
 import { employeesRouter } from "./features/employees/employees.controller.js"
+import { payrollRouter } from "./features/payroll/payroll.controller.js"
 import { createHealthRouter } from "./features/health/health.controller.js"
 import { usersRouter } from "./features/users/users.controller.js"
 import { servicesRouter } from "./features/services/services.controller.js"
@@ -95,6 +96,7 @@ export function createApp(
   )
   app.use("/api/departments", departmentsRouter)
   app.use("/api/employees", employeesRouter)
+  app.use("/api/payroll", payrollRouter)
   app.use("/api/clients", clientsRouter)
   app.use("/api/request-inbox", requestInboxRouter)
   app.use("/api/projects", projectsRouter)

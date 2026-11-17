@@ -15,6 +15,7 @@ import {
   getNavigationPolicies,
 } from "../src/features/workspaces/model/route-policy.ts"
 import { resolveWorkspaceModuleId } from "../src/features/workspaces/model/workspace-selection.ts"
+const payrollAccess = await import("../src/features/auth/model/permissions.ts")
 
 const superadmin = {
   id: "superadmin",
@@ -139,6 +140,78 @@ test("new administrative entries require an active account and the explicit capa
     assert.equal(canAccessRoute(actor, "/module/project-management"), false)
     assert.deepEqual(getAdministrativeModuleEntries(actor, moduleRegistry), [])
   }
+})
+
+test("Payroll route and write capability follow the Payroll-specific role split", () => {
+  assert.equal(typeof payrollAccess.canAccessPayroll, "function")
+  assert.equal(typeof payrollAccess.canManagePayroll, "function")
+  if (
+    typeof payrollAccess.canAccessPayroll !== "function" ||
+    typeof payrollAccess.canManagePayroll !== "function"
+  )
+    return
+
+  const cases = [
+    {
+      role: "ADMIN",
+      permissions: ["payroll:read", "payroll:manage"],
+      canRead: true,
+      canManage: true,
+    },
+    {
+      role: "SUPERADMIN",
+      permissions: ["payroll:read"],
+      canRead: true,
+      canManage: false,
+    },
+    {
+      role: "STAFF",
+      permissions: ["payroll:read", "payroll:manage"],
+      canRead: false,
+      canManage: false,
+    },
+    {
+      role: "USER",
+      permissions: [],
+      canRead: false,
+      canManage: false,
+    },
+  ]
+
+  for (const scenario of cases) {
+    const actor = { ...superadmin, ...scenario }
+    assert.equal(payrollAccess.canAccessPayroll(actor), scenario.canRead)
+    assert.equal(payrollAccess.canManagePayroll(actor), scenario.canManage)
+    assert.equal(
+      canAccessRoute(actor, "/module/payroll"),
+      scenario.canRead,
+      scenario.role,
+    )
+    for (const section of ["compensation", "settings"])
+      assert.equal(
+        canAccessRoute(actor, `/module/payroll/${section}`),
+        scenario.canRead,
+        `${scenario.role} ${section}`,
+      )
+  }
+  assert.equal(
+    payrollAccess.canAccessPayroll({
+      ...superadmin,
+      role: "ADMIN",
+      permissions: ["payroll:read"],
+      isActive: false,
+    }),
+    false,
+  )
+  assert.equal(
+    payrollAccess.canAccessPayroll({
+      ...superadmin,
+      role: "ADMIN",
+      permissions: ["payroll:read"],
+      accountDeletedAt: "2026-11-14T00:00:00.000Z",
+    }),
+    false,
+  )
 })
 
 test("all implemented portal pages have explicit authorization policies", async () => {

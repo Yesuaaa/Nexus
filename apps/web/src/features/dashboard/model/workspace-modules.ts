@@ -62,6 +62,12 @@ export function getWorkspaceModules(account: Account): WorkspaceModule[] {
     if (canAccessRoute(account, "/accounts")) add("administration", "/accounts")
   }
 
+  if (
+    canAccessRoute(account, "/module/payroll") &&
+    !modules.some((module) => module.id === "payroll")
+  )
+    add("payroll", "/module/payroll")
+
   if (modules.length > 0)
     for (const id of Object.keys(moduleRegistry) as WorkspaceModuleId[]) {
       const module = moduleRegistry[id]

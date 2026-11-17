@@ -24,6 +24,7 @@ test(
     const request = (path: string) =>
       fetch(`${base}${path}`, { headers: { Authorization: `Bearer ${token}` } })
     assert.equal((await fetch(`${base}/modules`)).status, 401)
+    assert.equal((await fetch(`${base}/modules/payroll`)).status, 401)
     assert.equal(
       await prisma.employee.count({ where: { userId: account.id } }),
       0,
@@ -77,10 +78,28 @@ test(
       "/client/services",
     ])
       assert.equal((await request(path)).status, 403, path)
-    for (const role of [Role.ADMIN, Role.STAFF, Role.USER]) {
+    for (const [role, payrollStatus] of [
+      [Role.ADMIN, 200],
+      [Role.STAFF, 403],
+      [Role.USER, 403],
+    ] as const) {
       await prisma.user.update({ where: { id: account.id }, data: { role } })
       assert.equal((await request("/modules")).status, 403)
       assert.equal((await request("/modules/project-management")).status, 403)
+      const payrollResponse = await request("/modules/payroll")
+      assert.equal(payrollResponse.status, payrollStatus)
+      if (payrollResponse.ok) {
+        const { module } = (await payrollResponse.json()) as {
+          module: { id: string; title: string }
+        }
+        assert.deepEqual(module, {
+          id: "payroll",
+          title: "Payroll",
+          description:
+            "Manage employee compensation, payroll processing, approvals, and salary disbursements.",
+          href: "/module/payroll",
+        })
+      }
     }
     await prisma.user.update({
       where: { id: account.id },

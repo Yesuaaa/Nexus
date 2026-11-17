@@ -15,7 +15,7 @@ import type { TestContext } from "node:test"
 import { PGlite } from "@electric-sql/pglite"
 import { PGLiteSocketServer } from "@electric-sql/pglite-socket"
 import { createApp } from "../../src/app.js"
-import { getPrisma } from "../../src/lib/db.js"
+import { disconnectPrisma, getPrisma } from "../../src/lib/db.js"
 import {
   setServiceImageStorageForTests,
   type ServiceImageStorage,
@@ -95,7 +95,7 @@ export async function startPgliteDatabase(
   const shutdownHooks: (() => unknown)[] = []
   t.after(async () => {
     for (const hook of shutdownHooks.reverse()) await hook()
-    await cleanup.prisma?.$disconnect()
+    if (cleanup.prisma) await disconnectPrisma()
     await cleanup.socket?.stop()
     await db.close()
     if (options.imageStorage) setServiceImageStorageForTests(undefined)

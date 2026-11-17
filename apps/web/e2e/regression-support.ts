@@ -1,6 +1,9 @@
 import { expect, test, type Page } from "@playwright/test"
 import type { Account } from "../src/features/auth/model/types"
-import { Permissions } from "../src/features/auth/model/permissions"
+import {
+  canAccessPayroll,
+  Permissions,
+} from "../src/features/auth/model/permissions"
 import type { Department } from "../src/features/departments/api/departments-api"
 import type { Employee } from "../src/features/employees/api/employees-api"
 import type {
@@ -88,6 +91,9 @@ export function accountFor(
       Permissions.SERVICES_MANAGE,
     )
   }
+  if (role === "ADMIN")
+    permissions.push(Permissions.PAYROLL_READ, Permissions.PAYROLL_MANAGE)
+  if (role === "SUPERADMIN") permissions.push(Permissions.PAYROLL_READ)
   if (role === "SUPERADMIN") {
     permissions.push(
       Permissions.MODULES_ACCESS_ALL,
@@ -358,7 +364,10 @@ export async function mockApi(
       const module = Object.hasOwn(moduleRegistry, id)
         ? moduleRegistry[id]
         : undefined
-      if (!currentUser.permissions.includes(Permissions.MODULES_ACCESS_ALL)) {
+      if (
+        !canAccessPayroll(currentUser) &&
+        !currentUser.permissions.includes(Permissions.MODULES_ACCESS_ALL)
+      ) {
         await route.fulfill({
           status: 403,
           json: { error: "Administrative module access is required" },

@@ -66,3 +66,10 @@ export function getPrisma() {
 
   return client
 }
+
+/** Reset the shared client after an isolated test database has shut down. */
+export async function disconnectPrisma() {
+  const current = client
+  client = undefined
+  await current?.$disconnect()
+}

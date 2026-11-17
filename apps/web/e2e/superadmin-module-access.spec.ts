@@ -175,6 +175,123 @@ test("backend denial prevents administrative entry content even when the browser
   ).toHaveCount(0)
 })
 
+for (const [role, width, readOnly] of [
+  ["ADMIN", 390, false],
+  ["SUPERADMIN", 1440, true],
+] as const)
+  test(`${role} opens Payroll with Phase 2 sections available at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 })
+    await restoreSession(page, role)
+    await page.goto("/module")
+
+    const payroll = page.getByRole("link", {
+      name: "Open Payroll workspace",
+      exact: true,
+    })
+    await expect(payroll).toBeVisible()
+    await payroll.click()
+    await expect(page).toHaveURL("/module/payroll")
+    await expect(
+      page.getByRole("heading", { name: "Payroll Management", exact: true }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole("heading", {
+        name: "Configure compensation and schedules",
+        exact: true,
+      }),
+    ).toBeVisible()
+    await expect(page.getByText("Read only", { exact: true })).toHaveCount(
+      readOnly ? 1 : 0,
+    )
+
+    if (width < 768)
+      await page.getByRole("button", { name: "Open navigation menu" }).click()
+    const sidebar = page.getByRole("complementary", {
+      name: "Primary navigation",
+    })
+    const overview = sidebar.getByRole("link", {
+      name: "Payroll overview",
+      exact: true,
+    })
+    await expect(overview).toHaveAttribute("aria-current", "page")
+    for (const section of ["Compensation", "Settings"]) {
+      const link = sidebar.getByRole("link", { name: section, exact: true })
+      await expect(link).toBeVisible()
+      await expect(link).not.toHaveAttribute("aria-disabled", "true")
+    }
+    for (const section of [
+      "Payroll Runs",
+      "Approvals",
+      "Disbursements",
+      "Payslips & History",
+    ]) {
+      await expect(sidebar.getByText(section, { exact: true })).toBeVisible()
+      await expect(
+        sidebar.getByRole("link", { name: section, exact: true }),
+      ).toHaveCount(0)
+    }
+    if (width >= 768) {
+      await page.getByRole("button", { name: "Collapse sidebar" }).click()
+      await sidebar
+        .getByRole("button", { name: "Payroll", exact: true })
+        .click()
+      const flyout = page.getByRole("menu")
+      for (const section of ["Compensation", "Settings"]) {
+        const item = flyout.getByRole("menuitem", { name: section })
+        await expect(item).toBeVisible()
+        await expect(item).not.toHaveAttribute("aria-disabled", "true")
+      }
+      for (const section of [
+        "Payroll Runs",
+        "Approvals",
+        "Disbursements",
+        "Payslips & History",
+      ]) {
+        const item = flyout.getByRole("menuitem", { name: section })
+        await expect(item).toBeVisible()
+        await expect(item).toHaveAttribute("aria-disabled", "true")
+        await expect(
+          flyout.getByRole("link", { name: section, exact: true }),
+        ).toHaveCount(0)
+      }
+    }
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true)
+  })
+
+for (const role of ["STAFF", "USER"] as const)
+  test(`${role} cannot open the administrative Payroll route`, async ({
+    page,
+  }) => {
+    await restoreSession(page, role)
+    const reads: string[] = []
+    page.on("request", (request) => {
+      if (request.url().includes("/api/modules/payroll"))
+        reads.push(request.url())
+    })
+    await page.goto("/module/payroll")
+    await expect(page).toHaveURL(role === "USER" ? /\/dashboard$/ : /\/module$/)
+    expect(reads).toEqual([])
+    await expect(
+      page.getByRole("heading", { name: "Payroll Management", exact: true }),
+    ).toHaveCount(0)
+  })
+
+test("an unauthenticated visitor cannot open the administrative Payroll route", async ({
+  page,
+}) => {
+  await page.goto("/module/payroll")
+  await expect(page).toHaveURL(/\/(login|internal\/login)$/)
+  await expect(
+    page.getByRole("heading", { name: "Payroll Management", exact: true }),
+  ).toHaveCount(0)
+})
+
 for (const role of ["ADMIN", "STAFF", "USER"] as const)
   test(`${role} cannot enter the global administrative module route`, async ({
     page,
