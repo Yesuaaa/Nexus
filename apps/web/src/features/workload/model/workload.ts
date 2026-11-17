@@ -34,6 +34,8 @@ export type WorkloadPlanning = {
       timeZone: string | null
     }[]
   }
+  approvedLeave?: { workDate: string; minutes: number }[]
+  approvedLeaveHours?: number
   confirmedAvailableSlots: null
   commitments: {
     id: string

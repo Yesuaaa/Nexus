@@ -5,6 +5,7 @@ import {
   activeDepartmentHead,
 } from "../../shared/query/accounts.js"
 import { fail } from "./workflow.validation.js"
+import { leaveAdminVisibility } from "../leave/leave.repository.js"
 
 export function notificationScope(
   userId: string,
@@ -12,6 +13,26 @@ export function notificationScope(
   return {
     userId,
     OR: [
+      {
+        leaveRequest: {
+          requestedById: userId,
+          requestedBy: activeAccount,
+        },
+      },
+      {
+        leaveRequest: {
+          employee: { department: activeDepartmentHead(userId) },
+        },
+      },
+      {
+        leaveRequestId: { not: null },
+        user: { ...activeAccount, role: "ADMIN" },
+        leaveRequest: leaveAdminVisibility,
+      },
+      {
+        leaveRequestId: { not: null },
+        user: { ...activeAccount, role: "SUPERADMIN" },
+      },
       {
         attendanceAdjustment: {
           employee: { department: activeDepartmentHead(userId) },
@@ -92,6 +113,7 @@ export async function listWorkflowNotifications(userId: string) {
             createdAt: true,
             readAt: true,
             attendanceAdjustmentId: true,
+            leaveRequestId: true,
             summary: true,
             type: true,
             event: { select: { summary: true, type: true, entityId: true } },
@@ -106,7 +128,10 @@ export async function listWorkflowNotifications(userId: string) {
           ...record,
           summary: event?.summary ?? record.summary!,
           type: event?.type ?? record.type!,
-          entityId: event?.entityId ?? record.attendanceAdjustmentId,
+          entityId:
+            event?.entityId ??
+            record.attendanceAdjustmentId ??
+            record.leaveRequestId,
         })),
         unreadCount,
       }

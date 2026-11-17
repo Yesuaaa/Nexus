@@ -307,6 +307,12 @@ export function MyAttendancePage() {
                   {day.policy.unpaidBreaksEnabled ? "Enabled" : "Disabled"}
                 </DetailItem>
               </DetailList>
+              {clock.state?.leaveConflict && (
+                <Alert>
+                  Recorded work crosses approved leave. Contact HR to reconcile
+                  the leave approval. You can still end your active session.
+                </Alert>
+              )}
               {day.overnightRequiresReview && (
                 <p className="text-xs text-[#805316]">
                   This policy requires overnight work to be reviewed.

@@ -15,7 +15,7 @@ type SummarySource = Pick<
   | "overnightRequiresReview"
   | "sessions"
   | "assignment"
-> & { id: string | null }
+> & { id: string | null; approvedLeaveMinutes?: number }
 
 /** Count elapsed instants against the attributed workday, never split at midnight. */
 export function summarizeAttendance(day: SummarySource, asOf: Date) {
@@ -40,7 +40,12 @@ export function summarizeAttendance(day: SummarySource, asOf: Date) {
     return [{ startedAt: session.startedAt, endedAt: end, breaks }]
   })
   const workedMilliseconds = attendanceWorkedMilliseconds(intervals)
-  const requiredMilliseconds = day.requiredMinutes * 60000
+  const approvedLeaveMinutes = Math.min(
+    day.requiredMinutes,
+    Math.max(0, day.approvedLeaveMinutes ?? 0),
+  )
+  const effectiveRequiredMinutes = day.requiredMinutes - approvedLeaveMinutes
+  const requiredMilliseconds = effectiveRequiredMinutes * 60000
   const remainingMilliseconds = Math.max(
     0,
     requiredMilliseconds - workedMilliseconds,
@@ -51,7 +56,7 @@ export function summarizeAttendance(day: SummarySource, asOf: Date) {
   )
   const activeSession = day.sessions.find((session) => session.endedAt === null)
   const status =
-    day.requiredMinutes === 0
+    effectiveRequiredMinutes === 0
       ? "NOT_REQUIRED"
       : activeSession
         ? remainingMilliseconds === 0
@@ -88,8 +93,10 @@ export function summarizeAttendance(day: SummarySource, asOf: Date) {
           attendanceWorkDate(session.startedAt, day.timeZone) !==
           attendanceWorkDate(session.endedAt ?? asOf, day.timeZone),
       ),
-    requiredMinutes: day.requiredMinutes,
-    requiredHours: day.requiredMinutes / 60,
+    baseRequiredMinutes: day.requiredMinutes,
+    approvedLeaveMinutes,
+    requiredMinutes: effectiveRequiredMinutes,
+    requiredHours: effectiveRequiredMinutes / 60,
     workedMilliseconds,
     workedMinutes: workedMilliseconds / 60000,
     workedHours: workedMilliseconds / 3600000,

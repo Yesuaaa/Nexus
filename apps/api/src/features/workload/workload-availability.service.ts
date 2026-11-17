@@ -72,28 +72,39 @@ export async function workloadPlanningContext(
           scheduledOnly: true,
         }
       : null
-  const [assignments, consultations, meetings] = await Promise.all([
-    tx.attendancePolicyAssignment.findMany({
-      where: {
-        employeeId: { in: staff.map((employee) => employee.id) },
-        effectiveFrom: { lt: until },
-        OR: [{ effectiveUntil: null }, { effectiveUntil: { gt: start } }],
-      },
-      include: { policy: { include: { days: true } } },
-    }),
-    head && calendarFilter
-      ? tx.workflowConsultation.findMany({
-          where: consultationCalendarWhere(calendarFilter),
-          select: { id: true, startsAt: true, endsAt: true },
-        })
-      : [],
-    head && calendarFilter
-      ? tx.conversationMeeting.findMany({
-          where: meetingCalendarWhere(calendarFilter),
-          select: { id: true, startsAt: true, endsAt: true },
-        })
-      : [],
-  ])
+  const [assignments, consultations, meetings, approvedLeave] =
+    await Promise.all([
+      tx.attendancePolicyAssignment.findMany({
+        where: {
+          employeeId: { in: staff.map((employee) => employee.id) },
+          effectiveFrom: { lt: until },
+          OR: [{ effectiveUntil: null }, { effectiveUntil: { gt: start } }],
+        },
+        include: { policy: { include: { days: true } } },
+      }),
+      head && calendarFilter
+        ? tx.workflowConsultation.findMany({
+            where: consultationCalendarWhere(calendarFilter),
+            select: { id: true, startsAt: true, endsAt: true },
+          })
+        : [],
+      head && calendarFilter
+        ? tx.conversationMeeting.findMany({
+            where: meetingCalendarWhere(calendarFilter),
+            select: { id: true, startsAt: true, endsAt: true },
+          })
+        : [],
+      tx.leaveRequestDay.findMany({
+        where: {
+          employeeId: { in: staff.map((employee) => employee.id) },
+          workDate: { gte: start, lt: until },
+          leaveMinutes: { gt: 0 },
+          request: { status: "APPROVED" },
+        },
+        select: { employeeId: true, workDate: true, leaveMinutes: true },
+        orderBy: [{ workDate: "asc" }, { id: "asc" }],
+      }),
+    ])
   const commitments = [
     ...consultations.map((item) => ({
       ...item,
@@ -123,6 +134,16 @@ export async function workloadPlanningContext(
           week,
           assignments.filter((item) => item.employeeId === employee.id),
         ),
+        approvedLeave: approvedLeave
+          .filter((day) => day.employeeId === employee.id)
+          .map((day) => ({
+            workDate: day.workDate.toISOString().slice(0, 10),
+            minutes: day.leaveMinutes,
+          })),
+        approvedLeaveHours:
+          approvedLeave
+            .filter((day) => day.employeeId === employee.id)
+            .reduce((sum, day) => sum + day.leaveMinutes, 0) / 60,
         // Null means unknown, not an empty week of confirmed free time.
         confirmedAvailableSlots: null,
         commitments: employee.id === head?.id ? commitments : [],

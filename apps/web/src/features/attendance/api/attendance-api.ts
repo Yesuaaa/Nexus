@@ -21,6 +21,8 @@ export type AttendanceWorkday = {
   timeZone: string
   isWorkingDay: boolean
   requiredMinutes: number
+  baseRequiredMinutes?: number
+  approvedLeaveMinutes?: number
   workedMilliseconds: number
   workedHours: number
   remainingMinutes: number
@@ -47,6 +49,7 @@ export type AttendanceWorkday = {
   overnightRequiresReview: boolean
 }
 export type AttendanceState = {
+  leaveConflict?: boolean
   asOf: string
   employeeId: string
   needsPolicy: boolean
