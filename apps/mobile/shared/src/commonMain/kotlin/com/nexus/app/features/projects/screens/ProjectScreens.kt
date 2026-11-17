@@ -152,6 +152,7 @@ fun ProjectScreen(id: String, overview: Boolean, onBack: () -> Unit, onOpen: () 
 private fun DeliverableCard(project: ClientProject, deliverable: ClientDeliverable, viewModel: ProjectsViewModel, busy: Boolean) {
     val platform = LocalPlatformFiles.current
     var note by rememberSaveable(deliverable.id) { mutableStateOf("") }
+    var confirmApproval by rememberSaveable(project.id, deliverable.id, deliverable.workflowFile.id) { mutableStateOf(false) }
     val review = deliverable.clientReviews.firstOrNull()?.takeIf { it.workflowFileId == deliverable.workflowFile.id }
     ProjectCard {
         Text(deliverable.title, Modifier.fillMaxWidth(), fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
@@ -169,10 +170,27 @@ private fun DeliverableCard(project: ClientProject, deliverable: ClientDeliverab
             review.note?.let { ProjectCopy(it) }
         } else if (project.status != "CANCELLED") {
             NexusTextField(note, { if (it.length <= 2000) note = it }, "Review note", "Describe any revisions needed", singleLine = false, maxLines = 5, enabled = !busy)
-            NexusButton("Approve deliverable", { viewModel.review(project.id, deliverable.id, "APPROVED", note) }, enabled = !busy)
+            NexusButton("Approve deliverable", { confirmApproval = true }, enabled = !busy)
             NexusButton("Request revision", { viewModel.review(project.id, deliverable.id, "REVISION_REQUESTED", note) }, variant = NexusButtonVariant.OUTLINE, enabled = !busy && note.trim().length >= 3)
         }
     }
+    if (confirmApproval && review == null && project.status != "CANCELLED") {
+        NexusAlertDialog(
+            onDismissRequest = { if (!busy) confirmApproval = false },
+            title = { Text("Approve this deliverable?") },
+            text = { Text("This confirms that “${deliverable.title}” meets the agreed expectations.") },
+            confirmButton = {
+                NexusDialogButton(enabled = !busy, onClick = {
+                    confirmApproval = false
+                    viewModel.review(project.id, deliverable.id, "APPROVED", note)
+                }) { Text("Approve deliverable") }
+            },
+            dismissButton = {
+                NexusDialogButton(enabled = !busy, onClick = { confirmApproval = false }) { Text("Cancel") }
+            },
+        )
+    }
+
 }
 
 @Composable

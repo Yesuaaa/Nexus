@@ -6,6 +6,7 @@ import com.nexus.app.core.components.NexusDialogButton
 import com.nexus.app.core.components.NexusAlertDialog
 import com.nexus.app.core.theme.NexusButtonShape
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.text.style.TextOverflow
@@ -14,14 +15,25 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Code
+import androidx.compose.material.icons.outlined.MailOutline
+import androidx.compose.material.icons.outlined.Paid
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Videocam
+import androidx.compose.material.icons.outlined.WorkOutline
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -109,19 +121,49 @@ fun ServicesScreen(
                     row.forEach { item ->
                         Card(onClick = { viewModel.showDetails(item) }, modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = .18f)),
                             colors = CardDefaults.cardColors(containerColor = NexusColors.ServiceCardNavy)) {
-                            ServiceImage(item.imageUrl, item.imageAltText ?: item.name, Modifier.fillMaxWidth().height(64.dp))
-                            Column(Modifier.fillMaxWidth().height(96.dp).padding(horizontal = 10.dp, vertical = 6.dp)) {
-                                Text(item.name, fontSize = 13.sp, lineHeight = 16.sp,
-                                    maxLines = 2, overflow = TextOverflow.Ellipsis,
-                                    fontWeight = FontWeight.SemiBold, color = Color.White)
-                                Spacer(Modifier.height(6.dp))
-                                Text(item.price(), fontSize = 11.sp, lineHeight = 14.sp,
-                                    maxLines = 2, overflow = TextOverflow.Ellipsis,
-                                    color = Color.White.copy(alpha = 0.85f))
-                                Spacer(Modifier.weight(1f))
-                                Text("Request service  +", fontSize = 12.sp, lineHeight = 16.sp,
-                                    maxLines = 1, color = Color.White)
+                            Box(Modifier.fillMaxWidth().height(160.dp)) {
+                                if (!item.imageUrl.isNullOrBlank()) {
+                                    ServiceImage(item.imageUrl, item.imageAltText ?: item.name, Modifier.matchParentSize())
+                                    Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(
+                                        Color.Black.copy(alpha = .28f), Color.Black.copy(alpha = .62f),
+                                    ))))
+                                }
+                                Column(Modifier.fillMaxSize().padding(12.dp)) {
+                                    Surface(shape = RoundedCornerShape(8.dp),
+                                        color = Color.White.copy(alpha = .06f),
+                                        border = BorderStroke(1.dp, Color.White.copy(alpha = .65f))) {
+                                        Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
+                                            Icon(when (item.iconKey.lowercase()) {
+                                                "social" -> Icons.Outlined.Share
+                                                "advertising" -> Icons.Outlined.Paid
+                                                "video" -> Icons.Outlined.Videocam
+                                                "code" -> Icons.Outlined.Code
+                                                "search" -> Icons.Outlined.Search
+                                                "email" -> Icons.Outlined.MailOutline
+                                                "sparkles" -> Icons.Outlined.AutoAwesome
+                                                else -> Icons.Outlined.WorkOutline
+                                            }, null, Modifier.size(22.dp), tint = Color.White)
+                                        }
+                                    }
+                                    Spacer(Modifier.weight(1f))
+                                    Text(item.name, fontSize = 13.sp, lineHeight = 17.sp,
+                                        maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                        fontWeight = FontWeight.SemiBold, color = Color.White)
+                                    Spacer(Modifier.height(10.dp))
+                                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Text("Request service", Modifier.weight(1f), fontSize = 11.sp, lineHeight = 16.sp,
+                                            maxLines = 1, color = Color.White.copy(alpha = .9f))
+                                        Surface(shape = CircleShape, color = Color.Transparent,
+                                            border = BorderStroke(1.dp, Color.White.copy(alpha = .8f))) {
+                                            Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+                                                Icon(Icons.Outlined.Add, null, Modifier.size(18.dp), tint = Color.White)
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

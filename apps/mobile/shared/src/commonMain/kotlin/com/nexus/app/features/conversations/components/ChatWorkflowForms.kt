@@ -3,6 +3,12 @@ package com.nexus.app.features.conversations.components
 import com.nexus.app.core.components.NexusDialogButton
 import com.nexus.app.core.components.NexusAlertDialog
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.platform.LocalUriHandler
+import com.nexus.app.features.conversations.model.ConversationMeeting
+import kotlinx.coroutines.launch
+import kotlinx.datetime.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -107,4 +113,85 @@ fun ChatWorkflowForms(
     Surface(shape = RoundedCornerShape(12.dp), color = Color.White, border = BorderStroke(1.dp, Color(0xFFD8E1EF))) {
         Text(workflow.nextAction, Modifier.padding(12.dp), fontSize = 12.sp, color = ConversationStyle.Muted)
     }
+}
+
+
+@Composable
+fun ConversationMeetingCard(
+    meeting: ConversationMeeting,
+    canAct: Boolean,
+    busy: Boolean,
+    error: String?,
+    clearError: () -> Unit,
+    requestReschedule: suspend (ConversationMeeting, String, String) -> Boolean,
+) {
+    var dialog by rememberSaveable(meeting.id) { mutableStateOf(false) }
+    var proposed by rememberSaveable(meeting.id) { mutableStateOf("") }
+    var reason by rememberSaveable(meeting.id) { mutableStateOf("") }
+    var validation by remember(meeting.id) { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val uriHandler = LocalUriHandler.current
+    var linkError by remember(meeting.id) { mutableStateOf<String?>(null) }
+    fun formatted(value: String): String = runCatching {
+        Instant.parse(value).toLocalDateTime(TimeZone.currentSystemDefault()).let {
+            "${it.date} ${it.hour.toString().padStart(2, '0')}:${it.minute.toString().padStart(2, '0')}"
+        }
+    }.getOrDefault(value)
+    DocumentFrame("Consultation/meeting", Icons.Outlined.Event, humanStatus(meeting.status)) {
+        Text(meeting.notes.ifBlank { "General meeting" }, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = ConversationStyle.Ink)
+        Text("${formatted(meeting.startsAt)} ? ${formatted(meeting.endsAt)}", fontSize = 13.sp, color = ConversationStyle.Muted)
+        val isLink = meeting.location.startsWith("https://", true) || meeting.location.startsWith("http://", true)
+        if (isLink) TextButton(onClick = {
+            linkError = runCatching { uriHandler.openUri(meeting.location) }.exceptionOrNull()?.let { "Unable to open this meeting link." }
+        }) { Text("Join meeting: ${meeting.location}") }
+        else Text(meeting.location, fontSize = 13.sp, color = ConversationStyle.Muted)
+        linkError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
+        if (meeting.bookings.isEmpty()) Text("General meeting ? No specific service", fontSize = 11.sp, color = ConversationStyle.Muted)
+        else Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Related services", fontSize = 12.sp, color = ConversationStyle.Muted)
+            meeting.bookings.forEach { related ->
+                Surface(shape = RoundedCornerShape(6.dp), color = ConversationStyle.Notice) {
+                    Text("${related.booking.service.name} ? ${related.booking.referenceNumber ?: related.booking.id}",
+                        Modifier.padding(8.dp), fontSize = 11.sp, color = ConversationStyle.Navy)
+                }
+            }
+        }
+        meeting.proposedStartsAt?.let {
+            Text("Reschedule requested: ${formatted(it)}", fontSize = 13.sp, color = ConversationStyle.Navy)
+            meeting.rescheduleNote?.let { note -> Text(note, fontSize = 13.sp) }
+            Text("The existing schedule remains until the department head confirms a change.", fontSize = 12.sp, color = ConversationStyle.Muted)
+        }
+        if (canAct && meeting.status == "SCHEDULED") OutlinedButton(shape = NexusButtonShape,
+            enabled = !busy && meeting.proposedStartsAt == null,
+            onClick = { clearError(); validation = null; dialog = true }) { Text("Request reschedule") }
+    }
+    if (dialog && canAct && meeting.status == "SCHEDULED") NexusAlertDialog(
+        onDismissRequest = { if (!busy) dialog = false },
+        title = { Text("Request reschedule") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Propose a new time in your local time zone. The current schedule remains until confirmed.", fontSize = 13.sp)
+                OutlinedTextField(proposed, { proposed = it; validation = null }, Modifier.fillMaxWidth(),
+                    enabled = !busy, label = { Text("Proposed date and time") }, placeholder = { Text("YYYY-MM-DD HH:mm") }, singleLine = true)
+                OutlinedTextField(reason, { reason = it.take(2000) }, Modifier.fillMaxWidth(),
+                    enabled = !busy, label = { Text("Reason for rescheduling") }, minLines = 2, maxLines = 4)
+                (validation ?: error)?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
+            }
+        },
+        confirmButton = {
+            NexusDialogButton(enabled = !busy && proposed.isNotBlank() && reason.isNotBlank(), onClick = {
+                val instant = runCatching {
+                    LocalDateTime.parse(proposed.trim().replace(' ', 'T')).toInstant(TimeZone.currentSystemDefault())
+                }.getOrNull()
+                if (instant == null) validation = "Enter a valid date and time (YYYY-MM-DD HH:mm)."
+                else if (instant <= Clock.System.now()) validation = "Choose a future date and time."
+                else scope.launch {
+                    if (requestReschedule(meeting, instant.toString(), reason)) {
+                        dialog = false; proposed = ""; reason = ""
+                    }
+                }
+            }) { Text(if (busy) "Sending?" else "Send request") }
+        },
+        dismissButton = { NexusDialogButton(enabled = !busy, onClick = { dialog = false }) { Text("Cancel") } },
+    )
 }

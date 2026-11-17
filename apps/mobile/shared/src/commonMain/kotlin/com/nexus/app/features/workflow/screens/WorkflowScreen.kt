@@ -12,6 +12,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import com.nexus.app.core.components.NexusButton
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -189,29 +193,53 @@ fun WorkflowScreen(id: String, onBack: () -> Unit, conversationId: String? = nul
             }, enabled = !state.busy && proposedTime.isNotBlank() && rescheduleNote.isNotBlank()) { Text("Request reschedule") }
         }, dismissButton = { NexusDialogButton(onClick = { consultationDetails = null }) { Text("Close") } }) }
     if (documents && workflow != null) ModalBottomSheet(onDismissRequest = { documents = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = Color.White, dragHandle = null) {
-        Column(Modifier.fillMaxWidth().heightIn(max = 640.dp).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        val payment = workflow.payment
+        val paymentStage = workflow.state in setOf("AGREEMENT_PAYMENT_PENDING", "READY_FOR_ACTIVATION")
+        val sandboxEligible = workflow.permissions.isClient && payment?.status == "PENDING" && paymentStage
+        var manualProof by remember(workflow.request.id, payment?.status) { mutableStateOf(false) }
+        val signingAgreement = workflow.agreement?.let {
+            it.documentFileId != null && it.status == "PENDING" && paymentStage
+        } == true
+        val showAttachmentControls = !sandboxEligible || manualProof || signingAgreement
+        Column(Modifier.fillMaxWidth().imePadding().heightIn(max = 640.dp).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Agreement and payment", Modifier.weight(1f), fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = ConversationStyle.Ink)
                 IconButton(onClick = { documents = false }) { Icon(Icons.Outlined.Close, "Close documents") }
             }
-            Text(workflow.request.serviceName, fontSize = 14.sp, color = ConversationStyle.Muted)
-            WorkflowDocumentCards(workflow) { file -> platformFiles?.let { viewModel.file(it, file, false) } }
-            state.uploadProgress?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth()) }
-            if (platformFiles != null && workflow.state !in setOf("PENDING_REVIEW", "CANCELLED", "DECLINED", "ON_HOLD")) OutlinedButton(onClick = { viewModel.upload(platformFiles) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth(), shape = NexusButtonShape) { Text("Attach signed agreement or payment evidence", fontSize = 12.sp) }
-            workflow.files.forEach { file ->
-                Row(Modifier.fillMaxWidth().clickable { viewModel.selectFile(file.id) }, verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(state.selectedFileId == file.id, { viewModel.selectFile(file.id) })
-                    Text(file.name, Modifier.weight(1f), fontSize = 12.sp)
-                    if (platformFiles != null) IconButton(onClick = { viewModel.file(platformFiles, file, true) }, enabled = !state.busy) { Icon(Icons.Outlined.OpenInNew, "Preview ${file.name}", Modifier.size(18.dp)) }
+            Column(Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(workflow.request.serviceName, fontSize = 14.sp, color = ConversationStyle.Muted)
+                WorkflowDocumentCards(workflow) { file -> platformFiles?.let { viewModel.file(it, file, false) } }
+                state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
+                if (state.pendingAction && !state.busy) {
+                    TextButton(shape = NexusButtonShape, onClick = viewModel::retryAction) { Text("Confirm previous action") }
                 }
+                if (sandboxEligible && payment != null) {
+                    if (!manualProof) key(workflow.request.id) {
+                        SandboxCardPaymentForm(payment, state.busy, state.pendingAction,
+                            onPay = { viewModel.action("COMPLETE_SANDBOX_PAYMENT") },
+                            onManualProof = { manualProof = true })
+                    } else TextButton(shape = NexusButtonShape, enabled = !state.busy && !state.pendingAction,
+                        onClick = { manualProof = false }) { Text("Use sandbox card checkout instead") }
+                }
+                state.uploadProgress?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth()) }
+                if (showAttachmentControls) {
+                    if (platformFiles != null && workflow.state !in setOf("PENDING_REVIEW", "CANCELLED", "DECLINED", "ON_HOLD")) OutlinedButton(onClick = { viewModel.upload(platformFiles) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth(), shape = NexusButtonShape) { Text("Attach signed agreement or payment evidence", fontSize = 12.sp) }
+                    workflow.files.forEach { file ->
+                        Row(Modifier.fillMaxWidth().clickable { viewModel.selectFile(file.id) }, verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(state.selectedFileId == file.id, { viewModel.selectFile(file.id) })
+                            Text(file.name, Modifier.weight(1f), fontSize = 12.sp)
+                            if (platformFiles != null) IconButton(onClick = { viewModel.file(platformFiles, file, true) }, enabled = !state.busy) { Icon(Icons.Outlined.OpenInNew, "Preview ${file.name}", Modifier.size(18.dp)) }
+                        }
+                    }
+                }
+                workflow.agreement?.let { agreement -> if (agreement.documentFileId != null && agreement.status == "PENDING" && workflow.state in setOf("AGREEMENT_PAYMENT_PENDING", "READY_FOR_ACTIVATION"))
+                    Button(onClick = { state.selectedFileId?.let { viewModel.action("SIGN_AGREEMENT", mapOf("fileId" to it)) } }, enabled = !state.busy && state.selectedFileId != null, modifier = Modifier.fillMaxWidth(), shape = NexusButtonShape) { Text("Submit signed agreement") }
+                }
+                workflow.payment?.let { payment -> if ((!sandboxEligible || manualProof) && payment.status !in setOf("VERIFIED", "SUBMITTED") && workflow.state in setOf("AGREEMENT_PAYMENT_PENDING", "READY_FOR_ACTIVATION")) {
+                    OutlinedTextField(paymentReference, { paymentReference = it.take(200) }, label = { Text("Payment reference") }, modifier = Modifier.fillMaxWidth())
+                    Button(onClick = { state.selectedFileId?.let { viewModel.action("SUBMIT_PAYMENT", mapOf("fileId" to it, "reference" to paymentReference)) } }, enabled = !state.busy && state.selectedFileId != null && paymentReference.isNotBlank(), modifier = Modifier.fillMaxWidth(), shape = NexusButtonShape) { Text("Submit payment evidence") }
+                } }
             }
-            workflow.agreement?.let { agreement -> if (agreement.documentFileId != null && agreement.status == "PENDING" && workflow.state in setOf("AGREEMENT_PAYMENT_PENDING", "READY_FOR_ACTIVATION"))
-                Button(onClick = { state.selectedFileId?.let { viewModel.action("SIGN_AGREEMENT", mapOf("fileId" to it)) } }, enabled = !state.busy && state.selectedFileId != null, modifier = Modifier.fillMaxWidth(), shape = NexusButtonShape) { Text("Submit signed agreement") }
-            }
-            workflow.payment?.let { payment -> if (payment.status !in setOf("VERIFIED", "SUBMITTED") && workflow.state in setOf("AGREEMENT_PAYMENT_PENDING", "READY_FOR_ACTIVATION")) {
-                OutlinedTextField(paymentReference, { paymentReference = it.take(200) }, label = { Text("Payment reference") }, modifier = Modifier.fillMaxWidth())
-                Button(onClick = { state.selectedFileId?.let { viewModel.action("SUBMIT_PAYMENT", mapOf("fileId" to it, "reference" to paymentReference)) } }, enabled = !state.busy && state.selectedFileId != null && paymentReference.isNotBlank(), modifier = Modifier.fillMaxWidth(), shape = NexusButtonShape) { Text("Submit payment evidence") }
-            } }
         }
     }
 }
@@ -286,3 +314,88 @@ private fun ConsultationCard(consultation: Consultation, onDetails: () -> Unit) 
 }
 private fun appointmentDate(value: String): String = try { Instant.parse(value).toLocalDateTime(TimeZone.currentSystemDefault()).date.toString() } catch (_: IllegalArgumentException) { value.take(10) }
 private fun appointmentTime(value: String): String = try { Instant.parse(value).toLocalDateTime(TimeZone.currentSystemDefault()).let { "${it.hour.toString().padStart(2, '0')}:${it.minute.toString().padStart(2, '0')}" } } catch (_: IllegalArgumentException) { value }
+
+
+@Composable
+private fun SandboxCardPaymentForm(
+    payment: Payment,
+    busy: Boolean,
+    pendingAction: Boolean,
+    onPay: () -> Unit,
+    onManualProof: () -> Unit,
+) {
+    // Prototype inputs stay in memory; the action sends no card details.
+    var cardholder by remember { mutableStateOf("Nexus Test Customer") }
+    var cardNumber by remember { mutableStateOf("4000 0000 0000 0002") }
+    var expiry by remember { mutableStateOf("12/30") }
+    var cvc by remember { mutableStateOf("123") }
+    var submitted by remember { mutableStateOf(false) }
+    val enabled = !busy && !pendingAction
+    val nameError = if (cardholder.isBlank()) "Enter the cardholder name." else null
+    val numberError = if (cardNumber.filter { it in '0'..'9' } != "4000000000000002")
+        "Use the prefilled sandbox card number for this prototype." else null
+    val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+    val expiryError = when {
+        !Regex("^(0[1-9]|1[0-2])/[0-9]{2}$").matches(expiry) -> "Enter a valid expiry date in MM/YY format."
+        else -> {
+            val month = expiry.take(2).toInt()
+            val year = 2000 + expiry.takeLast(2).toInt()
+            if (year < today.year || (year == today.year && month < today.monthNumber))
+                "Enter a future expiry date." else null
+        }
+    }
+    val cvcError = if (!Regex("^[0-9]{3}$").matches(cvc)) "Enter the 3-digit sandbox security code." else null
+    Surface(color = Color.White, border = BorderStroke(1.dp, ConversationStyle.Border), shape = RoundedCornerShape(12.dp)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(Icons.Outlined.CreditCard, null, Modifier.size(20.dp), tint = ConversationStyle.Navy)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Pay securely", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = ConversationStyle.Ink)
+                    Text("Xendit sandbox prototype · no real charge will be made", fontSize = 11.sp,
+                        lineHeight = 16.sp, color = ConversationStyle.Muted)
+                }
+                Surface(color = ConversationStyle.Notice, shape = RoundedCornerShape(12.dp)) {
+                    Text("Test mode", Modifier.padding(horizontal = 8.dp, vertical = 4.dp), fontSize = 10.sp, color = ConversationStyle.Navy)
+                }
+            }
+            Text("${payment.currency} ${displayAmount(payment.amount)}", fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold, color = ConversationStyle.Ink)
+            OutlinedTextField(cardholder, { cardholder = it.take(100) }, Modifier.fillMaxWidth(),
+                label = { Text("Cardholder name") }, enabled = enabled, singleLine = true, shape = NexusButtonShape,
+                isError = submitted && nameError != null,
+                supportingText = { if (submitted && nameError != null) Text(nameError) })
+            OutlinedTextField(cardNumber, {
+                cardNumber = it.filter { char -> char in '0'..'9' }.take(16).chunked(4).joinToString(" ")
+            }, Modifier.fillMaxWidth(), label = { Text("Card number") }, enabled = enabled, singleLine = true,
+                shape = NexusButtonShape, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                isError = submitted && numberError != null,
+                supportingText = { if (submitted && numberError != null) Text(numberError) })
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
+                OutlinedTextField(expiry, {
+                    val digits = it.filter { char -> char in '0'..'9' }.take(4)
+                    expiry = if (digits.length > 2) digits.take(2) + "/" + digits.drop(2) else digits
+                }, Modifier.weight(1f), label = { Text("Expiry") }, placeholder = { Text("MM/YY") },
+                    enabled = enabled, singleLine = true, shape = NexusButtonShape,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    isError = submitted && expiryError != null,
+                    supportingText = { if (submitted && expiryError != null) Text(expiryError) })
+                OutlinedTextField(cvc, { cvc = it.filter { char -> char in '0'..'9' }.take(3) }, Modifier.weight(1f),
+                    label = { Text("CVC") }, enabled = enabled, singleLine = true, shape = NexusButtonShape,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    visualTransformation = PasswordVisualTransformation(),
+                    isError = submitted && cvcError != null,
+                    supportingText = { if (submitted && cvcError != null) Text(cvcError) })
+            }
+            NexusButton(if (busy) "Processing payment…" else "Pay ${payment.currency} ${displayAmount(payment.amount)}",
+                onClick = {
+                    submitted = true
+                    if (nameError == null && numberError == null && expiryError == null && cvcError == null) onPay()
+                }, enabled = enabled)
+            Text("Prototype card: 4000 0000 0000 0002 · any future MM/YY · CVC 123",
+                fontSize = 10.sp, lineHeight = 16.sp, color = ConversationStyle.Muted)
+            TextButton(shape = NexusButtonShape, onClick = onManualProof, enabled = enabled) {
+                Text("Submit payment proof instead", fontSize = 12.sp)
+            }
+        }
+    }
+}

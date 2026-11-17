@@ -1,5 +1,11 @@
 package com.nexus.app.features.help.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -9,7 +15,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
-import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.*
@@ -18,6 +23,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.SpanStyle
@@ -28,9 +36,10 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nexus.app.core.components.LocalNexusBottomPadding
+import com.nexus.app.core.components.NexusSearchField
 import com.nexus.app.core.components.NexusButton
 import com.nexus.app.core.components.StatusBadge
-import com.nexus.app.core.theme.NexusButtonShape
 import com.nexus.app.core.theme.NexusColors
 import com.nexus.app.features.help.model.FaqGroup
 import com.nexus.app.features.help.model.FaqQuestion
@@ -54,54 +63,27 @@ fun HelpScreen(
         modifier = modifier
             .fillMaxSize()
             .background(NexusColors.SurfaceLight),
-        contentPadding = PaddingValues(20.dp),
+        contentPadding = PaddingValues(
+            start = 20.dp, end = 20.dp, top = 20.dp,
+            bottom = 20.dp + LocalNexusBottomPadding.current,
+        ),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = "Help & Support",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = NexusColors.HeaderDarkNavy,
-                )
-                Text(
-                    text = "Find answers about booking services and tracking your requests.",
-                    fontSize = 13.sp,
-                    lineHeight = 20.sp,
-                    color = NexusColors.TextSecondary,
-                )
-            }
+            Text(
+                text = "Find answers about booking services and tracking your requests.",
+                fontSize = 13.sp,
+                lineHeight = 20.sp,
+                color = NexusColors.TextSecondary,
+            )
         }
 
         item {
-            OutlinedTextField(
+            NexusSearchField(
                 value = search,
                 onValueChange = { search = it },
-                placeholder = {
-                    Text(
-                        text = "Search questions…",
-                        color = NexusColors.TextSecondary,
-                        fontSize = 14.sp,
-                    )
-                },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Outlined.Search,
-                        contentDescription = "Search questions",
-                        tint = NexusColors.TextSecondary,
-                        modifier = Modifier.size(20.dp),
-                    )
-                },
-                singleLine = true,
-                shape = NexusButtonShape,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White,
-                    focusedBorderColor = NexusColors.PrimaryBlue,
-                    unfocusedBorderColor = NexusColors.Border,
-                ),
-                modifier = Modifier.fillMaxWidth(),
+                placeholder = "Search questions…",
+                modifier = Modifier.height(44.dp),
             )
         }
 
@@ -181,11 +163,18 @@ private fun FaqAccordionItem(
     expanded: Boolean,
     onToggle: () -> Unit,
 ) {
+    val easing = CubicBezierEasing(0f, 0f, .58f, 1f)
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = tween(durationMillis = 200, easing = easing),
+        label = "FAQ chevron rotation",
+    )
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(role = Role.Button, onClick = onToggle)
+                .semantics { stateDescription = if (expanded) "Expanded" else "Collapsed" }
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
@@ -198,13 +187,23 @@ private fun FaqAccordionItem(
                 modifier = Modifier.weight(1f).padding(end = 12.dp),
             )
             Icon(
-                imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                imageVector = Icons.Outlined.ExpandMore,
                 contentDescription = if (expanded) "Collapse ${question.title}" else "Expand ${question.title}",
                 tint = NexusColors.TextSecondary,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(20.dp).rotate(chevronRotation),
             )
         }
-        if (expanded) {
+        AnimatedVisibility(
+            visible = expanded,
+            enter = expandVertically(
+                animationSpec = tween(durationMillis = 200, easing = easing),
+                expandFrom = Alignment.Top,
+            ),
+            exit = shrinkVertically(
+                animationSpec = tween(durationMillis = 200, easing = easing),
+                shrinkTowards = Alignment.Top,
+            ),
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()

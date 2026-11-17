@@ -82,6 +82,8 @@ fun statusLabel(status: String): String = when (status) {
     "UNDER_REVIEW" -> "Under review"
     "AWAITING_CLIENT_INFO" -> "Awaiting your information"
     "READY_FOR_QUOTATION" -> "Ready for quotation"
+    "ACTIVATED" -> "Activated"
+    "CONCLUDED" -> "Concluded"
     "CLOSED" -> "Closed"
     "CANCELLED" -> "Cancelled"
     else -> status.lowercase().replace('_', ' ')
