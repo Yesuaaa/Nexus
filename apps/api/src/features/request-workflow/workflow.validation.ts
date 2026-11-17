@@ -1,3 +1,4 @@
+import { isPlainObject, isUuidV4 } from "../../shared/validation.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 
 export type WorkflowCommand =
@@ -89,9 +90,8 @@ export function fail(message: string, status = 400): never {
 }
 
 export function object(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    fail("Invalid action")
-  return value as Record<string, unknown>
+  if (!isPlainObject(value)) fail("Invalid action")
+  return value
 }
 
 export function textField(
@@ -120,12 +120,7 @@ export function idField(value: unknown, name = "record ID"): string {
 
 export function uuid(value: unknown): string {
   const result = textField(value, "action ID", 36)
-  if (
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      result,
-    )
-  )
-    fail("A valid action ID is required")
+  if (!isUuidV4(result)) fail("A valid action ID is required")
   return result
 }
 

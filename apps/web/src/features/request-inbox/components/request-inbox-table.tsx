@@ -1,18 +1,16 @@
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 import { Eye, MessageSquare, Trash2 } from "lucide-react"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
-import { Button } from "@/components/ui/button"
 import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
 import { TableSortButton } from "@/components/ui/table-sort-button"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { rowActionButton } from "@/components/ui/row-action-styles"
+import { Pill } from "@/components/ui/pill"
 import {
+  DataTableErrorRow,
   ResponsiveDataTable,
   ResponsiveDataTableBody,
-  ResponsiveDataTableCell,
   ResponsiveDataTableColumnHeader,
   ResponsiveDataTableHeader,
-  ResponsiveDataTableRow,
 } from "@/components/ui/responsive-data-table"
 import { BookingStatusPill } from "@/features/bookings/components/booking-status-pill"
 import { cn } from "@/lib/utils"
@@ -34,12 +32,7 @@ function requestKey(request: InboxRequest) {
 }
 
 function StatusCell({ request }: { request: InboxRequest }) {
-  if (request.status === "SUBMITTED")
-    return (
-      <span className="inline-flex items-center rounded-md bg-[#fff1d6] px-2 py-0.5 text-[10px] font-medium text-[#8a5a00]">
-        Pending
-      </span>
-    )
+  if (request.status === "SUBMITTED") return <Pill tone="warning">Pending</Pill>
   return <BookingStatusPill status={request.status} />
 }
 
@@ -79,7 +72,7 @@ export function RequestInboxTable({
         style={{ color: "#070f1f" }}
         rowClassName={cn(
           grid,
-          "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold !text-foreground @max-[800px]:flex @max-[800px]:flex-wrap @max-[800px]:gap-x-4 @max-[800px]:gap-y-0",
+          "!text-foreground @max-[800px]:flex @max-[800px]:flex-wrap @max-[800px]:gap-x-4 @max-[800px]:gap-y-0",
         )}
       >
         {(
@@ -139,19 +132,7 @@ export function RequestInboxTable({
         </ResponsiveDataTableBody>
       ) : error ? (
         <ResponsiveDataTableBody>
-          <ResponsiveDataTableRow>
-            <ResponsiveDataTableCell
-              aria-colspan={6}
-              className="grid min-h-[150px] place-content-center gap-3 p-6 text-center text-xs text-[#52627a]"
-            >
-              <div role="alert">
-                <p>{error}</p>
-                <Button variant="outline" onClick={onRetry}>
-                  Try again
-                </Button>
-              </div>
-            </ResponsiveDataTableCell>
-          </ResponsiveDataTableRow>
+          <DataTableErrorRow message={error} onRetry={onRetry} colSpan={6} />
         </ResponsiveDataTableBody>
       ) : (
         <AnimatedSlotGridBody
@@ -177,7 +158,6 @@ export function RequestInboxTable({
                     Service
                   </span>
                   {request.service.name}
-                  <HoverTooltip>{request.service.name}</HoverTooltip>
                 </p>
               </div>
               <div
@@ -189,9 +169,6 @@ export function RequestInboxTable({
                     Reference
                   </span>
                   <span>{request.referenceNumber || request.id}</span>
-                  <HoverTooltip>
-                    {request.referenceNumber || request.id}
-                  </HoverTooltip>
                 </p>
               </div>
               <div
@@ -206,7 +183,6 @@ export function RequestInboxTable({
                 </p>
                 <p className="mt-1 mb-0 truncate text-[11px] text-[#738096]">
                   {request.client.email}
-                  <HoverTooltip>{request.client.email}</HoverTooltip>
                 </p>
               </div>
               <div
@@ -241,7 +217,6 @@ export function RequestInboxTable({
                   onClick={() => onView(request)}
                 >
                   <Eye size={16} aria-hidden="true" />
-                  <HoverTooltip>Review request</HoverTooltip>
                 </button>
                 <button
                   type="button"
@@ -253,7 +228,6 @@ export function RequestInboxTable({
                   onClick={() => onGoToChat(request)}
                 >
                   <MessageSquare size={16} aria-hidden="true" />
-                  <HoverTooltip>Go to chat</HoverTooltip>
                 </button>
                 <button
                   type="button"
@@ -265,7 +239,6 @@ export function RequestInboxTable({
                   onClick={() => onDelete(request)}
                 >
                   <Trash2 size={16} aria-hidden="true" />
-                  <HoverTooltip>Delete request</HoverTooltip>
                 </button>
               </div>
             </>

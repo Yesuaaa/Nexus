@@ -34,11 +34,9 @@ import {
   usePreferences,
   useDatePreferences,
 } from "../providers/preferences-provider"
+import { errorMessage } from "@/lib/error-message"
 const inputClass =
   "min-h-11 w-full rounded-lg border border-[#d8e1ef] bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[#294a9b]"
-const primaryClass = "min-h-11 bg-[#203f8c] text-white hover:bg-[#172f70]"
-const message = (error: unknown) =>
-  error instanceof Error ? error.message : "Please try again."
 export function SettingsPage() {
   const { preferences, update } = usePreferences()
   const { formatDateTime } = useDatePreferences()
@@ -92,7 +90,7 @@ export function SettingsPage() {
       })
       .catch((reason) => {
         if (!controller.signal.aborted) {
-          setError(message(reason))
+          setError(errorMessage(reason, "Please try again."))
           setLoading(false)
         }
       })
@@ -110,7 +108,7 @@ export function SettingsPage() {
       update(result)
       sileo.success({ title: "Settings saved" })
     } catch (reason) {
-      setError(message(reason))
+      setError(errorMessage(reason, "Please try again."))
     } finally {
       setSaving(false)
     }
@@ -130,7 +128,7 @@ export function SettingsPage() {
       setTarget(null)
       sileo.success({ title: "Session signed out" })
     } catch (reason) {
-      setSessionError(message(reason))
+      setSessionError(errorMessage(reason, "Please try again."))
     } finally {
       setPending(false)
     }
@@ -363,7 +361,8 @@ export function SettingsPage() {
 
                 <div className="flex justify-end">
                   <Button
-                    className={primaryClass}
+                    variant="brand"
+                    className="min-h-11"
                     disabled={!draft || !dirty || saving}
                   >
                     {saving ? "Saving…" : "Save notifications"}
@@ -473,7 +472,8 @@ export function SettingsPage() {
                     Cancel
                   </Button>
                   <Button
-                    className={primaryClass}
+                    variant="brand"
+                    className="min-h-11"
                     disabled={!draft || !dirty || saving}
                   >
                     {saving ? "Saving…" : "Save preferences"}

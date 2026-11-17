@@ -7,6 +7,7 @@ import {
   getToken,
 } from "../api/auth-api"
 import { watchVisibleRefresh } from "@/lib/visible-refresh"
+import { loginPathForRole } from "../model/auth-portal"
 import type { Account } from "../model/types"
 export function useAccount(onReady?: (succeeded: boolean) => void) {
   const router = useRouter()
@@ -17,13 +18,14 @@ export function useAccount(onReady?: (succeeded: boolean) => void) {
       inFlight = false,
       loaded = false,
       revoked = false
+    let loginPath: "/login" | "/internal/login" = "/login"
     const revoke = () => {
       if (!active || revoked) return
       revoked = true
       clearToken()
       setAccount(null)
       onReady?.(false)
-      router.replace("/login")
+      router.replace(loginPath)
     }
     const refresh = async () => {
       if (!active || revoked || inFlight) return
@@ -35,6 +37,7 @@ export function useAccount(onReady?: (succeeded: boolean) => void) {
       try {
         const { user } = await getCurrentAccount()
         if (active && !revoked) {
+          loginPath = loginPathForRole(user.role)
           // Polling must still observe every account/permission change, without
           // replacing the context value when the server payload is unchanged.
           setAccount((previous) =>

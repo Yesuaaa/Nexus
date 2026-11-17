@@ -6,7 +6,6 @@ import {
   CalendarDays,
   ListTodo,
   ChevronRight,
-  Flag,
   Plus,
   TriangleAlert,
   UsersRound,
@@ -15,19 +14,15 @@ import {
   ClientPageHeader,
   clientPageHeaderActionClass,
 } from "@/components/layout/client-page-header"
-import { contentClass } from "@/components/layout/styles"
+import { contentClass, focusRing } from "@/components/layout/styles"
+import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Calendar, calendarDate } from "@/components/ui/calendar"
 import { KpiCards, type KpiMetric } from "@/components/ui/kpi-cards"
+import { pillToneClass, type PillTone } from "@/components/ui/pill"
 import { apiRequest } from "@/features/auth/api/auth-api"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { FilterSelect } from "@/components/ui/filter-select"
 import { watchVisibleRefresh } from "@/lib/visible-refresh"
 import {
   calendarConflicts,
@@ -35,12 +30,14 @@ import {
   type CalendarEvent,
   type CalendarResponse,
 } from "../model/calendar"
+import { errorMessage } from "@/lib/error-message"
+import { cn } from "@/lib/utils"
 
 const eventTypes = {
-  consultation: { label: "Consultation", color: "#203f8c", Icon: CalendarDays },
-  meeting: { label: "Meeting", color: "#0d9488", Icon: UsersRound },
-  milestone: { label: "Milestone", color: "#d97706", Icon: Flag },
-  task: { label: "Task deadline", color: "#7c3aed", Icon: ListTodo },
+  consultation: { label: "Consultation", color: "#203f8c" },
+  meeting: { label: "Meeting", color: "#0d9488" },
+  milestone: { label: "Milestone", color: "#d97706" },
+  task: { label: "Task deadline", color: "#7c3aed" },
 }
 
 const timezone = "Asia/Manila"
@@ -61,8 +58,11 @@ const monthLabel = new Intl.DateTimeFormat("en-US", {
   month: "short",
   timeZone: "UTC",
 })
+// Agenda rows: borderless, a soft hover wash, and a stretched link overlay.
 const eventRowClass =
-  "relative flex items-center gap-2 px-5 py-3 hover:bg-[#f1f5fb] focus-within:bg-[#f1f5fb] max-[560px]:px-4"
+  "group relative -mx-2 flex gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-[#f6f8fb] focus-within:bg-[#f6f8fb] motion-reduce:transition-none"
+const mutedText = "text-xs leading-5 text-[#8a94a6]"
+const tag = "inline-flex rounded-full px-1.5 text-[10px] leading-4 font-medium"
 
 function meetingLink(event: CalendarEvent) {
   if (!event.endsAt || !event.location) return null
@@ -88,7 +88,9 @@ function EventAction({
     return (
       <Button
         asChild
-        className="relative z-10 h-8 shrink-0 bg-[#203f8c] px-3 text-sm text-white hover:bg-[#172f70]"
+        variant="brand"
+        size="sm"
+        className="relative z-10 mt-2 shrink-0"
       >
         <a href={url} target="_blank" rel="noopener noreferrer">
           Join meeting
@@ -110,11 +112,15 @@ function EventRowLink({
     <Link
       href={event.href}
       aria-label={`View ${event.title}`}
-      className="grid size-8 shrink-0 place-items-center text-[#203f8c] after:absolute after:inset-0 after:rounded-md focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-[#294a9b]"
+      className="grid size-7 shrink-0 place-items-center self-center text-[#9aa4b5] transition-colors group-hover:text-[#203f8c] after:absolute after:inset-0 after:rounded-lg focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-[#294a9b] motion-reduce:transition-none"
     >
-      {showChevron && <ChevronRight size={17} aria-hidden="true" />}
+      {showChevron && <ChevronRight size={16} aria-hidden="true" />}
     </Link>
   )
+}
+
+function Tag({ tone, children }: { tone: PillTone; children: string }) {
+  return <span className={cn(tag, pillToneClass(tone))}>{children}</span>
 }
 
 function CalendarFilter({
@@ -129,22 +135,16 @@ function CalendarFilter({
   options: { id: string; name: string }[]
 }) {
   return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger
-        aria-label={label}
-        className="h-[34px] w-[180px] text-xs max-[560px]:h-11 max-[560px]:w-full"
-      >
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="all">All {label.toLowerCase()}</SelectItem>
-        {options.map(({ id, name }) => (
-          <SelectItem key={id} value={id}>
-            {name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <FilterSelect
+      label={label}
+      value={value}
+      onChange={onChange}
+      triggerClassName="w-[170px]"
+      options={[
+        { value: "all", label: `All ${label.toLowerCase()}` },
+        ...options.map(({ id, name }) => ({ value: id, label: name })),
+      ]}
+    />
   )
 }
 
@@ -196,11 +196,7 @@ export function CalendarPage() {
         .catch((reason: unknown) => {
           if (!controller.signal.aborted) {
             setEvents([])
-            setError(
-              reason instanceof Error
-                ? reason.message
-                : "Could not load your calendar.",
-            )
+            setError(errorMessage(reason, "Could not load your calendar."))
           }
         })
         .finally(() => {
@@ -311,8 +307,9 @@ export function CalendarPage() {
     : error
       ? "Calendar unavailable."
       : null
-  const card =
-    "min-w-0 rounded-xl border border-[#dfe6eb] bg-[#f8fafb] p-5 text-[#182235] shadow-[0_2px_8px_rgb(30_55_80_/_3%)] max-[560px]:p-4"
+  const hasFilters = [eventType, projectId, departmentId, staffId].some(
+    (value) => value !== "all",
+  )
 
   return (
     <main
@@ -340,11 +337,12 @@ export function CalendarPage() {
         )}
       </ClientPageHeader>
       {error && (
-        <p role="alert" className="mt-4 text-sm text-red-700">
+        <Alert variant="text" className="mt-4 text-sm">
           {error}
           <Button
             variant="outline"
-            className="ml-3 h-8 text-xs"
+            size="sm"
+            className="ml-3"
             onClick={() => {
               setLoading(true)
               setRevision((value) => value + 1)
@@ -352,15 +350,21 @@ export function CalendarPage() {
           >
             Try again
           </Button>
-        </p>
+        </Alert>
       )}
       {!isClient && (
-        <section className="mt-4 space-y-2" aria-label="Calendar filters">
-          <div className="flex flex-wrap items-center gap-2.5">
+        <section className="mt-6 space-y-4" aria-label="Calendar filters">
+          <div className="flex flex-wrap items-center gap-2">
             {!organization && canViewTeam && (
-              <Select
+              <FilterSelect
+                label="Calendar scope"
                 value={scope}
-                onValueChange={(value) => {
+                triggerClassName="w-[170px]"
+                options={[
+                  { value: "mine", label: "My schedule" },
+                  { value: "team", label: "My team" },
+                ]}
+                onChange={(value) => {
                   setLoading(true)
                   setEvents([])
                   setScope(value)
@@ -368,18 +372,7 @@ export function CalendarPage() {
                   setStaffId("all")
                   setDepartmentId("all")
                 }}
-              >
-                <SelectTrigger
-                  aria-label="Calendar scope"
-                  className="h-[34px] w-[180px] text-xs max-[560px]:h-11 max-[560px]:w-full"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="mine">My schedule</SelectItem>
-                  <SelectItem value="team">My team</SelectItem>
-                </SelectContent>
-              </Select>
+              />
             )}
             <CalendarFilter
               label="Event types"
@@ -422,12 +415,13 @@ export function CalendarPage() {
                 />
               </>
             )}
-            {[eventType, projectId, departmentId, staffId].some(
-              (value) => value !== "all",
-            ) && (
-              <Button
-                variant="outline"
-                className="h-[34px] text-xs max-[560px]:h-11"
+            {hasFilters && (
+              <button
+                type="button"
+                className={cn(
+                  "h-[34px] cursor-pointer rounded-lg px-2.5 text-xs font-medium text-[#52627a] transition-colors hover:bg-[#f3f5f8] hover:text-[#182235] motion-reduce:transition-none max-[560px]:h-11",
+                  focusRing,
+                )}
                 onClick={() => {
                   setEventType("all")
                   setProjectId("all")
@@ -436,7 +430,7 @@ export function CalendarPage() {
                 }}
               >
                 Clear filters
-              </Button>
+              </button>
             )}
           </div>
           <KpiCards
@@ -445,10 +439,10 @@ export function CalendarPage() {
             pending={loading && allEvents.length === 0}
             unavailable={Boolean(error) && allEvents.length === 0}
             showCharts={false}
-            className="mt-3 grid-cols-4 gap-3 max-[1200px]:grid-cols-2 max-[560px]:grid-cols-1"
+            className="grid-cols-4 gap-3 max-[1200px]:grid-cols-2 max-[560px]:grid-cols-1"
           />
           {organization && (
-            <p className="m-0 text-xs leading-5 text-[#52627a]">
+            <p className={cn(mutedText, "m-0")}>
               Organization events are shown for planning. Open links are
               available for workflows you can access.
             </p>
@@ -456,9 +450,12 @@ export function CalendarPage() {
         </section>
       )}
       <div
-        className={`${isClient ? "mt-[clamp(30px,4vw,52px)]" : "mt-5"} grid items-start gap-5 xl:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]`}
+        className={cn(
+          isClient ? "mt-[clamp(30px,4vw,52px)]" : "mt-8",
+          "grid items-start gap-x-10 gap-y-10 xl:grid-cols-[minmax(0,1fr)_320px]",
+        )}
       >
-        <section className={card} aria-label="Month calendar">
+        <section className="min-w-0" aria-label="Month calendar">
           <Calendar
             variant="month"
             value={selected}
@@ -466,16 +463,16 @@ export function CalendarPage() {
             markers={markers}
             onSelect={setSelected}
           />
-          <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-3 border-t border-[#e8ebef] pt-4">
+          <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2">
             {Object.entries(eventTypes)
               .filter(([key]) => !isClient || key !== "task")
               .map(([, { color, label }]) => (
                 <span
                   key={label}
-                  className="flex items-center gap-2 text-xs font-medium text-[#52627a]"
+                  className="flex items-center gap-1.5 text-[11px] text-[#738096]"
                 >
                   <span
-                    className="size-2.5 rounded-full"
+                    className="size-1.5 rounded-full"
                     style={{ backgroundColor: color }}
                     aria-hidden="true"
                   />
@@ -484,72 +481,74 @@ export function CalendarPage() {
               ))}
           </div>
         </section>
-        <div className="min-w-0 space-y-5">
-          <section className={card} aria-labelledby="calendar-day">
-            <h2
-              id="calendar-day"
-              className="m-0 text-sm leading-5 font-semibold"
-              aria-live="polite"
-            >
-              {dayLabel.format(calendarDate(selected))}
-            </h2>
-            <p className="mt-1 text-xs leading-5 text-slate-600">
-              {dayEvents.length} {dayEvents.length === 1 ? "event" : "events"} ·
-              Philippine time
-            </p>
-            <div className="-mx-5 mt-3 border-t border-[#e8ebef] max-[560px]:-mx-4" />
+        <div className="min-w-0 space-y-8">
+          <section aria-labelledby="calendar-day">
+            <div className="flex items-baseline justify-between gap-3">
+              <h2
+                id="calendar-day"
+                className="m-0 text-base font-semibold tracking-[-0.01em] text-[#101d35]"
+                aria-live="polite"
+              >
+                {dayLabel.format(calendarDate(selected))}
+              </h2>
+              <span className={cn(mutedText, "shrink-0 tabular-nums")}>
+                {dayEvents.length} {dayEvents.length === 1 ? "event" : "events"}
+              </span>
+            </div>
+            <p className={cn(mutedText, "m-0")}>Philippine time</p>
             {dayEvents.length ? (
-              <ul className="-mx-5 max-h-[520px] divide-y divide-[#e8ebef] overflow-y-auto max-[560px]:-mx-4">
+              <ul className="mt-3 max-h-[520px] list-none space-y-0.5 overflow-y-auto p-0">
                 {dayEvents.map((event) => {
-                  const { Icon, color, label } = eventTypes[event.type]
+                  const { color, label } = eventTypes[event.type]
                   const { title, staff } = event
                   const status = calendarEventStatus(event, today)
+                  const overlap = !isClient && conflicts.has(event.id)
+                  const needsStaff = organization && event.unassigned
                   const time = event.endsAt
                     ? timeLabel.formatRange(
                         new Date(event.startsAt),
                         new Date(event.endsAt),
                       )
                     : "All day"
+                  const details = [
+                    staff && `with ${staff}`,
+                    !isClient && event.context,
+                  ].filter(Boolean)
                   return (
                     <li key={event.id} className={eventRowClass}>
                       <span
-                        title={label}
-                        className="grid size-8 shrink-0 place-items-center rounded-md bg-[#edf2f8]"
-                        style={{ color }}
-                      >
-                        <Icon size={16} aria-hidden="true" />
-                      </span>
+                        className="w-[3px] shrink-0 self-stretch rounded-full"
+                        style={{ backgroundColor: color }}
+                        aria-hidden="true"
+                      />
                       <div className="min-w-0 flex-1">
-                        <p className="break-words text-sm leading-5 font-semibold">
+                        <p className="m-0 text-[11px] leading-4 text-[#8a94a6] tabular-nums">
+                          {time} · {label}
+                        </p>
+                        <p className="m-0 mt-0.5 text-sm leading-5 font-medium break-words text-[#182235]">
                           {title}
                         </p>
-                        <p className="mt-0.5 text-xs leading-5 text-slate-600">
-                          {time}
-                          {staff && ` · with ${staff}`}
-                        </p>
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {status && (
-                            <span
-                              className={`inline-flex rounded-full px-1.5 text-[10px] leading-4 font-medium ${status === "Overdue" ? "bg-red-100 text-red-800" : "bg-emerald-100 text-emerald-800"}`}
-                            >
-                              {status}
-                            </span>
-                          )}
-                          {!isClient && conflicts.has(event.id) && (
-                            <span className="text-[10px] leading-4 font-medium text-amber-800">
-                              Schedule overlap
-                            </span>
-                          )}
-                          {organization && event.unassigned && (
-                            <span className="text-[10px] leading-4 font-medium text-amber-800">
-                              Unassigned
-                            </span>
-                          )}
-                        </div>
-                        {!isClient && (
-                          <p className="mt-0.5 text-xs leading-5 text-slate-600">
-                            {event.context}
+                        {details.length > 0 && (
+                          <p className={cn(mutedText, "m-0 break-words")}>
+                            {details.join(" · ")}
                           </p>
+                        )}
+                        {(status || overlap || needsStaff) && (
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            {status && (
+                              <Tag
+                                tone={
+                                  status === "Overdue" ? "danger" : "success"
+                                }
+                              >
+                                {status}
+                              </Tag>
+                            )}
+                            {overlap && (
+                              <Tag tone="warning">Schedule overlap</Tag>
+                            )}
+                            {needsStaff && <Tag tone="warning">Unassigned</Tag>}
+                          </div>
                         )}
                         <EventAction
                           event={event}
@@ -562,95 +561,78 @@ export function CalendarPage() {
                 })}
               </ul>
             ) : emptyMessage ? (
-              <p className="mt-4 text-xs leading-5 text-slate-600">
-                {emptyMessage}
-              </p>
+              <p className={cn(mutedText, "mt-4 mb-0")}>{emptyMessage}</p>
             ) : (
-              <div className="mt-4 grid min-h-32 place-items-center px-3 text-center">
-                <div>
-                  <CalendarDays
-                    size={26}
-                    className="mx-auto text-[#8293ad]"
-                    aria-hidden="true"
-                  />
-                  <h3 className="mt-3 mb-1 text-sm font-semibold text-[#243550]">
-                    No events on this day
-                  </h3>
-                  <p className="text-xs leading-5 text-slate-600">
-                    Select a date in the calendar to see its schedule.
-                  </p>
-                </div>
+              <div className="mt-4 rounded-xl border border-dashed border-[#e3e7ed] px-4 py-7 text-center">
+                <h3 className="m-0 text-sm font-medium text-[#3b4658]">
+                  No events on this day
+                </h3>
+                <p className={cn(mutedText, "mt-1 mb-0")}>
+                  Select a date in the calendar to see its schedule.
+                </p>
               </div>
             )}
           </section>
-          <section className={card} aria-labelledby="calendar-upcoming">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2
-                id="calendar-upcoming"
-                className="m-0 text-sm leading-5 font-semibold"
-              >
-                Coming up next
-              </h2>
-              <span className="text-xs leading-5 text-slate-600">
-                Philippine time
-              </span>
-            </div>
+          <section
+            aria-labelledby="calendar-upcoming"
+            className="border-t border-[#eceef2] pt-6"
+          >
+            <h2
+              id="calendar-upcoming"
+              className="m-0 text-sm font-semibold text-[#101d35]"
+            >
+              Coming up next
+            </h2>
             {comingUp.length ? (
-              <ul className="-mx-5 mt-3 divide-y divide-[#e8ebef] border-t border-[#e8ebef] max-[560px]:-mx-4">
+              <ul className="mt-3 list-none space-y-0.5 p-0">
                 {comingUp.map((event) => {
                   const date = calendarDate(
                     dateKey.format(new Date(event.startsAt)),
                   )
                   return (
-                    <li key={event.id} className={`${eventRowClass} flex-wrap`}>
+                    <li key={event.id} className={eventRowClass}>
                       <time
                         dateTime={event.startsAt}
-                        className="w-10 shrink-0 text-center"
+                        className="w-9 shrink-0 pt-0.5 text-center leading-none"
                       >
-                        <span className="block overflow-hidden rounded-md border border-[#dfe5ec] bg-white">
-                          <span className="block bg-[#203f8c] py-0.5 text-[10px] leading-3 font-semibold uppercase text-white">
-                            {monthLabel.format(date)}
-                          </span>
-                          <span className="block py-0.5 text-base leading-5 font-semibold tabular-nums">
-                            {date.getUTCDate()}
-                          </span>
+                        <span className="block text-[10px] font-medium tracking-wide text-[#8a94a6] uppercase">
+                          {monthLabel.format(date)}
+                        </span>
+                        <span className="mt-1 block text-base font-semibold tabular-nums text-[#182235]">
+                          {date.getUTCDate()}
                         </span>
                       </time>
                       <div className="min-w-0 flex-1">
-                        <p className="break-words text-sm leading-5 font-semibold">
+                        <p className="m-0 text-sm leading-5 font-medium break-words text-[#182235]">
                           {event.title}
                         </p>
-                        <p className="mt-0.5 text-xs leading-5 text-slate-600">
+                        <p className={cn(mutedText, "m-0 break-words")}>
                           {event.deadline
                             ? "Due this day"
                             : timeLabel.format(new Date(event.startsAt))}
                           {" · "}
                           {event.context}
                         </p>
+                        {event.pending && (
+                          <div className="mt-1.5" title="Reschedule pending">
+                            <Tag tone="warning">Pending</Tag>
+                          </div>
+                        )}
+                        <EventAction
+                          event={event}
+                          join={event.id === nextJoin?.id}
+                        />
                       </div>
-
-                      {event.pending && (
-                        <span
-                          className="rounded-full bg-amber-100 px-1.5 text-[10px] leading-4 font-medium text-amber-800"
-                          title="Reschedule pending"
-                        >
-                          Pending
-                        </span>
-                      )}
                       <EventRowLink
                         event={event}
                         showChevron={event.id !== nextJoin?.id}
-                      />
-                      <EventAction
-                        event={event}
-                        join={event.id === nextJoin?.id}
                       />
                     </li>
                   )
                 })}
               </ul>
             ) : (
-              <p className="mt-4 text-xs leading-5 text-slate-600">
+              <p className={cn(mutedText, "mt-3 mb-0")}>
                 {emptyMessage ?? "No other upcoming events."}
               </p>
             )}

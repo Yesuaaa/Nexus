@@ -24,6 +24,7 @@ import androidx.compose.runtime.*
 import androidx.compose.material3.*
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
@@ -43,9 +44,12 @@ fun NexusTopAppBar(
     onChatClick: () -> Unit = {},
     onProfileClick: () -> Unit = {},
     notificationUnread: Int = 0,
+    chatUnread: Int = 0,
+    scrolled: Boolean = false,
     accountActionsEnabled: Boolean = true,
     onSettingsClick: () -> Unit = {},
     onBillingLogsClick: () -> Unit = {},
+    onHelpClick: () -> Unit = {},
     onLogoutClick: () -> Unit = {},
     accountName: String = "Your account",
     accountEmail: String = "",
@@ -56,7 +60,8 @@ fun NexusTopAppBar(
     var accountMenu by remember { mutableStateOf(false) }
     LaunchedEffect(accountMenu) { onAccountMenuChange(accountMenu) }
     DisposableEffect(Unit) { onDispose { onAccountMenuChange(false) } }
-    Column(modifier.fillMaxWidth().background(Color.White).statusBarsPadding()) {
+    val foreground = if (scrolled) Color.White else NexusColors.PrimaryBlue
+    Column(modifier.fillMaxWidth().background(if (scrolled) NexusColors.PrimaryBlue else Color.White).statusBarsPadding()) {
         Row(
             modifier = Modifier.fillMaxWidth().height(63.dp).padding(start = 20.dp, end = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -68,7 +73,7 @@ fun NexusTopAppBar(
                 fontSize = 22.sp,
                 lineHeight = 28.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = NexusColors.HeaderDarkNavy,
+                color = if (scrolled) Color.White else NexusColors.HeaderDarkNavy,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -80,15 +85,20 @@ fun NexusTopAppBar(
                     modifier = Modifier.size(44.dp)
                 ) {
                     BadgedBox(badge = {
-                        if (notificationUnread > 0) Badge(containerColor = Color(0xFF203F8C), contentColor = Color.White) {
-                            Text(if (notificationUnread > 99) "99+" else notificationUnread.toString(), color = Color.White, fontSize = 11.sp)
+                        if (notificationUnread > 0) Badge(containerColor = if (scrolled) Color.White else NexusColors.PrimaryBlue,
+                            contentColor = if (scrolled) NexusColors.PrimaryBlue else Color.White) {
+                            Text(if (notificationUnread > 99) "99+" else notificationUnread.toString(), color = if (scrolled) NexusColors.PrimaryBlue else Color.White, fontSize = 11.sp)
                         }
                     }) {
-                        Icon(Icons.Outlined.Notifications, contentDescription = "Notifications", modifier = Modifier.size(24.dp), tint = NexusColors.PrimaryBlue)
+                        Icon(Icons.Outlined.Notifications, contentDescription = "Notifications", modifier = Modifier.size(24.dp), tint = foreground)
                     }
                 }
                 IconButton(onClick = onChatClick, enabled = accountActionsEnabled, modifier = Modifier.size(44.dp)) {
-                    Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = "Messages", modifier = Modifier.size(24.dp), tint = NexusColors.PrimaryBlue)
+                    BadgedBox(badge = {
+                        if (chatUnread > 0) Badge(containerColor = if (scrolled) Color.White else Color(0xFF3B82F6), modifier = Modifier.size(8.dp))
+                    }) {
+                        Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = if (chatUnread > 0) "Messages, unread messages" else "Messages", modifier = Modifier.size(24.dp), tint = foreground)
+                    }
                 }
                 Box {
                     IconButton(
@@ -107,7 +117,7 @@ fun NexusTopAppBar(
                             imageVector = Icons.Outlined.PersonOutline,
                             contentDescription = "Open account menu",
                             modifier = Modifier.size(24.dp),
-                            tint = NexusColors.PrimaryBlue
+                            tint = foreground
                         )
                     }
                     DropdownMenu(expanded = accountMenu && accountActionsEnabled, onDismissRequest = { accountMenu = false }, modifier = Modifier.width(236.dp), shape = RoundedCornerShape(8.dp), containerColor = Color.White, tonalElevation = 0.dp, shadowElevation = 6.dp, border = androidx.compose.foundation.BorderStroke(1.dp, NexusColors.Border)) {
@@ -119,12 +129,13 @@ fun NexusTopAppBar(
                         DropdownMenuItem(text = { Text("Profile", fontSize = 14.sp) }, leadingIcon = { Icon(Icons.Outlined.PersonOutline, null, Modifier.size(18.dp), tint = NexusColors.PrimaryBlue) }, onClick = { accountMenu = false; onProfileClick() })
                         DropdownMenuItem(text = { Text("Billing Logs", fontSize = 14.sp) }, leadingIcon = { Icon(Icons.AutoMirrored.Outlined.ReceiptLong, null, Modifier.size(18.dp), tint = NexusColors.PrimaryBlue) }, onClick = { accountMenu = false; onBillingLogsClick() })
                         DropdownMenuItem(text = { Text("Settings", fontSize = 14.sp) }, leadingIcon = { Icon(Icons.Outlined.Settings, null, Modifier.size(18.dp), tint = NexusColors.PrimaryBlue) }, onClick = { accountMenu = false; onSettingsClick() })
+                        DropdownMenuItem(text = { Text("Help & Support", fontSize = 14.sp) }, leadingIcon = { Icon(Icons.AutoMirrored.Outlined.HelpOutline, null, Modifier.size(18.dp), tint = NexusColors.PrimaryBlue) }, onClick = { accountMenu = false; onHelpClick() })
                         HorizontalDivider(color = NexusColors.Border)
                         DropdownMenuItem(text = { Text("Log out", fontSize = 14.sp, color = NexusColors.ErrorRed) }, leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Logout, null, Modifier.size(18.dp), tint = NexusColors.ErrorRed) }, onClick = { accountMenu = false; onLogoutClick() })
                     }
                 }
             }
         }
-        HorizontalDivider(thickness = 1.dp, color = Color(0xFFECEEF1))
+        if (!scrolled) HorizontalDivider(thickness = 1.dp, color = Color(0xFFECEEF1))
     }
 }

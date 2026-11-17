@@ -1,5 +1,6 @@
 import type { Prisma } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
+import { insensitive, paginate } from "../../shared/query/pagination.js"
 import type { ClientRequestFilters } from "./client-services.schema.js"
 
 export const clientRequestSelect = {
@@ -26,42 +27,55 @@ export const clientRequestSelect = {
   preferredSpecialist: { select: { id: true, fullName: true, position: true } },
 } satisfies Prisma.ServiceRequestSelect
 
+/**
+ * Search shared by both client-facing lists of a client's service requests
+ * (`/api/client/service-requests` and `/api/service-requests`).
+ */
+export function clientRequestSearch(search: string) {
+  return insensitive<Prisma.ServiceRequestWhereInput>(search, [
+    "referenceNumber",
+    "title",
+    "id",
+    "packageName",
+    (text) => ({ service: { name: text } }),
+  ])
+}
+
 export const clientServicesRepository = {
   async findClientRequests(clientId: string, filters: ClientRequestFilters) {
     const { page, search, status, sortOrder } = filters
-    const pageSize = 10
     const where: Prisma.ServiceRequestWhereInput = {
       clientId,
       ...(status ? { status } : {}),
-      ...(search
-        ? {
-            OR: [
-              { title: { contains: search, mode: "insensitive" } },
-              { referenceNumber: { contains: search, mode: "insensitive" } },
-              { service: { name: { contains: search, mode: "insensitive" } } },
-              { packageName: { contains: search, mode: "insensitive" } },
-            ],
-          }
-        : {}),
+      ...clientRequestSearch(search),
     }
-    const prisma = getPrisma()!
-    const summaryQuery = prisma.serviceRequest.groupBy({
-      by: ["status"],
-      where: { clientId },
-      orderBy: { status: "asc" },
-      _count: { _all: true },
-    })
-    const [requests, total, groups] = await prisma.$transaction([
-      prisma.serviceRequest.findMany({
-        where,
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        orderBy: [{ createdAt: sortOrder }, { id: sortOrder }],
-        select: clientRequestSelect,
-      }),
-      prisma.serviceRequest.count({ where }),
-      summaryQuery,
-    ])
+    const { requests, total, pageSize, groups } =
+      await getPrisma()!.$transaction(
+        async (tx) => {
+          const { rows, ...result } = await paginate(
+            page,
+            {
+              rows: (db, window) =>
+                db.serviceRequest.findMany({
+                  where,
+                  orderBy: [{ createdAt: sortOrder }, { id: sortOrder }],
+                  select: clientRequestSelect,
+                  ...window,
+                }),
+              count: (db) => db.serviceRequest.count({ where }),
+            },
+            { tx },
+          )
+          const groups = await tx.serviceRequest.groupBy({
+            by: ["status"],
+            where: { clientId },
+            orderBy: { status: "asc" },
+            _count: { _all: true },
+          })
+          return { requests: rows, ...result, groups }
+        },
+        { isolationLevel: "RepeatableRead" },
+      )
     const summary = {
       total: 0,
       pending: 0,

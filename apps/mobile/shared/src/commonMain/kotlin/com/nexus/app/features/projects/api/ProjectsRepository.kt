@@ -1,6 +1,7 @@
 package com.nexus.app.features.projects.api
 
 import com.nexus.app.core.files.SelectedFile
+import com.nexus.app.core.network.ApiEndpoints
 import com.nexus.app.features.conversations.api.CommunicationException
 import com.nexus.app.features.projects.model.*
 import io.ktor.client.HttpClient
@@ -19,8 +20,9 @@ class ProjectsRepository(private val client: HttpClient) {
         }
         return body()
     }
-    suspend fun list(): List<ClientProjectSummary> = client.get("/api/projects").checked()
-    suspend fun calendar(): List<CalendarEvent> = client.get("/api/projects/calendar").checked()
+    suspend fun listClientProjects(): List<ClientProjectSummary> = client.get(ApiEndpoints.CLIENT_PROJECTS).checked()
+    suspend fun list(): List<ClientProjectSummary> = listClientProjects()
+    suspend fun calendar(): List<CalendarEvent> = client.get(ApiEndpoints.CLIENT_CALENDAR).checked()
     suspend fun get(id: String): ClientProject = client.get("/api/projects/$id").checked()
     suspend fun brief(id: String, name: String, description: String): ClientProject = client.patch("/api/projects/$id/brief") {
         setBody(buildJsonObject { put("name", name.trim()); put("description", description.trim()) })
@@ -38,11 +40,11 @@ class ProjectsRepository(private val client: HttpClient) {
         if (!response.status.isSuccess()) throw CommunicationException(response.status.value, "This deliverable is unavailable. Refresh the project and try again.")
         return SelectedFile(deliverable.workflowFile.name, deliverable.workflowFile.mimeType, response.bodyAsBytes())
     }
-    suspend fun history(id: String, before: String? = null): ProjectChatHistory = client.get("/api/project-conversations/$id") {
+    suspend fun history(id: String, before: String? = null): ProjectChatHistory = client.get(ApiEndpoints.projectConversationMessages(id)) {
         before?.let { parameter("before", it) }
     }.checked()
-    suspend fun send(id: String, body: String, key: String): ProjectChatMessage = client.post("/api/project-conversations/$id/messages") {
+    suspend fun send(id: String, body: String, key: String): ProjectChatMessage = client.post(ApiEndpoints.sendProjectConversationMessage(id)) {
         setBody(buildJsonObject { put("body", body); put("clientMessageId", key) })
     }.checked<ProjectMessageResponse>().message
-    suspend fun markRead(id: String) { client.patch("/api/project-conversations/$id/read").checked<JsonObject>() }
+    suspend fun markRead(id: String) { client.patch(ApiEndpoints.markProjectConversationRead(id)).checked<JsonObject>() }
 }

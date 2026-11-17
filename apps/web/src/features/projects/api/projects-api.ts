@@ -1,16 +1,15 @@
 import { apiRequest, apiStreamRequest } from "@/features/auth/api/auth-api"
-import type { ProjectDeliverableStatus } from "@/features/project-workspace/api/project-workspace-api"
+import type {
+  ProjectDeliverableContract,
+  ProjectDeliverableStatus,
+  ProjectStatus,
+} from "@/features/project-management/model/project-contracts"
 
 export type ProjectClientReviewStatus = "APPROVED" | "REVISION_REQUESTED"
 export type ProjectChangeRequestStatus = "PENDING" | "ACCEPTED" | "NOT_APPROVED"
 export type ProjectChangeRequestKind = "CHANGE" | "CANCELLATION"
 
-export type ProjectDeliverable = {
-  id: string
-  title: string
-  description: string | null
-  expectedFileType: string | null
-  sentToClientAt: string | null
+export type ProjectDeliverable = ProjectDeliverableContract & {
   workflowFile: {
     id: string
     name: string
@@ -41,7 +40,7 @@ export type ProjectWorkspace = {
   id: string
   name: string
   description: string | null
-  status: string
+  status: ProjectStatus
   startDate: string | null
   createdAt: string
   workspaceManaged: boolean
@@ -68,7 +67,7 @@ export type ClientProjectSummary = {
   id: string
   name: string
   description: string | null
-  status: string
+  status: ProjectStatus
   startDate: string | null
   updatedAt: string
   request: ProjectWorkspace["request"]

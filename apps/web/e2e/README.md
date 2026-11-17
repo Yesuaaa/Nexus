@@ -91,7 +91,7 @@ From the repository root, `pnpm test:e2e -- --ui` runs the complete offline back
 suite and every Playwright spec under `apps/web/e2e/` in the interactive UI
 at the same time. This includes the login input validation regression in
 `login-validation.spec.ts` and its PGlite API boundary coverage in
-`apps/api/src/login-validation.test.ts`. Backend test results remain in the
+`apps/api/tests/login-validation.test.ts`. Backend test results remain in the
 terminal. The browser specs use mocked API responses, so the backend test
 validates the API independently rather than serving requests to the browser.
 
@@ -107,7 +107,7 @@ submission keeps the form open, reuses the same UUID and payload on retry, and
 only shows confirmation after a successful response.
 
 Run `pnpm --filter @nexus/api test:smoke` for the separate backend-only
-suite in `apps/api/src/backend-regression.test.ts`. It starts Express on an
+suite in `apps/api/tests/backend-regression.test.ts`. It starts Express on an
 ephemeral loopback port, applies every Prisma migration to a fresh in-memory
 PGlite database, and exercises real HTTP requests and Prisma writes. It needs
 neither a browser, a running development server, nor live account credentials.

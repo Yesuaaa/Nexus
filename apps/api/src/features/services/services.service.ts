@@ -3,6 +3,7 @@ import {
   isRecordNotFound,
   isUniqueConflict,
 } from "../../lib/errors.js"
+import { safeHttpsUrl } from "../../shared/validation.js"
 import {
   getServiceImageStorage,
   ServiceImageStorageError,
@@ -15,16 +16,10 @@ import {
   type ServiceInput,
   type ServicePersistenceInput,
 } from "./services.schema.js"
+import { HttpError as ServicesError } from "../../shared/http-error.js"
 
-export class ServicesError extends Error {
-  constructor(
-    public readonly status: number,
-    message: string,
-  ) {
-    super(message)
-    this.name = "ServicesError"
-  }
-}
+/** Feature-named alias of the shared `HttpError`. */
+export { ServicesError }
 
 function presentService<T extends { imagePath: string | null }>(service: T) {
   const { imagePath, ...data } = service
@@ -95,18 +90,6 @@ function uniqueConflict() {
   )
 }
 
-function publicPortfolioUrl(value: string | null): string | null {
-  if (!value) return null
-  try {
-    const url = new URL(value)
-    return url.protocol === "https:" && !url.username && !url.password
-      ? url.href
-      : null
-  } catch {
-    return null
-  }
-}
-
 function publicSocialLinks(
   links: { platform: string; url: string }[],
 ): { platform: string; url: string }[] {
@@ -115,7 +98,7 @@ function publicSocialLinks(
 
   for (const link of links) {
     const platform = link.platform.trim().replace(/\s+/g, " ").slice(0, 40)
-    const url = publicPortfolioUrl(link.url)
+    const url = safeHttpsUrl(link.url)
     if (!platform || !url || seen.has(url)) continue
     seen.add(url)
     publicLinks.push({ platform, url })
@@ -148,8 +131,8 @@ export const servicesService = {
     return {
       ...identity,
       bio: profileBio,
-      imageUrl: publicPortfolioUrl(profileImageUrl),
-      bannerUrl: publicPortfolioUrl(profileBannerUrl),
+      imageUrl: safeHttpsUrl(profileImageUrl),
+      bannerUrl: safeHttpsUrl(profileBannerUrl),
       specialties: profileSpecialties
         .map((item) => item.trim())
         .filter(Boolean)
@@ -157,8 +140,8 @@ export const servicesService = {
       socialLinks: publicSocialLinks(socialLinks),
       projects: portfolioProjects.map((project) => ({
         ...project,
-        thumbnailUrl: publicPortfolioUrl(project.thumbnailUrl),
-        projectUrl: publicPortfolioUrl(project.projectUrl),
+        thumbnailUrl: safeHttpsUrl(project.thumbnailUrl),
+        projectUrl: safeHttpsUrl(project.projectUrl),
       })),
     }
   },
@@ -168,7 +151,7 @@ export const servicesService = {
     const specialists = await servicesRepository.findSpecialists(serviceId)
     return specialists.map(({ profileImageUrl, ...specialist }) => ({
       ...specialist,
-      imageUrl: publicPortfolioUrl(profileImageUrl),
+      imageUrl: safeHttpsUrl(profileImageUrl),
     }))
   },
 

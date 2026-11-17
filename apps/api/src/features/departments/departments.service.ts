@@ -1,31 +1,27 @@
 import { EmployeeStatus, Prisma, Role } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { isUniqueConflict } from "../../lib/errors.js"
-import { publicUser } from "../users/users.dto.js"
+import { publicUser, publicUserInclude } from "../users/users.dto.js"
 import {
-  EmployeeError,
   syncEmployeeForUser,
   updateEmployee,
 } from "../employees/employees.service.js"
+import { insensitive, parsePage } from "../../shared/query/pagination.js"
+import { isRecordId } from "../../shared/validation.js"
 import {
   departmentsRepository,
   withoutTemporaryHeadTracking,
 } from "./departments.repository.js"
+import { assertDepartmentHeadTitle } from "./leadership.policy.js"
 import {
   validateDepartmentCreateInput,
   validateDepartmentUpdateInput,
   validateMemberAssignmentInput,
 } from "./departments.schema.js"
+import { HttpError as DepartmentError } from "../../shared/http-error.js"
 
-export class DepartmentError extends Error {
-  constructor(
-    public readonly status: number,
-    message: string,
-  ) {
-    super(message)
-    this.name = "DepartmentError"
-  }
-}
+/** Feature-named alias of the shared `HttpError`. */
+export { DepartmentError }
 
 export const departmentsService = {
   async listDepartments() {
@@ -48,8 +44,25 @@ export const departmentsService = {
     }
   },
 
-  async listEligibleHeads() {
-    const eligibleUsers = await departmentsRepository.listEligibleHeads()
+  /**
+   * `?departmentId=<id>` scopes candidates to an existing department;
+   * `?new=true` lists only unassigned staff (for a department being created).
+   */
+  async listEligibleHeads(
+    query: { departmentId?: unknown; new?: unknown } = {},
+  ) {
+    const departmentId = query.departmentId
+    const forNew = query.new
+    if (
+      (departmentId !== undefined && !isRecordId(departmentId)) ||
+      (forNew !== undefined && forNew !== "true") ||
+      (departmentId !== undefined && forNew !== undefined)
+    ) {
+      throw new DepartmentError(400, "Invalid department filter")
+    }
+    const eligibleUsers = await departmentsRepository.listEligibleHeads(
+      forNew === "true" ? null : departmentId,
+    )
     return {
       users: eligibleUsers.map((u) => ({
         id: u.id,
@@ -68,21 +81,8 @@ export const departmentsService = {
         : typeof query.search === "string"
           ? query.search.trim()
           : null
-    const pageValue = query.page
-    const page =
-      pageValue === undefined
-        ? 1
-        : typeof pageValue === "string" && /^\d+$/.test(pageValue)
-          ? Number(pageValue)
-          : null
-    if (
-      search === null ||
-      search.length > 100 ||
-      page === null ||
-      !Number.isSafeInteger(page) ||
-      page < 1 ||
-      page > 1_000_000
-    ) {
+    const page = parsePage(query.page)
+    if (search === null || search.length > 100 || page === null) {
       throw new DepartmentError(400, "Invalid employee filters")
     }
 
@@ -107,71 +107,27 @@ export const departmentsService = {
             },
           ],
         },
-        ...(search
-          ? [
-              {
-                OR: [
-                  {
-                    fullName: {
-                      contains: search,
-                      mode: "insensitive" as const,
-                    },
-                  },
-                  {
-                    email: {
-                      contains: search,
-                      mode: "insensitive" as const,
-                    },
-                  },
-                  {
-                    contactNumber: {
-                      contains: search,
-                      mode: "insensitive" as const,
-                    },
-                  },
-                  {
-                    employee: {
-                      is: {
-                        OR: [
-                          {
-                            employeeId: {
-                              contains: search,
-                              mode: "insensitive" as const,
-                            },
-                          },
-                          {
-                            fullName: {
-                              contains: search,
-                              mode: "insensitive" as const,
-                            },
-                          },
-                          {
-                            email: {
-                              contains: search,
-                              mode: "insensitive" as const,
-                            },
-                          },
-                          {
-                            contactNumber: {
-                              contains: search,
-                              mode: "insensitive" as const,
-                            },
-                          },
-                        ],
-                      },
-                    },
-                  },
-                ],
-              },
-            ]
-          : []),
+        insensitive<Prisma.UserWhereInput>(search, [
+          "fullName",
+          "email",
+          "contactNumber",
+          () => ({
+            employee: {
+              is: insensitive<Prisma.EmployeeWhereInput>(search, [
+                "employeeId",
+                "fullName",
+                "email",
+                "contactNumber",
+              ]),
+            },
+          }),
+        ]),
       ],
     }
-    const pageSize = 10
-    const [employees, total] =
-      await departmentsRepository.searchAssignableStaff(where, page, pageSize)
+    const { rows, ...result } =
+      await departmentsRepository.searchAssignableStaff(where, page)
     return {
-      employees: employees.map((user) => ({
+      employees: rows.map((user) => ({
         id: user.id,
         fullName: user.fullName?.trim() || user.email,
         email: user.email,
@@ -186,9 +142,7 @@ export const departmentsService = {
           isActive: user.isActive,
         },
       })),
-      total,
-      page,
-      pageSize,
+      ...result,
     }
   },
 
@@ -230,24 +184,8 @@ export const departmentsService = {
 
     const { name, color, code, description, headId } = parsed.value
 
-    if (headId) {
-      const headUser = await departmentsRepository.findUserById(headId)
-      if (!headUser) {
-        throw new DepartmentError(
-          400,
-          "Selected department head user not found",
-        )
-      }
-      const teamLead = await departmentsRepository.findTeamLeadByLeadId(headId)
-      if (teamLead) {
-        throw new DepartmentError(
-          409,
-          "Reassign this Team Lead before making them a Department Head.",
-        )
-      }
-    }
-
     try {
+      // The head is checked against the leadership policy inside the write.
       const department = await departmentsRepository.createDepartment({
         name,
         color,
@@ -282,24 +220,8 @@ export const departmentsService = {
 
     const { name, color, code, description, headId } = parsed.value
 
-    if (headId) {
-      const headUser = await departmentsRepository.findUserById(headId)
-      if (!headUser) {
-        throw new DepartmentError(
-          400,
-          "Selected department head user not found",
-        )
-      }
-      const teamLead = await departmentsRepository.findTeamLeadByLeadId(headId)
-      if (teamLead) {
-        throw new DepartmentError(
-          409,
-          "Reassign this Team Lead before making them a Department Head.",
-        )
-      }
-    }
-
     try {
+      // A new head is checked against the leadership policy inside the write.
       const updated = await departmentsRepository.updateDepartment(id, {
         name,
         color,
@@ -334,21 +256,14 @@ export const departmentsService = {
 
     const { employeeIds, userIds } = parsed.value
 
-    try {
-      const updatedMembers = await departmentsRepository.assignMembers(
-        id,
-        employeeIds,
-        userIds,
-      )
-      return {
-        message: "Members assigned successfully",
-        members: updatedMembers,
-      }
-    } catch (error) {
-      if (error instanceof EmployeeError) {
-        throw new DepartmentError(error.status, error.message)
-      }
-      throw error
+    const updatedMembers = await departmentsRepository.assignMembers(
+      id,
+      employeeIds,
+      userIds,
+    )
+    return {
+      message: "Members assigned successfully",
+      members: updatedMembers,
     }
   },
 
@@ -371,20 +286,13 @@ export const departmentsService = {
           "Cannot remove the Department Head from members. To remove or replace the head, use Edit Department.",
         )
       }
-      try {
-        await prisma.$transaction((tx) =>
-          updateEmployee(tx, employee.id, {
-            departmentId: null,
-            teamId: null,
-          }),
-        )
-        return { message: "Employee removed from department" }
-      } catch (error) {
-        if (error instanceof EmployeeError) {
-          throw new DepartmentError(error.status, error.message)
-        }
-        throw error
-      }
+      await prisma.$transaction((tx) =>
+        updateEmployee(tx, employee.id, {
+          departmentId: null,
+          teamId: null,
+        }),
+      )
+      return { message: "Employee removed from department" }
     }
 
     const user = await prisma.user.findFirst({
@@ -496,20 +404,6 @@ export const departmentsService = {
       )
     }
 
-    if (position !== undefined && position !== null) {
-      const lower = position.toLowerCase()
-      if (
-        (dept?.headId == null ||
-          dept.headId !== (employee?.userId ?? user?.id)) &&
-        (lower === "dept head" || lower === "department head")
-      ) {
-        throw new DepartmentError(
-          400,
-          "Only the assigned Department Head can have the title 'Department Head'. For regular members, please specify their job title (e.g. Specialist, Analyst, Coordinator).",
-        )
-      }
-    }
-
     if (teamId) {
       const team = await prisma.team.findFirst({
         where: { id: teamId, departmentId },
@@ -519,42 +413,38 @@ export const departmentsService = {
       }
     }
 
-    try {
-      if (employee) {
-        const updated = await prisma.$transaction((tx) =>
-          updateEmployee(tx, employee.id, {
-            ...(position !== undefined ? { position } : {}),
-            ...(teamId !== undefined ? { teamId } : {}),
-          }),
-        )
-        return { employee: updated }
-      }
-
-      const updated = await prisma.$transaction(async (tx) => {
-        const saved = await tx.user.update({
-          where: { id: user!.id },
-          data: {
-            ...(position !== undefined ? { position } : {}),
-            ...(teamId !== undefined ? { teamId } : {}),
-          },
-          include: {
-            department: {
-              select: { id: true, name: true, code: true, color: true },
-            },
-            team: { select: { id: true, name: true } },
-          },
-        })
-        await syncEmployeeForUser(tx, saved.id)
-        return saved
-      })
-
-      return { user: publicUser(updated) }
-    } catch (error) {
-      if (error instanceof EmployeeError) {
-        throw new DepartmentError(error.status, error.message)
-      }
-      throw error
+    // updateEmployee applies the "Department Head" title rule in its write.
+    if (employee) {
+      const updated = await prisma.$transaction((tx) =>
+        updateEmployee(tx, employee.id, {
+          ...(position !== undefined ? { position } : {}),
+          ...(teamId !== undefined ? { teamId } : {}),
+        }),
+      )
+      return { employee: updated }
     }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      if (position !== undefined)
+        await assertDepartmentHeadTitle(tx, {
+          title: position,
+          userId: user!.id,
+          departmentId,
+          currentTitle: user!.position,
+        })
+      const saved = await tx.user.update({
+        where: { id: user!.id },
+        data: {
+          ...(position !== undefined ? { position } : {}),
+          ...(teamId !== undefined ? { teamId } : {}),
+        },
+        include: publicUserInclude,
+      })
+      await syncEmployeeForUser(tx, saved.id)
+      return saved
+    })
+
+    return { user: publicUser(updated) }
   },
 
   async deleteDepartment(id: string) {
@@ -568,6 +458,15 @@ export const departmentsService = {
       throw new DepartmentError(
         409,
         "Reassign or remove this department's services before deleting the department",
+      )
+    }
+
+    const requestHistoryCount =
+      await departmentsRepository.countDepartmentRequestHistory(id)
+    if (requestHistoryCount > 0) {
+      throw new DepartmentError(
+        409,
+        "This department has client request history and can't be deleted",
       )
     }
 

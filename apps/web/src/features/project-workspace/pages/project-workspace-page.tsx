@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import {
   Archive,
   Activity,
@@ -9,64 +9,56 @@ import {
   FolderKanban,
   Layers3,
 } from "lucide-react"
+import { PageHeader } from "@/components/layout/page-header"
 import { contentClass } from "@/components/layout/styles"
+import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { EmptyState } from "@/components/ui/empty-state"
+import { FilterSelect } from "@/components/ui/filter-select"
 import { KpiCards } from "@/components/ui/kpi-cards"
 import { KpiDistributionChart } from "@/components/ui/kpi-distribution-chart"
 import { KpiDonutChart } from "@/components/ui/kpi-donut-chart"
 import { KpiPieChart } from "@/components/ui/kpi-pie-chart"
 import { SearchField } from "@/components/ui/search-field"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
   listProjectWorkspaces,
   type ProjectWorkspaceSummary,
 } from "../api/project-workspace-api"
 import { WorkspaceListTable } from "../components/workspace-list-table"
+import { useAsyncResource } from "@/lib/use-async-resource"
+
+type WorkspaceSort = "recent" | "most-active"
+
+const noWorkspaces: ProjectWorkspaceSummary[] = []
+
+const activeStatusOptions = [
+  { value: "all", label: "All active" },
+  { value: "PLANNED", label: "Planned" },
+  { value: "IN_PROGRESS", label: "In progress" },
+  { value: "ON_HOLD", label: "On hold" },
+]
+const archivedStatusOptions = [
+  { value: "all", label: "All archived" },
+  { value: "COMPLETED", label: "Completed" },
+  { value: "CANCELLED", label: "Cancelled" },
+]
+const sortOptions: { value: WorkspaceSort; label: string }[] = [
+  { value: "recent", label: "Most recent activity" },
+  { value: "most-active", label: "Most activity" },
+]
 
 export function ProjectWorkspacePage() {
-  const [workspaces, setWorkspaces] = useState<ProjectWorkspaceSummary[]>([])
-  const [sort, setSort] = useState<"recent" | "most-active">("recent")
+  const [sort, setSort] = useState<WorkspaceSort>("recent")
   const [view, setView] = useState<"active" | "archive">("active")
   const [status, setStatus] = useState("all")
   const [search, setSearch] = useState("")
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
-  const [revision, setRevision] = useState(0)
-
-  function refresh() {
-    setLoading(true)
-    setError("")
-    setRevision((value) => value + 1)
-  }
-
-  useEffect(() => {
-    const controller = new AbortController()
-    listProjectWorkspaces({ sort }, controller.signal)
-      .then((result) => {
-        if (!controller.signal.aborted) {
-          setWorkspaces(result.workspaces)
-          setError("")
-        }
-      })
-      .catch((reason: unknown) => {
-        if (!controller.signal.aborted)
-          setError(
-            reason instanceof Error
-              ? reason.message
-              : "Couldn't load project workspaces.",
-          )
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false)
-      })
-    return () => controller.abort()
-  }, [sort, revision])
+  const list = useAsyncResource(
+    (signal) => listProjectWorkspaces({ sort }, signal),
+    [sort],
+    { fallbackError: "Couldn't load project workspaces." },
+  )
+  const workspaces = list.data?.workspaces ?? noWorkspaces
+  const { loading, error, retry: refresh } = list
 
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase()
@@ -200,17 +192,10 @@ export function ProjectWorkspacePage() {
       className={`${contentClass} p-[clamp(16px,2.1vw,32px)]`}
       aria-label="Project workspace"
     >
-      <header className="-mx-[clamp(16px,2.1vw,32px)] flex items-center justify-between gap-6 border-b border-[#eceef1] px-[clamp(16px,2.1vw,32px)] pt-0.5 pb-5 max-[640px]:flex-col max-[640px]:items-start max-[640px]:gap-4">
-        <div>
-          <h1 className="m-0 text-[clamp(21px,2vw,25px)] leading-[1.25] font-[650] tracking-[-0.03em] text-foreground">
-            Project Workspace
-          </h1>
-          <p className="mt-[5px] mb-0 text-xs leading-[1.45] text-[#738096]">
-            Follow project plans, team assignments, and delivery activity for
-            your department.
-          </p>
-        </div>
-      </header>
+      <PageHeader
+        title="Project Workspace"
+        description="Follow project plans, team assignments, and delivery activity for your department."
+      />
 
       <KpiCards
         label="Project summary"
@@ -288,52 +273,24 @@ export function ProjectWorkspacePage() {
                 onChange={(event) => setSearch(event.target.value)}
                 containerClassName="max-[560px]:h-11"
               />
-              <Select value={status} onValueChange={setStatus}>
-                <SelectTrigger
-                  aria-label="Filter projects by status"
-                  className="h-[34px] w-[185px] border-[#e1e4ea] text-xs max-[560px]:h-11 max-[560px]:w-full"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">
-                    {view === "archive" ? "All archived" : "All active"}
-                  </SelectItem>
-                  {view === "archive" ? (
-                    <>
-                      <SelectItem value="COMPLETED">Completed</SelectItem>
-                      <SelectItem value="CANCELLED">Cancelled</SelectItem>
-                    </>
-                  ) : (
-                    <>
-                      <SelectItem value="PLANNED">Planned</SelectItem>
-                      <SelectItem value="IN_PROGRESS">In progress</SelectItem>
-                      <SelectItem value="ON_HOLD">On hold</SelectItem>
-                    </>
-                  )}
-                </SelectContent>
-              </Select>
-              <Select
+              <FilterSelect
+                label="Filter projects by status"
+                value={status}
+                options={
+                  view === "archive"
+                    ? archivedStatusOptions
+                    : activeStatusOptions
+                }
+                triggerClassName="w-[185px]"
+                onChange={setStatus}
+              />
+              <FilterSelect
+                label="Sort projects"
                 value={sort}
-                onValueChange={(value) => {
-                  const nextSort = value as "recent" | "most-active"
-                  if (nextSort === sort) return
-                  setLoading(true)
-                  setError("")
-                  setSort(nextSort)
-                }}
-              >
-                <SelectTrigger
-                  aria-label="Sort projects"
-                  className="h-[34px] w-[174px] border-[#e1e4ea] text-xs max-[560px]:h-11 max-[560px]:w-full"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="recent">Most recent activity</SelectItem>
-                  <SelectItem value="most-active">Most activity</SelectItem>
-                </SelectContent>
-              </Select>
+                options={sortOptions}
+                triggerClassName="w-[174px]"
+                onChange={setSort}
+              />
             </div>
             <Button
               type="button"
@@ -355,10 +312,7 @@ export function ProjectWorkspacePage() {
         </div>
 
         {error ? (
-          <div
-            className="rounded-xl border border-[#f0d1d3] bg-[#fff9f9] p-5 text-sm text-[#9c343b]"
-            role="alert"
-          >
+          <Alert as="div" className="rounded-xl p-5 text-sm">
             {error}
             <Button
               variant="outline"
@@ -367,7 +321,7 @@ export function ProjectWorkspacePage() {
             >
               Try again
             </Button>
-          </div>
+          </Alert>
         ) : loading || workspaces.length ? (
           <WorkspaceListTable
             workspaces={filtered}
@@ -378,49 +332,33 @@ export function ProjectWorkspacePage() {
             onChanged={refresh}
           />
         ) : workspaces.length === 0 && view === "active" ? (
-          <div className="grid min-h-52 place-items-center rounded-xl border border-dashed border-[#d5dce6] px-5 text-center">
-            <div>
-              <BriefcaseBusiness size={26} className="mx-auto text-[#8293ad]" />
-              <h3 className="mt-3 mb-1 text-sm font-semibold text-[#243550]">
-                No project workspaces yet
-              </h3>
-              <p className="m-0 max-w-md text-xs leading-5 text-[#738096]">
-                Workspaces will appear here once approved bookings are set up
-                for delivery.
-              </p>
-            </div>
-          </div>
+          <EmptyState
+            size="lg"
+            icon={BriefcaseBusiness}
+            title="No project workspaces yet"
+            description="Workspaces will appear here once approved bookings are set up for delivery."
+          />
         ) : view === "archive" &&
           archivedCount === 0 &&
           status === "all" &&
           !search.trim() ? (
-          <div className="grid min-h-52 place-items-center rounded-xl border border-dashed border-[#d5dce6] px-5 text-center">
-            <div>
-              <BriefcaseBusiness size={26} className="mx-auto text-[#8293ad]" />
-              <h3 className="mt-3 mb-1 text-sm font-semibold text-[#243550]">
-                Archive is empty
-              </h3>
-              <p className="m-0 max-w-md text-xs leading-5 text-[#738096]">
-                Completed and cancelled projects will appear here.
-              </p>
-            </div>
-          </div>
+          <EmptyState
+            size="lg"
+            icon={BriefcaseBusiness}
+            title="Archive is empty"
+            description="Completed and cancelled projects will appear here."
+          />
         ) : workspaces.length > 0 &&
           view === "active" &&
           openCount === 0 &&
           status === "all" &&
           !search.trim() ? (
-          <div className="grid min-h-52 place-items-center rounded-xl border border-dashed border-[#d5dce6] px-5 text-center">
-            <div>
-              <BriefcaseBusiness size={26} className="mx-auto text-[#8293ad]" />
-              <h3 className="mt-3 mb-1 text-sm font-semibold text-[#243550]">
-                No active projects
-              </h3>
-              <p className="m-0 max-w-md text-xs leading-5 text-[#738096]">
-                All completed and cancelled projects are available in Archive.
-              </p>
-            </div>
-          </div>
+          <EmptyState
+            size="lg"
+            icon={BriefcaseBusiness}
+            title="No active projects"
+            description="All completed and cancelled projects are available in Archive."
+          />
         ) : (
           <p className="rounded-xl border border-[#e2e6ec] p-8 text-center text-sm text-[#738096]">
             No projects match those filters.

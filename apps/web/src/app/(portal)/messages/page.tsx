@@ -9,9 +9,10 @@ export default async function Page({
     project?: string | string[]
     mode?: string | string[]
     view?: string | string[]
+    scope?: string | string[]
   }>
 }) {
-  const { request, internal, project, mode, view } = await searchParams
+  const { request, internal, project, mode, view, scope } = await searchParams
   const projectId =
     typeof project === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(project)
       ? project
@@ -32,6 +33,8 @@ export default async function Page({
       projectId={projectId}
       view={conversationView}
       mode={mode === "internal" ? "internal" : "requests"}
+      serviceOnly={scope === "service"}
+      projectOnly={scope === "project" || mode === "projects"}
     />
   )
 }

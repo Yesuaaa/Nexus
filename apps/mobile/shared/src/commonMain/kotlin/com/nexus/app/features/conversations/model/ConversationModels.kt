@@ -14,7 +14,8 @@ import kotlinx.serialization.Serializable
 @Serializable data class ConversationRow(
     val id: String, val title: String = "", val status: String = "",
     val service: ServiceName = ServiceName(), val acceptedDepartment: Department? = null,
-    val lastMessage: ChatMessage? = null, val unreadCount: Int = 0, val bookings: List<ConversationBooking> = emptyList()
+    val lastMessage: ChatMessage? = null, val unreadCount: Int = 0, val bookings: List<ConversationBooking> = emptyList(),
+    val updatedAt: String = ""
 )
 @Serializable data class ConversationPage(val conversations: List<ConversationRow> = emptyList(), val nextCursor: String? = null, val unreadCount: Int = 0)
 @Serializable data class ConversationInfo(val head: Person? = null, val department: Department? = null, val bookings: List<ConversationBooking> = emptyList())

@@ -1,6 +1,9 @@
 import type { Prisma } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
-import { activeUser } from "./workflow.access.js"
+import {
+  activeAccount,
+  activeDepartmentHead,
+} from "../../shared/query/accounts.js"
 import { fail } from "./workflow.validation.js"
 
 export function notificationScope(
@@ -13,7 +16,7 @@ export function notificationScope(
         workflow: {
           request: {
             clientId: userId,
-            client: { ...activeUser, role: "USER" },
+            client: { ...activeAccount, role: "USER" },
           },
         },
         event: { internal: false },
@@ -21,15 +24,12 @@ export function notificationScope(
       {
         workflow: {
           request: {
-            acceptedDepartment: {
-              headId: userId,
-              head: { ...activeUser, role: "STAFF" },
-            },
+            acceptedDepartment: activeDepartmentHead(userId),
           },
         },
       },
       {
-        user: { ...activeUser, role: { in: ["ADMIN", "SUPERADMIN"] } },
+        user: { ...activeAccount, role: { in: ["ADMIN", "SUPERADMIN"] } },
         workflow: { quotationApproverId: userId },
         event: {
           OR: [
@@ -39,7 +39,7 @@ export function notificationScope(
         },
       },
       {
-        user: { ...activeUser, role: { in: ["ADMIN", "SUPERADMIN"] } },
+        user: { ...activeAccount, role: { in: ["ADMIN", "SUPERADMIN"] } },
         workflow: { paymentVerifierId: userId },
         event: {
           OR: [
@@ -120,14 +120,14 @@ export async function listWorkflowApprovals(userId: string) {
         {
           quotationApproverId: userId,
           quotationApprover: {
-            ...activeUser,
+            ...activeAccount,
             role: { in: ["ADMIN", "SUPERADMIN"] },
           },
         },
         {
           paymentVerifierId: userId,
           paymentVerifier: {
-            ...activeUser,
+            ...activeAccount,
             role: { in: ["ADMIN", "SUPERADMIN"] },
           },
         },

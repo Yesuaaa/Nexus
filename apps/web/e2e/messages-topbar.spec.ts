@@ -32,6 +32,9 @@ for (const role of ["USER", "STAFF", "ADMIN", "SUPERADMIN"] as const) {
         json: { conversations: [], nextCursor: null, unreadCount: internal },
       })
     })
+    await page.route("**/api/internal-conversations/contacts", (route) =>
+      route.fulfill({ json: [] }),
+    )
     await page.goto("/messages")
     const topbar = page.getByRole("banner")
     const initialCount = role === "USER" ? 2 : 5
@@ -72,6 +75,12 @@ for (const role of ["USER", "STAFF", "ADMIN", "SUPERADMIN"] as const) {
     await expect(link).toBeVisible()
     await expect(link.locator("span")).toHaveCount(0)
     await link.click()
-    await expect(page).toHaveURL(/\/messages$/)
+    await expect(page).toHaveURL(
+      role === "USER"
+        ? /\/messages$/
+        : role === "STAFF"
+          ? /\/messages\?scope=project$/
+          : /\/messages\?mode=internal$/,
+    )
   })
 }

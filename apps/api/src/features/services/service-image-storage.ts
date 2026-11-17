@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
+import { safeHttpsUrl } from "../../shared/validation.js"
 
 const defaultBucket = "service-images"
 const maxImageBytes = 2 * 1024 * 1024
@@ -160,18 +161,21 @@ export function serviceImagePublicUrl(path: string | null) {
   }
 }
 
+/** Uploaded image URL, else the fallback, limited to safe HTTPS URLs. */
 export function profileImagePublicUrl(
   path: string | null,
   fallback?: string | null,
 ) {
-  const value = serviceImagePublicUrl(path) || fallback
-  if (!value) return null
-  try {
-    const url = new URL(value)
-    return url.protocol === "https:" && !url.username && !url.password
-      ? url.href
-      : null
-  } catch {
-    return null
-  }
+  return safeHttpsUrl(serviceImagePublicUrl(path) || fallback)
+}
+
+/** A user's avatar: their upload, else their employee record's image. */
+export function userImageUrl(user: {
+  profileImagePath: string | null
+  employee?: { profileImageUrl: string | null } | null
+}) {
+  return profileImagePublicUrl(
+    user.profileImagePath,
+    user.employee?.profileImageUrl,
+  )
 }

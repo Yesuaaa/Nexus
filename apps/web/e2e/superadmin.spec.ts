@@ -236,7 +236,7 @@ test.describe("Superadmin account management", () => {
 
     // 2. Modify Role
     const roleDropdown = page.getByRole("button", {
-      name: "Role for target@example.com: User",
+      name: "Role for target@example.com: Client",
     })
     await roleDropdown.click()
     await page.getByRole("menuitemradio", { name: "Staff" }).click()

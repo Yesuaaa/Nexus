@@ -5,21 +5,27 @@ import {
   Prisma,
   Role,
 } from "../../generated/prisma/client.js"
-import { validPassword } from "../auth/auth.password.js"
-import { employeeInclude } from "./employees.repository.js"
+import {
+  assertDepartmentHeadTitle,
+  assertLeadershipCandidate,
+  leadershipCandidateWhere,
+} from "../departments/leadership.policy.js"
+import { lockRows, lockRowsReturning } from "../../shared/db/locks.js"
+import { getPrisma } from "../../lib/db.js"
+import {
+  assertNotSelf,
+  deleteAccountPermanently,
+  moveAccountToTrash,
+  setAccountActive,
+} from "../users/account-lifecycle.js"
+import { directoryLogin, employeeInclude } from "./employees.repository.js"
 import type { EmployeeInput } from "./employees.schema.js"
+import { HttpError as EmployeeError } from "../../shared/http-error.js"
 
 export { employeeInclude }
 
-export class EmployeeError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
-    super(message)
-    this.name = "EmployeeError"
-  }
-}
+/** Feature-named alias of the shared `HttpError`. */
+export { EmployeeError }
 
 export type EmployeeWriteInput = EmployeeInput & { userId?: string | null }
 
@@ -84,8 +90,7 @@ async function listDepartmentHeadCandidates(
       userId: { not: excludingUserId },
       user: {
         is: {
-          role: Role.STAFF,
-          isActive: true,
+          ...leadershipCandidateWhere(departmentId),
           headOf: null,
           leadOfTeam: null,
         },
@@ -94,16 +99,6 @@ async function listDepartmentHeadCandidates(
     select: departmentHeadCandidateSelect,
   })
   return candidates.sort(compareSeniority)
-}
-
-export function validEmployeeAccountPassword(value: unknown): value is string {
-  return (
-    validPassword(value) &&
-    /[A-Z]/.test(value) &&
-    /[a-z]/.test(value) &&
-    /[0-9]/.test(value) &&
-    /[^A-Za-z0-9]/.test(value)
-  )
 }
 
 export function withoutEmployeeAccountDetails<
@@ -195,11 +190,6 @@ export async function getEmployeeStatusOptions(
 
 function generatedEmployeeId() {
   return `EXP-${randomUUID().replaceAll("-", "").slice(0, 10).toUpperCase()}`
-}
-
-function isDepartmentHeadTitle(position: string | null | undefined) {
-  const lower = position?.trim().toLowerCase()
-  return lower === "dept head" || lower === "department head"
 }
 
 async function validateDepartmentAndTeam(
@@ -295,16 +285,11 @@ async function writeEmployee(
         for (const department of temporaryDepartments)
           departmentIds.add(department.id)
       }
-      for (const departmentId of [...departmentIds].sort()) {
-        await tx.$queryRaw(
-          Prisma.sql`SELECT "id" FROM "Department" WHERE "id" = ${departmentId} FOR UPDATE`,
-        )
-      }
+      // Sorted, one at a time (lockRows), like every Department lock.
+      await lockRows(tx, "Department", [...departmentIds])
     }
 
-    await tx.$queryRaw(
-      Prisma.sql`SELECT "id" FROM "Employee" WHERE "id" = ${id} FOR UPDATE`,
-    )
+    await lockRows(tx, "Employee", id)
   }
   const existing = id ? await tx.employee.findUnique({ where: { id } }) : null
   if (id && !existing) throw new EmployeeError(404, "Employee not found")
@@ -383,9 +368,7 @@ async function writeEmployee(
           : "No active Staff member with an EXP account is available to temporarily lead this department",
       )
     }
-    await tx.$queryRaw(
-      Prisma.sql`SELECT "id" FROM "Employee" WHERE "id" = ${replacementHeadCandidate.id} FOR UPDATE`,
-    )
+    await lockRows(tx, "Employee", replacementHeadCandidate.id)
     const refreshedCandidate = await tx.employee.findUnique({
       where: { id: replacementHeadCandidate.id },
       select: departmentHeadCandidateSelect,
@@ -416,44 +399,20 @@ async function writeEmployee(
           },
         })
       : null
-
-  const originalTemporaryDepartment =
+  const restoreOriginal = Boolean(
+    returningDepartment &&
     oldUserId &&
-    existing &&
-    nextDepartmentId &&
-    isDepartmentHeadTitle(nextPosition)
-      ? await tx.department.findFirst({
-          where: {
-            id: nextDepartmentId,
-            temporaryHeadOriginalId: oldUserId,
-          },
-          select: { id: true },
-        })
-      : null
+    nextDepartmentId === returningDepartment.id &&
+    nextUserId === oldUserId &&
+    returningDepartment.headId === returningDepartment.temporaryHeadAssignedId,
+  )
 
-  if (isDepartmentHeadTitle(nextPosition)) {
-    if (!nextUserId) {
-      throw new EmployeeError(
-        400,
-        "Only the assigned Department Head can have the title 'Department Head'",
-      )
-    }
-    const department = nextDepartmentId
-      ? await tx.department.findUnique({
-          where: { id: nextDepartmentId },
-          select: { headId: true },
-        })
-      : null
-    const unchangedTemporaryHeadTitle = Boolean(
-      existing?.position === nextPosition && originalTemporaryDepartment,
-    )
-    if (department?.headId !== nextUserId && !unchangedTemporaryHeadTitle) {
-      throw new EmployeeError(
-        400,
-        "Only the assigned Department Head can have the title 'Department Head'",
-      )
-    }
-  }
+  await assertDepartmentHeadTitle(tx, {
+    title: nextPosition,
+    userId: nextUserId,
+    departmentId: nextDepartmentId,
+    currentTitle: existing?.position,
+  })
 
   const linkedUserIds = [
     ...new Set(
@@ -462,11 +421,7 @@ async function writeEmployee(
       ),
     ),
   ].sort()
-  for (const userId of linkedUserIds) {
-    await tx.$queryRaw(
-      Prisma.sql`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE`,
-    )
-  }
+  await lockRows(tx, "User", linkedUserIds)
 
   let nextUser: { id: string; role: Role } | null = null
   if (nextUserId) {
@@ -489,7 +444,7 @@ async function writeEmployee(
         where: { id: nextDepartmentId },
         select: { headId: true },
       })
-      if (department?.headId === nextUserId) {
+      if (department?.headId === nextUserId || restoreOriginal) {
         throw new EmployeeError(
           400,
           "The Department Head oversees the entire department and cannot be assigned to a sub-team",
@@ -527,28 +482,10 @@ async function writeEmployee(
         "The selected temporary head needs an active Staff account",
       )
     }
-    const candidateAccount = await tx.user.findUnique({
-      where: { id: candidateUserId },
-      select: {
-        id: true,
-        role: true,
-        isActive: true,
-        headOf: { select: { id: true } },
-        leadOfTeam: { select: { id: true } },
-      },
+    await assertLeadershipCandidate(tx, candidateUserId, {
+      kind: "tempHead",
+      departmentId: currentDepartment.id,
     })
-    if (
-      !candidateAccount ||
-      candidateAccount.role !== Role.STAFF ||
-      !candidateAccount.isActive ||
-      candidateAccount.headOf ||
-      candidateAccount.leadOfTeam
-    ) {
-      throw new EmployeeError(
-        409,
-        "The selected temporary head is no longer eligible; refresh and choose again",
-      )
-    }
 
     const canRestoreOriginal =
       nextDepartmentId === currentDepartment.id && nextUserId === oldUserId
@@ -559,13 +496,13 @@ async function writeEmployee(
     await tx.department.update({
       where: { id: currentDepartment.id },
       data: {
-        headId: candidateAccount.id,
+        headId: candidateUserId,
         temporaryHeadOriginalId: originalHeadId,
-        temporaryHeadAssignedId: originalHeadId ? candidateAccount.id : null,
+        temporaryHeadAssignedId: originalHeadId ? candidateUserId : null,
       },
     })
     await tx.user.update({
-      where: { id: candidateAccount.id },
+      where: { id: candidateUserId },
       data: { departmentId: currentDepartment.id, teamId: null },
     })
     await tx.employee.update({
@@ -574,13 +511,15 @@ async function writeEmployee(
     })
   }
 
+  if (statusChanged && input.status !== EmployeeStatus.ACTIVE && oldUserId) {
+    // Teams work without a lead, so a lead going non-active just steps down.
+    await tx.team.updateMany({
+      where: { leadId: oldUserId },
+      data: { leadId: null },
+    })
+  }
+
   if (returningDepartment && oldUserId) {
-    const restoreOriginal = Boolean(
-      nextDepartmentId === returningDepartment.id &&
-      nextUserId === oldUserId &&
-      returningDepartment.headId ===
-        returningDepartment.temporaryHeadAssignedId,
-    )
     await tx.department.update({
       where: { id: returningDepartment.id },
       data: {
@@ -674,14 +613,14 @@ export async function syncEmployeeForUser(
 ): Promise<Prisma.EmployeeGetPayload<{
   include: typeof employeeInclude
 }> | null> {
-  const lockedEmployee = await tx.$queryRaw<Array<{ id: string }>>(
-    Prisma.sql`SELECT "id" FROM "Employee" WHERE "userId" = ${userId} FOR UPDATE`,
+  const lockedEmployee = await lockRowsReturning(
+    tx,
+    "Employee",
+    userId,
+    "update",
+    "userId",
   )
-  if (lockedEmployee.length === 0) {
-    await tx.$queryRaw(
-      Prisma.sql`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE`,
-    )
-  }
+  if (lockedEmployee.length === 0) await lockRows(tx, "User", userId)
   const user = await tx.user.findUnique({
     where: { id: userId },
     select: {
@@ -754,4 +693,81 @@ export async function syncEmployeeForUser(
     },
     include: employeeInclude,
   })
+}
+
+const ADMIN_LOGIN_MESSAGE =
+  "Admin accounts must be managed from Account Management"
+
+/** Enables or disables the STAFF login linked to an employee directory entry. */
+export async function setEmployeeLoginStatus(
+  actorId: string,
+  employeeId: string,
+  isActive: boolean,
+) {
+  await getPrisma()!.$transaction(
+    async (tx) => {
+      const employee = await directoryLogin(tx, employeeId)
+      if (!employee) throw new EmployeeError(404, "Employee not found")
+      if (!employee.user || employee.user.accountDeletedAt) {
+        throw new EmployeeError(409, "Employee has no login account")
+      }
+      assertNotSelf(
+        actorId,
+        employee.user.id,
+        "You cannot change your own login status",
+      )
+      if (employee.user.role !== Role.STAFF) {
+        throw new EmployeeError(403, ADMIN_LOGIN_MESSAGE)
+      }
+      await setAccountActive(tx, employee.user.id, isActive)
+    },
+    { isolationLevel: "Serializable" },
+  )
+}
+
+/**
+ * Moves an employee's (already deactivated) STAFF login to Archive, or
+ * deletes an archived one permanently.
+ */
+export async function removeEmployeeLogin(
+  actorId: string,
+  employeeId: string,
+  { permanent }: { permanent: boolean },
+) {
+  await getPrisma()!.$transaction(
+    async (tx) => {
+      const employee = await directoryLogin(tx, employeeId)
+      if (!employee) throw new EmployeeError(404, "Employee not found")
+      if (!employee.user || (!permanent && employee.user.accountDeletedAt)) {
+        throw new EmployeeError(409, "Employee has no login account")
+      }
+      assertNotSelf(
+        actorId,
+        employee.user.id,
+        "You cannot delete your own login account",
+      )
+      if (employee.user.role !== Role.STAFF) {
+        throw new EmployeeError(403, ADMIN_LOGIN_MESSAGE)
+      }
+      if (employee.user.isActive)
+        throw new EmployeeError(
+          409,
+          "Deactivate the account before moving it to Archive",
+        )
+      if (!permanent) {
+        await moveAccountToTrash(tx, employee.user.id)
+        return
+      }
+      if (!employee.user.accountDeletedAt)
+        throw new EmployeeError(
+          409,
+          "Move the account to Archive before deleting it permanently",
+        )
+      await deleteAccountPermanently(tx, employee.user.id, {
+        linkedMessage:
+          "This account has related records and cannot be permanently deleted. Keep it in Archive to preserve its history.",
+      })
+    },
+    { isolationLevel: "Serializable" },
+  )
 }

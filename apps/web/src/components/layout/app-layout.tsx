@@ -95,8 +95,9 @@ export function AppLayout({
       />
       <div
         className={cn(
-          "h-dvh min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain py-[15px] pr-[15px] pl-4 transition-[margin-left] duration-[240ms] max-[767px]:m-0 max-[767px]:p-3 motion-reduce:transition-none",
-          collapsed ? "ml-[95px]" : "ml-[311px]",
+          "h-dvh min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain p-2 transition-[margin-left] duration-[240ms] max-[767px]:m-0 max-[767px]:p-1.5 motion-reduce:transition-none",
+          // Sidebar inset (8px) + its width; the p-2 above is the 8px gap.
+          collapsed ? "ml-[72px]" : "ml-[240px]",
         )}
       >
         <Topbar

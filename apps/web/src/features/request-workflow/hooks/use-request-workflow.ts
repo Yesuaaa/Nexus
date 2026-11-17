@@ -9,6 +9,8 @@ import {
   uploadWorkflowFile,
 } from "../api/workflow-api"
 import type { Workflow, WorkflowAction } from "../model/workflow"
+import { errorMessage } from "@/lib/error-message"
+import { watchVisibleRefresh } from "@/lib/visible-refresh"
 
 export function useRequestWorkflow(requestId: string | null) {
   const [workflow, setWorkflow] = useState<Workflow | null>(null)
@@ -103,10 +105,10 @@ export function useRequestWorkflow(requestId: string | null) {
               revoke(reason.message)
               return
             }
-            const message =
-              reason instanceof Error
-                ? reason.message
-                : "Couldn't load the request workflow."
+            const message = errorMessage(
+              reason,
+              "Couldn't load the request workflow.",
+            )
             setError(message)
             reportLoadError(message)
           } finally {
@@ -146,23 +148,17 @@ export function useRequestWorkflow(requestId: string | null) {
       setLoading(Boolean(requestId))
       void refresh(controller.signal)
     }, 0)
-    const timer = setInterval(() => {
-      if (document.visibilityState === "visible")
-        void refresh(controller.signal)
-    }, 15_000)
-    const onVisible = () => {
-      if (document.visibilityState === "visible")
-        void refresh(controller.signal)
-    }
-    document.addEventListener("visibilitychange", onVisible)
+    const stopRefresh = watchVisibleRefresh(
+      () => void refresh(controller.signal),
+      { intervalMs: 15_000 },
+    )
     return () => {
       alive.current = false
       controller.abort()
       if (refreshFlight.current?.requestId === requestId)
         refreshFlight.current = null
       clearTimeout(initial)
-      clearInterval(timer)
-      document.removeEventListener("visibilitychange", onVisible)
+      stopRefresh()
     }
   }, [refresh, requestId])
 
@@ -195,10 +191,7 @@ export function useRequestWorkflow(requestId: string | null) {
       return true
     } catch (reason) {
       if (!alive.current || revoked.current) return false
-      const message =
-        reason instanceof Error
-          ? reason.message
-          : "Couldn't update this request."
+      const message = errorMessage(reason, "Couldn't update this request.")
       setError(message)
       sileo.error({ title: "Action not completed", description: message })
       if (reason instanceof ApiError && [401, 403, 404].includes(reason.status))
@@ -235,8 +228,7 @@ export function useRequestWorkflow(requestId: string | null) {
       return result
     } catch (reason) {
       if (!alive.current || revoked.current) return null
-      const message =
-        reason instanceof Error ? reason.message : "Couldn't upload this file."
+      const message = errorMessage(reason, "Couldn't upload this file.")
       setError(message)
       if (reason instanceof ApiError && [401, 403, 404].includes(reason.status))
         revoke(message)

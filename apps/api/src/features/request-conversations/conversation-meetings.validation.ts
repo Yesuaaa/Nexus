@@ -1,3 +1,4 @@
+import { isPlainObject, isRecordId, isUuidV4 } from "../../shared/validation.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 
 function invalid(message: string): never {
@@ -5,9 +6,8 @@ function invalid(message: string): never {
 }
 
 function record(input: unknown): Record<string, unknown> {
-  if (!input || typeof input !== "object" || Array.isArray(input))
-    invalid("Invalid meeting details")
-  return input as Record<string, unknown>
+  if (!isPlainObject(input)) invalid("Invalid meeting details")
+  return input
 }
 
 function text(value: unknown, label: string, max: number, required = true) {
@@ -50,19 +50,11 @@ function schedule(input: Record<string, unknown>) {
 export function parseMeeting(input: unknown) {
   const body = record(input)
   const clientActionId = text(body.clientActionId, "invitation ID", 36)
-  if (
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      clientActionId,
-    )
-  )
-    invalid("Invalid invitation ID")
+  if (!isUuidV4(clientActionId)) invalid("Invalid invitation ID")
   if (
     !Array.isArray(body.bookingIds) ||
     body.bookingIds.length > 100 ||
-    !body.bookingIds.every(
-      (id): id is string =>
-        typeof id === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(id),
-    )
+    !body.bookingIds.every(isRecordId)
   )
     invalid("Choose services from this conversation")
   return {

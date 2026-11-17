@@ -1,16 +1,20 @@
 "use client"
 
 import { Form } from "@/components/ui/form"
+import { formFieldClass } from "@/components/ui/form-control-styles"
 import { useState, type FormEvent, type ReactNode } from "react"
-import { Eye, EyeOff } from "lucide-react"
 import { sileo } from "@/lib/toast"
+import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { focusRing } from "@/components/layout/styles"
+import { PasswordInput } from "@/components/ui/password-input"
 import { changeProfilePassword } from "@/features/profile/api/profile-api"
-const inputClass =
-  "min-h-11 w-full min-w-0 rounded-lg border border-[#d8e1ef] bg-background px-3 py-2 text-sm text-[#182235] outline-none focus-visible:ring-2 focus-visible:ring-[#294a9b] disabled:opacity-60"
-const primaryClass =
-  "min-h-11 bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
+import { errorMessage } from "@/lib/error-message"
+import {
+  PASSWORD_MAX_BYTES,
+  PASSWORD_MIN_LENGTH,
+  passwordIssue,
+  passwordPolicyHint,
+} from "@/lib/validation"
 function Field({
   label,
   children,
@@ -21,7 +25,7 @@ function Field({
   hint?: string
 }) {
   return (
-    <label className="grid min-w-0 content-start gap-2 text-xs font-medium text-[#52627a]">
+    <label className={`${formFieldClass} content-start`}>
       {label}
       {children}
       {hint && (
@@ -60,15 +64,10 @@ function Section({
 }
 function ErrorMessage({ message }: { message: string }) {
   return message ? (
-    <p role="alert" className="m-0 text-xs leading-5 text-[#bc3649]">
+    <Alert variant="text" className="leading-5">
       {message}
-    </p>
+    </Alert>
   ) : null
-}
-function errorText(reason: unknown) {
-  return reason instanceof Error
-    ? reason.message
-    : "Your changes could not be saved. Try again."
 }
 
 function PasswordField({
@@ -82,33 +81,16 @@ function PasswordField({
   autoComplete: string
   minLength?: number
 }) {
-  const [visible, setVisible] = useState(false)
   return (
     <Field label={label}>
-      <div className="relative">
-        <input
-          name={name}
-          type={visible ? "text" : "password"}
-          autoComplete={autoComplete}
-          minLength={minLength}
-          maxLength={1024}
-          required
-          className={`${inputClass} pr-12`}
-        />
-        <button
-          type="button"
-          aria-label={`${visible ? "Hide" : "Show"} ${label.toLowerCase()}`}
-          aria-pressed={visible}
-          onClick={() => setVisible(!visible)}
-          className={`absolute top-0 right-0 grid size-11 cursor-pointer place-items-center rounded-lg text-[#667b9e] ${focusRing}`}
-        >
-          {visible ? (
-            <EyeOff size={17} aria-hidden="true" />
-          ) : (
-            <Eye size={17} aria-hidden="true" />
-          )}
-        </button>
-      </div>
+      <PasswordInput
+        name={name}
+        toggleLabel={label.toLowerCase()}
+        autoComplete={autoComplete}
+        minLength={minLength}
+        maxLength={PASSWORD_MAX_BYTES}
+        required
+      />
     </Field>
   )
 }
@@ -125,8 +107,14 @@ export function SecurityDetails({
     event.preventDefault()
     if (busy) return
     const data = new FormData(event.currentTarget)
-    if (data.get("newPassword") !== data.get("confirmPassword")) {
+    const newPassword = String(data.get("newPassword"))
+    if (newPassword !== data.get("confirmPassword")) {
       setError("The new passwords do not match.")
+      return
+    }
+    const passwordError = passwordIssue(newPassword)
+    if (passwordError) {
+      setError(passwordError)
       return
     }
     setBusy(true)
@@ -135,12 +123,14 @@ export function SecurityDetails({
     try {
       await changeProfilePassword(
         String(data.get("currentPassword")),
-        String(data.get("newPassword")),
+        newPassword,
       )
       sileo.success({ title: "Password changed" })
       onChanged()
     } catch (reason) {
-      setError(errorText(reason))
+      setError(
+        errorMessage(reason, "Your changes could not be saved. Try again."),
+      )
     } finally {
       setBusy(false)
       onBusyChange?.(false)
@@ -150,7 +140,7 @@ export function SecurityDetails({
     <Section
       id="security"
       title="Password & security"
-      description="Use at least 12 characters. After saving, you can choose whether to log out of all devices."
+      description={`${passwordPolicyHint} After saving, you can choose whether to log out of all devices.`}
     >
       <Form onSubmit={save} className="grid gap-5">
         <fieldset
@@ -167,19 +157,19 @@ export function SecurityDetails({
               label="New password"
               name="newPassword"
               autoComplete="new-password"
-              minLength={12}
+              minLength={PASSWORD_MIN_LENGTH}
             />
             <PasswordField
               label="Confirm new password"
               name="confirmPassword"
               autoComplete="new-password"
-              minLength={12}
+              minLength={PASSWORD_MIN_LENGTH}
             />
           </div>
         </fieldset>
         <ErrorMessage message={error} />
         <div className="flex justify-end border-t border-[#eceef1] pt-4">
-          <Button className={primaryClass} disabled={busy}>
+          <Button variant="brand" size="touch" disabled={busy}>
             {busy ? "Updating…" : "Update password"}
           </Button>
         </div>

@@ -19,13 +19,15 @@ data class ProfileState(
 class ProfileViewModel(private val repository: ProfileRepository, private val session: SessionManager) : ViewModel() {
     private val mutable = MutableStateFlow(ProfileState())
     val state = mutable.asStateFlow()
+    private val generation = session.generation
     init { reload() }
     fun reload() {
         viewModelScope.launch {
             mutable.value = mutable.value.copy(loading = true, error = null)
             try {
                 val profile = repository.profile()
-                session.setUser(profile.user)
+                if (session.generation != generation) return@launch
+                session.updateUser(profile.user, generation)
                 mutable.value = mutable.value.copy(profile = profile)
                 mutable.value = mutable.value.copy(settings = repository.settings())
             } catch (e: CancellationException) { throw e }
@@ -38,7 +40,9 @@ class ProfileViewModel(private val repository: ProfileRepository, private val se
         mutable.value = mutable.value.copy(busy = true, error = null, message = null)
         viewModelScope.launch {
             try {
+                if (session.generation != generation) return@launch
                 block()
+                if (session.generation != generation) return@launch
                 mutable.value = mutable.value.copy(message = message)
                 done()
             } catch (e: CancellationException) { throw e }
@@ -47,8 +51,9 @@ class ProfileViewModel(private val repository: ProfileRepository, private val se
         }
     }
     private fun apply(profile: Profile) {
+        if (session.generation != generation) return
         mutable.value = mutable.value.copy(profile = profile)
-        session.setUser(profile.user)
+        session.updateUser(profile.user, generation)
     }
     fun save(name: String, contact: String, done: () -> Unit) = mutate("Personal details saved", done) {
         apply(repository.save(PersonalDetails(name.trim(), contact.trim())))

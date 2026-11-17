@@ -3,12 +3,68 @@ import { test } from "node:test"
 import {
   getCurrentAccount,
   getToken,
+  PortalAccessError,
   signIn,
+  signInToPortal,
   signOut,
   clearToken,
   apiRequest,
   apiStreamRequest,
 } from "../src/features/auth/api/auth-api.ts"
+
+test("sign-in through the wrong portal revokes and clears the new session", async (t) => {
+  const values = new Map()
+  let logouts = 0
+  const account = {
+    id: "client-1",
+    email: "client@example.com",
+    fullName: "Client Account",
+    contactNumber: null,
+    role: "USER",
+    permissions: ["dashboard:read"],
+    createdAt: "2026-01-01T00:00:00.000Z",
+  }
+
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    if (url === "/api/auth/login")
+      return Response.json({
+        token: "client-session",
+        refreshToken: "client-refresh",
+        expiresIn: 900,
+        user: account,
+      })
+    assert.equal(url, "/api/auth/logout")
+    assert.equal(options.headers.get("Authorization"), "Bearer client-session")
+    logouts++
+    return new Response(null, { status: 204 })
+  })
+  const descriptor = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "sessionStorage",
+  )
+  Object.defineProperty(globalThis, "sessionStorage", {
+    configurable: true,
+    value: {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => values.set(key, value),
+      removeItem: (key) => values.delete(key),
+    },
+  })
+  t.after(() => {
+    if (descriptor)
+      Object.defineProperty(globalThis, "sessionStorage", descriptor)
+    else delete globalThis.sessionStorage
+  })
+
+  await assert.rejects(
+    signInToPortal(account.email, "correct password", "workforce"),
+    (error) =>
+      error instanceof PortalAccessError && error.portal === "workforce",
+  )
+  assert.equal(logouts, 1)
+  assert.equal(values.has("nexus.auth.token"), false)
+  assert.equal(values.has("nexus.auth.refreshToken"), false)
+})
 
 test("stream requests renew expired access tokens and preserve the unread response body", async (t) => {
   const values = new Map([

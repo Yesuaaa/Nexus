@@ -3,7 +3,8 @@ import { cn } from "@/lib/utils"
 import { workflowButton } from "./workflow-primitives"
 
 export const draftSecondaryButton = "h-9 min-w-[92px] text-[11px]"
-export const draftPrimaryButton = `${workflowButton} min-w-[130px] bg-[#203f8c] text-white hover:bg-[#172f70]`
+/** Shape of the primary draft action; pair with `<Button variant="brand">`. */
+export const draftPrimaryButton = `${workflowButton} min-w-[130px]`
 
 export function WorkflowDraftFooter({
   children,

@@ -1,4 +1,5 @@
-import { parsePage, parseQueryString } from "../../shared/query-helpers.js"
+import { parseQueryString } from "../../shared/query-helpers.js"
+import { parsePage } from "../../shared/query/pagination.js"
 
 export type InboxFilters = {
   page: number
@@ -25,7 +26,6 @@ export function parseInboxFilters(
   const sortDir = query.sortDir ?? "asc"
   if (
     page === null ||
-    page > 100_000 ||
     search === null ||
     search.length > 100 ||
     ![

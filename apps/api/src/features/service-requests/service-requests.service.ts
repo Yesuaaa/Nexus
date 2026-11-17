@@ -3,21 +3,18 @@ import type { Prisma } from "../../generated/prisma/client.js"
 import { randomUUID } from "node:crypto"
 import { getPrisma } from "../../lib/db.js"
 import { isUniqueConflict } from "../../lib/errors.js"
+import { activeStaff } from "../../shared/query/accounts.js"
+import { PAGE_SIZE, paginate } from "../../shared/query/pagination.js"
+import { clientRequestSearch } from "../client-services/client-services.repository.js"
 import {
   validateServiceRequestInput,
   type ServiceRequestFilters,
   type ServiceRequestInput,
 } from "./service-requests.schema.js"
+import { HttpError as ServiceRequestsError } from "../../shared/http-error.js"
 
-export class ServiceRequestsError extends Error {
-  constructor(
-    public readonly status: number,
-    message: string,
-  ) {
-    super(message)
-    this.name = "ServiceRequestsError"
-  }
-}
+/** Feature-named alias of the shared `HttpError`. */
+export { ServiceRequestsError }
 
 const receiptSelect = {
   id: true,
@@ -45,20 +42,7 @@ export async function listClientBookings(
   const where: Prisma.ServiceRequestWhereInput = {
     clientId,
     ...(filters.status ? { status: filters.status } : {}),
-    ...(filters.search
-      ? {
-          OR: [
-            { id: { contains: filters.search, mode: "insensitive" } },
-            { title: { contains: filters.search, mode: "insensitive" } },
-            { packageName: { contains: filters.search, mode: "insensitive" } },
-            {
-              service: {
-                name: { contains: filters.search, mode: "insensitive" },
-              },
-            },
-          ],
-        }
-      : {}),
+    ...clientRequestSearch(filters.search),
   }
   return getPrisma()!.$transaction(
     async (tx) => {
@@ -79,18 +63,24 @@ export async function listClientBookings(
             serviceRequests: [],
             total: 0,
             page: filters.page,
-            pageSize: 10,
+            pageSize: PAGE_SIZE,
           }
       }
-      const serviceRequests = await tx.serviceRequest.findMany({
-        where,
-        select: bookingSelect,
-        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-        skip: (filters.page - 1) * 10,
-        take: 10,
-      })
-      const total = await tx.serviceRequest.count({ where })
-      return { serviceRequests, total, page: filters.page, pageSize: 10 }
+      const { rows: serviceRequests, ...page } = await paginate(
+        filters.page,
+        {
+          rows: (db, window) =>
+            db.serviceRequest.findMany({
+              where,
+              select: bookingSelect,
+              orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+              ...window,
+            }),
+          count: (db) => db.serviceRequest.count({ where }),
+        },
+        { tx },
+      )
+      return { serviceRequests, ...page }
     },
     { isolationLevel: "RepeatableRead" },
   )
@@ -187,7 +177,7 @@ export async function submitServiceRequest(clientId: string, body: unknown) {
                 id: input.preferredSpecialistId,
                 status: "ACTIVE",
                 department: { services: { some: { id: service.id } } },
-                user: { role: "STAFF", isActive: true, accountDeletedAt: null },
+                user: activeStaff,
               },
               select: { id: true, fullName: true },
             })

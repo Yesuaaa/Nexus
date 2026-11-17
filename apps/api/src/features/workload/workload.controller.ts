@@ -1,24 +1,23 @@
-import { Router, type ErrorRequestHandler } from "express"
+import { Router } from "express"
 import { requireAuth } from "../auth/auth.middleware.js"
 import { getPrisma } from "../../lib/db.js"
+import { activeStaff } from "../../shared/query/accounts.js"
 import type { Prisma } from "../../generated/prisma/client.js"
-import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
+import { fail } from "../../shared/http-error.js"
+import { requireDepartmentHead } from "../request-inbox/request-inbox.service.js"
 
 export const workloadRouter = Router()
 workloadRouter.use(requireAuth)
-const fail = (message: string, status = 400): never => {
-  throw new ServiceRequestsError(status, message)
-}
 function weekValue(value: unknown): string {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value))
-    return fail("Choose a valid week")
+    return fail(400, "Choose a valid week")
   const date = new Date(`${value}T00:00:00Z`)
   if (
     !Number.isFinite(date.getTime()) ||
     date.toISOString().slice(0, 10) !== value ||
     date.getUTCDay() !== 1
   )
-    return fail("Week must start on Monday")
+    return fail(400, "Week must start on Monday")
   return value
 }
 function hours(value: unknown, positive = false): number {
@@ -29,26 +28,17 @@ function hours(value: unknown, positive = false): number {
     value > 168 ||
     (positive && value === 0)
   )
-    return fail("Hours must be between 0 and 168")
+    return fail(400, "Hours must be between 0 and 168")
   return value
 }
-async function scope(tx: Prisma.TransactionClient, userId: string) {
-  const department = await tx.department.findFirst({
-    where: {
-      headId: userId,
-      head: { role: "STAFF", isActive: true, accountDeletedAt: null },
-    },
-    select: { id: true, name: true },
+function scope(tx: Prisma.TransactionClient, userId: string) {
+  return requireDepartmentHead(userId, {
+    client: tx,
+    message: "Only the department head can manage workload",
   })
-  if (!department)
-    return fail("Only the department head can manage workload", 403)
-  return department
 }
 function staffAccountWhere(departmentId: string): Prisma.EmployeeWhereInput {
-  return {
-    departmentId,
-    user: { role: "STAFF", isActive: true, accountDeletedAt: null },
-  }
+  return { departmentId, user: activeStaff }
 }
 function eligibleStaffWhere(departmentId: string): Prisma.EmployeeWhereInput {
   return { ...staffAccountWhere(departmentId), status: "ACTIVE" }
@@ -163,8 +153,9 @@ workloadRouter.put("/capacity", async (req, res) => {
     scheduledHours = hours(input.scheduledHours),
     timeOffHours = hours(input.timeOffHours)
   if (timeOffHours > scheduledHours)
-    return fail("Time off cannot exceed scheduled hours")
-  if (typeof input.employeeId !== "string") return fail("Choose an employee")
+    return fail(400, "Time off cannot exceed scheduled hours")
+  if (typeof input.employeeId !== "string")
+    return fail(400, "Choose an employee")
   const employeeId = input.employeeId
   await getPrisma()!.$transaction(async (tx) => {
     const department = await scope(tx, req.auth!.user.id)
@@ -173,7 +164,7 @@ workloadRouter.put("/capacity", async (req, res) => {
       data: { updatedAt: new Date() },
     })
     if (!member.count)
-      return fail("Choose staff with an active account in your department", 404)
+      return fail(404, "Choose staff with an active account in your department")
     await tx.workloadCapacity.upsert({
       where: { employeeId_week: { employeeId, week } },
       create: {
@@ -194,7 +185,7 @@ workloadRouter.put("/assignment", async (req, res) => {
     typeof input.employeeId !== "string" ||
     typeof input.projectId !== "string"
   )
-    return fail("Choose staff and a project")
+    return fail(400, "Choose staff and a project")
   const employeeId = input.employeeId,
     projectId = input.projectId,
     weeklyHours = hours(input.weeklyHours, true)
@@ -204,14 +195,14 @@ workloadRouter.put("/assignment", async (req, res) => {
     typeof input.endDate !== "string" ||
     !/^\d{4}-\d{2}-\d{2}$/.test(input.endDate)
   )
-    return fail("Choose an end date")
+    return fail(400, "Choose an end date")
   const allocationEnd = new Date(`${input.endDate}T00:00:00Z`)
   if (
     !Number.isFinite(allocationEnd.getTime()) ||
     allocationEnd.toISOString().slice(0, 10) !== input.endDate ||
     allocationEnd < allocationStart
   )
-    return fail("End date must be on or after the starting week")
+    return fail(400, "End date must be on or after the starting week")
   await getPrisma()!.$transaction(async (tx) => {
     const department = await scope(tx, req.auth!.user.id)
     const project = await tx.project.updateMany({
@@ -228,7 +219,7 @@ workloadRouter.put("/assignment", async (req, res) => {
       data: { updatedAt: new Date() },
     })
     if (!project.count)
-      return fail("Service must be authorized before allocating staff", 409)
+      return fail(409, "Service must be authorized before allocating staff")
     const member = await tx.employee.updateMany({
       where: {
         id: employeeId,
@@ -237,7 +228,7 @@ workloadRouter.put("/assignment", async (req, res) => {
       data: { updatedAt: new Date() },
     })
     if (!member.count)
-      return fail("Choose active department staff with an active login", 409)
+      return fail(409, "Choose active department staff with an active login")
     const previousEmployeeId =
       typeof input.previousEmployeeId === "string"
         ? input.previousEmployeeId
@@ -247,7 +238,7 @@ workloadRouter.put("/assignment", async (req, res) => {
         where: { projectId, employeeId: previousEmployeeId },
         select: { id: true },
       })
-      if (!previous) return fail("Previous assignment was not found", 404)
+      if (!previous) return fail(404, "Previous assignment was not found")
     }
     const data = {
       weeklyHours,
@@ -323,12 +314,7 @@ workloadRouter.delete("/assignment/:id", async (req, res) => {
         project: { request: { acceptedDepartmentId: department.id } },
       },
     })
-    if (!removed.count) return fail("Assignment not found", 404)
+    if (!removed.count) return fail(404, "Assignment not found")
   })
   res.json({ saved: true })
 })
-workloadRouter.use(((error, _req, res, next) => {
-  if (error instanceof ServiceRequestsError)
-    return res.status(error.status).json({ error: error.message })
-  next(error)
-}) satisfies ErrorRequestHandler)

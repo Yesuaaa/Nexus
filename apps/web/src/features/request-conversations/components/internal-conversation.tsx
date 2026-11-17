@@ -3,12 +3,9 @@
 import { Form } from "@/components/ui/form"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 
-import { useEffect, useRef, useState, type FormEvent } from "react"
+import { useEffect, useState } from "react"
 import { Info } from "lucide-react"
-import { sileo } from "@/lib/toast"
 import { Button } from "@/components/ui/button"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
-import { ApiError } from "@/features/auth/api/auth-api"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { focusRing } from "@/components/layout/styles"
 import { cn } from "@/lib/utils"
@@ -30,6 +27,10 @@ import {
   type InternalConversationHistory,
 } from "../api/internal-conversations-api"
 import type { RequestMessage } from "../api/request-conversations-api"
+import { useConversationThread } from "../hooks/use-conversation-thread"
+import { mergeMessages } from "../model/conversation-events"
+import { errorMessage } from "@/lib/error-message"
+import { watchVisibleRefresh } from "@/lib/visible-refresh"
 
 type InternalConversationProps = {
   conversationId: string
@@ -51,18 +52,6 @@ type InternalConversationProps = {
 
 const contextPanelStorageKey = "nexus.messages.context-panel-open"
 
-function mergeMessages(current: RequestMessage[], incoming: RequestMessage[]) {
-  return [
-    ...new Map(
-      [...current, ...incoming].map((message) => [message.id, message]),
-    ).values(),
-  ].sort(
-    (left, right) =>
-      left.createdAt.localeCompare(right.createdAt) ||
-      left.id.localeCompare(right.id),
-  )
-}
-
 export function InternalConversation(props: InternalConversationProps) {
   return <InternalConversationPanel key={props.conversationId} {...props} />
 }
@@ -81,21 +70,35 @@ function InternalConversationPanel({
   const sendMessage = transport?.sendMessage ?? sendInternalMessage
   const conversationLabel =
     kind === "project" ? "Project conversation" : "Internal conversation"
-  const { formatDate, formatTime } = useDatePreferences()
+  const { formatDate } = useDatePreferences()
 
   const account = usePortalAccount()
-  const [history, setHistory] = useState<InternalConversationHistory | null>(
-    null,
-  )
-  const [error, setError] = useState("")
-  useEffect(() => {
-    if (error)
-      sileo.error({ title: "Couldn't load messages", description: error })
-  }, [error])
-  const [draft, setDraft] = useState("")
-  const [sending, setSending] = useState(false)
-  const [olderLoading, setOlderLoading] = useState(false)
-  const [sendError, setSendError] = useState("")
+  const {
+    history,
+    setHistory,
+    error,
+    setError,
+    revision,
+    reload,
+    draft,
+    setDraft,
+    sending,
+    sendError,
+    olderLoading,
+    loadOlder,
+    submit,
+    logRef,
+    followLatestRef,
+    onLogScroll,
+  } = useConversationThread<InternalConversationHistory>({
+    loadOlderPage: (cursor) => getHistory(conversationId, cursor),
+    send: (body, idempotencyKey) =>
+      sendMessage(conversationId, body, idempotencyKey),
+    readConversationId: () => conversationId,
+    markRead,
+    onConversationRead,
+    onSent: (message) => onLatestMessage?.(conversationId, message),
+  })
   const [contextPanelOpen, setContextPanelOpen] = useState(() => {
     if (typeof window === "undefined") return true
     try {
@@ -104,17 +107,14 @@ function InternalConversationPanel({
       return true
     }
   })
-  const [revision, setRevision] = useState(0)
-  const pending = useRef<{ body: string; id: string } | null>(null)
-  const sendingRef = useRef(false)
-  const logRef = useRef<HTMLDivElement>(null)
-  const followLatest = useRef(true)
-  const lastMarkedReadMessage = useRef<string | null>(null)
 
   useEffect(() => {
     const controller = new AbortController()
     let active = true
+    let loading = false
     async function refresh() {
+      if (loading) return
+      loading = true
       try {
         const result = await getHistory(
           conversationId,
@@ -139,122 +139,35 @@ function InternalConversationPanel({
         if (active && !controller.signal.aborted) {
           setHistory(null)
           setError(
-            reason instanceof Error
-              ? reason.message
-              : "Couldn't load this internal conversation.",
+            errorMessage(reason, "Couldn't load this internal conversation."),
           )
         }
+      } finally {
+        loading = false
       }
     }
     void refresh()
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") void refresh()
-    }, 15_000)
+    const stopRefresh = watchVisibleRefresh(() => void refresh(), {
+      intervalMs: 15_000,
+    })
     return () => {
       active = false
       controller.abort()
-      clearInterval(timer)
+      stopRefresh()
     }
-  }, [conversationId, revision, getHistory, onLatestMessage])
+  }, [
+    conversationId,
+    revision,
+    getHistory,
+    onLatestMessage,
+    setHistory,
+    setError,
+  ])
 
   useEffect(() => {
-    if (followLatest.current && logRef.current)
+    if (followLatestRef.current && logRef.current)
       logRef.current.scrollTop = logRef.current.scrollHeight
-  }, [history?.messages])
-
-  const latestMessageId = history?.messages.at(-1)?.id
-  useEffect(() => {
-    if (!latestMessageId || lastMarkedReadMessage.current === latestMessageId)
-      return
-    lastMarkedReadMessage.current = latestMessageId
-    let active = true
-    void markRead(conversationId)
-      .then((result) => {
-        if (active)
-          onConversationRead?.(
-            conversationId,
-            result.unreadCount,
-            result.conversationUnreadCount,
-          )
-      })
-      .catch(() => {
-        if (active) lastMarkedReadMessage.current = null
-      })
-    return () => {
-      active = false
-    }
-  }, [conversationId, latestMessageId, onConversationRead, markRead])
-
-  async function loadOlder() {
-    if (!history?.nextCursor || olderLoading) return
-    setOlderLoading(true)
-    try {
-      const result = await getHistory(conversationId, history.nextCursor)
-      followLatest.current = false
-      setHistory((previous) =>
-        previous
-          ? {
-              ...previous,
-              nextCursor: result.nextCursor,
-              messages: mergeMessages(result.messages, previous.messages),
-            }
-          : previous,
-      )
-      setError("")
-    } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Couldn't load earlier messages.",
-      )
-    } finally {
-      setOlderLoading(false)
-    }
-  }
-
-  async function submit(event: FormEvent) {
-    event.preventDefault()
-    const body = draft.trim()
-    if (!body || !history?.canSend || sendingRef.current) return
-    if (pending.current?.body !== body)
-      pending.current = { body, id: crypto.randomUUID() }
-    sendingRef.current = true
-    setSending(true)
-    setSendError("")
-    try {
-      const message = await sendMessage(
-        conversationId,
-        body,
-        pending.current.id,
-      )
-      followLatest.current = true
-      setHistory((previous) =>
-        previous
-          ? {
-              ...previous,
-              messages: mergeMessages(previous.messages, [message]),
-            }
-          : previous,
-      )
-      setDraft("")
-      onLatestMessage?.(conversationId, message)
-      pending.current = null
-    } catch (reason) {
-      const message =
-        reason instanceof Error
-          ? reason.message
-          : "Couldn't send your message. Try again."
-      setSendError(message)
-      sileo.error({ title: "Message not sent", description: message })
-      if (reason instanceof ApiError && [401, 403, 404].includes(reason.status))
-        setHistory(null)
-      if (reason instanceof ApiError && reason.status === 409)
-        setRevision((value) => value + 1)
-    } finally {
-      sendingRef.current = false
-      setSending(false)
-    }
-  }
+  }, [history?.messages, followLatestRef, logRef])
 
   function setContextPanel(open: boolean) {
     setContextPanelOpen(open)
@@ -317,11 +230,6 @@ function InternalConversationPanel({
                   onClick={() => setContextPanel(!contextPanelOpen)}
                 >
                   <Info size={17} aria-hidden="true" />
-                  <HoverTooltip>
-                    {contextPanelOpen
-                      ? "Hide project details"
-                      : "Show project details"}
-                  </HoverTooltip>
                 </button>
               )
             }
@@ -351,11 +259,7 @@ function InternalConversationPanel({
                 aria-live="polite"
                 aria-relevant="additions"
                 tabIndex={0}
-                onScroll={(event) => {
-                  const node = event.currentTarget
-                  followLatest.current =
-                    node.scrollHeight - node.scrollTop - node.clientHeight < 70
-                }}
+                onScroll={onLogScroll}
                 className="min-h-0 flex-1 overflow-y-auto px-7 py-5 focus-visible:outline-none max-[767px]:px-4"
               >
                 {!timeline.length && (
@@ -406,11 +310,7 @@ function InternalConversationPanel({
                             isClient={account.role === "USER"}
                           />
                         ) : (
-                          <ConversationBubble
-                            own={own}
-                            body={message.body}
-                            timestamp={formatTime(date)}
-                          />
+                          <ConversationBubble own={own} body={message.body} />
                         )}
                       </ConversationMessage>
                     </div>
@@ -435,7 +335,7 @@ function InternalConversationPanel({
                         <ProjectConversationTools
                           history={history}
                           isClient={account.role === "USER"}
-                          onSubmitted={() => setRevision((value) => value + 1)}
+                          onSubmitted={reload}
                         />
                       ) : undefined
                     }

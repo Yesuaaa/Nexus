@@ -1,16 +1,10 @@
-import { useRef, useState, type FocusEvent } from "react"
+import { useRef, type FocusEvent } from "react"
 import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
-import { Input } from "@/components/ui/input"
+import { FormInput } from "@/components/ui/form-input"
+import { PasswordInput } from "@/components/ui/password-input"
 import { Label } from "@/components/ui/label"
 import type { AuthCopy } from "../content/auth-copy"
-import {
-  fieldClass,
-  focusOutline,
-  inputClass,
-  labelClass,
-} from "../styles/auth-styles"
+import { fieldClass, labelClass } from "../styles/auth-styles"
 
 export function FieldError({
   id,
@@ -29,7 +23,6 @@ export function FieldError({
       aria-atomic="true"
     >
       {message}
-      {message && <HoverTooltip>{message}</HoverTooltip>}
     </p>
   )
 }
@@ -79,8 +72,8 @@ export function TextField({
       <Label className={labelClass} htmlFor={id}>
         {label}
       </Label>
-      <Input
-        className={inputClass}
+      <FormInput
+        className="h-12"
         id={id}
         type={type}
         value={value}
@@ -97,23 +90,6 @@ export function TextField({
       />
       <FieldError id={id} message={error} />
     </div>
-  )
-}
-
-function EyeIcon({ visible }: { visible: boolean }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M2.5 12s3.5-5 9.5-5 9.5 5 9.5 5-3.5 5-9.5 5-9.5-5-9.5-5Z"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinejoin="round"
-      />
-      <circle cx="12" cy="12" r="2.5" stroke="currentColor" strokeWidth="1.7" />
-      {visible && (
-        <path d="M4 20 20 4" stroke="currentColor" strokeWidth="1.7" />
-      )}
-    </svg>
   )
 }
 
@@ -144,7 +120,6 @@ export function PasswordField({
   recoveryLink?: boolean
   copy: AuthCopy
 }) {
-  const [visible, setVisible] = useState(false)
   const fieldRef = useRef<HTMLDivElement>(null)
   function handleFieldBlur(event: FocusEvent<HTMLDivElement>) {
     if (!fieldRef.current?.contains(event.relatedTarget as Node | null)) {
@@ -166,31 +141,20 @@ export function PasswordField({
           </Link>
         )}
       </div>
-      <div className="relative">
-        <Input
-          className={`${inputClass} pr-12`}
-          id={id}
-          type={visible ? "text" : "password"}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          onFocus={onFocus}
-          autoComplete={autoComplete}
-          minLength={minLength}
-          aria-invalid={Boolean(error)}
-          aria-describedby={error || helperText ? `${id}-error` : undefined}
-          required
-        />
-        <Button
-          className={`absolute top-0 right-0 grid h-[47px] w-11 place-items-center border-0 bg-transparent p-0 text-[#8b9fc0] shadow-none hover:bg-transparent hover:text-[#8b9fc0] [&_svg]:size-[19px] ${focusOutline}`}
-          variant="outline"
-          type="button"
-          onClick={() => setVisible((current) => !current)}
-          aria-label={`${visible ? copy.hidePassword : copy.showPassword} ${label.toLowerCase()}`}
-          aria-pressed={visible}
-        >
-          <EyeIcon visible={visible} />
-        </Button>
-      </div>
+      <PasswordInput
+        className="h-12"
+        id={id}
+        showLabel={`${copy.showPassword} ${label.toLowerCase()}`}
+        hideLabel={`${copy.hidePassword} ${label.toLowerCase()}`}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onFocus={onFocus}
+        autoComplete={autoComplete}
+        minLength={minLength}
+        aria-invalid={Boolean(error)}
+        aria-describedby={error || helperText ? `${id}-error` : undefined}
+        required
+      />
       <FieldError
         id={id}
         message={error ?? helperText}

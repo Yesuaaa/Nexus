@@ -1,6 +1,7 @@
 "use client"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -9,9 +10,13 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import { ApiError, clearToken } from "@/features/auth/api/auth-api"
+import { loginPathForRole } from "@/features/auth/model/auth-portal"
+import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { revokeAllSessions } from "../api/settings-api"
+import { errorMessage } from "@/lib/error-message"
 export function PasswordSessionChoice({ onClose }: { onClose: () => void }) {
   const router = useRouter()
+  const account = usePortalAccount()
   const [confirm, setConfirm] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
@@ -22,17 +27,18 @@ export function PasswordSessionChoice({ onClose }: { onClose: () => void }) {
     try {
       await revokeAllSessions()
       clearToken()
-      router.replace("/login")
+      router.replace(loginPathForRole(account.role))
     } catch (reason) {
       if (reason instanceof ApiError && reason.status === 401) {
         clearToken()
-        router.replace("/login")
+        router.replace(loginPathForRole(account.role))
         return
       }
       setError(
-        reason instanceof Error
-          ? reason.message
-          : "Couldn’t log out your devices. Please try again.",
+        errorMessage(
+          reason,
+          "Couldn’t log out your devices. Please try again.",
+        ),
       )
       setBusy(false)
     }
@@ -63,9 +69,9 @@ export function PasswordSessionChoice({ onClose }: { onClose: () => void }) {
             : "Do you want to log out of all devices?"}
         </DialogDescription>
         {error && (
-          <p role="alert" className="m-0 text-xs leading-5 text-[#bc3649]">
+          <Alert variant="text" className="leading-5">
             {error}
-          </p>
+          </Alert>
         )}
         <footer className="mt-2 flex flex-wrap justify-end gap-2">
           {confirm ? (
@@ -82,7 +88,8 @@ export function PasswordSessionChoice({ onClose }: { onClose: () => void }) {
                 Cancel
               </Button>
               <Button
-                className="min-h-11 bg-[#bc3649] text-white hover:bg-[#a42f40]"
+                variant="danger"
+                className="min-h-11"
                 disabled={busy}
                 onClick={() => void logout()}
               >
@@ -100,7 +107,8 @@ export function PasswordSessionChoice({ onClose }: { onClose: () => void }) {
                 No
               </Button>
               <Button
-                className="min-h-11 bg-[#203f8c] text-white hover:bg-[#172f70]"
+                variant="brand"
+                className="min-h-11"
                 onClick={() => setConfirm(true)}
               >
                 Yes

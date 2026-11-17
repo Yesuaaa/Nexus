@@ -38,8 +38,6 @@ Database (Prisma / PostgreSQL)
 apps/api/src/
 ├── index.ts                              # Port binding & server bootstrap
 ├── app.ts                                # Express factory, global middleware, error handler
-├── app.test.ts                           # Smoke & route availability test
-├── employee-integration.test.ts          # End-to-end integration test suite
 │
 ├── lib/
 │   ├── db.ts                             # PrismaClient singleton & pg pool configuration
@@ -60,25 +58,20 @@ apps/api/src/
     │   ├── auth.permissions.ts           # Permission constants and role-permission mappings
     │   ├── auth.password.ts              # Salted scrypt password hashing & timing-safe verification
     │   ├── auth.schema.ts                # Email normalization & profile validation
-    │   ├── auth.limiter.ts               # In-process login rate limiter
-    │   ├── auth.test.ts                  # Unit tests: passwords, email, profile validation
-    │   └── employee-permissions.test.ts  # Unit tests: permission checks
+    │   └── auth.limiter.ts               # In-process login rate limiter
     │
     ├── users/                            # Account management (Superadmin only)
     │   ├── users.controller.ts           # Route handlers: status, deletion, listing, creation, role change
     │   ├── users.service.ts              # User lifecycle business logic & hierarchy checks
     │   ├── users.repository.ts           # User database queries, updates, and sync triggers
     │   ├── users.dto.ts                  # publicUser() response transformer
-    │   ├── users.policy.ts               # Role assignment and status transition authorization rules
-    │   ├── role-policy.test.ts           # Unit tests: role policy
-    │   └── account-status.test.ts        # Unit tests: account status transitions
+    │   └── users.policy.ts               # Role assignment and status transition authorization rules
     │
     ├── employees/                        # Employee directory & profile management
     │   ├── employees.controller.ts       # Route handlers: directory search, CRUD, staff account linkage
     │   ├── employees.service.ts          # Employee sync, seniority comparison, staff account creation
     │   ├── employees.repository.ts       # Employee queries, include definitions & transactions
-    │   ├── employees.schema.ts           # Input parsing and assignment validation
-    │   └── validation.test.ts            # Unit tests: employee input validation
+    │   └── employees.schema.ts           # Input parsing and assignment validation
     │
     ├── departments/                      # Departments, sub-teams, and member management
     │   ├── departments.controller.ts     # Route handlers: departments CRUD, member assignment, team CRUD
@@ -91,12 +84,24 @@ apps/api/src/
     │   ├── services.controller.ts        # Route handlers: active list, full list, CRUD, status toggling
     │   ├── services.service.ts           # Service catalog business logic & department association checks
     │   ├── services.repository.ts        # Service database queries & department relation connections
-    │   ├── services.schema.ts            # Service input validation
-    │   └── validation.test.ts            # Unit tests: service validation
+    │   └── services.schema.ts            # Service input validation
     │
     └── health/                           # Health monitoring
         └── health.controller.ts          # /api/health and /api/db-check routes
 ```
+
+Tests live outside `src/`, so they are never compiled into `dist/`:
+
+```
+apps/api/tests/
+├── tsconfig.json                         # Typechecks tests together with src (used by `typecheck`)
+├── support/
+│   └── pglite-app.ts                     # Shared in-memory PGlite database + app harness
+├── *.test.ts                             # Integration & regression suites (one per area)
+└── features/<feature>/*.test.ts          # Unit tests, mirroring src/features/<feature>
+```
+
+`pnpm --filter @nexus/api test` typechecks, then runs every `tests/**/*.test.ts` with `tsx --test`; a new test file is picked up automatically.
 
 ---
 

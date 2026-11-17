@@ -140,8 +140,12 @@ test.describe("Pricing template management", () => {
         .click()
       await page.reload()
       await page
-        .getByRole("button", { name: "Edit Test Service", exact: true })
+        .getByRole("button", {
+          name: "More actions for Test Service",
+          exact: true,
+        })
         .click()
+      await page.getByRole("menuitem", { name: "Edit", exact: true }).click()
       const serviceDialog = page.getByRole("dialog", {
         name: "Edit Service",
         exact: true,
@@ -182,8 +186,12 @@ test.describe("Pricing template management", () => {
         .getByRole("button", { name: "Close dialog", exact: true })
         .click()
       await page
-        .getByRole("button", { name: "Edit Test Service", exact: true })
+        .getByRole("button", {
+          name: "More actions for Test Service",
+          exact: true,
+        })
         .click()
+      await page.getByRole("menuitem", { name: "Edit", exact: true }).click()
       await serviceDialog
         .getByRole("navigation", { name: "Service form progress" })
         .getByRole("button", { name: "Pricing" })

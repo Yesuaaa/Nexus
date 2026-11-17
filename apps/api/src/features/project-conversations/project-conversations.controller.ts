@@ -1,6 +1,11 @@
-import { Router, type ErrorRequestHandler } from "express"
+import { Router } from "express"
+import {
+  isMessageBody,
+  isOptionalRecordId,
+  isUuidV4,
+  recordIdParam,
+} from "../../shared/validation.js"
 import { requireAuth } from "../auth/auth.middleware.js"
-import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 import {
   getProjectConversation,
   listProjectConversations,
@@ -8,7 +13,6 @@ import {
   sendProjectMessage,
 } from "./project-conversations.service.js"
 
-const idPattern = /^[A-Za-z0-9_-]{1,80}$/
 export const projectConversationsRouter = Router()
 projectConversationsRouter.use(requireAuth)
 projectConversationsRouter.use((request, response, next) => {
@@ -18,20 +22,9 @@ projectConversationsRouter.use((request, response, next) => {
     })
   next()
 })
-projectConversationsRouter.param(
-  "id",
-  (_request, response, next, id: string) => {
-    if (!idPattern.test(id))
-      return response.status(400).json({ error: "Invalid project ID" })
-    next()
-  },
-)
+projectConversationsRouter.param("id", recordIdParam("Invalid project ID"))
 projectConversationsRouter.use((request, response, next) => {
-  const before = request.query.before
-  if (
-    before !== undefined &&
-    (typeof before !== "string" || !idPattern.test(before))
-  )
+  if (!isOptionalRecordId(request.query.before))
     return response.status(400).json({ error: "Invalid conversation cursor" })
   next()
 })
@@ -67,15 +60,9 @@ projectConversationsRouter.post("/:id/messages", async (request, response) => {
     !input ||
     typeof input !== "object" ||
     !("body" in input) ||
-    typeof input.body !== "string" ||
-    !input.body.trim() ||
-    input.body.length > 4000 ||
-    input.body.includes("\u0000") ||
+    !isMessageBody(input.body) ||
     !("clientMessageId" in input) ||
-    typeof input.clientMessageId !== "string" ||
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      input.clientMessageId,
-    )
+    !isUuidV4(input.clientMessageId)
   )
     return response.status(400).json({
       error: "Enter a message of 1–4000 characters and a valid message ID",
@@ -88,8 +75,3 @@ projectConversationsRouter.post("/:id/messages", async (request, response) => {
   )
   response.status(201).json({ message })
 })
-projectConversationsRouter.use(((error, _request, response, next) => {
-  if (error instanceof ServiceRequestsError)
-    return response.status(error.status).json({ error: error.message })
-  next(error)
-}) satisfies ErrorRequestHandler)

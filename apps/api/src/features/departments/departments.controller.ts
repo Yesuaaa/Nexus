@@ -1,9 +1,10 @@
 import { Router } from "express"
 import { requireAuth, requirePermission } from "../auth/auth.middleware.js"
 import { Permission } from "../auth/auth.permissions.js"
-import { DepartmentError, departmentsService } from "./departments.service.js"
-import { TeamError, teamsService } from "./teams.service.js"
+import { departmentsService } from "./departments.service.js"
+import { teamsService } from "./teams.service.js"
 
+// Service errors are HttpErrors; Express 5 forwards them to `handleError`.
 export const departmentsRouter = Router()
 departmentsRouter.use(requireAuth)
 
@@ -11,13 +12,8 @@ departmentsRouter.use(requireAuth)
 departmentsRouter.get(
   "/",
   requirePermission(Permission.DEPARTMENTS_READ),
-  async (_request, response, next) => {
-    try {
-      const result = await departmentsService.listDepartments()
-      response.json(result)
-    } catch (error) {
-      next(error)
-    }
+  async (_request, response) => {
+    response.json(await departmentsService.listDepartments())
   },
 )
 
@@ -25,13 +21,8 @@ departmentsRouter.get(
 departmentsRouter.get(
   "/eligible-heads",
   requirePermission(Permission.DEPARTMENTS_MANAGE),
-  async (_request, response, next) => {
-    try {
-      const result = await departmentsService.listEligibleHeads()
-      response.json(result)
-    } catch (error) {
-      next(error)
-    }
+  async (request, response) => {
+    response.json(await departmentsService.listEligibleHeads(request.query))
   },
 )
 
@@ -39,16 +30,8 @@ departmentsRouter.get(
 departmentsRouter.get(
   "/employee-options",
   requirePermission(Permission.DEPARTMENTS_READ),
-  async (request, response, next) => {
-    try {
-      const result = await departmentsService.getEmployeeOptions(request.query)
-      response.json(result)
-    } catch (error) {
-      if (error instanceof DepartmentError) {
-        return response.status(error.status).json({ error: error.message })
-      }
-      next(error)
-    }
+  async (request, response) => {
+    response.json(await departmentsService.getEmployeeOptions(request.query))
   },
 )
 
@@ -56,18 +39,10 @@ departmentsRouter.get(
 departmentsRouter.get(
   "/:id",
   requirePermission(Permission.DEPARTMENTS_READ),
-  async (request, response, next) => {
-    try {
-      const result = await departmentsService.getDepartmentById(
-        String(request.params.id),
-      )
-      response.json(result)
-    } catch (error) {
-      if (error instanceof DepartmentError) {
-        return response.status(error.status).json({ error: error.message })
-      }
-      next(error)
-    }
+  async (request, response) => {
+    response.json(
+      await departmentsService.getDepartmentById(String(request.params.id)),
+    )
   },
 )
 
@@ -75,16 +50,10 @@ departmentsRouter.get(
 departmentsRouter.post(
   "/",
   requirePermission(Permission.DEPARTMENTS_MANAGE),
-  async (request, response, next) => {
-    try {
-      const result = await departmentsService.createDepartment(request.body)
-      return response.status(201).json(result)
-    } catch (error) {
-      if (error instanceof DepartmentError) {
-        return response.status(error.status).json({ error: error.message })
-      }
-      next(error)
-    }
+  async (request, response) => {
+    response
+      .status(201)
+      .json(await departmentsService.createDepartment(request.body))
   },
 )
 
@@ -92,19 +61,13 @@ departmentsRouter.post(
 departmentsRouter.put(
   "/:id",
   requirePermission(Permission.DEPARTMENTS_MANAGE),
-  async (request, response, next) => {
-    try {
-      const result = await departmentsService.updateDepartment(
+  async (request, response) => {
+    response.json(
+      await departmentsService.updateDepartment(
         String(request.params.id),
         request.body,
-      )
-      return response.json(result)
-    } catch (error) {
-      if (error instanceof DepartmentError) {
-        return response.status(error.status).json({ error: error.message })
-      }
-      next(error)
-    }
+      ),
+    )
   },
 )
 
@@ -112,19 +75,13 @@ departmentsRouter.put(
 departmentsRouter.post(
   "/:id/members",
   requirePermission(Permission.DEPARTMENTS_MANAGE),
-  async (request, response, next) => {
-    try {
-      const result = await departmentsService.assignMembers(
+  async (request, response) => {
+    response.json(
+      await departmentsService.assignMembers(
         String(request.params.id),
         request.body,
-      )
-      return response.json(result)
-    } catch (error) {
-      if (error instanceof DepartmentError) {
-        return response.status(error.status).json({ error: error.message })
-      }
-      next(error)
-    }
+      ),
+    )
   },
 )
 
@@ -132,19 +89,13 @@ departmentsRouter.post(
 departmentsRouter.delete(
   "/:id/members/:memberId",
   requirePermission(Permission.DEPARTMENTS_MANAGE),
-  async (request, response, next) => {
-    try {
-      const result = await departmentsService.removeMember(
+  async (request, response) => {
+    response.json(
+      await departmentsService.removeMember(
         String(request.params.id),
         String(request.params.memberId),
-      )
-      return response.json(result)
-    } catch (error) {
-      if (error instanceof DepartmentError) {
-        return response.status(error.status).json({ error: error.message })
-      }
-      next(error)
-    }
+      ),
+    )
   },
 )
 
@@ -152,18 +103,10 @@ departmentsRouter.delete(
 departmentsRouter.delete(
   "/:id",
   requirePermission(Permission.DEPARTMENTS_DELETE),
-  async (request, response, next) => {
-    try {
-      const result = await departmentsService.deleteDepartment(
-        String(request.params.id),
-      )
-      return response.json(result)
-    } catch (error) {
-      if (error instanceof DepartmentError) {
-        return response.status(error.status).json({ error: error.message })
-      }
-      next(error)
-    }
+  async (request, response) => {
+    response.json(
+      await departmentsService.deleteDepartment(String(request.params.id)),
+    )
   },
 )
 
@@ -171,19 +114,12 @@ departmentsRouter.delete(
 departmentsRouter.post(
   "/:id/teams",
   requirePermission(Permission.DEPARTMENTS_MANAGE),
-  async (request, response, next) => {
-    try {
-      const result = await teamsService.createTeam(
-        String(request.params.id),
-        request.body,
+  async (request, response) => {
+    response
+      .status(201)
+      .json(
+        await teamsService.createTeam(String(request.params.id), request.body),
       )
-      return response.status(201).json(result)
-    } catch (error) {
-      if (error instanceof TeamError) {
-        return response.status(error.status).json({ error: error.message })
-      }
-      next(error)
-    }
   },
 )
 
@@ -191,20 +127,14 @@ departmentsRouter.post(
 departmentsRouter.put(
   "/:id/teams/:teamId",
   requirePermission(Permission.DEPARTMENTS_MANAGE),
-  async (request, response, next) => {
-    try {
-      const result = await teamsService.updateTeam(
+  async (request, response) => {
+    response.json(
+      await teamsService.updateTeam(
         String(request.params.id),
         String(request.params.teamId),
         request.body,
-      )
-      return response.json(result)
-    } catch (error) {
-      if (error instanceof TeamError) {
-        return response.status(error.status).json({ error: error.message })
-      }
-      next(error)
-    }
+      ),
+    )
   },
 )
 
@@ -212,19 +142,13 @@ departmentsRouter.put(
 departmentsRouter.delete(
   "/:id/teams/:teamId",
   requirePermission(Permission.DEPARTMENTS_MANAGE),
-  async (request, response, next) => {
-    try {
-      const result = await teamsService.deleteTeam(
+  async (request, response) => {
+    response.json(
+      await teamsService.deleteTeam(
         String(request.params.id),
         String(request.params.teamId),
-      )
-      return response.json(result)
-    } catch (error) {
-      if (error instanceof TeamError) {
-        return response.status(error.status).json({ error: error.message })
-      }
-      next(error)
-    }
+      ),
+    )
   },
 )
 
@@ -232,19 +156,13 @@ departmentsRouter.delete(
 departmentsRouter.patch(
   "/:id/members/:memberId",
   requirePermission(Permission.DEPARTMENTS_MANAGE),
-  async (request, response, next) => {
-    try {
-      const result = await departmentsService.updateMember(
+  async (request, response) => {
+    response.json(
+      await departmentsService.updateMember(
         String(request.params.id),
         String(request.params.memberId),
         request.body ?? {},
-      )
-      return response.json(result)
-    } catch (error) {
-      if (error instanceof DepartmentError) {
-        return response.status(error.status).json({ error: error.message })
-      }
-      next(error)
-    }
+      ),
+    )
   },
 )

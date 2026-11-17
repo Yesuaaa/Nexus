@@ -1,16 +1,15 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import dynamic from "next/dynamic"
 import { PanelLoading } from "@/components/ui/panel-loading"
 import { sileo } from "@/lib/toast"
-import { ChevronLeft, ChevronRight } from "lucide-react"
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog"
+import { CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react"
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
+import { EmptyState } from "@/components/ui/empty-state"
+import { Pill } from "@/components/ui/pill"
+import { ProgressMeter } from "@/components/ui/stat-strip"
+import { serviceRequestStatuses } from "../model/service-request-status"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { contentClass, focusRing } from "@/components/layout/styles"
 import { ClientPageHeader } from "@/components/layout/client-page-header"
@@ -46,6 +45,7 @@ import {
   writeServiceDraft,
   clearServiceDraft,
 } from "../model/service-draft"
+import { errorMessage } from "@/lib/error-message"
 
 const pageSize = 8
 
@@ -87,6 +87,12 @@ function ServiceCardSkeleton() {
 }
 
 export function ClientServicesPage() {
+  const focusConfirmation = useCallback(
+    (element: HTMLHeadingElement | null) => {
+      element?.focus()
+    },
+    [],
+  )
   const account = usePortalAccount()
   const [services, setServices] = useState<Service[]>([])
   const [loading, setLoading] = useState(true)
@@ -211,9 +217,7 @@ export function ClientServicesPage() {
       .catch((caught: unknown) => {
         if (!active) return
         setError(
-          caught instanceof Error
-            ? caught.message
-            : "Couldn't load services. Please try again.",
+          errorMessage(caught, "Couldn't load services. Please try again."),
         )
       })
       .finally(() => {
@@ -341,10 +345,7 @@ export function ClientServicesPage() {
       if (request !== detailRequest.current) return
       setDetailState({
         id: service.id,
-        error:
-          reason instanceof Error
-            ? reason.message
-            : "Could not load this service.",
+        error: errorMessage(reason, "Could not load this service."),
       })
     }
   }
@@ -387,10 +388,10 @@ export function ClientServicesPage() {
       setDraftNotice("")
       sileo.success({ title: "Service request submitted for review" })
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "We couldn’t submit your request. Please try again."
+      const message = errorMessage(
+        error,
+        "We couldn’t submit your request. Please try again.",
+      )
       setSubmissionError(message)
       submissionErrorToast.current = await sileo.error({
         title: "Request not submitted",
@@ -406,30 +407,58 @@ export function ClientServicesPage() {
     <main
       className={cn(contentClass, "p-[clamp(20px,2.1vw,32px)]")}
       aria-label="Services catalog"
+      data-request-submitted={submittedRequest ? "" : undefined}
     >
       <ClientPageHeader
-        eyebrow="Services"
+        headingRef={submittedRequest ? focusConfirmation : undefined}
+        eyebrow={
+          submittedRequest ? (
+            <span className="text-[#203f8c]">Services</span>
+          ) : (
+            "Services"
+          )
+        }
+        actions={
+          submittedRequest ? (
+            <Pill className="rounded-lg bg-[#fff4d6] px-3 py-1 text-sm font-semibold text-[#755400]">
+              {serviceRequestStatuses.SUBMITTED.label}
+            </Pill>
+          ) : undefined
+        }
         title={
-          submittedRequest
-            ? "Request Submitted"
-            : currentStep === 4
-              ? "Preferred Specialist"
-              : currentStep === 3
-                ? "Project Requirements"
-                : currentStep === 2
-                  ? "Choose Your Package"
-                  : "Build Your Brand with EXP"
+          submittedRequest ? (
+            <span className="flex items-center gap-3 text-black">
+              <CheckCircle2
+                size={32}
+                className="shrink-0 text-[#19703a]"
+                aria-hidden="true"
+              />
+              Request submitted
+            </span>
+          ) : currentStep === 4 ? (
+            "Preferred Specialist"
+          ) : currentStep === 3 ? (
+            "Project Requirements"
+          ) : currentStep === 2 ? (
+            "Choose Your Package"
+          ) : (
+            "Build Your Brand with EXP"
+          )
         }
         description={
-          submittedRequest
-            ? "Your service request is pending review."
-            : currentStep === 4
-              ? "Let us know who you’d prefer to work with, subject to availability and Department Manager approval."
-              : currentStep === 3
-                ? "Share your goals, requirements, and expected timeline so we can understand your project."
-                : currentStep === 2
-                  ? "Find the right package for your goals, with clear pricing and everything you need to get started."
-                  : "Discover powerful digital services crafted to amplify your presence, connect with your audience, and turn ideas into real business impact."
+          submittedRequest ? (
+            <span className="text-[#52627a]">
+              Your request is with the department for review.
+            </span>
+          ) : currentStep === 4 ? (
+            "Let us know who you’d prefer to work with, subject to availability and Department Manager approval."
+          ) : currentStep === 3 ? (
+            "Share your goals, requirements, and expected timeline so we can understand your project."
+          ) : currentStep === 2 ? (
+            "Find the right package for your goals, with clear pricing and everything you need to get started."
+          ) : (
+            "Discover powerful digital services crafted to amplify your presence, connect with your audience, and turn ideas into real business impact."
+          )
         }
       />
 
@@ -455,28 +484,20 @@ export function ClientServicesPage() {
       )}
 
       <div className="mt-[clamp(30px,4vw,52px)] flex items-center gap-4">
-        <div
-          className="h-1 flex-1 overflow-hidden rounded-full bg-[#e4ebfa]"
-          role="progressbar"
-          aria-label="Service request progress"
-          aria-valuemin={1}
-          aria-valuemax={4}
-          aria-valuenow={currentStep}
-        >
-          <div
-            className={cn(
-              "h-full rounded-full bg-[#294c96] transition-[width] duration-300 motion-reduce:transition-none",
-              currentStep === 4
-                ? "w-full"
-                : currentStep === 3
-                  ? "w-3/4"
-                  : currentStep === 2
-                    ? "w-1/2"
-                    : "w-1/4",
-            )}
+        <div className="-mt-1 min-w-0 flex-1">
+          <ProgressMeter
+            value={currentStep}
+            max={4}
+            label="Service request progress"
+            colorClass={submittedRequest ? "bg-[#203f8c]" : "bg-[#294c96]"}
           />
         </div>
-        <span className="flex-none text-xs font-bold tracking-[0.04em] text-[#173d8d] uppercase">
+        <span
+          className={cn(
+            "flex-none text-xs font-bold tracking-[0.04em] uppercase",
+            submittedRequest ? "text-[#203f8c]" : "text-[#173d8d]",
+          )}
+        >
           Step {currentStep} of 4
         </span>
       </div>
@@ -513,17 +534,6 @@ export function ClientServicesPage() {
             setRequirementsDraft(createProjectRequirementsDraft())
             setRequirementsSaved(false)
             setPreferredSpecialist(null)
-            submissionKey.current = null
-            setCurrentStep(1)
-          }}
-          onNewRequest={() => {
-            setSubmittedRequest(null)
-            setPackageService(null)
-            setSelectedPackageId(null)
-            setRequirementsDraft(createProjectRequirementsDraft())
-            setRequirementsSaved(false)
-            setPreferredSpecialist(null)
-            setSubmissionError("")
             submissionKey.current = null
             setCurrentStep(1)
           }}
@@ -624,18 +634,14 @@ export function ClientServicesPage() {
           </div>
 
           {error ? (
-            <div
-              className="mt-4 grid min-h-[360px] place-items-center rounded-2xl border border-dashed border-[#ccd7e8] px-6 text-center"
+            <EmptyState
               role="alert"
-            >
-              <div>
-                <p className="m-0 text-sm font-semibold text-[#243c69]">
-                  {error}
-                </p>
+              className="mt-4 min-h-[360px] rounded-2xl"
+              action={
                 <button
                   type="button"
                   className={cn(
-                    "mt-4 min-h-10 cursor-pointer rounded-lg border border-[#294c96] bg-background px-4 text-xs font-semibold text-[#294c96] hover:bg-[#eef3ff]",
+                    "min-h-10 cursor-pointer rounded-lg border border-[#294c96] bg-background px-4 text-xs font-semibold text-[#294c96] hover:bg-[#eef3ff]",
                     focusRing,
                   )}
                   onClick={() => {
@@ -645,8 +651,12 @@ export function ClientServicesPage() {
                 >
                   Try again
                 </button>
-              </div>
-            </div>
+              }
+            >
+              <p className="m-0 text-sm font-semibold text-[#243c69]">
+                {error}
+              </p>
+            </EmptyState>
           ) : (
             <>
               <div className="mt-4 grid grid-cols-4 gap-3 max-[1200px]:grid-cols-3 max-[960px]:grid-cols-2 max-[560px]:grid-cols-1">
@@ -664,16 +674,11 @@ export function ClientServicesPage() {
               </div>
 
               {!loading && filteredServices.length === 0 && (
-                <div className="mt-4 grid min-h-[280px] place-items-center rounded-2xl border border-dashed border-[#ccd7e8] px-6 text-center">
-                  <div>
-                    <p className="m-0 text-base font-semibold text-[#243c69]">
-                      No services found
-                    </p>
-                    <p className="mt-1.5 mb-0 text-sm text-[#6f83a2]">
-                      Try a different search or department.
-                    </p>
-                  </div>
-                </div>
+                <EmptyState
+                  title="No services found"
+                  description="Try a different search or department."
+                  className="mt-4 min-h-[280px] rounded-2xl"
+                />
               )}
 
               {!loading && filteredServices.length > 0 && (
@@ -752,45 +757,22 @@ export function ClientServicesPage() {
           onExplore={exploreService}
         />
       )}
-      <Dialog
-        open={pendingService !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingService(null)
-        }}
-      >
-        <DialogContent className="max-w-md rounded-2xl p-6">
-          <DialogTitle>Start with a different service?</DialogTitle>
-          <DialogDescription className="text-sm leading-6">
-            Changing to {pendingService?.name} will clear the package, project
-            details, and specialist preference in your current draft.
-          </DialogDescription>
-          <div className="mt-3 flex flex-wrap justify-end gap-3">
-            <button
-              type="button"
-              onClick={() => setPendingService(null)}
-              className={cn(
-                "min-h-11 rounded-lg border border-[#dce3ee] px-4 text-sm font-semibold text-[#294c96]",
-                focusRing,
-              )}
-            >
-              Keep current draft
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (pendingService) applyService(pendingService)
-                setPendingService(null)
-              }}
-              className={cn(
-                "min-h-11 rounded-lg bg-[#294c96] px-4 text-sm font-semibold text-white",
-                focusRing,
-              )}
-            >
-              Change service
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {pendingService && (
+        <ConfirmationDialog
+          title="Start with a different service?"
+          description={`Changing to ${pendingService.name} will clear the package, project details, and specialist preference in your current draft.`}
+          confirmLabel="Change service"
+          pendingLabel="Change service"
+          cancelLabel="Keep current draft"
+          pending={false}
+          destructive={false}
+          onClose={() => setPendingService(null)}
+          onConfirm={() => {
+            applyService(pendingService)
+            setPendingService(null)
+          }}
+        />
+      )}
     </main>
   )
 }

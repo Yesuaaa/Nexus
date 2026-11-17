@@ -122,7 +122,7 @@ export function Breadcrumbs() {
             className={`flex items-center gap-[5px] text-[#647a9c] no-underline hover:text-[#203a78] ${focusRing}`}
           >
             <HomeIcon width="15" height="15" />
-            <span>Home</span>
+            <span className="max-[560px]:sr-only">Home</span>
           </Link>
         </li>
         {segments.map((segment, index) => {
@@ -139,20 +139,22 @@ export function Breadcrumbs() {
           return (
             <li
               key={`${index}-${segment}`}
-              className="flex min-w-0 items-center gap-[7px] text-[#8a9ab3]"
+              // Phones show Home › current page only; middle levels would
+              // otherwise squeeze into each other.
+              className={`flex min-w-0 items-center gap-[7px] text-[#8a9ab3] ${isCurrent ? "" : "max-[560px]:hidden"}`}
             >
-              <ChevronRightIcon width="14" height="14" />
+              <ChevronRightIcon width="14" height="14" className="flex-none" />
               {isCurrent ? (
                 <span
                   aria-current="page"
-                  className="overflow-hidden text-ellipsis font-semibold text-[#253f8c]"
+                  className="min-w-0 truncate font-semibold text-[#253f8c]"
                 >
                   {label}
                 </span>
               ) : (
                 <Link
                   href={`/${segments.slice(0, index + 1).join("/")}`}
-                  className={`flex items-center gap-[5px] text-[#647a9c] no-underline hover:text-[#203a78] ${focusRing}`}
+                  className={`block min-w-0 truncate text-[#647a9c] no-underline hover:text-[#203a78] ${focusRing}`}
                 >
                   {label}
                 </Link>

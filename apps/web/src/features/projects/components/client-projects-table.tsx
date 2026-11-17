@@ -1,13 +1,17 @@
-import { Button } from "@/components/ui/button"
 import { ClientRowTable } from "@/components/ui/client-row-table"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Pill } from "@/components/ui/pill"
 import { rowActionButton } from "@/components/ui/row-action-styles"
+import { ProgressMeter } from "@/components/ui/stat-strip"
 import type { ServiceIconKey } from "@/features/services/api/services-api"
 import { ServiceIcon } from "@/features/services/components/service-icon"
 import Link from "next/link"
 import { Eye } from "lucide-react"
 import type { ClientProjectSummary } from "../api/projects-api"
+import {
+  projectProgress,
+  statusLabel,
+  statusTone,
+} from "../model/project-status"
 
 type ProjectRowVisual = {
   iconClassName: string
@@ -72,47 +76,16 @@ function projectRowVisual(serviceName?: string): ProjectRowVisual {
   }
 }
 
-function statusLabel(status: string) {
-  const label = status.toLowerCase().replaceAll("_", " ")
-  return label.charAt(0).toUpperCase() + label.slice(1)
-}
-
-function statusClass(status: string) {
-  if (status === "IN_PROGRESS") return "bg-amber-100 text-amber-800"
-  if (status === "COMPLETED") return "bg-emerald-100 text-emerald-800"
-  if (status === "CANCELLED") return "bg-rose-100 text-rose-700"
-  if (status === "ON_HOLD") return "bg-orange-100 text-orange-800"
-  return "bg-slate-100 text-slate-700"
-}
-
-function projectProgress(project: ClientProjectSummary) {
-  return project.taskCount
-    ? Math.min(
-        100,
-        Math.round((project.completedTasks / project.taskCount) * 100),
-      )
-    : 0
-}
-
-function ProjectAction({
-  project,
-  onView,
-}: {
-  project: ClientProjectSummary
-  onView: (project: ClientProjectSummary) => void
-}) {
+function ProjectAction({ project }: { project: ClientProjectSummary }) {
   return (
-    <Button
+    <Link
       id={`project-view-${project.id}`}
-      variant="outline"
       className={rowActionButton}
-      type="button"
       aria-label={`View ${project.name}`}
-      onClick={() => onView(project)}
+      href={`/projects/${encodeURIComponent(project.id)}`}
     >
       <Eye size={15} aria-hidden="true" />
-      <HoverTooltip>View project</HoverTooltip>
-    </Button>
+    </Link>
   )
 }
 
@@ -121,13 +94,13 @@ export function ClientProjectsTable({
   formatDate,
   viewKey,
   quickKey,
-  onView,
+  onRowsSettled,
 }: {
   projects: ClientProjectSummary[]
   formatDate: (value: Date | string) => string
   viewKey: string
   quickKey: string
-  onView: (project: ClientProjectSummary) => void
+  onRowsSettled?: () => void
 }) {
   return (
     <ClientRowTable
@@ -148,6 +121,7 @@ export function ClientProjectsTable({
       ]}
       rowClassName="h-[66px] align-middle"
       emptyContent="No projects match"
+      onRowsSettled={onRowsSettled}
       renderRow={(project) => {
         const serviceName = project.request?.service.name || "Project"
         const visual = projectRowVisual(project.request?.service.name)
@@ -184,18 +158,13 @@ export function ClientProjectsTable({
               </span>
             </td>
             <td className="border-y border-l border-[#e7ebf1] bg-[#f4f7fb] px-4 py-2 align-middle">
-              <div className="mt-1.5 flex max-w-[220px] items-center gap-2">
-                <div
-                  className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-[#dfe6ef]"
-                  role="progressbar"
-                  aria-valuenow={percent}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-label={`${project.name} progress`}
-                >
-                  <div
-                    className="h-full rounded-full bg-[#294c96]"
-                    style={{ width: `${percent}%` }}
+              <div className="flex max-w-[220px] items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <ProgressMeter
+                    value={percent}
+                    max={100}
+                    label={`${project.name} progress`}
+                    colorClass="bg-[#294c96]"
                   />
                 </div>
                 <span className="w-9 shrink-0 text-right text-[11px] text-[#738096]">
@@ -204,7 +173,7 @@ export function ClientProjectsTable({
               </div>
             </td>
             <td className="border-y border-[#e1e7ef] bg-[#f4f7fb] px-4 py-2 align-middle">
-              <Pill className={statusClass(project.status)}>
+              <Pill tone={statusTone(project.status)}>
                 {statusLabel(project.status)}
               </Pill>
             </td>
@@ -214,7 +183,7 @@ export function ClientProjectsTable({
               </time>
             </td>
             <td className="rounded-r-xl border-y border-r border-[#e1e7ef] bg-[#f4f7fb] px-3 py-2 align-middle">
-              <ProjectAction project={project} onView={onView} />
+              <ProjectAction project={project} />
             </td>
           </>
         )
@@ -241,7 +210,7 @@ export function ClientProjectsTable({
                   </p>
                 </div>
               </div>
-              <Pill className={statusClass(project.status)}>
+              <Pill tone={statusTone(project.status)}>
                 {statusLabel(project.status)}
               </Pill>
             </div>
@@ -270,7 +239,7 @@ export function ClientProjectsTable({
               >
                 Last updated {formatDate(project.updatedAt)}
               </time>
-              <ProjectAction project={project} onView={onView} />
+              <ProjectAction project={project} />
             </div>
           </article>
         )

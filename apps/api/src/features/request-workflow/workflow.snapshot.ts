@@ -1,4 +1,5 @@
 import { readTransaction } from "../../lib/database-read.js"
+import { activeStaff } from "../../shared/query/accounts.js"
 import { workflowAccess, type WorkflowTx } from "./workflow.access.js"
 
 const eventSelect = {
@@ -281,7 +282,7 @@ export async function snapshot(
         ? tx.employee.findMany({
             where: {
               departmentId: request.acceptedDepartmentId!,
-              user: { isActive: true, accountDeletedAt: null, role: "STAFF" },
+              user: activeStaff,
             },
             orderBy: [{ status: "asc" }, { fullName: "asc" }],
             select: {

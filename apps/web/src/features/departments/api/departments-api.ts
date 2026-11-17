@@ -1,4 +1,5 @@
 import { apiRequest } from "@/features/auth/api/auth-api"
+import type { Role } from "@/features/auth/model/roles"
 import type { DepartmentColor } from "../model/department-color"
 
 export const COMPANY_DEPARTMENT_PRESETS = [
@@ -43,7 +44,7 @@ export type DepartmentHead = {
   id: string
   email: string
   fullName: string | null
-  role: "SUPERADMIN" | "ADMIN" | "STAFF" | "USER"
+  role: Role
   position?: string | null
 }
 
@@ -78,7 +79,7 @@ export type DepartmentMember = {
     id: string
     email: string
     fullName: string | null
-    role: "SUPERADMIN" | "ADMIN" | "STAFF" | "USER"
+    role: Role
     isActive: boolean
     accountDeletedAt: string | null
   } | null
@@ -121,20 +122,27 @@ export type EligibleHead = {
   id: string
   fullName: string | null
   email: string
-  role: "SUPERADMIN" | "ADMIN" | "STAFF" | "USER"
+  role: Role
   headOf: { id: string; name: string } | null
 }
 
-export async function listDepartments(): Promise<Department[]> {
+export async function listDepartments(
+  signal?: AbortSignal,
+): Promise<Department[]> {
   const result = await apiRequest<{ departments: Department[] }>(
     "/api/departments",
+    { signal },
   )
   return result.departments
 }
 
-export async function getDepartment(id: string): Promise<DepartmentDetail> {
+export async function getDepartment(
+  id: string,
+  signal?: AbortSignal,
+): Promise<DepartmentDetail> {
   const result = await apiRequest<{ department: DepartmentDetail }>(
     `/api/departments/${encodeURIComponent(id)}`,
+    { signal },
   )
   return result.department
 }
@@ -158,9 +166,21 @@ export async function listAssignableStaff(
   }>(`/api/departments/employee-options?${params}`)
 }
 
-export async function listEligibleHeads(): Promise<EligibleHead[]> {
+/**
+ * Staff who may head a department. Pass the department's id when editing
+ * (eligible staff plus its current head) or null when creating (unassigned
+ * eligible staff only).
+ */
+export async function listEligibleHeads(
+  departmentId: string | null,
+  signal?: AbortSignal,
+): Promise<EligibleHead[]> {
+  const query = new URLSearchParams(
+    departmentId === null ? { new: "true" } : { departmentId },
+  )
   const result = await apiRequest<{ users: EligibleHead[] }>(
-    "/api/departments/eligible-heads",
+    `/api/departments/eligible-heads?${query}`,
+    { signal },
   )
   return result.users
 }

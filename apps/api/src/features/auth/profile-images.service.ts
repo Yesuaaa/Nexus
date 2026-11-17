@@ -1,4 +1,5 @@
 import { getPrisma } from "../../lib/db.js"
+import { activeAccount } from "../../shared/query/accounts.js"
 import { AuthError } from "./auth.service.js"
 import { getProfile } from "./profile.service.js"
 import {
@@ -14,7 +15,7 @@ export async function uploadProfileImage(userId: string, input: unknown) {
   const prisma = getPrisma()
   if (!prisma) throw new AuthError(503, "Database unavailable")
   const user = await prisma.user.findFirst({
-    where: { id: userId, isActive: true, accountDeletedAt: null },
+    where: { id: userId, ...activeAccount },
     select: { role: true, employee: { select: { id: true } } },
   })
   if (!user) throw new AuthError(404, "Account unavailable")
@@ -70,7 +71,7 @@ export async function uploadProfileImage(userId: string, input: unknown) {
   try {
     await prisma.$transaction(async (tx) => {
       const changed = await tx.user.updateMany({
-        where: { id: userId, isActive: true, accountDeletedAt: null },
+        where: { id: userId, ...activeAccount },
         data:
           kind === "avatar"
             ? { profileImagePath: path }

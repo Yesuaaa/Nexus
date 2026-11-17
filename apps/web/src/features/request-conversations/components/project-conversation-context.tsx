@@ -2,9 +2,10 @@
 
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { humanizeEnum } from "@/lib/format"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 import type { ProjectConversationDetails } from "../model/project-conversation"
-import { ConversationAvatar } from "./conversation-avatar"
+import { Avatar } from "@/components/ui/avatar"
 
 type ProjectConversationParticipant = {
   id: string
@@ -23,7 +24,7 @@ export function ProjectConversationContext({
   isClient: boolean
 }) {
   const { formatDate } = useDatePreferences()
-  const projectStatus = project.status.toLowerCase().replaceAll("_", " ")
+  const projectStatus = humanizeEnum(project.status, { capitalize: false })
 
   return (
     <>
@@ -32,7 +33,7 @@ export function ProjectConversationContext({
           Conversation details
         </h3>
         <div className="mt-3 flex items-center gap-3">
-          <ConversationAvatar name={project.name} className="size-10" />
+          <Avatar name={project.name} className="size-10" />
           <div className="min-w-0">
             <p className="m-0 truncate text-xs font-semibold text-[#182235]">
               {project.name}
@@ -76,7 +77,7 @@ export function ProjectConversationContext({
         <ul className="m-0 mt-3 list-none space-y-2 p-0">
           {participants.map((person) => (
             <li key={person.id} className="flex items-center gap-3">
-              <ConversationAvatar
+              <Avatar
                 name={person.fullName || "Participant"}
                 className="size-8"
               />
@@ -91,10 +92,7 @@ export function ProjectConversationContext({
         </ul>
       </section>
       <div className="py-3">
-        <Button
-          asChild
-          className="w-full bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
-        >
+        <Button asChild variant="brand" className="w-full text-xs">
           <Link
             href={
               isClient

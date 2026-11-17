@@ -1,6 +1,15 @@
 import { CircleOff, Package, Radio } from "lucide-react"
-import { KpiCards, type KpiMetric } from "@/components/ui/kpi-cards"
+import {
+  ProgressMeter,
+  SegmentMeter,
+  StatStrip,
+  type StatStripItem,
+} from "@/components/ui/stat-strip"
 import type { Service } from "../api/services-api"
+
+function share(value: number, total: number) {
+  return total === 0 ? "0%" : `${Math.round((value / total) * 100)}%`
+}
 
 export function ServiceKpiCards({
   services,
@@ -11,39 +20,72 @@ export function ServiceKpiCards({
   loading: boolean
   unavailable: boolean
 }) {
-  const activeCount = services.filter((service) => service.isActive).length
-  const metrics: KpiMetric[] = [
+  const total = services.length
+  const active = services.filter((service) => service.isActive).length
+  const inactive = total - active
+  const empty = total === 0
+
+  const items: StatStripItem[] = [
     {
-      label: "Total Services",
-      value: services.length,
-      description: "Services in the catalog",
+      label: "Services",
+      value: total.toLocaleString("en-US"),
+      caption: empty ? "No services yet" : "Services in the catalog",
       icon: Package,
-      iconClassName: "text-[#2058d4]",
+      tone: "bg-[#e8eef8] text-[#284f9e]",
+      meter: (
+        <SegmentMeter
+          label="Service status breakdown"
+          segments={[
+            { label: "Active", value: active, colorClass: "bg-[#29906b]" },
+            { label: "Inactive", value: inactive, colorClass: "bg-[#c94a6a]" },
+          ]}
+        />
+      ),
     },
     {
-      label: "Active Services",
-      value: activeCount,
-      description: "Available for new requests",
+      label: "Active",
+      value: active.toLocaleString("en-US"),
+      caption: empty
+        ? "—"
+        : `${share(active, total)} available for new requests`,
+      captionTone: active > 0 ? "text-[#25745b]" : undefined,
       icon: Radio,
-      iconClassName: "text-[#159447]",
+      tone: "bg-[#e6f4ee] text-[#25745b]",
+      meter: (
+        <ProgressMeter
+          value={active}
+          max={total}
+          label="Active services"
+          colorClass="bg-[#29906b]"
+        />
+      ),
     },
     {
-      label: "Inactive Services",
-      value: services.length - activeCount,
-      description: "Unavailable for new requests",
+      label: "Inactive",
+      value: inactive.toLocaleString("en-US"),
+      caption:
+        inactive === 0 ? "None inactive" : "Unavailable for new requests",
+      captionTone: inactive > 0 ? "text-[#b4234d]" : undefined,
       icon: CircleOff,
-      iconClassName: "text-[#d81758]",
+      tone: "bg-[#fbe9ee] text-[#b4234d]",
+      meter: (
+        <ProgressMeter
+          value={inactive}
+          max={total}
+          label="Inactive services"
+          colorClass="bg-[#c94a6a]"
+        />
+      ),
     },
   ]
 
   return (
-    <KpiCards
-      metrics={metrics}
+    <StatStrip
+      items={items}
       label="Service overview"
-      pending={loading && services.length === 0}
-      unavailable={unavailable && services.length === 0}
-      showCharts={false}
-      className="grid-cols-3 max-[760px]:grid-cols-1"
+      pending={loading && empty}
+      unavailable={unavailable && empty}
+      className="grid-cols-3 max-[1050px]:grid-cols-3 max-[760px]:grid-cols-1"
     />
   )
 }

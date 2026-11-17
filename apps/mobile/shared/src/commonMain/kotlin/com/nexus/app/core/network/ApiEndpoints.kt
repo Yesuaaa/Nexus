@@ -30,7 +30,15 @@ object ApiEndpoints {
     fun markConversationRead(id: String) = "/api/request-conversations/$id/read"
     fun conversationStream(id: String) = "/api/request-conversations/$id/events"
 
+    // Project Conversations & Chat
+    const val PROJECT_CONVERSATIONS = "/api/project-conversations"
+    fun projectConversationMessages(id: String) = "/api/project-conversations/$id"
+    fun sendProjectConversationMessage(id: String) = "/api/project-conversations/$id/messages"
+    fun markProjectConversationRead(id: String) = "/api/project-conversations/$id/read"
+
     // Projects
+    const val CLIENT_PROJECTS = "/api/projects"
+    const val CLIENT_CALENDAR = "/api/projects/calendar"
     fun projectWorkspace(id: String) = "/api/projects/$id"
 
     // Request Workflows & Billing

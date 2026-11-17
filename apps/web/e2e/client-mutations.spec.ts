@@ -72,7 +72,9 @@ for (const width of [1440, 390]) {
     await dialog.getByLabel("Full Name").fill("Test Client")
     await dialog.getByLabel("Email Address").fill("invalid-email")
     await dialog.getByLabel("Contact Number").fill("09171234567")
-    await dialog.getByLabel("Initial Password").fill("initial client password")
+    await dialog
+      .getByLabel("Initial Password")
+      .fill("Initial client password1!")
     await dialog.getByRole("button", { name: "Create Client" }).click()
     await expect(dialog.getByLabel("Email Address")).toBeFocused()
     await expect(

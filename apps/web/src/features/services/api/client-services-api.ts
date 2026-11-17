@@ -3,6 +3,7 @@ import {
   getWorkflow,
   performWorkflowAction,
 } from "@/features/request-workflow/api/workflow-api"
+import type { ServiceRequestStatus } from "@/features/service-operations/model/service-request-contracts"
 
 export async function cancelClientServiceRequest(
   request: ServiceRequestSummary,
@@ -27,11 +28,10 @@ import type {
   ServiceRequestReceipt,
   PricingModel,
   BillingInterval,
-  ServiceRequestStatus,
 } from "./services-api"
 import type { ProjectRequirementsDraft } from "../model/project-requirements"
 
-export type { ServiceRequestStatus } from "./services-api"
+export type { ServiceRequestStatus } from "@/features/service-operations/model/service-request-contracts"
 export interface ServiceRequestSummary {
   id: string
   referenceNumber: string | null
@@ -86,9 +86,11 @@ export async function getClientService(id: string): Promise<Service> {
 }
 export async function getClientServiceSpecialists(
   serviceId: string,
+  signal?: AbortSignal,
 ): Promise<ServiceSpecialist[]> {
   const result = await apiRequest<{ specialists: ServiceSpecialist[] }>(
     `/api/client/services/${encodeURIComponent(serviceId)}/specialists`,
+    { signal },
   )
   return result.specialists
 }

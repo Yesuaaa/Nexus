@@ -1,4 +1,3 @@
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import type { KpiDistributionSegment } from "./kpi-distribution-chart"
 
 export function KpiDonutChart({
@@ -34,9 +33,6 @@ export function KpiDonutChart({
       >
         <div className="h-4 w-4 rounded-full bg-[#f8fafb]" />
       </div>
-      <HoverTooltip align="end" className="max-w-64 text-left leading-relaxed">
-        {label}
-      </HoverTooltip>
     </div>
   )
 }

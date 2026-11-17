@@ -1,5 +1,6 @@
 package com.nexus.app.features.conversations.screens
 
+import com.nexus.app.core.components.LocalNexusBottomPadding
 import com.nexus.app.core.theme.NexusButtonShape
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -25,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.nexus.app.core.theme.NexusColors
@@ -33,16 +35,34 @@ import com.nexus.app.features.notifications.viewmodel.NotificationsViewModel
 import org.koin.compose.viewmodel.koinViewModel
 import com.nexus.app.features.conversations.model.ConversationBooking
 import com.nexus.app.features.conversations.model.conversationTimeline
+import com.nexus.app.features.projects.model.ProjectChatMessage
+import com.nexus.app.features.projects.model.ProjectConversationRow
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import kotlinx.datetime.toLocalDateTime
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 
 @Composable
-fun NotificationsScreen(onRequest: (String) -> Unit, viewModel: NotificationsViewModel = koinViewModel()) {
+fun NotificationsScreen(
+    onRequest: (String) -> Unit,
+    viewModel: NotificationsViewModel = koinViewModel(),
+    conversationsViewModel: ConversationsViewModel = koinViewModel()
+) {
     val state by viewModel.state.collectAsState()
+    val conversations by conversationsViewModel.state.collectAsState()
+    val bookings = conversations.page.conversations.flatMap { it.bookings }.associateBy { it.id }
+    val groups = remember(state.feed.notifications) {
+        state.feed.notifications.groupBy { it.requestId }.values
+            .map { it.sortedByDescending { notice -> notice.createdAt } }
+            .sortedByDescending { it.first().createdAt }
+    }
+    var expanded by rememberSaveable { mutableStateOf<String?>(null) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refresh() }
-    LazyColumn(Modifier.fillMaxSize().background(NexusColors.SurfaceLight).padding(horizontal = 20.dp)) {
+    LazyColumn(Modifier.fillMaxSize().background(NexusColors.SurfaceLight).padding(horizontal = 20.dp),
+        contentPadding = PaddingValues(bottom = LocalNexusBottomPadding.current),
+        verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Row(Modifier.fillMaxWidth().padding(vertical = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -58,16 +78,38 @@ fun NotificationsScreen(onRequest: (String) -> Unit, viewModel: NotificationsVie
             if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
             state.error?.let { Text(it, color = NexusColors.ErrorRed, modifier = Modifier.padding(vertical = 12.dp)) }
         }
-        if (!state.loading && state.feed.notifications.isEmpty()) item { Text("You're all caught up.", Modifier.padding(16.dp)) }
-        items(state.feed.notifications, key = { it.id }) { notification ->
-            val unread = notification.readAt == null
-            Surface(color = if (unread) Color(0xFFDFE6F2) else Color.White, shape = RoundedCornerShape(6.dp),
+        if (!state.loading && groups.isEmpty()) item { Text("You're all caught up.", Modifier.padding(16.dp)) }
+        items(groups, key = { it.first().requestId }) { updates ->
+            val latest = updates.first()
+            val unread = updates.any { it.readAt == null }
+            val booking = bookings[latest.requestId]
+            Surface(color = if (unread) Color(0xFFDFE6F2) else Color.White, shape = RoundedCornerShape(8.dp),
                 border = androidx.compose.foundation.BorderStroke(1.dp, if (unread) Color(0xFFA7B5CF) else NexusColors.Border)) {
-                Column(Modifier.fillMaxWidth().clickable { viewModel.open(notification, onRequest) }.padding(16.dp)) {
-                    Text(notification.summary, fontSize = 14.sp, fontWeight = if (notification.readAt == null) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (unread) Color(0xFF172B4D) else NexusColors.TextSecondary)
-                    Spacer(Modifier.height(10.dp))
-                    Text(displayTime(notification.createdAt), fontSize = 12.sp, color = if (unread) Color(0xFF344968) else NexusColors.TextSecondary)
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.fillMaxWidth().clickable { viewModel.openGroup(updates, onRequest) },
+                        verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(booking?.title?.takeIf { it.isNotBlank() } ?: booking?.serviceName?.takeIf { it.isNotBlank() }
+                            ?: "Service updates", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = NexusColors.PrimaryBlue)
+                        booking?.referenceNumber?.let { Text(it, fontSize = 11.sp, color = NexusColors.TextSecondary) }
+                        Text(latest.summary, fontSize = 14.sp,
+                            fontWeight = if (unread) FontWeight.SemiBold else FontWeight.Normal,
+                            color = NexusColors.TextPrimary)
+                        Text(displayTime(latest.createdAt), fontSize = 12.sp, color = NexusColors.TextSecondary)
+                    }
+                    if (updates.size > 1) {
+                        TextButton(onClick = { expanded = if (expanded == latest.requestId) null else latest.requestId },
+                            contentPadding = PaddingValues(0.dp)) {
+                            Text(if (expanded == latest.requestId) "Hide updates" else "${updates.size} updates - View all", fontSize = 12.sp)
+                        }
+                        if (expanded == latest.requestId) updates.drop(1).forEach { notification ->
+                            HorizontalDivider(color = NexusColors.Border)
+                            Column(Modifier.fillMaxWidth().clickable { viewModel.open(notification, onRequest) }.padding(vertical = 6.dp)) {
+                                Text(notification.summary, fontSize = 13.sp,
+                                    fontWeight = if (notification.readAt == null) FontWeight.SemiBold else FontWeight.Normal)
+                                Text(displayTime(notification.createdAt), fontSize = 11.sp, color = NexusColors.TextSecondary)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -76,39 +118,219 @@ fun NotificationsScreen(onRequest: (String) -> Unit, viewModel: NotificationsVie
 }
 
 @Composable
-fun MessagesScreen(onConversation: (String) -> Unit, viewModel: ConversationsViewModel = koinViewModel()) {
+fun MessagesScreen(
+    onConversation: (String) -> Unit,
+    onProjectConversation: (String) -> Unit = {},
+    currentUserId: String = "",
+    viewModel: ConversationsViewModel = koinViewModel(),
+) {
     val state by viewModel.state.collectAsState()
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refresh(false) }
-    LazyColumn(Modifier.fillMaxSize().background(NexusColors.SurfaceLight).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Text("Select a conversation", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            Text("Choose a department below to discuss all your bookings in one conversation.", fontSize = 12.sp, lineHeight = 18.sp, color = ConversationStyle.Muted) }
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(viewModel, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (kotlinx.coroutines.currentCoroutineContext().isActive) {
+                viewModel.refresh()
+                delay(15_000)
+            }
+        }
+    }
+    val requestConversations = remember(state.page.conversations, state.archived) {
+        state.page.conversations.filter { (it.status == "ARCHIVED") == state.archived }
+    }
+    val projectConversations = state.projectPage.conversations
+    val hasMore = state.page.nextCursor != null || state.projectPage.nextCursor != null
+
+    LazyColumn(
+        Modifier.fillMaxSize().background(NexusColors.SurfaceLight).padding(horizontal = 20.dp),
+        contentPadding = PaddingValues(top = 20.dp, bottom = 20.dp + LocalNexusBottomPadding.current),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item {
+            Text("Select a conversation", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(
+                "Choose a conversation to discuss your bookings or projects.",
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
+                color = ConversationStyle.Muted,
+            )
+        }
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                listOf(false to "Active", true to "Archived").forEach { (archivedTab, label) ->
+                    val selected = state.archived == archivedTab
+                    Surface(
+                        modifier = Modifier.clickable(enabled = !state.loading) {
+                            if (state.archived != archivedTab) {
+                                viewModel.setArchived(archivedTab)
+                            }
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (selected) ConversationStyle.Navy else Color.White,
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (selected) ConversationStyle.Navy else NexusColors.Border,
+                        ),
+                    ) {
+                        Text(
+                            text = label,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (selected) Color.White else ConversationStyle.Ink,
+                        )
+                    }
+                }
+            }
+        }
         item {
             if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
             state.error?.let {
                 Text("Unable to load conversations. Please try again.", color = NexusColors.ErrorRed)
-                TextButton(shape = NexusButtonShape, onClick = { viewModel.refresh(false) }, enabled = !state.loading) { Text("Retry") }
+                TextButton(
+                    shape = NexusButtonShape,
+                    onClick = { viewModel.refresh(state.archived) },
+                    enabled = !state.loading,
+                ) { Text("Retry") }
             }
         }
-        if (!state.loading && state.error == null && state.page.conversations.isEmpty()) item {
-            Text("No conversations yet.", color = NexusColors.TextSecondary)
+        if (!state.loading && state.error == null && requestConversations.isEmpty() && projectConversations.isEmpty()) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = if (state.archived) "No archived conversations" else "No conversations yet.",
+                        color = if (state.archived) ConversationStyle.Ink else NexusColors.TextSecondary,
+                        fontWeight = if (state.archived) FontWeight.SemiBold else FontWeight.Normal,
+                        fontSize = 14.sp,
+                    )
+                    if (state.archived) {
+                        Text(
+                            text = "Completed project chats will appear here.",
+                            color = NexusColors.TextSecondary,
+                            fontSize = 12.sp,
+                        )
+                    }
+                }
+            }
         }
-        items(state.page.conversations, key = { it.id }) { row ->
-            Card(onClick = { onConversation(row.id) }, colors = CardDefaults.cardColors(containerColor = Color.White),
-                border = androidx.compose.foundation.BorderStroke(1.dp, NexusColors.Border)) {
+        items(requestConversations, key = { "request-${it.id}" }) { row ->
+            Card(
+                onClick = { onConversation(row.id) },
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = androidx.compose.foundation.BorderStroke(1.dp, NexusColors.Border),
+            ) {
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    ChatAvatar(row.acceptedDepartment?.head?.fullName ?: "EXP", row.acceptedDepartment?.head?.imageUrl)
+                    BadgedBox(badge = {
+                        if (row.unreadCount > 0) Badge(containerColor = Color(0xFF3B82F6), modifier = Modifier.size(8.dp))
+                    }) {
+                        ChatAvatar(row.acceptedDepartment?.head?.fullName ?: "EXP", row.acceptedDepartment?.head?.imageUrl)
+                    }
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(row.acceptedDepartment?.head?.fullName ?: row.acceptedDepartment?.name ?: row.title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = ConversationStyle.Ink)
-                        Text(row.service.name + if (row.bookings.size > 1) " - ${row.bookings.size} bookings" else "", fontSize = 12.sp, color = NexusColors.TextSecondary)
-                        Text(row.lastMessage?.let { if (it.deletedAt != null) "Message deleted" else it.body.orEmpty() } ?: "Start a conversation", maxLines = 2, fontSize = 12.sp, lineHeight = 18.sp, color = ConversationStyle.Muted)
+                        Text(
+                            row.acceptedDepartment?.head?.fullName ?: row.acceptedDepartment?.name ?: row.title,
+                            fontSize = 14.sp,
+                            fontWeight = if (row.unreadCount > 0) FontWeight.Bold else FontWeight.Medium,
+                            color = ConversationStyle.Ink,
+                            maxLines = 2,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            row.service.name + if (row.bookings.size > 1) " - ${row.bookings.size} bookings" else "",
+                            fontSize = 12.sp,
+                            color = NexusColors.TextSecondary,
+                        )
+                        Text(
+                            row.lastMessage?.let { if (it.deletedAt != null) "Message deleted" else it.body.orEmpty() }
+                                ?: "Start a conversation",
+                            maxLines = 2,
+                            fontSize = 12.sp,
+                            lineHeight = 18.sp,
+                            color = ConversationStyle.Muted,
+                        )
                     }
-                    if (row.unreadCount > 0) Badge { Text(row.unreadCount.toString()) }
+                    if (row.unreadCount > 0) Badge(containerColor = Color(0xFF3B82F6), contentColor = Color.White) { Text(row.unreadCount.toString()) }
                     Text(" >", color = NexusColors.PrimaryBlue)
                 }
             }
         }
-        if (state.page.nextCursor != null) item { TextButton(shape = NexusButtonShape, onClick = { viewModel.refresh(more = true) }, enabled = !state.loading) { Text("Load more") } }
+        items(projectConversations, key = { "project-${it.id}" }) { project ->
+            ProjectConversationCard(
+                project = project,
+                currentUserId = currentUserId,
+                onClick = { onProjectConversation(project.id) },
+            )
+        }
+        if (hasMore) {
+            item {
+                TextButton(
+                    shape = NexusButtonShape,
+                    onClick = { viewModel.refresh(more = true) },
+                    enabled = !state.loading,
+                ) { Text("Load more") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProjectConversationCard(
+    project: ProjectConversationRow,
+    currentUserId: String,
+    onClick: () -> Unit,
+) {
+    val members = project.participants
+        .filter { currentUserId.isEmpty() || it.id != currentUserId }
+        .mapNotNull { it.fullName?.takeIf(String::isNotBlank) }
+        .joinToString(", ")
+        .ifEmpty { "Awaiting staff assignment" }
+    val prefix = when {
+        project.archived -> "Archived project"
+        project.isGroup -> "Project group"
+        else -> "Project"
+    }
+    val preview = project.lastMessage?.let { msg ->
+        msg.body?.takeIf { it.isNotBlank() }
+            ?: msg.deliverable?.let { "Shared deliverable: ${it.title}" }
+            ?: "Start a conversation"
+    } ?: "Start a conversation"
+
+    Card(
+        onClick = onClick,
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = androidx.compose.foundation.BorderStroke(1.dp, NexusColors.Border),
+    ) {
+        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            ChatAvatar(project.name.ifBlank { "Project" })
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = project.name.ifBlank { "Project chat" },
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = ConversationStyle.Ink,
+                )
+                Text(
+                    text = "$prefix \u00B7 $members",
+                    fontSize = 12.sp,
+                    color = NexusColors.TextSecondary,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = preview,
+                    maxLines = 2,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp,
+                    color = ConversationStyle.Muted,
+                )
+            }
+            if (project.unreadCount > 0) Badge { Text(project.unreadCount.toString()) }
+            Text(" >", color = NexusColors.PrimaryBlue)
+        }
     }
 }
 
@@ -335,8 +557,8 @@ internal fun ConversationBookingSheet(bookings: List<ConversationBooking>, onDis
         }
         HorizontalDivider(color = ConversationStyle.Divider)
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(48.dp), shape = NexusButtonShape, border = androidx.compose.foundation.BorderStroke(1.dp, ConversationStyle.Border)) { Text("Cancel", color = ConversationStyle.Navy, fontSize = 14.sp) }
-            Button(onClick = { selected?.let(onContinue) }, enabled = !loading && error == null && bookings.any { it.id == selected }, modifier = Modifier.weight(1f).height(48.dp), shape = NexusButtonShape,
+            OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(40.dp), shape = NexusButtonShape, border = androidx.compose.foundation.BorderStroke(1.dp, ConversationStyle.Border)) { Text("Cancel", color = ConversationStyle.Navy, fontSize = 14.sp) }
+            Button(onClick = { selected?.let(onContinue) }, enabled = !loading && error == null && bookings.any { it.id == selected }, modifier = Modifier.weight(1f).height(40.dp), shape = NexusButtonShape,
                 colors = ButtonDefaults.buttonColors(containerColor = ConversationStyle.Navy, disabledContainerColor = Color(0xFFE5E8EE), disabledContentColor = Color(0xFF9AA4B4))) { Text("Continue", fontSize = 14.sp) }
         }
     }
@@ -347,3 +569,275 @@ private fun displayTime(value: String): String = try {
         "${it.date} ${it.hour.toString().padStart(2, '0')}:${it.minute.toString().padStart(2, '0')}"
     }
 } catch (_: IllegalArgumentException) { value }
+
+@Composable
+fun ProjectConversationScreen(
+    projectId: String,
+    userId: String,
+    onBack: () -> Unit,
+    onDeliverables: () -> Unit = {},
+    viewModel: ConversationsViewModel = koinViewModel(),
+) {
+    val state by viewModel.state.collectAsState()
+    var draft by rememberSaveable(projectId) { mutableStateOf("") }
+    val list = rememberLazyListState()
+    val history = state.projectHistory
+    val title = history?.project?.name?.takeIf { it.isNotBlank() }
+        ?: history?.conversation?.fullName?.takeIf { it.isNotBlank() }
+        ?: "Project chat"
+    val subtitle = history?.participants
+        ?.mapNotNull { it.fullName?.takeIf(String::isNotBlank) }
+        ?.takeIf { it.isNotEmpty() }
+        ?.joinToString(", ")
+        ?: history?.conversation?.position
+        ?: "Project chat"
+
+    LaunchedEffect(projectId) {
+        viewModel.openProject(projectId)
+        while (isActive) {
+            delay(15_000)
+            viewModel.refreshProject(projectId)
+        }
+    }
+    DisposableEffect(projectId) {
+        onDispose { viewModel.closeProject() }
+    }
+    LaunchedEffect(state.projectMessages.size, state.projectPending.size) {
+        val total = state.projectMessages.size + state.projectPending.size
+        if (total > 0) {
+            list.animateScrollToItem(total - 1)
+        }
+    }
+
+    Column(Modifier.fillMaxSize().imePadding().background(ConversationStyle.Background)) {
+        Row(
+            Modifier.fillMaxWidth().height(60.dp).background(Color.White).padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onBack, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    Icons.AutoMirrored.Outlined.ArrowBack,
+                    "Back to messages",
+                    Modifier.size(20.dp),
+                    tint = ConversationStyle.Navy,
+                )
+            }
+            ChatAvatar(title, modifier = Modifier.size(36.dp))
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    fontSize = 18.sp,
+                    lineHeight = 22.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = ConversationStyle.Ink,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = subtitle,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp,
+                    color = ConversationStyle.Muted,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
+            if (history?.archived == true) {
+                WorkflowPill("Archived", complete = false)
+            }
+        }
+        HorizontalDivider(color = ConversationStyle.Divider)
+        if (state.projectLoading) {
+            LinearProgressIndicator(Modifier.fillMaxWidth(), color = ConversationStyle.Navy)
+        }
+        LazyColumn(
+            Modifier.weight(1f).fillMaxWidth(),
+            state = list,
+            contentPadding = PaddingValues(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.Bottom),
+        ) {
+            state.projectError?.let { error ->
+                item {
+                    Text(error, color = NexusColors.ErrorRed, fontSize = 12.sp)
+                    TextButton(
+                        shape = NexusButtonShape,
+                        onClick = { viewModel.refreshProject(projectId) },
+                        enabled = !state.projectLoading,
+                    ) { Text("Refresh messages", fontSize = 12.sp) }
+                }
+            }
+            if (history?.nextCursor != null) {
+                item {
+                    TextButton(
+                        shape = NexusButtonShape,
+                        onClick = { viewModel.refreshProject(projectId, older = true) },
+                        enabled = !state.projectLoading,
+                    ) { Text("Load older messages", fontSize = 12.sp) }
+                }
+            }
+            if (history != null && state.projectMessages.isEmpty() && state.projectPending.isEmpty()) {
+                item {
+                    Text(
+                        "No messages yet. Start a conversation with your project team.",
+                        fontSize = 12.sp,
+                        color = ConversationStyle.Muted,
+                    )
+                }
+            }
+            items(state.projectMessages, key = { it.id }) { message ->
+                ProjectMessageItem(
+                    message = message,
+                    own = message.sender.id == userId,
+                    onDeliverables = onDeliverables,
+                )
+            }
+            items(state.projectPending, key = { it.clientMessageId }) { pending ->
+                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
+                    Surface(shape = RoundedCornerShape(8.dp), color = ConversationStyle.Notice) {
+                        Text(pending.body, Modifier.padding(12.dp), fontSize = 14.sp)
+                    }
+                    if (pending.failed) {
+                        pending.failureReason?.let { Text(it, color = NexusColors.ErrorRed, fontSize = 12.sp) }
+                        TextButton(
+                            shape = NexusButtonShape,
+                            onClick = { viewModel.retryProject(pending) },
+                        ) { Text("Send failed - Retry", fontSize = 12.sp) }
+                    } else {
+                        Text("Sending...", fontSize = 11.sp, color = ConversationStyle.Muted)
+                    }
+                }
+            }
+        }
+        HorizontalDivider(color = ConversationStyle.Divider)
+        Column(
+            Modifier.fillMaxWidth().background(Color.White).padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (history?.canSend == true) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Box(
+                        Modifier.weight(1f)
+                            .heightIn(min = 48.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color(0xFFFAFAF9))
+                            .border(1.dp, Color(0xFFE8E9EB), RoundedCornerShape(16.dp))
+                            .padding(12.dp),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        androidx.compose.foundation.text.BasicTextField(
+                            value = draft,
+                            onValueChange = { if (it.length <= 4000) draft = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 4,
+                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = ConversationStyle.Ink),
+                            decorationBox = { input ->
+                                if (draft.isEmpty()) Text("Message your project team", color = ConversationStyle.Muted, fontSize = 14.sp)
+                                input()
+                            },
+                        )
+                    }
+                    SquareChatAction(
+                        Icons.AutoMirrored.Outlined.Send,
+                        "Send message",
+                        {
+                            viewModel.sendProject(draft)
+                            draft = ""
+                        },
+                        draft.isNotBlank(),
+                    )
+                }
+            } else if (history != null) {
+                Text(
+                    if (history.archived) "This project chat is archived and read-only."
+                    else "Messaging is available once staff are assigned to your project.",
+                    fontSize = 12.sp,
+                    color = ConversationStyle.Muted,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProjectMessageItem(
+    message: ProjectChatMessage,
+    own: Boolean,
+    onDeliverables: () -> Unit,
+) {
+    Column(
+        Modifier.fillMaxWidth(),
+        horizontalAlignment = if (own) Alignment.End else Alignment.Start,
+    ) {
+        Text(
+            text = message.sender.fullName ?: "Project team",
+            fontSize = 11.sp,
+            color = ConversationStyle.Muted,
+            modifier = Modifier.padding(bottom = 4.dp),
+        )
+        Surface(
+            shape = RoundedCornerShape(
+                topStart = 16.dp,
+                topEnd = 16.dp,
+                bottomEnd = if (own) 6.dp else 16.dp,
+                bottomStart = if (own) 16.dp else 6.dp,
+            ),
+            color = if (own) ConversationStyle.Navy else Color(0xFFDFE4EB),
+        ) {
+            Column(
+                Modifier.widthIn(max = 300.dp).padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                message.body?.takeIf { it.isNotBlank() }?.let {
+                    Text(
+                        text = it,
+                        fontSize = 14.sp,
+                        lineHeight = 21.sp,
+                        color = if (own) Color.White else ConversationStyle.Ink,
+                    )
+                }
+                message.deliverable?.let { attachment ->
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color.White,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, ConversationStyle.Border),
+                    ) {
+                        Column(
+                            Modifier.fillMaxWidth().padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(
+                                text = attachment.title,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = ConversationStyle.Ink,
+                            )
+                            Text(
+                                text = attachment.fileName,
+                                fontSize = 12.sp,
+                                color = ConversationStyle.Muted,
+                            )
+                            TextButton(
+                                shape = NexusButtonShape,
+                                onClick = onDeliverables,
+                                contentPadding = PaddingValues(0.dp),
+                            ) {
+                                Text("View deliverables", fontSize = 12.sp, color = ConversationStyle.Navy)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Text(
+            text = displayTime(message.createdAt),
+            modifier = Modifier.padding(top = 4.dp),
+            fontSize = 10.sp,
+            color = ConversationStyle.Muted,
+        )
+    }
+}

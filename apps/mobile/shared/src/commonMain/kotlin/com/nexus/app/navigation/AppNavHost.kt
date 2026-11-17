@@ -1,7 +1,21 @@
 package com.nexus.app.navigation
 
 import com.nexus.app.core.theme.NexusButtonShape
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import com.nexus.app.features.conversations.viewmodel.ConversationsViewModel
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.runtime.CompositionLocalProvider
+import com.nexus.app.core.components.LocalNexusBottomPadding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
@@ -38,14 +52,16 @@ import com.nexus.app.core.components.ToastKind
 import com.nexus.app.core.session.SessionManager
 import com.nexus.app.core.theme.NexusColors
 import com.nexus.app.features.auth.api.AuthRepository
-import com.nexus.app.features.auth.api.AuthRequestException
+import com.nexus.app.features.auth.api.SessionRestoration
 import com.nexus.app.features.auth.screens.LoginScreen
 import com.nexus.app.features.auth.screens.RegisterScreen
 import com.nexus.app.features.booked_requests.screens.BookedRequestsScreen
 import com.nexus.app.features.dashboard.screens.DashboardScreen
+import com.nexus.app.features.help.screens.HelpScreen
 import com.nexus.app.features.profile.screens.ProfileScreen
 import com.nexus.app.features.services.screens.ServicesScreen
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.awaitCancellation
 import org.koin.compose.koinInject
 
 import com.nexus.app.features.conversations.screens.*
@@ -80,24 +96,25 @@ object Routes {
     const val WORKFLOW = "workflow/{requestId}?conversationId={conversationId}&documents={documents}"
     const val PROFILE = "profile"
     const val SETTINGS = "settings"
+    const val HELP = "help"
     const val REQUEST_DETAIL = "request/{requestId}"
 
-    val main = setOf(BILLING_LOGS, NOTIFICATIONS, MESSAGES, CHAT, WORKFLOW, DASHBOARD, SERVICES, BOOKED_REQUESTS, PROFILE, SETTINGS, REQUEST_DETAIL, CALENDAR, PROJECTS, PROJECT_DETAILS, PROJECT_OVERVIEW, PROJECT_BRIEF, PROJECT_REQUEST, PROJECT_CHAT)
+    val main = setOf(BILLING_LOGS, NOTIFICATIONS, MESSAGES, CHAT, WORKFLOW, DASHBOARD, SERVICES, BOOKED_REQUESTS, PROFILE, SETTINGS, HELP, REQUEST_DETAIL, CALENDAR, PROJECTS, PROJECT_DETAILS, PROJECT_OVERVIEW, PROJECT_BRIEF, PROJECT_REQUEST, PROJECT_CHAT)
 }
 
 private fun BottomTab.route() = when (this) {
     BottomTab.DASHBOARD -> Routes.DASHBOARD
     BottomTab.SERVICES -> Routes.SERVICES
-    BottomTab.BOOKED_REQUESTS -> Routes.BOOKED_REQUESTS
     BottomTab.CALENDAR -> Routes.CALENDAR
+    BottomTab.BOOKED_REQUESTS -> Routes.BOOKED_REQUESTS
     BottomTab.PROJECTS -> Routes.PROJECTS
 }
 
 private fun routeToTab(route: String?): BottomTab? = when (route) {
     Routes.DASHBOARD -> BottomTab.DASHBOARD
     Routes.SERVICES -> BottomTab.SERVICES
-    Routes.BOOKED_REQUESTS, Routes.REQUEST_DETAIL -> BottomTab.BOOKED_REQUESTS
     Routes.CALENDAR -> BottomTab.CALENDAR
+    Routes.BOOKED_REQUESTS, Routes.REQUEST_DETAIL -> BottomTab.BOOKED_REQUESTS
     Routes.PROJECTS, Routes.PROJECT_DETAILS, Routes.PROJECT_OVERVIEW, Routes.PROJECT_BRIEF, Routes.PROJECT_REQUEST, Routes.PROJECT_CHAT -> BottomTab.PROJECTS
     else -> null
 }
@@ -131,6 +148,7 @@ internal fun NavController.restoreAuthenticatedDestination() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppNavHost(modifier: Modifier = Modifier) {
     val authRepository = koinInject<AuthRepository>()
@@ -142,14 +160,17 @@ fun AppNavHost(modifier: Modifier = Modifier) {
     val notificationViewModel: NotificationsViewModel = koinViewModel()
     val notificationState by notificationViewModel.state.collectAsState()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val user by session.user.collectAsState()
-    LaunchedEffect(user?.id, lifecycle) {
+    val sessionState by session.state.collectAsState()
+    val conversationsViewModel: ConversationsViewModel = koinViewModel(key = "header-conversations-${sessionState.generation}")
+    val conversationsState by conversationsViewModel.state.collectAsState()
+    val user = sessionState.user
+    LaunchedEffect(user?.id, sessionState.generation, lifecycle) {
         notificationViewModel.reset()
         if (user != null) lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            while (isActive) { notificationViewModel.refresh(); delay(30_000) }
+            while (isActive) { notificationViewModel.refresh(); conversationsViewModel.refresh(); delay(30_000) }
         }
     }
-    val notice by session.notice.collectAsState()
+    val notice = sessionState.notice
     val pendingLink by DeepLinks.pending.collectAsState()
     var restorationAttempt by rememberSaveable { mutableStateOf(0) }
     var restorationError by remember { mutableStateOf<String?>(null) }
@@ -160,28 +181,32 @@ fun AppNavHost(modifier: Modifier = Modifier) {
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val route = backStackEntry?.destination?.route
+    var profileOriginEntry by rememberSaveable(user?.id, sessionState.generation) { mutableStateOf<String?>(null) }
+    val appBarState = remember(route) { TopAppBarState(-Float.MAX_VALUE, 0f, 0f) }
+    val appBarScroll = TopAppBarDefaults.pinnedScrollBehavior(appBarState)
+    LaunchedEffect(route) {
+        if (user != null && route in Routes.main) conversationsViewModel.refresh()
+    }
     routeToTab(route)?.let { lastTab = it }
 
-    // Session restoration (also runs after process death).
-    LaunchedEffect(restorationAttempt) {
-        restorationError = null
-        authRepository.restoreSession()
-            .onSuccess { restored ->
-                if (restored == null) {
-                    navController.resetTo(Routes.LOGIN)
-                } else {
-                    session.setUser(restored)
-                    navController.restoreAuthenticatedDestination()
+    // Revalidate on every resume and explicit retry. Cancellation never discards credentials.
+    LaunchedEffect(restorationAttempt, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            restorationError = null
+            when (authRepository.restoreClientSession()) {
+                SessionRestoration.SignedOut -> {
+                    if (session.state.value.signedOut) navController.resetTo(Routes.LOGIN)
                 }
-            }
-            .onFailure { error ->
-                if (error is AuthRequestException && error.status in setOf(401, 403)) {
-                    navController.resetTo(Routes.LOGIN)
-                } else {
+                is SessionRestoration.VerifiedClient, is SessionRestoration.CachedOfflineClient -> {
+                    if (session.state.value.user != null) navController.restoreAuthenticatedDestination()
+                }
+                is SessionRestoration.TemporarilyUnavailable -> {
                     restorationError = "Can't restore your session right now. Check your connection and retry."
                     navController.navigate(Routes.CHECKING) { launchSingleTop = true }
                 }
             }
+            awaitCancellation()
+        }
     }
 
     // Deep links: wait until restore has finished (route is a main screen or Login/Register).
@@ -198,13 +223,17 @@ fun AppNavHost(modifier: Modifier = Modifier) {
         }
     }
 
-    // Refresh token rejected: back to Login.
-    LaunchedEffect(session) {
-        session.expired.collect { navController.resetTo(Routes.LOGIN) }
+    // Durable state also handles expiry while no event collector is present.
+    LaunchedEffect(sessionState.signedOut, sessionState.generation, route) {
+        if (sessionState.signedOut && route != Routes.LOGIN && route != Routes.REGISTER) {
+            navController.resetTo(Routes.LOGIN)
+        }
     }
 
     fun signedIn() {
-        navController.resetTo(Routes.DASHBOARD)
+        if (session.state.value.user != null && !session.state.value.signedOut) {
+            navController.resetTo(Routes.DASHBOARD)
+        }
     }
 
     fun logout() {
@@ -213,20 +242,12 @@ fun AppNavHost(modifier: Modifier = Modifier) {
         coroutineScope.launch {
             try {
                 val result = authRepository.logout()
-                session.clear(
-                    if (result.isFailure) {
-                        "You are signed out on this device. We couldn't confirm sign-out with the server."
-                    } else {
-                        null
-                    }
-                )
-                toast.show(
+                if (session.state.value.signedOut) toast.show(
                     if (result.isSuccess) "Signed out" else "Signed out on this device",
                     if (result.isSuccess) "You can sign in again at any time." else "Server sign-out could not be confirmed.",
                     if (result.isSuccess) ToastKind.SUCCESS else ToastKind.INFO
                 )
             } finally {
-                navController.resetTo(Routes.LOGIN)
                 loggingOut = false
             }
         }
@@ -261,11 +282,22 @@ fun AppNavHost(modifier: Modifier = Modifier) {
         Routes.MESSAGES -> "Messages"
         Routes.CHAT -> "Chat"
         Routes.WORKFLOW -> "Request details"
+        Routes.HELP -> "Help & Support"
         Routes.PROFILE, Routes.SETTINGS -> accountTitle
         else -> ""
     }
-    val showBars = route in Routes.main
+    val showBars = user != null && !sessionState.signedOut && route in Routes.main
 
+    val showBottomBar = showBars && !editingAccount && route !in setOf(Routes.CHAT, Routes.WORKFLOW, Routes.PROJECT_CHAT)
+    var floatingBarHeightPx by remember { mutableStateOf(0) }
+    val density = LocalDensity.current
+    val navigationInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    // Scaffold already reserves the system inset; only clear the floating bar itself.
+    val floatingBarPadding = if (showBottomBar) {
+        (with(density) { floatingBarHeightPx.toDp() } - navigationInset).coerceAtLeast(0.dp)
+    } else 0.dp
+    CompositionLocalProvider(LocalNexusBottomPadding provides floatingBarPadding) {
+    Box(modifier.fillMaxSize()) {
     Scaffold(
         topBar = {
             if (showBars && route != Routes.CHAT) {
@@ -274,51 +306,60 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                     onNotificationClick = { toggleHeaderPage(Routes.NOTIFICATIONS) },
                     onChatClick = { toggleHeaderPage(Routes.MESSAGES) },
                     onProfileClick = {
-                        if (route != Routes.PROFILE) navController.navigate(Routes.PROFILE) { launchSingleTop = true }
+                        if (route !in setOf(Routes.PROFILE, Routes.SETTINGS)) {
+                            profileOriginEntry = backStackEntry?.id
+                            navController.navigate(Routes.PROFILE) { launchSingleTop = true }
+                        }
                     },
                     onSettingsClick = { if (route != Routes.SETTINGS) navController.navigate(Routes.SETTINGS) { launchSingleTop = true } },
                     onBillingLogsClick = { if (route != Routes.BILLING_LOGS) navController.navigate(Routes.BILLING_LOGS) { launchSingleTop = true } },
+                    onHelpClick = { if (route != Routes.HELP) navController.navigate(Routes.HELP) { launchSingleTop = true } },
                     onLogoutClick = { logout() },
-                    accountName = user?.fullName ?: "Your account",
-                    accountEmail = user?.email ?: "",
+                    accountName = user.fullName ?: "Your account",
+                    accountEmail = user.email,
                     accountPageOpen = route in setOf(Routes.PROFILE, Routes.SETTINGS, Routes.BILLING_LOGS),
-                    onCloseAccountPage = { closeHeaderPage() },
+                    onCloseAccountPage = {
+                        if (route == Routes.BILLING_LOGS) {
+                            closeHeaderPage()
+                        } else if (route == Routes.PROFILE && accountTitle == "Profile" &&
+                            profileOriginEntry != null && navController.previousBackStackEntry?.id == profileOriginEntry) {
+                            profileOriginEntry = null
+                            closeHeaderPage()
+                        }
+                    },
+                    scrolled = appBarState.contentOffset < -1f,
+                    chatUnread = conversationsState.page.unreadCount,
                     onAccountMenuChange = { accountMenuOpen = it },
-                    notificationUnread = if (user != null) notificationState.feed.unreadCount else 0,
+                    notificationUnread = notificationState.feed.notifications.filter { it.readAt == null }.map { it.requestId }.distinct().size,
                     accountActionsEnabled = !loggingOut
                 )
             }
         },
-        bottomBar = {
-            if (showBars && !editingAccount && route !in setOf(Routes.CHAT, Routes.WORKFLOW, Routes.PROJECT_CHAT)) {
-                NexusBottomBar(
-                    currentTab = if (accountMenuOpen) null else routeToTab(route),
-                    onTabSelected = { tab ->
-                        if (!loggingOut) {
-                            // An explicit tab tap opens that page, without restoring a header screen above it.
-                            navController.navigate(tab.route()) {
-                                popUpTo(Routes.DASHBOARD)
-                                launchSingleTop = true
-                            }
-                        }
-                    }
-                )
-            }
-        },
-        containerColor = NexusColors.Background,
-        modifier = modifier.fillMaxSize()
+        containerColor = NexusColors.SurfaceLight,
+        modifier = Modifier.fillMaxSize().nestedScroll(appBarScroll.nestedScrollConnection)
     ) { paddingValues ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(NexusColors.Background),
+                .background(NexusColors.SurfaceLight),
             contentAlignment = Alignment.TopCenter
         ) {
-            Box(Modifier.widthIn(max = 1120.dp).fillMaxSize()) {
+            Column(Modifier.widthIn(max = 1120.dp).fillMaxSize()) {
+                if (sessionState.offline && route in Routes.main) {
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        Text("Offline session. Your identity was previously verified. Connect to refresh your session.", color = NexusColors.TextSecondary)
+                        Button(shape = NexusButtonShape, onClick = { restorationAttempt++ }) { Text("Retry connection") }
+                    }
+                }
                 NavHost(
                     navController = navController,
-                    startDestination = Routes.CHECKING
+                    modifier = Modifier.weight(1f),
+                    startDestination = Routes.CHECKING,
+                    enterTransition = { EnterTransition.None },
+                    exitTransition = { ExitTransition.None },
+                    popEnterTransition = { EnterTransition.None },
+                    popExitTransition = { ExitTransition.None }
                 ) {
                     composable(Routes.CHECKING) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -339,7 +380,6 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                     composable(Routes.LOGIN) {
                         LoginScreen(
                             onLoggedIn = {
-                                session.setUser(it)
                                 signedIn()
                                 toast.show("Signed in", "Welcome back to EXP.", ToastKind.SUCCESS)
                             },
@@ -350,15 +390,26 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                     composable(Routes.REGISTER) {
                         RegisterScreen(
                             onRegistered = {
-                                session.setUser(it)
                                 signedIn()
                                 toast.show("Account created", "Welcome to your client portal.", ToastKind.SUCCESS)
                             },
                             onNavigateToLogin = { navController.popBackStack() }
                         )
                     }
-                    composable(Routes.NOTIFICATIONS) { NotificationsScreen(onRequest = { navController.navigate("workflow/$it") }, viewModel = notificationViewModel) }
-                    composable(Routes.MESSAGES) { MessagesScreen(onConversation = { navController.navigate("chat/$it") }) }
+                    composable(Routes.NOTIFICATIONS) { NotificationsScreen(onRequest = { navController.navigate("workflow/$it") }, viewModel = notificationViewModel, conversationsViewModel = conversationsViewModel) }
+                    composable(Routes.MESSAGES) {
+                        MessagesScreen(
+                            onConversation = { navController.navigate("chat/$it") },
+                            onProjectConversation = { navController.navigate("projects/$it/chat") },
+                            currentUserId = user?.id.orEmpty(),
+                            viewModel = conversationsViewModel,
+                        )
+                    }
+                    composable(Routes.HELP) {
+                        HelpScreen(
+                            onOpenMessages = { navController.navigate(Routes.MESSAGES) { launchSingleTop = true } },
+                        )
+                    }
                     composable(Routes.CHAT) { entry ->
                         val id = entry.arguments?.getString("conversationId") ?: return@composable
                         val selectedBookingId by entry.savedStateHandle.getStateFlow<String?>("selectedBookingId", null).collectAsState()
@@ -397,9 +448,10 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                         )
                     }
                     composable(Routes.PROJECTS) {
-                        MyProjectsScreen(
+                        com.nexus.app.features.projects.screens.ClientProjectsScreen(
                             onNewRequest = { navController.switchTab(Routes.SERVICES) },
-                            onProject = { navController.navigate("projects/$it/details") }
+                            onOpenProject = { navController.navigate("projects/$it/details") },
+                            onProjectChat = { navController.navigate("projects/$it/chat") }
                         )
                     }
                     composable(Routes.PROJECT_DETAILS) { entry ->
@@ -442,13 +494,17 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                         )
                     }
                     composable(Routes.BOOKED_REQUESTS) {
-                        BookedRequestsScreen(onNewRequestClick = { navController.switchTab(Routes.SERVICES) })
+                        BookedRequestsScreen(
+                            onNewRequestClick = { navController.switchTab(Routes.SERVICES) },
+                            onOpenMessages = { navController.navigate("chat/$it") },
+                        )
                     }
                     composable(Routes.REQUEST_DETAIL) { entry ->
                         BookedRequestsScreen(
                             onNewRequestClick = { navController.switchTab(Routes.SERVICES) },
                             initialRequestId = entry.arguments?.getString("requestId"),
-                            onBackFromDetails = { navController.popBackStack() }
+                            onBackFromDetails = { navController.popBackStack() },
+                            onOpenMessages = { navController.navigate("chat/$it") },
                         )
                     }
                     composable(Routes.BILLING_LOGS) {
@@ -478,4 +534,21 @@ fun AppNavHost(modifier: Modifier = Modifier) {
             }
         }
     }
+        if (showBottomBar) {
+            NexusBottomBar(
+                currentTab = if (accountMenuOpen) null else routeToTab(route),
+                modifier = Modifier.align(Alignment.BottomCenter).onSizeChanged { floatingBarHeightPx = it.height },
+                onTabSelected = { tab ->
+                    if (!loggingOut) {
+                        navController.navigate(tab.route()) {
+                            popUpTo(Routes.DASHBOARD)
+                            launchSingleTop = true
+                        }
+                    }
+                }
+            )
+        }
+    }
+    }
+
 }

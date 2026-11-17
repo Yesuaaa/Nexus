@@ -132,14 +132,14 @@ When adding backend features, maintain strict separation of concerns:
 - `validation.ts`: Request body, parameter, and query validation.
 - `controller.ts` or `handlers.ts`: HTTP request/response orchestration.
 - `service.ts`: Business logic and Prisma database access (`lib/db.ts`).
-- `*.test.ts`: Integration tests using PGlite in-memory database.
+- Tests do not live in `src/`. Put them in `apps/api/tests/` (mirroring `src/features/<feature>/` for unit tests) and build PGlite apps with `tests/support/pglite-app.ts`; every `tests/**/*.test.ts` runs automatically.
 
 ---
 
 ## 6. Domain Data & Validation Rules
 
 - **Contact Numbers:** Philippine mobile numbers strictly: 11 digits starting with `08` or `09` (`^(08|09)\d{9}$`).
-- **Emails:** Required, valid format ending in `.com` or `.ph`.
+- **Emails:** Required, valid format (any domain); one shared rule in `apps/api/src/shared/validation.ts` and `apps/web/src/lib/validation.ts`.
 - **Passwords:** Minimum 12 characters, max 1024 bytes. Must include uppercase, lowercase, numeric, and special characters. Hashed with Node scrypt.
 - **Employee ID:** 2 to 40 characters, letters, numbers, hyphens, and underscores only (`^[a-zA-Z0-9_-]{2,40}$`).
 - **Full Name:** 2 to 100 characters supporting Unicode letters, spaces, hyphens, apostrophes, and periods.
@@ -159,6 +159,7 @@ When adding backend features, maintain strict separation of concerns:
 | **Seed Services**         | `pnpm --filter @nexus/api db:seed:services` | Seeds initial service catalog                     |
 | **Prisma Migrate**        | `pnpm db:migrate --name <name>`             | Creates and applies new migration                 |
 | **Prisma Studio**         | `pnpm db:studio`                            | Opens database browser GUI                        |
+| **Run every test suite**  | `pnpm test` (`pnpm test:unit` skips e2e)    | Runners live in `scripts/tests/`                  |
 | **Run API Tests**         | `pnpm --filter @nexus/api test`             | Runs offline PGlite tests                         |
 | **Run Web Unit Tests**    | `pnpm --filter @nexus/web test`             | Runs frontend unit/validation checks              |
 | **Run E2E Browser Tests** | `pnpm --filter @nexus/web test:e2e`         | Runs Playwright tests on port 5273                |

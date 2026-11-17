@@ -1,5 +1,6 @@
 package com.nexus.app.features.profile.screens
 
+import com.nexus.app.core.components.LocalNexusBottomPadding
 import com.nexus.app.core.components.NexusDialogButton
 import com.nexus.app.core.components.NexusAlertDialog
 import com.nexus.app.core.theme.NexusButtonShape
@@ -149,9 +150,8 @@ fun ProfileScreen(
 }
 
 @Composable private fun AccountPage(scrollState: ScrollState = rememberScrollState(), content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxSize().verticalScroll(scrollState).padding(20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(scrollState).padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp + LocalNexusBottomPadding.current), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         content()
-        Spacer(Modifier.height(8.dp))
     }
 }
 @Composable private fun AccountCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
@@ -352,7 +352,7 @@ private fun roleLabel(role: String) = when (role) { "USER" -> "Client"; "SUPERAD
             val offset = if (sectionTarget == "sessions") {
                 snapshotFlow { sessionsOffset }.filterNotNull().first()
             } else 0
-            scrollState.animateScrollTo(offset.coerceAtLeast(0))
+            scrollState.scrollTo(offset.coerceAtLeast(0))
         }
     }
     val saved = settings?.preferences ?: Preferences()

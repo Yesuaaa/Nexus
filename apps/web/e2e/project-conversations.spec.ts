@@ -1,5 +1,9 @@
 import { expect, test, type Page } from "@playwright/test"
-import { configureRegressionTest, restoreSession } from "./regression-support"
+import {
+  accountFor,
+  configureRegressionTest,
+  restoreSession,
+} from "./regression-support"
 import type { RequestMessage } from "../src/features/request-conversations/api/request-conversations-api"
 import type { ConversationSummary } from "../src/features/request-conversations/api/request-conversations-api"
 
@@ -194,6 +198,232 @@ async function projectChat(page: Page, role: "USER" | "STAFF") {
 }
 
 for (const role of ["USER", "STAFF"] as const) {
+  test(`${role} searches conversations without mixing module lists`, async ({
+    page,
+  }) => {
+    await projectChat(page, role)
+    await page.goto(role === "USER" ? "/messages" : "/messages?scope=project")
+    const rail = page.getByRole("navigation", {
+      name: "Conversations",
+      exact: true,
+    })
+    const search = rail.getByRole("searchbox", {
+      name: "Search conversations",
+      exact: true,
+    })
+    await search.fill("website launch")
+    await expect(rail.locator("[data-conversation-id]")).toHaveCount(1)
+    await expect(
+      rail.locator('[data-conversation-id="project-1"]'),
+    ).toBeVisible()
+    await search.fill("Taylor developer")
+    await expect(
+      rail.locator('[data-conversation-id="project-1"]'),
+    ).toBeVisible()
+    await search.fill("team is ready")
+    await expect(
+      rail.locator('[data-conversation-id="project-1"]'),
+    ).toBeVisible()
+    await search.fill("Website booking")
+    await expect(
+      rail.locator('[data-conversation-id="booking-chat"]'),
+    ).toHaveCount(role === "USER" ? 1 : 0)
+    if (role === "STAFF")
+      await expect(
+        rail.getByText("No conversations found.", { exact: true }),
+      ).toBeVisible()
+    await rail
+      .getByRole("button", { name: "Clear conversation search", exact: true })
+      .click()
+    await expect(rail.locator("[data-conversation-id]")).toHaveCount(
+      role === "USER" ? 2 : 1,
+    )
+  })
+}
+
+test("department head topbar and legacy links never mix service and project lists", async ({
+  page,
+}) => {
+  await projectChat(page, "STAFF")
+  await page.route("**/api/auth/me", (route) =>
+    route.fulfill({
+      json: {
+        user: accountFor("STAFF", {
+          id: "staff",
+          headOf: { id: "design", name: "Design" },
+        }),
+      },
+    }),
+  )
+  await page.route("**/api/internal-conversations/contacts", (route) =>
+    route.fulfill({ json: [] }),
+  )
+  const rail = page.getByRole("navigation", {
+    name: "Conversations",
+    exact: true,
+  })
+  await page.goto("/messages?scope=service")
+  await expect(rail.locator("[data-conversation-id]")).toHaveCount(1)
+  await expect(
+    rail.locator('[data-conversation-id="booking-chat"]'),
+  ).toHaveCount(1)
+  await expect(
+    page.getByRole("banner").getByRole("link", { name: /^Messages/ }),
+  ).toHaveAttribute("href", "/messages?scope=service")
+  await page.goto("/project-workspace")
+  await page
+    .getByRole("banner")
+    .getByRole("link", { name: /^Messages/ })
+    .click()
+  await expect(page).toHaveURL(/\/messages\?scope=project$/)
+  await expect(rail.locator("[data-conversation-id]")).toHaveCount(1)
+  await expect(rail.locator('[data-conversation-id="project-1"]')).toHaveCount(
+    1,
+  )
+  await page.goto("/messages?project=project-1")
+  await expect(
+    rail.locator('[data-conversation-id="booking-chat"]'),
+  ).toHaveCount(0)
+  await page.goto("/messages?mode=projects&project=project-1")
+  await expect(
+    page.getByRole("banner").getByRole("link", { name: /^Messages/ }),
+  ).toHaveAttribute("href", "/messages?scope=project")
+  await expect(
+    page.getByRole("region", { name: "Project conversation", exact: true }),
+  ).toBeVisible()
+  await page
+    .getByRole("link", { name: "Internal Messages", exact: true })
+    .click()
+  await expect(page).toHaveURL(/\/messages\?mode=internal$/)
+  await expect(
+    page.getByRole("link", { name: "Back to client chats", exact: true }),
+  ).toHaveCount(0)
+  await expect(
+    page.getByRole("button", {
+      name: "Open internal conversations",
+      exact: true,
+    }),
+  ).toHaveCount(0)
+  await expect(rail.locator("[data-conversation-id]")).toHaveCount(0)
+})
+
+for (const width of [1440, 390]) {
+  test(`Project Management separates project messages and preserves scoped history at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const state = await projectChat(page, "STAFF")
+    await page.goto("/project-workspace")
+    if (width < 768)
+      await page.getByRole("button", { name: "Open navigation menu" }).click()
+    await page
+      .getByRole("link", { name: "Project Messages", exact: true })
+      .click()
+    await expect(page).toHaveURL(/\/messages\?scope=project$/)
+    await expect(
+      page.getByRole("heading", { name: "Project Messages", exact: true }),
+    ).toBeVisible()
+    const nav = page.getByRole("navigation", {
+      name: "Conversations",
+      exact: true,
+    })
+    await expect(nav.locator("[data-conversation-id]")).toHaveCount(1)
+    await expect(
+      nav.locator('[data-conversation-id="booking-chat"]'),
+    ).toHaveCount(0)
+    const link = nav.getByRole("link", { name: /Website launch/ })
+    await expect(link).toHaveAttribute(
+      "href",
+      "/messages?scope=project&project=project-1",
+    )
+    await link.click()
+    const panel = page.getByRole("region", {
+      name: "Project conversation",
+      exact: true,
+    })
+    await expect(
+      panel.getByText("The team is ready.", { exact: true }),
+    ).toBeVisible()
+    await expect(
+      panel.getByRole("button", { name: "Open request actions" }),
+    ).toHaveCount(0)
+    await page
+      .getByRole("textbox", { name: "Message Website launch" })
+      .fill("Scoped project update")
+    await page
+      .getByRole("button", { name: "Send message", exact: true })
+      .click()
+    await expect(
+      panel.getByText("Scoped project update", { exact: true }),
+    ).toBeVisible()
+    expect(state.sends).toBe(1)
+    await page.reload()
+    await expect(
+      panel.getByText("Scoped project update", { exact: true }),
+    ).toBeVisible()
+    if (width < 768)
+      await page
+        .getByRole("link", { name: "All project conversations" })
+        .click()
+    await page
+      .getByRole("button", { name: "Archived conversations", exact: true })
+      .click()
+    await expect(page).toHaveURL(/\/messages\?scope=project&view=archived$/)
+    state.archived = true
+    await page.reload()
+    await nav.getByRole("link", { name: /Website launch/ }).click()
+    await expect(page).toHaveURL(
+      /scope=project&project=project-1&view=archived$/,
+    )
+    await expect(
+      panel.getByText("Archived · Read-only", { exact: true }),
+    ).toBeVisible()
+    await expect(
+      panel.getByRole("button", { name: "Send message" }),
+    ).toHaveCount(0)
+    if (width < 768) {
+      await page
+        .getByRole("link", { name: "All project conversations" })
+        .click()
+      await expect(page).toHaveURL(/\/messages\?scope=project&view=archived$/)
+    }
+  })
+}
+
+test("clients keep unified Messages when opening a scoped project link", async ({
+  page,
+}) => {
+  await projectChat(page, "USER")
+  await page.goto("/messages?scope=project&project=project-1")
+  await expect(
+    page.getByRole("heading", { name: "Messages", exact: true }),
+  ).toBeVisible()
+  const nav = page.getByRole("navigation", {
+    name: "Conversations",
+    exact: true,
+  })
+  await expect(nav.locator("[data-conversation-id]")).toHaveCount(2)
+  await expect(
+    page.getByRole("link", { name: "Project Messages", exact: true }),
+  ).toHaveCount(0)
+  await expect(
+    page.getByRole("link", { name: "Switch Workspace", exact: true }),
+  ).toHaveCount(0)
+})
+
+for (const role of ["ADMIN", "SUPERADMIN"] as const) {
+  test(`${role} receives no Project Messages module navigation`, async ({
+    page,
+  }) => {
+    await restoreSession(page, role)
+    await page.goto(role === "ADMIN" ? "/employees" : "/accounts")
+    await expect(
+      page.getByRole("link", { name: "Project Messages", exact: true }),
+    ).toHaveCount(0)
+  })
+}
+
+for (const role of ["USER", "STAFF"] as const) {
   test(`${role} can message the project team and read archived history`, async ({
     page,
   }) => {
@@ -204,12 +434,13 @@ for (const role of ["USER", "STAFF"] as const) {
       exact: true,
     })
     const rows = nav.locator("[data-conversation-id]")
-    await expect(rows).toHaveCount(2)
-    await expect(rows.nth(0)).toHaveAttribute(
-      "data-conversation-id",
-      "booking-chat",
-    )
-    await expect(rows.nth(1)).toHaveAttribute(
+    await expect(rows).toHaveCount(role === "USER" ? 2 : 1)
+    if (role === "USER")
+      await expect(rows.nth(0)).toHaveAttribute(
+        "data-conversation-id",
+        "booking-chat",
+      )
+    await expect(rows.nth(role === "USER" ? 1 : 0)).toHaveAttribute(
       "data-conversation-id",
       "project-1",
     )
@@ -217,7 +448,11 @@ for (const role of ["USER", "STAFF"] as const) {
       page.getByRole("link", { name: "Open project chats" }),
     ).toHaveCount(0)
     await page.getByRole("link", { name: /Website launch/ }).click()
-    await expect(page).toHaveURL(/\/messages\?project=project-1$/)
+    await expect(page).toHaveURL(
+      role === "USER"
+        ? /\/messages\?project=project-1$/
+        : /\/messages\?scope=project&project=project-1$/,
+    )
     const panel = page.getByRole("region", {
       name: "Project conversation",
       exact: true,

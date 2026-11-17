@@ -3,7 +3,7 @@ import { WorkspaceTeam } from "../components/workspace-team"
 import { WorkspaceActivity } from "../components/workspace-activity"
 import { WorkspaceDeliverables } from "../components/workspace-deliverables"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { CheckCircle2, ChevronDown, Pause, Play } from "lucide-react"
@@ -11,7 +11,11 @@ import { contentClass } from "@/components/layout/styles"
 import { ProjectSummary } from "../components/project-summary"
 import { WorkspaceOverview } from "../components/workspace-overview"
 import { PlanEditor, emptyPlan } from "../components/plan-editor"
+import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { pillToneClass } from "@/components/ui/pill"
+import { statusTone } from "@/features/projects/model/project-status"
+import { humanizeEnum } from "@/lib/format"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,13 +35,20 @@ import {
   getProjectWorkspace,
   type ProjectWorkspaceDetail,
 } from "../api/project-workspace-api"
+import { errorMessage } from "@/lib/error-message"
+import { useAsyncResource } from "@/lib/use-async-resource"
 
 export function WorkspaceDetailPage({ id }: { id: string }) {
   const searchParams = useSearchParams()
-  const [workspace, setWorkspace] = useState<ProjectWorkspaceDetail | null>(
-    null,
+  const project = useAsyncResource<ProjectWorkspaceDetail>(
+    (signal) => getProjectWorkspace(id, signal),
+    [id],
+    { fallbackError: "Couldn't load project" },
   )
-  const [error, setError] = useState("")
+  const workspace = project.data ?? null
+  const setWorkspace = project.setData
+  const [actionError, setError] = useState("")
+  const error = actionError || project.error
   const [tab, setTab] = useState(
     searchParams.get("tab") === "deliverables" ? "Deliverables" : "Overview",
   )
@@ -64,7 +75,7 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
       setEditing(null)
       setError("")
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Couldn't save plan")
+      setError(errorMessage(reason, "Couldn't save plan"))
     } finally {
       setBusy(false)
     }
@@ -78,27 +89,11 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
     try {
       setWorkspace(await updateProjectWorkspaceStatus(id, action))
     } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Couldn't update project status",
-      )
+      setError(errorMessage(reason, "Couldn't update project status"))
     } finally {
       setStatusBusy(false)
     }
   }
-  useEffect(() => {
-    const controller = new AbortController()
-    getProjectWorkspace(id, controller.signal)
-      .then(setWorkspace)
-      .catch((reason: unknown) => {
-        if (!controller.signal.aborted)
-          setError(
-            reason instanceof Error ? reason.message : "Couldn't load project",
-          )
-      })
-    return () => controller.abort()
-  }, [id])
   const workstreams = workspace?.workstreams ?? []
   const tasks = workstreams.flatMap(
     (stream) => stream.plan?.phases.flatMap((phase) => phase.tasks) ?? [],
@@ -144,9 +139,9 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
   return (
     <main className={`${contentClass} p-8`}>
       {error && (
-        <p role="alert" className="text-red-700">
+        <Alert variant="text" className="text-base">
           {error}
-        </p>
+        </Alert>
       )}
       {!workspace ? (
         <p role="status">Loading project…</p>
@@ -159,9 +154,9 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
               </h1>
               <div className="flex shrink-0 items-center gap-2">
                 <span
-                  className={`inline-flex items-center rounded-md px-2.5 py-1 text-[11px] font-medium capitalize ${workspace.status === "IN_PROGRESS" ? "bg-[#fff1d4] text-[#946000]" : workspace.status === "ON_HOLD" ? "bg-[#fbe9d5] text-[#9a4b12]" : workspace.status === "CANCELLED" ? "bg-[#ffeaeb] text-[#b3343b]" : workspace.status === "COMPLETED" ? "bg-[#e3f5e9] text-[#13743b]" : "bg-[#edf1f6] text-[#60718c]"}`}
+                  className={`inline-flex items-center rounded-md px-2.5 py-1 text-[11px] font-medium capitalize ${pillToneClass(statusTone(workspace.status))}`}
                 >
-                  {workspace.status.toLowerCase().replaceAll("_", " ")}
+                  {humanizeEnum(workspace.status, { capitalize: false })}
                 </span>
                 {workspace.canManage && !terminal && (
                   <DropdownMenu>
@@ -298,7 +293,7 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
                   Discard changes
                 </Button>
                 <Button
-                  className="bg-[#294c96] text-white hover:bg-[#203f80]"
+                  variant="brand"
                   disabled={busy}
                   onClick={() => void savePlan()}
                 >
@@ -340,17 +335,7 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
             <WorkspaceTeam
               workspace={workspace}
               onUpdated={setWorkspace}
-              onChanged={() => {
-                getProjectWorkspace(id)
-                  .then(setWorkspace)
-                  .catch((reason: unknown) =>
-                    setError(
-                      reason instanceof Error
-                        ? reason.message
-                        : "Could not reload team",
-                    ),
-                  )
-              }}
+              onChanged={project.retry}
             />
           )}
         </>

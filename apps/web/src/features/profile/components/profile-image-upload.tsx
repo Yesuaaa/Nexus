@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState } from "react"
 import { ImagePlus, Upload, X } from "lucide-react"
+import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { uploadProfileImage, type Profile } from "../api/profile-api"
+import { errorMessage } from "@/lib/error-message"
 
 export function ProfileImageUpload({
   kind,
@@ -70,9 +72,7 @@ export function ProfileImageUpload({
       setSelected(null)
     } catch (reason) {
       setError(
-        reason instanceof Error
-          ? reason.message
-          : "The image could not be uploaded. Try again.",
+        errorMessage(reason, "The image could not be uploaded. Try again."),
       )
     } finally {
       setBusy(false)
@@ -137,7 +137,8 @@ export function ProfileImageUpload({
           <>
             <Button
               type="button"
-              className="min-h-11 bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
+              variant="brand"
+              size="touch"
               disabled={busy}
               onClick={() => void upload()}
             >
@@ -166,9 +167,9 @@ export function ProfileImageUpload({
             : ". Upload the image, then save your specialist profile."}
       </p>
       {error && (
-        <p role="alert" className="m-0 text-xs leading-5 text-[#bc3649]">
+        <Alert variant="text" className="leading-5">
           {error}
-        </p>
+        </Alert>
       )}
     </div>
   )

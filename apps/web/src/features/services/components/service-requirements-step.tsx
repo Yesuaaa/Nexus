@@ -1,5 +1,7 @@
 "use client"
 
+import { FormInput, FormTextarea } from "@/components/ui/form-input"
+
 import { Form } from "@/components/ui/form"
 
 import {
@@ -16,6 +18,8 @@ import {
   ClipboardList,
 } from "lucide-react"
 import { focusRing } from "@/components/layout/styles"
+import { Alert } from "@/components/ui/alert"
+import { buttonTones } from "@/components/ui/button-variants"
 import { cn } from "@/lib/utils"
 import type { Service } from "../api/services-api"
 import {
@@ -164,11 +168,6 @@ export function ServiceRequirementsStep({
                 onChange: (
                   event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
                 ) => onChange({ ...value, [field.name]: event.target.value }),
-                className: cn(
-                  "w-full rounded-xl border bg-white px-3.5 py-3 text-sm leading-6 text-[#17233a] placeholder:text-[#8da0bd]",
-                  error ? "border-[#b4234d]" : "border-[#dce3ee]",
-                  focusRing,
-                ),
               }
               return (
                 <div key={field.name} className="min-w-0">
@@ -194,23 +193,19 @@ export function ServiceRequirementsStep({
                     {field.hint}
                   </p>
                   {field.rows ? (
-                    <textarea
-                      {...inputProps}
-                      rows={field.rows}
-                      className={cn(inputProps.className, "block resize-y")}
-                    />
+                    <FormTextarea {...inputProps} rows={field.rows} />
                   ) : (
-                    <input {...inputProps} type="text" />
+                    <FormInput {...inputProps} type="text" />
                   )}
                   <div className="mt-1.5 flex items-start justify-between gap-3">
                     {error && (
-                      <p
+                      <Alert
+                        variant="text"
                         id={`${id}-error`}
-                        role="alert"
-                        className="m-0 text-xs leading-5 text-[#b4234d]"
+                        className="leading-5"
                       >
                         {error}
-                      </p>
+                      </Alert>
                     )}
                     <span
                       className="ml-auto shrink-0 text-xs leading-5 text-[#687e9e]"
@@ -246,7 +241,8 @@ export function ServiceRequirementsStep({
                 name="intent"
                 value="continue"
                 className={cn(
-                  "inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border-0 bg-[#294c96] px-5 text-sm font-bold text-white hover:bg-[#203f80] max-[560px]:w-full",
+                  "inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border-0 px-5 text-sm font-bold max-[560px]:w-full",
+                  buttonTones.brand,
                   focusRing,
                 )}
               >

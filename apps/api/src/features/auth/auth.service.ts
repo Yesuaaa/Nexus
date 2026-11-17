@@ -1,30 +1,25 @@
 import { createHash, randomBytes } from "node:crypto"
 import { Role, type User } from "../../generated/prisma/client.js"
 import { isUniqueConflict } from "../../lib/errors.js"
+import {
+  assertStrongPassword,
+  withinPasswordByteLimit,
+} from "../../shared/password-policy.js"
+import { normalizedEmail } from "../../shared/validation.js"
 import { publicUser } from "../users/users.dto.js"
 import { clearFailures, loginAllowed, recordFailure } from "./auth.limiter.js"
-import { hashPassword, validPassword, verifyPassword } from "./auth.password.js"
+import { hashPassword, verifyPassword } from "./auth.password.js"
 import { authRepository } from "./auth.repository.js"
-import {
-  normalizedEmail,
-  validRegistrationEmail,
-  validSelfRegistrationProfile,
-} from "./auth.schema.js"
+import { validRegistrationProfile } from "./auth.schema.js"
 import { signAccessToken, jwtKey } from "./auth.jwt.js"
 
 import { approximateSessionLocation } from "./session-location.js"
+import { HttpError as AuthError } from "../../shared/http-error.js"
 
 export const SESSION_DAYS = 7
 
-export class AuthError extends Error {
-  constructor(
-    public readonly status: number,
-    message: string,
-  ) {
-    super(message)
-    this.name = "AuthError"
-  }
-}
+/** Feature-named alias of the shared `HttpError`. */
+export { AuthError }
 
 export function tokenHash(token: string): string {
   return createHash("sha256").update(token).digest("hex")
@@ -88,17 +83,11 @@ export const authService = {
     const fullName = input.fullName
     const contactNumber = input.contactNumber
 
-    if (
-      !cleanEmail ||
-      !validRegistrationEmail(cleanEmail) ||
-      !validPassword(password)
-    ) {
-      throw new AuthError(
-        400,
-        "Provide a valid email and password meeting the password policy",
-      )
+    if (!cleanEmail) {
+      throw new AuthError(400, "Provide a valid email address")
     }
-    if (!validSelfRegistrationProfile(fullName, contactNumber)) {
+    assertStrongPassword(password, (message) => new AuthError(400, message))
+    if (!validRegistrationProfile(fullName, contactNumber)) {
       throw new AuthError(400, "Provide a valid name and contact number")
     }
 
@@ -112,7 +101,7 @@ export const authService = {
         email: cleanEmail,
         fullName: (fullName as string).trim(),
         contactNumber: (contactNumber as string).trim(),
-        passwordHash: await hashPassword(password as string),
+        passwordHash: await hashPassword(password),
         role: Role.USER,
       })
       return await issueSession(user, input.userAgent, input.ip)
@@ -139,7 +128,7 @@ export const authService = {
       !cleanEmail ||
       typeof password !== "string" ||
       password.length === 0 ||
-      Buffer.byteLength(password) > 1024
+      !withinPasswordByteLimit(password)
     ) {
       throw new AuthError(400, "Provide a valid email and password")
     }
@@ -175,14 +164,11 @@ export const authService = {
     const newPassword = input.newPassword
     if (
       typeof currentPassword !== "string" ||
-      Buffer.byteLength(currentPassword) > 1024 ||
-      !validPassword(newPassword)
+      !withinPasswordByteLimit(currentPassword)
     ) {
-      throw new AuthError(
-        400,
-        "Provide the current password and a new password meeting the password policy",
-      )
+      throw new AuthError(400, "Provide your current password")
     }
+    assertStrongPassword(newPassword, (message) => new AuthError(400, message))
     if (!(await verifyPassword(currentPassword, input.currentPasswordHash))) {
       throw new AuthError(400, "Current password is incorrect")
     }

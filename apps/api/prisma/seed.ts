@@ -9,7 +9,7 @@ import {
   hashPassword,
   validPassword,
 } from "../src/features/auth/auth.password.js"
-import { normalizedEmail } from "../src/features/auth/auth.schema.js"
+import { normalizedEmail } from "../src/shared/validation.js"
 import { getPrisma } from "../src/lib/db.js"
 
 async function seedSuperadmin(

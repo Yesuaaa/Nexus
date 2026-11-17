@@ -1,40 +1,34 @@
 "use client"
 
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { LoaderCircle, Trash2 } from "lucide-react"
-import { ConversationAvatar } from "@/features/request-conversations/components/conversation-avatar"
-import { useReducedMotion } from "framer-motion"
+import { LoaderCircle, Trash2, UsersRound } from "lucide-react"
+import { Avatar } from "@/components/ui/avatar"
+import { ManagementViewToggle } from "@/components/layout/management-view-toggle"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { sileo } from "@/lib/toast"
 import { cn } from "@/lib/utils"
 import { contentClass } from "@/components/layout/styles"
-import {
-  AnimatedSlotRow,
-  settledAnimatedRows,
-  swapAnimatedRows,
-  type AnimatedRowItem,
-  type AnimatedRowSlot,
-} from "@/components/ui/animated-data-row"
+import { PageHeader, PageHeaderButton } from "@/components/layout/page-header"
+import { Alert } from "@/components/ui/alert"
+import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
-import { DepartmentPill } from "@/components/ui/department-pill.tsx"
 import { Dropdown as AccessDropdown } from "@/components/ui/dropdown"
-import { NumberedPagination } from "@/components/ui/numbered-pagination"
+import { FilterSelect } from "@/components/ui/filter-select"
 import { Pill } from "@/components/ui/pill"
 import { SearchField } from "@/components/ui/search-field"
 import {
+  DataTableErrorRow,
   ResponsiveDataTable,
   ResponsiveDataTableBody,
   ResponsiveDataTableHeader,
 } from "@/components/ui/responsive-data-table"
+import { TablePaginationFooter } from "@/components/ui/table-pagination-footer"
+import { TableSearchStatus } from "@/components/ui/table-search-status"
 import { TableSortButton } from "@/components/ui/table-sort-button"
+import { usePaginatedList } from "@/components/ui/use-paginated-list"
 import { ApiError, clearToken } from "@/features/auth/api/auth-api"
+import { roleLabels } from "@/features/auth/model/roles"
 import type { Account } from "@/features/auth/model/types"
 import {
   canAssignRole,
@@ -49,12 +43,10 @@ import {
   moveAccountToTrash,
   permanentlyDeleteAccount,
   restoreAccount,
-  type AccountList,
   type AccountRole,
   type AccountSortDirection,
   type AccountSortKey,
 } from "../api/accounts-api"
-import { AccountDropdown } from "../components/account-dropdown"
 import { AccountStatusDialog } from "../components/account-status-dialog"
 import { AccountRowActions } from "../components/account-row-actions"
 import { CreateAccountDialog } from "../components/create-account-dialog"
@@ -63,25 +55,15 @@ import { DeleteAccountDialog } from "../components/delete-account-dialog"
 import {
   accountButton,
   accountButtonPrimary,
-  accountFocusRing,
   accountGrid,
 } from "../styles/account-styles"
-
-const roleNames: Record<AccountRole, string> = {
-  SUPERADMIN: "Superadmin",
-  ADMIN: "Admin",
-  STAFF: "Staff",
-  USER: "User",
-}
+import { errorMessage } from "@/lib/error-message"
 
 const allRoles: AccountRole[] = ["USER", "STAFF", "ADMIN", "SUPERADMIN"]
-const roleOptions = allRoles.map((role) => ({
-  value: role,
-  label: roleNames[role],
-}))
-
-type AccountRowItem = AnimatedRowItem<Account>
-type AccountRowSlot = AnimatedRowSlot<Account>
+const roleFilterOptions: { value: string; label: string }[] = [
+  { value: "", label: "All roles" },
+  ...allRoles.map((role) => ({ value: role, label: roleLabels[role] })),
+]
 
 function AccountRowContents({
   user,
@@ -113,7 +95,7 @@ function AccountRowContents({
   return (
     <>
       <div className="flex min-w-0 items-center gap-2.5 @max-[900px]:col-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto">
-        <ConversationAvatar
+        <Avatar
           name={user.fullName || user.email}
           imageUrl={user.imageUrl}
           className="size-8"
@@ -131,42 +113,19 @@ function AccountRowContents({
         <span className="mr-1.5 hidden text-[#738096] @max-[530px]:inline">
           Role
         </span>
-        <span className="text-xs text-foreground">{roleNames[user.role]}</span>
+        <span className="text-xs text-foreground">{roleLabels[user.role]}</span>
       </div>
       <div className="flex min-w-0 items-center gap-2 @max-[900px]:col-start-2 @max-[900px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto">
         <span className="hidden text-[#738096] @max-[900px]:inline">
           Status
         </span>
         <Pill
-          className={
-            trashView
-              ? "bg-[#eef0f3] text-[#596579]"
-              : user.isActive
-                ? "bg-[#dcf5e5] text-[#19703a]"
-                : "bg-[#fde4ea] text-[#b4234d]"
-          }
+          tone={trashView ? "neutral" : user.isActive ? "success" : "danger"}
         >
           {trashView ? "Deleted" : user.isActive ? "Active" : "Inactive"}
         </Pill>
       </div>
-      <div className="min-w-0 @max-[900px]:col-start-1 @max-[900px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto">
-        {user.department ? (
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <DepartmentPill
-              className="self-start"
-              department={user.department}
-            />
-            {user.team && (
-              <span className="truncate text-[11px] text-[#738096]">
-                {user.team.name}
-              </span>
-            )}
-          </div>
-        ) : (
-          <span className="text-xs text-[#94a3b8]">—</span>
-        )}
-      </div>
-      <div className="text-[11px] text-[#738096] @max-[900px]:col-start-1 @max-[900px]:row-start-3 @max-[530px]:row-auto">
+      <div className="text-[11px] text-[#738096] @max-[900px]:col-start-1 @max-[900px]:row-start-2 @max-[530px]:row-auto">
         <span className="mr-1.5 hidden @max-[900px]:inline">
           {trashView ? "Deleted" : "Created"}
         </span>
@@ -176,7 +135,7 @@ function AccountRowContents({
             : user.createdAt,
         )}
       </div>
-      <div className="flex min-w-0 items-center @max-[900px]:col-start-2 @max-[900px]:row-start-3 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+      <div className="flex min-w-0 items-center @max-[900px]:col-start-1 @max-[900px]:row-start-3 @max-[530px]:col-start-1 @max-[530px]:row-auto">
         {trashView ? (
           <span className="text-[11px] text-[#738096]">Removed</span>
         ) : editable ? (
@@ -189,7 +148,7 @@ function AccountRowContents({
             disabled={disabled}
             options={assignableRoles.map((role) => ({
               value: role,
-              label: roleNames[role],
+              label: roleLabels[role],
             }))}
             onChange={(role) => onRoleChange(user, role)}
           />
@@ -199,7 +158,7 @@ function AccountRowContents({
           </span>
         )}
       </div>
-      <div className="flex min-w-0 items-center gap-2 @max-[900px]:col-start-2 @max-[900px]:row-start-4 @max-[530px]:col-start-1 @max-[530px]:row-auto">
+      <div className="flex min-w-0 items-center gap-2 @max-[900px]:col-start-2 @max-[900px]:row-start-3 @max-[530px]:col-start-1 @max-[530px]:row-auto">
         <span className="hidden text-[#738096] @max-[530px]:inline">
           Actions
         </span>
@@ -234,42 +193,34 @@ function formatDate(value: string) {
   }).format(new Date(value))
 }
 
+const accountKey = (account: Account) => account.id
+
+const accountRowClassName = cn(
+  accountGrid,
+  "h-[58px] border-b border-[#eceef1] bg-background px-4 py-[7px] text-xs text-foreground hover:bg-[#e8eef2] @max-[900px]:h-[158px] @max-[900px]:gap-x-4 @max-[900px]:gap-y-[10px] @max-[900px]:py-[14px] @max-[530px]:h-[228px] @max-[530px]:gap-[9px]",
+)
+
+function accountRowClass(_account: Account, _index: number, isLast: boolean) {
+  return cn(accountRowClassName, isLast && "rounded-b-[7px] border-b-0")
+}
+
+function matchesAccountSearch(account: Account, query: string) {
+  return (
+    account.email.toLowerCase().includes(query) ||
+    (account.fullName?.toLowerCase().includes(query) ?? false)
+  )
+}
+
 export function AccountManagementPage() {
   const actor = usePortalAccount()
   const router = useRouter()
-  const reduceMotion = useReducedMotion() ?? false
   const [search, setSearch] = useState("")
-  const [previewingSearch, setPreviewingSearch] = useState(false)
-  const searchRef = useRef(search)
+  const query = search.trim()
   const [roleFilter, setRoleFilter] = useState("")
   const [sortKey, setSortKey] = useState<AccountSortKey>("createdAt")
   const [sortDirection, setSortDirection] =
     useState<AccountSortDirection>("desc")
-  const [page, setPage] = useState(1)
-  const [revision, setRevision] = useState(0)
   const [trashView, setTrashView] = useState(false)
-  const [rowSlots, setRowSlots] = useState<AccountRowSlot[]>([])
-  const rowSlotsRef = useRef<AccountRowSlot[]>([])
-  const [footerResult, setFooterResult] = useState<AccountList | null>(null)
-  const searchCacheRef = useRef({
-    scope: "",
-    results: new Map<string, AccountList>(),
-  })
-  const [rowHeight, setRowHeight] = useState(58)
-  const [isAnimatingRows, setIsAnimatingRows] = useState(false)
-  const [animateBodyHeight, setAnimateBodyHeight] = useState(false)
-  const rowsBodyRef = useRef<HTMLDivElement>(null)
-  const animationTimerRef = useRef<number | null>(null)
-  const bodyHeightTimerRef = useRef<number | null>(null)
-  const animationGenerationRef = useRef(0)
-  const lastResolvedViewKey = useRef<string | null>(null)
-  const lastResolvedSearch = useRef<string | null>(null)
-  const [result, setResult] = useState<AccountList | null>(null)
-  const [resolvedKey, setResolvedKey] = useState("")
-  const [errorState, setErrorState] = useState<{
-    requestKey: string
-    message: string
-  } | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [passwordTarget, setPasswordTarget] = useState<Account | null>(null)
   const [draftRoles, setDraftRoles] = useState<
@@ -283,219 +234,49 @@ export function AccountManagementPage() {
   const [deleteTarget, setDeleteTarget] = useState<Account | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState("")
-  const searchScope = JSON.stringify([
-    roleFilter,
-    sortKey,
-    sortDirection,
-    trashView,
-    revision,
-  ])
-  const requestKey = JSON.stringify([
-    search,
-    roleFilter,
-    sortKey,
-    sortDirection,
-    page,
-    trashView,
-    revision,
-  ])
-  const viewKey = JSON.stringify([
-    search,
-    roleFilter,
-    sortKey,
-    sortDirection,
-    page,
-    trashView,
-  ])
-  const error = errorState?.requestKey === requestKey ? errorState.message : ""
 
-  useEffect(
-    () => () => {
-      if (animationTimerRef.current !== null) {
-        window.clearTimeout(animationTimerRef.current)
-      }
-      if (bodyHeightTimerRef.current !== null) {
-        window.clearTimeout(bodyHeightTimerRef.current)
-      }
+  const list = usePaginatedList({
+    params: {
+      search: query,
+      role: roleFilter,
+      sort: sortKey,
+      direction: sortDirection,
+      deleted: trashView,
     },
-    [],
-  )
-
-  useLayoutEffect(() => {
-    const firstRow = rowsBodyRef.current?.querySelector<HTMLElement>(
-      "[data-animated-slot-row]",
-    )
-    if (!firstRow) return
-
-    const updateHeight = () => {
-      const nextHeight = Math.round(firstRow.getBoundingClientRect().height)
-      if (nextHeight > 0) setRowHeight(nextHeight)
-    }
-    updateHeight()
-
-    const observer = new ResizeObserver(updateHeight)
-    observer.observe(firstRow)
-    return () => observer.disconnect()
-  }, [rowSlots])
-
-  const updateRows = useCallback(
-    (
-      users: Account[],
-      animate: boolean,
-      quick: boolean,
-      data?: AccountList,
-    ) => {
-      const runId = ++animationGenerationRef.current
-      if (animationTimerRef.current !== null) {
-        window.clearTimeout(animationTimerRef.current)
-        animationTimerRef.current = null
-      }
-      if (bodyHeightTimerRef.current !== null) {
-        window.clearTimeout(bodyHeightTimerRef.current)
-        bodyHeightTimerRef.current = null
-      }
-      const settle = () => {
-        const slots = settledAnimatedRows(users)
-        rowSlotsRef.current = slots
-        setRowSlots(slots)
-        if (data) setFooterResult(data)
-        setIsAnimatingRows(false)
-      }
-      const { slots, animationDuration } = swapAnimatedRows({
-        currentSlots: rowSlotsRef.current,
-        items: users,
-        getKey: (account) => account.id,
-        reduceMotion,
-        runId,
-        quick,
-      })
-      if (!animate || animationDuration === 0) {
-        settle()
-        setAnimateBodyHeight(false)
-        return
-      }
-      rowSlotsRef.current = slots
-      setRowSlots(slots)
-      setIsAnimatingRows(true)
-      setAnimateBodyHeight(true)
-      animationTimerRef.current = window.setTimeout(() => {
-        if (runId !== animationGenerationRef.current) return
-        settle()
-        animationTimerRef.current = null
-        bodyHeightTimerRef.current = window.setTimeout(() => {
-          setAnimateBodyHeight(false)
-          bodyHeightTimerRef.current = null
-        }, 250)
-      }, animationDuration)
-    },
-    [reduceMotion],
-  )
-
-  useEffect(() => {
-    let active = true
-    const controller = new AbortController()
-    listAccounts(
-      search,
-      roleFilter,
-      page,
-      sortKey,
-      sortDirection,
-      trashView,
-      controller.signal,
-    )
-      .then((data) => {
-        if (active) {
-          if (searchCacheRef.current.scope !== searchScope) {
-            searchCacheRef.current = { scope: searchScope, results: new Map() }
-          }
-          if (page === 1) {
-            const cache = searchCacheRef.current.results
-            cache.set(search.trim().toLowerCase(), data)
-            if (cache.size > 20) {
-              const oldestKey = cache.keys().next().value
-              if (oldestKey !== undefined) cache.delete(oldestKey)
-            }
-          }
-          const previousViewKey = lastResolvedViewKey.current
-          const searchChanged =
-            lastResolvedSearch.current !== null &&
-            lastResolvedSearch.current !== search
-          const shouldAnimate =
-            previousViewKey !== null &&
-            previousViewKey !== viewKey &&
-            searchRef.current === search
-
-          setResult(data)
-          setPreviewingSearch(false)
-          setErrorState(null)
-          setResolvedKey(requestKey)
-          lastResolvedViewKey.current = viewKey
-          lastResolvedSearch.current = search
-
-          updateRows(data.users, shouldAnimate, searchChanged, data)
-        }
-      })
-      .catch((caught: unknown) => {
-        if (!active || controller.signal.aborted) return
+    load: async ({ page, signal }) => {
+      try {
+        return await listAccounts({
+          search: query,
+          role: roleFilter,
+          page,
+          sort: sortKey,
+          direction: sortDirection,
+          deleted: trashView,
+          signal,
+        })
+      } catch (caught) {
         if (caught instanceof ApiError && caught.status === 401) {
           clearToken()
           router.replace("/login")
         } else if (caught instanceof ApiError && caught.status === 403) {
           window.location.replace("/dashboard")
-        } else {
-          setErrorState({
-            requestKey,
-            message:
-              caught instanceof ApiError
-                ? caught.message
-                : "Couldn't load accounts. Please try again.",
-          })
-          setResolvedKey(requestKey)
-        }
-      })
-    return () => {
-      active = false
-      controller.abort()
-    }
-  }, [
-    search,
-    roleFilter,
-    page,
-    revision,
-    router,
-    requestKey,
-    viewKey,
-    reduceMotion,
-    sortDirection,
-    sortKey,
-    trashView,
-    searchScope,
-    updateRows,
-  ])
+        } else throw caught
+        // Leaving the page: stay in the loading state instead of flashing an error.
+        return new Promise<never>(() => {})
+      }
+    },
+    rows: (result) => result.users,
+    matches: matchesAccountSearch,
+    initial: { users: [], total: 0, page: 1, pageSize: 10 },
+    fallbackError: "Couldn't load accounts. Please try again.",
+  })
+  const { page, setPage, retry } = list
+  const busy = list.loading
+  const mutating = savingAccess || statusSaving || deleting
 
   function updateSearch(value: string) {
-    searchRef.current = value
     setSearch(value)
     setPage(1)
-    setPreviewingSearch(true)
-    // Preview known matches without waiting for the full server search.
-    if (!result || searchCacheRef.current.scope !== searchScope) return
-    const query = value.trim().toLowerCase()
-    const cache = searchCacheRef.current.results
-    let source = result
-    let bestQueryLength = -1
-    for (const [cachedQuery, cachedResult] of cache) {
-      if (query.includes(cachedQuery) && cachedQuery.length > bestQueryLength) {
-        source = cachedResult
-        bestQueryLength = cachedQuery.length
-      }
-    }
-    const users = source.users.filter(
-      (account) =>
-        account.email.toLowerCase().includes(query) ||
-        (account.fullName?.toLowerCase().includes(query) ?? false),
-    )
-    updateRows(users, true, true)
   }
 
   function updateRoleFilter(value: string) {
@@ -511,6 +292,13 @@ export function AccountManagementPage() {
       setSortDirection(key === "createdAt" ? "desc" : "asc")
     }
     setPage(1)
+  }
+
+  /** After removing a row: step back from an emptied last page, else reload. */
+  function reloadAfterRemoval() {
+    if ((list.data?.users.length ?? 0) === 1 && page > 1)
+      setPage((current) => current - 1)
+    else retry()
   }
 
   async function saveAccessChanges() {
@@ -539,7 +327,7 @@ export function AccountManagementPage() {
             return
           }
           failures.push(
-            `${change.email}: ${caught instanceof ApiError ? caught.message : "Please try again."}`,
+            `${change.email}: ${errorMessage(caught, "Please try again.")}`,
           )
         }
       }
@@ -560,7 +348,7 @@ export function AccountManagementPage() {
           for (const id of savedIds) delete next[id]
           return next
         })
-        setRevision((current) => current + 1)
+        retry()
       }
       setSavingAccess(false)
     }
@@ -578,11 +366,7 @@ export function AccountManagementPage() {
           description: `${statusTarget.email} is back in Account Management as inactive.`,
         })
         setStatusTarget(null)
-        if ((result?.users.length ?? 0) === 1 && page > 1) {
-          setPage((current) => current - 1)
-        } else {
-          setRevision((current) => current + 1)
-        }
+        reloadAfterRemoval()
         return
       }
       const isActive = !statusTarget.isActive
@@ -594,7 +378,7 @@ export function AccountManagementPage() {
           : `${statusTarget.email} can no longer sign in.`,
       })
       setStatusTarget(null)
-      setRevision((current) => current + 1)
+      retry()
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 401) {
         clearToken()
@@ -602,9 +386,10 @@ export function AccountManagementPage() {
         return
       }
       setStatusError(
-        caught instanceof ApiError
-          ? caught.message
-          : "Couldn't update account status. Please try again.",
+        errorMessage(
+          caught,
+          "Couldn't update account status. Please try again.",
+        ),
       )
     } finally {
       setStatusSaving(false)
@@ -636,11 +421,7 @@ export function AccountManagementPage() {
           ? `${deletedEmail} was permanently deleted.`
           : `${deletedEmail} is now in Trash.`,
       })
-      if ((result?.users.length ?? 0) === 1 && page > 1) {
-        setPage((current) => current - 1)
-      } else {
-        setRevision((current) => current + 1)
-      }
+      reloadAfterRemoval()
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 401) {
         clearToken()
@@ -648,89 +429,44 @@ export function AccountManagementPage() {
         return
       }
       setDeleteError(
-        caught instanceof ApiError
-          ? caught.message
-          : "Couldn't delete the account. Please try again.",
+        errorMessage(caught, "Couldn't delete the account. Please try again."),
       )
     } finally {
       setDeleting(false)
     }
   }
 
-  const totalPages = footerResult
-    ? Math.max(1, Math.ceil(footerResult.total / footerResult.pageSize))
-    : 1
-  const bodyHeight = rowSlots.length > 0 ? rowSlots.length * rowHeight : 150
   const creatableRoles = allRoles.filter((role) => canCreateRole(actor, role))
-  const busy = resolvedKey !== requestKey
-  const initialLoading = busy && !result
-  const searching = busy && result !== null && previewingSearch
-  const accountRowClassName = cn(
-    accountGrid,
-    "h-[58px] border-b border-[#eceef1] bg-background px-4 py-[7px] text-xs text-foreground hover:bg-[#e8eef2] @max-[900px]:h-[188px] @max-[900px]:gap-x-4 @max-[900px]:gap-y-[10px] @max-[900px]:py-[14px] @max-[530px]:h-[258px] @max-[530px]:gap-[9px]",
-  )
+  const initialLoading = busy && list.tableViewKey === ""
 
-  function renderAccountRow(
-    row: AccountRowItem,
-    delayMs: number,
-    roundBottom: boolean,
-  ) {
-    const user = row.item
+  function renderAccountRow(user: Account) {
     return (
-      <AnimatedSlotRow
-        key={user.id}
-        className={cn(
-          accountRowClassName,
-          roundBottom && "rounded-b-[7px] border-b-0",
-        )}
-        delayMs={delayMs}
-        phase={row.phase}
-        reduceMotion={reduceMotion}
-        quick={row.quick ?? false}
-        onExitComplete={
-          row.phase === "exit"
-            ? () => {
-                if (row.runId !== animationGenerationRef.current) return
-                const nextSlots = rowSlotsRef.current.map((slot) =>
-                  slot.exiting &&
-                  slot.exiting.runId === row.runId &&
-                  slot.exiting.item.id === user.id
-                    ? { ...slot, exiting: null }
-                    : slot,
-                )
-                rowSlotsRef.current = nextSlots
-                setRowSlots(nextSlots)
-              }
-            : undefined
-        }
-      >
-        <AccountRowContents
-          user={user}
-          actor={actor}
-          selectedRole={draftRoles[user.id]?.role ?? user.role}
-          disabled={busy || savingAccess || statusSaving || deleting}
-          onRoleChange={(account, role) => {
-            setAccessError("")
-            setDraftRoles((current) => {
-              const next = { ...current }
-              if (role === account.role) delete next[account.id]
-              else next[account.id] = { role, email: account.email }
-              return next
-            })
-          }}
-          onChangeStatus={(account) => {
-            setStatusError("")
-            setStatusTarget(account)
-          }}
-          onChangePassword={setPasswordTarget}
-          onDelete={(account) => {
-            if (!trashView && account.isActive) return
-            setDeleteError("")
-            setDeleteTarget(account)
-          }}
-          trashView={trashView}
-        />
-      </AnimatedSlotRow>
+      <AccountRowContents
+        user={user}
+        actor={actor}
+        selectedRole={draftRoles[user.id]?.role ?? user.role}
+        disabled={busy || mutating}
+        onRoleChange={(account, role) => {
+          setAccessError("")
+          setDraftRoles((current) => {
+            const next = { ...current }
+            if (role === account.role) delete next[account.id]
+            else next[account.id] = { role, email: account.email }
+            return next
+          })
+        }}
+        onChangeStatus={(account) => {
+          setStatusError("")
+          setStatusTarget(account)
+        }}
+        onChangePassword={setPasswordTarget}
+        onDelete={(account) => {
+          if (!trashView && account.isActive) return
+          setDeleteError("")
+          setDeleteTarget(account)
+        }}
+        trashView={trashView}
+      />
     )
   }
 
@@ -739,40 +475,31 @@ export function AccountManagementPage() {
       className={cn(contentClass, "p-[clamp(16px,2.1vw,32px)]")}
       aria-label="Account Management"
     >
-      <header className="-mx-[clamp(16px,2.1vw,32px)] flex items-center justify-between gap-6 border-b border-[#eceef1] px-[clamp(16px,2.1vw,32px)] pt-0.5 pb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-4 max-[560px]:pb-[18px]">
-        <div>
-          <h1 className="m-0 text-[clamp(21px,2vw,25px)] leading-[1.25] font-[650] tracking-[-0.03em] text-foreground">
-            Account Management
-          </h1>
-          <p className="mt-[5px] mb-0 text-xs leading-[1.45] text-[#738096]">
-            View portal accounts and manage their access.
-          </p>
-        </div>
-        <button
-          type="button"
-          className={cn(
-            accountButton,
-            accountButtonPrimary,
-            "min-h-[34px] flex-none rounded-lg px-[13px] text-xs",
-          )}
-          onClick={() => setCreateOpen(true)}
-          disabled={savingAccess || statusSaving || deleting}
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 14 14"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            aria-hidden="true"
+      <PageHeader
+        title="Account Management"
+        description="View portal accounts and manage their access."
+        actions={
+          <PageHeaderButton
+            type="button"
+            onClick={() => setCreateOpen(true)}
+            disabled={mutating}
           >
-            <path d="M7 2.5v9M2.5 7h9" />
-          </svg>
-          Create account
-        </button>
-      </header>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 14 14"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              aria-hidden="true"
+            >
+              <path d="M7 2.5v9M2.5 7h9" />
+            </svg>
+            Create account
+          </PageHeaderButton>
+        }
+      />
 
       <section
         className="mt-[18px] min-w-0 max-[560px]:mt-[14px]"
@@ -786,39 +513,40 @@ export function AccountManagementPage() {
               onChange={(event) => updateSearch(event.target.value)}
               placeholder="Search name or email"
               maxLength={100}
-              disabled={savingAccess || statusSaving || deleting}
+              disabled={mutating}
             />
-            <AccountDropdown
-              className="max-[560px]:w-full"
-              triggerClassName="h-[34px] min-w-[132px] border-[#e1e4ea] text-xs font-normal max-[560px]:min-w-0"
+            <FilterSelect
+              triggerClassName="min-w-[132px] font-normal max-[560px]:min-w-0"
               label="Filter by role"
+              announceValue
               value={roleFilter}
-              options={[{ value: "", label: "All roles" }, ...roleOptions]}
+              options={roleFilterOptions}
               onChange={updateRoleFilter}
-              disabled={savingAccess || statusSaving || deleting}
+              disabled={mutating}
             />
           </div>
           <div className="flex items-center justify-end gap-2 max-[560px]:justify-start">
-            <button
-              type="button"
-              className={cn(
-                accountButton,
-                "min-h-[34px] rounded-lg border-red-500 bg-background px-[12px] text-xs text-red-600 hover:enabled:bg-red-50",
-              )}
-              disabled={savingAccess || statusSaving || deleting || busy}
-              aria-pressed={trashView}
-              onClick={() => {
-                setTrashView(!trashView)
-                setSortKey(trashView ? "createdAt" : "deletedAt")
+            <ManagementViewToggle
+              active={trashView}
+              ariaLabel="Account view"
+              views={[
+                {
+                  value: false,
+                  label: trashView ? "Back to Accounts" : "Accounts",
+                  icon: UsersRound,
+                },
+                { value: true, label: "Trash", icon: Trash2 },
+              ]}
+              disabled={mutating || busy}
+              onChange={(nextTrashView) => {
+                setTrashView(nextTrashView)
+                setSortKey(nextTrashView ? "deletedAt" : "createdAt")
                 setSortDirection("desc")
                 setPage(1)
                 setDraftRoles({})
                 setAccessError("")
               }}
-            >
-              <Trash2 size={14} aria-hidden="true" />
-              {trashView ? "Back to Accounts" : "Trash"}
-            </button>
+            />
             <button
               type="button"
               className={cn(
@@ -849,21 +577,13 @@ export function AccountManagementPage() {
           </div>
         </div>
         {accessError && (
-          <p
-            className="mt-0 mb-3 rounded-lg bg-[#fff0f1] p-3 text-xs break-words text-[#bc3649]"
-            role="alert"
-          >
-            {accessError}
-          </p>
+          <Alert className="mb-3 break-words">{accessError}</Alert>
         )}
 
         <ResponsiveDataTable label="Accounts" aria-busy={busy}>
           <ResponsiveDataTableHeader
             className="@max-[900px]:hidden"
-            rowClassName={cn(
-              accountGrid,
-              "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground",
-            )}
+            rowClassName={accountGrid}
           >
             <span>
               <TableSortButton
@@ -888,13 +608,6 @@ export function AccountManagementPage() {
             </span>
             <span>
               <TableSortButton
-                label="Department"
-                direction={sortKey === "department" ? sortDirection : null}
-                onClick={() => sortBy("department")}
-              />
-            </span>
-            <span>
-              <TableSortButton
                 label={trashView ? "Deleted" : "Created"}
                 direction={
                   sortKey === (trashView ? "deletedAt" : "createdAt")
@@ -907,142 +620,67 @@ export function AccountManagementPage() {
             <span>Access</span>
             <span>Actions</span>
           </ResponsiveDataTableHeader>
-          <ResponsiveDataTableBody
-            ref={rowsBodyRef}
-            className="relative min-w-0"
-            aria-live="polite"
-            aria-busy={busy || isAnimatingRows}
-            style={
-              initialLoading
-                ? undefined
-                : {
-                    height: bodyHeight,
-                    transition: animateBodyHeight
-                      ? "height 220ms ease-out"
-                      : "none",
-                  }
-            }
-          >
-            {initialLoading && (
-              <DataTableSkeletonRows
-                label="accounts"
-                rowClassName={cn(
-                  accountGrid,
-                  "h-[58px] px-4 py-[7px] @max-[900px]:h-[188px] @max-[900px]:gap-x-4 @max-[900px]:gap-y-[10px] @max-[900px]:py-[14px] @max-[530px]:h-[258px] @max-[530px]:gap-[9px]",
-                )}
-                cellClassNames={[
-                  "@max-[900px]:col-start-1 @max-[900px]:row-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto",
-                  "@max-[900px]:col-start-2 @max-[900px]:row-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto",
-                  "@max-[900px]:col-start-2 @max-[900px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto",
-                  "@max-[900px]:col-start-1 @max-[900px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto",
-                  "@max-[900px]:col-start-1 @max-[900px]:row-start-3 @max-[530px]:col-start-1 @max-[530px]:row-auto",
-                  "@max-[900px]:col-start-2 @max-[900px]:row-start-3 @max-[530px]:col-start-1 @max-[530px]:row-auto",
-                  "@max-[900px]:col-start-2 @max-[900px]:row-start-4 @max-[530px]:col-start-1 @max-[530px]:row-auto",
-                ]}
-                cellSkeletonClassNames={[
-                  "h-8 w-4/5",
-                  "h-3 w-3/5",
-                  "h-5 w-16 rounded",
-                  "h-3 w-4/5",
-                  "h-3 w-20",
-                  "h-3 w-20",
-                  "h-8 w-24",
-                ]}
-              />
-            )}
-            {!busy && error && (
-              <div
-                className="grid min-h-[150px] place-content-center gap-2 p-6 text-center text-[#7183a2]"
-                role="alert"
-              >
-                <p className="m-0">{error}</p>
-                <button
-                  type="button"
-                  className={cn(
-                    "cursor-pointer border-0 bg-transparent font-bold text-[#244993]",
-                    accountFocusRing,
+          {initialLoading || list.error ? (
+            <ResponsiveDataTableBody className="relative min-w-0">
+              {initialLoading ? (
+                <DataTableSkeletonRows
+                  label="accounts"
+                  rowClassName={cn(
+                    accountGrid,
+                    "h-[58px] px-4 py-[7px] @max-[900px]:h-[158px] @max-[900px]:gap-x-4 @max-[900px]:gap-y-[10px] @max-[900px]:py-[14px] @max-[530px]:h-[228px] @max-[530px]:gap-[9px]",
                   )}
-                  onClick={() => setRevision((current) => current + 1)}
-                >
-                  Try again
-                </button>
-              </div>
-            )}
-            {!error && result && rowSlots.length === 0 && !isAnimatingRows && (
-              <div className="grid min-h-[150px] place-content-center gap-2 p-6 text-center text-[#7183a2]">
-                {busy
-                  ? "Searching accounts…"
-                  : trashView
-                    ? "No soft-deleted accounts match your search."
-                    : "No accounts match your search."}
-              </div>
-            )}
-            {result &&
-              !error &&
-              rowSlots.map((slot) => {
-                const quick =
-                  slot.entering?.quick ?? slot.exiting?.quick ?? false
-                const stagger = reduceMotion
-                  ? 0
-                  : Math.min(slot.index, quick ? 5 : 9) * (quick ? 20 : 40)
-                return (
-                  <div
-                    key={slot.index}
-                    className="relative"
-                    style={{ height: rowHeight }}
-                  >
-                    {slot.exiting &&
-                      renderAccountRow(
-                        slot.exiting,
-                        slot.exiting.delayMs ?? stagger,
-                        slot.index === rowSlots.length - 1,
-                      )}
-                    {slot.entering &&
-                      renderAccountRow(
-                        slot.entering,
-                        slot.entering.delayMs ??
-                          stagger +
-                            (slot.exiting && !reduceMotion
-                              ? quick
-                                ? 50
-                                : 100
-                              : 0),
-                        slot.index === rowSlots.length - 1,
-                      )}
-                  </div>
-                )
-              })}
-          </ResponsiveDataTableBody>
-        </ResponsiveDataTable>
-        {searching && !error && (
-          <p className="mt-3 text-[11px] text-[#65718a]" role="status">
-            Searching all accounts…
-          </p>
-        )}
-        {!error && !searching && footerResult && footerResult.total > 0 && (
-          <div className="flex items-center justify-between gap-3 pt-4 text-[11px] text-[#65718a] max-[560px]:flex-wrap max-[560px]:pt-[14px]">
-            <span>
-              Showing {(footerResult.page - 1) * footerResult.pageSize + 1}–
-              {Math.min(
-                footerResult.page * footerResult.pageSize,
-                footerResult.total,
-              )}{" "}
-              of {footerResult.total}
-            </span>
-            <NumberedPagination
-              page={footerResult.page}
-              totalPages={totalPages}
-              disabled={
-                busy ||
-                isAnimatingRows ||
-                savingAccess ||
-                statusSaving ||
-                deleting
+                  cellClassNames={[
+                    "@max-[900px]:col-start-1 @max-[900px]:row-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto",
+                    "@max-[900px]:col-start-2 @max-[900px]:row-start-1 @max-[530px]:col-start-1 @max-[530px]:row-auto",
+                    "@max-[900px]:col-start-2 @max-[900px]:row-start-2 @max-[530px]:col-start-1 @max-[530px]:row-auto",
+                    "@max-[900px]:col-start-1 @max-[900px]:row-start-3 @max-[530px]:col-start-1 @max-[530px]:row-auto",
+                    "@max-[900px]:col-start-2 @max-[900px]:row-start-3 @max-[530px]:col-start-1 @max-[530px]:row-auto",
+                  ]}
+                  cellSkeletonClassNames={[
+                    "h-8 w-4/5",
+                    "h-3 w-3/5",
+                    "h-5 w-16 rounded",
+                    "h-3 w-20",
+                    "h-3 w-20",
+                    "h-8 w-24",
+                  ]}
+                />
+              ) : (
+                <DataTableErrorRow
+                  message={list.error}
+                  colSpan={6}
+                  onRetry={retry}
+                />
+              )}
+            </ResponsiveDataTableBody>
+          ) : (
+            <AnimatedSlotGridBody
+              items={list.rows}
+              viewKey={list.tableViewKey}
+              quickKey={query}
+              onRowsSettled={list.onRowsSettled}
+              animateRows
+              getKey={accountKey}
+              rowClassName={accountRowClass}
+              emptyContent={
+                trashView
+                  ? "No soft-deleted accounts match your search."
+                  : "No accounts match your search."
               }
-              label={trashView ? "Trash pages" : "Account pages"}
-              onPageChange={setPage}
+              ariaBusy={busy}
+              className="relative min-w-0"
+              renderRow={renderAccountRow}
             />
-          </div>
+          )}
+        </ResponsiveDataTable>
+        <TableSearchStatus active={busy && list.previewing} label="accounts" />
+        {list.footer && (
+          <TablePaginationFooter
+            {...list.footer}
+            disabled={list.footer.disabled || mutating}
+            label={trashView ? "Trash pages" : "Account pages"}
+            onPageChange={setPage}
+          />
         )}
       </section>
 
@@ -1086,7 +724,7 @@ export function AccountManagementPage() {
           setSearch("")
           setRoleFilter("")
           setPage(1)
-          setRevision((current) => current + 1)
+          retry()
         }}
       />
     </main>

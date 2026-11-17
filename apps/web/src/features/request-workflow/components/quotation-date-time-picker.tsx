@@ -23,7 +23,7 @@ export function QuotationDateTimePicker({
       ? `Valid until ${saved.toLocaleString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}`
       : "Choose validity date and time"
   return (
-    <div data-quotation-validity className="w-full min-w-0">
+    <div data-quotation-validity className="w-full min-w-0 [&>div>button]:h-10">
       <DateInput
         triggerLabel={
           saved && Number.isFinite(saved.getTime())

@@ -1,17 +1,15 @@
 "use client"
 
+import { FormInput, FormTextarea } from "@/components/ui/form-input"
+import { formFieldClass } from "@/components/ui/form-control-styles"
+
 import { Form } from "@/components/ui/form"
 
-import {
-  useEffect,
-  useId,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from "react"
+import { useId, useState, type FormEvent, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { Plus, Trash2 } from "lucide-react"
 import { sileo } from "@/lib/toast"
+import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -23,6 +21,7 @@ import { ProfileOverview } from "../components/profile-overview"
 import { ProfileImagesEditor } from "../components/profile-images-editor"
 import { ProfileImageUpload } from "../components/profile-image-upload"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
+import { roleLabels } from "@/features/auth/model/roles"
 import {
   getProfile,
   savePersonalProfile,
@@ -31,17 +30,9 @@ import {
   type SpecialistProfile,
   type PortfolioProject,
 } from "../api/profile-api"
+import { errorMessage } from "@/lib/error-message"
+import { useAsyncResource } from "@/lib/use-async-resource"
 
-const inputClass =
-  "min-h-11 w-full min-w-0 rounded-lg border border-[#d8e1ef] bg-background px-3 py-2 text-sm text-[#182235] outline-none focus-visible:ring-2 focus-visible:ring-[#294a9b] disabled:opacity-60"
-const primaryClass =
-  "min-h-11 bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
-const roles = {
-  USER: "Client",
-  STAFF: "Staff",
-  ADMIN: "Admin",
-  SUPERADMIN: "Superadmin",
-}
 function Field({
   label,
   children,
@@ -52,7 +43,7 @@ function Field({
   hint?: string
 }) {
   return (
-    <label className="grid min-w-0 content-start gap-2 text-xs font-medium text-[#52627a]">
+    <label className={`${formFieldClass} content-start`}>
       {label}
       {children}
       {hint && (
@@ -91,15 +82,10 @@ function Section({
 }
 function ErrorMessage({ message }: { message: string }) {
   return message ? (
-    <p role="alert" className="m-0 text-xs leading-5 text-[#bc3649]">
+    <Alert variant="text" className="leading-5">
       {message}
-    </p>
+    </Alert>
   ) : null
-}
-function errorText(reason: unknown) {
-  return reason instanceof Error
-    ? reason.message
-    : "Your changes could not be saved. Try again."
 }
 
 function PersonalDetails({
@@ -126,7 +112,9 @@ function PersonalDetails({
       window.dispatchEvent(new Event("nexus:account-updated"))
       sileo.success({ title: "Personal details updated" })
     } catch (reason) {
-      setError(errorText(reason))
+      setError(
+        errorMessage(reason, "Your changes could not be saved. Try again."),
+      )
     } finally {
       setBusy(false)
     }
@@ -143,48 +131,37 @@ function PersonalDetails({
           className="m-0 grid min-w-0 gap-5 border-0 p-0 sm:grid-cols-2"
         >
           <Field label="Full name">
-            <input
+            <FormInput
               name="fullName"
               autoComplete="name"
               required
               minLength={2}
               maxLength={100}
               defaultValue={profile.user.fullName || ""}
-              className={inputClass}
             />
           </Field>
           <Field label="Contact number">
-            <input
+            <FormInput
               name="contactNumber"
               type="tel"
               autoComplete="tel"
               maxLength={21}
               defaultValue={profile.user.contactNumber || ""}
-              className={inputClass}
             />
           </Field>
           <Field
             label="Email address"
             hint="Contact an administrator to change your email address."
           >
-            <input
-              type="email"
-              readOnly
-              value={profile.user.email}
-              className={`${inputClass} bg-[#f5f7fa]`}
-            />
+            <FormInput type="email" readOnly value={profile.user.email} />
           </Field>
           <Field label="Account role">
-            <input
-              readOnly
-              value={roles[profile.user.role]}
-              className={`${inputClass} bg-[#f5f7fa]`}
-            />
+            <FormInput readOnly value={roleLabels[profile.user.role]} />
           </Field>
         </fieldset>
         <ErrorMessage message={error} />
         <div className="flex justify-end border-t border-[#eceef1] pt-4">
-          <Button className={primaryClass} disabled={busy}>
+          <Button variant="brand" size="touch" disabled={busy}>
             {busy ? "Saving…" : "Save personal details"}
           </Button>
         </div>
@@ -244,7 +221,9 @@ function SpecialistEditor({
       }
       sileo.success({ title: "Specialist profile updated" })
     } catch (reason) {
-      setError(errorText(reason))
+      setError(
+        errorMessage(reason, "Your changes could not be saved. Try again."),
+      )
     } finally {
       setBusy(false)
     }
@@ -261,25 +240,23 @@ function SpecialistEditor({
           className="m-0 grid min-w-0 gap-6 border-0 p-0"
         >
           <Field label="About">
-            <textarea
+            <FormTextarea
               rows={4}
               maxLength={2000}
               value={draft.bio}
               onChange={(event) =>
                 setDraft({ ...draft, bio: event.target.value })
               }
-              className={inputClass}
             />
           </Field>
           <Field
             label="Specialties"
             hint="Separate specialties with commas. Up to 20 specialties, 80 characters each."
           >
-            <textarea
+            <FormTextarea
               rows={2}
               value={specialties}
               onChange={(event) => setSpecialties(event.target.value)}
-              className={inputClass}
               placeholder="Web development, UI design, Project management"
             />
           </Field>
@@ -296,7 +273,7 @@ function SpecialistEditor({
                 className="grid gap-3 rounded-lg border border-[#e1e6ee] p-4 sm:grid-cols-[1fr_2fr_auto]"
               >
                 <Field label="Platform">
-                  <input
+                  <FormInput
                     required
                     maxLength={40}
                     value={link.platform}
@@ -310,12 +287,11 @@ function SpecialistEditor({
                         ),
                       })
                     }
-                    className={inputClass}
                     placeholder="LinkedIn"
                   />
                 </Field>
                 <Field label="URL">
-                  <input
+                  <FormInput
                     type="url"
                     required
                     maxLength={2048}
@@ -330,7 +306,6 @@ function SpecialistEditor({
                         ),
                       })
                     }
-                    className={inputClass}
                     placeholder="https://…"
                   />
                 </Field>
@@ -406,18 +381,17 @@ function SpecialistEditor({
                   </Button>
                 </div>
                 <Field label="Project title">
-                  <input
+                  <FormInput
                     required
                     maxLength={160}
                     value={item.title}
                     onChange={(event) =>
                       project(index, { title: event.target.value })
                     }
-                    className={inputClass}
                   />
                 </Field>
                 <Field label="Summary">
-                  <textarea
+                  <FormTextarea
                     required
                     rows={3}
                     maxLength={3000}
@@ -425,18 +399,16 @@ function SpecialistEditor({
                     onChange={(event) =>
                       project(index, { summary: event.target.value })
                     }
-                    className={inputClass}
                   />
                 </Field>
                 <Field label="Your contribution">
-                  <textarea
+                  <FormTextarea
                     rows={2}
                     maxLength={2000}
                     value={item.contribution}
                     onChange={(event) =>
                       project(index, { contribution: event.target.value })
                     }
-                    className={inputClass}
                   />
                 </Field>
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -455,26 +427,24 @@ function SpecialistEditor({
                     />
                   </div>
                   <Field label="Project image URL">
-                    <input
+                    <FormInput
                       type="url"
                       maxLength={2048}
                       value={item.thumbnailUrl}
                       onChange={(event) =>
                         project(index, { thumbnailUrl: event.target.value })
                       }
-                      className={inputClass}
                       placeholder="https://…"
                     />
                   </Field>
                   <Field label="Project link">
-                    <input
+                    <FormInput
                       type="url"
                       maxLength={2048}
                       value={item.projectUrl}
                       onChange={(event) =>
                         project(index, { projectUrl: event.target.value })
                       }
-                      className={inputClass}
                       placeholder="https://…"
                     />
                   </Field>
@@ -521,7 +491,11 @@ function SpecialistEditor({
         </fieldset>
         <ErrorMessage message={error} />
         <div className="flex justify-end border-t border-[#eceef1] pt-4">
-          <Button className={primaryClass} disabled={busy || uploadingImage}>
+          <Button
+            variant="brand"
+            size="touch"
+            disabled={busy || uploadingImage}
+          >
             {busy
               ? "Saving…"
               : uploadingImage
@@ -537,27 +511,18 @@ function SpecialistEditor({
 export function ProfilePage() {
   const router = useRouter()
   const account = usePortalAccount()
-  const [profile, setProfile] = useState<Profile | null>(null)
-  const [error, setError] = useState("")
-  const [revision, setRevision] = useState(0)
+  const {
+    data: profile = null,
+    error,
+    retry,
+    setData: setProfile,
+  } = useAsyncResource((signal) => getProfile(signal), [], {
+    fallbackError: "Your changes could not be saved. Try again.",
+  })
   const [uploadingImage, setUploadingImage] = useState(false)
   const [editor, setEditor] = useState<
     "personal" | "specialist" | "images" | null
   >(null)
-  useEffect(() => {
-    const controller = new AbortController()
-    getProfile(controller.signal)
-      .then((data) => {
-        if (!controller.signal.aborted) {
-          setProfile(data)
-          setError("")
-        }
-      })
-      .catch((reason) => {
-        if (!controller.signal.aborted) setError(errorText(reason))
-      })
-    return () => controller.abort()
-  }, [revision])
   const user = profile?.user || account
   const saved = (data: Profile) => {
     setProfile(data)
@@ -569,7 +534,7 @@ export function ProfilePage() {
         user={user}
         profile={profile}
         error={error}
-        onRetry={() => setRevision((value) => value + 1)}
+        onRetry={retry}
         onEditPersonal={() => setEditor("personal")}
         onEditSpecialist={() => setEditor("specialist")}
         onEditSecurity={() => router.push("/settings")}

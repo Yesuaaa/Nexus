@@ -1,31 +1,22 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import dynamic from "next/dynamic"
-import { PanelLoading } from "@/components/ui/panel-loading"
+import { PanelLoading, SidePanelLoading } from "@/components/ui/panel-loading"
 import { Plus } from "lucide-react"
 import { sileo } from "@/lib/toast"
+import { PageHeader, PageHeaderButton } from "@/components/layout/page-header"
 import { contentClass } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
-import {
-  useTableSearch,
-  useTableFooter,
-} from "@/components/ui/use-table-search"
+import { FilterSelect } from "@/components/ui/filter-select"
+import { usePaginatedList } from "@/components/ui/use-paginated-list"
 import { TableSearchStatus } from "@/components/ui/table-search-status"
-import { NumberedPagination } from "@/components/ui/numbered-pagination"
+import { TablePaginationFooter } from "@/components/ui/table-pagination-footer"
 import { SearchEmptyState } from "@/components/ui/search-empty-state"
 import { SearchField } from "@/components/ui/search-field"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import {
   listClients,
-  type ClientList,
   type ClientSort,
   type ClientStatus,
   type Client,
@@ -45,10 +36,19 @@ const ClientDetailsDrawer = dynamic(
     import("../components/client-details-drawer").then(
       (module) => module.ClientDetailsDrawer,
     ),
-  { loading: PanelLoading },
+  { loading: () => <SidePanelLoading /> },
 )
 
-const sortOptions: { value: string; label: string }[] = [
+const statusOptions: { value: ClientStatus; label: string }[] = [
+  { value: "", label: "All Statuses" },
+  { value: "ACTIVE", label: "Active" },
+  { value: "INACTIVE", label: "Inactive" },
+]
+
+const sortOptions: {
+  value: `${ClientSort}:${"asc" | "desc"}`
+  label: string
+}[] = [
   { value: "createdAt:desc", label: "Newest registered" },
   { value: "createdAt:asc", label: "Oldest registered" },
   { value: "fullName:asc", label: "Name: A to Z" },
@@ -74,102 +74,21 @@ export function ClientManagementPage() {
   const [search, setSearch] = useState("")
   const query = search.trim()
   const [status, setStatus] = useState<ClientStatus>("")
-  const [page, setPage] = useState(1)
   const [animateRows, setAnimateRows] = useState(true)
   const [sortBy, setSortBy] = useState<ClientSort>("createdAt")
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
-  const [revision, setRevision] = useState(0)
-  const [result, setResult] = useState<ClientList>({
-    clients: [],
-    total: 0,
-    page: 1,
-    pageSize: 10,
-  })
-  const [resolvedKey, setResolvedKey] = useState("")
-  const [resolvedViewKey, setResolvedViewKey] = useState("")
-  const [errorMessage, setError] = useState("")
-  const [errorRequestKey, setErrorRequestKey] = useState("")
-  const requestKey = JSON.stringify({
-    search: query,
-    status,
-    page,
-    sortBy,
-    sortOrder,
-    revision,
-  })
-  const viewKey = JSON.stringify({
-    search: query,
-    status,
-    page,
-    sortBy,
-    sortOrder,
-  })
-  const error = errorRequestKey === requestKey ? errorMessage : ""
-  const loading = resolvedKey !== requestKey || search.trim() !== query
-  const filtered = Boolean(search.trim() || status)
+  const filtered = Boolean(query || status)
 
-  const searchScope = JSON.stringify([status, sortBy, sortOrder, revision])
-  const { acceptRows, preview, previewing } = useTableSearch<Client>({
-    search: query,
-    scope: searchScope,
-    page,
+  const list = usePaginatedList({
+    params: { search: query, status, sortBy, sortOrder },
+    load: ({ page, signal }) =>
+      listClients({ search: query, status, page, sortBy, sortOrder, signal }),
+    rows: (result) => result.clients,
     matches: matchesTableSearch,
+    initial: { clients: [], total: 0, page: 1, pageSize: 10 },
+    fallbackError: "Could not load clients.",
   })
-  const { footer, onRowsSettled } = useTableFooter(
-    result,
-    loading || previewing,
-  )
-  const tableViewKey = previewing
-    ? JSON.stringify([searchScope, query, 1])
-    : resolvedViewKey
-
-  useEffect(() => {
-    const controller = new AbortController()
-    let active = true
-    listClients({
-      search: query,
-      status,
-      page,
-      sortBy,
-      sortOrder,
-      signal: controller.signal,
-    })
-      .then((data) => {
-        if (!active) return
-        const lastPage = Math.max(1, Math.ceil(data.total / data.pageSize))
-        if (page > lastPage) {
-          setPage(lastPage)
-          return
-        }
-        acceptRows(data.clients)
-        setResult(data)
-        setError("")
-        setResolvedKey(requestKey)
-        setResolvedViewKey(viewKey)
-      })
-      .catch((reason: unknown) => {
-        if (!active) return
-        setErrorRequestKey(requestKey)
-        setError(
-          reason instanceof Error ? reason.message : "Could not load clients.",
-        )
-        setResolvedKey(requestKey)
-      })
-    return () => {
-      active = false
-      controller.abort()
-    }
-  }, [
-    query,
-    status,
-    page,
-    sortBy,
-    sortOrder,
-    revision,
-    requestKey,
-    viewKey,
-    acceptRows,
-  ])
+  const { setPage } = list
 
   function sort(key: ClientSort) {
     setAnimateRows(true)
@@ -183,36 +102,26 @@ export function ClientManagementPage() {
     setStatus("")
     setPage(1)
   }
-  const pages = Math.max(1, Math.ceil(footer.total / footer.pageSize))
-  const from = footer.total === 0 ? 0 : (footer.page - 1) * footer.pageSize + 1
-  const to = (footer.page - 1) * footer.pageSize + footer.clients.length
 
   return (
     <main
       className={cn(contentClass, "p-[clamp(16px,2.1vw,32px)]")}
       aria-label="Client management"
     >
-      <header className="-mx-[clamp(16px,2.1vw,32px)] flex items-center justify-between gap-6 border-b border-[#eceef1] px-[clamp(16px,2.1vw,32px)] pt-0.5 pb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-4 max-[560px]:pb-[18px]">
-        <div>
-          <h1
-            id="client-directory-heading"
-            tabIndex={-1}
-            className="m-0 text-[clamp(21px,2vw,25px)] leading-[1.25] font-[650] tracking-[-0.03em] text-foreground"
+      <PageHeader
+        headingId="client-directory-heading"
+        title="Client Management"
+        description="Create and manage client accounts and contact information."
+        actions={
+          <PageHeaderButton
+            type="button"
+            onClick={() => setFormTarget("create")}
           >
-            Client Management
-          </h1>
-          <p className="mt-[5px] mb-0 text-xs leading-[1.45] text-[#738096]">
-            Create and manage client accounts and contact information.
-          </p>
-        </div>
-        <Button
-          onClick={() => setFormTarget("create")}
-          className="h-[34px] bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
-        >
-          <Plus size={16} aria-hidden="true" />
-          Create Client
-        </Button>
-      </header>
+            <Plus size={16} aria-hidden="true" />
+            Create Client
+          </PageHeaderButton>
+        }
+      />
       <section
         aria-label="Client directory"
         className="@container mt-[18px] min-w-0 max-[767px]:mt-[14px]"
@@ -229,51 +138,31 @@ export function ClientManagementPage() {
             }}
             placeholder="Search name or email…"
           />
-          <Select
-            value={status || "all"}
-            onValueChange={(value) => {
+          <FilterSelect
+            label="Filter by account status"
+            value={status}
+            options={statusOptions}
+            triggerClassName="w-[135px]"
+            onChange={(value) => {
               setAnimateRows(true)
-              setStatus(value === "all" ? "" : (value as ClientStatus))
+              setStatus(value)
               setPage(1)
             }}
-          >
-            <SelectTrigger
-              aria-label="Filter by account status"
-              className="h-[34px] w-[135px] flex-none border-[#e1e4ea] text-xs max-[560px]:w-full"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="ACTIVE">Active</SelectItem>
-              <SelectItem value="INACTIVE">Inactive</SelectItem>
-            </SelectContent>
-          </Select>
-          <div className="hidden @max-[1000px]:block">
-            <Select
+          />
+          <div className="hidden @max-[1000px]:block max-[560px]:w-full">
+            <FilterSelect
+              label="Sort clients"
               value={`${sortBy}:${sortOrder}`}
-              onValueChange={(value) => {
+              options={sortOptions}
+              triggerClassName="w-[180px]"
+              onChange={(value) => {
                 setAnimateRows(true)
                 const [key, order] = value.split(":")
                 setSortBy(key as ClientSort)
                 setSortOrder(order as "asc" | "desc")
                 setPage(1)
               }}
-            >
-              <SelectTrigger
-                aria-label="Sort clients"
-                className="h-[34px] w-[180px] text-xs max-[560px]:w-full"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {sortOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            />
           </div>
           {filtered && (
             <Button
@@ -286,13 +175,13 @@ export function ClientManagementPage() {
           )}
         </div>
         <ClientTable
-          clients={preview ?? result.clients}
-          viewKey={tableViewKey}
-          onRowsSettled={onRowsSettled}
+          clients={list.rows}
+          viewKey={list.tableViewKey}
+          onRowsSettled={list.onRowsSettled}
           quickKey={query}
           animateRows={animateRows}
-          loading={loading}
-          error={error}
+          loading={list.loading}
+          error={list.error}
           emptyMessage={
             query ? (
               <SearchEmptyState query={query} />
@@ -304,27 +193,23 @@ export function ClientManagementPage() {
           }
           sortBy={sortBy}
           sortOrder={sortOrder}
-          onRetry={() => setRevision((value) => value + 1)}
+          onRetry={list.retry}
           onSort={sort}
           onView={(client) => setSelectedClient({ client, tab: "overview" })}
         />
-        <TableSearchStatus active={loading && previewing} label="clients" />
-        {!error && !previewing && footer.total > 0 && (
-          <footer className="flex flex-wrap items-center justify-between gap-3 pt-4 text-[11px] text-[#738096]">
-            <span role="status" aria-live="polite" aria-atomic="true">
-              Showing {from}–{to} of {footer.total}
-            </span>
-            <NumberedPagination
-              page={footer.page}
-              totalPages={pages}
-              disabled={loading || footer !== result}
-              label="Client pages"
-              onPageChange={(nextPage) => {
-                setAnimateRows(true)
-                setPage(nextPage)
-              }}
-            />
-          </footer>
+        <TableSearchStatus
+          active={list.loading && list.previewing}
+          label="clients"
+        />
+        {list.footer && (
+          <TablePaginationFooter
+            {...list.footer}
+            label="Client pages"
+            onPageChange={(nextPage) => {
+              setAnimateRows(true)
+              setPage(nextPage)
+            }}
+          />
         )}
       </section>
       {formTarget && (
@@ -338,7 +223,7 @@ export function ClientManagementPage() {
               description: "Client information was saved successfully.",
             })
             setFormTarget(null)
-            setRevision((value) => value + 1)
+            list.retry()
           }}
         />
       )}

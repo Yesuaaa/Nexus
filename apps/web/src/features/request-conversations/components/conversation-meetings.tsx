@@ -1,11 +1,14 @@
 "use client"
 
+import { FormInput, FormTextarea } from "@/components/ui/form-input"
+
 import { Form } from "@/components/ui/form"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 
 import { useEffect, useRef, useState, type FormEvent } from "react"
 import { CalendarDays } from "lucide-react"
 import { sileo } from "@/lib/toast"
+import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { DateInput } from "@/components/ui/date-input"
 import { WorkflowDraftFrame } from "@/features/request-workflow/components/workflow-draft-frame"
@@ -29,6 +32,7 @@ import {
   type MeetingAction,
   type MeetingSchedule,
 } from "../api/request-conversations-api"
+import { errorMessage } from "@/lib/error-message"
 
 function localTime(value: string | Date) {
   const date = new Date(value)
@@ -88,13 +92,12 @@ function ScheduleFields({ meeting }: { meeting?: ConversationMeeting }) {
         </WorkflowField>
       </div>
       <WorkflowField label="Meeting link or location">
-        <input
+        <FormInput
           name="location"
           required
           maxLength={1000}
           defaultValue={meeting?.location}
           placeholder="Meeting link or office address"
-          className={workflowInput}
         />
       </WorkflowField>
     </>
@@ -141,10 +144,10 @@ export function ScheduleConversationMeeting({
       sileo.success({ title: "Meeting scheduled" })
       onClose()
     } catch (reason) {
-      const message =
-        reason instanceof Error
-          ? reason.message
-          : "Couldn't schedule this meeting. Try again."
+      const message = errorMessage(
+        reason,
+        "Couldn't schedule this meeting. Try again.",
+      )
       setError(message)
       sileo.error({ title: "Meeting not scheduled", description: message })
     } finally {
@@ -169,12 +172,11 @@ export function ScheduleConversationMeeting({
           className="m-0 min-w-0 space-y-3 border-0 p-0"
         >
           <WorkflowField label="Meeting topic">
-            <textarea
+            <FormTextarea
               name="notes"
               maxLength={2000}
               rows={2}
               placeholder="What would you like to discuss?"
-              className={workflowInput}
             />
           </WorkflowField>
           <ScheduleFields />
@@ -220,11 +222,7 @@ export function ScheduleConversationMeeting({
               : "General meeting · No specific service"}
           </p>
         </fieldset>
-        {error && (
-          <p role="alert" className="m-0 text-xs text-red-700">
-            {error}
-          </p>
-        )}
+        {error && <Alert variant="text">{error}</Alert>}
         <WorkflowDraftFooter sticky>
           <Button
             type="button"
@@ -235,7 +233,12 @@ export function ScheduleConversationMeeting({
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={busy} className={draftPrimaryButton}>
+          <Button
+            type="submit"
+            disabled={busy}
+            variant="brand"
+            className={draftPrimaryButton}
+          >
             {busy ? "Sending…" : "Send invitation"}
           </Button>
         </WorkflowDraftFooter>
@@ -286,10 +289,10 @@ export function ConversationMeetingCard({
       setForm(null)
       sileo.success({ title: "Meeting updated" })
     } catch (reason) {
-      const message =
-        reason instanceof Error
-          ? reason.message
-          : "Couldn't update this meeting. Try again."
+      const message = errorMessage(
+        reason,
+        "Couldn't update this meeting. Try again.",
+      )
       setError(message)
       sileo.error({ title: "Meeting not updated", description: message })
       onRefresh()
@@ -436,12 +439,11 @@ export function ConversationMeetingCard({
                       />
                     </WorkflowField>
                     <WorkflowField label="Reason for rescheduling">
-                      <textarea
+                      <FormTextarea
                         name="note"
                         required
                         maxLength={2000}
                         rows={2}
-                        className={workflowInput}
                       />
                     </WorkflowField>
                   </>
@@ -457,7 +459,8 @@ export function ConversationMeetingCard({
                   </Button>
                   <Button
                     type="submit"
-                    className={`${workflowButton} bg-[#203f8c] text-white`}
+                    variant="brand"
+                    className={workflowButton}
                   >
                     {form === "reschedule"
                       ? "Confirm new schedule"
@@ -469,11 +472,7 @@ export function ConversationMeetingCard({
           )}
         </>
       )}
-      {error && (
-        <p role="alert" className="m-0 text-xs text-red-700">
-          {error}
-        </p>
-      )}
+      {error && <Alert variant="text">{error}</Alert>}
     </WorkflowCard>
   )
 }

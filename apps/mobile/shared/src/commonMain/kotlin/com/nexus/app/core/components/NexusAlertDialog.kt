@@ -60,9 +60,9 @@ fun NexusDialogButton(
     Button(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.fillMaxWidth().height(48.dp),
+        modifier = Modifier.fillMaxWidth().height(40.dp),
         shape = NexusButtonShape,
-        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = fill, contentColor = Color.White,
             disabledContainerColor = fill.copy(alpha = .5f),

@@ -1,6 +1,7 @@
 package com.nexus.app.core.components
 
 import com.nexus.app.core.theme.NexusButtonShape
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -31,11 +32,12 @@ fun NexusButton(
     modifier: Modifier = Modifier,
     variant: NexusButtonVariant = NexusButtonVariant.PRIMARY,
     enabled: Boolean = true,
-    loading: Boolean = false
+    loading: Boolean = false,
+    compact: Boolean = false
 ) {
     val buttonModifier = modifier
         .fillMaxWidth()
-        .heightIn(min = 48.dp)
+        .heightIn(min = if (compact) 40.dp else 48.dp)
 
     if (variant == NexusButtonVariant.PRIMARY) {
         Button(
@@ -50,7 +52,7 @@ fun NexusButton(
                 disabledContentColor = Color.White.copy(alpha = 0.7f)
             )
         ) {
-            ButtonContent(text = text, loading = loading, textColor = Color.White)
+            ButtonContent(text = text, loading = loading, textColor = Color.White, compact = compact)
         }
     } else {
         OutlinedButton(
@@ -58,11 +60,12 @@ fun NexusButton(
             modifier = buttonModifier,
             enabled = enabled && !loading,
             shape = NexusButtonShape,
+            border = BorderStroke(1.dp, NexusColors.PrimaryBlue.copy(alpha = if (enabled && !loading) 1f else 0.5f)),
             colors = ButtonDefaults.outlinedButtonColors(
                 contentColor = NexusColors.PrimaryBlue
             )
         ) {
-            ButtonContent(text = text, loading = loading, textColor = NexusColors.PrimaryBlue)
+            ButtonContent(text = text, loading = loading, textColor = NexusColors.PrimaryBlue, compact = compact)
         }
     }
 }
@@ -71,7 +74,8 @@ fun NexusButton(
 private fun ButtonContent(
     text: String,
     loading: Boolean,
-    textColor: Color
+    textColor: Color,
+    compact: Boolean
 ) {
     Box(contentAlignment = Alignment.Center) {
         if (loading) {
@@ -83,7 +87,7 @@ private fun ButtonContent(
         } else {
             Text(
                 text = text,
-                fontSize = 15.sp,
+                fontSize = if (compact) 13.sp else 15.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = textColor
             )

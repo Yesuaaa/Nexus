@@ -4,6 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { ChevronDown, MessageSquare } from "lucide-react"
 import { contentClass, focusRing } from "@/components/layout/styles"
+import { PageHeader } from "@/components/layout/page-header"
 import { Button } from "@/components/ui/button"
 import { SearchEmptyState } from "@/components/ui/search-empty-state"
 import { SearchField } from "@/components/ui/search-field"
@@ -91,14 +92,11 @@ export default function HelpCenterPage() {
 
   return (
     <main className={`${contentClass} p-[clamp(16px,2.1vw,32px)]`}>
-      <header className="-mx-[clamp(16px,2.1vw,32px)] border-b border-[#eceef1] px-[clamp(16px,2.1vw,32px)] pt-0.5 pb-5">
-        <h1 className="m-0 text-[clamp(21px,2vw,25px)] leading-[1.25] font-[650] tracking-[-0.03em]">
-          Help &amp; Support
-        </h1>
-        <p className="mt-[5px] mb-0 text-xs leading-[1.45] text-[#52627a]">
-          Find answers about booking services and tracking your requests.
-        </p>
-      </header>
+      <PageHeader
+        tone="client"
+        title="Help & Support"
+        description="Find answers about booking services and tracking your requests."
+      />
 
       <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-6">
@@ -192,10 +190,7 @@ export default function HelpCenterPage() {
             Open your booking conversation to ask the team a question or follow
             up on an update.
           </p>
-          <Button
-            asChild
-            className="mt-4 bg-[#203f8c] text-white hover:bg-[#172f70]"
-          >
+          <Button asChild variant="brand" className="mt-4">
             <Link href="/messages">Open messages</Link>
           </Button>
           <p className="mt-2 text-[13px] text-[#475569]">

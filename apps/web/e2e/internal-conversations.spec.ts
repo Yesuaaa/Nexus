@@ -139,6 +139,175 @@ async function internalChat(
   return state
 }
 
+for (const width of [1440, 390]) {
+  test(`internal conversation search filters colleagues and retains the open thread at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const state = await internalChat(page, "STAFF")
+    state.created = true
+    state.unread = 3
+    await page.goto("/messages?mode=internal")
+    const rail = page.getByRole("navigation", {
+      name: "Conversations",
+      exact: true,
+    })
+    const search = rail.getByRole("searchbox", {
+      name: "Search conversations",
+      exact: true,
+    })
+    if (width >= 768) {
+      await rail
+        .getByRole("button", { name: "Collapse conversations", exact: true })
+        .click()
+      await rail
+        .getByRole("button", { name: "Search conversations", exact: true })
+        .click()
+      await expect(search).toBeFocused()
+    }
+    await search.fill("  DANI   designer  ")
+    const colleague = rail.getByRole("link", { name: /^Dani Colleague/ })
+    await expect(colleague).toBeVisible()
+    await expect(colleague).toHaveAttribute(
+      "aria-label",
+      "Dani Colleague, 3 unread messages",
+    )
+    await search.fill("no-such-colleague")
+    await expect(
+      rail.getByText("No conversations found.", { exact: true }),
+    ).toBeVisible()
+    await expect(colleague).toHaveCount(0)
+    expect(state.reads).toBe(0)
+    await rail
+      .getByRole("button", { name: "Clear conversation search", exact: true })
+      .click()
+    await colleague.click()
+    await expect(
+      page.getByRole("region", { name: "Internal conversation", exact: true }),
+    ).toBeVisible()
+    if (width < 768)
+      await page
+        .getByRole("link", { name: "All internal conversations", exact: true })
+        .click()
+    await search.fill("no-such-colleague")
+    if (width >= 768)
+      await expect(
+        page.getByRole("region", {
+          name: "Internal conversation",
+          exact: true,
+        }),
+      ).toBeVisible()
+    expect(state.creates).toHaveLength(0)
+  })
+}
+
+for (const width of [1440, 390]) {
+  test(`Internal Messages shares the same thread across Admin modules at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const state = await internalChat(page, "ADMIN")
+    for (const moduleName of ["Service Operations", "People & HR"]) {
+      await page.goto("/module")
+      await page
+        .getByRole("link", {
+          name: `Open ${moduleName} workspace`,
+          exact: true,
+        })
+        .click()
+      if (width < 768)
+        await page.getByRole("button", { name: "Open navigation menu" }).click()
+      const menu = page.getByRole("navigation", {
+        name: "Main menu",
+        exact: true,
+      })
+      await expect(menu.getByText("Shared", { exact: true })).toBeVisible()
+      await menu
+        .getByRole("link", { name: "Internal Messages", exact: true })
+        .click()
+      await expect(page).toHaveURL(/\/messages\?mode=internal$/)
+      const rail = page.getByRole("navigation", {
+        name: "Conversations",
+        exact: true,
+      })
+      if (!state.created) {
+        await page
+          .getByRole("button", { name: "Dani Colleague Designer", exact: true })
+          .click()
+        await page
+          .getByRole("textbox", { name: "Message Dani Colleague", exact: true })
+          .fill("Shared across workspaces")
+        await page
+          .getByRole("button", { name: "Send message", exact: true })
+          .click()
+      } else {
+        await rail
+          .getByRole("link", { name: "Dani Colleague", exact: true })
+          .click()
+      }
+      await expect(page).toHaveURL(/\/messages\?mode=internal&internal=chat-1$/)
+      await expect(
+        page
+          .getByRole("region", { name: "Internal conversation" })
+          .getByRole("article"),
+      ).toContainText("Shared across workspaces")
+    }
+    expect(state.creates).toEqual(["recipient-1"])
+    expect(state.sends).toHaveLength(1)
+    expect(state.messages).toHaveLength(1)
+  })
+}
+
+for (const role of ["STAFF", "SUPERADMIN"] as const) {
+  test(`${role} can open shared Internal Messages from its module`, async ({
+    page,
+  }) => {
+    await internalChat(page, role)
+    await page.goto(role === "STAFF" ? "/project-workspace" : "/accounts")
+    await page
+      .getByRole("navigation", { name: "Main menu", exact: true })
+      .getByRole("link", { name: "Internal Messages", exact: true })
+      .click()
+    await expect(page).toHaveURL(/\/messages\?mode=internal$/)
+    await expect(
+      page.getByRole("button", {
+        name: "Dani Colleague Designer",
+        exact: true,
+      }),
+    ).toBeVisible()
+  })
+}
+
+test("clients cannot open internal conversation presentation or controls", async ({
+  page,
+}) => {
+  await restoreSession(page, "USER")
+  const internalRequests: string[] = []
+  page.on("request", (request) => {
+    if (
+      new URL(request.url()).pathname.startsWith("/api/internal-conversations")
+    )
+      internalRequests.push(request.url())
+  })
+  await page.goto("/messages?mode=internal&internal=chat-1")
+  await expect(
+    page.getByRole("heading", { name: "Messages", exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("region", { name: "Internal conversation" }),
+  ).toHaveCount(0)
+  await expect(
+    page.getByRole("link", { name: "Internal Messages", exact: true }),
+  ).toHaveCount(0)
+  await expect(
+    page.getByRole("button", {
+      name: "Open internal conversations",
+      exact: true,
+    }),
+  ).toHaveCount(0)
+  expect(internalRequests).toEqual([])
+})
+
 for (const role of ["STAFF", "ADMIN", "SUPERADMIN"] as const) {
   for (const width of [1440, 390]) {
     test(`${role} starts an internal chat and retries a saved message at ${width}px`, async ({
@@ -223,26 +392,13 @@ for (const role of ["STAFF", "ADMIN", "SUPERADMIN"] as const) {
         name: "Back to client chats",
         exact: true,
       })
-      await expect(clientChats).toBeVisible()
+      await expect(clientChats).toHaveCount(0)
       await expect(
         navigation.getByRole("button", {
           name: "Open internal conversations",
           exact: true,
         }),
       ).toHaveCount(0)
-      await clientChats.click()
-      await expect(page).toHaveURL(/\/messages$/)
-      await expect(
-        navigation.getByText("Internal chats", { exact: true }),
-      ).toHaveCount(0)
-      await navigation
-        .getByRole("button", {
-          name: "Open internal conversations",
-          exact: true,
-        })
-        .click()
-      await expect(page).toHaveURL(/\/messages\?mode=internal$/)
-      await expect(clientChats).toBeVisible()
       await expect(
         navigation.getByRole("link", { name: "Dani Colleague", exact: true }),
       ).toBeVisible()

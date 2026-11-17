@@ -1,9 +1,6 @@
+import { FormInput } from "@/components/ui/form-input"
 import { useState } from "react"
-import {
-  panelField,
-  panelInput,
-} from "@/features/departments/styles/member-panel-styles"
-import { Input } from "@/components/ui/input"
+import { panelField } from "@/components/ui/panel-styles"
 
 export function CapacityFields({
   scheduledHours,
@@ -37,8 +34,7 @@ export function CapacityFields({
     <>
       <label className={panelField}>
         Scheduled hours
-        <Input
-          className={panelInput}
+        <FormInput
           name="scheduledHours"
           type="number"
           min="0"
@@ -52,8 +48,7 @@ export function CapacityFields({
       </label>
       <label className={panelField}>
         Time off / holiday hours
-        <Input
-          className={panelInput}
+        <FormInput
           name="timeOffHours"
           type="number"
           min="0"

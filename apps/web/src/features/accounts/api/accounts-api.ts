@@ -24,25 +24,32 @@ export type NewAccount = {
   teamId?: string
 }
 
-export function listAccounts(
-  search: string,
-  role: string,
-  page: number,
-  sort: AccountSortKey = "createdAt",
-  direction: AccountSortDirection = "desc",
+export function listAccounts({
+  search = "",
+  role = "",
+  page = 1,
+  sort = "createdAt",
+  direction = "desc",
   deleted = false,
-  signal?: AbortSignal,
-) {
+  signal,
+}: {
+  search?: string
+  /** An `AccountRole`, or "" for every role. */
+  role?: string
+  page?: number
+  sort?: AccountSortKey
+  direction?: AccountSortDirection
+  /** List accounts in Trash instead of active ones. */
+  deleted?: boolean
+  signal?: AbortSignal
+} = {}) {
   const params = new URLSearchParams({ page: String(page) })
   if (search) params.set("search", search)
   if (role) params.set("role", role)
   if (sort !== "createdAt") params.set("sort", sort)
   if (direction !== "desc") params.set("direction", direction)
   if (deleted) params.set("deleted", "true")
-  return apiRequest<AccountList>(
-    `/api/users?${params}`,
-    signal ? { signal } : {},
-  )
+  return apiRequest<AccountList>(`/api/users?${params}`, { signal })
 }
 
 export function createAccount(data: NewAccount) {

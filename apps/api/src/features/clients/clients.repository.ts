@@ -1,7 +1,13 @@
 import { hashPassword } from "../auth/auth.password.js"
+import {
+  moveAccountToTrash,
+  revokeSessions,
+} from "../users/account-lifecycle.js"
 import type { parseClientInput } from "./clients.schema.js"
 import { Role, type Prisma } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
+import { fail } from "../../shared/http-error.js"
+import { insensitive, paginate } from "../../shared/query/pagination.js"
 import type { ClientFilters } from "./clients.schema.js"
 
 const clientSelect = {
@@ -28,11 +34,9 @@ export const clientsRepository = {
           (await tx.project.count({ where: { clientId: id } }))
         )
           return "linked"
-        await tx.user.update({
-          where: { id },
-          data: { isActive: false, accountDeletedAt: new Date() },
-        })
-        await tx.session.deleteMany({ where: { userId: id } })
+        // Clients have no separate deactivate step: one write disables the
+        // login, moves it to Trash and revokes its sessions.
+        await moveAccountToTrash(tx, id, { deactivate: true })
         return "deleted"
       },
       { isolationLevel: "Serializable" },
@@ -65,7 +69,7 @@ export const clientsRepository = {
           },
           select: { id: true },
         })
-        if (duplicate) throw new Error("DUPLICATE_EMAIL")
+        if (duplicate) fail(409, "An account with this email already exists.")
         if (creating)
           return tx.user.create({
             data: {
@@ -80,47 +84,32 @@ export const clientsRepository = {
           data: profile,
           select: clientSelect,
         })
-        if (!profile.isActive)
-          await tx.session.deleteMany({ where: { userId: updated.id } })
+        if (!profile.isActive) await revokeSessions(tx, updated.id)
         return updated
       },
       { isolationLevel: "Serializable" },
     )
   },
   async list(filters: ClientFilters) {
-    const prisma = getPrisma()!
     const where: Prisma.UserWhereInput = {
       role: Role.USER,
       accountDeletedAt: null,
       ...(filters.status ? { isActive: filters.status === "ACTIVE" } : {}),
-      ...(filters.search
-        ? {
-            OR: [
-              { fullName: { contains: filters.search, mode: "insensitive" } },
-              { email: { contains: filters.search, mode: "insensitive" } },
-            ],
-          }
-        : {}),
+      ...insensitive<Prisma.UserWhereInput>(filters.search, [
+        "fullName",
+        "email",
+      ]),
     }
     const orderBy: Prisma.UserOrderByWithRelationInput[] = [
       { [filters.sortBy]: filters.sortOrder },
       { id: "asc" },
     ]
-    const pageSize = 10
-    const [clients, total] = await prisma.$transaction(
-      [
-        prisma.user.findMany({
-          where,
-          select: clientSelect,
-          orderBy,
-          skip: (filters.page - 1) * pageSize,
-          take: pageSize,
-        }),
-        prisma.user.count({ where }),
-      ],
-      { isolationLevel: "RepeatableRead" },
-    )
-    return { clients, total, page: filters.page, pageSize }
+    const { rows: clients, ...page } = await paginate(filters.page, {
+      rows: (db, window) =>
+        db.user.findMany({ where, select: clientSelect, orderBy, ...window }),
+      count: (db) => db.user.count({ where }),
+    })
+    return { clients, ...page }
   },
   async detail(id: string) {
     const prisma = getPrisma()!
@@ -155,23 +144,27 @@ export const clientsRepository = {
         })
         if (!client) return null
         const where = { clientId: id }
-        const [serviceRequests, total] = await Promise.all([
-          tx.serviceRequest.findMany({
-            where,
-            select: {
-              id: true,
-              title: true,
-              status: true,
-              createdAt: true,
-              service: { select: { id: true, name: true } },
-            },
-            orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-            skip: (page - 1) * 10,
-            take: 10,
-          }),
-          tx.serviceRequest.count({ where }),
-        ])
-        return { serviceRequests, total, page, pageSize: 10 }
+        const { rows: serviceRequests, ...result } = await paginate(
+          page,
+          {
+            rows: (db, window) =>
+              db.serviceRequest.findMany({
+                where,
+                select: {
+                  id: true,
+                  title: true,
+                  status: true,
+                  createdAt: true,
+                  service: { select: { id: true, name: true } },
+                },
+                orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+                ...window,
+              }),
+            count: (db) => db.serviceRequest.count({ where }),
+          },
+          { tx },
+        )
+        return { serviceRequests, ...result }
       },
       { isolationLevel: "RepeatableRead" },
     )
@@ -189,23 +182,27 @@ export const clientsRepository = {
           clientId: id,
           OR: [{ requestId: null }, { startDate: { not: null } }],
         }
-        const [projects, total] = await Promise.all([
-          tx.project.findMany({
-            where,
-            select: {
-              id: true,
-              name: true,
-              status: true,
-              startDate: true,
-              createdAt: true,
-            },
-            orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-            skip: (page - 1) * 10,
-            take: 10,
-          }),
-          tx.project.count({ where }),
-        ])
-        return { projects, total, page, pageSize: 10 }
+        const { rows: projects, ...result } = await paginate(
+          page,
+          {
+            rows: (db, window) =>
+              db.project.findMany({
+                where,
+                select: {
+                  id: true,
+                  name: true,
+                  status: true,
+                  startDate: true,
+                  createdAt: true,
+                },
+                orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+                ...window,
+              }),
+            count: (db) => db.project.count({ where }),
+          },
+          { tx },
+        )
+        return { projects, ...result }
       },
       { isolationLevel: "RepeatableRead" },
     )

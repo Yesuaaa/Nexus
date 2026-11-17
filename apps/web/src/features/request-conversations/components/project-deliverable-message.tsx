@@ -2,7 +2,7 @@ import Link from "next/link"
 import { FileText } from "lucide-react"
 import {
   deliverableStatusLabel,
-  deliverableStatusClass,
+  deliverableStatusTone,
 } from "@/features/project-workspace/components/deliverable-status"
 import { Pill } from "@/components/ui/pill"
 import { focusRing } from "@/components/layout/styles"
@@ -33,7 +33,7 @@ export function ProjectDeliverableMessage({
           {card.title}
         </span>
       </div>
-      <Pill className={deliverableStatusClass(status)}>
+      <Pill tone={deliverableStatusTone(status)}>
         {deliverableStatusLabel(status)}
       </Pill>
       <p className="m-0 text-xs text-[#52627a] [overflow-wrap:anywhere]">

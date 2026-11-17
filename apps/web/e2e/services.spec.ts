@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
 import { Permissions } from "../src/features/auth/model/permissions"
 import {
   configureRegressionTest,
@@ -8,6 +8,18 @@ import {
 } from "./regression-support"
 
 configureRegressionTest()
+
+/** Opens a service row's ⋯ menu and picks an action, e.g. "Edit". */
+async function chooseServiceAction(
+  page: Page,
+  service: string,
+  action: string,
+) {
+  await page
+    .getByRole("button", { name: `More actions for ${service}`, exact: true })
+    .click()
+  await page.getByRole("menuitem", { name: action, exact: true }).click()
+}
 
 test.describe("Service management", () => {
   test.skip(live, "Live mode uses the supplied accounts against the real API")
@@ -24,20 +36,37 @@ test.describe("Service management", () => {
     await expect(
       page.getByRole("rowheader", { name: "Test Service" }),
     ).toBeVisible()
+    await expect(
+      page.getByRole("button", { name: "Create Service", exact: true }),
+    ).toHaveCount(0)
+    await page
+      .getByRole("button", {
+        name: "More actions for Test Service",
+        exact: true,
+      })
+      .click()
+    // Read-only users get a menu with only the view action.
+    await expect(page.getByRole("menuitem")).toHaveCount(1)
     for (const name of [
-      "Create Service",
-      "Edit Test Service",
-      "More actions for Test Service",
+      "Edit",
+      "Activate service",
+      "Deactivate service",
+      "Delete service",
     ]) {
-      await expect(page.getByRole("button", { name, exact: true })).toHaveCount(
-        0,
-      )
+      await expect(
+        page.getByRole("menuitem", { name, exact: true }),
+      ).toHaveCount(0)
     }
-    await page.getByRole("button", { name: "View Test Service" }).click()
+    await page
+      .getByRole("menuitem", { name: "View service", exact: true })
+      .click()
     const detailsPanel = page.getByRole("dialog")
     await expect(detailsPanel).toContainText(
       "A service used by the regression suite.",
     )
+    await expect(
+      detailsPanel.getByRole("button", { name: "Edit service", exact: true }),
+    ).toHaveCount(0)
     const panelBounds = await detailsPanel.boundingBox()
     expect(panelBounds).not.toBeNull()
     expect(panelBounds?.x).toBeGreaterThan(600)
@@ -49,9 +78,7 @@ test.describe("Service management", () => {
   }) => {
     await restoreSession(page, "ADMIN")
     await page.goto("/services")
-    await page
-      .getByRole("button", { name: "Edit Test Service", exact: true })
-      .click()
+    await chooseServiceAction(page, "Test Service", "Edit")
     const dialog = page.getByRole("dialog")
     const selectStep = (name: string) =>
       dialog
@@ -123,9 +150,7 @@ test.describe("Service management", () => {
     })
     await expect(dialog).toHaveCount(0)
     await page.reload()
-    await page
-      .getByRole("button", { name: "View Test Service", exact: true })
-      .click()
+    await chooseServiceAction(page, "Test Service", "View service")
     for (const text of [
       "Brand guide; Project brief",
       "Discuss project scope",
@@ -133,9 +158,7 @@ test.describe("Service management", () => {
       await expect(dialog).toContainText(text)
     }
     await dialog.getByRole("button", { name: "Close details" }).click()
-    await page
-      .getByRole("button", { name: "Edit Test Service", exact: true })
-      .click()
+    await chooseServiceAction(page, "Test Service", "Edit")
     await selectStep("Benefits")
     await expect(dialog.getByLabel("Benefit Title")).toHaveValue(
       "Launch with confidence",
@@ -184,9 +207,7 @@ test.describe("Service management", () => {
   }) => {
     await restoreSession(page, "ADMIN")
     await page.goto("/services")
-    await page
-      .getByRole("button", { name: "Edit Test Service", exact: true })
-      .click()
+    await chooseServiceAction(page, "Test Service", "Edit")
     const dialog = page.getByRole("dialog")
     const selectStep = (name: string) =>
       dialog
@@ -256,9 +277,7 @@ test.describe("Service management", () => {
     })
     await expect(dialog).toHaveCount(0)
     await page.reload()
-    await page
-      .getByRole("button", { name: "Edit Test Service", exact: true })
-      .click()
+    await chooseServiceAction(page, "Test Service", "Edit")
     await selectStep("Options")
     await expect(dialog.getByRole("radio", { name: /^Packages/ })).toBeChecked()
     await selectStep("Packages")
@@ -283,9 +302,7 @@ test.describe("Service management", () => {
     expect((await updated).postDataJSON()).toMatchObject({ packages: [] })
     await expect(dialog).toHaveCount(0)
     await page.reload()
-    await page
-      .getByRole("button", { name: "Edit Test Service", exact: true })
-      .click()
+    await chooseServiceAction(page, "Test Service", "Edit")
     await selectStep("Options")
     await expect(dialog.getByRole("radio", { name: /^Pricing/ })).toBeChecked()
   })
@@ -354,7 +371,7 @@ test.describe("Service management", () => {
     })
     await page.goto("/services")
     await expect(page.getByText(payload, { exact: true })).toBeVisible()
-    await page.getByRole("button", { name: "View Untrusted service" }).click()
+    await chooseServiceAction(page, "Untrusted service", "View service")
     await expect(page.getByRole("dialog")).toContainText(payload)
     expect(
       await page.evaluate(() => Reflect.get(window, "__regressionXss")),
@@ -492,9 +509,7 @@ test.describe("Service management", () => {
       await expect(
         page.getByRole("rowheader", { name: "Consulting", exact: true }),
       ).toBeVisible()
-      await page
-        .getByRole("button", { name: "Edit Consulting", exact: true })
-        .click()
+      await chooseServiceAction(page, "Consulting", "Edit")
       await dialog.getByLabel("Service Name").fill("Updated Consulting")
       await page.route("**/api/services/service-2", (route) =>
         route.fulfill({ status: 403, json: { error: "Permission revoked" } }),
@@ -530,9 +545,7 @@ test.describe("Service management", () => {
       ).toBeVisible()
       if (offering === "Packages") {
         await page.unroute("**/api/services/service-2")
-        await page
-          .getByRole("button", { name: "Edit Consulting", exact: true })
-          .click()
+        await chooseServiceAction(page, "Consulting", "Edit")
         await dialog
           .getByRole("navigation", { name: "Service form progress" })
           .getByRole("button", { name: "5 Packages", exact: true })
@@ -580,9 +593,7 @@ test.describe("Service management", () => {
           "Replacement",
         ])
         await expect(dialog).toHaveCount(0)
-        await page
-          .getByRole("button", { name: "Edit Consulting", exact: true })
-          .click()
+        await chooseServiceAction(page, "Consulting", "Edit")
         await dialog
           .getByRole("navigation", { name: "Service form progress" })
           .getByRole("button", { name: "5 Packages", exact: true })

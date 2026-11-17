@@ -1,5 +1,3 @@
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
-
 export type KpiDistributionSegment = {
   label: string
   value: number
@@ -36,12 +34,6 @@ export function KpiDistributionChart({
             />
           ))}
       </div>
-      <HoverTooltip
-        align="end"
-        className="max-w-64 text-left leading-relaxed whitespace-normal"
-      >
-        {label}
-      </HoverTooltip>
     </div>
   )
 }

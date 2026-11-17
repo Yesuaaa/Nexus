@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { useAnimatedPanelClose } from "@/components/ui/use-animated-panel-close"
+import { useRestoreFocus } from "@/lib/use-restore-focus"
 import { cn } from "@/lib/utils"
 import type { Service } from "../api/services-api"
 import { ServiceIcon } from "./service-icon"
@@ -28,9 +29,7 @@ export function ServiceShowcaseDialog({
 }) {
   const { open, handleOpenChange, closeAfterTransition } =
     useAnimatedPanelClose(onClose)
-  const openerRef = useRef(
-    typeof document === "undefined" ? null : document.activeElement,
-  )
+  const restoreFocus = useRestoreFocus()
   const nameRef = useRef<HTMLSpanElement>(null)
   const typeTweenRef = useRef<gsap.core.Tween | null>(null)
   const departmentLabel =
@@ -94,12 +93,7 @@ export function ServiceShowcaseDialog({
         showCloseButton={false}
         overlayClassName="nexus-panel-overlay z-[110] bg-[rgb(13_28_57_/_58%)]"
         className="nexus-detail-dialog z-[110] grid aspect-[896/492] max-h-[calc(100dvh-28px)] w-[min(896px,calc(100vw-28px),calc(182.1138dvh-51px))] max-w-[896px] grid-cols-[40%_60%] gap-0 overflow-hidden rounded-2xl border-0 bg-white p-0 text-[#111827] shadow-[0_24px_80px_rgb(7_20_48_/_28%)] max-[700px]:aspect-auto max-[700px]:w-[calc(100vw-28px)] max-[700px]:grid-cols-1"
-        onCloseAutoFocus={(event) => {
-          event.preventDefault()
-          const opener = openerRef.current
-          if (opener instanceof HTMLElement && opener.isConnected)
-            opener.focus()
-        }}
+        onCloseAutoFocus={restoreFocus.onCloseAutoFocus}
       >
         <div
           className="relative h-full min-h-0 overflow-hidden bg-[#294c96] max-[700px]:h-auto max-[700px]:aspect-[16/8]"

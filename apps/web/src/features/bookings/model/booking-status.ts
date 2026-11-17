@@ -1,24 +1,25 @@
-import type { ServiceRequestStatus } from "@/features/services/api/services-api"
+import type { PillTone } from "@/components/ui/pill"
+import type { ServiceRequestStatus } from "@/features/service-operations/model/service-request-contracts"
 
 export const bookingStatuses: Record<
   ServiceRequestStatus,
-  { label: string; className: string }
+  { label: string; tone: PillTone }
 > = {
-  SUBMITTED: { label: "Submitted", className: "bg-[#fff3df] text-[#805316]" },
+  SUBMITTED: { label: "Submitted", tone: "warning" },
   UNDER_REVIEW: {
     label: "Under review",
-    className: "bg-[#e8eef9] text-[#244993]",
+    tone: "info",
   },
   AWAITING_CLIENT_INFO: {
     label: "Awaiting information",
-    className: "bg-[#fff3df] text-[#805316]",
+    tone: "warning",
   },
   READY_FOR_QUOTATION: {
     label: "Ready for quotation",
-    className: "bg-[#e8eef9] text-[#244993]",
+    tone: "info",
   },
-  CLOSED: { label: "Closed", className: "bg-[#e9edf2] text-[#52627a]" },
-  CANCELLED: { label: "Cancelled", className: "bg-[#fde4ea] text-[#b4234d]" },
+  CLOSED: { label: "Closed", tone: "neutral" },
+  CANCELLED: { label: "Cancelled", tone: "danger" },
 }
 
 export function bookingDate(value: string): string {

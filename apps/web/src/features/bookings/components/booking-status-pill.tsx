@@ -1,5 +1,5 @@
 import { Pill } from "@/components/ui/pill"
-import type { ServiceRequestStatus } from "@/features/services/api/services-api"
+import type { ServiceRequestStatus } from "@/features/service-operations/model/service-request-contracts"
 import { bookingStatuses } from "../model/booking-status"
 
 export function BookingStatusPill({
@@ -10,5 +10,5 @@ export function BookingStatusPill({
   label?: string
 }) {
   const info = bookingStatuses[status]
-  return <Pill className={info.className}>{label ?? info.label}</Pill>
+  return <Pill tone={info.tone}>{label ?? info.label}</Pill>
 }

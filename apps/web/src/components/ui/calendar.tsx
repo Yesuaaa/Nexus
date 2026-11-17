@@ -77,7 +77,11 @@ export function Calendar({
         setFocused(today)
         onSelect(today)
       }}
-      className="rounded-md px-2 py-1 text-xs font-semibold text-[#203f8c] hover:bg-[#eaf0fb] focus-visible:outline-2 focus-visible:outline-[#294a9b] disabled:opacity-30"
+      className={cn(
+        "rounded-md px-2 py-1 text-xs font-semibold text-[#203f8c] hover:bg-[#eaf0fb] focus-visible:outline-2 focus-visible:outline-[#294a9b] disabled:opacity-30",
+        monthGrid &&
+          "mr-1 h-8 rounded-lg border border-[#e3e7ed] px-3 py-0 font-medium text-[#182235] hover:bg-[#f5f7fa]",
+      )}
     >
       Today
     </button>
@@ -106,9 +110,19 @@ export function Calendar({
   }
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between gap-2">
+      <div
+        className={cn(
+          "flex items-center justify-between gap-2",
+          monthGrid ? "mb-4" : "mb-3",
+        )}
+      >
         <p
-          className="m-0 text-sm font-semibold text-[#182235]"
+          className={cn(
+            "m-0 font-semibold",
+            monthGrid
+              ? "text-lg tracking-[-0.02em] text-[#101d35]"
+              : "text-sm text-[#182235]",
+          )}
           aria-live="polite"
         >
           {monthLabel.format(view)}
@@ -157,7 +171,7 @@ export function Calendar({
         role="grid"
         aria-label={monthLabel.format(view)}
         className={cn(
-          monthGrid && "overflow-hidden rounded-lg border border-[#e1e4ea]",
+          monthGrid && "overflow-hidden rounded-xl border border-[#eceef2]",
         )}
         onKeyDown={(event) => {
           const target = event.target
@@ -192,10 +206,7 @@ export function Calendar({
       >
         <div
           role="row"
-          className={cn(
-            "grid grid-cols-7",
-            monthGrid ? "bg-[#f5f7fa]" : "mb-1",
-          )}
+          className={cn("grid grid-cols-7", !monthGrid && "mb-1")}
         >
           {(monthGrid
             ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -206,11 +217,11 @@ export function Calendar({
               role="columnheader"
               className={cn(
                 "py-2 text-center font-medium",
-                monthGrid &&
-                  "border-r border-[#e1e4ea] text-[10px] tracking-wide uppercase last:border-r-0",
-                markers
-                  ? "text-xs text-slate-600"
-                  : "text-[10px] text-[#738096]",
+                monthGrid
+                  ? "py-2.5 text-[11px] text-[#8a94a6]"
+                  : markers
+                    ? "text-xs text-slate-600"
+                    : "text-[10px] text-[#738096]",
               )}
             >
               {day}
@@ -227,6 +238,7 @@ export function Calendar({
               const markedToday = Boolean(markers) && key === today
               const dayMarkers = markers?.[key] ?? []
               const dots = dayMarkers.slice(0, 3)
+              const outside = date.getUTCMonth() !== view.getUTCMonth()
               const inWeek =
                 week && !!selected && date >= monday && date <= sunday
               return (
@@ -236,12 +248,8 @@ export function Calendar({
                   aria-selected={active}
                   className={cn(
                     monthGrid
-                      ? "min-w-0 border-t border-r border-[#e1e4ea] last:border-r-0"
+                      ? "min-w-0 border-t border-r border-[#f0f1f4] last:border-r-0"
                       : "my-0.5 flex justify-center",
-                    monthGrid &&
-                      (date.getUTCMonth() === view.getUTCMonth()
-                        ? "bg-[#f8fafb]"
-                        : "bg-[#f0f3f6]"),
                     inWeek &&
                       "bg-[#eaf0fb] first:rounded-l-lg last:rounded-r-lg",
                   )}
@@ -266,7 +274,8 @@ export function Calendar({
                       markers &&
                         !monthGrid &&
                         "flex h-11 w-full max-w-14 flex-col items-center justify-center gap-1 text-base text-slate-800",
-                      date.getUTCMonth() !== view.getUTCMonth() &&
+                      outside &&
+                        !monthGrid &&
                         (markers ? "text-slate-500" : "text-[#9aa8bb]"),
                       key === today &&
                         !monthGrid &&
@@ -277,62 +286,76 @@ export function Calendar({
                         !monthGrid &&
                         "bg-[#203f8c] font-semibold text-white hover:bg-[#172f70] hover:text-white",
                       monthGrid &&
-                        "flex h-32 w-full min-w-0 flex-col items-stretch justify-start gap-1.5 rounded-none p-2 text-left text-xs hover:bg-[#f1f5fb] max-[560px]:h-24 max-[560px]:gap-1 max-[560px]:p-1 focus-visible:-outline-offset-2",
-                      monthGrid &&
-                        active &&
-                        "bg-[#edf2fc] ring-1 ring-inset ring-[#b8c9eb]",
+                        "flex h-28 w-full min-w-0 flex-col items-stretch justify-start gap-1 rounded-none p-1.5 text-left text-xs text-[#182235] transition-colors hover:bg-[#f8f9fb] hover:text-[#182235] focus-visible:-outline-offset-2 motion-reduce:transition-none max-[560px]:h-14 max-[560px]:items-center max-[560px]:p-1",
+                      monthGrid && active && "bg-[#f4f7fd] hover:bg-[#eef2fb]",
                     )}
                     onFocus={() => setFocused(key)}
                     onClick={() => onSelect(key)}
                   >
                     {monthGrid ? (
                       <>
-                        <span className="flex items-center justify-between gap-1">
-                          <span
-                            className={cn(
-                              "grid size-6 place-items-center rounded-full text-[11px] tabular-nums",
-                              key === today &&
-                                "bg-[#203f8c] font-semibold text-white",
-                              active &&
-                                key !== today &&
-                                "bg-[#dce6f8] font-semibold text-[#203f8c]",
-                            )}
-                          >
-                            {date.getUTCDate()}
-                          </span>
-                          {dayMarkers.length > 0 && (
-                            <span
-                              className="mr-1 size-1.5 shrink-0 rounded-full bg-[#4168b0]"
-                              aria-hidden="true"
-                            />
-                          )}
-                        </span>
                         <span
-                          className="flex min-w-0 flex-col gap-1"
-                          aria-hidden="true"
-                        >
-                          {dots
-                            .slice(0, 2)
-                            .map(({ label, title, color }, index) => (
-                              <span
-                                key={index}
-                                title={title ?? label}
-                                className="block truncate rounded border-l-2 px-1.5 py-1 text-[10px] leading-tight font-medium max-[560px]:px-0.5 max-[560px]:text-[9px]"
-                                style={{
-                                  color,
-                                  borderColor: color,
-                                  backgroundColor: `color-mix(in srgb, ${color} 10%, white)`,
-                                }}
-                              >
-                                {title ?? label}
-                              </span>
-                            ))}
-                          {dayMarkers.length > 2 && (
-                            <span className="px-1 text-[10px] font-medium text-[#52627a]">
-                              +{dayMarkers.length - 2} more
-                            </span>
+                          className={cn(
+                            "grid size-6 shrink-0 place-items-center rounded-full text-xs font-medium tabular-nums",
+                            outside && "text-[#b6bdca]",
+                            key === today &&
+                              "bg-[#203f8c] font-semibold text-white",
+                            active &&
+                              key !== today &&
+                              "bg-[#e3eaf8] font-semibold text-[#203f8c]",
                           )}
+                        >
+                          {date.getUTCDate()}
                         </span>
+                        {dayMarkers.length > 0 && (
+                          <>
+                            <span
+                              className={cn(
+                                "flex min-w-0 flex-col gap-0.5 max-[560px]:hidden",
+                                outside && "opacity-50",
+                              )}
+                              aria-hidden="true"
+                            >
+                              {dayMarkers
+                                .slice(0, dayMarkers.length > 3 ? 2 : 3)
+                                .map(({ label, title, color }, index) => (
+                                  <span
+                                    key={index}
+                                    title={title ?? label}
+                                    className="flex min-w-0 items-center gap-1.5 px-1 text-[11px] leading-[18px] text-[#3b4658]"
+                                  >
+                                    <span
+                                      className="size-1.5 shrink-0 rounded-full"
+                                      style={{ backgroundColor: color }}
+                                    />
+                                    <span className="truncate">
+                                      {title ?? label}
+                                    </span>
+                                  </span>
+                                ))}
+                              {dayMarkers.length > 3 && (
+                                <span className="px-1 text-[10px] font-medium text-[#8a94a6]">
+                                  +{dayMarkers.length - 2} more
+                                </span>
+                              )}
+                            </span>
+                            <span
+                              className={cn(
+                                "hidden items-center gap-0.5 max-[560px]:flex",
+                                outside && "opacity-50",
+                              )}
+                              aria-hidden="true"
+                            >
+                              {dots.map(({ color }, index) => (
+                                <span
+                                  key={index}
+                                  className="size-1.5 rounded-full"
+                                  style={{ backgroundColor: color }}
+                                />
+                              ))}
+                            </span>
+                          </>
+                        )}
                       </>
                     ) : (
                       date.getUTCDate()

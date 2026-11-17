@@ -3,10 +3,9 @@ import { useDatePreferences } from "@/features/settings/providers/preferences-pr
 
 import Link from "next/link"
 import { focusRing } from "@/components/layout/styles"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { cn } from "@/lib/utils"
 import { messagePreview } from "../model/conversation-groups"
-import { ConversationAvatar } from "./conversation-avatar"
+import { Avatar } from "@/components/ui/avatar"
 import type { ConversationSummary } from "../api/request-conversations-api"
 import type { ProjectConversationSummary } from "../api/project-conversations-api"
 
@@ -15,11 +14,13 @@ export function ConversationListItem({
   isClient,
   requestId,
   railCollapsed,
+  listHref = "/messages",
 }: {
   conversation: ConversationSummary
   isClient: boolean
   requestId: string | null
   railCollapsed: boolean
+  listHref?: string
 }) {
   const selected =
     requestId === conversation.id ||
@@ -37,7 +38,7 @@ export function ConversationListItem({
   return (
     <ConversationRow
       id={conversation.id}
-      href={`/messages?request=${encodeURIComponent(conversation.id)}`}
+      href={`${listHref}${listHref.includes("?") ? "&" : "?"}request=${encodeURIComponent(conversation.id)}`}
       name={name}
       subtitle={`${department} · ${bookingsLabel}`}
       imageUrl={participant?.imageUrl}
@@ -57,12 +58,14 @@ export function ProjectConversationListItem({
   projectId,
   view,
   railCollapsed,
+  listHref = "/messages",
 }: {
   conversation: ProjectConversationSummary
   accountId: string
   projectId: string | null
   view: "active" | "archived"
   railCollapsed: boolean
+  listHref?: string
 }) {
   const members = conversation.participants
     .filter((person) => person.id !== accountId)
@@ -73,7 +76,7 @@ export function ProjectConversationListItem({
   return (
     <ConversationRow
       id={conversation.id}
-      href={`/messages?project=${encodeURIComponent(conversation.id)}${view === "archived" ? "&view=archived" : ""}`}
+      href={`${listHref}${listHref.includes("?") ? "&" : "?"}project=${encodeURIComponent(conversation.id)}${view === "archived" ? "&view=archived" : ""}`}
       name={conversation.name}
       subtitle={subtitle}
       label={`${conversation.name}, ${subtitle}. ${preview}${conversation.unreadCount ? `. ${conversation.unreadCount} unread messages` : ""}`}
@@ -130,7 +133,7 @@ function ConversationRow({
         )}
       >
         <span className="relative shrink-0">
-          <ConversationAvatar name={name} imageUrl={imageUrl} />
+          <Avatar name={name} imageUrl={imageUrl} />
           {Boolean(unreadCount) && railCollapsed && (
             <span
               aria-hidden="true"
@@ -192,11 +195,6 @@ function ConversationRow({
             )}
           </span>
         </span>
-        {railCollapsed && (
-          <HoverTooltip side="right">
-            {name} · {subtitle}
-          </HoverTooltip>
-        )}
       </Link>
     </div>
   )

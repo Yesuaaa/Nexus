@@ -1,7 +1,7 @@
 import type { Prisma } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
-import { serviceImagePublicUrl } from "../services/service-image-storage.js"
+import { userImageUrl } from "../services/service-image-storage.js"
 
 const internalRoles = ["STAFF", "ADMIN", "SUPERADMIN"] as const
 type InternalRole = (typeof internalRoles)[number]
@@ -30,21 +30,6 @@ type InternalUser = {
   employee?: { profileImageUrl: string | null } | null
 }
 
-function avatarUrl(user: Pick<InternalUser, "profileImagePath" | "employee">) {
-  const value =
-    serviceImagePublicUrl(user.profileImagePath) ||
-    user.employee?.profileImageUrl
-  if (!value) return null
-  try {
-    const url = new URL(value)
-    return url.protocol === "https:" && !url.username && !url.password
-      ? url.href
-      : null
-  } catch {
-    return null
-  }
-}
-
 function participantDto(user: InternalUser) {
   return {
     id: user.id,
@@ -55,11 +40,11 @@ function participantDto(user: InternalUser) {
     isActive: user.isActive,
     accountDeletedAt: user.accountDeletedAt,
     department: user.department,
-    imageUrl: avatarUrl(user),
+    imageUrl: userImageUrl(user),
   }
 }
 
-function isInternalRole(role: string): role is InternalRole {
+export function isInternalRole(role: string): role is InternalRole {
   return (internalRoles as readonly string[]).includes(role)
 }
 
@@ -290,7 +275,10 @@ export async function getInternalConversationAccess(
   const participant = otherParticipant(record, userId)
   return {
     conversation: participantDto(participant),
-    canSend: participant.isActive && participant.accountDeletedAt === null,
+    canSend:
+      participant.isActive &&
+      participant.accountDeletedAt === null &&
+      isInternalRole(participant.role),
   }
 }
 
@@ -390,6 +378,19 @@ export async function sendInternalMessage(
     })
     if (!access)
       throw new ServiceRequestsError(404, "Internal conversation not found")
+    const sender =
+      access.participantOne.id === userId
+        ? access.participantOne
+        : access.participantTwo
+    if (
+      !sender.isActive ||
+      sender.accountDeletedAt !== null ||
+      !isInternalRole(sender.role)
+    )
+      throw new ServiceRequestsError(
+        403,
+        "Only staff and administrators can use internal chat.",
+      )
     const participant =
       access.participantOne.id === userId
         ? access.participantTwo

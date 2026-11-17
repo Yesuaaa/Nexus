@@ -1,6 +1,8 @@
-import { Role, type User } from "../../generated/prisma/client.js"
+import { Role } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { readDatabase } from "../../lib/database-read.js"
+import { activeAccount } from "../../shared/query/accounts.js"
+import { publicUserInclude } from "../users/users.dto.js"
 
 export interface CreateUserData {
   email: string
@@ -34,17 +36,11 @@ export const authRepository = {
     if (!prisma) return null
     return prisma.user.findUnique({
       where: { email },
-      include: {
-        department: {
-          select: { id: true, name: true, code: true, color: true },
-        },
-        team: { select: { id: true, name: true } },
-        headOf: { select: { id: true, name: true } },
-      },
+      include: publicUserInclude,
     })
   },
 
-  async createUser(data: CreateUserData): Promise<User> {
+  async createUser(data: CreateUserData) {
     const prisma = getPrisma()!
     return prisma.user.create({
       data: {
@@ -54,6 +50,7 @@ export const authRepository = {
         passwordHash: data.passwordHash,
         role: data.role ?? Role.USER,
       },
+      include: publicUserInclude,
     })
   },
 
@@ -78,17 +75,7 @@ export const authRepository = {
     return readDatabase(() =>
       prisma.session.findUnique({
         where: { id },
-        include: {
-          user: {
-            include: {
-              department: {
-                select: { id: true, name: true, code: true, color: true },
-              },
-              team: { select: { id: true, name: true } },
-              headOf: { select: { id: true, name: true } },
-            },
-          },
-        },
+        include: { user: { include: publicUserInclude } },
       }),
     )
   },
@@ -117,7 +104,7 @@ export const authRepository = {
           id: session.id,
           tokenHash: currentHash,
           expiresAt: { gt: new Date() },
-          user: { isActive: true, accountDeletedAt: null },
+          user: activeAccount,
         },
         data: { tokenHash: nextHash },
       })

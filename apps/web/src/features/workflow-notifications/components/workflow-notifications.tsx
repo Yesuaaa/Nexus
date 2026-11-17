@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { dropdownMenuClass } from "@/components/ui/dropdown-styles"
 import { iconButtonClass } from "@/components/layout/styles"
+import { watchVisibleRefresh } from "@/lib/visible-refresh"
 
 type Notification = {
   id: string
@@ -54,13 +55,19 @@ export function WorkflowNotifications() {
   }, [])
   useEffect(() => {
     const controller = new AbortController()
-    void Promise.resolve().then(() => load(controller.signal))
-    const timer = setInterval(() => {
-      if (document.visibilityState === "visible") void load(controller.signal)
-    }, 30_000)
+    let loading = false
+    const refresh = () => {
+      if (loading) return
+      loading = true
+      void load(controller.signal).finally(() => {
+        loading = false
+      })
+    }
+    void Promise.resolve().then(refresh)
+    const stopRefresh = watchVisibleRefresh(refresh, { intervalMs: 30_000 })
     return () => {
       controller.abort()
-      clearInterval(timer)
+      stopRefresh()
     }
   }, [load, preferences.workflowNotifications])
   async function read(id: string) {

@@ -4,10 +4,9 @@ import { useId, type ReactNode, type Ref } from "react"
 import Link from "next/link"
 import { ArrowLeft, Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { focusRing } from "@/components/layout/styles"
 import { cn } from "@/lib/utils"
-import { ConversationAvatar } from "./conversation-avatar"
+import { Avatar } from "@/components/ui/avatar"
 
 export function ConversationSurface({
   label,
@@ -57,7 +56,7 @@ export function ConversationHeader({
       >
         <ArrowLeft size={17} aria-hidden="true" />
       </Link>
-      <ConversationAvatar name={name} imageUrl={imageUrl} className="size-8" />
+      <Avatar name={name} imageUrl={imageUrl} className="size-8" />
       <div className="min-w-0 flex-1">
         <h2 className="m-0 truncate text-sm font-semibold text-[#182235]">
           {name}
@@ -105,7 +104,7 @@ export function ConversationMessage({
       )}
     >
       {!own && (
-        <ConversationAvatar
+        <Avatar
           name={name}
           imageUrl={imageUrl}
           className={cn("size-7", groupedWithNext && "invisible")}
@@ -131,12 +130,10 @@ export function ConversationBubble({
   own,
   deleted = false,
   body,
-  timestamp,
 }: {
   own: boolean
   deleted?: boolean
   body: string | null
-  timestamp: string
 }) {
   return (
     <div className="relative w-fit max-w-full">
@@ -154,7 +151,6 @@ export function ConversationBubble({
       >
         {deleted ? "This message was deleted" : body}
       </p>
-      <HoverTooltip>{timestamp}</HoverTooltip>
     </div>
   )
 }
@@ -220,7 +216,8 @@ export function ConversationComposer({
           <Button
             type="submit"
             aria-label={sending ? "Sending…" : "Send message"}
-            className="size-9 shrink-0 rounded-full bg-[#203f8c] p-0 text-white hover:bg-[#172f70]"
+            variant="brand"
+            className="size-9 shrink-0 rounded-full p-0"
             disabled={!draft.trim() || !canSend || sending}
           >
             <Send

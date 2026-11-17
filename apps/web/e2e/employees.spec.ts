@@ -157,7 +157,12 @@ test.describe("Employee management", () => {
   }) => {
     await restoreSession(page, "ADMIN")
     await page.goto("/employees")
-    await page.getByRole("button", { name: "View Alex Employee" }).click()
+    await page
+      .getByRole("button", { name: "More actions for Alex Employee" })
+      .click()
+    await page
+      .getByRole("menuitem", { name: "View Employee", exact: true })
+      .click()
     await expect(page.getByRole("dialog")).toContainText("EMP-001")
     await expect(page.getByRole("dialog")).toContainText(
       "alex.employee@example.com",

@@ -1,10 +1,4 @@
-export function normalizedEmail(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined
-  const email = value.trim().toLowerCase()
-  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-    return undefined
-  return email
-}
+import { isContactNumber } from "../../shared/validation.js"
 
 export function validRegistrationEmail(email: string): boolean {
   return /^[A-Za-z0-9]+([._+-][A-Za-z0-9]+)*@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.(com|ph)$/i.test(
@@ -21,7 +15,7 @@ export function validRegistrationProfile(
     fullName.trim().length >= 2 &&
     fullName.trim().length <= 100 &&
     typeof contactNumber === "string" &&
-    /^\+?[0-9][0-9\s-]{6,19}$/.test(contactNumber.trim())
+    isContactNumber(contactNumber.trim())
   )
 }
 

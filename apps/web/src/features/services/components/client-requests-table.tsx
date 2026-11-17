@@ -6,7 +6,6 @@ import { useState, type ReactNode } from "react"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { cancelClientServiceRequest } from "../api/client-services-api"
 import { Button } from "@/components/ui/button"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Pill } from "@/components/ui/pill"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import { RowActionsMenu } from "@/components/ui/row-actions-menu"
@@ -14,6 +13,7 @@ import type { ServiceRequestSummary } from "../api/client-services-api"
 import { serviceRequestStatuses } from "../model/service-request-status"
 import { ServiceIcon } from "./service-icon"
 import type { ServiceIconKey } from "../api/services-api"
+import { errorMessage } from "@/lib/error-message"
 
 type RequestRowVisual = {
   iconClassName: string
@@ -90,11 +90,7 @@ function RequestActions({
       setConfirming(false)
       onCancelled()
     } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Could not cancel this request.",
-      )
+      setError(errorMessage(reason, "Could not cancel this request."))
     } finally {
       setPending(false)
     }
@@ -122,7 +118,6 @@ function RequestActions({
       >
         <Eye size={15} aria-hidden="true" />
         {!compact && "View request"}
-        {compact && <HoverTooltip>View request</HoverTooltip>}
       </Button>
       {chatAvailable ? (
         <Button asChild variant="outline" className={buttonClass}>
@@ -132,7 +127,6 @@ function RequestActions({
           >
             <MessageSquare size={15} aria-hidden="true" />
             {!compact && "Go to chat"}
-            {compact && <HoverTooltip>Go to chat</HoverTooltip>}
           </Link>
         </Button>
       ) : (
@@ -148,9 +142,7 @@ function RequestActions({
           >
             <MessageSquare size={15} aria-hidden="true" />
             {!compact && "Go to chat"}
-            {compact && <HoverTooltip>Go to chat</HoverTooltip>}
           </Button>
-          <HoverTooltip>{chatHint}</HoverTooltip>
           <span className="sr-only">{chatHint}</span>
         </span>
       )}
@@ -199,7 +191,7 @@ export function RequestStatus({
   status: ServiceRequestSummary["status"]
 }) {
   const value = serviceRequestStatuses[status]
-  return <Pill className={value.className}>{value.label}</Pill>
+  return <Pill tone={value.tone}>{value.label}</Pill>
 }
 
 const requestKey = (request: ServiceRequestSummary) => request.id

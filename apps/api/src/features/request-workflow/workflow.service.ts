@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto"
 import type { RequestWorkflowState } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
+import { activeStaff } from "../../shared/query/accounts.js"
 import {
   appendEvent,
   lockRequest,
@@ -912,7 +913,7 @@ async function runAction(
           id: { in: command.employeeIds },
           departmentId: request.acceptedDepartmentId,
           status: "ACTIVE",
-          user: { role: "STAFF", isActive: true, accountDeletedAt: null },
+          user: activeStaff,
         },
         select: { id: true, fullName: true },
       })

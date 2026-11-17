@@ -1,5 +1,9 @@
-import { Building2, Network, UserRoundX, UsersRound } from "lucide-react"
-import { KpiCards, type KpiMetric } from "@/components/ui/kpi-cards"
+import { Building2, Network, UserRoundCheck, UsersRound } from "lucide-react"
+import {
+  ProgressMeter,
+  StatStrip,
+  type StatStripItem,
+} from "@/components/ui/stat-strip"
 import type { Department } from "../api/departments-api"
 
 export function DepartmentKpiCards({
@@ -11,85 +15,83 @@ export function DepartmentKpiCards({
   loading: boolean
   unavailable: boolean
 }) {
+  const total = departments.length
   const employeeCount = departments.reduce(
-    (total, department) => total + department.memberCount,
+    (sum, department) => sum + department.memberCount,
     0,
   )
   const teamCount = departments.reduce(
-    (total, department) => total + (department.teamCount ?? 0),
+    (sum, department) => sum + (department.teamCount ?? 0),
     0,
   )
-  const assignedHeadCount = departments.filter(
-    (department) => department.head,
+  const departmentsWithTeams = departments.filter(
+    (department) => (department.teamCount ?? 0) > 0,
   ).length
-  const unassignedHeadCount = departments.length - assignedHeadCount
-  const departmentsByName = [...departments].sort((a, b) =>
-    a.name.localeCompare(b.name),
-  )
-  const departmentsByCreation = [...departments].sort(
-    (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt),
-  )
-  const metrics: KpiMetric[] = [
+  const headed = departments.filter((department) => department.head).length
+  const needHead = total - headed
+  const average = total === 0 ? 0 : employeeCount / total
+  const covered = needHead === 0
+
+  const items: StatStripItem[] = [
     {
       label: "Departments",
-      value: departments.length,
-      description: "Organizational units",
+      value: total.toLocaleString("en-US"),
+      caption: "Organizational units",
       icon: Building2,
-      iconClassName: "text-[#284f9e]",
-      chartValues: departmentsByCreation.map((_, index) => index + 1),
-      chartLabel: "Cumulative departments by creation date",
-      chartColor: "#4169bd",
+      tone: "bg-[#e8eef8] text-[#284f9e]",
     },
     {
-      label: "Assigned Employees",
-      value: employeeCount,
-      description: "Across all departments",
+      label: "Employees",
+      value: employeeCount.toLocaleString("en-US"),
+      caption:
+        total === 0
+          ? "No departments yet"
+          : `≈ ${average.toFixed(average < 10 ? 1 : 0)} per department`,
       icon: UsersRound,
-      iconClassName: "text-[#25745b]",
-      chartValues: departmentsByName.map(
-        (department) => department.memberCount,
-      ),
-      chartLabel: "Employee distribution across departments",
-      chartColor: "#29906b",
+      tone: "bg-[#e6f4ee] text-[#25745b]",
     },
     {
       label: "Teams",
-      value: teamCount,
-      description: "Created within departments",
+      value: teamCount.toLocaleString("en-US"),
+      caption:
+        total === 0
+          ? "No departments yet"
+          : `In ${departmentsWithTeams} of ${total} departments`,
       icon: Network,
-      iconClassName: "text-[#6552a6]",
-      chartValues: departmentsByName.map(
-        (department) => department.teamCount ?? 0,
-      ),
-      chartLabel: "Team distribution across departments",
-      chartColor: "#7159bd",
+      tone: "bg-[#efebf8] text-[#6552a6]",
     },
     {
-      label: "Heads Unassigned",
-      value: unassignedHeadCount,
-      description:
-        departments.length === 0
-          ? "No departments created"
-          : `${assignedHeadCount} of ${departments.length} departments covered`,
-      icon: UserRoundX,
-      iconClassName:
-        unassignedHeadCount > 0 ? "text-[#a45b12]" : "text-[#25745b]",
-      chartValues: departmentsByName.map((department) =>
-        department.head ? 0 : 1,
+      label: "Head coverage",
+      value: `${headed}/${total}`,
+      caption:
+        total === 0
+          ? "No departments yet"
+          : covered
+            ? "Every department has a head"
+            : `${needHead} ${needHead === 1 ? "needs" : "need"} a head`,
+      captionTone:
+        total === 0 ? undefined : covered ? "text-[#25745b]" : "text-[#a45b12]",
+      icon: UserRoundCheck,
+      tone: covered
+        ? "bg-[#e6f4ee] text-[#25745b]"
+        : "bg-[#fbf0e2] text-[#a45b12]",
+      meter: (
+        <ProgressMeter
+          value={headed}
+          max={total}
+          label="Departments with a head"
+          colorClass={covered ? "bg-[#29906b]" : "bg-[#d08a33]"}
+        />
       ),
-      chartLabel: "Unassigned head status across departments",
-      chartColor: unassignedHeadCount > 0 ? "#c27625" : "#29906b",
     },
   ]
 
   return (
-    <KpiCards
-      metrics={metrics}
+    <StatStrip
+      items={items}
       label="Department overview"
       pending={loading && departments.length === 0}
       unavailable={unavailable && departments.length === 0}
-      showCharts={false}
-      className="grid-cols-4 max-[1050px]:grid-cols-2 max-[560px]:grid-cols-1"
     />
   )
 }

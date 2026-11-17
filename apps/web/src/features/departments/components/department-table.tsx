@@ -2,11 +2,12 @@ import { useMemo, useState } from "react"
 import { focusRing } from "@/components/layout/styles"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
-import { useTableFooter } from "@/components/ui/use-table-search"
-import { NumberedPagination } from "@/components/ui/numbered-pagination"
+import { useLocalTable, useTableSort } from "@/components/ui/use-local-table"
+import { TablePaginationFooter } from "@/components/ui/table-pagination-footer"
 import { SearchEmptyState } from "@/components/ui/search-empty-state"
 import { SearchField } from "@/components/ui/search-field"
 import {
+  DataTableErrorRow,
   ResponsiveDataTable,
   ResponsiveDataTableBody,
   ResponsiveDataTableHeader,
@@ -15,17 +16,19 @@ import {
   TableSortButton,
   type SortDirection,
 } from "@/components/ui/table-sort-button"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { cn } from "@/lib/utils"
 import type { Department } from "../api/departments-api"
 import { DepartmentRowActions } from "./department-row-actions"
 
 const tableRowKey = (item: Department) => item.id
-const pageSize = 10
 const departmentGrid =
   "grid grid-cols-[minmax(160px,1.5fr)_minmax(130px,1.3fr)_minmax(65px,.55fr)_minmax(75px,.65fr)_minmax(70px,.6fr)_112px] items-center gap-3.5 @max-[820px]:grid-cols-[minmax(0,1fr)_auto]"
 
 type SortKey = "name" | "teams" | "employees" | "services"
+
+/** Names sort A–Z first; counts sort largest first. */
+const defaultSortDirection = (key: SortKey): SortDirection =>
+  key === "name" ? "asc" : "desc"
 
 export function DepartmentTable({
   departments,
@@ -49,9 +52,8 @@ export function DepartmentTable({
   onRetry: () => void
 }) {
   const [search, setSearch] = useState("")
-  const [sortKey, setSortKey] = useState<SortKey>("name")
-  const [direction, setDirection] = useState<SortDirection>("asc")
-  const [page, setPage] = useState(1)
+  const sort = useTableSort<SortKey>("name", "asc", defaultSortDirection)
+  const { sortKey, direction } = sort
   const [animateRows, setAnimateRows] = useState(true)
   const query = search.trim().toLowerCase()
   const filtered = useMemo(
@@ -82,31 +84,14 @@ export function DepartmentTable({
         }),
     [departments, query, sortKey, direction],
   )
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
-  const currentPage = Math.min(page, totalPages)
-  const visible = useMemo(
-    () => filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize),
-    [filtered, currentPage],
-  )
-  const tableResult = useMemo(
-    () => ({
-      page: currentPage,
-      total: filtered.length,
-      view: [query, sortKey, direction],
-    }),
-    [currentPage, filtered.length, query, sortKey, direction],
-  )
-  const { footer, onRowsSettled } = useTableFooter(tableResult, loading)
-  const viewKey = JSON.stringify([query, sortKey, direction, currentPage])
+  // Search and sort changes return to the first page.
+  const table = useLocalTable(filtered, {
+    view: [query, sortKey, direction],
+    loading,
+  })
   function sortBy(key: SortKey) {
     setAnimateRows(true)
-    if (sortKey === key) {
-      setDirection((value) => (value === "asc" ? "desc" : "asc"))
-    } else {
-      setSortKey(key)
-      setDirection(key === "name" ? "asc" : "desc")
-    }
-    setPage(1)
+    sort.toggle(key)
   }
 
   return (
@@ -121,7 +106,6 @@ export function DepartmentTable({
             onChange={(event) => {
               setAnimateRows(true)
               setSearch(event.target.value)
-              setPage(1)
             }}
           />
         </div>
@@ -133,15 +117,12 @@ export function DepartmentTable({
       >
         <ResponsiveDataTableHeader
           className="@max-[820px]:sr-only"
-          rowClassName={cn(
-            departmentGrid,
-            "min-h-[39px] rounded-t-[7px] border-b border-[#dfe6eb] bg-[#e8eef2] px-4 text-xs font-semibold text-foreground",
-          )}
+          rowClassName={departmentGrid}
         >
           <span role="columnheader">
             <TableSortButton
               label="Department"
-              direction={sortKey === "name" ? direction : null}
+              direction={sort.directionFor("name")}
               onClick={() => sortBy("name")}
             />
           </span>
@@ -149,21 +130,21 @@ export function DepartmentTable({
           <span role="columnheader">
             <TableSortButton
               label="Teams"
-              direction={sortKey === "teams" ? direction : null}
+              direction={sort.directionFor("teams")}
               onClick={() => sortBy("teams")}
             />
           </span>
           <span role="columnheader">
             <TableSortButton
               label="Employees"
-              direction={sortKey === "employees" ? direction : null}
+              direction={sort.directionFor("employees")}
               onClick={() => sortBy("employees")}
             />
           </span>
           <span role="columnheader">
             <TableSortButton
               label="Services"
-              direction={sortKey === "services" ? direction : null}
+              direction={sort.directionFor("services")}
               onClick={() => sortBy("services")}
             />
           </span>
@@ -196,33 +177,17 @@ export function DepartmentTable({
                 ]}
               />
             ) : (
-              <div role="row">
-                <div
-                  role="cell"
-                  aria-colspan={6}
-                  className="grid min-h-[150px] place-content-center gap-2 p-6 text-center text-xs text-[#7183a2]"
-                >
-                  <div role="alert" className="grid justify-items-center gap-3">
-                    <p className="m-0">{error}</p>
-                    <button
-                      type="button"
-                      className={cn(
-                        "cursor-pointer border-0 bg-transparent font-bold text-[#244993]",
-                        focusRing,
-                      )}
-                      onClick={onRetry}
-                    >
-                      Try again
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <DataTableErrorRow
+                message={error}
+                onRetry={onRetry}
+                colSpan={6}
+              />
             )}
           </ResponsiveDataTableBody>
         ) : (
           <AnimatedSlotGridBody
-            items={visible}
-            viewKey={viewKey}
+            items={table.visible}
+            viewKey={table.viewKey}
             quickKey={query}
             animateRows={animateRows}
             getKey={tableRowKey}
@@ -244,7 +209,7 @@ export function DepartmentTable({
               </>
             }
             className="relative overflow-x-clip"
-            onRowsSettled={onRowsSettled}
+            onRowsSettled={table.onRowsSettled}
             renderRow={(department) => (
               <>
                 <div
@@ -262,14 +227,6 @@ export function DepartmentTable({
                     >
                       {department.name}
                     </button>
-                    {department.description && (
-                      <HoverTooltip
-                        align="start"
-                        className="max-w-64 whitespace-normal text-left leading-4"
-                      >
-                        {department.description}
-                      </HoverTooltip>
-                    )}
                   </span>
                   {department.code && (
                     <span className="mt-0.5 block truncate text-[11px] text-[#738096]">
@@ -337,24 +294,14 @@ export function DepartmentTable({
       </ResponsiveDataTable>
 
       {!loading && !error && (
-        <footer className="flex items-center justify-between gap-3 pt-4 text-[11px] text-[#65718a] max-[560px]:flex-wrap max-[560px]:pt-[14px]">
-          <span role="status" aria-live="polite" aria-atomic="true">
-            Showing {footer.total === 0 ? 0 : (footer.page - 1) * pageSize + 1}–
-            {Math.min(footer.page * pageSize, footer.total)} of {footer.total}
-          </span>
-          {footer.total > 0 && (
-            <NumberedPagination
-              page={footer.page}
-              totalPages={Math.max(1, Math.ceil(footer.total / pageSize))}
-              disabled={loading || footer !== tableResult}
-              label="Department pages"
-              onPageChange={(nextPage) => {
-                setAnimateRows(true)
-                setPage(nextPage)
-              }}
-            />
-          )}
-        </footer>
+        <TablePaginationFooter
+          {...table.footer}
+          label="Department pages"
+          onPageChange={(nextPage) => {
+            setAnimateRows(true)
+            table.setPage(nextPage)
+          }}
+        />
       )}
     </>
   )

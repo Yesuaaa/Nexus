@@ -22,15 +22,12 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import { contentClass, focusRing } from "@/components/layout/styles"
+import { roleLabels } from "@/features/auth/model/roles"
 import type { Account } from "@/features/auth/model/types"
+import { humanizeEnum } from "@/lib/format"
+import { getInitials } from "@/lib/initials"
 import type { Profile, PortfolioProject } from "../api/profile-api"
 
-const roles = {
-  USER: "Client",
-  STAFF: "Staff",
-  ADMIN: "Admin",
-  SUPERADMIN: "Superadmin",
-}
 function Photo({
   url,
   alt,
@@ -113,13 +110,7 @@ export function ProfileOverview({
     useState<PortfolioProject | null>(null)
   const specialist = profile?.specialist
   const employee = profile?.employee
-  const initials = (user.fullName || user.email)
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase()
+  const initials = getInitials(user.fullName || user.email)
   const memberSince = new Date(user.createdAt).toLocaleDateString("en-PH", {
     month: "long",
     year: "numeric",
@@ -193,7 +184,7 @@ export function ProfileOverview({
                   {user.fullName || "Your account"}
                 </h2>
                 <span className="rounded-full bg-[#edf2fb] px-3 py-1 text-[11px] font-medium text-[#294a9b]">
-                  {roles[user.role]}
+                  {roleLabels[user.role]}
                 </span>
               </div>
               <p className="mt-2 mb-0 text-sm font-medium text-[#294a9b]">
@@ -201,7 +192,7 @@ export function ProfileOverview({
                   user.position ||
                   (user.role === "USER"
                     ? "Client at EXP Digital Solutions"
-                    : `${roles[user.role]} at EXP Digital Solutions`)}
+                    : `${roleLabels[user.role]} at EXP Digital Solutions`)}
               </p>
               {(employee?.department || user.department) && (
                 <p className="mt-2 mb-0 flex items-center gap-2 text-xs text-[#738096]">
@@ -234,7 +225,8 @@ export function ProfileOverview({
                 type="button"
                 disabled={!profile}
                 onClick={onEditPersonal}
-                className="min-h-11 bg-[#203f8c] text-xs text-white hover:bg-[#172f70]"
+                variant="brand"
+                size="touch"
               >
                 <Pencil size={15} aria-hidden="true" />
                 Edit profile
@@ -415,16 +407,8 @@ export function ProfileOverview({
                     ["Position", employee.position],
                     ["Department", employee.department?.name],
                     ["Team", employee.team?.name],
-                    [
-                      "Employment type",
-                      employee.employmentType
-                        .replaceAll("_", " ")
-                        .toLowerCase(),
-                    ],
-                    [
-                      "Status",
-                      employee.status.replaceAll("_", " ").toLowerCase(),
-                    ],
+                    ["Employment type", humanizeEnum(employee.employmentType)],
+                    ["Status", humanizeEnum(employee.status)],
                     [
                       "Start date",
                       employee.startDate
@@ -513,10 +497,7 @@ export function ProfileOverview({
                 </div>
               )}
               {selectedProject.projectUrl && (
-                <Button
-                  asChild
-                  className="min-h-11 bg-[#203f8c] text-white hover:bg-[#172f70]"
-                >
+                <Button asChild variant="brand" className="min-h-11">
                   <a
                     href={selectedProject.projectUrl}
                     target="_blank"
