@@ -18,6 +18,7 @@ export function ConfirmationDialog({
   title,
   subject,
   description,
+  children,
   confirmLabel,
   pendingLabel,
   cancelLabel = "Cancel",
@@ -32,6 +33,7 @@ export function ConfirmationDialog({
   /** Name of the thing being acted on, shown in bold under the title. */
   subject?: ReactNode
   description: ReactNode
+  children?: ReactNode
   confirmLabel: string
   pendingLabel: string
   cancelLabel?: string
@@ -68,6 +70,7 @@ export function ConfirmationDialog({
           <DialogDescription className="mt-2 mb-0 text-xs leading-relaxed text-[#738096]">
             {description}
           </DialogDescription>
+          {children}
           {error && (
             <Alert variant="text" className="mt-3">
               {error}

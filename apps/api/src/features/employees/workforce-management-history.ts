@@ -28,7 +28,17 @@ type Heads = {
   temporaryHeadOriginalId?: Transition<string | null>
   temporaryHeadAssignedId?: Transition<string | null>
 }
-type Payloads = {
+export type PayrollApprovalAuditAction =
+  | "PAYROLL_SUBMITTED"
+  | "PAYROLL_APPROVED"
+  | "PAYROLL_REJECTED"
+  | "PAYROLL_RETURNED_FOR_REVISION"
+  | "PAYROLL_RESUBMITTED"
+
+type Payloads = Record<
+  PayrollApprovalAuditAction,
+  { calculationId: string; reason?: string }
+> & {
   CREATED: Assignments &
     Heads & {
       status?: Transition<EmployeeStatus | null>
@@ -109,7 +119,7 @@ type WorkforceField =
   | "attemptId"
   | "failureCode"
 
-type ActionSubjects = {
+type ActionSubjects = Record<PayrollApprovalAuditAction, "PAYROLL_RUN"> & {
   CREATED: Exclude<
     Subject,
     "COMPENSATION" | "PAYROLL_CONFIGURATION" | "PAYROLL_PERIOD" | "PAYROLL_RUN"
@@ -336,6 +346,25 @@ export async function writeWorkforceManagementChange(
         revision: (value) => Number.isInteger(value) && Number(value) > 0,
       }
       required = [...fields]
+      break
+    case Action.PAYROLL_SUBMITTED:
+    case Action.PAYROLL_APPROVED:
+    case Action.PAYROLL_REJECTED:
+    case Action.PAYROLL_RETURNED_FOR_REVISION:
+    case Action.PAYROLL_RESUBMITTED:
+      if (input.subjectType !== Subject.PAYROLL_RUN)
+        throw new Error("Payroll approval history requires a PayrollRun")
+      fields = ["calculationId", "status"]
+      required = ["calculationId"]
+      checks = { calculationId: isRecordId }
+      if (input.action === Action.PAYROLL_REJECTED) {
+        fields = [...fields, "reason"]
+        required.push("reason")
+        checks.reason = (value) =>
+          typeof value === "string" &&
+          value.trim().length >= 5 &&
+          value.length <= 500
+      }
       break
     case Action.PAYROLL_CALCULATION_FAILED:
       if (input.subjectType !== Subject.PAYROLL_RUN)

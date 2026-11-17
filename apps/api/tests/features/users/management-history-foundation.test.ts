@@ -92,6 +92,10 @@ test(
             `migration changed ${name}`,
           )
         preservedTables = snapshots.size
+        await applyMigrations(
+          database,
+          (name) => name > migration && name.includes("_payroll_"),
+        )
       },
     })
     assert.ok(preservedTables > 20)
@@ -304,7 +308,97 @@ test(
           },
           { ...account, action: "DELETED", changedFields: [], changes: {} },
         ]
+        const payroll = {
+          ...workforce,
+          subjectType: "PAYROLL_RUN",
+          subjectId: "run",
+          origin: "PAYROLL_MANAGEMENT",
+        } as const
         const workforces: WorkforceManagementChangeInput[] = [
+          {
+            ...payroll,
+            subjectType: "COMPENSATION",
+            subjectId: "compensation",
+            action: "VERSION_CREATED",
+            changedFields: ["previousVersionId", "versionId", "reason"],
+            changes: {
+              previousVersionId: null,
+              versionId: "version",
+              reason: "Initial payroll rate",
+            },
+          },
+          {
+            ...payroll,
+            subjectType: "PAYROLL_PERIOD",
+            subjectId: "period",
+            action: "PAYROLL_PERIOD_CREATED",
+            changedFields: [
+              "configurationId",
+              "startDate",
+              "endDate",
+              "frequency",
+            ],
+            changes: {
+              configurationId: "configuration",
+              startDate: "2026-11-01",
+              endDate: "2026-11-30",
+              frequency: "MONTHLY",
+            },
+          },
+          {
+            ...payroll,
+            action: "PAYROLL_RUN_CREATED",
+            changedFields: ["periodId"],
+            changes: { periodId: "period" },
+          },
+          ...(["PAYROLL_CALCULATED", "PAYROLL_RECALCULATED"] as const).map(
+            (action) => ({
+              ...payroll,
+              action,
+              changedFields: [
+                "calculationId",
+                "previousCalculationId",
+                "revision",
+              ] as const,
+              changes: {
+                calculationId: "calculation",
+                previousCalculationId: null,
+                revision: 1,
+              },
+            }),
+          ),
+          {
+            ...payroll,
+            action: "PAYROLL_CALCULATION_FAILED",
+            changedFields: ["attemptId", "revision", "failureCode"],
+            changes: {
+              attemptId: "attempt",
+              revision: 1,
+              failureCode: "CALCULATION_FAILED",
+            },
+          },
+          ...(
+            [
+              "PAYROLL_SUBMITTED",
+              "PAYROLL_APPROVED",
+              "PAYROLL_RESUBMITTED",
+              "PAYROLL_RETURNED_FOR_REVISION",
+            ] as const
+          ).map((action) => ({
+            ...payroll,
+            action,
+            changedFields: ["status", "calculationId"] as const,
+            changes: { calculationId: "calculation" },
+          })),
+          {
+            ...payroll,
+            action: "PAYROLL_REJECTED",
+            changedFields: ["status", "calculationId", "reason"],
+            changes: {
+              calculationId: "calculation",
+              reason: "Check revised totals",
+            },
+          },
           {
             ...workforce,
             action: "CREATED",
@@ -772,7 +866,16 @@ test(
         }
         for (const row of await prisma.workforceManagementChange.findMany()) {
           assert.equal(row.actorAccountId, "actor")
-          assert.ok(["employee", "department", "team"].includes(row.subjectId))
+          assert.ok(
+            [
+              "employee",
+              "department",
+              "team",
+              "compensation",
+              "period",
+              "run",
+            ].includes(row.subjectId),
+          )
         }
       },
     )

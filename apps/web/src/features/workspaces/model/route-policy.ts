@@ -40,6 +40,7 @@ export type RoutePolicyId =
   | `module-${string}`
   | "payroll-compensation"
   | "payroll-runs"
+  | "payroll-approvals"
   | "payroll-settings"
   | "employees-overview"
   | "attendance-time-logs"
@@ -150,6 +151,12 @@ export const routePolicies: readonly RoutePolicy[] = [
   {
     id: "payroll-runs",
     match: { kind: "exact", path: "/module/payroll/runs" },
+    moduleId: "payroll",
+    canAccess: canAccessPayroll,
+  },
+  {
+    id: "payroll-approvals",
+    match: { kind: "exact", path: "/module/payroll/approvals" },
     moduleId: "payroll",
     canAccess: canAccessPayroll,
   },

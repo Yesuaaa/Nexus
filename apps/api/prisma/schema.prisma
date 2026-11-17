@@ -48,6 +48,11 @@ enum WorkforceManagementSubject {
 }
 
 enum WorkforceManagementAction {
+  PAYROLL_SUBMITTED
+  PAYROLL_APPROVED
+  PAYROLL_REJECTED
+  PAYROLL_RETURNED_FOR_REVISION
+  PAYROLL_RESUBMITTED
   CREATED
   PROFILE_UPDATED
   STATUS_CHANGED
@@ -98,6 +103,9 @@ enum PayrollPeriodStatus {
 }
 
 enum PayrollRunStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
   DRAFT
   CALCULATED
 }
@@ -864,10 +872,24 @@ model PayrollRunCalculation {
   blockedItemCount    Int                      @default(0)
   inputSnapshot       Json
   items               PayrollRunItem[]
+  approvalEvents      PayrollApprovalEvent[]
 
   @@unique([runId, revision], map: "payroll_run_calculation_revision_uq")
   @@index([runId, revision], map: "payroll_run_calculation_history_idx")
   @@index([status, calculatedAt], map: "payroll_run_calculation_status_idx")
+}
+
+model PayrollApprovalEvent {
+  id            String                    @id @default(cuid())
+  calculationId String
+  calculation   PayrollRunCalculation     @relation(fields: [calculationId], references: [id], onDelete: Restrict)
+  action        WorkforceManagementAction
+  actorId       String
+  actorName     String?
+  reason        String?                   @db.VarChar(500)
+  createdAt     DateTime                  @default(now()) @db.Timestamptz(3)
+
+  @@unique([calculationId, action])
 }
 
 model PayrollRunItem {

@@ -17,7 +17,7 @@ import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { EmptyState } from "@/components/ui/empty-state"
 import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
 import { Form } from "@/components/ui/form"
-import { FormInput } from "@/components/ui/form-input"
+import { FormInput, FormTextarea } from "@/components/ui/form-input"
 import { Pill } from "@/components/ui/pill"
 import {
   ResponsiveDataTable,
@@ -57,6 +57,8 @@ import { useAsyncResource } from "@/lib/use-async-resource"
 import { sileo } from "@/lib/toast"
 import {
   calculatePayrollRun,
+  transitionPayrollApproval,
+  type PayrollApprovalAction,
   createPayrollRun,
   generatePayrollPeriods,
   getPayrollRun,
@@ -111,7 +113,13 @@ function frequencyLabel(value: PayrollFrequency) {
 }
 
 function runStatusLabel(value: PayrollRunStatus) {
-  return value === "DRAFT" ? "Draft" : "Calculated"
+  return {
+    DRAFT: "Draft",
+    CALCULATED: "Calculated",
+    PENDING_APPROVAL: "Pending approval",
+    APPROVED: "Approved",
+    REJECTED: "Rejected",
+  }[value]
 }
 
 function calculationStatusLabel(value: PayrollCalculationStatus) {
@@ -150,7 +158,18 @@ function itemStatusTone(value: PayrollRunItem["status"]) {
   return "warning" as const
 }
 
-export function PayrollRunsPage() {
+function submissionFor(revision: PayrollRun["latestCalculation"]) {
+  return revision?.approvalEvents?.find(
+    ({ action }) =>
+      action === "PAYROLL_SUBMITTED" || action === "PAYROLL_RESUBMITTED",
+  )
+}
+
+export function PayrollRunsPage({
+  approvals = false,
+}: {
+  approvals?: boolean
+}) {
   const account = usePortalAccount()
   const canManage = canManagePayroll(account)
   const [search, setSearch] = useState("")
@@ -164,7 +183,14 @@ export function PayrollRunsPage() {
   const list = usePaginatedList({
     params: { search: query, status, frequency },
     load: ({ page, signal }) =>
-      listPayrollRuns({ page, search: query, status, frequency, signal }),
+      listPayrollRuns({
+        page,
+        approvals,
+        search: query,
+        status,
+        frequency,
+        signal,
+      }),
     rows: (result) => result.rows,
     matches: matchesRun,
     initial: { rows: [], total: 0, page: 1, pageSize: 10 },
@@ -206,14 +232,18 @@ export function PayrollRunsPage() {
   return (
     <main
       className={`${contentClass} min-w-0 p-[clamp(16px,2.1vw,32px)]`}
-      aria-label="Payroll Runs"
+      aria-label={approvals ? "Payroll Approvals" : "Payroll Runs"}
     >
       <PageHeader
         headingId="payroll-runs-heading"
-        title="Payroll Runs"
-        description="Create draft payroll calculations and review the source records behind each result."
+        title={approvals ? "Payroll Approvals" : "Payroll Runs"}
+        description={
+          approvals
+            ? "Review submitted payroll runs and manage approval decisions."
+            : "Create draft payroll calculations and review the source records behind each result."
+        }
         actions={
-          canManage ? (
+          canManage && !approvals ? (
             <>
               <PageHeaderButton
                 type="button"
@@ -236,14 +266,14 @@ export function PayrollRunsPage() {
                 Create draft run
               </PageHeaderButton>
             </>
-          ) : (
+          ) : !canManage ? (
             <Pill tone="neutral">Read only</Pill>
-          )
+          ) : null
         }
       />
 
       <section
-        aria-label="Payroll run list"
+        aria-label={approvals ? "Payroll approval queue" : "Payroll run list"}
         className="@container mt-[18px] min-w-0 max-[767px]:mt-[14px]"
       >
         <div className={`${filterBarClass} pb-4`}>
@@ -264,6 +294,9 @@ export function PayrollRunsPage() {
               { value: "", label: "All statuses" },
               { value: "DRAFT", label: "Draft" },
               { value: "CALCULATED", label: "Calculated" },
+              { value: "PENDING_APPROVAL", label: "Pending approval" },
+              { value: "APPROVED", label: "Approved" },
+              { value: "REJECTED", label: "Rejected" },
             ]}
             triggerClassName="w-[142px]"
             onChange={(value) => {
@@ -305,16 +338,16 @@ export function PayrollRunsPage() {
                 Payroll period
               </ResponsiveDataTableColumnHeader>
               <ResponsiveDataTableColumnHeader>
-                Frequency
+                {approvals ? "Submission" : "Frequency"}
               </ResponsiveDataTableColumnHeader>
               <ResponsiveDataTableColumnHeader>
                 Status
               </ResponsiveDataTableColumnHeader>
               <ResponsiveDataTableColumnHeader>
-                Calculation review
+                {approvals ? "Calculation revision" : "Calculation review"}
               </ResponsiveDataTableColumnHeader>
               <ResponsiveDataTableColumnHeader className="text-right max-[900px]:hidden">
-                Known gross
+                {approvals ? "Payroll totals" : "Known gross"}
               </ResponsiveDataTableColumnHeader>
               <ResponsiveDataTableColumnHeader className="text-right max-[900px]:hidden">
                 Employees
@@ -358,7 +391,7 @@ export function PayrollRunsPage() {
                         : "Generate periods from the configured schedule, then create a draft run for one of them."
                     }
                     action={
-                      !hasFilters && canManage ? (
+                      !hasFilters && canManage && !approvals ? (
                         <Button
                           variant="outline"
                           onClick={() => setPanelMode("generate")}
@@ -372,7 +405,12 @@ export function PayrollRunsPage() {
               </ResponsiveDataTableRow>
             ) : (
               list.rows.map((run) => {
-                const calculation = run.latestCalculation
+                const calculation = approvals
+                  ? (run.calculationHistory.find((revision) =>
+                      submissionFor(revision),
+                    ) ?? null)
+                  : run.latestCalculation
+                const submission = submissionFor(calculation)
                 return (
                   <ResponsiveDataTableRow
                     key={run.id}
@@ -388,7 +426,15 @@ export function PayrollRunsPage() {
                       </span>
                     </ResponsiveDataTableCell>
                     <ResponsiveDataTableCell>
-                      {frequencyLabel(run.period.frequency)}
+                      {approvals ? (
+                        <span>
+                          {submission?.actorName ?? submission?.actorId}
+                          <br />
+                          {formatDate(submission?.createdAt)}
+                        </span>
+                      ) : (
+                        frequencyLabel(run.period.frequency)
+                      )}
                     </ResponsiveDataTableCell>
                     <ResponsiveDataTableCell>
                       <Pill tone={run.status === "DRAFT" ? "warning" : "brand"}>
@@ -396,7 +442,14 @@ export function PayrollRunsPage() {
                       </Pill>
                     </ResponsiveDataTableCell>
                     <ResponsiveDataTableCell className="min-w-0">
-                      {calculation ? (
+                      {approvals && calculation ? (
+                        <span>
+                          Revision {calculation.revision}
+                          <br />
+                          {calculation.createdBy?.fullName ??
+                            calculation.createdBy?.id}
+                        </span>
+                      ) : calculation ? (
                         <div className="grid justify-items-start gap-1">
                           <Pill tone={calculationTone(calculation.status)}>
                             {calculationStatusLabel(calculation.status)}
@@ -411,7 +464,23 @@ export function PayrollRunsPage() {
                       )}
                     </ResponsiveDataTableCell>
                     <ResponsiveDataTableCell className="text-right tabular-nums max-[900px]:hidden">
-                      {calculation ? formatMoney(calculation.grossTotal) : "—"}
+                      {calculation ? (
+                        <span>
+                          {approvals && "Gross "}
+                          {formatMoney(calculation.grossTotal)}
+                          {approvals && (
+                            <>
+                              <br />
+                              Deductions{" "}
+                              {formatMoney(calculation.deductionsTotal)}
+                              <br />
+                              Net {formatMoney(calculation.netTotal)}
+                            </>
+                          )}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
                     </ResponsiveDataTableCell>
                     <ResponsiveDataTableCell className="text-right tabular-nums max-[900px]:hidden">
                       {calculation
@@ -466,6 +535,7 @@ export function PayrollRunsPage() {
       <PayrollRunDetailsPanel
         runId={selectedRunId}
         canManage={canManage}
+        approvals={approvals}
         refreshKey={refreshKey}
         onClose={() => setSelectedRunId(null)}
         onChanged={() => {
@@ -720,16 +790,22 @@ function periodOptionLabel(period: PayrollPeriod) {
 function PayrollRunDetailsPanel({
   runId,
   canManage,
+  approvals,
   refreshKey,
   onClose,
   onChanged,
 }: {
   runId: string | null
   canManage: boolean
+  approvals: boolean
   refreshKey: number
   onClose: () => void
   onChanged: () => void
 }) {
+  const account = usePortalAccount()
+  const [approvalAction, setApprovalAction] =
+    useState<PayrollApprovalAction | null>(null)
+  const [reason, setReason] = useState("")
   const [itemSearch, setItemSearch] = useState("")
   const [selectedCalculationId, setSelectedCalculationId] = useState("")
   const [selectedItem, setSelectedItem] = useState<PayrollRunItem | null>(null)
@@ -744,18 +820,22 @@ function PayrollRunDetailsPanel({
       fallbackError: "Couldn't load this payroll run.",
     },
   )
+  const reviewRevision = approvals
+    ? run.data?.calculationHistory.find((revision) => submissionFor(revision))
+    : null
+  const activeRevisionId = selectedCalculationId || reviewRevision?.id || ""
   const items = usePaginatedList({
     params: {
       search: itemSearch.trim(),
       runId: runId ?? "",
-      calculationId: selectedCalculationId,
+      calculationId: activeRevisionId,
     },
     load: ({ page, signal }) =>
       runId
         ? listPayrollRunItems(runId, {
             page,
             search: itemSearch.trim(),
-            calculationId: selectedCalculationId || undefined,
+            calculationId: activeRevisionId || undefined,
             signal,
           })
         : Promise.resolve({
@@ -774,10 +854,63 @@ function PayrollRunDetailsPanel({
     () =>
       run.data?.calculationHistory.find(
         ({ id }) =>
-          id === (selectedCalculationId || run.data?.latestCalculation?.id),
+          id === (activeRevisionId || run.data?.latestCalculation?.id),
       ) ?? null,
-    [run.data, selectedCalculationId],
+    [run.data, activeRevisionId],
   )
+
+  const latest = run.data?.latestCalculation
+  const canRecalculate =
+    canManage &&
+    !approvals &&
+    run.data?.status !== "PENDING_APPROVAL" &&
+    run.data?.status !== "APPROVED"
+  const selfApproval =
+    account.id === run.data?.createdBy.id ||
+    account.id === latest?.createdBy?.id
+  const reviewIsCurrent = selectedRevision?.id === latest?.id
+  const eligible =
+    latest?.status === "COMPLETE" &&
+    latest.calculatedItemCount > 0 &&
+    !latest.reviewItemCount &&
+    !latest.blockedItemCount
+
+  function openApproval(action: PayrollApprovalAction) {
+    setActionError("")
+    setReason("")
+    setApprovalAction(action)
+  }
+
+  async function confirmApproval() {
+    if (!runId || !selectedRevision || !approvalAction || pending) return
+    if (approvalAction === "reject" && reason.trim().length < 5) {
+      setActionError("Enter a rejection reason of at least 5 characters.")
+      return
+    }
+    setPending(true)
+    setActionError("")
+    try {
+      await transitionPayrollApproval(
+        runId,
+        selectedRevision.id,
+        approvalAction,
+        reason.trim(),
+      )
+      sileo.success({
+        title: {
+          submit: "Payroll submitted",
+          approve: "Payroll approved",
+          reject: "Payroll rejected",
+        }[approvalAction],
+      })
+      setApprovalAction(null)
+      onChanged()
+    } catch (error) {
+      setActionError(errorMessage(error, "Couldn't update payroll approval."))
+    } finally {
+      setPending(false)
+    }
+  }
 
   async function recalculate() {
     if (!runId) return
@@ -886,7 +1019,7 @@ function PayrollRunDetailsPanel({
                           </DetailItem>
                         </DetailList>
                       </SidePanelSection>
-                      {canManage && (
+                      {canRecalculate && (
                         <div className="flex flex-wrap items-center gap-2">
                           <Button
                             variant="outline"
@@ -910,7 +1043,7 @@ function PayrollRunDetailsPanel({
                       title="This run has not been calculated"
                       description="Create a draft calculation to inspect employee results and warnings."
                       action={
-                        canManage ? (
+                        canRecalculate ? (
                           <Button
                             onClick={() => void recalculate()}
                             disabled={pending}
@@ -920,6 +1053,97 @@ function PayrollRunDetailsPanel({
                         ) : undefined
                       }
                     />
+                  )}
+                  {selectedRevision && (
+                    <SidePanelSection title="Approval review">
+                      <DetailList>
+                        <DetailItem label="Revision">
+                          {selectedRevision.revision} · {selectedRevision.id}
+                        </DetailItem>
+                        <DetailItem label="Prepared by">
+                          {run.data.createdBy.fullName ?? run.data.createdBy.id}
+                        </DetailItem>
+                        <DetailItem label="Calculated by">
+                          {selectedRevision.createdBy?.fullName ??
+                            selectedRevision.createdBy?.id}
+                        </DetailItem>
+                      </DetailList>
+                      {canManage &&
+                        run.data.status === "CALCULATED" &&
+                        !approvals &&
+                        (eligible && reviewIsCurrent ? (
+                          <Button
+                            size="sm"
+                            disabled={pending}
+                            onClick={() => openApproval("submit")}
+                          >
+                            Submit for Approval
+                          </Button>
+                        ) : (
+                          <Alert>
+                            {!reviewIsCurrent
+                              ? "Select the current revision to submit it."
+                              : "Resolve all employee calculation issues before submitting."}
+                          </Alert>
+                        ))}
+                      {canManage && run.data.status === "PENDING_APPROVAL" && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          {!reviewIsCurrent ? (
+                            <Alert>
+                              Select the submitted revision to make a decision.
+                            </Alert>
+                          ) : (
+                            <>
+                              {selfApproval ? (
+                                <Alert>
+                                  The preparer and calculation author cannot
+                                  approve this revision.
+                                </Alert>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  disabled={pending}
+                                  onClick={() => openApproval("approve")}
+                                >
+                                  Approve
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={pending}
+                                onClick={() => openApproval("reject")}
+                              >
+                                Reject
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </SidePanelSection>
+                  )}
+                  {run.data.calculationHistory.some(
+                    (revision) => revision.approvalEvents?.length,
+                  ) && (
+                    <SidePanelSection title="Approval history">
+                      <DetailList>
+                        {run.data.calculationHistory.flatMap((revision) =>
+                          (revision.approvalEvents ?? []).map((event) => (
+                            <DetailItem
+                              key={event.id}
+                              label={`Revision ${revision.revision} · ${event.action
+                                .replace(/^PAYROLL_/, "")
+                                .replaceAll("_", " ")
+                                .toLowerCase()}`}
+                            >
+                              {event.actorName ?? event.actorId} ·{" "}
+                              {formatDate(event.createdAt)}
+                              {event.reason && <p>{event.reason}</p>}
+                            </DetailItem>
+                          )),
+                        )}
+                      </DetailList>
+                    </SidePanelSection>
                   )}
                   {run.data.calculationHistory.length > 1 && (
                     <SidePanelSection title="Calculation history">
@@ -1080,6 +1304,47 @@ function PayrollRunDetailsPanel({
           </>
         )}
       </SidePanel>
+      {approvalAction && (
+        <ConfirmationDialog
+          title={
+            {
+              submit: "Submit payroll for approval?",
+              approve: "Approve this payroll revision?",
+              reject: "Reject this payroll revision?",
+            }[approvalAction]
+          }
+          subject={run.data?.period.cutoffLabel}
+          description={
+            approvalAction === "reject"
+              ? "The submitted revision and reason will be kept in the approval history."
+              : "This decision applies to the selected calculation revision."
+          }
+          confirmLabel={
+            { submit: "Submit", approve: "Approve", reject: "Reject" }[
+              approvalAction
+            ]
+          }
+          pendingLabel="Saving…"
+          pending={pending}
+          destructive={approvalAction === "reject"}
+          error={actionError}
+          onClose={() => setApprovalAction(null)}
+          onConfirm={() => void confirmApproval()}
+        >
+          {approvalAction === "reject" && (
+            <label className="mt-4 grid gap-2 text-sm">
+              Rejection reason
+              <FormTextarea
+                value={reason}
+                required
+                maxLength={500}
+                minLength={5}
+                onChange={(event) => setReason(event.target.value)}
+              />
+            </label>
+          )}
+        </ConfirmationDialog>
+      )}
       {confirmRecalculate && (
         <ConfirmationDialog
           title="Recalculate this draft run?"

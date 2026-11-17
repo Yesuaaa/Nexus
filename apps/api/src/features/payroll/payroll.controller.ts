@@ -74,7 +74,7 @@ payrollRouter.post(
 )
 
 payrollRouter.get(
-  "/runs",
+  ["/runs", "/approvals"],
   requirePermission(Permission.PAYROLL_READ),
   async (request, response) => {
     const page = parsePage(request.query.page)
@@ -101,7 +101,8 @@ payrollRouter.get(
       await payrollRunsService.listRuns({
         page,
         search,
-        status: status as "" | "DRAFT" | "CALCULATED",
+        status: status as "" | PayrollRunStatus,
+        approvals: /^\/approvals\/?$/i.test(request.path),
         frequency: frequency as "" | "MONTHLY" | "SEMI_MONTHLY",
       }),
     )
@@ -181,6 +182,52 @@ payrollRouter.post(
     ),
 )
 
+payrollRouter.get(
+  "/runs/:runId/approval-history",
+  requirePermission(Permission.PAYROLL_READ),
+  async (request, response) => {
+    const run = await payrollRunsService.getRun(String(request.params.runId))
+    return response.json(
+      run.calculationHistory.flatMap((revision) =>
+        revision.approvalEvents.map((event) => ({
+          ...event,
+          revision: revision.revision,
+        })),
+      ),
+    )
+  },
+)
+
+for (const action of ["submit", "approve", "reject"] as const) {
+  payrollRouter.post(
+    "/runs/:runId/" + action,
+    requirePermission(Permission.PAYROLL_MANAGE),
+    async (request, response) => {
+      const calculationId = request.body?.calculationId
+      const reason =
+        typeof request.body?.reason === "string"
+          ? request.body.reason.trim()
+          : ""
+      if (typeof calculationId !== "string" || !isRecordId(calculationId))
+        return response
+          .status(400)
+          .json({ error: "A valid calculation revision is required" })
+      if (action === "reject" && (reason.length < 5 || reason.length > 500))
+        return response.status(400).json({
+          error: "Enter a rejection reason between 5 and 500 characters",
+        })
+      return response.json(
+        await payrollRunsService.transitionApproval(
+          request.auth!,
+          String(request.params.runId),
+          calculationId,
+          action,
+          action === "reject" ? reason : undefined,
+        ),
+      )
+    },
+  )
+}
 payrollRouter.get(
   "/runs/:runId",
   requirePermission(Permission.PAYROLL_READ),

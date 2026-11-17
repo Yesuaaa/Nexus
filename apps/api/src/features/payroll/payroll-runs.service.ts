@@ -11,7 +11,10 @@ import { getPrisma } from "../../lib/db.js"
 import { fail, HttpError } from "../../shared/http-error.js"
 import { createManagementOperation } from "../../shared/management-history.js"
 import { paginate, insensitive } from "../../shared/query/pagination.js"
-import { writeWorkforceManagementChange } from "../employees/workforce-management-history.js"
+import {
+  writeWorkforceManagementChange,
+  type PayrollApprovalAuditAction,
+} from "../employees/workforce-management-history.js"
 import type { AuthContext } from "../auth/auth.middleware.js"
 import { attendanceWorkdayInclude } from "../attendance/attendance.repository.js"
 import { manilaToday } from "./payroll.service.js"
@@ -71,6 +74,7 @@ const runInclude = {
     orderBy: { revision: "desc" },
     select: {
       ...calculationSummarySelect,
+      approvalEvents: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
       createdBy: { select: { id: true, fullName: true, role: true } },
     },
   },
@@ -212,6 +216,7 @@ function runView<
       }
     }
     calculations: (Parameters<typeof calculationSummary>[0] & {
+      approvalEvents?: Prisma.PayrollApprovalEventGetPayload<object>[]
       createdBy?: { id: string; fullName: string | null; role: string }
     })[]
   },
@@ -219,6 +224,7 @@ function runView<
   const history = value.calculations.map((item) => ({
     ...calculationSummary(item),
     ...(item.createdBy ? { createdBy: item.createdBy } : {}),
+    approvalEvents: item.approvalEvents ?? [],
   }))
   return {
     id: value.id,
@@ -566,7 +572,117 @@ function periodConfiguration(configuration: {
   }
 }
 
+type ApprovalAction = "submit" | "approve" | "reject"
+
+async function recordApprovalEvent(
+  tx: Prisma.TransactionClient,
+  auth: AuthContext,
+  runId: string,
+  calculationId: string,
+  action: PayrollApprovalAuditAction,
+  reason?: string,
+) {
+  await tx.payrollApprovalEvent.create({
+    data: {
+      calculationId,
+      action,
+      actorId: auth.user.id,
+      actorName: auth.user.fullName,
+      reason,
+    },
+  })
+  await writeWorkforceManagementChange(tx, payrollOperation(auth), {
+    action,
+    origin: WorkforceManagementOrigin.PAYROLL_MANAGEMENT,
+    subjectType: WorkforceManagementSubject.PAYROLL_RUN,
+    subjectId: runId,
+    changedFields: [
+      "status",
+      "calculationId",
+      ...(reason ? ["reason" as const] : []),
+    ],
+    changes: { calculationId, ...(reason ? { reason } : {}) },
+  })
+}
 export const payrollRunsService = {
+  async transitionApproval(
+    auth: AuthContext,
+    runId: string,
+    calculationId: string,
+    action: ApprovalAction,
+    reason?: string,
+  ) {
+    return getPrisma()!.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(848225, hashtext(${runId}))`
+      const run = await tx.payrollRun.findUnique({
+        where: { id: runId },
+        include: runInclude,
+      })
+      if (!run) fail(404, "Payroll run not found")
+      const revision = run.calculations[0]
+      if (
+        !revision ||
+        revision.id !== calculationId ||
+        revision.revision !== run.calculationCount
+      )
+        fail(
+          409,
+          "The payroll calculation changed; refresh and review the current revision",
+        )
+      if (
+        run.status !== (action === "submit" ? "CALCULATED" : "PENDING_APPROVAL")
+      )
+        fail(
+          409,
+          "This payroll action is unavailable in the current run status",
+        )
+      const submitted = revision.approvalEvents.some(
+        ({ action }) =>
+          action === "PAYROLL_SUBMITTED" || action === "PAYROLL_RESUBMITTED",
+      )
+      if (submitted !== (action !== "submit"))
+        fail(409, "The current revision does not match the approval workflow")
+      if (
+        action !== "reject" &&
+        (revision.status !== "COMPLETE" ||
+          !revision.calculatedItemCount ||
+          revision.reviewItemCount ||
+          revision.blockedItemCount)
+      )
+        fail(409, "Resolve all employee calculation issues before approval")
+      if (
+        action === "approve" &&
+        [run.createdById, revision.createdBy.id].includes(auth.user.id)
+      )
+        fail(
+          403,
+          "The run preparer and calculation author cannot approve this revision",
+        )
+      const status =
+        action === "submit"
+          ? "PENDING_APPROVAL"
+          : action === "approve"
+            ? "APPROVED"
+            : "REJECTED"
+      const event =
+        action === "submit"
+          ? run.calculations.some((item) => item.approvalEvents.length)
+            ? "PAYROLL_RESUBMITTED"
+            : "PAYROLL_SUBMITTED"
+          : action === "approve"
+            ? "PAYROLL_APPROVED"
+            : "PAYROLL_REJECTED"
+      await tx.payrollRun.update({ where: { id: runId }, data: { status } })
+      await recordApprovalEvent(tx, auth, runId, calculationId, event, reason)
+      return runView(
+        await tx.payrollRun.findUniqueOrThrow({
+          where: { id: runId },
+          include: runInclude,
+        }),
+      )
+    })
+  },
+
   async listPeriods(input: { page: number; year: number | null }) {
     const where: Prisma.PayrollPeriodWhereInput = input.year
       ? {
@@ -721,11 +837,14 @@ export const payrollRunsService = {
   async listRuns(input: {
     page: number
     search: string
-    status: "" | "DRAFT" | "CALCULATED"
+    status: "" | PayrollRunStatus
+    approvals?: boolean
     frequency: "" | "MONTHLY" | "SEMI_MONTHLY"
   }) {
     const and: Prisma.PayrollRunWhereInput[] = []
     if (input.status) and.push({ status: input.status })
+    if (input.approvals)
+      and.push({ calculations: { some: { approvalEvents: { some: {} } } } })
     if (input.frequency)
       and.push({
         period: {
@@ -862,9 +981,14 @@ export const payrollRunsService = {
     const operation = payrollOperation(auth)
     const existing = await prisma.payrollRun.findUnique({
       where: { id: runId },
-      select: { id: true, calculationCount: true },
+      select: { id: true, calculationCount: true, status: true },
     })
     if (!existing) fail(404, "Payroll run not found")
+    if (
+      existing.status === "PENDING_APPROVAL" ||
+      existing.status === "APPROVED"
+    )
+      fail(409, "Pending or approved payroll runs cannot be recalculated")
     const revision = existing.calculationCount + 1
     const attemptId = randomUUID()
     try {
@@ -872,7 +996,11 @@ export const payrollRunsService = {
         async (tx) => {
           await tx.$executeRaw`SELECT pg_advisory_xact_lock(848225, hashtext(${runId}))`
           const claim = await tx.payrollRun.updateMany({
-            where: { id: runId, calculationCount: existing.calculationCount },
+            where: {
+              id: runId,
+              calculationCount: existing.calculationCount,
+              status: existing.status,
+            },
             data: {
               calculationCount: revision,
               status: PayrollRunStatus.CALCULATED,
@@ -1096,6 +1224,14 @@ export const payrollRunsService = {
               revision,
             },
           })
+          if (existing.status === "REJECTED" && previousCalculationId)
+            await recordApprovalEvent(
+              tx,
+              auth,
+              runId,
+              previousCalculationId,
+              "PAYROLL_RETURNED_FOR_REVISION",
+            )
           return tx.payrollRun.findUniqueOrThrow({
             where: { id: runId },
             include: runInclude,

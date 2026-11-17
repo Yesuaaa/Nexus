@@ -51,7 +51,11 @@ test(
       { deleted: true },
     )
 
-    for (const path of ["/payroll/periods", "/payroll/runs"]) {
+    for (const path of [
+      "/payroll/periods",
+      "/payroll/runs",
+      "/payroll/approvals",
+    ]) {
       for (const user of [admin, superadmin]) {
         const response = await fetch(`${base}${path}`, {
           headers: user.headers,
@@ -157,6 +161,15 @@ test(
     assert.equal(runResponse.status, 201)
     const run = (await runResponse.json()) as { id: string; status: string }
     assert.equal(run.status, "DRAFT")
+    const uncalculatedSubmission = await fetch(
+      `${base}/payroll/runs/${run.id}/submit`,
+      {
+        method: "POST",
+        headers: { ...admin.headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ calculationId: "missing-calculation" }),
+      },
+    )
+    assert.equal(uncalculatedSubmission.status, 409)
 
     const duplicateRun = await fetch(`${base}/payroll/runs`, {
       method: "POST",
@@ -303,6 +316,179 @@ test(
       assert.equal(mutate.status, 403)
     }
 
+    const reviewer = await actor(prisma, "phase4-reviewer", Role.ADMIN)
+    const calculator = await actor(prisma, "phase4-calculator", Role.ADMIN)
+    const approvalRequest = (
+      user: typeof admin,
+      action: "submit" | "approve" | "reject",
+      calculationId: string,
+      reason?: string,
+    ) =>
+      fetch(`${base}/payroll/runs/${run.id}/${action}`, {
+        method: "POST",
+        headers: { ...user.headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ calculationId, reason }),
+      })
+    const secondId = recalculated.calculationHistory[0]!.id
+    assert.equal(
+      (
+        await approvalRequest(
+          reviewer,
+          "submit",
+          recalculated.calculationHistory[1]!.id,
+        )
+      ).status,
+      409,
+    )
+    const authored = await fetch(`${base}/payroll/runs/${run.id}/calculate`, {
+      method: "POST",
+      headers: calculator.headers,
+    })
+    assert.equal(authored.status, 200)
+    const authoredId = (
+      (await authored.json()) as { latestCalculation: { id: string } }
+    ).latestCalculation.id
+    assert.equal(
+      (await approvalRequest(reviewer, "submit", secondId)).status,
+      409,
+    )
+    const submission = await approvalRequest(reviewer, "submit", authoredId)
+    assert.equal(submission.status, 200, await submission.text())
+    assert.equal(
+      (await approvalRequest(reviewer, "submit", authoredId)).status,
+      409,
+    )
+    assert.equal(
+      (await approvalRequest(admin, "approve", authoredId)).status,
+      403,
+    )
+    assert.equal(
+      (await approvalRequest(calculator, "approve", authoredId)).status,
+      403,
+    )
+    for (const denied of [superadmin, staff, client]) {
+      assert.equal(
+        (await approvalRequest(denied, "approve", authoredId)).status,
+        403,
+      )
+      assert.equal(
+        (await approvalRequest(denied, "reject", authoredId, "Check totals"))
+          .status,
+        403,
+      )
+    }
+    assert.equal(
+      (await approvalRequest(reviewer, "reject", authoredId, " ")).status,
+      400,
+    )
+    const calculate = () =>
+      fetch(`${base}/payroll/runs/${run.id}/calculate`, {
+        method: "POST",
+        headers: admin.headers,
+      })
+    assert.equal((await calculate()).status, 409)
+    assert.equal(
+      (await approvalRequest(reviewer, "reject", authoredId, "Check totals"))
+        .status,
+      200,
+    )
+    assert.equal(
+      (await approvalRequest(reviewer, "submit", authoredId)).status,
+      409,
+    )
+    const revised = await calculate()
+    assert.equal(revised.status, 200)
+    const revisedId = (
+      (await revised.json()) as { latestCalculation: { id: string } }
+    ).latestCalculation.id
+    assert.equal(
+      (await approvalRequest(admin, "submit", revisedId)).status,
+      200,
+    )
+    assert.equal(
+      (await approvalRequest(reviewer, "approve", authoredId)).status,
+      409,
+    )
+    const competing = await Promise.all([
+      approvalRequest(reviewer, "approve", revisedId),
+      approvalRequest(calculator, "approve", revisedId),
+    ])
+    assert.deepEqual(competing.map(({ status }) => status).sort(), [200, 409])
+    assert.equal(
+      (await approvalRequest(reviewer, "reject", revisedId, "Check totals"))
+        .status,
+      409,
+    )
+    assert.equal((await calculate()).status, 409)
+    const queue = await fetch(`${base}/payroll/approvals`, {
+      headers: superadmin.headers,
+    })
+    assert.equal(queue.status, 200)
+    assert.equal(((await queue.json()) as { total: number }).total, 1)
+    const history = await fetch(
+      `${base}/payroll/runs/${run.id}/approval-history`,
+      { headers: superadmin.headers },
+    )
+    assert.equal(history.status, 200)
+    const events = (await history.json()) as {
+      action: string
+      calculationId: string
+      reason: string | null
+    }[]
+    assert.equal(events.length, 5)
+    assert.equal(
+      events.find(({ action }) => action === "PAYROLL_REJECTED")?.reason,
+      "Check totals",
+    )
+    assert.equal(
+      events.find(({ action }) => action === "PAYROLL_APPROVED")?.calculationId,
+      revisedId,
+    )
+    const december = generated.rows.find(
+      ({ startDate }) => startDate === "2026-12-01",
+    )!
+    const concurrentRun = await prisma.payrollRun.create({
+      data: { periodId: december.id, createdById: admin.user.id },
+    })
+    const concurrentCalculation = await fetch(
+      `${base}/payroll/runs/${concurrentRun.id}/calculate`,
+      {
+        method: "POST",
+        headers: admin.headers,
+      },
+    )
+    assert.equal(concurrentCalculation.status, 200)
+    const concurrentId = (
+      (await concurrentCalculation.json()) as {
+        latestCalculation: { id: string }
+      }
+    ).latestCalculation.id
+    const decide = (action: "submit" | "approve" | "reject") =>
+      fetch(`${base}/payroll/runs/${concurrentRun.id}/${action}`, {
+        method: "POST",
+        headers: { ...reviewer.headers, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          calculationId: concurrentId,
+          reason: action === "reject" ? "Check totals" : undefined,
+        }),
+      })
+    assert.equal((await decide("submit")).status, 200)
+    const conflicting = await Promise.all([decide("approve"), decide("reject")])
+    assert.deepEqual(conflicting.map(({ status }) => status).sort(), [200, 409])
+    const decisions = await prisma.payrollApprovalEvent.findMany({
+      where: {
+        calculationId: concurrentId,
+        action: { in: ["PAYROLL_APPROVED", "PAYROLL_REJECTED"] },
+      },
+    })
+    assert.equal(decisions.length, 1)
+    const decidedRun = await prisma.payrollRun.findUniqueOrThrow({
+      where: { id: concurrentRun.id },
+    })
+    assert.equal(
+      decidedRun.status,
+      decisions[0]!.action === "PAYROLL_APPROVED" ? "APPROVED" : "REJECTED",
+    )
     const payrollEvents = await prisma.workforceManagementChange.findMany({
       where: { subjectType: "PAYROLL_RUN", subjectId: run.id },
       orderBy: { createdAt: "asc" },
@@ -313,6 +499,13 @@ test(
         WorkforceManagementAction.PAYROLL_RUN_CREATED,
         WorkforceManagementAction.PAYROLL_CALCULATED,
         WorkforceManagementAction.PAYROLL_RECALCULATED,
+        WorkforceManagementAction.PAYROLL_RECALCULATED,
+        WorkforceManagementAction.PAYROLL_SUBMITTED,
+        WorkforceManagementAction.PAYROLL_REJECTED,
+        WorkforceManagementAction.PAYROLL_RECALCULATED,
+        WorkforceManagementAction.PAYROLL_RETURNED_FOR_REVISION,
+        WorkforceManagementAction.PAYROLL_RESUBMITTED,
+        WorkforceManagementAction.PAYROLL_APPROVED,
       ],
     )
     for (const event of payrollEvents) {
@@ -555,6 +748,18 @@ test(
     assert.equal(calculated.latestCalculation.grossTotal, "10000.00")
     assert.equal(calculated.latestCalculation.calculatedItemCount, 1)
     assert.equal(calculated.latestCalculation.blockedItemCount, 1)
+    const blockedRevision = await prisma.payrollRunCalculation.findFirstOrThrow(
+      { where: { runId: run.id } },
+    )
+    const blockedSubmission = await fetch(
+      `${base}/payroll/runs/${run.id}/submit`,
+      {
+        method: "POST",
+        headers: { ...admin.headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ calculationId: blockedRevision.id }),
+      },
+    )
+    assert.equal(blockedSubmission.status, 409)
 
     const itemsResponse = await fetch(`${base}/payroll/runs/${run.id}/items`, {
       headers: admin.headers,

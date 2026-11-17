@@ -367,3 +367,103 @@ for (const role of ["STAFF", "USER"] as const)
     ).toHaveCount(0)
     expect(payrollRequests).toEqual([])
   })
+
+for (const scenario of ["reviewer", "preparer", "superadmin"] as const) {
+  test(`Payroll Approvals shows the submitted revision to the ${scenario}`, async ({
+    page,
+  }) => {
+    await restoreSession(
+      page,
+      scenario === "superadmin" ? "SUPERADMIN" : "ADMIN",
+    )
+    const baseRun = runFor(period(2026, 11))
+    const submitted = {
+      ...summary(1, "revision-1"),
+      status: "COMPLETE",
+      calculatedItemCount: 1,
+      blockedItemCount: 0,
+      approvalEvents: [
+        {
+          id: "submission-1",
+          action: "PAYROLL_SUBMITTED",
+          actorId: "submitter",
+          actorName: "Payroll Submitter",
+          reason: null,
+          createdAt: "2026-12-01T08:00:00.000Z",
+        },
+      ],
+    }
+    const run = {
+      ...baseRun,
+      createdBy: {
+        ...baseRun.createdBy,
+        id: scenario === "preparer" ? "actor" : "admin-1",
+      },
+      status: "PENDING_APPROVAL",
+      calculationCount: 1,
+      latestCalculation: submitted,
+      calculationHistory: [submitted],
+    }
+    await page.route("**/api/payroll/**", async (route) => {
+      const path = new URL(route.request().url()).pathname
+      if (path.endsWith("/approvals") || path.endsWith("/runs"))
+        return route.fulfill({
+          json: { rows: [run], total: 1, page: 1, pageSize: 10 },
+        })
+      if (path.endsWith("/items"))
+        return route.fulfill({
+          json: {
+            rows: [itemFor(baseRun, 1)],
+            total: 1,
+            page: 1,
+            pageSize: 10,
+            calculationId: submitted.id,
+          },
+        })
+      if (path.endsWith("/approve")) {
+        expect(route.request().postDataJSON()).toMatchObject({
+          calculationId: submitted.id,
+        })
+        run.status = "APPROVED"
+      }
+      return route.fulfill({ json: run })
+    })
+    await page.goto("/module/payroll/runs")
+    await page.getByRole("link", { name: "Approvals", exact: true }).click()
+    await expect(page.getByText("Read only", { exact: true })).toHaveCount(
+      scenario === "superadmin" ? 1 : 0,
+    )
+    await expect(
+      page.getByRole("heading", { name: "Payroll Approvals" }),
+    ).toBeVisible()
+    await page.getByRole("button", { name: "View 2026-11 payroll run" }).click()
+    await expect(page.getByText("Morgan Payroll")).toBeVisible()
+    await expect(
+      page.getByText("Approval history", { exact: true }),
+    ).toBeVisible()
+    const approve = page.getByRole("button", { name: "Approve", exact: true })
+    const reject = page.getByRole("button", { name: "Reject", exact: true })
+    if (scenario === "reviewer") {
+      await reject.click()
+      await expect(
+        page.getByRole("textbox", { name: "Rejection reason" }),
+      ).toHaveAttribute("required")
+      await page.getByRole("button", { name: "Cancel", exact: true }).click()
+      await approve.click()
+      await page
+        .getByRole("dialog")
+        .getByRole("button", { name: "Approve", exact: true })
+        .click()
+      await expect(page.getByText("Payroll approved")).toBeVisible()
+    } else {
+      await expect(approve).toHaveCount(0)
+      if (scenario === "preparer")
+        await expect(
+          page.getByText(
+            "The preparer and calculation author cannot approve this revision.",
+          ),
+        ).toBeVisible()
+      else await expect(reject).toHaveCount(0)
+    }
+  })
+}

@@ -30,7 +30,17 @@ export type PayrollPeriod = {
   } | null
 }
 
-export type PayrollRunStatus = "DRAFT" | "CALCULATED"
+export type PayrollRunStatus =
+  "DRAFT" | "CALCULATED" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED"
+export type PayrollApprovalAction = "submit" | "approve" | "reject"
+export type PayrollApprovalEvent = {
+  id: string
+  action: string
+  actorId: string
+  actorName: string | null
+  reason: string | null
+  createdAt: string
+}
 export type PayrollCalculationStatus =
   "COMPLETE" | "REVIEW_REQUIRED" | "BLOCKED"
 export type PayrollRunItemStatus = "CALCULATED" | "REVIEW_REQUIRED" | "BLOCKED"
@@ -47,6 +57,7 @@ export type PayrollCalculationSummary = {
   calculatedItemCount: number
   reviewItemCount: number
   blockedItemCount: number
+  approvalEvents?: PayrollApprovalEvent[]
   createdBy?: { id: string; fullName: string | null; role: string }
 }
 
@@ -205,6 +216,7 @@ export function getCurrentPayrollPeriod(signal?: AbortSignal) {
 
 export async function listPayrollRuns(input: {
   page: number
+  approvals?: boolean
   search?: string
   status?: "" | PayrollRunStatus
   frequency?: "" | PayrollFrequency
@@ -214,9 +226,12 @@ export async function listPayrollRuns(input: {
   if (input.search) params.set("search", input.search)
   if (input.status) params.set("status", input.status)
   if (input.frequency) params.set("frequency", input.frequency)
-  return apiRequest<PayrollPage<PayrollRun>>(`/api/payroll/runs?${params}`, {
-    signal: input.signal,
-  })
+  return apiRequest<PayrollPage<PayrollRun>>(
+    `/api/payroll/${input.approvals ? "approvals" : "runs"}?${params}`,
+    {
+      signal: input.signal,
+    },
+  )
 }
 
 export function createPayrollRun(periodId: string) {
@@ -267,5 +282,20 @@ export function getPayrollRunItem(
   return apiRequest<PayrollRunItem>(
     `/api/payroll/runs/${encodeURIComponent(runId)}/items/${encodeURIComponent(itemId)}`,
     { signal },
+  )
+}
+
+export function transitionPayrollApproval(
+  runId: string,
+  calculationId: string,
+  action: PayrollApprovalAction,
+  reason: string,
+) {
+  return apiRequest<PayrollRun>(
+    `/api/payroll/runs/${encodeURIComponent(runId)}/${action}`,
+    {
+      method: "POST",
+      body: JSON.stringify({ calculationId, reason }),
+    },
   )
 }
