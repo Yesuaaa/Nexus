@@ -773,7 +773,7 @@ test(
     )
 
     await t.test(
-      "the conversation remains available after every attached booking ends",
+      "the conversation archives, becomes read-only, and enforces deletion authorization after every attached booking ends",
       async () => {
         await prisma!.serviceRequest.update({
           where: { id: bookingA.id },
@@ -787,6 +787,16 @@ test(
             (row) => row.id === designConversation.id,
           ),
         )
+        const archivedWithOne = (await (
+          await list(client, "?view=archived")
+        ).json()) as {
+          conversations: { id: string }[]
+        }
+        assert.ok(
+          !archivedWithOne.conversations.some(
+            (row) => row.id === designConversation.id,
+          ),
+        )
         await prisma!.serviceRequest.update({
           where: { id: bookingB.id },
           data: { status: "CANCELLED" },
@@ -794,10 +804,19 @@ test(
         const active = (await (await list()).json()) as {
           conversations: { id: string; status: string }[]
         }
+        assert.ok(
+          !active.conversations.some((row) => row.id === designConversation.id),
+        )
+        const archivedList = (await (
+          await list(client, "?view=archived")
+        ).json()) as {
+          conversations: { id: string; status: string }[]
+        }
         assert.equal(
-          active.conversations.find((row) => row.id === designConversation.id)
-            ?.status,
-          "ACTIVE",
+          archivedList.conversations.find(
+            (row) => row.id === designConversation.id,
+          )?.status,
+          "ARCHIVED",
         )
         const sharedHistory = (await (
           await history(designConversation.id, head)
@@ -806,9 +825,38 @@ test(
           canSend: boolean
           messages: unknown[]
         }
-        assert.equal(sharedHistory.archived, false)
-        assert.equal(sharedHistory.canSend, true)
+        assert.equal(sharedHistory.archived, true)
+        assert.equal(sharedHistory.canSend, false)
         assert.equal(sharedHistory.messages.length, 2)
+
+        const blockedSend = await send(
+          designConversation.id,
+          client,
+          "Should be rejected",
+        )
+        assert.equal(blockedSend.status, 409)
+
+        const foreignDelete = await fetch(
+          `${base}/request-conversations/${designConversation.id}`,
+          { method: "DELETE", headers: foreignClient.headers },
+        )
+        assert.equal(foreignDelete.status, 404)
+
+        const clientDelete = await fetch(
+          `${base}/request-conversations/${designConversation.id}`,
+          { method: "DELETE", headers: client.headers },
+        )
+        assert.equal(clientDelete.status, 200)
+        const afterClientDelete = (await (
+          await list(client, "?view=archived")
+        ).json()) as {
+          conversations: { id: string }[]
+        }
+        assert.ok(
+          !afterClientDelete.conversations.some(
+            (row) => row.id === designConversation.id,
+          ),
+        )
       },
     )
 

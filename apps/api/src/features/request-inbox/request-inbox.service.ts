@@ -217,6 +217,9 @@ export async function acceptInboxRequest(userId: string, id: string) {
       update: { updatedAt: new Date() },
       select: { id: true },
     })
+    await tx.requestConversationDeletion.deleteMany({
+      where: { conversationId: conversation.id },
+    })
     await tx.serviceRequest.update({
       where: { id },
       data: { conversationId: conversation.id },
