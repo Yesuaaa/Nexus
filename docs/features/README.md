@@ -6,6 +6,8 @@ Use the date the feature was completed, and keep later implementation changes in
 
 ## Records
 
+- [Leave requests: workflow, edge cases, and frontend reuse](leave-requests-plan.md), developed 2026-11-17.
+
 - [Browser regression baseline and contract remediation (Phase 4C.1)](browser-regression-contract-remediation.md), developed 2026-11-15; [preserved initial baseline](browser-regression-baseline.md).
 
 - [Team management actor attribution (Phase 4B.4B.5D)](team-management-attribution.md), developed 2026-11-15.

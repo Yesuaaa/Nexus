@@ -17,6 +17,7 @@ import {
   TableCell,
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Dialog,
   DialogContent,
@@ -181,9 +182,38 @@ export default function BillingLogsPage() {
           {error}
         </Alert>
       ) : payments === null ? (
-        <p role="status" className="mt-6 text-sm text-[#52627a]">
-          Loading billing records…
-        </p>
+        <div
+          className="mt-6 space-y-6"
+          role="status"
+          aria-label="Loading billing records"
+          aria-busy="true"
+        >
+          <span className="sr-only">Loading billing records…</span>
+          {["Due next", "Payment history"].map((title, section) => (
+            <section key={title} aria-label={title}>
+              <h2 className="mb-3 text-base font-semibold">{title}</h2>
+              <div
+                className={
+                  section === 0
+                    ? "@container divide-y divide-[#c7d7ef] rounded-xl border border-[#b9cbee] bg-[#eaf1fd]"
+                    : "@container divide-y divide-[#eceef1] rounded-xl border border-[#e2e8f0]"
+                }
+              >
+                {Array.from({ length: section === 0 ? 1 : 4 }, (_, row) => (
+                  <div key={row} className={paymentRowClass}>
+                    <div className="col-span-2 min-w-0 space-y-2 @min-[640px]:col-span-1">
+                      <Skeleton className="h-3 w-3/5" />
+                      <Skeleton className="h-3 w-2/5" />
+                    </div>
+                    <Skeleton className="h-4 w-24 @min-[640px]:justify-self-center" />
+                    <Skeleton className="h-6 w-28 rounded-full @min-[640px]:justify-self-center" />
+                    <Skeleton className="col-span-2 h-9 w-24 justify-self-end @min-[640px]:col-span-1" />
+                  </div>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
       ) : (
         <div className="mt-6 space-y-6">
           <section aria-labelledby="billing-due">

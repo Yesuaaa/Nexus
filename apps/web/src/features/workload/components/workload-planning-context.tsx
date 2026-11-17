@@ -19,9 +19,9 @@ export function WorkloadPlanningContext({ staff }: { staff: WorkloadStaff }) {
     <SidePanelSection title="Availability planning">
       <p className="m-0 text-xs leading-5 text-[#738096]">
         Weekly capacity is a planning estimate. Confirmed available time slots
-        are unknown: assigned time windows and approved leave are not available
-        here. Time off is entered manually. Clock-in status and attendance hours
-        do not establish task availability or productivity.
+        are unknown. Approved leave is shown separately from manually entered
+        time off to prevent double deduction. Clock-in status and attendance
+        hours do not establish task availability or productivity.
       </p>
       {metrics.capacity !== null && metrics.assigned > metrics.capacity && (
         <p className="m-0 text-xs font-medium text-[#bc3649]">
@@ -44,6 +44,11 @@ export function WorkloadPlanningContext({ staff }: { staff: WorkloadStaff }) {
             : "Incomplete policy coverage"}
         </DetailItem>
         <DetailItem label="Confirmed free time slots">Unknown</DetailItem>
+        <DetailItem label="Approved leave this week">
+          {planning
+            ? `${hours(planning.approvedLeaveHours ?? 0)} hrs`
+            : "Unavailable"}
+        </DetailItem>
       </DetailList>
       <p className="m-0 text-[11px] leading-5 text-[#738096]">
         Policy requirements are duration targets, not scheduled availability.
@@ -66,6 +71,13 @@ export function WorkloadPlanningContext({ staff }: { staff: WorkloadStaff }) {
                   <p className="mt-1 mb-0 text-[11px] break-words text-[#738096]">
                     {day.policyName} · {day.timeZone}
                   </p>
+                )}
+                {planning.approvedLeave?.some(
+                  (leave) => leave.workDate === day.workDate,
+                ) && (
+                  <Pill tone="warning" className="mt-1">
+                    Approved leave
+                  </Pill>
                 )}
               </DetailItem>
             ))}

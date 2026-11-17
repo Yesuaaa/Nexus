@@ -597,6 +597,22 @@ export async function mockApi(
       return
     }
 
+    const accountUpdateMatch = pathname.match(/^\/api\/users\/([^/]+)$/)
+    if (accountUpdateMatch && method === "PATCH") {
+      const targetId = decodeURIComponent(accountUpdateMatch[1])
+      const data = request.postDataJSON() as Partial<
+        Pick<Account, "fullName" | "email" | "contactNumber" | "role">
+      >
+      const target = users.find((user) => user.id === targetId)
+      if (target) {
+        Object.assign(target, data)
+        await route.fulfill({ json: { user: target } })
+      } else {
+        await route.fulfill({ status: 404, json: { error: "User not found" } })
+      }
+      return
+    }
+
     const restoreAccountMatch = pathname.match(
       /^\/api\/users\/([^/]+)\/restore$/,
     )

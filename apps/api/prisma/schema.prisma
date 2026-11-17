@@ -20,6 +20,32 @@ enum Role {
   USER
 }
 
+enum LeaveType {
+  ANNUAL
+  SICK
+  EMERGENCY
+  UNPAID
+  OTHER
+}
+
+enum LeaveStatus {
+  SUBMITTED
+  VERIFIED
+  APPROVED
+  REJECTED
+  CANCELLED
+  REVERSED
+}
+
+enum LeaveAction {
+  SUBMITTED
+  VERIFIED
+  APPROVED
+  REJECTED
+  CANCELLED
+  REVERSED
+}
+
 enum AccountManagementAction {
   CREATED
   PROFILE_UPDATED
@@ -300,6 +326,9 @@ model User {
   attendanceReviews                 AttendanceAdjustment[]            @relation("AttendanceReviewer")
   attendanceVerifications           AttendanceAdjustment[]            @relation("AttendanceVerifier")
   attendanceAudit                   AttendanceAudit[]
+  leaveRequests                     LeaveRequest[]                    @relation("LeaveRequester")
+  leaveDecisions                    LeaveDecision[]
+  leaveVerifications                LeaveRequest[]                    @relation("LeaveVerifier")
   id                                String                            @id @default(cuid())
   email                             String                            @unique
   fullName                          String?
@@ -735,6 +764,8 @@ model Employee {
   attendanceAudit          AttendanceAudit[]
   attendanceAssignments    AttendancePolicyAssignment[]
   attendanceWorkdays       AttendanceWorkday[]
+  leaveRequests            LeaveRequest[]
+  leaveRequestDays         LeaveRequestDay[]
   id                       String                       @id @default(cuid())
   employeeId               String                       @unique
   fullName                 String
@@ -1131,6 +1162,8 @@ model WorkflowNotification {
   event                  WorkflowEvent?        @relation(fields: [eventId], references: [id], onDelete: Restrict)
   attendanceAdjustmentId String?
   attendanceAdjustment   AttendanceAdjustment? @relation(fields: [attendanceAdjustmentId], references: [id], onDelete: Restrict)
+  leaveRequestId         String?
+  leaveRequest           LeaveRequest?         @relation(fields: [leaveRequestId], references: [id], onDelete: Restrict)
   type                   String?
   summary                String?
   readAt                 DateTime?
@@ -1138,7 +1171,74 @@ model WorkflowNotification {
 
   @@unique([userId, eventId])
   @@unique([userId, attendanceAdjustmentId, type])
+  @@unique([userId, leaveRequestId, type])
   @@index([userId, readAt, createdAt])
+}
+
+model LeaveRequest {
+  id                String                 @id @default(cuid())
+  requestKey        String                 @db.Uuid
+  employeeId        String
+  employee          Employee               @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  requestedById     String
+  requestedBy       User                   @relation("LeaveRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+  routeDepartmentId String?
+  verifiedById      String?
+  verifiedBy        User?                  @relation("LeaveVerifier", fields: [verifiedById], references: [id], onDelete: Restrict)
+  verifiedAt        DateTime?              @db.Timestamptz(3)
+  type              LeaveType
+  reason            String                 @db.VarChar(2000)
+  startDate         DateTime               @db.Date
+  endDate           DateTime               @db.Date
+  status            LeaveStatus            @default(SUBMITTED)
+  version           Int                    @default(1)
+  createdAt         DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime               @updatedAt @db.Timestamptz(3)
+  days              LeaveRequestDay[]
+  decisions         LeaveDecision[]
+  notifications     WorkflowNotification[]
+
+  @@unique([requestedById, requestKey])
+  @@index([employeeId, startDate, endDate])
+  @@index([status, createdAt, id])
+  @@index([routeDepartmentId, status, createdAt])
+}
+
+model LeaveRequestDay {
+  id                  String                     @id @default(cuid())
+  requestId           String
+  request             LeaveRequest               @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  employeeId          String
+  employee            Employee                   @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  assignmentId        String
+  assignment          AttendancePolicyAssignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  workDate            DateTime                   @db.Date
+  timeZone            String                     @db.VarChar(100)
+  policyName          String                     @db.VarChar(100)
+  baseRequiredMinutes Int
+  leaveMinutes        Int
+  createdAt           DateTime                   @default(now()) @db.Timestamptz(3)
+
+  @@unique([requestId, workDate])
+  @@index([employeeId, workDate])
+}
+
+model LeaveDecision {
+  id         String       @id @default(cuid())
+  requestId  String
+  request    LeaveRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  actorId    String
+  actor      User         @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  actionId   String       @db.Uuid
+  action     LeaveAction
+  fromStatus LeaveStatus?
+  toStatus   LeaveStatus
+  note       String?      @db.VarChar(2000)
+  version    Int
+  createdAt  DateTime     @default(now()) @db.Timestamptz(3)
+
+  @@unique([requestId, actorId, actionId])
+  @@index([requestId, createdAt, id])
 }
 
 model WorkloadCapacity {
@@ -1310,15 +1410,16 @@ model AttendancePolicyDay {
 }
 
 model AttendancePolicyAssignment {
-  id             String              @id @default(cuid())
-  employeeId     String
-  employee       Employee            @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-  policyId       String
-  policy         AttendancePolicy    @relation(fields: [policyId], references: [id], onDelete: Restrict)
-  effectiveFrom  DateTime            @db.Date
-  effectiveUntil DateTime?           @db.Date
-  createdAt      DateTime            @default(now()) @db.Timestamptz(3)
-  workdays       AttendanceWorkday[]
+  id               String              @id @default(cuid())
+  employeeId       String
+  employee         Employee            @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  policyId         String
+  policy           AttendancePolicy    @relation(fields: [policyId], references: [id], onDelete: Restrict)
+  effectiveFrom    DateTime            @db.Date
+  effectiveUntil   DateTime?           @db.Date
+  createdAt        DateTime            @default(now()) @db.Timestamptz(3)
+  workdays         AttendanceWorkday[]
+  leaveRequestDays LeaveRequestDay[]
 
   @@unique([id, employeeId])
   @@index([employeeId, effectiveFrom])

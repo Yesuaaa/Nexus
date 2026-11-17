@@ -3,6 +3,7 @@ import { useState } from "react"
 import { Clock3, Coffee, LogOut, Play } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Pill } from "@/components/ui/pill"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Alert } from "@/components/ui/alert"
 import { OverviewPanel } from "@/components/ui/overview-panel"
 import { ProgressMeter } from "@/components/ui/stat-strip"
@@ -97,12 +98,22 @@ export function MyAttendancePage() {
     <AttendanceShell tab="my">
       <div className="grid gap-5">
         <ResourceStatus
-          loading={clock.loading}
+          loading={false}
           error={clock.error}
           retry={() => {
             void clock.refresh()
           }}
         />
+        {clock.loading && !clock.error && (
+          <div
+            role="status"
+            aria-label="Loading attendance policy"
+            className="rounded-lg border border-[#dfe6eb] p-3"
+          >
+            <span className="sr-only">Loading attendance policy…</span>
+            <Skeleton className="my-0.5 h-3 w-full max-w-[900px]" />
+          </div>
+        )}
         {!clock.loading && clock.state?.needsPolicy && (
           <Alert>
             Your attendance policy has not been assigned. Ask HR to configure
@@ -307,6 +318,12 @@ export function MyAttendancePage() {
                   {day.policy.unpaidBreaksEnabled ? "Enabled" : "Disabled"}
                 </DetailItem>
               </DetailList>
+              {clock.state?.leaveConflict && (
+                <Alert>
+                  Recorded work crosses approved leave. Contact HR to reconcile
+                  the leave approval. You can still end your active session.
+                </Alert>
+              )}
               {day.overnightRequiresReview && (
                 <p className="text-xs text-[#805316]">
                   This policy requires overnight work to be reviewed.
@@ -356,10 +373,19 @@ export function MyAttendancePage() {
             />
           </div>
           <ResourceStatus
-            loading={history.loading && !history.data}
+            loading={false}
             error={history.error}
             retry={history.retry}
           />
+          {history.loading && !history.data && (
+            <>
+              <AttendanceHistoryTable days={[]} asOf={0} loading />
+              <div aria-hidden="true" className="mt-4 space-y-3">
+                <Skeleton className="h-2.5 w-24" />
+                <Skeleton className="h-2.5 w-56 max-w-full" />
+              </div>
+            </>
+          )}
           {history.data && (
             <>
               <AttendanceHistoryTable

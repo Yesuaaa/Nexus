@@ -13,7 +13,7 @@ import {
 type CalendarPerson = { id: string; name: string }
 export type CalendarEvent = {
   id: string
-  type: "consultation" | "meeting" | "milestone" | "task"
+  type: "consultation" | "meeting" | "milestone" | "task" | "leave"
   title: string
   context: string
   startsAt: Date
@@ -28,6 +28,9 @@ export type CalendarEvent = {
   deadline: boolean
   unassigned: boolean
   href: string | null
+  allDay?: boolean
+  startDate?: string
+  endDateExclusive?: string
 }
 
 export async function listInternalCalendar(userId: string, scope: unknown) {
@@ -98,7 +101,7 @@ export async function listInternalCalendar(userId: string, scope: unknown) {
   const timedScope: ServiceCalendarScope = organization
     ? { kind: "ORGANIZATION" }
     : { kind: "HEAD", userId }
-  const [consultations, meetings, projects] = await Promise.all([
+  const [consultations, meetings, projects, leaveRequests] = await Promise.all([
     prisma.workflowConsultation.findMany({
       where: consultationCalendarWhere({ scope: timedScope }),
       include: {
@@ -153,6 +156,33 @@ export async function listInternalCalendar(userId: string, scope: unknown) {
         },
         milestones: { where: { sentToClientAt: { not: null } } },
       },
+    }),
+    prisma.leaveRequest.findMany({
+      where: {
+        status: "APPROVED",
+        ...(organization
+          ? {}
+          : team && user.headOf
+            ? { employee: { departmentId: user.headOf.id } }
+            : { employeeId: user.employee?.id ?? "" }),
+      },
+      select: {
+        id: true,
+        days: {
+          where: { leaveMinutes: { gt: 0 } },
+          select: { id: true, workDate: true },
+          orderBy: { workDate: "asc" },
+        },
+        employee: {
+          select: {
+            userId: true,
+            fullName: true,
+            department: { select: { id: true, name: true } },
+          },
+        },
+      },
+      orderBy: [{ startDate: "asc" }, { id: "asc" }],
+      take: 1000,
     }),
   ])
   const events: CalendarEvent[] = []
@@ -275,6 +305,37 @@ export async function listInternalCalendar(userId: string, scope: unknown) {
         completed: Boolean(milestone.completedAt),
         deadline: false,
         unassigned: false,
+      })
+    }
+  }
+  for (const leave of leaveRequests) {
+    for (const day of leave.days) {
+      const label = day.workDate.toISOString().slice(0, 10)
+      const startsAt = new Date(`${label}T00:00:00Z`)
+      const endsAt = new Date(startsAt)
+      endsAt.setUTCDate(endsAt.getUTCDate() + 1)
+      events.push({
+        id: `leave-${leave.id}-${day.id}`,
+        type: "leave",
+        title: "Approved leave",
+        context: leave.employee.fullName,
+        startsAt,
+        endsAt,
+        location: null,
+        staff: leave.employee.fullName,
+        staffMembers: leave.employee.userId
+          ? [{ id: leave.employee.userId, name: leave.employee.fullName }]
+          : [],
+        department: leave.employee.department,
+        project: null,
+        pending: false,
+        completed: false,
+        deadline: false,
+        unassigned: false,
+        href: "/attendance/requests/leave",
+        allDay: true,
+        startDate: label,
+        endDateExclusive: endsAt.toISOString().slice(0, 10),
       })
     }
   }
