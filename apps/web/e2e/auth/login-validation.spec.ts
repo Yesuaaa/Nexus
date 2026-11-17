@@ -192,3 +192,51 @@ test("a malformed successful login response cannot establish a session", async (
   await expect(page).toHaveURL(/\/login$/)
   expect(await storedTokens(page)).toEqual([null, null])
 })
+
+test("malformed login user data shows an error and permits a safe retry", async ({
+  page,
+}) => {
+  await mockApi(page, "USER")
+  let attempts = 0
+  await page.route("**/api/auth/login", async (route) => {
+    attempts += 1
+    if (attempts === 1) {
+      await route.fulfill({
+        status: 200,
+        json: {
+          token: "malformed-user-access",
+          refreshToken: "malformed-user-refresh",
+          expiresIn: 900,
+          user: { id: null },
+        },
+      })
+      return
+    }
+    await route.fallback()
+  })
+
+  await page.goto("/login")
+  const email = page.getByLabel("Email address", { exact: true })
+  const password = page.getByLabel("Password", { exact: true })
+  const submit = page.getByRole("button", { name: "Sign In", exact: true })
+  await email.fill("malformed-user@example.org")
+  await password.fill("SyntheticPassword123!")
+  await submit.click()
+
+  await expect(
+    page.getByText("Sign-in unavailable", { exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.getByText(getAuthCopy("en").serverError, { exact: true }),
+  ).toBeVisible()
+  await expect(page).toHaveURL(/\/login$/)
+  await expect(email).toHaveValue("malformed-user@example.org")
+  await expect(password).toHaveValue("SyntheticPassword123!")
+  await expect(submit).toBeEnabled()
+  expect(await storedTokens(page)).toEqual([null, null])
+
+  await submit.click()
+  await expect(page).toHaveURL(/\/dashboard$/)
+  expect(attempts).toBe(2)
+  expect(await storedTokens(page)).toEqual(["test-session", "test-refresh"])
+})

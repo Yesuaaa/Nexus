@@ -1,5 +1,8 @@
 import { apiUrl } from "../../../lib/api-url.ts"
+import { departmentColorValues } from "../../departments/model/department-color.ts"
 import { canSignInToPortal } from "../model/auth-portal.ts"
+import { Permissions } from "../model/permissions.ts"
+import { roles } from "../model/roles.ts"
 import type { Account, AuthPortal, RegistrationData } from "../model/types"
 
 type TokenResult = { token: string; refreshToken: string; expiresIn: number }
@@ -7,6 +10,7 @@ type AuthResult = TokenResult & { user: Account }
 
 const tokenKey = "nexus.auth.token"
 const refreshKey = "nexus.auth.refreshToken"
+const permissionValues = new Set<string>(Object.values(Permissions))
 let refreshFlight: { token: string; promise: Promise<void> } | null = null
 let sessionVersion = 0
 
@@ -79,13 +83,77 @@ function validTokenResult(result: unknown): result is TokenResult {
   )
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === "string"
+}
+
+function optionalNullableString(record: Record<string, unknown>, key: string) {
+  return !(key in record) || isNullableString(record[key])
+}
+
+function optionalNamedSummary(record: Record<string, unknown>, key: string) {
+  if (!(key in record) || record[key] === null) return true
+  const summary = record[key]
+  return (
+    isRecord(summary) &&
+    typeof summary.id === "string" &&
+    typeof summary.name === "string"
+  )
+}
+
+function optionalDepartment(record: Record<string, unknown>) {
+  if (!("department" in record) || record.department === null) return true
+  const department = record.department
+  return (
+    isRecord(department) &&
+    typeof department.id === "string" &&
+    typeof department.name === "string" &&
+    isNullableString(department.code) &&
+    typeof department.color === "string" &&
+    departmentColorValues.includes(
+      department.color as (typeof departmentColorValues)[number],
+    )
+  )
+}
+
+function validAccount(value: unknown): value is Account {
+  if (!isRecord(value)) return false
+  return (
+    typeof value.id === "string" &&
+    Boolean(value.id.trim()) &&
+    typeof value.email === "string" &&
+    Boolean(value.email.trim()) &&
+    isNullableString(value.fullName) &&
+    isNullableString(value.contactNumber) &&
+    roles.includes(value.role as (typeof roles)[number]) &&
+    typeof value.isActive === "boolean" &&
+    Array.isArray(value.permissions) &&
+    value.permissions.every(
+      (permission) =>
+        typeof permission === "string" && permissionValues.has(permission),
+    ) &&
+    typeof value.createdAt === "string" &&
+    Boolean(value.createdAt.trim()) &&
+    optionalNullableString(value, "imageUrl") &&
+    optionalNullableString(value, "accountDeletedAt") &&
+    optionalNullableString(value, "position") &&
+    optionalNullableString(value, "departmentId") &&
+    optionalNullableString(value, "teamId") &&
+    optionalNamedSummary(value, "team") &&
+    optionalNamedSummary(value, "headOf") &&
+    optionalDepartment(value)
+  )
+}
+
 function assertAuthResult(result: unknown): asserts result is AuthResult {
   if (
     !validTokenResult(result) ||
     !("user" in result) ||
-    !result.user ||
-    typeof result.user !== "object" ||
-    Array.isArray(result.user)
+    !validAccount(result.user)
   )
     throw new ApiError(
       "Invalid authentication response. Please try again.",

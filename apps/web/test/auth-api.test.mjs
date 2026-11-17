@@ -14,6 +14,27 @@ import {
   register,
 } from "../src/features/auth/api/auth-api.ts"
 
+function accountForTest(id, email = `${id}@example.com`) {
+  return {
+    id,
+    email,
+    fullName: "Test Person",
+    imageUrl: null,
+    contactNumber: null,
+    role: "USER",
+    isActive: true,
+    accountDeletedAt: null,
+    position: null,
+    departmentId: null,
+    department: null,
+    teamId: null,
+    team: null,
+    headOf: null,
+    permissions: ["dashboard:read", "profile:read", "profile:change-password"],
+    createdAt: "2026-01-01T00:00:00.000Z",
+  }
+}
+
 for (const operation of ["login", "register"]) {
   test(`${operation} rejects malformed authentication responses before writing credentials`, async (t) => {
     const values = new Map()
@@ -43,7 +64,7 @@ for (const operation of ["login", "register"]) {
       token: "valid-access",
       refreshToken: "valid-refresh",
       expiresIn: 900,
-      user: { id: "user-1", role: "USER" },
+      user: accountForTest("user-1", "member@example.com"),
     }
     let payload = valid
     t.mock.method(globalThis, "fetch", async (url) => {
@@ -68,6 +89,14 @@ for (const operation of ["login", "register"]) {
       {},
       { ...valid, user: null },
       { ...valid, user: [] },
+      { ...valid, user: {} },
+      { ...valid, user: { ...valid.user, id: null } },
+      { ...valid, user: { ...valid.user, id: " " } },
+      { ...valid, user: { ...valid.user, role: "SUPERUSER" } },
+      {
+        ...valid,
+        user: { ...valid.user, permissions: ["unknown:permission"] },
+      },
     ]
     for (const field of ["token", "refreshToken", "expiresIn"]) {
       for (const value of [null, undefined, "", "   ", 0, -1, true, {}, []]) {
@@ -100,15 +129,7 @@ for (const operation of ["login", "register"]) {
 test("sign-in through the wrong portal revokes and clears the new session", async (t) => {
   const values = new Map()
   let logouts = 0
-  const account = {
-    id: "client-1",
-    email: "client@example.com",
-    fullName: "Client Account",
-    contactNumber: null,
-    role: "USER",
-    permissions: ["dashboard:read"],
-    createdAt: "2026-01-01T00:00:00.000Z",
-  }
+  const account = accountForTest("client-1", "client@example.com")
 
   t.mock.method(globalThis, "fetch", async (url, options) => {
     if (url === "/api/auth/login")
@@ -207,15 +228,7 @@ test("stream requests renew expired access tokens and preserve the unread respon
 
 test("sign-in stores its session and authenticated requests send one bearer token", async (t) => {
   const values = new Map()
-  const account = {
-    id: "user-1",
-    email: "jane@example.com",
-    fullName: "Jane Doe",
-    contactNumber: null,
-    role: "USER",
-    permissions: ["dashboard:read", "profile:read", "profile:change-password"],
-    createdAt: "2026-01-01T00:00:00.000Z",
-  }
+  const account = accountForTest("user-1", "jane@example.com")
   const requests = []
 
   t.mock.method(globalThis, "fetch", async (url, options) => {
@@ -364,7 +377,7 @@ test("an old mutation is never replayed under a newly signed-in account", async 
         token: "account-b",
         refreshToken: "refresh-b",
         expiresIn: 900,
-        user: { id: "b" },
+        user: accountForTest("b", "b@example.com"),
       })
     mutations++
     started()
@@ -424,7 +437,7 @@ test("response bodies and earlier login attempts cannot overwrite a newer sessio
           token: "account-b",
           refreshToken: "refresh-b",
           expiresIn: 900,
-          user: { id: "b" },
+          user: accountForTest("b", "b@example.com"),
         })
       const response = Response.json(
         {},
@@ -440,7 +453,7 @@ test("response bodies and earlier login attempts cannot overwrite a newer sessio
               token: "account-a",
               refreshToken: "refresh-a",
               expiresIn: 900,
-              user: { id: "a" },
+              user: accountForTest("a", "a@example.com"),
             }
           : scenario === "error"
             ? { error: "Invalid session" }
