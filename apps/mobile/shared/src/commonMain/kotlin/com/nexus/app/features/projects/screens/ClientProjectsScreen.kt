@@ -1,5 +1,6 @@
 package com.nexus.app.features.projects.screens
 
+import com.nexus.app.core.components.LocalNexusBottomPadding
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -9,7 +10,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -46,8 +46,8 @@ fun ClientProjectsScreen(
     )
 
     val sortOptions = listOf(
-        "NEWEST" to "Most recently updated",
-        "OLDEST" to "Least recently updated"
+        "NEWEST" to "Latest",
+        "OLDEST" to "Oldest"
     )
 
     Column(
@@ -56,29 +56,14 @@ fun ClientProjectsScreen(
             .background(NexusColors.SurfaceLight)
             .imePadding()
             .verticalScroll(scrollState)
-            .padding(horizontal = 20.dp, vertical = 20.dp),
+            .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp + LocalNexusBottomPadding.current),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Header
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                text = "Projects",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = NexusColors.PrimaryBlue
-            )
-            Text(
-                text = "My Projects",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = NexusColors.HeaderDarkNavy
-            )
-            Text(
-                text = "Follow project progress and review work shared with you.",
-                fontSize = 13.sp,
-                color = NexusColors.TextSecondary
-            )
-        }
+        Text(
+            text = "Follow project progress and review work shared with you.",
+            fontSize = 13.sp,
+            color = NexusColors.TextSecondary
+        )
 
         // Action Button: + New Service Request
         NexusButton(
@@ -89,7 +74,7 @@ fun ClientProjectsScreen(
 
         // 3 KPI Summary Cards
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             val kpis = listOf(
@@ -99,7 +84,7 @@ fun ClientProjectsScreen(
             )
             kpis.forEach { (count, title, hint) ->
                 Surface(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
                     color = NexusColors.PrimaryBlue,
                     shape = RoundedCornerShape(10.dp)
                 ) {
@@ -131,27 +116,7 @@ fun ClientProjectsScreen(
         }
 
         // Search Bar
-        OutlinedTextField(
-            value = state.query,
-            onValueChange = viewModel::onQueryChange,
-            placeholder = { Text("Search project, service or reference…", fontSize = 13.sp) },
-            leadingIcon = {
-                Icon(
-                    imageVector = Icons.Outlined.Search,
-                    contentDescription = "Search",
-                    tint = NexusColors.TextSecondary
-                )
-            },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-            shape = NexusButtonShape,
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White,
-                focusedBorderColor = NexusColors.PrimaryBlue,
-                unfocusedBorderColor = NexusColors.Border
-            )
-        )
+        NexusSearchField(state.query, viewModel::onQueryChange, "Search project, service or reference")
 
         // Dropdowns: Status Filter & Sort Order
         Row(
@@ -169,7 +134,7 @@ fun ClientProjectsScreen(
                 )
             }
             Box(modifier = Modifier.weight(1f)) {
-                val currentSortLabel = sortOptions.firstOrNull { it.first == state.sort }?.second ?: "Most recently updated"
+                val currentSortLabel = sortOptions.firstOrNull { it.first == state.sort }?.second ?: "Latest"
                 NexusDropdown(
                     label = currentSortLabel,
                     options = sortOptions,
@@ -332,12 +297,18 @@ fun ClientProjectsScreen(
                     ) {
                         Text(
                             text = project.request?.service?.name ?: "Service Project",
+                            modifier = Modifier.weight(1f).padding(end = 8.dp),
+                            maxLines = 2,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
                             color = NexusColors.PrimaryBlue
                         )
                         Text(
                             text = project.request?.referenceNumber ?: project.id,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 2,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                             fontSize = 12.sp,
                             color = NexusColors.TextSecondary
                         )
@@ -357,7 +328,7 @@ fun ClientProjectsScreen(
                     }
 
                     // Progress bar
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Column(Modifier.fillMaxWidth().background(Color(0xFFE2ECFF), RoundedCornerShape(8.dp)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
@@ -374,15 +345,7 @@ fun ClientProjectsScreen(
                                 color = NexusColors.PrimaryBlue
                             )
                         }
-                        LinearProgressIndicator(
-                            progress = { fraction },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(5.dp),
-                            color = NexusColors.PrimaryBlue,
-                            trackColor = Color(0xFFE2E8F0),
-                            gapSize = 0.dp
-                        )
+                        NexusProgressBar(fraction)
                         Text(
                             text = "${project.completedTasks} of ${project.taskCount} tasks complete",
                             fontSize = 10.sp,
@@ -400,6 +363,7 @@ fun ClientProjectsScreen(
                         text = "View details  ›",
                         onClick = { viewModel.selectProject(project) },
                         variant = NexusButtonVariant.OUTLINE,
+                        compact = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }

@@ -1,7 +1,21 @@
 package com.nexus.app.navigation
 
 import com.nexus.app.core.theme.NexusButtonShape
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import com.nexus.app.features.conversations.viewmodel.ConversationsViewModel
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.runtime.CompositionLocalProvider
+import com.nexus.app.core.components.LocalNexusBottomPadding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
@@ -131,6 +145,7 @@ internal fun NavController.restoreAuthenticatedDestination() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppNavHost(modifier: Modifier = Modifier) {
     val authRepository = koinInject<AuthRepository>()
@@ -143,11 +158,13 @@ fun AppNavHost(modifier: Modifier = Modifier) {
     val notificationState by notificationViewModel.state.collectAsState()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val sessionState by session.state.collectAsState()
+    val conversationsViewModel: ConversationsViewModel = koinViewModel(key = "header-conversations-${sessionState.generation}")
+    val conversationsState by conversationsViewModel.state.collectAsState()
     val user = sessionState.user
     LaunchedEffect(user?.id, sessionState.generation, lifecycle) {
         notificationViewModel.reset()
         if (user != null) lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            while (isActive) { notificationViewModel.refresh(); delay(30_000) }
+            while (isActive) { notificationViewModel.refresh(); conversationsViewModel.refresh(false); delay(30_000) }
         }
     }
     val notice = sessionState.notice
@@ -161,6 +178,12 @@ fun AppNavHost(modifier: Modifier = Modifier) {
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val route = backStackEntry?.destination?.route
+    var profileOriginEntry by rememberSaveable(user?.id, sessionState.generation) { mutableStateOf<String?>(null) }
+    val appBarState = remember(route) { TopAppBarState(-Float.MAX_VALUE, 0f, 0f) }
+    val appBarScroll = TopAppBarDefaults.pinnedScrollBehavior(appBarState)
+    LaunchedEffect(route) {
+        if (user != null && route in Routes.main) conversationsViewModel.refresh(false)
+    }
     routeToTab(route)?.let { lastTab = it }
 
     // Revalidate on every resume and explicit retry. Cancellation never discards credentials.
@@ -260,6 +283,16 @@ fun AppNavHost(modifier: Modifier = Modifier) {
     }
     val showBars = user != null && !sessionState.signedOut && route in Routes.main
 
+    val showBottomBar = showBars && !editingAccount && route !in setOf(Routes.CHAT, Routes.WORKFLOW, Routes.PROJECT_CHAT)
+    var floatingBarHeightPx by remember { mutableStateOf(0) }
+    val density = LocalDensity.current
+    val navigationInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    // Scaffold already reserves the system inset; only clear the floating bar itself.
+    val floatingBarPadding = if (showBottomBar) {
+        (with(density) { floatingBarHeightPx.toDp() } - navigationInset).coerceAtLeast(0.dp)
+    } else 0.dp
+    CompositionLocalProvider(LocalNexusBottomPadding provides floatingBarPadding) {
+    Box(modifier.fillMaxSize()) {
     Scaffold(
         topBar = {
             if (showBars && route != Routes.CHAT) {
@@ -268,44 +301,39 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                     onNotificationClick = { toggleHeaderPage(Routes.NOTIFICATIONS) },
                     onChatClick = { toggleHeaderPage(Routes.MESSAGES) },
                     onProfileClick = {
-                        if (route != Routes.PROFILE) navController.navigate(Routes.PROFILE) { launchSingleTop = true }
+                        if (route !in setOf(Routes.PROFILE, Routes.SETTINGS)) {
+                            profileOriginEntry = backStackEntry?.id
+                            navController.navigate(Routes.PROFILE) { launchSingleTop = true }
+                        }
                     },
                     onSettingsClick = { if (route != Routes.SETTINGS) navController.navigate(Routes.SETTINGS) { launchSingleTop = true } },
                     onLogoutClick = { logout() },
                     accountName = user.fullName ?: "Your account",
                     accountEmail = user.email,
                     accountPageOpen = route in setOf(Routes.PROFILE, Routes.SETTINGS),
-                    onCloseAccountPage = { closeHeaderPage() },
+                    onCloseAccountPage = {
+                        if (route == Routes.PROFILE && accountTitle == "Profile" &&
+                            profileOriginEntry != null && navController.previousBackStackEntry?.id == profileOriginEntry) {
+                            profileOriginEntry = null
+                            closeHeaderPage()
+                        }
+                    },
+                    scrolled = appBarState.contentOffset < -1f,
+                    chatUnread = conversationsState.page.unreadCount,
                     onAccountMenuChange = { accountMenuOpen = it },
-                    notificationUnread = notificationState.feed.unreadCount,
+                    notificationUnread = notificationState.feed.notifications.filter { it.readAt == null }.map { it.requestId }.distinct().size,
                     accountActionsEnabled = !loggingOut
                 )
             }
         },
-        bottomBar = {
-            if (showBars && !editingAccount && route !in setOf(Routes.CHAT, Routes.WORKFLOW, Routes.PROJECT_CHAT)) {
-                NexusBottomBar(
-                    currentTab = if (accountMenuOpen) null else routeToTab(route),
-                    onTabSelected = { tab ->
-                        if (!loggingOut) {
-                            // An explicit tab tap opens that page, without restoring a header screen above it.
-                            navController.navigate(tab.route()) {
-                                popUpTo(Routes.DASHBOARD)
-                                launchSingleTop = true
-                            }
-                        }
-                    }
-                )
-            }
-        },
-        containerColor = NexusColors.Background,
-        modifier = modifier.fillMaxSize()
+        containerColor = NexusColors.SurfaceLight,
+        modifier = Modifier.fillMaxSize().nestedScroll(appBarScroll.nestedScrollConnection)
     ) { paddingValues ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(NexusColors.Background),
+                .background(NexusColors.SurfaceLight),
             contentAlignment = Alignment.TopCenter
         ) {
             Column(Modifier.widthIn(max = 1120.dp).fillMaxSize()) {
@@ -318,7 +346,11 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 NavHost(
                     navController = navController,
                     modifier = Modifier.weight(1f),
-                    startDestination = Routes.CHECKING
+                    startDestination = Routes.CHECKING,
+                    enterTransition = { EnterTransition.None },
+                    exitTransition = { ExitTransition.None },
+                    popEnterTransition = { EnterTransition.None },
+                    popExitTransition = { ExitTransition.None }
                 ) {
                     composable(Routes.CHECKING) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -355,8 +387,8 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                             onNavigateToLogin = { navController.popBackStack() }
                         )
                     }
-                    composable(Routes.NOTIFICATIONS) { NotificationsScreen(onRequest = { navController.navigate("workflow/$it") }, viewModel = notificationViewModel) }
-                    composable(Routes.MESSAGES) { MessagesScreen(onConversation = { navController.navigate("chat/$it") }) }
+                    composable(Routes.NOTIFICATIONS) { NotificationsScreen(onRequest = { navController.navigate("workflow/$it") }, viewModel = notificationViewModel, conversationsViewModel = conversationsViewModel) }
+                    composable(Routes.MESSAGES) { MessagesScreen(onConversation = { navController.navigate("chat/$it") }, viewModel = conversationsViewModel) }
                     composable(Routes.CHAT) { entry ->
                         val id = entry.arguments?.getString("conversationId") ?: return@composable
                         val selectedBookingId by entry.savedStateHandle.getStateFlow<String?>("selectedBookingId", null).collectAsState()
@@ -471,4 +503,21 @@ fun AppNavHost(modifier: Modifier = Modifier) {
             }
         }
     }
+        if (showBottomBar) {
+            NexusBottomBar(
+                currentTab = if (accountMenuOpen) null else routeToTab(route),
+                modifier = Modifier.align(Alignment.BottomCenter).onSizeChanged { floatingBarHeightPx = it.height },
+                onTabSelected = { tab ->
+                    if (!loggingOut) {
+                        navController.navigate(tab.route()) {
+                            popUpTo(Routes.DASHBOARD)
+                            launchSingleTop = true
+                        }
+                    }
+                }
+            )
+        }
+    }
+    }
+
 }

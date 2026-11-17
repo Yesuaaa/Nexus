@@ -1,5 +1,6 @@
 package com.nexus.app.features.booked_requests.screens
 
+import com.nexus.app.core.components.LocalNexusBottomPadding
 import com.nexus.app.core.components.NexusDialogButton
 import com.nexus.app.core.components.NexusAlertDialog
 import com.nexus.app.core.theme.NexusButtonShape
@@ -9,8 +10,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.*
+import com.nexus.app.core.components.NexusSearchField
+import androidx.compose.ui.Alignment
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -53,7 +57,7 @@ fun BookedRequestsScreen(
     if (state.detailId != null) {
         val detail = state.detail
         LazyColumn(modifier.fillMaxSize().background(Color(0xFFF7F8FA)),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 0.dp, bottom = 20.dp),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 0.dp, bottom = 8.dp + LocalNexusBottomPadding.current),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
             item { TextButton(shape = NexusButtonShape, onClick = { closeDetails() }, enabled = !state.cancelling,
                 contentPadding = PaddingValues(0.dp)) { Text("←  Back to booked requests") } }
@@ -101,9 +105,15 @@ fun BookedRequestsScreen(
                 dismissButton = { NexusDialogButton(onClick = { confirmCancellation = false }) { Text("Keep request") } })
         }
     } else {
+        val refreshState = rememberPullToRefreshState()
         PullToRefreshBox(isRefreshing = state.loading, onRefresh = { viewModel.refresh() },
+            state = refreshState,
+            indicator = {
+                PullToRefreshDefaults.Indicator(state = refreshState, isRefreshing = state.loading,
+                    modifier = Modifier.align(Alignment.TopCenter), containerColor = Color.White, color = NexusColors.PrimaryBlue)
+            },
             modifier = modifier.fillMaxSize().background(Color(0xFFF7F8FA))) {
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp),
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp + LocalNexusBottomPadding.current),
                 verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 item { Text("Track your requests, review project details, and follow their progress.", fontSize = 13.sp, lineHeight = 20.sp, color = NexusColors.TextSecondary) }
                 item { NexusButton("+ New Service Request", onNewRequestClick) }
@@ -119,17 +129,7 @@ fun BookedRequestsScreen(
                         }
                     }
                 }
-                item { OutlinedTextField(state.filters.search, viewModel::search,
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Search reference, service, or package", color = NexusColors.TextSecondary) },
-                    leadingIcon = { Icon(Icons.Outlined.Search, "Search booked requests", tint = NexusColors.TextSecondary, modifier = Modifier.size(20.dp)) },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = Color.White,
-                        unfocusedContainerColor = Color.White,
-                        disabledContainerColor = Color.White
-                    ),
-                    shape = RoundedCornerShape(10.dp),
-                    singleLine = true) }
+                item { NexusSearchField(state.filters.search, viewModel::search, "Search reference, service, or package") }
                 item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterMenu(if (state.filters.status.isEmpty()) "All statuses" else statusLabel(state.filters.status),
                         listOf("" to "All statuses") + listOf("SUBMITTED", "UNDER_REVIEW", "AWAITING_CLIENT_INFO",
