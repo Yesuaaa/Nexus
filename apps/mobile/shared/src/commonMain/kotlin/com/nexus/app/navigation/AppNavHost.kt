@@ -57,6 +57,7 @@ import com.nexus.app.features.auth.screens.LoginScreen
 import com.nexus.app.features.auth.screens.RegisterScreen
 import com.nexus.app.features.booked_requests.screens.BookedRequestsScreen
 import com.nexus.app.features.dashboard.screens.DashboardScreen
+import com.nexus.app.features.help.screens.HelpScreen
 import com.nexus.app.features.profile.screens.ProfileScreen
 import com.nexus.app.features.services.screens.ServicesScreen
 import kotlinx.coroutines.launch
@@ -94,9 +95,10 @@ object Routes {
     const val WORKFLOW = "workflow/{requestId}?conversationId={conversationId}&documents={documents}"
     const val PROFILE = "profile"
     const val SETTINGS = "settings"
+    const val HELP = "help"
     const val REQUEST_DETAIL = "request/{requestId}"
 
-    val main = setOf(NOTIFICATIONS, MESSAGES, CHAT, WORKFLOW, DASHBOARD, SERVICES, BOOKED_REQUESTS, PROFILE, SETTINGS, REQUEST_DETAIL, CALENDAR, PROJECTS, PROJECT_DETAILS, PROJECT_OVERVIEW, PROJECT_BRIEF, PROJECT_REQUEST, PROJECT_CHAT)
+    val main = setOf(NOTIFICATIONS, MESSAGES, CHAT, WORKFLOW, DASHBOARD, SERVICES, BOOKED_REQUESTS, PROFILE, SETTINGS, HELP, REQUEST_DETAIL, CALENDAR, PROJECTS, PROJECT_DETAILS, PROJECT_OVERVIEW, PROJECT_BRIEF, PROJECT_REQUEST, PROJECT_CHAT)
 }
 
 private fun BottomTab.route() = when (this) {
@@ -164,7 +166,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
     LaunchedEffect(user?.id, sessionState.generation, lifecycle) {
         notificationViewModel.reset()
         if (user != null) lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            while (isActive) { notificationViewModel.refresh(); conversationsViewModel.refresh(false); delay(30_000) }
+            while (isActive) { notificationViewModel.refresh(); conversationsViewModel.refresh(); delay(30_000) }
         }
     }
     val notice = sessionState.notice
@@ -182,7 +184,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
     val appBarState = remember(route) { TopAppBarState(-Float.MAX_VALUE, 0f, 0f) }
     val appBarScroll = TopAppBarDefaults.pinnedScrollBehavior(appBarState)
     LaunchedEffect(route) {
-        if (user != null && route in Routes.main) conversationsViewModel.refresh(false)
+        if (user != null && route in Routes.main) conversationsViewModel.refresh()
     }
     routeToTab(route)?.let { lastTab = it }
 
@@ -278,6 +280,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
         Routes.MESSAGES -> "Messages"
         Routes.CHAT -> "Chat"
         Routes.WORKFLOW -> "Request details"
+        Routes.HELP -> "Help & Support"
         Routes.PROFILE, Routes.SETTINGS -> accountTitle
         else -> ""
     }
@@ -307,6 +310,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                         }
                     },
                     onSettingsClick = { if (route != Routes.SETTINGS) navController.navigate(Routes.SETTINGS) { launchSingleTop = true } },
+                    onHelpClick = { if (route != Routes.HELP) navController.navigate(Routes.HELP) { launchSingleTop = true } },
                     onLogoutClick = { logout() },
                     accountName = user.fullName ?: "Your account",
                     accountEmail = user.email,
@@ -388,7 +392,19 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                         )
                     }
                     composable(Routes.NOTIFICATIONS) { NotificationsScreen(onRequest = { navController.navigate("workflow/$it") }, viewModel = notificationViewModel, conversationsViewModel = conversationsViewModel) }
-                    composable(Routes.MESSAGES) { MessagesScreen(onConversation = { navController.navigate("chat/$it") }, viewModel = conversationsViewModel) }
+                    composable(Routes.MESSAGES) {
+                        MessagesScreen(
+                            onConversation = { navController.navigate("chat/$it") },
+                            onProjectConversation = { navController.navigate("projects/$it/chat") },
+                            currentUserId = user?.id.orEmpty(),
+                            viewModel = conversationsViewModel,
+                        )
+                    }
+                    composable(Routes.HELP) {
+                        HelpScreen(
+                            onOpenMessages = { navController.navigate(Routes.MESSAGES) { launchSingleTop = true } },
+                        )
+                    }
                     composable(Routes.CHAT) { entry ->
                         val id = entry.arguments?.getString("conversationId") ?: return@composable
                         val selectedBookingId by entry.savedStateHandle.getStateFlow<String?>("selectedBookingId", null).collectAsState()
@@ -473,13 +489,17 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                         )
                     }
                     composable(Routes.BOOKED_REQUESTS) {
-                        BookedRequestsScreen(onNewRequestClick = { navController.switchTab(Routes.SERVICES) })
+                        BookedRequestsScreen(
+                            onNewRequestClick = { navController.switchTab(Routes.SERVICES) },
+                            onOpenMessages = { navController.navigate("chat/$it") },
+                        )
                     }
                     composable(Routes.REQUEST_DETAIL) { entry ->
                         BookedRequestsScreen(
                             onNewRequestClick = { navController.switchTab(Routes.SERVICES) },
                             initialRequestId = entry.arguments?.getString("requestId"),
-                            onBackFromDetails = { navController.popBackStack() }
+                            onBackFromDetails = { navController.popBackStack() },
+                            onOpenMessages = { navController.navigate("chat/$it") },
                         )
                     }
                     composable(Routes.SETTINGS) {

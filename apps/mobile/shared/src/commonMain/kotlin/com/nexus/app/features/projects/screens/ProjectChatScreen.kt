@@ -39,6 +39,18 @@ fun ProjectChatScreen(id: String, userId: String, onBack: () -> Unit, onDelivera
     LaunchedEffect(state.sentCount) { if (state.sentCount > 0) { text = ""; list.scrollToItem((state.history?.messages?.size ?: 0).coerceAtLeast(0)) } }
     Column(Modifier.fillMaxSize().background(NexusColors.SurfaceLight).imePadding().padding(horizontal = 20.dp)) {
         ProjectBack("Back to project", onBack)
+        val projectTitle = state.history?.project?.name?.takeIf { it.isNotBlank() }
+            ?: state.history?.conversation?.fullName?.takeIf { it.isNotBlank() }
+        val participantsSubtitle = state.history?.participants
+            ?.mapNotNull { it.fullName?.takeIf(String::isNotBlank) }
+            ?.takeIf { it.isNotEmpty() }
+            ?.joinToString(", ")
+        if (projectTitle != null) {
+            ProjectTitle(projectTitle)
+        }
+        if (participantsSubtitle != null) {
+            ProjectCopy(participantsSubtitle)
+        }
         if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = NexusColors.PrimaryBlue)
         state.error?.let {
             Text(it, fontSize = 13.sp, color = NexusColors.ErrorRed)

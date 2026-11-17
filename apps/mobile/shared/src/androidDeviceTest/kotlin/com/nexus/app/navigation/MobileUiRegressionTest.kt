@@ -19,6 +19,7 @@ import com.nexus.app.features.booking.viewmodel.BookingViewModel
 import com.nexus.app.features.services.screens.ServicesScreen
 import com.nexus.app.features.booked_requests.screens.BookedRequestsScreen
 import com.nexus.app.features.booked_requests.viewmodel.RequestsViewModel
+import com.nexus.app.features.help.screens.HelpScreen
 import org.junit.Rule
 import org.junit.Test
 import org.junit.Assert.assertEquals
@@ -264,5 +265,43 @@ class MobileUiRegressionTest {
         compose.setContent { MaterialTheme { NexusButton("Submit", { clicks++ }, loading = true) } }
         compose.onNode(hasClickAction()).assertIsNotEnabled().performClick()
         compose.runOnIdle { assertEquals(0, clicks) }
+    }
+
+    @Test fun helpScreenDisplaysFaqsFiltersSearchAndNavigatesToMessages() {
+        var openedMessages = 0
+        compose.setContent {
+            MaterialTheme {
+                HelpScreen(onOpenMessages = { openedMessages++ })
+            }
+        }
+        compose.onNodeWithText("Bookings and requests").assertIsDisplayed()
+        compose.onNodeWithText("Choose a service or package from the Services page.").assertIsDisplayed()
+        compose.onNodeWithText("What does my request status mean?").performScrollTo().performClick()
+        compose.onNodeWithText("Pending review").assertIsDisplayed()
+        compose.onNodeWithText("Under review").assertIsDisplayed()
+        compose.onNodeWithText("Open messages").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(1, openedMessages) }
+
+        compose.onNode(hasSetTextAction()).performTextInput("unmatched-faq-query")
+        compose.onNodeWithText("No results for “unmatched-faq-query” found.").assertIsDisplayed()
+    }
+
+    @Test fun requestDetailsOpenInMessagesDispatchesRequestId() {
+        val repo = FakeBookingGateway()
+        var openedRequestId: String? = null
+        compose.setContent {
+            MaterialTheme {
+                CompositionLocalProvider(LocalNexusToast provides remember { NexusToastState() }) {
+                    BookedRequestsScreen(
+                        initialRequestId = "request",
+                        onOpenMessages = { openedRequestId = it },
+                        viewModel = remember { RequestsViewModel(repo) },
+                    )
+                }
+            }
+        }
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("Open in Messages"))
+        compose.onNodeWithText("Open in Messages").performClick()
+        compose.runOnIdle { assertEquals("request", openedRequestId) }
     }
 }

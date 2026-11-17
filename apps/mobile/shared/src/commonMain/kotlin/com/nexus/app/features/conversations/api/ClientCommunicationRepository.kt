@@ -1,7 +1,12 @@
 package com.nexus.app.features.conversations.api
 
+import com.nexus.app.core.network.ApiEndpoints
 import com.nexus.app.features.conversations.model.*
 import com.nexus.app.features.notifications.model.NotificationFeed
+import com.nexus.app.features.projects.model.ProjectChatHistory
+import com.nexus.app.features.projects.model.ProjectChatMessage
+import com.nexus.app.features.projects.model.ProjectConversationPage
+import com.nexus.app.features.projects.model.ProjectMessageResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.*
@@ -23,24 +28,40 @@ class ClientCommunicationRepository(private val client: HttpClient) {
         return body()
     }
     suspend fun conversations(archived: Boolean, before: String? = null): ConversationPage =
-        client.get("/api/request-conversations") {
+        client.get(ApiEndpoints.CONVERSATIONS) {
             parameter("view", if (archived) "archived" else "active")
             before?.let { parameter("before", it) }
         }.checked()
-    suspend fun history(id: String, before: String? = null, bookingId: String? = null): History = client.get("/api/request-conversations/$id") {
+    suspend fun history(id: String, before: String? = null, bookingId: String? = null): History = client.get(ApiEndpoints.conversationMessages(id)) {
         before?.let { parameter("before", it) }
         bookingId?.let { parameter("booking", it) }
     }.checked()
     suspend fun send(id: String, message: SendMessage): ChatMessage =
-        client.post("/api/request-conversations/$id/messages") { setBody(message) }.checked<MessageResponse>().message
-    suspend fun read(id: String) { client.patch("/api/request-conversations/$id/read").checked<kotlinx.serialization.json.JsonObject>() }
+        client.post(ApiEndpoints.sendConversationMessage(id)) { setBody(message) }.checked<MessageResponse>().message
+    suspend fun read(id: String) { client.patch(ApiEndpoints.markConversationRead(id)).checked<kotlinx.serialization.json.JsonObject>() }
+    suspend fun projectConversations(archived: Boolean = false, before: String? = null): ProjectConversationPage =
+        client.get(ApiEndpoints.PROJECT_CONVERSATIONS) {
+            parameter("view", if (archived) "archived" else "active")
+            before?.let { parameter("before", it) }
+        }.checked()
+    suspend fun projectHistory(id: String, before: String? = null): ProjectChatHistory =
+        client.get(ApiEndpoints.projectConversationMessages(id)) {
+            before?.let { parameter("before", it) }
+        }.checked()
+    suspend fun sendProjectMessage(id: String, body: String, clientMessageId: String): ProjectChatMessage =
+        client.post(ApiEndpoints.sendProjectConversationMessage(id)) {
+            setBody(SendMessage(body = body, clientMessageId = clientMessageId))
+        }.checked<ProjectMessageResponse>().message
+    suspend fun readProject(id: String) {
+        client.patch(ApiEndpoints.markProjectConversationRead(id)).checked<kotlinx.serialization.json.JsonObject>()
+    }
     suspend fun notifications(): NotificationFeed = client.get("/api/request-workflows/notifications").checked()
     suspend fun readNotification(id: String) { client.patch("/api/request-workflows/notifications/$id/read").checked<kotlinx.serialization.json.JsonObject>() }
     suspend fun readAll() { client.patch("/api/request-workflows/notifications/read-all").checked<kotlinx.serialization.json.JsonObject>() }
     suspend fun checkRequestAccess(id: String) { client.get("/api/request-workflows/$id").checked<kotlinx.serialization.json.JsonObject>() }
     /** The stream carries invalidations, never message bodies. Re-fetch history on connect and changes. */
     suspend fun events(id: String, changed: suspend () -> Unit) {
-        client.prepareGet("/api/request-conversations/$id/events") {
+        client.prepareGet(ApiEndpoints.conversationStream(id)) {
             timeout { requestTimeoutMillis = 70_000; socketTimeoutMillis = 35_000 }
             accept(ContentType.Text.EventStream)
         }.execute { response ->

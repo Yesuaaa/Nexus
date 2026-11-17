@@ -40,11 +40,11 @@ class ProjectsRepository(private val client: HttpClient) {
         if (!response.status.isSuccess()) throw CommunicationException(response.status.value, "This deliverable is unavailable. Refresh the project and try again.")
         return SelectedFile(deliverable.workflowFile.name, deliverable.workflowFile.mimeType, response.bodyAsBytes())
     }
-    suspend fun history(id: String, before: String? = null): ProjectChatHistory = client.get("/api/project-conversations/$id") {
+    suspend fun history(id: String, before: String? = null): ProjectChatHistory = client.get(ApiEndpoints.projectConversationMessages(id)) {
         before?.let { parameter("before", it) }
     }.checked()
-    suspend fun send(id: String, body: String, key: String): ProjectChatMessage = client.post("/api/project-conversations/$id/messages") {
+    suspend fun send(id: String, body: String, key: String): ProjectChatMessage = client.post(ApiEndpoints.sendProjectConversationMessage(id)) {
         setBody(buildJsonObject { put("body", body); put("clientMessageId", key) })
     }.checked<ProjectMessageResponse>().message
-    suspend fun markRead(id: String) { client.patch("/api/project-conversations/$id/read").checked<JsonObject>() }
+    suspend fun markRead(id: String) { client.patch(ApiEndpoints.markProjectConversationRead(id)).checked<JsonObject>() }
 }
