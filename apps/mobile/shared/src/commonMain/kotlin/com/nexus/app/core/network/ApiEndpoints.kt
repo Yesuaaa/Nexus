@@ -33,6 +33,11 @@ object ApiEndpoints {
     // Projects
     fun projectWorkspace(id: String) = "/api/projects/$id"
 
+    // Request Workflows & Billing
+    const val BILLING_LOGS = "/api/request-workflows/billing"
+    fun workflowFileDownload(requestId: String, fileId: String) =
+        "/api/request-workflows/$requestId/files/$fileId"
+
     // System Health
     const val HEALTH = "/api/health"
 }

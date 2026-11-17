@@ -17,6 +17,8 @@ val appModule = module {
     viewModel { com.nexus.app.features.profile.viewmodel.ProfileViewModel(get(), get()) }
     single { com.nexus.app.features.workflow.api.WorkflowRepository(get()) }
     viewModel { com.nexus.app.features.workflow.viewmodel.WorkflowViewModel(get()) }
+    single { com.nexus.app.features.billing.api.BillingRepository(get()) }
+    viewModel { com.nexus.app.features.billing.viewmodel.BillingViewModel(get()) }
 
     single { com.nexus.app.features.conversations.api.ClientCommunicationRepository(get()) }
     viewModel { com.nexus.app.features.conversations.viewmodel.ConversationsViewModel(get(), get(), get()) }
