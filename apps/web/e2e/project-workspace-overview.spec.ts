@@ -323,7 +323,7 @@ async function mockStaffWorkspace(
   await page.goto("/project-workspace/group%3Aoverview-project")
 }
 
-test("Staff overview summarizes current records and links to existing sections", async ({
+test("Staff overview follows the portal overview layout and links to existing sections", async ({
   page,
 }) => {
   await mockStaffWorkspace(page, workspace())
@@ -353,13 +353,13 @@ test("Staff overview summarizes current records and links to existing sections",
   const detailsBox = await projectDetails.boundingBox()
   const summaryBox = await summary.boundingBox()
   expect(
-    detailsBox!.y - (headerBox!.y + headerBox!.height),
-  ).toBeGreaterThanOrEqual(11)
+    summaryBox!.y - (headerBox!.y + headerBox!.height),
+  ).toBeGreaterThanOrEqual(17)
   expect(
-    detailsBox!.y - (headerBox!.y + headerBox!.height),
-  ).toBeLessThanOrEqual(13)
+    summaryBox!.y - (headerBox!.y + headerBox!.height),
+  ).toBeLessThanOrEqual(19)
   expect(
-    summaryBox!.y - (detailsBox!.y + detailsBox!.height),
+    detailsBox!.y - (summaryBox!.y + summaryBox!.height),
   ).toBeGreaterThanOrEqual(15)
   const summaryCards = await summary.getByRole("article").all()
   const summaryCardBoxes = await Promise.all(
@@ -369,8 +369,7 @@ test("Staff overview summarizes current records and links to existing sections",
   for (let index = 0; index < summaryCardBoxes.length - 1; index += 1) {
     const current = summaryCardBoxes[index]!
     const next = summaryCardBoxes[index + 1]!
-    expect(next.x - (current.x + current.width)).toBeGreaterThanOrEqual(8)
-    expect(next.x - (current.x + current.width)).toBeLessThanOrEqual(12)
+    expect(next.x - (current.x + current.width)).toBeCloseTo(1)
     expect(Math.abs(next.height - current.height)).toBeLessThanOrEqual(1)
   }
   await expect(
@@ -381,7 +380,10 @@ test("Staff overview summarizes current records and links to existing sections",
   ).toContainText("2 of 3 tasks complete")
   await expect(
     summary.getByRole("link", { name: "View deliverables" }),
-  ).toContainText("1 / 4 sent")
+  ).toContainText("1 / 4")
+  await expect(
+    summary.getByRole("link", { name: "View deliverables" }),
+  ).toContainText("Sent to client")
   await expect(
     summary.getByRole("link", { name: "View deliverables" }),
   ).toContainText("2 internal reviews pending")
@@ -428,16 +430,25 @@ test("Staff overview summarizes current records and links to existing sections",
   ).toBeVisible()
   const attention = page.getByRole("region", { name: "Requires Attention" })
   const attentionBox = await attention.boundingBox()
-  const brief = page
-    .getByRole("heading", { name: "Project brief" })
-    .locator("xpath=ancestor::section[1]")
+  const teamBox = await page
+    .getByRole("region", { name: "Assigned team" })
+    .boundingBox()
+  const brief = page.getByRole("region", { name: "Project brief" })
   const briefBox = await brief.boundingBox()
   expect(
-    attentionBox!.y - (summaryBox!.y + summaryBox!.height),
-  ).toBeGreaterThanOrEqual(18)
+    attentionBox!.y - (detailsBox!.y + detailsBox!.height),
+  ).toBeGreaterThanOrEqual(15)
+  expect(teamBox!.y).toBeCloseTo(attentionBox!.y)
   expect(
-    briefBox!.y - (attentionBox!.y + attentionBox!.height),
-  ).toBeGreaterThanOrEqual(18)
+    teamBox!.x - (attentionBox!.x + attentionBox!.width),
+  ).toBeGreaterThanOrEqual(15)
+  expect(
+    briefBox!.y -
+      Math.max(
+        teamBox!.y + teamBox!.height,
+        attentionBox!.y + attentionBox!.height,
+      ),
+  ).toBeGreaterThanOrEqual(15)
   await expect(
     page.getByRole("heading", { name: "Project brief" }),
   ).toBeVisible()
@@ -459,6 +470,21 @@ test("Staff overview summarizes current records and links to existing sections",
   const sidebar = page.getByRole("complementary", {
     name: "Primary navigation",
   })
+  await expect(
+    sidebar.getByRole("link", { name: "Switch Workspace" }),
+  ).toHaveCount(0)
+  await expect(
+    sidebar.getByRole("link", { name: "Back to projects" }),
+  ).toBeVisible()
+  await expect(
+    sidebar.getByRole("link", { name: "Project Messages" }),
+  ).toHaveCount(0)
+  await expect(
+    sidebar.getByRole("link", { name: "Overview", exact: true }),
+  ).toHaveCSS("background-color", "rgb(238, 242, 249)")
+  await expect(
+    sidebar.getByRole("link", { name: "Overview", exact: true }),
+  ).toHaveAttribute("aria-current", "page")
   for (const section of [
     "Overview",
     "Work",
@@ -550,10 +576,10 @@ test("loaded empty notes and requests show confirmed zero counts and remain navi
   const requestsCard = summary.getByRole("link", {
     name: "View client requests",
   })
-  await expect(notesCard).toContainText("0 unique notes")
+  await expect(notesCard.getByText("0", { exact: true })).toBeVisible()
   await expect(notesCard).toContainText("0 awaiting review")
   await expect(notesCard).not.toContainText("Data unavailable")
-  await expect(requestsCard).toContainText("0 requests")
+  await expect(requestsCard.getByText("0", { exact: true })).toBeVisible()
   await expect(requestsCard).toContainText("0 pending")
   await expect(requestsCard).not.toContainText("Data unavailable")
 })
@@ -574,13 +600,16 @@ test("project note, revision, and review drafts accept input safely", async ({
   await revisionDraft.fill("A revised project note")
   await expect(revisionDraft).toHaveValue("A revised project note")
 
-  const reviewFeedback = page.getByPlaceholder(
+  const review = page.getByRole("listitem").filter({
+    has: page.getByText("Note content note-team-lead-current", { exact: true }),
+  })
+  const reviewFeedback = review.getByPlaceholder(
     "Add feedback when requesting changes or rejecting.",
   )
   await reviewFeedback.fill("Please adjust the opening section.")
   await expect(reviewFeedback).toHaveValue("Please adjust the opening section.")
 
-  const publicationCheckbox = page.getByRole("checkbox", {
+  const publicationCheckbox = review.getByRole("checkbox", {
     name: "Share with the client after approval",
   })
   await publicationCheckbox.check()
@@ -645,9 +674,9 @@ test("empty attention state stays compact", async ({ page }) => {
   await mockStaffWorkspace(page, detail)
 
   const attention = page.getByRole("region", { name: "Requires Attention" })
-  await expect(
-    attention.getByRole("heading", { name: "Nothing needs your attention" }),
-  ).toBeVisible()
+  await expect(attention.getByRole("status")).toHaveText(
+    "Nothing needs your attention",
+  )
   const box = await attention.boundingBox()
   expect(box?.height).toBeLessThan(150)
 })
@@ -752,16 +781,17 @@ test("Superadmin gets unavailable states for missing data and no overview mutati
     .getByRole("heading", { name: "Overview project" })
     .locator("xpath=ancestor::header[1]")
   const adminHeaderBox = await adminHeader.boundingBox()
-  const adminDetailsBox = await page
-    .locator('dl[aria-label="Project details"]')
-    .boundingBox()
-  expect(
-    adminDetailsBox!.y - (adminHeaderBox!.y + adminHeaderBox!.height),
-  ).toBeGreaterThanOrEqual(11)
-  expect(
-    adminDetailsBox!.y - (adminHeaderBox!.y + adminHeaderBox!.height),
-  ).toBeLessThanOrEqual(13)
+  await expect(
+    adminHeader.getByText("Workspace: Northstar Workspace"),
+  ).toBeVisible()
   const summary = page.getByRole("region", { name: "Project overview summary" })
+  const adminSummaryBox = await summary.boundingBox()
+  expect(
+    adminSummaryBox!.y - (adminHeaderBox!.y + adminHeaderBox!.height),
+  ).toBeGreaterThanOrEqual(17)
+  expect(
+    adminSummaryBox!.y - (adminHeaderBox!.y + adminHeaderBox!.height),
+  ).toBeLessThanOrEqual(19)
   await expect(
     summary.getByRole("article").filter({ hasText: "Project Notes" }),
   ).toContainText("Data unavailable")

@@ -380,6 +380,24 @@ test(
           new Set([booking.id, contested.id]),
         )
         assert.deepEqual(list.department, { id: design.id, name: "Design" })
+        const overviewResponse = await get("/request-inbox/overview")
+        assert.equal(overviewResponse.status, 200)
+        const overview = (await overviewResponse.json()) as {
+          department: object
+          total: number
+          statusCounts: Record<string, number>
+          recentRequests: { id: string }[]
+        }
+        assert.deepEqual(overview.department, {
+          id: design.id,
+          name: "Design",
+        })
+        assert.equal(overview.total, 2)
+        assert.equal(overview.statusCounts.SUBMITTED, 2)
+        assert.deepEqual(
+          new Set(overview.recentRequests.map((item) => item.id)),
+          new Set([booking.id, contested.id]),
+        )
         assert.equal(
           list.serviceRequests.find((item) => item.id === booking.id)
             ?.referenceNumber,

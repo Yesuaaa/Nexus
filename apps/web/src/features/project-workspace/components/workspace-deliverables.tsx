@@ -27,7 +27,7 @@ import { Button } from "@/components/ui/button"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { EmptyState } from "@/components/ui/empty-state"
-import { FilterSelect } from "@/components/ui/filter-select"
+import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
 import {
   Modal,
   ModalBody,
@@ -37,6 +37,13 @@ import {
 import { SearchField } from "@/components/ui/search-field"
 import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
 import { Pill } from "@/components/ui/pill"
+import {
+  ResponsiveDataTable,
+  ResponsiveDataTableBody,
+  ResponsiveDataTableCell,
+  ResponsiveDataTableColumnHeader,
+  ResponsiveDataTableHeader,
+} from "@/components/ui/responsive-data-table"
 import {
   Select,
   SelectContent,
@@ -75,6 +82,7 @@ import {
 import {
   deliverableStatusClass,
   deliverableStatusLabel,
+  deliverableStatusTone,
 } from "./deliverable-status"
 import { errorMessage } from "@/lib/error-message"
 
@@ -83,6 +91,20 @@ type DeliverableRow = {
   stream: ProjectWorkspaceWorkstream
   deliverable: ProjectDeliverable
 }
+
+const deliverableGrid =
+  "grid grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,.9fr)_minmax(95px,.65fr)_minmax(100px,1fr)] items-center gap-3 @max-[730px]:grid-cols-[minmax(0,1fr)_auto]"
+const deliverableRowClass = cn(
+  deliverableGrid,
+  "min-h-[58px] px-4 py-3 text-xs hover:bg-[#f8fafd]",
+)
+const deliverableCells = [
+  "min-w-0 @max-[730px]:col-span-2",
+  "min-w-0 @max-[730px]:col-span-2",
+  "min-w-0 @max-[730px]:col-span-2",
+  "min-w-0 @max-[730px]:col-span-2",
+  "min-w-0 justify-self-end @max-[730px]:col-span-2",
+]
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
@@ -879,20 +901,18 @@ export function WorkspaceDeliverables({
         </h2>
       </header>
       {rows.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className={filterBarClass}>
           <SearchField
             label="Search deliverables"
             value={query}
             onChange={(event) => setQuery(event.currentTarget.value)}
             placeholder="Search deliverables..."
-            containerClassName="w-full max-w-[300px] border-[#dfe4ec] bg-transparent px-3 text-[#65718a] focus-within:ring-2 focus-within:ring-[#294c96] max-[1050px]:w-full max-[1050px]:max-w-[300px] max-[1050px]:flex-none"
-            className="text-[#182235] placeholder:text-[#65718a]"
           />
           <FilterSelect
             label="Filter deliverables by service"
             value={serviceFilter}
             options={serviceOptions}
-            triggerClassName="w-[190px] bg-transparent"
+            triggerClassName="w-[190px]"
             onChange={setServiceFilter}
           />
         </div>
@@ -904,235 +924,238 @@ export function WorkspaceDeliverables({
           description="Expected deliverables from the project plan will appear here."
         />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-[#dfe4ec]">
-          <div
-            className="min-w-[900px]"
-            role="table"
-            aria-label="Project deliverables"
-            aria-busy={searchPending}
+        <ResponsiveDataTable
+          label="Project deliverables"
+          aria-busy={searchPending}
+        >
+          <ResponsiveDataTableHeader
+            className="@max-[730px]:sr-only"
+            rowClassName={deliverableGrid}
           >
-            <div
-              role="row"
-              className="grid grid-cols-[minmax(190px,1.2fr)_minmax(190px,1.2fr)_minmax(160px,1fr)_minmax(135px,.8fr)_160px] items-center bg-[#e9eef3] text-[11px] font-semibold text-[#182235]"
-            >
-              {[
-                ["Deliverable", "pl-4"],
-                ["Attachment", ""],
-                ["Service", ""],
-                ["Status", "text-center"],
-                ["Actions", "pr-4 text-right"],
-              ].map(([label, className]) => (
-                <div
-                  key={label}
-                  role="columnheader"
-                  className={cn("px-3 py-3", className)}
-                >
-                  {label}
-                </div>
-              ))}
-            </div>
-            {searchPending ? (
-              <div role="rowgroup">
-                <DataTableSkeletonRows
-                  label="deliverables"
-                  rows={5}
-                  rowClassName="grid grid-cols-[minmax(190px,1.2fr)_minmax(190px,1.2fr)_minmax(160px,1fr)_minmax(135px,.8fr)_160px] min-h-[58px] items-center border-t border-[#e5e9ef] text-xs text-[#182235]"
-                  cellClassNames={[
-                    "min-w-0 px-4 py-3.5",
-                    "min-w-0 px-3 py-3.5",
-                    "min-w-0 px-3 py-3.5",
-                    "px-3 py-3.5",
-                    "py-3.5",
-                  ]}
-                  cellSkeletonClassNames={[
-                    "h-3 w-3/4",
-                    "h-3 w-2/3",
-                    "h-5 w-24 rounded",
-                    "h-5 w-16 rounded",
-                    "h-8 w-24",
-                  ]}
-                />
-              </div>
-            ) : (
-              <AnimatedSlotGridBody
-                items={filteredRows}
-                viewKey={JSON.stringify([settledQuery, serviceFilter])}
-                quickKey={settledQuery}
-                animateRows={false}
-                getKey={deliverableRowKey}
-                rowClassName={() =>
-                  "grid grid-cols-[minmax(190px,1.2fr)_minmax(190px,1.2fr)_minmax(160px,1fr)_minmax(135px,.8fr)_160px] items-center border-t border-[#e5e9ef] text-xs text-[#182235]"
-                }
-                emptyContent="No deliverables match those filters."
-                className="relative overflow-x-clip"
-                renderRow={({ workspaceId, stream, deliverable }) => {
-                  const row = { workspaceId, stream, deliverable }
-                  const currentSubmission = deliverable.submissions?.find(
-                    ({ workflowFile }) =>
-                      workflowFile.id === deliverable.workflowFile?.id,
-                  )
-                  const canReview =
-                    !administrativeReadOnly &&
-                    currentSubmission?.submittedById !== account.id &&
-                    ((stream.isTeamLead &&
-                      currentSubmission?.status === "IN_REVIEW") ||
-                      (stream.isDepartmentHead &&
-                        (currentSubmission?.status === "ESCALATED" ||
-                          (!stream.hasTeamLead &&
-                            currentSubmission?.status === "IN_REVIEW"))))
-                  const canEscalate =
-                    !administrativeReadOnly &&
-                    stream.isTeamLead &&
-                    currentSubmission?.status === "IN_REVIEW"
-                  const canUpload =
-                    !administrativeReadOnly && stream.canUploadDeliverables
-                  const canEdit =
-                    !administrativeReadOnly &&
-                    stream.canAssign &&
-                    deliverable.deliveryStatus !== "SENT_TO_CLIENT"
-                  const actions = (
-                    <div className="flex items-center justify-end gap-2 pr-4">
+            {[
+              ["Deliverable", ""],
+              ["Attachment", ""],
+              ["Service", ""],
+              ["Status", ""],
+              ["Actions", "text-right"],
+            ].map(([label, className]) => (
+              <ResponsiveDataTableColumnHeader
+                key={label}
+                className={className}
+              >
+                {label}
+              </ResponsiveDataTableColumnHeader>
+            ))}
+          </ResponsiveDataTableHeader>
+          {searchPending ? (
+            <ResponsiveDataTableBody>
+              <DataTableSkeletonRows
+                label="deliverables"
+                rows={5}
+                rowClassName={deliverableRowClass}
+                cellClassNames={deliverableCells}
+                cellSkeletonClassNames={[
+                  "h-3 w-3/4",
+                  "h-3 w-2/3",
+                  "h-5 w-24 rounded",
+                  "h-5 w-16 rounded",
+                  "h-8 w-24",
+                ]}
+              />
+            </ResponsiveDataTableBody>
+          ) : (
+            <AnimatedSlotGridBody
+              items={filteredRows}
+              viewKey={JSON.stringify([settledQuery, serviceFilter])}
+              quickKey={settledQuery}
+              animateRows={false}
+              autoRowHeight
+              getKey={deliverableRowKey}
+              rowClassName={(_row, _index, isLast) =>
+                cn(deliverableRowClass, !isLast && "border-b border-[#eceef1]")
+              }
+              emptyContent="No deliverables match those filters."
+              className="relative overflow-x-clip"
+              renderRow={({ workspaceId, stream, deliverable }) => {
+                const row = { workspaceId, stream, deliverable }
+                const currentSubmission = deliverable.submissions?.find(
+                  ({ workflowFile }) =>
+                    workflowFile.id === deliverable.workflowFile?.id,
+                )
+                const canReview =
+                  !administrativeReadOnly &&
+                  currentSubmission?.submittedById !== account.id &&
+                  ((stream.isTeamLead &&
+                    currentSubmission?.status === "IN_REVIEW") ||
+                    (stream.isDepartmentHead &&
+                      (currentSubmission?.status === "ESCALATED" ||
+                        (!stream.hasTeamLead &&
+                          currentSubmission?.status === "IN_REVIEW"))))
+                const canEscalate =
+                  !administrativeReadOnly &&
+                  stream.isTeamLead &&
+                  currentSubmission?.status === "IN_REVIEW"
+                const canUpload =
+                  !administrativeReadOnly && stream.canUploadDeliverables
+                const canEdit =
+                  !administrativeReadOnly &&
+                  stream.canAssign &&
+                  deliverable.deliveryStatus !== "SENT_TO_CLIENT"
+                const actions = (
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <ActionIcon
+                      id={`project-deliverable-view-${deliverable.id}`}
+                      label={`View details for ${deliverable.title}`}
+                      onClick={() => {
+                        setSelectedIds({
+                          projectId: stream.id,
+                          deliverableId: deliverable.id,
+                        })
+                      }}
+                    >
+                      <Eye size={16} aria-hidden="true" />
+                    </ActionIcon>
+                    {canReview && canEdit && (
                       <ActionIcon
-                        id={`project-deliverable-view-${deliverable.id}`}
-                        label={`View details for ${deliverable.title}`}
-                        onClick={() => {
-                          setSelectedIds({
+                        label={`Edit ${deliverable.title}`}
+                        variant="brand"
+                        onClick={() =>
+                          setEditingIds({
                             projectId: stream.id,
                             deliverableId: deliverable.id,
                           })
-                        }}
+                        }
                       >
-                        <Eye size={16} aria-hidden="true" />
+                        <Pencil size={16} aria-hidden="true" />
                       </ActionIcon>
-                      {canReview && canEdit && (
-                        <ActionIcon
-                          label={`Edit ${deliverable.title}`}
-                          variant="brand"
-                          onClick={() =>
-                            setEditingIds({
-                              projectId: stream.id,
-                              deliverableId: deliverable.id,
-                            })
-                          }
-                        >
-                          <Pencil size={16} aria-hidden="true" />
-                        </ActionIcon>
-                      )}
-                      {canReview &&
-                        deliverable.deliveryStatus === "IN_REVIEW" && (
-                          <>
-                            <ActionIcon
-                              label={`Approve ${deliverable.title}`}
-                              variant="brand"
-                              disabled={busy}
-                              onClick={() => void handleApprove(row)}
-                            >
-                              <Check size={16} aria-hidden="true" />
-                            </ActionIcon>
-                            <ActionIcon
-                              label={`Reject ${deliverable.title}`}
-                              variant="danger"
-                              disabled={busy}
-                              onClick={() =>
-                                setRejectingIds({
-                                  projectId: stream.id,
-                                  deliverableId: deliverable.id,
-                                })
-                              }
-                            >
-                              <X size={16} aria-hidden="true" />
-                            </ActionIcon>
-                          </>
-                        )}
-                      {canEscalate && (
-                        <ActionIcon
-                          label={`Escalate ${deliverable.title} to the Department Head`}
-                          disabled={busy}
-                          onClick={() => void handleEscalate(row)}
-                        >
-                          <ArrowUpRight size={16} aria-hidden="true" />
-                        </ActionIcon>
-                      )}
-                      {stream.canAssign &&
-                        deliverable.deliveryStatus === "APPROVED" && (
+                    )}
+                    {canReview &&
+                      deliverable.deliveryStatus === "IN_REVIEW" && (
+                        <>
                           <ActionIcon
-                            label={`Send ${deliverable.title} to client`}
+                            label={`Approve ${deliverable.title}`}
                             variant="brand"
                             disabled={busy}
-                            onClick={() => void handleSend(row)}
+                            onClick={() => void handleApprove(row)}
                           >
-                            <Send size={15} aria-hidden="true" />
+                            <Check size={16} aria-hidden="true" />
                           </ActionIcon>
-                        )}
-                    </div>
-                  )
-                  return (
-                    <>
-                      {" "}
-                      <div role="cell" className="min-w-0 px-4 py-3.5">
-                        <span
-                          className="block truncate font-medium"
-                          title={deliverable.title}
-                        >
-                          {deliverable.title}
-                        </span>
-                        {deliverable.description && (
-                          <span
-                            className="mt-1 block truncate text-[11px] text-[#738096]"
-                            title={deliverable.description}
-                          >
-                            {deliverable.description}
-                          </span>
-                        )}
-                      </div>
-                      <div role="cell" className="min-w-0 px-3 py-3.5">
-                        {deliverable.workflowFile &&
-                        (canReview || canUpload) ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
+                          <ActionIcon
+                            label={`Reject ${deliverable.title}`}
+                            variant="danger"
                             disabled={busy}
-                            className="h-auto max-w-full justify-start truncate p-0 text-left text-[#294c96] hover:bg-transparent hover:underline"
-                            onClick={() => void handleDownload(row)}
+                            onClick={() =>
+                              setRejectingIds({
+                                projectId: stream.id,
+                                deliverableId: deliverable.id,
+                              })
+                            }
                           >
-                            {deliverable.workflowFile.name}
-                          </Button>
-                        ) : administrativeReadOnly ? (
-                          <span className="text-[#738096]">
-                            Not included in project inspection
-                          </span>
-                        ) : (
-                          <span className="text-[#738096]">
-                            {deliverable.workflowFile?.name ?? "No attachment"}
-                          </span>
-                        )}
-                      </div>
-                      <div role="cell" className="min-w-0 px-3 py-3.5">
-                        <span className="inline-flex max-w-full truncate rounded-md bg-[#edf1f6] px-2 py-1 text-[10px] text-[#52627a]">
-                          {stream.serviceName}
-                        </span>
-                      </div>
-                      <div role="cell" className="px-3 py-3.5 text-center">
-                        <span
-                          className={cn(
-                            "inline-flex rounded-md px-2.5 py-1 text-[10px] font-medium",
-                            deliverableStatusClass(deliverable.deliveryStatus),
-                          )}
+                            <X size={16} aria-hidden="true" />
+                          </ActionIcon>
+                        </>
+                      )}
+                    {canEscalate && (
+                      <ActionIcon
+                        label={`Escalate ${deliverable.title} to the Department Head`}
+                        disabled={busy}
+                        onClick={() => void handleEscalate(row)}
+                      >
+                        <ArrowUpRight size={16} aria-hidden="true" />
+                      </ActionIcon>
+                    )}
+                    {stream.canAssign &&
+                      deliverable.deliveryStatus === "APPROVED" && (
+                        <ActionIcon
+                          label={`Send ${deliverable.title} to client`}
+                          variant="brand"
+                          disabled={busy}
+                          onClick={() => void handleSend(row)}
                         >
-                          {deliverableStatusLabel(deliverable.deliveryStatus)}
+                          <Send size={15} aria-hidden="true" />
+                        </ActionIcon>
+                      )}
+                  </div>
+                )
+                return (
+                  <>
+                    <ResponsiveDataTableCell className={deliverableCells[0]}>
+                      <span
+                        className="block truncate font-medium"
+                        title={deliverable.title}
+                      >
+                        {deliverable.title}
+                      </span>
+                      {deliverable.description && (
+                        <span
+                          className="mt-1 block truncate text-[11px] text-[#738096]"
+                          title={deliverable.description}
+                        >
+                          {deliverable.description}
                         </span>
-                      </div>
-                      <div role="cell" className="py-3.5">
-                        {actions}
-                      </div>
-                    </>
-                  )
-                }}
-              />
-            )}
-          </div>
-        </div>
+                      )}
+                    </ResponsiveDataTableCell>
+                    <ResponsiveDataTableCell
+                      className={cn(deliverableCells[1], "min-w-0 break-words")}
+                    >
+                      <span className="hidden font-medium text-[#65718a] @max-[730px]:inline">
+                        Attachment:{" "}
+                      </span>
+                      {deliverable.workflowFile && (canReview || canUpload) ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          disabled={busy}
+                          className="h-auto max-w-full justify-start p-0 text-left text-[#294c96] hover:bg-transparent hover:underline"
+                          onClick={() => void handleDownload(row)}
+                        >
+                          <span className="truncate">
+                            {deliverable.workflowFile.name}
+                          </span>
+                        </Button>
+                      ) : administrativeReadOnly ? (
+                        <span className="text-[#738096]">
+                          Not included in project inspection
+                        </span>
+                      ) : (
+                        <span className="text-[#738096]">
+                          {deliverable.workflowFile?.name ?? "No attachment"}
+                        </span>
+                      )}
+                    </ResponsiveDataTableCell>
+                    <ResponsiveDataTableCell className={deliverableCells[2]}>
+                      <span className="mr-1 hidden font-medium text-[#65718a] @max-[730px]:inline">
+                        Service:
+                      </span>
+                      <Pill
+                        tone="neutral"
+                        className="align-middle"
+                        title={stream.serviceName}
+                      >
+                        {stream.serviceName}
+                      </Pill>
+                    </ResponsiveDataTableCell>
+                    <ResponsiveDataTableCell className={deliverableCells[3]}>
+                      <span className="mr-1 hidden font-medium text-[#65718a] @max-[730px]:inline">
+                        Status:
+                      </span>
+                      <Pill
+                        tone={deliverableStatusTone(deliverable.deliveryStatus)}
+                        className="align-middle"
+                      >
+                        {deliverableStatusLabel(deliverable.deliveryStatus)}
+                      </Pill>
+                    </ResponsiveDataTableCell>
+                    <ResponsiveDataTableCell className={deliverableCells[4]}>
+                      {actions}
+                    </ResponsiveDataTableCell>
+                  </>
+                )
+              }}
+            />
+          )}
+        </ResponsiveDataTable>
       )}
       {selected && (
         <DeliverableDetailsPanel

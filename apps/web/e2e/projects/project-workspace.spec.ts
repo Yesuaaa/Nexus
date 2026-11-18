@@ -1027,23 +1027,36 @@ test("Superadmin workspace details stay read-only and reset to the summary view"
   await expect(panel).toContainText("Department Head")
   await expect(panel).toContainText("Project Assignee")
   await expect(panel).toContainText("1 of 2 tasks complete")
-  await panel.getByRole("button", { name: projectTitle }).click()
-  await expect(panel.getByRole("heading", { name: projectTitle })).toBeVisible()
-  await expect(panel.getByText("Project details", { exact: true })).toHaveCount(
+  const projectTrigger = panel.getByRole("button", { name: projectTitle })
+  await projectTrigger.click()
+  const projectSubview = panel.getByRole("region", { name: projectTitle })
+  await expect(
+    projectSubview.getByRole("heading", { name: projectTitle }),
+  ).toBeVisible()
+  await expect(projectTrigger).toHaveCount(0)
+  await expect(
+    projectSubview.getByText("Project details", { exact: true }),
+  ).toHaveCount(0)
+  await expect(
+    projectSubview.getByText("In progress", { exact: true }),
+  ).toBeVisible()
+  await expect(projectSubview).toContainText("Project description")
+  await expect(projectSubview).toContainText("Project lead")
+  await expect(projectSubview).toContainText(
+    "1 completed · 1 incomplete · 2 total",
+  )
+  await expect(
+    projectSubview.getByText("In progress", { exact: true }),
+  ).toHaveCount(1)
+  await expect(projectSubview.getByText("Status", { exact: true })).toHaveCount(
     0,
   )
-  await expect(panel.getByText("In progress", { exact: true })).toBeVisible()
-  await expect(panel).toContainText("Project description")
-  await expect(panel).toContainText("Project lead")
-  await expect(panel).toContainText("1 completed · 1 incomplete · 2 total")
-  await expect(panel.getByText("In progress", { exact: true })).toHaveCount(1)
-  await expect(panel.getByText("Status", { exact: true })).toHaveCount(0)
   await expect(
     panel.getByRole("heading", { name: "Project details" }),
   ).toHaveCount(0)
   await expect(panel).not.toContainText("Read-only project details.")
   await expect(
-    panel.getByText("Persisted workspace name", { exact: true }),
+    projectSubview.getByText("Persisted workspace name", { exact: true }),
   ).toBeVisible()
   await expect(
     panel.getByRole("heading", { name: "Project team" }),
@@ -1084,7 +1097,8 @@ test("Superadmin workspace details stay read-only and reset to the summary view"
   await expect(
     panel.getByRole("heading", { name: "Persisted workspace name" }),
   ).toBeVisible()
-  await panel.getByRole("button", { name: projectTitle }).click()
+  await expect(projectTrigger).toBeFocused()
+  await projectTrigger.click()
   await panel
     .getByRole("button", { name: "Close project workspace details" })
     .click()

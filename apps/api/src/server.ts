@@ -1,4 +1,6 @@
 import { createServer, type Server } from "node:http"
+import { purgeServiceLogs } from "./features/service-operation-logs/log-retention.js"
+import { purgeProjectLogs } from "./features/project-management-logs/retention.js"
 import { createApp } from "./app.js"
 import { jwtKey } from "./features/auth/auth.jwt.js"
 import { conversationRealtime } from "./features/request-conversations/request-conversations.realtime.js"
@@ -65,6 +67,24 @@ export function startApi(): {
   }
 
   purgeExpiredMessages()
+  let logsPurging = false
+  const purgeLogs = () => {
+    if (logsPurging) return
+    logsPurging = true
+    void Promise.all([
+      purgeServiceLogs().catch(() =>
+        console.error("Unable to purge expired Service Operations logs"),
+      ),
+      purgeProjectLogs().catch(() =>
+        console.error("Unable to purge expired Project Management logs"),
+      ),
+    ]).finally(() => {
+      logsPurging = false
+    })
+  }
+  purgeLogs()
+  const logPurgeTimer = setInterval(purgeLogs, 60 * 60 * 1000)
+  logPurgeTimer.unref()
   const messagePurgeTimer = setInterval(purgeExpiredMessages, 60 * 60 * 1000)
   messagePurgeTimer.unref()
 
@@ -80,6 +100,7 @@ export function startApi(): {
     onStart: () => {
       isShuttingDown = true
       clearInterval(messagePurgeTimer)
+      clearInterval(logPurgeTimer)
     },
     cleanupResources: async () => {
       const results = await Promise.allSettled([

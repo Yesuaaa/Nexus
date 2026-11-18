@@ -12,8 +12,14 @@ import {
   MessageSquare,
   Pause,
   Play,
+  SlidersHorizontal,
 } from "lucide-react"
 import { contentClass } from "@/components/layout/styles"
+import {
+  compactHeaderActionClass,
+  PageHeader,
+  PageHeaderButton,
+} from "@/components/layout/page-header"
 import { ProjectSummary } from "../components/project-summary"
 import { WorkspaceOverview } from "../components/workspace-overview"
 import { WorkspaceNotes } from "../components/workspace-notes"
@@ -21,9 +27,13 @@ import { WorkspaceRequests } from "../components/workspace-requests"
 import { PlanEditor, emptyPlan } from "../components/plan-editor"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { pillToneClass } from "@/components/ui/pill"
-import { statusTone } from "@/features/projects/model/project-status"
-import { humanizeEnum } from "@/lib/format"
+import { EmptyState } from "@/components/ui/empty-state"
+import { OverviewPanel, RowsSkeleton } from "@/components/ui/overview-panel"
+import { Pill } from "@/components/ui/pill"
+import {
+  statusLabel,
+  statusTone,
+} from "@/features/projects/model/project-status"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -232,186 +242,207 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
       )}
       {!workspace ? (
         project.loading ? (
-          <p role="status">Loading project…</p>
+          <>
+            <PageHeader title="Project workspace" />
+            <div className="mt-5" role="status">
+              <span className="sr-only">Loading project…</span>
+              <RowsSkeleton />
+            </div>
+          </>
         ) : loadError ? null : (
-          <p role="status">Project workspace not found.</p>
+          <EmptyState title="Project workspace not found" role="status" />
         )
       ) : (
         <>
-          <header className="flex min-w-0 flex-wrap items-start justify-between gap-3">
-            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-              <h1 className="m-0 min-w-0 break-words text-[clamp(21px,2vw,25px)] leading-[1.25] font-[650] tracking-[-0.03em]">
-                {workspace.name}
-              </h1>
-              <span
-                className={`inline-flex items-center rounded-md px-2.5 py-1 text-[11px] font-medium capitalize ${pillToneClass(statusTone(workspace.status))}`}
-              >
-                {humanizeEnum(workspace.status, { capitalize: false })}
-              </span>
-            </div>
-            <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
-              {chatWorkstreams.map((stream) => (
-                <Button key={stream.id} asChild variant="outline" size="sm">
-                  <Link
-                    href={`/messages?project=${encodeURIComponent(stream.id)}`}
-                    aria-label={`Chat with client · ${stream.name}`}
-                  >
-                    <MessageSquare size={15} aria-hidden="true" />
-                    Chat with client
-                  </Link>
-                </Button>
-              ))}
-              {workspace.canManage && !terminal && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
+          <PageHeader
+            title={workspace.name}
+            meta={
+              <Pill tone={statusTone(workspace.status)}>
+                {statusLabel(workspace.status)}
+              </Pill>
+            }
+            mobileActions={chatWorkstreams.length > 1 ? "stack" : "icon"}
+            actions={
+              chatWorkstreams.length > 0 ||
+              (workspace.canManage && !terminal) ? (
+                <>
+                  {chatWorkstreams.map((stream) => (
                     <Button
-                      type="button"
-                      variant="brandOutline"
-                      size="sm"
-                      disabled={statusBusy}
-                      aria-label="Manage project status"
+                      key={stream.id}
+                      asChild
+                      variant="outline"
+                      size="header"
+                      className={compactHeaderActionClass}
                     >
-                      Manage status <ChevronDown size={14} aria-hidden="true" />
+                      <Link
+                        href={`/messages?project=${encodeURIComponent(stream.id)}`}
+                        aria-label={`Chat with client · ${stream.name}`}
+                      >
+                        <MessageSquare size={15} aria-hidden="true" />
+                        Chat with client
+                      </Link>
                     </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="end"
-                    sideOffset={6}
-                    className={`${dropdownMenuClass} w-64 text-xs outline-none`}
-                  >
-                    {workstreams.some(
-                      (stream) => stream.status === "IN_PROGRESS",
-                    ) && (
-                      <DropdownMenuItem
-                        disabled={statusBusy}
-                        className={dropdownItemClass}
-                        onSelect={() => void changeWorkspaceStatus("ON_HOLD")}
+                  ))}
+                  {workspace.canManage && !terminal && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <PageHeaderButton
+                          type="button"
+                          disabled={statusBusy}
+                          aria-label="Manage project status"
+                        >
+                          <SlidersHorizontal size={15} aria-hidden="true" />
+                          Manage status
+                          <ChevronDown
+                            size={14}
+                            className="group-data-[compact]/header:max-[560px]:hidden"
+                            aria-hidden="true"
+                          />
+                        </PageHeaderButton>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align="end"
+                        sideOffset={6}
+                        className={`${dropdownMenuClass} w-64 text-xs outline-none`}
                       >
-                        <span className="flex items-center gap-2">
-                          <Pause size={14} aria-hidden="true" /> Put on hold
-                        </span>
-                      </DropdownMenuItem>
-                    )}
-                    {workstreams.some(
-                      (stream) => stream.status === "ON_HOLD",
-                    ) && (
-                      <DropdownMenuItem
-                        disabled={statusBusy}
-                        className={dropdownItemClass}
-                        onSelect={() => void changeWorkspaceStatus("RESUME")}
-                      >
-                        <span className="flex items-center gap-2">
-                          <Play size={14} aria-hidden="true" /> Resume project
-                        </span>
-                      </DropdownMenuItem>
-                    )}
-                    <DropdownMenuItem
-                      disabled={statusBusy || !canComplete}
-                      className={dropdownItemClass}
-                      onSelect={() => void changeWorkspaceStatus("COMPLETE")}
-                    >
-                      <span className="flex items-center gap-2">
-                        <CheckCircle2 size={14} aria-hidden="true" /> Mark
-                        complete
-                      </span>
-                    </DropdownMenuItem>
-                    {!canComplete && (
-                      <p className="m-0 px-2.5 py-2 text-[11px] leading-4 text-[#65718a]">
-                        {completionBlockReason}
-                      </p>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-            </div>
-          </header>
-          {tab === "overview" && (
-            <div className="mt-3">
+                        {workstreams.some(
+                          (stream) => stream.status === "IN_PROGRESS",
+                        ) && (
+                          <DropdownMenuItem
+                            disabled={statusBusy}
+                            className={dropdownItemClass}
+                            onSelect={() =>
+                              void changeWorkspaceStatus("ON_HOLD")
+                            }
+                          >
+                            <span className="flex items-center gap-2">
+                              <Pause size={14} aria-hidden="true" /> Put on hold
+                            </span>
+                          </DropdownMenuItem>
+                        )}
+                        {workstreams.some(
+                          (stream) => stream.status === "ON_HOLD",
+                        ) && (
+                          <DropdownMenuItem
+                            disabled={statusBusy}
+                            className={dropdownItemClass}
+                            onSelect={() =>
+                              void changeWorkspaceStatus("RESUME")
+                            }
+                          >
+                            <span className="flex items-center gap-2">
+                              <Play size={14} aria-hidden="true" /> Resume
+                              project
+                            </span>
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem
+                          disabled={statusBusy || !canComplete}
+                          className={dropdownItemClass}
+                          onSelect={() =>
+                            void changeWorkspaceStatus("COMPLETE")
+                          }
+                        >
+                          <span className="flex items-center gap-2">
+                            <CheckCircle2 size={14} aria-hidden="true" /> Mark
+                            complete
+                          </span>
+                        </DropdownMenuItem>
+                        {!canComplete && (
+                          <p className="m-0 px-2.5 py-2 text-[11px] leading-4 text-[#65718a]">
+                            {completionBlockReason}
+                          </p>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                </>
+              ) : undefined
+            }
+          />
+          <div className="mt-[18px] min-w-0 max-[560px]:mt-[14px]">
+            {tab === "overview" && (
               <ProjectSummary
                 workspace={workspace}
                 sectionHref={(section: ProjectOverviewSection) =>
                   tabHref(section)
                 }
               />
-            </div>
-          )}
-          {tab === "work" &&
-            (editing ? (
-              <section className="mb-5 rounded-xl border border-[#dfe4ec] p-5">
-                <h2 className="text-sm font-semibold">
-                  Edit plan · {editing.name}
-                </h2>
-                <p className="text-xs text-[#65718a]">
-                  Rename phases and tasks, add work, or remove items. Removing a
-                  phase also removes its tasks when you save.
-                </p>
-                <PlanEditor
-                  plan={editing.plan}
-                  onChange={(plan) =>
-                    setEditing((current) =>
-                      current ? { ...current, plan } : null,
-                    )
+            )}
+            {tab === "work" &&
+              (editing ? (
+                <OverviewPanel
+                  title={`Edit plan · ${editing.name}`}
+                  description="Rename phases and tasks, add work, or remove items. Removing a phase also removes its tasks when you save."
+                >
+                  <PlanEditor
+                    plan={editing.plan}
+                    onChange={(plan) =>
+                      setEditing((current) =>
+                        current ? { ...current, plan } : null,
+                      )
+                    }
+                    disabled={busy}
+                  />
+                  <div className="mt-4 flex justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => setEditing(null)}
+                    >
+                      Discard changes
+                    </Button>
+                    <Button
+                      variant="brand"
+                      disabled={busy}
+                      onClick={() => void savePlan()}
+                    >
+                      {busy ? "Saving…" : "Save plan"}
+                    </Button>
+                  </div>
+                </OverviewPanel>
+              ) : (
+                <WorkspaceOverview
+                  workspace={workspace}
+                  busy={busy}
+                  onUpdated={updateWorkspaceAndNotify}
+                  onEditPlan={(stream) =>
+                    setEditing({
+                      projectId: stream.id,
+                      name: stream.serviceName,
+                      updatedAt: stream.updatedAt,
+                      plan: structuredClone(stream.plan ?? emptyPlan()),
+                    })
                   }
-                  disabled={busy}
                 />
-                <div className="mt-4 flex justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => setEditing(null)}
-                  >
-                    Discard changes
-                  </Button>
-                  <Button
-                    variant="brand"
-                    disabled={busy}
-                    onClick={() => void savePlan()}
-                  >
-                    {busy ? "Saving…" : "Save plan"}
-                  </Button>
-                </div>
-              </section>
-            ) : (
-              <WorkspaceOverview
+              ))}
+            {tab === "deliverables" && (
+              <WorkspaceDeliverables
                 workspace={workspace}
-                busy={busy}
-                onUpdated={updateWorkspaceAndNotify}
-                onEditPlan={(stream) =>
-                  setEditing({
-                    projectId: stream.id,
-                    name: stream.serviceName,
-                    updatedAt: stream.updatedAt,
-                    plan: structuredClone(stream.plan ?? emptyPlan()),
-                  })
-                }
+                onUpdated={setWorkspace}
               />
-            ))}
-          {tab === "deliverables" && (
-            <WorkspaceDeliverables
-              workspace={workspace}
-              onUpdated={setWorkspace}
-            />
-          )}
-          {tab === "notes" && (
-            <WorkspaceNotes
-              workspace={workspace}
-              onUpdated={updateWorkspaceAndNotify}
-            />
-          )}
-          {tab === "requests" && (
-            <WorkspaceRequests
-              workspace={workspace}
-              onChanged={project.retry}
-            />
-          )}
-          {tab === "team" && (
-            <WorkspaceTeam
-              workspace={workspace}
-              onUpdated={updateWorkspaceAndNotify}
-              onChanged={project.retry}
-            />
-          )}
-          {tab === "activity" && <WorkspaceActivity workspace={workspace} />}
+            )}
+            {tab === "notes" && (
+              <WorkspaceNotes
+                workspace={workspace}
+                onUpdated={updateWorkspaceAndNotify}
+              />
+            )}
+            {tab === "requests" && (
+              <WorkspaceRequests
+                workspace={workspace}
+                onChanged={project.retry}
+              />
+            )}
+            {tab === "team" && (
+              <WorkspaceTeam
+                workspace={workspace}
+                onUpdated={updateWorkspaceAndNotify}
+                onChanged={project.retry}
+              />
+            )}
+            {tab === "activity" && <WorkspaceActivity workspace={workspace} />}
+          </div>
         </>
       )}
     </main>

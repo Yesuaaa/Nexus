@@ -30,6 +30,12 @@ export type InboxView =
   | "cancelled"
 export type InboxSort =
   "createdAt" | "reference" | "service" | "client" | "status"
+export type InboxOverview = {
+  department: { id: string; name: string }
+  total: number
+  statusCounts: Record<string, number>
+  recentRequests: InboxRequest[]
+}
 
 export function listInbox(filters: {
   signal?: AbortSignal
@@ -47,6 +53,9 @@ export function listInbox(filters: {
     sortDir: filters.sortDir,
   })
   return apiRequest(`/api/request-inbox?${query}`, { signal: filters.signal })
+}
+export function getInboxOverview(signal?: AbortSignal): Promise<InboxOverview> {
+  return apiRequest("/api/request-inbox/overview", { signal })
 }
 export async function getInboxRequest(
   id: string,

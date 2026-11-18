@@ -1,7 +1,6 @@
 "use client"
 
 import {
-  ArrowRight,
   ClipboardList,
   FileText,
   ListChecks,
@@ -12,6 +11,12 @@ import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
 import { MemberIdentity } from "@/components/ui/member-identity"
+import {
+  ItemList,
+  MiniStats,
+  OverviewPanel,
+  Section,
+} from "@/components/ui/overview-panel"
 import { Pill } from "@/components/ui/pill"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 import {
@@ -30,13 +35,11 @@ export function ProjectSummary({
   workspace,
   sectionHref,
   departmentName,
-  workspaceName,
   readOnly = false,
 }: {
   workspace: ProjectWorkspaceDetail
   sectionHref: (section: ProjectOverviewSection) => string
   departmentName?: string | null
-  workspaceName?: string | null
   readOnly?: boolean
 }) {
   const account = usePortalAccount()
@@ -94,12 +97,9 @@ export function ProjectSummary({
     },
     {
       label: "Deliverables",
-      value:
-        summary.deliverables.sentToClient +
-        " / " +
-        summary.deliverables.total +
-        " sent to client",
+      value: `${summary.deliverables.sentToClient} / ${summary.deliverables.total}`,
       caption:
+        "Sent to client · " +
         summary.deliverables.pendingReview +
         " internal reviews pending · " +
         summary.deliverables.revisionRequired +
@@ -112,7 +112,7 @@ export function ProjectSummary({
     },
     {
       label: "Project Notes",
-      value: summary.notes.total + " unique notes",
+      value: summary.notes.total.toLocaleString(),
       caption:
         summary.notes.awaitingReview +
         " awaiting review · " +
@@ -126,7 +126,7 @@ export function ProjectSummary({
     },
     {
       label: "Client Requests",
-      value: summary.requests.total + " requests",
+      value: summary.requests.total.toLocaleString(),
       caption:
         account.role === "SUPERADMIN"
           ? summary.requests.pending + " pending · read-only project inspection"
@@ -145,146 +145,67 @@ export function ProjectSummary({
     },
   ]
   const metadata = [
-    ["Client", workspace.client.fullName || "Client"],
-    ["Service", serviceNames.length ? serviceNames.join(", ") : "Unavailable"],
-    ["Started", streamDates[0] ? formatDate(streamDates[0]) : "Not started"],
-    ["Department", departmentName ?? account.department?.name],
-    ["Workspace", workspaceName],
-  ].filter((item): item is [string, string] => Boolean(item[1]))
+    { label: "Client", value: workspace.client.fullName || "Client" },
+    { label: "Service", value: serviceNames.join(", ") || "Unavailable" },
+    {
+      label: "Started",
+      value: streamDates[0] ? formatDate(streamDates[0]) : "Not started",
+    },
+    {
+      label: "Department",
+      value: departmentName ?? account.department?.name ?? "Unavailable",
+    },
+  ]
 
   return (
-    <div className="min-w-0">
-      <dl
-        aria-label="Project details"
-        className="m-0 flex flex-wrap gap-x-7 gap-y-3 rounded-xl border border-[#dfe5ec] bg-white px-4 py-3.5"
-      >
-        {metadata.map(([label, value]) => (
-          <div key={label} className="min-w-0">
-            <dt className="text-[10px] font-medium uppercase tracking-wide text-[#738096]">
-              {label}
-            </dt>
-            <dd className="m-0 mt-1 max-w-[280px] text-xs font-medium text-[#26364e] [overflow-wrap:anywhere]">
-              {value}
-            </dd>
-          </div>
-        ))}
-      </dl>
-
+    <div className="grid min-w-0 gap-4">
       <StatStrip
         items={items}
         label="Project overview summary"
         pending={false}
         unavailable={false}
-        compact
-        variant="cards"
-        className="mt-4"
+        wrapCaption
+      />
+      <MiniStats
+        label="Project details"
+        loading={false}
+        items={metadata}
+        wrapValues
       />
 
-      <section
-        aria-label={attention.heading}
-        className="mt-5 rounded-xl border border-[#dfe5ec] bg-white p-4 sm:p-5"
-      >
-        <header className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="grid size-7 place-items-center rounded-lg bg-[#f2f5fa] text-[#415b83]">
-              <ClipboardList size={15} aria-hidden="true" />
-            </span>
-            <h2 className="m-0 text-sm font-semibold">{attention.heading}</h2>
-          </div>
-          {account.role === "SUPERADMIN" && (
-            <Pill tone="neutral">Read only</Pill>
-          )}
-        </header>
-        {attention.items.length ? (
-          <ul className="mt-3 grid list-none gap-2 p-0 sm:grid-cols-2">
-            {attention.items.map((item) => (
-              <li key={item.id} className="min-w-0">
-                <Button
-                  asChild
-                  variant="outline"
-                  size="sm"
-                  className="h-auto min-h-10 w-full justify-between gap-3 whitespace-normal px-3 py-2 text-left"
-                >
-                  <Link href={sectionHref(item.section)}>
-                    <span className="min-w-0 flex-1">{item.label}</span>
-                    <ArrowRight
-                      size={14}
-                      className="shrink-0"
-                      aria-hidden="true"
-                    />
-                  </Link>
-                </Button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <EmptyState
-            role="status"
-            title={
-              account.role === "SUPERADMIN"
-                ? "No outstanding oversight items"
-                : "Nothing needs your attention"
+      <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+        <OverviewPanel title={attention.heading}>
+          <ItemList
+            loading={false}
+            rows={attention.items.map(({ id, label, section }) => ({
+              id,
+              label,
+              href: sectionHref(section),
+            }))}
+            limit={attention.items.length}
+            empty={
+              <span role="status">
+                {readOnly
+                  ? "No outstanding oversight items"
+                  : "Nothing needs your attention"}
+              </span>
             }
-            description={
-              account.role === "SUPERADMIN"
-                ? "No current reviews, escalations, or requests are available to inspect."
-                : "Your current review and revision queues are clear."
-            }
-            size="xs"
-            className="mt-2 border-0 bg-transparent"
           />
-        )}
-      </section>
+        </OverviewPanel>
 
-      <div className="mt-5 grid min-w-0 gap-4 lg:grid-cols-2">
-        <section className="min-w-0 rounded-xl border border-[#dfe5ec] bg-white p-4 sm:p-5">
-          <header className="border-b border-[#e9edf2] pb-3">
-            <h2 className="m-0 text-sm font-semibold">Project brief</h2>
-          </header>
-          {workspace.workstreams.length ? (
-            <div className="divide-y divide-[#edf0f4]">
-              {workspace.workstreams.map((stream) => {
-                const description = stream.description?.trim()
-                return (
-                  <article key={stream.id} className="py-3.5 last:pb-0">
-                    {workspace.workstreams.length > 1 && (
-                      <h3 className="m-0 mb-1.5 text-xs font-semibold">
-                        {stream.serviceName}
-                      </h3>
-                    )}
-                    <p className="m-0 whitespace-pre-wrap text-xs leading-5 text-[#5f718b] [overflow-wrap:anywhere]">
-                      {description
-                        ? stream.description
-                        : "No project goals have been provided."}
-                    </p>
-                  </article>
-                )
-              })}
-            </div>
-          ) : (
-            <p className="mb-0 mt-3 text-xs leading-5 text-[#65718a]">
-              No project goals have been provided.
-            </p>
-          )}
-        </section>
-
-        <section className="min-w-0 rounded-xl border border-[#dfe5ec] bg-white p-4 sm:p-5">
-          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e9edf2] pb-3">
-            <div>
-              <h2 className="m-0 text-sm font-semibold">Assigned team</h2>
-              <p className="mt-1 mb-0 text-[11px] text-[#738096]">
-                {staff.length} {staff.length === 1 ? "person" : "people"}{" "}
-                assigned
-              </p>
-            </div>
+        <OverviewPanel
+          title="Assigned team"
+          description={`${staff.length} ${staff.length === 1 ? "person" : "people"} assigned`}
+          action={
             <Button asChild variant="outline" size="sm">
               <Link href={sectionHref("team")}>View team</Link>
             </Button>
-          </header>
+          }
+        >
           {staff.length ? (
-            <ul className="m-0 mt-1 list-none divide-y divide-[#edf0f4] p-0">
+            <ul className="m-0 list-none divide-y divide-[#edf0f4] p-0">
               {staff.map((person) => (
-                <li key={person.id} className="py-3">
+                <li key={person.id} className="py-3 first:pt-0 last:pb-0">
                   <MemberIdentity
                     member={{ fullName: person.fullName }}
                     secondaryText={person.position || "Staff"}
@@ -306,11 +227,34 @@ export function ProjectSummary({
                   : "The department head can approve staffing from Team."
               }
               size="sm"
-              className="mt-3"
             />
           )}
-        </section>
+        </OverviewPanel>
       </div>
+
+      <Section title="Project brief">
+        {workspace.workstreams.length ? (
+          <div className="max-w-prose divide-y divide-[#eceef1]">
+            {workspace.workstreams.map((stream) => (
+              <article key={stream.id} className="py-3 first:pt-0 last:pb-0">
+                {workspace.workstreams.length > 1 && (
+                  <h3 className="m-0 mb-1 text-xs font-semibold">
+                    {stream.serviceName}
+                  </h3>
+                )}
+                <p className="m-0 whitespace-pre-wrap text-xs leading-5 text-[#65718a] [overflow-wrap:anywhere]">
+                  {stream.description?.trim() ||
+                    "No project goals have been provided."}
+                </p>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="m-0 text-xs leading-5 text-[#65718a]">
+            No project goals have been provided.
+          </p>
+        )}
+      </Section>
     </div>
   )
 }

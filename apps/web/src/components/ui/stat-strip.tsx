@@ -24,9 +24,8 @@ export type StatStripItem = {
 }
 
 /**
- * Headline metrics as a continuous strip or separated overview cards.
- * The default strip uses a 1px grid gap over a border-colored background for
- * dividers that follow any responsive column count.
+ * Headline metrics in a continuous strip. A 1px grid gap draws dividers at
+ * every responsive column count.
  */
 export function StatStrip({
   items,
@@ -35,7 +34,7 @@ export function StatStrip({
   unavailable,
   columns = 4,
   compact = false,
-  variant = "strip",
+  wrapCaption = false,
   className,
 }: {
   items: StatStripItem[]
@@ -44,8 +43,7 @@ export function StatStrip({
   unavailable: boolean
   columns?: 2 | 4
   compact?: boolean
-  /** Separated cards for overview navigation; strip preserves divider styling. */
-  variant?: "strip" | "cards"
+  wrapCaption?: boolean
   className?: string
 }) {
   return (
@@ -53,9 +51,7 @@ export function StatStrip({
       aria-label={label}
       aria-busy={pending}
       className={cn(
-        variant === "cards"
-          ? "grid min-w-0 items-stretch gap-2"
-          : "grid min-w-0 gap-px overflow-hidden rounded-xl border border-[#dfe6eb] bg-[#eceef1] shadow-[0_1px_2px_rgb(30_55_80_/_4%)]",
+        "grid min-w-0 gap-px overflow-hidden rounded-xl border border-[#dfe6eb] bg-[#eceef1] shadow-[0_1px_2px_rgb(30_55_80_/_4%)]",
         columns === 2
           ? "grid-cols-2 max-[1050px]:grid-cols-2 max-[560px]:grid-cols-1"
           : "grid-cols-4 max-[1050px]:grid-cols-2 max-[560px]:grid-cols-1",
@@ -107,7 +103,9 @@ export function StatStrip({
                 <p
                   className={cn(
                     "m-0 text-[11px]",
-                    compact ? "whitespace-normal leading-4" : "truncate",
+                    compact || wrapCaption
+                      ? "whitespace-normal leading-4"
+                      : "truncate",
                     itemUnavailable
                       ? "text-[#65718a]"
                       : (item.captionTone ?? "text-[#65718a]"),
@@ -120,16 +118,11 @@ export function StatStrip({
           </>
         )
         const surfaceClass = cn(
-          "flex min-w-0 flex-col bg-background",
+          "flex min-h-full min-w-0 flex-col bg-background",
           compact ? "gap-2.5 px-4 py-3.5" : "gap-3 px-5 py-4",
-          variant === "cards" &&
-            "h-full rounded-[10px] border border-[#dfe5ec]",
         )
         return (
-          <article
-            key={item.label}
-            className={variant === "cards" ? "h-full" : undefined}
-          >
+          <article key={item.label}>
             {href ? (
               <Link
                 href={href}
@@ -139,20 +132,13 @@ export function StatStrip({
                 }
                 className={cn(
                   surfaceClass,
-                  "group min-h-full rounded-[10px] no-underline hover:bg-[#f8fafb] focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-[#203f8c]",
+                  "group no-underline hover:bg-[#f8fafb] focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-[#203f8c]",
                 )}
               >
                 {content}
               </Link>
             ) : (
-              <div
-                className={cn(
-                  surfaceClass,
-                  variant === "cards" && "rounded-[10px]",
-                )}
-              >
-                {content}
-              </div>
+              <div className={surfaceClass}>{content}</div>
             )}
           </article>
         )

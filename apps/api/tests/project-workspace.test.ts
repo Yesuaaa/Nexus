@@ -444,6 +444,26 @@ test(
     )
     const completed = (await completedResponse.json()) as Workspace
     assert.equal(completed.status, "COMPLETED")
+    const completionTrace = completedResponse.headers.get("X-Correlation-ID")!
+    const completionLogs = await prisma.projectManagementLog.findMany({
+      where: { correlationId: completionTrace, event: "WORKSPACE_COMPLETED" },
+    })
+    assert.deepEqual(
+      completionLogs.map(({ projectId }) => projectId).sort(),
+      [first.project.id, second.project.id].sort(),
+    )
+    assert.ok(
+      completionLogs.every(
+        ({ workspaceId: id, actorId }) =>
+          id === workspaceId && actorId === head.id,
+      ),
+    )
+    assert.equal(
+      await prisma.serviceOperationLog.count({
+        where: { correlationId: completionTrace, event: "REQUEST_CONCLUDED" },
+      }),
+      2,
+    )
     assert.ok(
       completed.workstreams.every(({ status }) => status === "COMPLETED"),
     )
@@ -658,6 +678,19 @@ test(
           await persistedProjectPlan(booking.project.id),
           expectedUpdatedPlan,
         )
+        const planningLogs = await prisma.projectManagementLog.findMany({
+          where: { projectId: booking.project.id, source: "planning" },
+        })
+        assert.deepEqual(planningLogs.map(({ event }) => event).sort(), [
+          "PLAN_UPDATED",
+          "TASK_ADDED",
+          "TASK_STATUS_CHANGED",
+        ])
+        assert.deepEqual(
+          planningLogs.find(({ event }) => event === "TASK_STATUS_CHANGED")
+            ?.changes,
+          [{ field: "Status", before: "Not started", after: "In progress" }],
+        )
 
         const unchangedPlan = await persistedProjectPlan(booking.project.id)
         const invalidTask = await request(
@@ -784,6 +817,14 @@ test(
         assert.equal(headUpload.status, 403)
         assert.equal((await milestone()).deliveryStatus, "NOT_SUBMITTED")
         assert.equal(await prisma.workflowFile.count(), 0)
+        assert.equal(
+          (
+            await request(path, head.id, "PATCH", {
+              description: "PRIVATE-DELIVERABLE-DESCRIPTION",
+            })
+          ).status,
+          200,
+        )
 
         const outsiderUpload = await request(
           `${path}/attachment`,
@@ -795,14 +836,20 @@ test(
         assert.equal((await milestone()).deliveryStatus, "NOT_SUBMITTED")
         assert.equal(await prisma.workflowFile.count(), 0)
 
+        const firstPayload = upload("draft.txt", "Draft one")
         const firstUpload = await request(
           `${path}/attachment`,
           staff.id,
           "POST",
-          upload("draft.txt", "Draft one"),
+          firstPayload,
         )
         assert.equal(firstUpload.status, 201, await firstUpload.clone().text())
         const firstSaved = await milestone()
+        assert.equal(
+          (await request(`${path}/attachment`, staff.id, "POST", firstPayload))
+            .status,
+          201,
+        )
         assert.equal(firstSaved.deliveryStatus, "IN_REVIEW")
         assert.equal(firstSaved.workflowFile?.clientVisible, false)
         assert.equal(
@@ -837,12 +884,17 @@ test(
         const afterRemove = await milestone()
         assert.equal(afterRemove.deliveryStatus, "NOT_SUBMITTED")
         assert.equal(afterRemove.workflowFileId, null)
-        assert.equal(
-          await prisma.workflowFile.count({
-            where: { id: firstSaved.workflowFileId! },
-          }),
-          0,
-        )
+        const withdrawn = await prisma.projectDeliverableSubmission.findUnique({
+          where: { workflowFileId: firstSaved.workflowFileId! },
+          select: {
+            status: true,
+            workflowFile: { select: { clientVisible: true } },
+          },
+        })
+        assert.deepEqual(withdrawn, {
+          status: "WITHDRAWN",
+          workflowFile: { clientVisible: false },
+        })
 
         const repeatedRemove = await request(
           `${path}/attachment`,
@@ -953,6 +1005,26 @@ test(
         assert.equal(editSent.status, 409)
         assert.equal((await milestone()).title, "Brand guide")
         assert.equal((await milestone()).deliveryStatus, "SENT_TO_CLIENT")
+        const audit = await prisma.projectManagementLog.findMany({
+          where: { targetId: deliverable.id },
+        })
+        assert.deepEqual(
+          audit.map(({ event }) => event).sort(),
+          [
+            "ATTACHMENT_ADDED",
+            "ATTACHMENT_ADDED",
+            "ATTACHMENT_REMOVED",
+            "ATTACHMENT_REPLACED",
+            "DELIVERABLE_APPROVED",
+            "DELIVERABLE_REJECTED",
+            "DELIVERABLE_SHARED",
+            "DELIVERABLE_UPDATED",
+          ].sort(),
+        )
+        assert.doesNotMatch(
+          JSON.stringify(audit),
+          /draft\.txt|Draft one|PRIVATE-DELIVERABLE-DESCRIPTION|sha256/i,
+        )
       },
     )
 
@@ -1327,6 +1399,32 @@ test(
           changeRequests: { status: string }[]
         }
         assert.equal(finalView.status, "CANCELLED")
+        const decisions = await prisma.projectManagementLog.findMany({
+          where: { projectId: id, event: { contains: "_REQUEST_" } },
+        })
+        assert.deepEqual(
+          new Set(decisions.map(({ event }) => event)),
+          new Set([
+            "CHANGE_REQUEST_SUBMITTED",
+            "CHANGE_REQUEST_REVIEWED",
+            "CANCELLATION_REQUEST_SUBMITTED",
+            "CANCELLATION_REQUEST_REVIEWED",
+          ]),
+        )
+        const cancellationReview = decisions.find(
+          ({ targetId, event }) =>
+            targetId === cancellation.id &&
+            event === "CANCELLATION_REQUEST_REVIEWED",
+        )
+        assert.deepEqual(cancellationReview?.changes, [
+          { field: "Status", before: "Pending", after: "Accepted" },
+          {
+            field: "Project status",
+            before: "In progress",
+            after: "Cancelled",
+          },
+          { field: "Pending changes declined", before: 0, after: 1 },
+        ])
         assert.ok(
           finalView.changeRequests.every((item) => item.status !== "PENDING"),
         )
@@ -1484,6 +1582,15 @@ test(
           }),
           2,
         )
+        const clientReviews = await prisma.projectManagementLog.findMany({
+          where: {
+            projectId: booking.project.id,
+            event: "DELIVERABLE_CLIENT_REVIEWED",
+          },
+        })
+        assert.equal(clientReviews.length, 2)
+        assert.ok(clientReviews.every(({ actorId }) => actorId === client.id))
+        assert.doesNotMatch(JSON.stringify(clientReviews), /Improve contrast/)
       },
     )
 

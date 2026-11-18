@@ -73,10 +73,16 @@ test("decline failure is announced and preserves the request", async ({
 
   await page.goto("/request-inbox")
   await page
-    .getByRole("button", { name: "Review request booking-1", exact: true })
+    .getByRole("button", {
+      name: "More actions for request booking-1",
+      exact: true,
+    })
+    .click()
+  await page
+    .getByRole("menuitem", { name: "Review request", exact: true })
     .click()
 
-  const details = page.getByRole("dialog", { name: "Booking details" })
+  const details = page.getByRole("dialog", { name: "Website Development" })
   await details.getByRole("button", { name: "Decline request" }).click()
   const confirmation = page.getByRole("dialog", {
     name: "Decline this request?",
@@ -101,6 +107,9 @@ test("decline failure is announced and preserves the request", async ({
   expect(mutations).toEqual(["POST /api/request-inbox/booking-1/decline"])
   expect(request.status).toBe("SUBMITTED")
   await expect(
-    page.getByRole("button", { name: "Review request booking-1", exact: true }),
+    page.getByRole("button", {
+      name: "More actions for request booking-1",
+      exact: true,
+    }),
   ).toBeVisible()
 })

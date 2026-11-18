@@ -1,4 +1,7 @@
 import cors from "cors"
+import { serviceLogContext } from "./features/service-operation-logs/log-context.js"
+import { serviceLogsRouter } from "./features/service-operation-logs/log-controller.js"
+import { projectLogsRouter } from "./features/project-management-logs/controller.js"
 import { trustedProxyAddresses } from "./features/auth/session-location.js"
 import { requireAuth } from "./features/auth/auth.middleware.js"
 import { authRateLimit } from "./features/auth/auth.limiter.js"
@@ -46,6 +49,9 @@ export function createApp(
   app.use(cors({ origin: process.env.WEB_ORIGIN || "http://localhost:5173" }))
   app.use("/api", noStore)
   app.use(devErrorInterceptor)
+  app.use(serviceLogContext)
+  app.use("/api/service-operation-logs", serviceLogsRouter)
+  app.use("/api/project-management-logs", projectLogsRouter)
   app.use("/api/services", servicesRouter)
   app.use(
     "/api/service-requests",

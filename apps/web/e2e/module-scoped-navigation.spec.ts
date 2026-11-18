@@ -76,9 +76,12 @@ for (const role of ["SUPERADMIN"] as const) {
       })
       .click()
     await expect(page).toHaveURL("/project-management/overview")
-    await mainMenu(page)
-      .getByRole("button", { name: "Project Workspace", exact: true })
-      .click()
+    const workspaceGroup = mainMenu(page).getByRole("button", {
+      name: "Project Workspace",
+      exact: true,
+    })
+    if ((await workspaceGroup.getAttribute("aria-expanded")) !== "true")
+      await workspaceGroup.click()
     await mainMenu(page)
       .getByRole("link", {
         name: "Project Workspace Management",
@@ -130,7 +133,7 @@ for (const role of ["SUPERADMIN"] as const) {
     await expect(page).toHaveURL(/\/project-management\/overview$/)
     await expect(
       page.getByRole("heading", {
-        name: "Project Workspace Overview",
+        name: "Project Overview",
         exact: true,
       }),
     ).toBeVisible()
@@ -139,9 +142,7 @@ for (const role of ["SUPERADMIN"] as const) {
         .getByRole("navigation", { name: "Breadcrumb" })
         .getByText("Overview"),
     ).toBeVisible()
-    await expect(
-      page.getByText("Project metrics are not included in Phase 1."),
-    ).toBeVisible()
+    await expect(page.getByText("No project records yet.")).toBeVisible()
 
     await menu
       .getByRole("link", { name: "Switch Workspace", exact: true })
@@ -542,6 +543,16 @@ test("department head keeps request and workload navigation in their approved mo
   await restoreSession(page, "STAFF", {
     account: { headOf: { id: "design", name: "Design" } },
   })
+  await page.route("**/api/request-inbox/overview", (route) =>
+    route.fulfill({
+      json: {
+        department: { id: "design", name: "Design" },
+        total: 0,
+        statusCounts: {},
+        recentRequests: [],
+      },
+    }),
+  )
   await page.route("**/api/request-inbox?**", (route) =>
     route.fulfill({
       json: {
@@ -562,9 +573,12 @@ test("department head keeps request and workload navigation in their approved mo
       exact: true,
     })
     .click()
-  await expect(page).toHaveURL(/\/request-inbox$/)
+  await expect(page).toHaveURL(/\/request-inbox\/overview$/)
   await expect(
-    menu.getByRole("link", { name: "Request Inbox", exact: true }),
+    menu.getByRole("button", { name: "Request", exact: true }),
+  ).toHaveAttribute("aria-expanded", "true")
+  await expect(
+    menu.getByRole("link", { name: "Request overview", exact: true }),
   ).toHaveAttribute("aria-current", "page")
   await expect(menu.getByRole("link", { name: "Staff Workload" })).toHaveCount(
     0,

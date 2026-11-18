@@ -4,8 +4,10 @@ import Link from "next/link"
 import { useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { PageHeader } from "@/components/layout/page-header"
 import { EmptyState } from "@/components/ui/empty-state"
 import { MemberIdentity } from "@/components/ui/member-identity"
+import { RowsSkeleton } from "@/components/ui/overview-panel"
 import { Pill } from "@/components/ui/pill"
 import { SearchField } from "@/components/ui/search-field"
 import { FilterSelect } from "@/components/ui/filter-select"
@@ -175,12 +177,27 @@ function matchesAdministrativeProject(
   ].some((value) => value?.toLocaleLowerCase().includes(needle))
 }
 
-export function AdministrativeProjectsOverview() {
+export function AdministrativeProjectsOverview({
+  title,
+  description,
+}: {
+  title: string
+  description: string
+}) {
   const id = useSearchParams().get("project")
   return id ? (
     <AdministrativeProjectDetails id={id} />
   ) : (
-    <AdministrativeProjectList />
+    <>
+      <PageHeader
+        headingId="administrative-workspace-heading"
+        title={title}
+        description={description}
+      />
+      <div className="mt-5">
+        <AdministrativeProjectList />
+      </div>
+    </>
   )
 }
 
@@ -376,33 +393,52 @@ function AdministrativeProjectDetails({ id }: { id: string }) {
 
   return (
     <section aria-label="Administrative project details">
-      <Link href={root}>Back to all projects</Link>
-      {result.loading && <p role="status">Loading project…</p>}
+      <PageHeader
+        headingId="administrative-workspace-heading"
+        title={project?.name ?? "Project details"}
+        description={
+          project?.workspaceGroup?.name
+            ? `Workspace: ${project.workspaceGroup.name}`
+            : project
+              ? "Standalone project"
+              : undefined
+        }
+        meta={
+          project?.capabilities.read && (
+            <>
+              <Pill tone={statusTone(project.status)}>
+                {statusLabel(project.status)}
+              </Pill>
+              <Pill tone="neutral">Read only</Pill>
+            </>
+          )
+        }
+        actions={
+          <Button asChild variant="outline" size="header">
+            <Link href={root}>Back to all projects</Link>
+          </Button>
+        }
+        mobileActions="stack"
+      />
+      {result.loading && (
+        <div className="mt-5" role="status">
+          <span className="sr-only">Loading project…</span>
+          <RowsSkeleton />
+        </div>
+      )}
       {result.error && (
-        <p role="alert">
+        <p role="alert" className="mt-5">
           {result.error} <Button onClick={result.retry}>Retry</Button>
         </p>
       )}
       {project?.capabilities.read && (
         <>
-          <header className="mt-5 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <h2 className="m-0 text-xl font-semibold">{project.name}</h2>
-              <Pill tone={statusTone(project.status)}>
-                {statusLabel(project.status)}
-              </Pill>
-            </div>
-            <Pill tone="neutral">Read only</Pill>
-          </header>
           {section === "overview" ? (
-            <div className="mt-3">
+            <div className="mt-[18px] max-[560px]:mt-[14px]">
               <ProjectSummary
                 workspace={project}
                 readOnly
                 departmentName={project.department?.name}
-                workspaceName={
-                  project.workspaceGroup?.name ?? "Standalone project"
-                }
                 sectionHref={(next: ProjectOverviewSection) =>
                   sectionHref(next)
                 }

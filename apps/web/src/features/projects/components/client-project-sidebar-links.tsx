@@ -10,10 +10,12 @@ import {
   FolderKanban,
   History,
   Layers3,
+  MoveLeft,
   UsersRound,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { focusRing } from "@/components/layout/styles"
+import { SidebarLink } from "@/components/layout/sidebar-link"
 
 const projectNavLinkClass = `group relative flex min-h-10 w-full items-center gap-[13px] rounded-md border-0 bg-transparent px-[13px] text-left font-semibold text-foreground no-underline whitespace-nowrap cursor-pointer transition-colors duration-150 hover:bg-[#e1e3e5] motion-reduce:transition-none ${focusRing}`
 
@@ -139,10 +141,12 @@ export function StaffProjectSidebarLinks({
   projectId,
   collapsed,
   onNavigate,
+  showBackLink,
 }: {
   projectId: string
   collapsed: boolean
   onNavigate: () => void
+  showBackLink?: boolean
 }) {
   const searchParams = useSearchParams()
   const basePath = `/project-workspace/${encodeURIComponent(projectId)}`
@@ -156,6 +160,7 @@ export function StaffProjectSidebarLinks({
       backHref={backHref}
       collapsed={collapsed}
       onNavigate={onNavigate}
+      showBackLink={showBackLink}
     />
   )
 }
@@ -175,42 +180,45 @@ export function ProjectWorkspaceSidebarLinks({
   backHref,
   collapsed,
   onNavigate,
+  showBackLink = true,
 }: {
   projectBaseHref: string
   backHref: string
   collapsed: boolean
   onNavigate: () => void
+  showBackLink?: boolean
 }) {
   const searchParams = useSearchParams()
-  const activeTab = searchParams.get("tab")?.toLowerCase() ?? "overview"
+  const tab = searchParams.get("tab")?.toLowerCase()
+  const activeTab =
+    workspaceSections.find((section) => section.id === tab)?.id ?? "overview"
 
   return (
     <>
-      <ProjectNavLink
-        href={backHref}
-        label="Back to projects"
-        active={false}
-        collapsed={collapsed}
-        onNavigate={onNavigate}
-      >
-        <ArrowLeft size={20} strokeWidth={1.7} className="flex-none" />
-      </ProjectNavLink>
+      {showBackLink && (
+        <SidebarLink
+          href={backHref}
+          label="Back to projects"
+          icon={MoveLeft}
+          collapsed={collapsed}
+          onNavigate={onNavigate}
+        />
+      )}
       {workspaceSections.map(({ id, label, icon: Icon }) => {
         const query = new URLSearchParams(searchParams.toString())
         if (id === "overview") query.delete("tab")
         else query.set("tab", id)
         const href = `${projectBaseHref}${query.size ? `?${query}` : ""}`
         return (
-          <ProjectNavLink
+          <SidebarLink
             key={id}
             href={href}
             label={label}
+            icon={Icon}
             active={activeTab === id}
             collapsed={collapsed}
             onNavigate={onNavigate}
-          >
-            <Icon size={20} strokeWidth={1.7} className="flex-none" />
-          </ProjectNavLink>
+          />
         )
       })}
     </>

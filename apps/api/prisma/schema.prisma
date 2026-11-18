@@ -89,7 +89,66 @@ enum WorkforceManagementOrigin {
 }
 
 // Immutable identity snapshots deliberately have no User/HR foreign keys.
-// Domain writers append within their caller's transaction; no history API.
+// Domain success writers append within their caller's transaction.
+model ServiceOperationLog {
+  id            String   @id @default(cuid())
+  event         String   @db.VarChar(60)
+  action        String?  @db.VarChar(60)
+  endpoint      String?  @db.VarChar(160)
+  source        String   @db.VarChar(40)
+  outcome       String   @db.VarChar(20)
+  actorId       String?  @db.VarChar(80)
+  actorName     String?  @db.VarChar(100)
+  actorRole     Role?
+  subjectId     String?  @db.VarChar(80)
+  targetType    String?  @db.VarChar(60)
+  targetLabel   String?  @db.VarChar(160)
+  changes       Json?
+  requestId     String?  @db.VarChar(80)
+  correlationId String   @db.Uuid
+  status        Int?
+  failureCode   String?  @db.VarChar(60)
+  failureReason String?  @db.VarChar(240)
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([createdAt, id])
+  @@index([outcome, createdAt, id])
+  @@index([requestId, createdAt, id])
+  @@index([actorId, createdAt, id])
+  @@index([correlationId])
+}
+
+// Scalar snapshots survive business-record deletion without imposing new foreign keys.
+model ProjectManagementLog {
+  id            String   @id @default(cuid())
+  event         String   @db.VarChar(60)
+  source        String   @db.VarChar(40)
+  outcome       String   @db.VarChar(20)
+  actorId       String?  @db.VarChar(80)
+  actorName     String?  @db.VarChar(100)
+  actorRole     Role?
+  projectId     String?  @db.VarChar(80)
+  projectName   String?  @db.VarChar(160)
+  workspaceId   String?  @db.VarChar(80)
+  targetId      String?  @db.VarChar(80)
+  targetLabel   String?  @db.VarChar(160)
+  requestId     String?  @db.VarChar(80)
+  changes       Json?
+  endpoint      String?  @db.VarChar(160)
+  correlationId String   @db.Uuid
+  status        Int?
+  failureCode   String?  @db.VarChar(60)
+  failureReason String?  @db.VarChar(240)
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([createdAt, id])
+  @@index([outcome, createdAt, id])
+  @@index([actorId, createdAt, id])
+  @@index([projectId, createdAt, id])
+  @@index([workspaceId, createdAt, id])
+  @@index([correlationId])
+}
+
 model AccountManagementChange {
   id               String                  @id @default(cuid())
   actorAccountId   String                  @db.VarChar(80)

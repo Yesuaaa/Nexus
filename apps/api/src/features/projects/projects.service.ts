@@ -6,6 +6,11 @@ import {
   activeStaff,
 } from "../../shared/query/accounts.js"
 import { appendEvent } from "../request-workflow/workflow.access.js"
+import {
+  auditLabel,
+  projectAuditStatus,
+} from "../project-management-logs/events.js"
+import { writeProjectLog } from "../project-management-logs/writer.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 import { lockRows } from "../../shared/db/locks.js"
 
@@ -323,7 +328,7 @@ export async function updateClientProjectBrief(
     await lockRows(tx, "Project", projectId)
     const current = await tx.project.findFirst({
       where: { id: projectId, ...clientProjectScope(userId) },
-      select: { id: true, status: true },
+      select: { id: true, status: true, name: true, description: true },
     })
     if (!current)
       throw new ServiceRequestsError(404, "Active project not found")
@@ -346,6 +351,12 @@ export async function updateClientProjectBrief(
         "The brief can no longer be edited for this project",
       )
     await tx.project.update({ where: { id: projectId }, data: brief })
+    const descriptionEdited = current.description !== brief.description
+    if (current.name !== brief.name || descriptionEdited)
+      await writeProjectLog(tx, userId, projectId, "CLIENT_BRIEF_UPDATED", {
+        Name: [auditLabel(current.name), auditLabel(brief.name)],
+        "Brief edited": [false, descriptionEdited],
+      })
   })
   return getProject(userId, projectId)
 }
@@ -405,13 +416,24 @@ export async function createProjectChangeRequest(
         409,
         "You already have a change request under review",
       )
-    await tx.projectChangeRequest.create({
+    const request = await tx.projectChangeRequest.create({
       data: { projectId, requestedById: userId, kind: "CHANGE", details },
+      select: { id: true },
     })
     await tx.project.update({
       where: { id: projectId },
       data: { updatedAt: new Date() },
     })
+    await writeProjectLog(
+      tx,
+      userId,
+      projectId,
+      "CHANGE_REQUEST_SUBMITTED",
+      {
+        Status: [null, projectAuditStatus("PENDING")],
+      },
+      { id: request.id },
+    )
   })
   return getProject(userId, projectId)
 }
@@ -463,13 +485,14 @@ export async function createProjectCancellationRequest(
         409,
         "A cancellation request is already under review",
       )
-    await tx.projectChangeRequest.create({
+    const request = await tx.projectChangeRequest.create({
       data: {
         projectId,
         requestedById: userId,
         kind: "CANCELLATION",
         details,
       },
+      select: { id: true },
     })
     await tx.project.update({
       where: { id: projectId },
@@ -482,6 +505,16 @@ export async function createProjectCancellationRequest(
       "PROJECT_CANCELLATION_REQUESTED",
       `The client requested cancellation of “${project.name}”. Review the request in Project Workspace.`,
       project.id,
+    )
+    await writeProjectLog(
+      tx,
+      userId,
+      projectId,
+      "CANCELLATION_REQUEST_SUBMITTED",
+      {
+        Status: [null, projectAuditStatus("PENDING")],
+      },
+      { id: request.id },
     )
   })
   return getProject(userId, projectId)
@@ -555,6 +588,16 @@ export async function reviewProjectChangeRequest(
       where: { id: projectId },
       data: { updatedAt: new Date() },
     })
+    await writeProjectLog(
+      tx,
+      userId,
+      projectId,
+      "CHANGE_REQUEST_REVIEWED",
+      {
+        Status: [projectAuditStatus("PENDING"), projectAuditStatus(decision)],
+      },
+      { id: changeRequestId },
+    )
   })
   return getProject(userId, projectId)
 }
@@ -626,6 +669,7 @@ export async function reviewProjectCancellationRequest(
         409,
         "This cancellation request has already been reviewed",
       )
+    let declinedChanges = 0
     if (decision === "ACCEPTED") {
       await tx.project.update({
         where: { id: projectId },
@@ -644,7 +688,7 @@ export async function reviewProjectCancellationRequest(
           data: { status: "CANCELLED" },
         })
       }
-      await tx.projectChangeRequest.updateMany({
+      const declined = await tx.projectChangeRequest.updateMany({
         where: {
           projectId,
           kind: "CHANGE",
@@ -658,6 +702,7 @@ export async function reviewProjectCancellationRequest(
           reviewedAt: new Date(),
         },
       })
+      declinedChanges = declined.count
     } else {
       await tx.project.update({
         where: { id: projectId },
@@ -677,6 +722,23 @@ export async function reviewProjectCancellationRequest(
           : `The Department Head declined the cancellation request for “${project.name}”.`,
         project.id,
       )
+    await writeProjectLog(
+      tx,
+      userId,
+      projectId,
+      "CANCELLATION_REQUEST_REVIEWED",
+      {
+        Status: [projectAuditStatus("PENDING"), projectAuditStatus(decision)],
+        "Project status": [
+          projectAuditStatus(project.status),
+          projectAuditStatus(
+            decision === "ACCEPTED" ? "CANCELLED" : project.status,
+          ),
+        ],
+        "Pending changes declined": [0, declinedChanges],
+      },
+      { id: cancellationRequestId },
+    )
   })
   return getProject(userId, projectId)
 }
@@ -727,7 +789,7 @@ export async function reviewClientDeliverable(
         deliveryStatus: "SENT_TO_CLIENT",
         workflowFile: { clientVisible: true },
       },
-      select: { id: true, workflowFileId: true },
+      select: { id: true, workflowFileId: true, title: true },
     })
     if (!milestone?.workflowFileId)
       throw new ServiceRequestsError(404, "Shared deliverable not found")
@@ -750,6 +812,16 @@ export async function reviewClientDeliverable(
       where: { id: projectId },
       data: { updatedAt: new Date() },
     })
+    await writeProjectLog(
+      tx,
+      userId,
+      projectId,
+      "DELIVERABLE_CLIENT_REVIEWED",
+      {
+        "Client decision": [null, projectAuditStatus(decision)],
+      },
+      { id: milestoneId, label: milestone.title },
+    )
   })
   return getProject(userId, projectId)
 }
@@ -812,6 +884,16 @@ export async function setMilestoneCompletion(
       where: { id: milestoneId },
       data: { completedAt: completed ? new Date() : null },
     })
+    await writeProjectLog(
+      tx,
+      userId,
+      projectId,
+      "MILESTONE_COMPLETION_CHANGED",
+      {
+        Completed: [Boolean(milestone.completedAt), completed],
+      },
+      { id: milestoneId, label: milestone.title },
+    )
     const project = await tx.project.findUniqueOrThrow({
       where: { id: projectId },
       select: {
