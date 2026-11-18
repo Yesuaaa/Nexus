@@ -15,7 +15,7 @@ export const serviceLogContext: RequestHandler = (request, response, next) => {
 
 /** Only static Express route templates; no raw URLs, query strings or parameter values. */
 export function serviceLogEndpoint(request: Request): string | undefined {
-  const root = request.originalUrl.split("?")[0].split("/")[2]
+  const root = request.originalUrl.split("?")[0].split("/")[2]?.toLowerCase()
   const route: unknown = request.route?.path
   if (
     !root ||

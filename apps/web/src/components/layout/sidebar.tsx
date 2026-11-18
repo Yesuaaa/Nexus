@@ -101,6 +101,7 @@ function NavigationIcon({
     "staff-workload": Gauge,
     "administrative-workload": Gauge,
     "service-operation-logs": History,
+    "project-management-logs": History,
     "attendance-audit": History,
   }
   const icon = icons[policyId]
@@ -579,15 +580,13 @@ export function Sidebar({
     (policy) => policy.id === "dashboard",
   )
   const workspaceNavigation = activeModuleId
-    ? mainNavigation.filter(
-        (policy) =>
-          policy.moduleId === activeModuleId &&
-          policy.id !== "service-operation-logs",
+    ? mainNavigation.filter((policy) => policy.moduleId === activeModuleId)
+    : []
+  const systemToolNavigation = activeModuleId
+    ? getNavigationPolicies(account, "system-tool").filter(
+        (policy) => policy.moduleId === activeModuleId,
       )
     : []
-  const logsNavigation = mainNavigation.filter(
-    (policy) => policy.id === "service-operation-logs",
-  )
   const sharedNavigation = mainNavigation.filter(
     (policy) =>
       policy.id !== "dashboard" && (isClient || policy.moduleId === null),
@@ -783,20 +782,17 @@ export function Sidebar({
             </>
           )}
 
-          {logsNavigation.length > 0 && (
-            <>
-              <p className={sectionLabelClass}>System Tool</p>
-              {logsNavigation.map((policy) => (
-                <SidebarNavigationLink
-                  key={policy.id}
-                  policy={policy}
-                  account={account}
-                  pathname={pathname}
-                  collapsed={collapsed}
-                  onNavigate={onCloseDrawer}
-                />
-              ))}
-            </>
+          {systemToolNavigation.length > 0 && (
+            <div
+              role="group"
+              aria-labelledby="sidebar-system-tool"
+              className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-0.5"
+            >
+              <p id="sidebar-system-tool" className={sectionLabelClass}>
+                System Tool
+              </p>
+              {systemToolNavigation.map(renderPolicy)}
+            </div>
           )}
 
           {sharedNavigation.length > 0 && (

@@ -14,19 +14,12 @@ import { rowActionButton } from "@/components/ui/row-action-styles"
 import { roleLabels } from "@/features/auth/model/roles"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 import { cn } from "@/lib/utils"
-import type { ServiceLog, ServiceLogSource } from "../api/service-logs-api"
-
-export const serviceLogSourceLabels: Record<ServiceLogSource, string> = {
-  catalog: "Service catalog",
-  requests: "Requests",
-  workflow: "Workflow",
-  workload: "Workload",
-}
+import type { AuditLog } from "../api/audit-logs-api"
 
 const grid =
   "grid grid-cols-[minmax(250px,2fr)_minmax(170px,1.15fr)_120px_150px_52px] items-center gap-3.5 @max-[850px]:grid-cols-[minmax(0,1fr)_auto]"
 
-function rowClass(_log: ServiceLog, _index: number, isLast: boolean) {
+function rowClass(_log: AuditLog, _index: number, isLast: boolean) {
   return cn(
     grid,
     "h-[72px] border-b border-[#eceef1] bg-background px-4 py-[9px] text-xs text-foreground transition-colors hover:bg-[#e8eef2] @max-[850px]:h-[210px] @max-[850px]:content-center @max-[850px]:gap-x-3 @max-[850px]:gap-y-3 @max-[850px]:py-4",
@@ -34,9 +27,9 @@ function rowClass(_log: ServiceLog, _index: number, isLast: boolean) {
   )
 }
 
-const logKey = (log: ServiceLog) => log.id
+const logKey = (log: AuditLog) => log.id
 
-export function matchesServiceLogSearch(log: ServiceLog, query: string) {
+export function matchesAuditLogSearch(log: AuditLog, query: string) {
   const needle = query.trim().toLocaleLowerCase()
   return [
     log.message,
@@ -55,13 +48,18 @@ export function matchesServiceLogSearch(log: ServiceLog, query: string) {
     log.endpoint,
     log.subjectId,
     log.requestId,
+    log.projectId,
+    log.projectName,
+    log.workspaceId,
     log.correlationId,
     log.failureCode,
     log.failureReason,
   ].some((value) => value?.toLocaleLowerCase().includes(needle))
 }
 
-export function ServiceLogsTable({
+export function AuditLogsTable({
+  title,
+  sourceLabels,
   logs,
   loading,
   error,
@@ -71,19 +69,21 @@ export function ServiceLogsTable({
   onRetry,
   onView,
 }: {
-  logs: ServiceLog[]
+  title: string
+  sourceLabels: Readonly<Record<string, string>>
+  logs: AuditLog[]
   loading: boolean
   error: string
   viewKey: string
   quickKey: string
   onRowsSettled?: () => void
   onRetry: () => void
-  onView: (log: ServiceLog) => void
+  onView: (log: AuditLog) => void
 }) {
   const { formatDateTime } = useDatePreferences()
   const initialLoading = loading && viewKey === ""
   return (
-    <ResponsiveDataTable label="Service Operations logs" aria-busy={loading}>
+    <ResponsiveDataTable label={title} aria-busy={loading}>
       <ResponsiveDataTableHeader
         className="@max-[850px]:hidden"
         rowClassName={grid}
@@ -104,7 +104,7 @@ export function ServiceLogsTable({
         <ResponsiveDataTableBody className="relative min-w-0">
           {initialLoading ? (
             <DataTableSkeletonRows
-              label="Service Operations logs"
+              label={title}
               rows={6}
               rowClassName={cn(
                 grid,
@@ -165,7 +165,9 @@ export function ServiceLogsTable({
                   <span className="text-[11px] text-[#738096]">
                     {log.actor.role
                       ? roleLabels[log.actor.role]
-                      : "Automated process"}
+                      : log.actor.attribution === "UNKNOWN"
+                        ? "Unknown"
+                        : "Automated process"}
                   </span>
                 </div>
               </div>
@@ -173,7 +175,7 @@ export function ServiceLogsTable({
                 <span className="mr-1.5 hidden text-[#738096] @max-[850px]:inline">
                   Area
                 </span>
-                <span>{serviceLogSourceLabels[log.source]}</span>
+                <span>{sourceLabels[log.source] ?? log.source}</span>
               </div>
               <div className="min-w-0 text-[11px] text-[#738096] @max-[850px]:col-start-1">
                 <span className="mr-1.5 hidden @max-[850px]:inline">Time</span>

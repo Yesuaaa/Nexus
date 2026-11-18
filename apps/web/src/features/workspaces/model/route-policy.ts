@@ -24,6 +24,7 @@ import {
 import type { Account } from "../../auth/model/types.ts"
 import {
   canAccessAdministrativeModules,
+  getModuleLogsLabel,
   moduleRegistry,
   type ModuleRegistration,
   type WorkspaceModuleId,
@@ -83,6 +84,7 @@ export type RoutePolicyId =
   | "staff-workload"
   | "administrative-workload"
   | "service-operation-logs"
+  | "project-management-logs"
   | "request-inbox-overview"
   | "request-inbox"
   | "profile"
@@ -91,7 +93,7 @@ export type RoutePolicyId =
 export type RouteMatch =
   { kind: "exact" | "prefix"; path: string } | { kind: "pattern"; path: string }
 
-type NavigationLocation = "main" | "footer"
+type NavigationLocation = "main" | "system-tool" | "footer"
 
 type RouteNavigation = {
   href: string | ((account: Account) => string)
@@ -138,6 +140,21 @@ export function administrativeModulePolicies(
 
 export const routePolicies: readonly RoutePolicy[] = [
   {
+    id: "project-management-logs",
+    match: { kind: "exact", path: "/module/project-management/logs" },
+    moduleId: "project-management",
+    canAccess: (account) =>
+      account.role === "SUPERADMIN" &&
+      canAccessAdministrativeModules(account) &&
+      hasPermission(account, Permissions.ORGANIZATION_READ_ALL),
+    navigation: {
+      href: "/module/project-management/logs",
+      label: getModuleLogsLabel("project-management"),
+      location: "system-tool",
+      order: 0,
+    },
+  },
+  {
     id: "service-operation-logs",
     match: { kind: "exact", path: "/module/service-operations/logs" },
     moduleId: "service-operations",
@@ -147,9 +164,9 @@ export const routePolicies: readonly RoutePolicy[] = [
       hasPermission(account, Permissions.ORGANIZATION_READ_ALL),
     navigation: {
       href: "/module/service-operations/logs",
-      label: "Logs",
-      location: "main",
-      order: 90,
+      label: getModuleLogsLabel("service-operations"),
+      location: "system-tool",
+      order: 0,
     },
   },
   ...administrativeModulePolicies(),
@@ -174,12 +191,6 @@ export const routePolicies: readonly RoutePolicy[] = [
     canAccess: (account) =>
       canAccessAdministrativeModules(account) &&
       hasPermission(account, Permissions.ORGANIZATION_READ_ALL),
-    navigation: {
-      href: "/project-management/overview",
-      label: "Project Overview",
-      location: "main",
-      order: 2,
-    },
   },
   {
     id: "admin-project-management",

@@ -1,38 +1,40 @@
 import { apiRequest } from "@/features/auth/api/auth-api"
 import type { Role } from "@/features/auth/model/roles"
 
-export type ServiceLogSource = "catalog" | "requests" | "workflow" | "workload"
-export type ServiceLogActor = {
+export type AuditLogActor = {
   id: string | null
   name: string
   role: Role | null
-  attribution: "RECORDED" | "CURRENT" | "UNAVAILABLE" | "SYSTEM"
+  attribution: "RECORDED" | "CURRENT" | "UNAVAILABLE" | "SYSTEM" | "UNKNOWN"
 }
-export type ServiceLogChangeValue = string | number | boolean | null
-export type ServiceLogChange = {
+export type AuditLogChangeValue = string | number | boolean | null
+export type AuditLogChange = {
   field: string
-  before: ServiceLogChangeValue
-  after: ServiceLogChangeValue
+  before: AuditLogChangeValue
+  after: AuditLogChangeValue
 }
-export type ServiceLog = {
+export type AuditLog = {
   endpoint: string | null
   id: string
   event: string
   action: string | null
-  source: ServiceLogSource
+  source: string
   outcome: "SUCCESS" | "FAILURE"
   actorId: string | null
   actorRole: string | null
-  actor: ServiceLogActor
+  actor: AuditLogActor
   message: string
   target: {
     id: string | null
     type: string | null
     label: string | null
   }
-  changes: ServiceLogChange[]
+  changes: AuditLogChange[]
   subjectId: string | null
   requestId: string | null
+  projectId?: string | null
+  projectName?: string | null
+  workspaceId?: string | null
   correlationId: string
   status: number | null
   failureCode: string | null
@@ -52,7 +54,8 @@ export type LogFilters = Record<
   | "search",
   string
 >
-export function getServiceLogs(
+export function getAuditLogs(
+  endpoint: "/api/service-operation-logs" | "/api/project-management-logs",
   filters: LogFilters,
   page: number,
   signal: AbortSignal,
@@ -62,11 +65,11 @@ export function getServiceLogs(
   )
   query.set("page", String(page))
   return apiRequest<{
-    events: ServiceLog[]
+    events: AuditLog[]
     total: number
     page: number
     pageSize: number
     asOf: string
     retentionDays: number
-  }>(`/api/service-operation-logs?${query}`, { signal })
+  }>(`${endpoint}?${query}`, { signal })
 }

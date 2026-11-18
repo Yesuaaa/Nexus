@@ -1,5 +1,5 @@
 import { HttpError } from "../../shared/http-error.js"
-import { ServiceOperationLogWriteError } from "./log-write-error.js"
+import { ActivityLogWriteError } from "../../shared/activity-log-write-error.js"
 
 export const serviceIncidentCodes = [
   "ACTIVITY_LOG_PERSISTENCE_FAILED",
@@ -74,7 +74,7 @@ export function classifyServiceIncident(
   endpoint?: string,
 ): ServiceIncidentDiagnostic {
   const chain = causes(error)
-  if (chain.some((value) => value instanceof ServiceOperationLogWriteError))
+  if (chain.some((value) => value instanceof ActivityLogWriteError))
     return {
       code: "ACTIVITY_LOG_PERSISTENCE_FAILED",
       reason:
@@ -95,7 +95,9 @@ export function classifyServiceIncident(
       reason: "The database was temporarily unavailable.",
     }
   if (
-    endpoint?.includes("/files") &&
+    (endpoint?.includes("/files") ||
+      (endpoint?.includes("/deliverables/") &&
+        /\/(attachment|file)$/.test(endpoint))) &&
     codes.some((code) => fileStorageCodes.has(code))
   )
     return {

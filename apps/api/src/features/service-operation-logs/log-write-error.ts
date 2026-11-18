@@ -1,6 +1,7 @@
-export class ServiceOperationLogWriteError extends Error {
+import { ActivityLogWriteError } from "../../shared/activity-log-write-error.js"
+
+export class ServiceOperationLogWriteError extends ActivityLogWriteError {
   constructor(cause: unknown) {
-    super("Service Operations activity log could not be saved", { cause })
-    this.name = "ServiceOperationLogWriteError"
+    super("Service Operations", cause)
   }
 }

@@ -1,4 +1,5 @@
 import path from "node:path"
+import { recordProjectIncident } from "../features/project-management-logs/incidents.js"
 import { recordServiceIncident } from "../features/service-operation-logs/log-incidents.js"
 import {
   logContext,
@@ -252,6 +253,7 @@ export const handleError: ErrorRequestHandler = (
   const { status, message, details, retryAfter } = resolveError(error)
   if (status >= 500) {
     void recordServiceIncident(request, status, error)
+    void recordProjectIncident(request, status, error)
     console.error(
       "API request failed",
       {

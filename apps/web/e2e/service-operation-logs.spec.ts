@@ -16,6 +16,17 @@ for (const width of [1440, 390])
       "Failed while updating workload capacity for Jordan Reyes because the database operation timed out."
     await page.setViewportSize({ width, height: 1000 })
     await restoreSession(page, "SUPERADMIN")
+    await page.route("**/api/administrative-requests?**", (route) =>
+      route.fulfill({
+        json: {
+          serviceRequests: [],
+          departments: [],
+          total: 0,
+          page: 1,
+          pageSize: 10,
+        },
+      }),
+    )
     let denied = false
     await page.route("**/api/service-operation-logs?**", (route) =>
       route.fulfill(
@@ -111,22 +122,28 @@ for (const width of [1440, 390])
             },
       ),
     )
-    await page.goto("/module/service-operations/logs")
-    await expect(
-      page.getByRole("heading", { name: "Service Operations logs" }),
-    ).toBeVisible()
+    await page.goto("/module/service-operations")
     if (width < 768)
       await page.getByRole("button", { name: "Open navigation menu" }).click()
-    const menu = page.getByRole("navigation", { name: "Main menu" })
-    await expect(menu.locator("p", { hasText: "System Tool" })).toBeVisible()
+    const menu = page.locator('#app-sidebar nav[aria-label="Main menu"]')
+    const logs = menu
+      .getByRole("group", { name: "System Tool", exact: true })
+      .getByRole("link", { name: "Service Logs", exact: true })
+    await expect(menu.locator('a[href$="/logs"]')).toHaveCount(1)
+    await expect(logs).toHaveAttribute(
+      "href",
+      "/module/service-operations/logs",
+    )
+    await logs.click()
+    await expect(page).toHaveURL(/\/module\/service-operations\/logs$/)
     await expect(
-      menu.getByRole("link", { name: "Logs", exact: true }),
+      page.getByRole("heading", {
+        name: "Service Logs",
+        exact: true,
+      }),
     ).toBeVisible()
-    if (width < 768)
-      await page
-        .getByRole("complementary", { name: "Primary navigation" })
-        .getByRole("button", { name: "Close navigation menu" })
-        .click()
+    await expect(menu.locator('a[href$="/logs"]')).toHaveCount(1)
+    await expect(menu.getByText("System Tool", { exact: true })).toHaveCount(1)
     await expect(page.getByText(successMessage)).toBeVisible()
     await expect(page.getByText("Jordan Reyes").first()).toBeVisible()
     expect(

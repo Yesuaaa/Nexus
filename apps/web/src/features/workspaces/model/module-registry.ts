@@ -6,6 +6,10 @@ export const moduleRegistry = registry
 export type WorkspaceModuleId = keyof typeof registry
 export type ModuleRegistration = (typeof registry)[WorkspaceModuleId]
 
+export function getModuleLogsLabel(moduleId: WorkspaceModuleId): string {
+  return `${moduleRegistry[moduleId].title.split(" ")[0]} Logs`
+}
+
 export function canAccessAdministrativeModules(account: Account): boolean {
   return Boolean(
     account.isActive &&
