@@ -1,3 +1,10 @@
+import { createManagementOperation } from "../../shared/management-history.js"
+import {
+  readReconciliation,
+  recordReconciliationExceptions,
+  decideReconciliationException,
+  readExceptionDecisions,
+} from "./payroll-reconciliation.service.js"
 import { disbursementsRouter } from "./payroll-disbursements.controller.js"
 import { Router } from "express"
 import {
@@ -6,7 +13,7 @@ import {
   PayrollRunStatus,
   PayrollSandboxDestinationKind,
 } from "../../generated/prisma/client.js"
-import { mapPrismaErrors } from "../../shared/http-error.js"
+import { fail, mapPrismaErrors } from "../../shared/http-error.js"
 import { parsePage } from "../../shared/query/pagination.js"
 import { parseQueryString } from "../../shared/query-helpers.js"
 import { isRecordId, recordIdParam } from "../../shared/validation.js"
@@ -139,6 +146,99 @@ payrollRouter.post(
 )
 
 payrollRouter.param("runId", recordIdParam("Invalid payroll run reference"))
+
+payrollRouter.get(
+  "/runs/:runId/reconciliation",
+  requirePermission(Permission.PAYROLL_READ),
+  async (request, response) => {
+    const page = parsePage(request.query.page)
+    const exceptionPage = parsePage(request.query.exceptionPage)
+    const search = parseQueryString(request.query.search)
+    const payoutStatus = parseQueryString(request.query.payoutStatus)
+    const category = parseQueryString(request.query.category)
+    const observation = parseQueryString(request.query.observation)
+    if (
+      page === null ||
+      exceptionPage === null ||
+      search === null ||
+      search.length > 200 ||
+      payoutStatus === null ||
+      ![
+        "",
+        "SUCCEEDED",
+        "PENDING",
+        "FAILED",
+        "MATCHED",
+        "EXCEPTION",
+        "NOT_STARTED",
+      ].includes(payoutStatus) ||
+      category === null ||
+      ![
+        "",
+        "AMOUNT_MISMATCH",
+        "MISSING_PAYOUT_RECORD",
+        "FAILED_PAYOUT",
+        "UNMATCHED_PAYOUT",
+      ].includes(category) ||
+      observation === null ||
+      !["", "CURRENT", "HISTORICAL"].includes(observation)
+    )
+      fail(400, "Invalid reconciliation filters")
+    response.set("Cache-Control", "no-store")
+    response.json(
+      await readReconciliation(
+        String(request.params.runId),
+        page,
+        exceptionPage,
+        { search, payoutStatus, category, observation },
+      ),
+    )
+  },
+)
+
+payrollRouter.post(
+  "/runs/:runId/reconciliation/observations",
+  requirePermission(Permission.PAYROLL_MANAGE),
+  async (request, response) => {
+    response.set("Cache-Control", "no-store")
+    response.json({
+      observed: await recordReconciliationExceptions(
+        String(request.params.runId),
+        createManagementOperation(request.auth!),
+      ),
+    })
+  },
+)
+payrollRouter.get(
+  "/runs/:runId/reconciliation/exceptions/:category/:subjectId/decisions",
+  requirePermission(Permission.PAYROLL_READ),
+  async (request, response) => {
+    response.set("Cache-Control", "no-store")
+    response.json(
+      await readExceptionDecisions(
+        String(request.params.runId),
+        String(request.params.category),
+        String(request.params.subjectId),
+      ),
+    )
+  },
+)
+
+payrollRouter.post(
+  "/runs/:runId/reconciliation/decisions",
+  requirePermission(Permission.PAYROLL_MANAGE),
+  async (request, response) => {
+    response.set("Cache-Control", "no-store")
+    response.json(
+      await decideReconciliationException(
+        String(request.params.runId),
+        request.body,
+        createManagementOperation(request.auth!),
+      ),
+    )
+  },
+)
+
 payrollRouter.param("itemId", recordIdParam("Invalid payroll item reference"))
 
 payrollRouter.get(

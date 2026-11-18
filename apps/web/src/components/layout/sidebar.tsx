@@ -237,6 +237,10 @@ function payrollModuleGroup(visible: (account: Account) => boolean): NavGroup {
         label: "Disbursements",
       },
       {
+        href: "/module/payroll/reconciliation",
+        label: "Reconciliation",
+      },
+      {
         href: "/module/payroll/payslips",
         label: "Payslips & History",
       },

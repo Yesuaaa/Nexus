@@ -1,3 +1,8 @@
+import { randomUUID } from "node:crypto"
+import {
+  type readReconciliation,
+  recordReconciliationExceptions,
+} from "../../../src/features/payroll/payroll-reconciliation.service.js"
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { Role } from "../../../src/generated/prisma/client.js"
@@ -28,6 +33,7 @@ test(
       return { id, token: (await issueSession(user)).token }
     }
     const admin = await account("document-admin", Role.ADMIN)
+    const reviewer = await account("document-reviewer", Role.ADMIN)
     const superadmin = await account("document-superadmin", Role.SUPERADMIN)
     const staff = await account("document-staff", Role.STAFF)
     const other = await account("document-other", Role.STAFF)
@@ -139,6 +145,10 @@ test(
     const generate = "/payroll/runs/" + run.id + "/generate-payslips"
     const publish = "/payroll/runs/" + run.id + "/publish-payslips"
     const self = "/staff/my-payroll"
+    const reconciliation = "/payroll/runs/" + run.id + "/reconciliation"
+    assert.equal((await api(reconciliation, admin)).status, 409)
+    assert.equal((await api(reconciliation, staff)).status, 403)
+    assert.equal((await api(reconciliation, client)).status, 403)
     assert.equal((await api(generate, admin, "POST")).status, 409)
     await prisma.payrollRun.update({
       where: { id: run.id },
@@ -328,6 +338,13 @@ test(
     assert.equal(initialSummary.latestPayslip?.net, "12300.00")
     assert.equal(initialSummary.openConcernCount, 0)
 
+    const unprepared = await api(reconciliation, superadmin)
+    assert.equal(unprepared.status, 200)
+    assert.equal(
+      ((await unprepared.json()) as { status: string }).status,
+      "NOT_STARTED",
+    )
+    assert.equal((await api(reconciliation + "?page=0", admin)).status, 400)
     const batches = "/payroll/disbursements"
     const prepare = () => api(batches, admin, "POST", { runId: run.id })
     const [firstBatch, repeatedBatch] = await Promise.all([
@@ -409,6 +426,14 @@ test(
         }[]
       }
       assert.equal(configured.items[0]?.status, "BLOCKED")
+      assert.equal(
+        (
+          (await (await api(reconciliation, admin)).json()) as {
+            status: string
+          }
+        ).status,
+        "PENDING",
+      )
       assert.match(configured.items[0]?.destination?.masked ?? "", /•••• \d{4}/)
       const replay = await Promise.all([
         api(simulatePath, admin, "POST", simulation),
@@ -418,6 +443,237 @@ test(
         replay.map((response) => response.status),
         [200, 200],
       )
+      const evaluated = (await (
+        await api(reconciliation, superadmin)
+      ).json()) as Awaited<ReturnType<typeof readReconciliation>>
+      assert.equal(evaluated.status, "EXCEPTION")
+      assert.equal(evaluated.amounts.realPaid, "0.00")
+      assert.equal(evaluated.amounts.failed, "12300.00")
+      assert.equal(evaluated.exceptions.rows[0]?.category, "FAILED_PAYOUT")
+      assert.equal(await prisma.payrollReconciliationException.count(), 0)
+      assert.deepEqual(
+        await Promise.all([
+          recordReconciliationExceptions(run.id),
+          recordReconciliationExceptions(run.id),
+        ]),
+        [1, 1],
+      )
+      assert.equal(await prisma.payrollReconciliationException.count(), 1)
+      const observationPath = reconciliation + "/observations"
+      assert.equal((await api(observationPath, superadmin, "POST")).status, 403)
+      assert.equal((await api(observationPath, admin, "POST")).status, 200)
+      const stored =
+        await prisma.payrollReconciliationException.findFirstOrThrow()
+      await prisma.payrollReconciliationException.create({
+        data: {
+          calculationId: stored.calculationId,
+          subjectId: stored.subjectId,
+          firstDetectedAt: stored.firstDetectedAt,
+          lastObservedAt: stored.lastObservedAt,
+          firstEvidence: { category: "MISSING_PAYOUT_RECORD" },
+          category: "MISSING_PAYOUT_RECORD",
+          lastEvidence: {
+            ...evaluated.exceptions.rows[0],
+            category: "MISSING_PAYOUT_RECORD",
+            observed: null,
+          },
+        },
+      })
+      const decisionPath = reconciliation + "/decisions"
+      const decision = {
+        subjectId: stored.subjectId,
+        category: stored.category,
+        version: stored.version,
+        action: "START_REVIEW",
+        reason: "Check the failed simulation",
+        requestId: randomUUID(),
+      }
+      assert.equal(
+        (await api(decisionPath, superadmin, "POST", decision)).status,
+        403,
+      )
+      assert.equal(
+        (await api(decisionPath, staff, "POST", decision)).status,
+        403,
+      )
+      assert.equal(
+        (await api(decisionPath, client, "POST", decision)).status,
+        403,
+      )
+      assert.equal(
+        (
+          await api(decisionPath, reviewer, "POST", {
+            ...decision,
+            reason: "  ",
+          })
+        ).status,
+        400,
+      )
+      const duplicate = await Promise.all([
+        api(decisionPath, reviewer, "POST", decision),
+        api(decisionPath, reviewer, "POST", decision),
+      ])
+      assert.deepEqual(
+        duplicate.map((response) => response.status),
+        [200, 200],
+      )
+      assert.deepEqual(await duplicate[0]!.json(), await duplicate[1]!.json())
+      const resolve = {
+        ...decision,
+        requestId: randomUUID(),
+        action: "RESOLVE",
+        version: stored.version + 1,
+        classification: "FURTHER_ACTION_REQUIRED",
+        reason: "Investigation complete; payout still failed",
+      }
+      assert.equal(
+        (await api(decisionPath, admin, "POST", resolve)).status,
+        403,
+      )
+      assert.equal(
+        (
+          await api(decisionPath, reviewer, "POST", {
+            ...resolve,
+            version: stored.version,
+          })
+        ).status,
+        409,
+      )
+      assert.equal(
+        (await api(decisionPath, reviewer, "POST", resolve)).status,
+        200,
+      )
+      const afterResolution = (await (
+        await api(reconciliation, superadmin)
+      ).json()) as Awaited<ReturnType<typeof readReconciliation>>
+      assert.equal(afterResolution.amounts.failed, "12300.00")
+      assert.equal(afterResolution.amounts.realPaid, "0.00")
+      assert.equal(afterResolution.exceptions.rows[0]?.lifecycle, "RESOLVED")
+      assert.equal(afterResolution.exceptions.rows[0]?.observation, "CURRENT")
+      const reopen = {
+        ...decision,
+        action: "REOPEN",
+        version: stored.version + 2,
+        requestId: randomUUID(),
+        reason: "Review newly received operational information",
+      }
+      assert.equal(
+        (await api(decisionPath, reviewer, "POST", reopen)).status,
+        200,
+      )
+      const decisionHistory = await api(
+        reconciliation +
+          "/exceptions/" +
+          stored.category +
+          "/" +
+          stored.subjectId +
+          "/decisions",
+        superadmin,
+      )
+      assert.equal(decisionHistory.status, 200)
+      assert.deepEqual(
+        (
+          (await decisionHistory.json()) as { decisions: { action: string }[] }
+        ).decisions.map((event) => event.action),
+        ["START_REVIEW", "RESOLVE", "REOPEN"],
+      )
+      const assessment = {
+        ...decision,
+        action: "ASSESS",
+        version: stored.version + 3,
+        requestId: randomUUID(),
+        assessment: "MANUAL_VERIFICATION",
+        reason: "Confirm the payout separately before taking financial action",
+      }
+      assert.equal(
+        (await api(decisionPath, reviewer, "POST", assessment)).status,
+        200,
+      )
+      const dismissal = {
+        ...decision,
+        action: "DISMISS",
+        version: stored.version + 4,
+        requestId: randomUUID(),
+        classification: "EXPECTED_CONDITION",
+        reason: "Expected failed outcome in this simulator exercise",
+      }
+      assert.equal(
+        (
+          await api(decisionPath, reviewer, "POST", {
+            ...dismissal,
+            reason: "",
+          })
+        ).status,
+        400,
+      )
+      assert.equal(
+        (await api(decisionPath, reviewer, "POST", dismissal)).status,
+        200,
+      )
+      assert.equal(
+        (
+          await api(decisionPath, reviewer, "POST", {
+            ...dismissal,
+            version: stored.version + 5,
+            requestId: randomUUID(),
+          })
+        ).status,
+        409,
+      )
+
+      // Model a previous evaluation that recorded the discrepancy as absent.
+      const exceptionKey = {
+        calculationId: stored.calculationId,
+        category: stored.category,
+        subjectId: stored.subjectId,
+      }
+      await prisma.payrollReconciliationException.update({
+        where: { calculationId_category_subjectId: exceptionKey },
+        data: { observed: false, version: { increment: 1 } },
+      })
+      const recurred = (await (
+        await api(reconciliation, reviewer)
+      ).json()) as Awaited<ReturnType<typeof readReconciliation>>
+      assert.equal(recurred.exceptions.rows[0]?.recurring, true)
+      assert.equal(recurred.exceptions.rows[0]?.version, null)
+      assert.equal((await api(observationPath, reviewer, "POST")).status, 200)
+      const reopenedCycle =
+        await prisma.payrollReconciliationException.findUniqueOrThrow({
+          where: { calculationId_category_subjectId: exceptionKey },
+        })
+      assert.equal(reopenedCycle.status, "OPEN")
+      assert.deepEqual(reopenedCycle.firstEvidence, stored.firstEvidence)
+      assert.equal(
+        await prisma.payrollReconciliationDecision.count({
+          where: exceptionKey,
+        }),
+        5,
+      )
+      const history = await api(
+        reconciliation + "?observation=HISTORICAL",
+        admin,
+      )
+      assert.equal(history.status, 200)
+      const historyData = (await history.json()) as Awaited<
+        ReturnType<typeof readReconciliation>
+      >
+      assert.equal(historyData.exceptions.total, 1)
+      assert.equal(historyData.exceptions.rows[0]?.observation, "HISTORICAL")
+      assert.equal(
+        historyData.exceptions.rows[0]?.category,
+        "MISSING_PAYOUT_RECORD",
+      )
+      assert.equal(await prisma.payrollReconciliationException.count(), 2)
+      const filtered = await api(
+        reconciliation + "?search=unknown-employee",
+        admin,
+      )
+      assert.equal(filtered.status, 200)
+      const filteredData = (await filtered.json()) as Awaited<
+        ReturnType<typeof readReconciliation>
+      >
+      assert.equal(filteredData.employees.total, 0)
+      assert.equal(filteredData.amounts.approved, "12300.00")
       assert.equal(
         await prisma.payrollTransferAttempt.count({
           where: { itemId: item.id },
@@ -831,7 +1087,7 @@ test(
       await prisma.workforceManagementChange.count({
         where: { action: "PAYROLL_DOCUMENT_ACTIVITY" },
       }),
-      19 + (editRaceStaff.status === 200 ? 1 : 0),
+      26 + (editRaceStaff.status === 200 ? 1 : 0),
     )
   },
 )

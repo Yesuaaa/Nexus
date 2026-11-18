@@ -44,6 +44,8 @@ type PayrollDocumentActivity =
   | "DISBURSEMENT_CANCELLED"
   | "DISBURSEMENT_TEST_DESTINATION"
   | "DISBURSEMENT_SIMULATED"
+  | "RECONCILIATION_OBSERVED"
+  | "RECONCILIATION_DECIDED"
   | "GENERATED"
   | "REGENERATED"
   | "PUBLISHED"
@@ -96,6 +98,7 @@ type Payloads = Record<
     activity: PayrollDocumentActivity
     calculationId?: string
     batchId?: string
+    decisionId?: string
   }
   PAYROLL_RUN_CREATED: { periodId: string }
   PAYROLL_PREFERENCES_UPDATED: {
@@ -451,6 +454,8 @@ export async function writeWorkforceManagementChange(
       required = run ? ["activity", "calculationId"] : ["activity"]
       if (run && String(input.changes?.activity).startsWith("DISBURSEMENT_"))
         required.push("batchId")
+      if (run && input.changes?.activity === "RECONCILIATION_DECIDED")
+        required.push("decisionId")
       checks = {
         activity: (v) =>
           run
@@ -462,7 +467,9 @@ export async function writeWorkforceManagementChange(
                 v === "DISBURSEMENT_VALIDATED" ||
                 v === "DISBURSEMENT_CANCELLED" ||
                 v === "DISBURSEMENT_TEST_DESTINATION" ||
-                v === "DISBURSEMENT_SIMULATED")
+                v === "DISBURSEMENT_SIMULATED" ||
+                v === "RECONCILIATION_OBSERVED" ||
+                v === "RECONCILIATION_DECIDED")
             : operation.actorRoleAtTime === "STAFF"
               ? v === "REQUEST_CREATED" ||
                 v === "REQUEST_MESSAGE" ||
@@ -473,6 +480,9 @@ export async function writeWorkforceManagementChange(
         ...(run
           ? {
               calculationId: isRecordId,
+              ...(input.changes?.activity === "RECONCILIATION_DECIDED"
+                ? { decisionId: isRecordId }
+                : {}),
               ...(String(input.changes?.activity).startsWith("DISBURSEMENT_")
                 ? { batchId: isRecordId }
                 : {}),

@@ -899,6 +899,7 @@ model PayrollRun {
 }
 
 model PayrollRunCalculation {
+  reconciliationExceptions PayrollReconciliationException[]
   disbursement        PayrollDisbursementBatch?
   id                  String                    @id @default(cuid())
   runId               String
@@ -1668,4 +1669,51 @@ enum PayrollSimulationOutcome {
   SUCCEEDED
   FAILED
   PENDING
+}
+
+enum PayrollReconciliationExceptionStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  DISMISSED
+}
+
+model PayrollReconciliationException {
+  calculationId  String
+  calculation    PayrollRunCalculation @relation(fields: [calculationId], references: [id], onDelete: Restrict)
+  category       String
+  subjectId      String
+  status         PayrollReconciliationExceptionStatus @default(OPEN)
+  firstEvidence  Json
+  lastEvidence   Json
+  firstDetectedAt DateTime @db.Timestamptz(3)
+  lastObservedAt  DateTime @db.Timestamptz(3)
+
+  version        Int @default(0)
+  observed       Boolean @default(true)
+  decisions      PayrollReconciliationDecision[]
+
+  @@id([calculationId, category, subjectId])
+}
+
+model PayrollReconciliationDecision {
+  id             String   @id @default(cuid())
+  calculationId  String
+  category       String
+  subjectId      String
+  exception      PayrollReconciliationException @relation(fields: [calculationId, category, subjectId], references: [calculationId, category, subjectId], onDelete: Restrict, map: "payroll_reconcile_decision_exception_fk")
+  requestId      String   @db.Uuid
+  version        Int
+  actorId        String
+  action         String
+  previous       PayrollReconciliationExceptionStatus
+  next           PayrollReconciliationExceptionStatus
+  reason         String   @db.VarChar(500)
+  classification String?
+  assessment     String?
+  evidence       Json
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([calculationId, category, subjectId, requestId], map: "payroll_reconcile_decision_request_uq")
+  @@unique([calculationId, category, subjectId, version], map: "payroll_reconcile_decision_version_uq")
 }
