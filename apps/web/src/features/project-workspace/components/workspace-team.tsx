@@ -2,15 +2,25 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Eye, Plus, UsersRound } from "lucide-react"
-import { AnimatedTableBody } from "@/components/ui/animated-table-body"
+import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { Alert } from "@/components/ui/alert"
-import { Avatar } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
-import { FilterSelect } from "@/components/ui/filter-select"
+import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
 import { SearchField } from "@/components/ui/search-field"
-import { TableSkeletonBody } from "@/components/ui/data-table-skeleton"
+import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
+import { MemberIdentity } from "@/components/ui/member-identity"
+import { Pill } from "@/components/ui/pill"
+import {
+  ResponsiveDataTable,
+  ResponsiveDataTableBody,
+  ResponsiveDataTableCell,
+  ResponsiveDataTableColumnHeader,
+  ResponsiveDataTableHeader,
+} from "@/components/ui/responsive-data-table"
 import { rowActionButton } from "@/components/ui/row-action-styles"
+import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
+import { cn } from "@/lib/utils"
 import { TeamMemberPanel, type TeamMember } from "./team-member-panel"
 import { useRequestWorkflow } from "@/features/request-workflow/hooks/use-request-workflow"
 import { ProjectStaffingDialog } from "@/features/request-workflow/components/project-staffing-dialog"
@@ -18,6 +28,16 @@ import {
   notifyProjectWorkspaceListChanged,
   type ProjectWorkspaceDetail,
 } from "../api/project-workspace-api"
+
+const teamGrid =
+  "grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(88px,.8fr)_56px] items-center gap-3 @max-[640px]:grid-cols-[minmax(0,1fr)_auto]"
+const teamCells = [
+  "min-w-0 @max-[640px]:col-start-1 @max-[640px]:row-start-1",
+  "min-w-0 @max-[640px]:col-span-2",
+  "min-w-0 @max-[640px]:col-span-2",
+  "min-w-0 @max-[640px]:col-span-2",
+  "justify-self-end @max-[640px]:col-start-2 @max-[640px]:row-start-1",
+] as const
 
 function AssignStaff({
   requestId,
@@ -75,6 +95,7 @@ export function WorkspaceTeam({
   onChanged: () => void
   onUpdated: (workspace: ProjectWorkspaceDetail) => void
 }) {
+  const { formatDate } = useDatePreferences()
   const [search, setSearch] = useState("")
   const [settledSearch, setSettledSearch] = useState("")
   const searchPending = search.trim() !== settledSearch
@@ -153,7 +174,7 @@ export function WorkspaceTeam({
           ))}
         </div>
       </div>
-      <div className="mb-4 flex flex-wrap gap-2.5">
+      <div className={cn("mb-4", filterBarClass)}>
         <SearchField
           label="Search assigned staff"
           placeholder="Search name, position, or skills..."
@@ -169,58 +190,86 @@ export function WorkspaceTeam({
         />
       </div>
       {rows.length ? (
-        <div className="overflow-x-auto rounded-xl border border-[#dfe5ec]">
-          <table
-            className="w-full min-w-[640px] text-left text-xs"
-            aria-busy={searchPending}
-          >
-            <thead className="bg-[#edf1f5]">
-              <tr>
-                {["Staff", "Position", "Service", "Assigned on", "Actions"].map(
-                  (label) => (
-                    <th key={label} className="px-4 py-3 font-semibold">
-                      {label}
-                    </th>
-                  ),
-                )}
-              </tr>
-            </thead>
+        <div>
+          <ResponsiveDataTable label="Assigned staff" aria-busy={searchPending}>
+            <ResponsiveDataTableHeader
+              className="@max-[640px]:sr-only"
+              rowClassName={teamGrid}
+            >
+              {["Staff", "Position", "Service", "Assigned on", "Actions"].map(
+                (label) => (
+                  <ResponsiveDataTableColumnHeader key={label}>
+                    {label}
+                  </ResponsiveDataTableColumnHeader>
+                ),
+              )}
+            </ResponsiveDataTableHeader>
             {searchPending ? (
-              <TableSkeletonBody label="assigned staff" columns={5} rows={5} />
+              <ResponsiveDataTableBody>
+                <DataTableSkeletonRows
+                  label="assigned staff"
+                  rows={5}
+                  rowClassName={cn(teamGrid, "min-h-[58px] px-4 py-3")}
+                  cellClassNames={[...teamCells]}
+                />
+              </ResponsiveDataTableBody>
             ) : (
-              <AnimatedTableBody
+              <AnimatedSlotGridBody
                 items={visible}
+                getKey={(row) => row.id}
                 viewKey={JSON.stringify([settledSearch, streamId])}
                 quickKey={settledSearch}
                 animateRows={false}
-                columns={5}
-                rowClassName="border-t border-[#edf0f4]"
+                autoRowHeight
+                rowClassName={(_person, _index, isLast) =>
+                  cn(
+                    teamGrid,
+                    "min-h-[58px] px-4 py-3 text-xs hover:bg-[#f8fafd]",
+                    !isLast && "border-b border-[#eceef1]",
+                  )
+                }
                 emptyContent="No staff match these filters."
                 renderRow={({ id, person, stream }) => (
                   <>
-                    <td className="px-4 py-4">
-                      <div className="flex items-center gap-3">
-                        <Avatar name={person.fullName} className="size-8" />
-                        <span className="font-medium">{person.fullName}</span>
-                        {person.isTeamLead && (
-                          <span className="rounded-md bg-[#e9effc] px-2 py-1 text-[11px] text-[#294c96]">
-                            Team lead
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-4 text-[#60718c]">
-                      {person.position || "Staff"}
-                    </td>
-                    <td className="px-4 py-4">
-                      <span className="rounded-md bg-[#e9effc] px-2 py-1 text-[11px] text-[#294c96]">
-                        {stream.serviceName}
+                    <ResponsiveDataTableCell className={teamCells[0]}>
+                      <MemberIdentity
+                        member={person}
+                        secondaryText={null}
+                        nameAdornment={
+                          person.isTeamLead && <Pill>Team lead</Pill>
+                        }
+                      />
+                    </ResponsiveDataTableCell>
+                    <ResponsiveDataTableCell
+                      className={cn(teamCells[1], "break-words text-[#60718c]")}
+                    >
+                      <span className="hidden font-medium @max-[640px]:inline">
+                        Position:{" "}
                       </span>
-                    </td>
-                    <td className="px-4 py-4 text-[#60718c]">
-                      {new Date(person.approvedAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-4">
+                      {person.position || "Staff"}
+                    </ResponsiveDataTableCell>
+                    <ResponsiveDataTableCell className={teamCells[2]}>
+                      <span className="mr-1 hidden font-medium text-[#60718c] @max-[640px]:inline">
+                        Service:
+                      </span>
+                      <Pill
+                        className="max-w-full align-middle"
+                        title={stream.serviceName}
+                      >
+                        {stream.serviceName}
+                      </Pill>
+                    </ResponsiveDataTableCell>
+                    <ResponsiveDataTableCell
+                      className={cn(teamCells[3], "text-[#60718c]")}
+                    >
+                      <span className="hidden font-medium @max-[640px]:inline">
+                        Assigned on:{" "}
+                      </span>
+                      <time dateTime={person.approvedAt}>
+                        {formatDate(person.approvedAt)}
+                      </time>
+                    </ResponsiveDataTableCell>
+                    <ResponsiveDataTableCell className={teamCells[4]}>
                       <button
                         type="button"
                         id={`team-member-view-${id}`}
@@ -228,16 +277,16 @@ export function WorkspaceTeam({
                         aria-label={`View ${person.fullName}`}
                         onClick={() => setDetailId(id)}
                       >
-                        <Eye size={16} />
+                        <Eye size={16} aria-hidden="true" />
                       </button>
-                    </td>
+                    </ResponsiveDataTableCell>
                   </>
                 )}
               />
             )}
-          </table>
+          </ResponsiveDataTable>
           {!searchPending && (
-            <p className="m-0 border-t border-[#edf0f4] px-4 py-3 text-[11px] text-[#738096]">
+            <p className="m-0 px-1 py-3 text-[11px] text-[#738096]">
               Showing {visible.length} of {rows.length} assignments
             </p>
           )}

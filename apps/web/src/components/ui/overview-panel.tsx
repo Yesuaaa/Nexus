@@ -1,4 +1,7 @@
 import { useId, type ReactNode } from "react"
+import { ArrowRight } from "lucide-react"
+import Link from "next/link"
+import { focusRing } from "@/components/layout/styles"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ProgressMeter } from "@/components/ui/stat-strip"
 import { cn } from "@/lib/utils"
@@ -140,7 +143,8 @@ export function BreakdownList({
 export type ItemRow = {
   id: string
   label: string
-  note: string
+  note?: string
+  href?: string
   tone?: "warning" | "danger" | "muted"
 }
 
@@ -183,14 +187,31 @@ export function ItemList({
         {shown.map((row) => (
           <li
             key={row.id}
-            className="flex items-center justify-between gap-3 text-xs"
+            className="flex min-w-0 items-center justify-between gap-3 text-xs"
           >
-            <span className="min-w-0 truncate font-medium text-[#182235]">
-              {row.label}
-            </span>
-            <span className={cn("shrink-0", noteTones[row.tone ?? "muted"])}>
-              {row.note}
-            </span>
+            {row.href ? (
+              <Link
+                href={row.href}
+                className={cn(
+                  "flex min-h-8 min-w-0 flex-1 items-center justify-between gap-3 rounded-md font-medium text-[#203f8c] underline-offset-2 hover:underline",
+                  focusRing,
+                )}
+              >
+                <span className="min-w-0 [overflow-wrap:anywhere]">
+                  {row.label}
+                </span>
+                <ArrowRight size={14} className="shrink-0" aria-hidden="true" />
+              </Link>
+            ) : (
+              <span className="min-w-0 truncate font-medium text-[#182235]">
+                {row.label}
+              </span>
+            )}
+            {row.note && (
+              <span className={cn("shrink-0", noteTones[row.tone ?? "muted"])}>
+                {row.note}
+              </span>
+            )}
           </li>
         ))}
       </ul>
@@ -217,12 +238,14 @@ export function MiniStats({
   label,
   columns = 4,
   variant = "boxed",
+  wrapValues = false,
 }: {
   items: MiniStat[]
   loading: boolean
   label: string
   columns?: 2 | 4
   variant?: "boxed" | "plain"
+  wrapValues?: boolean
 }) {
   const boxed = variant === "boxed"
   return (
@@ -259,7 +282,8 @@ export function MiniStats({
             </dt>
             <dd
               className={cn(
-                "m-0 mt-1 truncate text-base font-semibold tabular-nums",
+                "m-0 mt-1 text-base font-semibold tabular-nums",
+                wrapValues ? "[overflow-wrap:anywhere]" : "truncate",
                 attention ? "text-[#805316]" : "text-[#101d35]",
               )}
             >

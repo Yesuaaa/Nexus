@@ -99,6 +99,7 @@ export function ClientProjectPage({
     ? Math.round((progress.completed / progress.total) * 100)
     : 0
   const deliverables = project?.deliverables ?? []
+  const clientNotes = project?.notes ?? []
   const changeRequests = project?.changeRequests ?? []
   const pendingChange = changeRequests.some(
     (request) => request.kind === "CHANGE" && request.status === "PENDING",
@@ -365,7 +366,9 @@ export function ClientProjectPage({
                   aria-hidden="true"
                 />
                 <p className="m-0 text-xs text-[#52627a]">
-                  No notes added yet.
+                  {clientNotes.length
+                    ? `${clientNotes.length} approved note${clientNotes.length === 1 ? "" : "s"} shared with you.`
+                    : "No notes have been shared with you yet."}
                 </p>
               </div>
             </section>
@@ -388,49 +391,34 @@ export function ClientProjectPage({
               <div>
                 <h2 className="m-0 text-base font-semibold">Project notes</h2>
                 <p className="mt-1 mb-0 text-xs text-[#738096]">
-                  Notes and project context shared with you.
+                  Approved notes the project team has shared with you.
                 </p>
               </div>
             </div>
-            {project.description ? (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                <article className="group relative aspect-[4/5] w-full max-w-[340px] overflow-hidden rounded-2xl bg-[#294c96] p-6 text-white shadow-[0_8px_24px_rgb(26_58_128_/_10%)]">
-                  <span
-                    className="pointer-events-none absolute inset-0 bg-[linear-gradient(145deg,transparent_40%,rgb(20_54_129_/_42%))]"
-                    aria-hidden="true"
-                  />
-                  <div className="relative z-10 flex h-full min-w-0 flex-col">
-                    <span className="grid size-14 shrink-0 place-items-center rounded-2xl border-2 border-current bg-[rgb(22_48_105_/_10%)]">
-                      <FileText
-                        size={24}
-                        strokeWidth={1.8}
-                        aria-hidden="true"
-                      />
-                    </span>
-                    <div className="mt-auto min-w-0">
-                      <h3 className="m-0 text-xl leading-tight font-bold tracking-[-0.025em]">
-                        Project brief
-                      </h3>
-                      <p className="mt-2 mb-0 whitespace-pre-wrap text-sm leading-6 text-white/80 [overflow-wrap:anywhere]">
-                        {project.description}
-                      </p>
-                    </div>
-                  </div>
-                </article>
+            {clientNotes.length ? (
+              <div className="grid gap-3">
+                {clientNotes.map((note) => (
+                  <article
+                    key={note.id}
+                    className="rounded-xl border border-[#dce3eb] bg-white p-5"
+                  >
+                    <p className="m-0 whitespace-pre-wrap text-sm leading-6 text-[#263247] [overflow-wrap:anywhere]">
+                      {note.content}
+                    </p>
+                    <p className="mt-3 mb-0 text-[11px] text-[#738096]">
+                      {note.author.fullName || "Project team"} · Shared{" "}
+                      {formatDate(note.submittedAt)}
+                    </p>
+                  </article>
+                ))}
               </div>
             ) : (
-              <section className="grid min-h-[230px] w-full max-w-[340px] place-items-center rounded-2xl border border-dashed border-[#ccd7e8] bg-white px-6 text-center">
-                <div>
-                  <FileText
-                    size={24}
-                    className="mx-auto text-[#58729e]"
-                    aria-hidden="true"
-                  />
-                  <p className="mt-3 mb-0 text-sm font-semibold text-[#243c69]">
-                    No notes added yet
-                  </p>
-                </div>
-              </section>
+              <EmptyState
+                icon={FileText}
+                title="No notes shared yet"
+                description="Approved project notes will appear here when the team shares them with you."
+                size="md"
+              />
             )}
           </section>
         </TabsContent>

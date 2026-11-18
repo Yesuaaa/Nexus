@@ -884,12 +884,17 @@ test(
         const afterRemove = await milestone()
         assert.equal(afterRemove.deliveryStatus, "NOT_SUBMITTED")
         assert.equal(afterRemove.workflowFileId, null)
-        assert.equal(
-          await prisma.workflowFile.count({
-            where: { id: firstSaved.workflowFileId! },
-          }),
-          0,
-        )
+        const withdrawn = await prisma.projectDeliverableSubmission.findUnique({
+          where: { workflowFileId: firstSaved.workflowFileId! },
+          select: {
+            status: true,
+            workflowFile: { select: { clientVisible: true } },
+          },
+        })
+        assert.deepEqual(withdrawn, {
+          status: "WITHDRAWN",
+          workflowFile: { clientVisible: false },
+        })
 
         const repeatedRemove = await request(
           `${path}/attachment`,

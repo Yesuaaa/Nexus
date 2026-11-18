@@ -2,6 +2,7 @@ import type { ReactNode } from "react"
 import { ArrowLeft } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
 import { panelIconButton } from "@/components/ui/panel-styles"
+import { SidePanelClose } from "@/components/ui/side-panel"
 import { cn } from "@/lib/utils"
 
 const variants = {
@@ -25,8 +26,10 @@ export function PanelSubview({
   open,
   id,
   title,
+  meta,
   description,
   backLabel,
+  closeLabel,
   disabled,
   initialFocusId,
   onBack,
@@ -35,8 +38,10 @@ export function PanelSubview({
   open: boolean
   id: string
   title: ReactNode
+  meta?: ReactNode
   description?: ReactNode
   backLabel: string
+  closeLabel?: string
   disabled?: boolean
   initialFocusId?: string
   onBack: () => void
@@ -69,19 +74,25 @@ export function PanelSubview({
             >
               <ArrowLeft size={16} aria-hidden="true" />
             </button>
-            <div className="min-w-0">
-              <h2
-                id={`${id}-title`}
-                className="m-0 text-lg font-[650] tracking-[-0.03em]"
-              >
-                {title}
-              </h2>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <h2
+                  id={`${id}-title`}
+                  className="m-0 min-w-0 text-lg font-[650] tracking-[-0.03em] [overflow-wrap:anywhere]"
+                >
+                  {title}
+                </h2>
+                {meta}
+              </div>
               {description && (
                 <p className="mt-1 mb-0 text-xs text-[#738096]">
                   {description}
                 </p>
               )}
             </div>
+            {closeLabel && (
+              <SidePanelClose label={closeLabel} disabled={disabled} />
+            )}
           </header>
           {children}
         </motion.section>

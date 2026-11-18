@@ -1,4 +1,4 @@
-import { json, Router } from "express"
+import { json, Router, type Response } from "express"
 import { isRecordId, recordIdParam } from "../../shared/validation.js"
 import { requireAuth, requirePermission } from "../auth/auth.middleware.js"
 import { Permission } from "../auth/auth.permissions.js"
@@ -25,6 +25,13 @@ import {
   reviewProjectDeliverable,
   sendProjectDeliverableToClient,
   downloadProjectDeliverable,
+  downloadProjectDeliverableSubmission,
+  createProjectNote,
+  createProjectNoteRevision,
+  reviewProjectNoteRevision,
+  escalateProjectNoteRevision,
+  unpublishProjectNoteRevision,
+  escalateProjectDeliverable,
   updateProjectWorkspaceStatus,
 } from "./project-workspace.service.js"
 import { getProjectWorkspaceOverview } from "./project-workspace-overview.service.js"
@@ -52,7 +59,14 @@ projectWorkspaceRouter.param(
   },
 )
 
-for (const parameter of ["projectId", "taskId", "deliverableId"])
+for (const parameter of [
+  "projectId",
+  "taskId",
+  "deliverableId",
+  "submissionId",
+  "noteId",
+  "revisionId",
+])
   projectWorkspaceRouter.param(
     parameter,
     recordIdParam("Invalid project workspace ID"),
@@ -342,6 +356,20 @@ projectWorkspaceRouter.post(
 )
 
 projectWorkspaceRouter.post(
+  "/:id/projects/:projectId/deliverables/:deliverableId/escalate",
+  async (request, response) => {
+    response.json(
+      await escalateProjectDeliverable(
+        request.auth!.user.id,
+        String(request.params.id),
+        String(request.params.projectId),
+        String(request.params.deliverableId),
+      ),
+    )
+  },
+)
+
+projectWorkspaceRouter.post(
   "/:id/projects/:projectId/deliverables/:deliverableId/send",
   async (request, response) => {
     response.json(
@@ -355,6 +383,125 @@ projectWorkspaceRouter.post(
   },
 )
 
+projectWorkspaceRouter.post(
+  "/:id/projects/:projectId/notes",
+  json({ limit: "8kb" }),
+  async (request, response) => {
+    response
+      .status(201)
+      .json(
+        await createProjectNote(
+          request.auth!.user.id,
+          String(request.params.id),
+          String(request.params.projectId),
+          request.body as unknown,
+        ),
+      )
+  },
+)
+
+projectWorkspaceRouter.post(
+  "/:id/projects/:projectId/notes/:noteId/revisions",
+  json({ limit: "8kb" }),
+  async (request, response) => {
+    response
+      .status(201)
+      .json(
+        await createProjectNoteRevision(
+          request.auth!.user.id,
+          String(request.params.id),
+          String(request.params.projectId),
+          String(request.params.noteId),
+          request.body as unknown,
+        ),
+      )
+  },
+)
+
+projectWorkspaceRouter.patch(
+  "/:id/projects/:projectId/notes/:noteId/revisions/:revisionId/review",
+  json({ limit: "8kb" }),
+  async (request, response) => {
+    response.json(
+      await reviewProjectNoteRevision(
+        request.auth!.user.id,
+        String(request.params.id),
+        String(request.params.projectId),
+        String(request.params.noteId),
+        String(request.params.revisionId),
+        request.body as unknown,
+      ),
+    )
+  },
+)
+
+projectWorkspaceRouter.post(
+  "/:id/projects/:projectId/notes/:noteId/revisions/:revisionId/escalate",
+  async (request, response) => {
+    response.json(
+      await escalateProjectNoteRevision(
+        request.auth!.user.id,
+        String(request.params.id),
+        String(request.params.projectId),
+        String(request.params.noteId),
+        String(request.params.revisionId),
+      ),
+    )
+  },
+)
+
+projectWorkspaceRouter.post(
+  "/:id/projects/:projectId/notes/:noteId/revisions/:revisionId/unpublish",
+  async (request, response) => {
+    response.json(
+      await unpublishProjectNoteRevision(
+        request.auth!.user.id,
+        String(request.params.id),
+        String(request.params.projectId),
+        String(request.params.noteId),
+        String(request.params.revisionId),
+      ),
+    )
+  },
+)
+
+function sendDeliverableDownload(
+  response: Response,
+  file: { name: string; mimeType: string; size: number; data: Uint8Array },
+) {
+  const extensionByType: Record<string, string> = {
+    "application/pdf": ".pdf",
+    "application/msword": ".doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+      ".docx",
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "text/plain": ".txt",
+  }
+  response.set({
+    "Content-Type": file.mimeType,
+    "Content-Disposition": `attachment; filename="download${extensionByType[file.mimeType] ?? ""}"; filename*=UTF-8''${encodeURIComponent(file.name).replace(/['()]/g, (character) => `%${character.charCodeAt(0).toString(16)}`)}`,
+    "Content-Length": String(file.size),
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy": "sandbox; default-src 'none'",
+  })
+  response.send(Buffer.from(file.data))
+}
+
+projectWorkspaceRouter.get(
+  "/:id/projects/:projectId/deliverables/:deliverableId/submissions/:submissionId/attachment",
+  async (request, response) => {
+    const file = await downloadProjectDeliverableSubmission(
+      request.auth!.user.id,
+      String(request.params.id),
+      String(request.params.projectId),
+      String(request.params.deliverableId),
+      String(request.params.submissionId),
+    )
+    sendDeliverableDownload(response, file)
+  },
+)
+
 projectWorkspaceRouter.get(
   "/:id/projects/:projectId/deliverables/:deliverableId/attachment",
   async (request, response) => {
@@ -364,22 +511,6 @@ projectWorkspaceRouter.get(
       String(request.params.projectId),
       String(request.params.deliverableId),
     )
-    const extensionByType: Record<string, string> = {
-      "application/pdf": ".pdf",
-      "application/msword": ".doc",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-        ".docx",
-      "image/png": ".png",
-      "image/jpeg": ".jpg",
-      "text/plain": ".txt",
-    }
-    response.set({
-      "Content-Type": file.mimeType,
-      "Content-Disposition": `attachment; filename="download${extensionByType[file.mimeType] ?? ""}"; filename*=UTF-8''${encodeURIComponent(file.name).replace(/['()]/g, (character) => `%${character.charCodeAt(0).toString(16)}`)}`,
-      "Content-Length": String(file.size),
-      "X-Content-Type-Options": "nosniff",
-      "Content-Security-Policy": "sandbox; default-src 'none'",
-    })
-    response.send(Buffer.from(file.data))
+    sendDeliverableDownload(response, file)
   },
 )

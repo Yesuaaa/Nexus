@@ -6,17 +6,34 @@ import { WorkspaceDeliverables } from "../components/workspace-deliverables"
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
-import { CheckCircle2, ChevronDown, Pause, Play } from "lucide-react"
+import {
+  CheckCircle2,
+  ChevronDown,
+  MessageSquare,
+  Pause,
+  Play,
+  SlidersHorizontal,
+} from "lucide-react"
 import { contentClass } from "@/components/layout/styles"
+import {
+  compactHeaderActionClass,
+  PageHeader,
+  PageHeaderButton,
+} from "@/components/layout/page-header"
 import { ProjectSummary } from "../components/project-summary"
 import { WorkspaceOverview } from "../components/workspace-overview"
+import { WorkspaceNotes } from "../components/workspace-notes"
+import { WorkspaceRequests } from "../components/workspace-requests"
 import { PlanEditor, emptyPlan } from "../components/plan-editor"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { pillToneClass } from "@/components/ui/pill"
-import { statusTone } from "@/features/projects/model/project-status"
-import { humanizeEnum } from "@/lib/format"
+import { EmptyState } from "@/components/ui/empty-state"
+import { OverviewPanel, RowsSkeleton } from "@/components/ui/overview-panel"
+import { Pill } from "@/components/ui/pill"
+import {
+  statusLabel,
+  statusTone,
+} from "@/features/projects/model/project-status"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,18 +55,36 @@ import {
   getProjectWorkspace,
   type ProjectWorkspaceDetail,
 } from "../api/project-workspace-api"
+import type { ProjectOverviewSection } from "../model/project-overview-summary"
 import { errorMessage } from "@/lib/error-message"
 import { useAsyncResource } from "@/lib/use-async-resource"
 import { useBreadcrumbLabel } from "@/components/layout/breadcrumbs"
 
-const detailTabs = [
-  "Overview",
-  "Work",
-  "Deliverables",
-  "Team",
-  "Activity",
-] as const
-type DetailTab = (typeof detailTabs)[number]
+type DetailTab =
+  | "overview"
+  | "work"
+  | "deliverables"
+  | "notes"
+  | "requests"
+  | "team"
+  | "activity"
+
+const detailTabs: DetailTab[] = [
+  "overview",
+  "work",
+  "deliverables",
+  "notes",
+  "requests",
+  "team",
+  "activity",
+]
+
+function readDetailTab(value: string | null): DetailTab {
+  const normalized = value?.toLowerCase()
+  return detailTabs.includes(normalized as DetailTab)
+    ? (normalized as DetailTab)
+    : "overview"
+}
 
 export function WorkspaceDetailPage({ id }: { id: string }) {
   const searchParams = useSearchParams()
@@ -93,9 +128,14 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
   const [actionError, setError] = useState("")
   const loadError = project.data?.error || project.error
   const error = actionError || (project.loading ? "" : loadError)
-  const [tab, setTab] = useState<DetailTab>(
-    searchParams.get("tab") === "deliverables" ? "Deliverables" : "Overview",
-  )
+  const tab = readDetailTab(searchParams.get("tab"))
+  const detailPath = `/project-workspace/${encodeURIComponent(id)}`
+  function tabHref(next: DetailTab) {
+    const query = new URLSearchParams(searchParams.toString())
+    if (next === "overview") query.delete("tab")
+    else query.set("tab", next)
+    return `${detailPath}${query.size ? `?${query}` : ""}`
+  }
   const [busy, setBusy] = useState(false)
   const [statusBusy, setStatusBusy] = useState(false)
   const [editing, setEditing] = useState<{
@@ -143,6 +183,9 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
     (stream) => stream.plan?.phases.flatMap((phase) => phase.tasks) ?? [],
   )
   const deliverables = workstreams.flatMap((stream) => stream.milestones ?? [])
+  const chatWorkstreams = workstreams.filter(
+    (stream) => stream.canUploadDeliverables && stream.startDate,
+  )
   const terminal =
     workstreams.length > 0 &&
     workstreams.every((stream) =>
@@ -199,151 +242,139 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
       )}
       {!workspace ? (
         project.loading ? (
-          <p role="status">Loading project…</p>
+          <>
+            <PageHeader title="Project workspace" />
+            <div className="mt-5" role="status">
+              <span className="sr-only">Loading project…</span>
+              <RowsSkeleton />
+            </div>
+          </>
         ) : loadError ? null : (
-          <p role="status">Project workspace not found.</p>
+          <EmptyState title="Project workspace not found" role="status" />
         )
       ) : (
         <>
-          <header className="min-w-0">
-            <div className="flex min-w-0 items-start justify-between gap-4">
-              <h1 className="m-0 break-words text-[clamp(21px,2vw,25px)] leading-[1.25] font-[650] tracking-[-0.03em]">
-                {workspace.name}
-              </h1>
-              <div className="flex shrink-0 items-center gap-2">
-                <span
-                  className={`inline-flex items-center rounded-md px-2.5 py-1 text-[11px] font-medium capitalize ${pillToneClass(statusTone(workspace.status))}`}
-                >
-                  {humanizeEnum(workspace.status, { capitalize: false })}
-                </span>
-                {workspace.canManage && !terminal && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="brandOutline"
-                        size="sm"
-                        disabled={statusBusy}
-                        aria-label="Manage project status"
-                      >
-                        Manage status{" "}
-                        <ChevronDown size={14} aria-hidden="true" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="end"
-                      sideOffset={6}
-                      className={`${dropdownMenuClass} w-64 text-xs outline-none`}
+          <PageHeader
+            title={workspace.name}
+            meta={
+              <Pill tone={statusTone(workspace.status)}>
+                {statusLabel(workspace.status)}
+              </Pill>
+            }
+            mobileActions={chatWorkstreams.length > 1 ? "stack" : "icon"}
+            actions={
+              chatWorkstreams.length > 0 ||
+              (workspace.canManage && !terminal) ? (
+                <>
+                  {chatWorkstreams.map((stream) => (
+                    <Button
+                      key={stream.id}
+                      asChild
+                      variant="outline"
+                      size="header"
+                      className={compactHeaderActionClass}
                     >
-                      {workstreams.some(
-                        (stream) => stream.status === "IN_PROGRESS",
-                      ) && (
-                        <DropdownMenuItem
+                      <Link
+                        href={`/messages?project=${encodeURIComponent(stream.id)}`}
+                        aria-label={`Chat with client · ${stream.name}`}
+                      >
+                        <MessageSquare size={15} aria-hidden="true" />
+                        Chat with client
+                      </Link>
+                    </Button>
+                  ))}
+                  {workspace.canManage && !terminal && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <PageHeaderButton
+                          type="button"
                           disabled={statusBusy}
+                          aria-label="Manage project status"
+                        >
+                          <SlidersHorizontal size={15} aria-hidden="true" />
+                          Manage status
+                          <ChevronDown
+                            size={14}
+                            className="group-data-[compact]/header:max-[560px]:hidden"
+                            aria-hidden="true"
+                          />
+                        </PageHeaderButton>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align="end"
+                        sideOffset={6}
+                        className={`${dropdownMenuClass} w-64 text-xs outline-none`}
+                      >
+                        {workstreams.some(
+                          (stream) => stream.status === "IN_PROGRESS",
+                        ) && (
+                          <DropdownMenuItem
+                            disabled={statusBusy}
+                            className={dropdownItemClass}
+                            onSelect={() =>
+                              void changeWorkspaceStatus("ON_HOLD")
+                            }
+                          >
+                            <span className="flex items-center gap-2">
+                              <Pause size={14} aria-hidden="true" /> Put on hold
+                            </span>
+                          </DropdownMenuItem>
+                        )}
+                        {workstreams.some(
+                          (stream) => stream.status === "ON_HOLD",
+                        ) && (
+                          <DropdownMenuItem
+                            disabled={statusBusy}
+                            className={dropdownItemClass}
+                            onSelect={() =>
+                              void changeWorkspaceStatus("RESUME")
+                            }
+                          >
+                            <span className="flex items-center gap-2">
+                              <Play size={14} aria-hidden="true" /> Resume
+                              project
+                            </span>
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem
+                          disabled={statusBusy || !canComplete}
                           className={dropdownItemClass}
-                          onSelect={() => void changeWorkspaceStatus("ON_HOLD")}
+                          onSelect={() =>
+                            void changeWorkspaceStatus("COMPLETE")
+                          }
                         >
                           <span className="flex items-center gap-2">
-                            <Pause size={14} aria-hidden="true" /> Put on hold
+                            <CheckCircle2 size={14} aria-hidden="true" /> Mark
+                            complete
                           </span>
                         </DropdownMenuItem>
-                      )}
-                      {workstreams.some(
-                        (stream) => stream.status === "ON_HOLD",
-                      ) && (
-                        <DropdownMenuItem
-                          disabled={statusBusy}
-                          className={dropdownItemClass}
-                          onSelect={() => void changeWorkspaceStatus("RESUME")}
-                        >
-                          <span className="flex items-center gap-2">
-                            <Play size={14} aria-hidden="true" /> Resume project
-                          </span>
-                        </DropdownMenuItem>
-                      )}
-                      <DropdownMenuItem
-                        disabled={statusBusy || !canComplete}
-                        className={dropdownItemClass}
-                        onSelect={() => void changeWorkspaceStatus("COMPLETE")}
-                      >
-                        <span className="flex items-center gap-2">
-                          <CheckCircle2 size={14} aria-hidden="true" /> Mark
-                          complete
-                        </span>
-                      </DropdownMenuItem>
-                      {!canComplete && (
-                        <p className="m-0 px-2.5 py-2 text-[11px] leading-4 text-[#65718a]">
-                          {completionBlockReason}
-                        </p>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
-              </div>
-            </div>
-          </header>
-          {workstreams.some(
-            (stream) => stream.canUploadDeliverables && stream.startDate,
-          ) && (
-            <div
-              className="mt-4 flex flex-wrap gap-2"
-              aria-label="Project chats"
-            >
-              {workstreams
-                .filter(
-                  (stream) => stream.canUploadDeliverables && stream.startDate,
-                )
-                .map((stream) => (
-                  <Button
-                    key={stream.id}
-                    asChild
-                    variant="outline"
-                    className="text-xs"
-                  >
-                    <Link
-                      href={`/messages?project=${encodeURIComponent(stream.id)}`}
-                    >
-                      Chat with client · {stream.name}
-                    </Link>
-                  </Button>
-                ))}
-            </div>
-          )}
-          <Tabs
-            value={tab}
-            onValueChange={(value) => setTab(value as DetailTab)}
-          >
-            <TabsList
-              aria-label="Project sections"
-              className="my-6 h-auto max-w-full justify-start gap-6 overflow-x-auto rounded-none border-b border-[#e1e4ea] bg-transparent p-0"
-            >
-              {detailTabs.map((item) => (
-                <TabsTrigger
-                  key={item}
-                  value={item}
-                  className="h-auto shrink-0 rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 text-xs text-[#65718a] shadow-none data-[state=active]:border-[#203f8c] data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-[#203f8c] data-[state=active]:shadow-none"
-                >
-                  {item}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-            <TabsContent value="Overview" className="m-0 outline-none">
+                        {!canComplete && (
+                          <p className="m-0 px-2.5 py-2 text-[11px] leading-4 text-[#65718a]">
+                            {completionBlockReason}
+                          </p>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                </>
+              ) : undefined
+            }
+          />
+          <div className="mt-[18px] min-w-0 max-[560px]:mt-[14px]">
+            {tab === "overview" && (
               <ProjectSummary
                 workspace={workspace}
-                onViewTeam={() => setTab("Team")}
-                onViewDeliverables={() => setTab("Deliverables")}
+                sectionHref={(section: ProjectOverviewSection) =>
+                  tabHref(section)
+                }
               />
-            </TabsContent>
-            <TabsContent value="Work" className="m-0 outline-none">
-              {editing ? (
-                <section className="mb-5 rounded-xl border border-[#dfe4ec] p-5">
-                  <h2 className="text-sm font-semibold">
-                    Edit plan · {editing.name}
-                  </h2>
-                  <p className="text-xs text-[#65718a]">
-                    Rename phases and tasks, add work, or remove items. Removing
-                    a phase also removes its tasks when you save.
-                  </p>
+            )}
+            {tab === "work" &&
+              (editing ? (
+                <OverviewPanel
+                  title={`Edit plan · ${editing.name}`}
+                  description="Rename phases and tasks, add work, or remove items. Removing a phase also removes its tasks when you save."
+                >
                   <PlanEditor
                     plan={editing.plan}
                     onChange={(plan) =>
@@ -369,7 +400,7 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
                       {busy ? "Saving…" : "Save plan"}
                     </Button>
                   </div>
-                </section>
+                </OverviewPanel>
               ) : (
                 <WorkspaceOverview
                   workspace={workspace}
@@ -384,25 +415,34 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
                     })
                   }
                 />
-              )}
-            </TabsContent>
-            <TabsContent value="Deliverables" className="m-0 outline-none">
+              ))}
+            {tab === "deliverables" && (
               <WorkspaceDeliverables
                 workspace={workspace}
                 onUpdated={setWorkspace}
               />
-            </TabsContent>
-            <TabsContent value="Team" className="m-0 outline-none">
+            )}
+            {tab === "notes" && (
+              <WorkspaceNotes
+                workspace={workspace}
+                onUpdated={updateWorkspaceAndNotify}
+              />
+            )}
+            {tab === "requests" && (
+              <WorkspaceRequests
+                workspace={workspace}
+                onChanged={project.retry}
+              />
+            )}
+            {tab === "team" && (
               <WorkspaceTeam
                 workspace={workspace}
                 onUpdated={updateWorkspaceAndNotify}
                 onChanged={project.retry}
               />
-            </TabsContent>
-            <TabsContent value="Activity" className="m-0 outline-none">
-              <WorkspaceActivity workspace={workspace} />
-            </TabsContent>
-          </Tabs>
+            )}
+            {tab === "activity" && <WorkspaceActivity workspace={workspace} />}
+          </div>
         </>
       )}
     </main>
