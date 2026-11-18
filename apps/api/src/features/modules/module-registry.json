@@ -52,7 +52,7 @@
     "description": "Manage employee compensation, payroll processing, approvals, and salary disbursements.",
     "implemented": true,
     "administrativePath": null,
-    "workspaceParent": "attendance-monitoring",
+    "workspaceParent": "people-hr",
     "icon": "payroll",
     "color": "#237d83"
   },
@@ -62,6 +62,7 @@
     "implemented": true,
     "administrativePath": null,
     "staffOnly": true,
+    "workspaceParent": "attendance-monitoring",
     "icon": "payroll",
     "color": "#237d83"
   }

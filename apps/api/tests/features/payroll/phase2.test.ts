@@ -212,6 +212,12 @@ test(
     for (const invalid of [
       { ...initial, baseRate: "72500.105" },
       { ...initial, baseRate: "1e5" },
+      { ...initial, baseRate: "-1.00" },
+      { ...initial, baseRate: "0.00" },
+      { ...initial, baseRate: "Infinity" },
+      { ...initial, baseRate: "NaN" },
+      { ...initial, baseRate: "10,000.00" },
+      { ...initial, baseRate: "10000000000.00" },
       { ...initial, effectiveFrom: "2026-02-30" },
       { ...initial, currency: "USD" },
       {

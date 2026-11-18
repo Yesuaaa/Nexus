@@ -70,34 +70,57 @@ const SelectScrollDownButton = React.forwardRef<
 SelectScrollDownButton.displayName =
   SelectPrimitive.ScrollDownButton.displayName
 
+type SelectContentProps = React.ComponentPropsWithoutRef<
+  typeof SelectPrimitive.Content
+> & {
+  maxHeight?: "default" | "roomy"
+}
+
+const selectContentHeightClass = {
+  default: "max-h-[min(20rem,var(--radix-select-content-available-height))]",
+  roomy: "max-h-[min(32rem,var(--radix-select-content-available-height))]",
+} as const
+
 const SelectContent = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
->(({ className, children, position = "popper", ...props }, ref) => (
-  <SelectPrimitive.Portal>
-    <SelectPrimitive.Content
-      ref={ref}
-      className={cn(
-        "relative z-[130] flex max-h-[min(20rem,var(--radix-select-content-available-height))] min-w-[8rem] max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-lg border border-[#e1e4ea] bg-background text-foreground shadow-md origin-[var(--radix-select-content-transform-origin)]",
-        position === "popper" && "w-[var(--radix-select-trigger-width)]",
-        className,
-      )}
-      position={position}
-      sideOffset={4}
-      collisionPadding={8}
-      hideWhenDetached
-      {...props}
-    >
-      <SelectScrollUpButton />
-      <SelectPrimitive.Viewport
-        className={cn("p-1", position === "popper" && "w-full min-w-0")}
+  SelectContentProps
+>(
+  (
+    {
+      className,
+      children,
+      position = "popper",
+      maxHeight = "default",
+      ...props
+    },
+    ref,
+  ) => (
+    <SelectPrimitive.Portal>
+      <SelectPrimitive.Content
+        ref={ref}
+        className={cn(
+          "relative z-[130] flex min-w-[8rem] max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-lg border border-[#e1e4ea] bg-background text-foreground shadow-md origin-[var(--radix-select-content-transform-origin)]",
+          selectContentHeightClass[maxHeight],
+          position === "popper" && "w-[var(--radix-select-trigger-width)]",
+          className,
+        )}
+        position={position}
+        sideOffset={4}
+        collisionPadding={8}
+        hideWhenDetached
+        {...props}
       >
-        {children}
-      </SelectPrimitive.Viewport>
-      <SelectScrollDownButton />
-    </SelectPrimitive.Content>
-  </SelectPrimitive.Portal>
-))
+        <SelectScrollUpButton />
+        <SelectPrimitive.Viewport
+          className={cn("p-1", position === "popper" && "w-full min-w-0")}
+        >
+          {children}
+        </SelectPrimitive.Viewport>
+        <SelectScrollDownButton />
+      </SelectPrimitive.Content>
+    </SelectPrimitive.Portal>
+  ),
+)
 SelectContent.displayName = SelectPrimitive.Content.displayName
 
 const SelectLabel = React.forwardRef<

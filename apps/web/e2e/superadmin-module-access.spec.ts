@@ -213,7 +213,7 @@ for (const [role, width, readOnly] of [
   ["ADMIN", 390, false],
   ["SUPERADMIN", 1440, true],
 ] as const)
-  test(`${role} opens Payroll from Workforce Compliance at ${width}px`, async ({
+  test(`${role} opens Payroll from People & HR at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 844 })
@@ -225,23 +225,28 @@ for (const [role, width, readOnly] of [
       exact: true,
     })
     await expect(payroll).toHaveCount(0)
-    await page
-      .getByRole("link", { name: "Open Workforce Compliance workspace" })
-      .click()
+    await page.getByRole("link", { name: "Open People & HR workspace" }).click()
     if (width < 768)
       await page.getByRole("button", { name: "Open navigation menu" }).click()
     const sidebar = page.getByRole("complementary", {
       name: "Primary navigation",
     })
-    await expect(sidebar).toContainText("Workforce Compliance")
+    await expect(sidebar).toContainText("People & HR")
+    await expect(sidebar).not.toContainText("Workforce Compliance")
     await sidebar.getByRole("button", { name: "Payroll", exact: true }).click()
-    await sidebar
-      .getByRole("link", { name: "Payroll overview", exact: true })
-      .click()
+    const payrollOverview = sidebar.getByRole("link", {
+      name: "Payroll overview",
+      exact: true,
+    })
+    await expect(payrollOverview).toHaveAttribute("href", "/module/payroll")
+    await payrollOverview.click()
     await expect(page).toHaveURL("/module/payroll")
     await expect(
       page.getByRole("heading", { name: "Payroll Management", exact: true }),
     ).toBeVisible()
+    await expect(
+      page.getByRole("navigation", { name: "Breadcrumb" }),
+    ).toContainText("People & HR")
     await expect(
       page.getByRole("heading", {
         name: "Configure compensation and schedules",
@@ -283,6 +288,8 @@ for (const [role, width, readOnly] of [
         await expect(item).toBeVisible()
         await expect(item).not.toHaveAttribute("aria-disabled", "true")
       }
+      await page.keyboard.press("Escape")
+      await page.getByRole("button", { name: "Expand sidebar" }).click()
     }
     expect(
       await page.evaluate(

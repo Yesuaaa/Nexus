@@ -32,6 +32,35 @@ function period(year: number, month: number) {
   }
 }
 
+function semiMonthlyPeriod(
+  year: number,
+  month: number,
+  startDay: number,
+  endDay: number,
+) {
+  const monthKey = String(month).padStart(2, "0")
+  const dateKey = (day: number) =>
+    `${year}-${monthKey}-${String(day).padStart(2, "0")}`
+  return {
+    ...period(year, month),
+    id: `period-${year}-${monthKey}-${startDay}`,
+    configurationId: "configuration-semi-monthly",
+    startDate: dateKey(startDay),
+    endDate: dateKey(endDay),
+    cutoffLabel: `${year}-${monthKey} ${startDay}–${endDay}`,
+    frequency: "SEMI_MONTHLY",
+    firstCutoffDay: 15,
+    configuration: {
+      id: "configuration-semi-monthly",
+      frequency: "SEMI_MONTHLY",
+      firstCutoffDay: 15,
+      currency: "PHP",
+      effectiveFrom: `${year}-01-01`,
+      effectiveTo: null,
+    },
+  }
+}
+
 function summary(revision: number, id: string) {
   return {
     id,
@@ -310,7 +339,7 @@ test("Admin generates periods, creates a draft, and reviews blocked calculations
 
   await expect(page.getByText("Blocked", { exact: true }).first()).toBeVisible()
   await page.getByRole("tab", { name: "Employees", exact: true }).click()
-  await expect(page.getByText("Showing 1-10 of 11 employees")).toBeVisible()
+  await expect(page.getByText("Showing 1–10 of 11 employees")).toBeVisible()
   const employeePages = page.getByRole("navigation", {
     name: "Employee calculation pages",
   })
@@ -328,7 +357,7 @@ test("Admin generates periods, creates a draft, and reviews blocked calculations
     ),
   ).toBeVisible()
   await page.getByRole("button", { name: "Back to employees" }).click()
-  await expect(page.getByText("Showing 1-10 of 11 employees")).toBeVisible()
+  await expect(page.getByText("Showing 1–10 of 11 employees")).toBeVisible()
   await page.getByRole("tab", { name: "Summary", exact: true }).click()
   await expect(page.getByText("Known calculated amounts")).toBeVisible()
   await expect(
@@ -352,6 +381,344 @@ test("Admin generates periods, creates a draft, and reviews blocked calculations
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).resolves.toBe(true)
+})
+
+test("Create Draft Run reloads and selects periods for the chosen year", async ({
+  page,
+}) => {
+  await restoreSession(page, "ADMIN")
+  await mockPayrollRuns(page)
+  let rejectFirstDraft = true
+  await page.route("**/api/payroll/runs", async (route) => {
+    if (route.request().method() === "POST" && rejectFirstDraft) {
+      rejectFirstDraft = false
+      return route.fulfill({
+        status: 409,
+        json: { error: "A draft already exists for this period." },
+      })
+    }
+    return route.fallback()
+  })
+
+  const listedYears: number[] = []
+  let generatedYear = 0
+  page.on("request", (request) => {
+    const url = new URL(request.url())
+    if (url.pathname !== "/api/payroll/periods") return
+    if (request.method() === "GET") {
+      const year = Number(url.searchParams.get("year"))
+      if (year) listedYears.push(year)
+    } else if (request.method() === "POST") {
+      generatedYear = (request.postDataJSON() as { year: number }).year
+    }
+  })
+
+  await page.goto("/module/payroll/runs")
+  await page.getByRole("button", { name: "Create draft run" }).click()
+  const panel = page.getByRole("dialog")
+  const yearInput = page.getByRole("spinbutton", {
+    name: "Payroll period year",
+  })
+  await yearInput.fill("2027")
+  await expect.poll(() => listedYears).toContain(2027)
+  await expect(
+    panel.getByRole("heading", { name: "No payroll periods generated" }),
+  ).toBeVisible()
+
+  await panel.getByRole("button", { name: "Generate periods for 2027" }).click()
+  const generationPanel = page.getByRole("dialog")
+  await expect(
+    generationPanel.getByRole("heading", { name: "Generate payroll periods" }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("spinbutton", { name: "Payroll calendar year" }),
+  ).toHaveValue("2027")
+  await generationPanel
+    .getByRole("button", { name: "Generate periods", exact: true })
+    .click()
+  await expect(page.getByText("Payroll periods added")).toBeVisible()
+  expect(generatedYear).toBe(2027)
+
+  const draftPanel = page.getByRole("dialog")
+  await expect(
+    draftPanel.getByRole("heading", { name: "Create a Draft Run" }),
+  ).toBeVisible()
+  const periodSelect = draftPanel.getByRole("combobox", {
+    name: "Choose payroll period",
+  })
+  await expect(periodSelect).toBeVisible()
+  await periodSelect.click()
+  await page.getByRole("option", { name: "January 2027" }).click()
+  const selectedSummary = draftPanel.getByRole("region", {
+    name: "Selected period",
+  })
+  await expect(selectedSummary).toContainText("January 2027")
+  await expect(selectedSummary).toContainText("Monthly")
+  await expect(selectedSummary).toContainText("Jan 1–31, 2027")
+  await expect(selectedSummary).toContainText("Available")
+
+  await yearInput.fill("2026")
+  await expect(
+    draftPanel.getByRole("heading", { name: "No payroll periods generated" }),
+  ).toBeVisible()
+  await expect(
+    draftPanel.getByRole("region", { name: "Selected period" }),
+  ).toHaveCount(0)
+  await yearInput.fill("2027")
+  await expect(periodSelect).toBeVisible()
+  await expect(periodSelect).toContainText("Choose a period")
+  await expect(
+    draftPanel.getByRole("region", { name: "Selected period" }),
+  ).toHaveCount(0)
+
+  await periodSelect.click()
+  await page.getByRole("option", { name: "January 2027" }).click()
+  await expect(
+    draftPanel.getByRole("button", { name: "Create draft", exact: true }),
+  ).toBeEnabled()
+  await draftPanel
+    .getByRole("button", { name: "Create draft", exact: true })
+    .click()
+  await expect(draftPanel.getByRole("alert")).toContainText(
+    "A draft already exists for this period.",
+  )
+  await expect(selectedSummary).toContainText("January 2027")
+  await expect(
+    draftPanel.getByRole("button", { name: "Create draft", exact: true }),
+  ).toBeEnabled()
+  await draftPanel
+    .getByRole("button", { name: "Create draft", exact: true })
+    .click()
+  await expect(page.getByText("This run has not been calculated")).toBeVisible()
+})
+
+test("Create Draft Run sorts semimonthly periods and supports bounded keyboard scrolling", async ({
+  page,
+}) => {
+  await restoreSession(page, "ADMIN")
+  await mockPayrollRuns(page)
+  const periods = Array.from({ length: 12 }, (_, index) => {
+    const month = index + 1
+    const lastDay = new Date(Date.UTC(2027, month, 0)).getUTCDate()
+    return [
+      semiMonthlyPeriod(2027, month, 1, 15),
+      semiMonthlyPeriod(2027, month, 16, lastDay),
+    ]
+  })
+    .flat()
+    .reverse()
+  await page.route("**/api/payroll/periods**", async (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+    if (request.method() !== "GET" || url.searchParams.get("year") !== "2027")
+      return route.fallback()
+    return route.fulfill({
+      json: { rows: periods, total: periods.length, page: 1, pageSize: 50 },
+    })
+  })
+
+  await page.goto("/module/payroll/runs")
+  await page.getByRole("button", { name: "Create draft run" }).click()
+  const panel = page.getByRole("dialog")
+  const yearInput = page.getByRole("spinbutton", {
+    name: "Payroll period year",
+  })
+  await yearInput.fill("2027")
+  await expect(
+    panel.getByRole("combobox", { name: "Choose payroll period" }),
+  ).toBeVisible()
+
+  const periodSelect = panel.getByRole("combobox", {
+    name: "Choose payroll period",
+  })
+  await page.setViewportSize({ width: 1280, height: 800 })
+  const yearBounds = await yearInput.boundingBox()
+  const periodBounds = await periodSelect.boundingBox()
+  expect(yearBounds).not.toBeNull()
+  expect(periodBounds).not.toBeNull()
+  expect(
+    Math.abs(yearBounds!.width - periodBounds!.width),
+  ).toBeLessThanOrEqual(1)
+  await page.setViewportSize({ width: 768, height: 800 })
+  await expect(
+    page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+  ).resolves.toBe(true)
+  const tabletYearBounds = await yearInput.boundingBox()
+  const tabletPeriodBounds = await periodSelect.boundingBox()
+  expect(tabletYearBounds).not.toBeNull()
+  expect(tabletPeriodBounds).not.toBeNull()
+  expect(
+    Math.abs(tabletYearBounds!.width - tabletPeriodBounds!.width),
+  ).toBeLessThanOrEqual(1)
+
+  await page.setViewportSize({ width: 390, height: 620 })
+  await expect(
+    page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+  ).resolves.toBe(true)
+  await periodSelect.focus()
+  await page.keyboard.press("Enter")
+  const listbox = page.getByRole("listbox")
+  await expect(listbox).toBeVisible()
+  const options = listbox.getByRole("option")
+  await expect(options).toHaveCount(24)
+  await expect(options).toHaveText([
+    "January 1–15, 2027",
+    "January 16–31, 2027",
+    "February 1–15, 2027",
+    "February 16–28, 2027",
+    "March 1–15, 2027",
+    "March 16–31, 2027",
+    "April 1–15, 2027",
+    "April 16–30, 2027",
+    "May 1–15, 2027",
+    "May 16–31, 2027",
+    "June 1–15, 2027",
+    "June 16–30, 2027",
+    "July 1–15, 2027",
+    "July 16–31, 2027",
+    "August 1–15, 2027",
+    "August 16–31, 2027",
+    "September 1–15, 2027",
+    "September 16–30, 2027",
+    "October 1–15, 2027",
+    "October 16–31, 2027",
+    "November 1–15, 2027",
+    "November 16–30, 2027",
+    "December 1–15, 2027",
+    "December 16–31, 2027",
+  ])
+  const menuBounds = await listbox.boundingBox()
+  expect(menuBounds).not.toBeNull()
+  expect(menuBounds!.x).toBeGreaterThanOrEqual(0)
+  expect(menuBounds!.x + menuBounds!.width).toBeLessThanOrEqual(390)
+  expect(menuBounds!.y).toBeGreaterThanOrEqual(0)
+  expect(menuBounds!.y + menuBounds!.height).toBeLessThanOrEqual(620)
+  await expect(
+    page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+  ).resolves.toBe(true)
+  const firstOptionBounds = await options.first().boundingBox()
+  expect(firstOptionBounds).not.toBeNull()
+  expect(firstOptionBounds!.y).toBeGreaterThanOrEqual(menuBounds!.y)
+  expect(firstOptionBounds!.y + firstOptionBounds!.height).toBeLessThanOrEqual(
+    menuBounds!.y + menuBounds!.height,
+  )
+
+  await page.keyboard.press("End")
+  const lastOption = listbox.getByRole("option", {
+    name: "December 16–31, 2027",
+  })
+  await expect(lastOption).toBeVisible()
+  const lastOptionBounds = await lastOption.boundingBox()
+  expect(lastOptionBounds).not.toBeNull()
+  expect(lastOptionBounds!.y).toBeGreaterThanOrEqual(menuBounds!.y)
+  expect(lastOptionBounds!.y + lastOptionBounds!.height).toBeLessThanOrEqual(
+    menuBounds!.y + menuBounds!.height,
+  )
+  await page.keyboard.press("Enter")
+  await expect(periodSelect).toBeFocused()
+  const selectedSummary = panel.getByRole("region", {
+    name: "Selected period",
+  })
+  await expect(selectedSummary).toContainText("December 16–31, 2027")
+  await expect(selectedSummary).toContainText("Semi-monthly")
+  await expect(selectedSummary).toContainText("Dec 16–31, 2027")
+
+  await page.keyboard.press("Enter")
+  await expect(listbox).toBeVisible()
+  await page.keyboard.press("Escape")
+  await expect(listbox).toHaveCount(0)
+  await expect(periodSelect).toBeFocused()
+})
+
+test("Create Draft Run explains when all generated periods already have runs", async ({
+  page,
+}) => {
+  await restoreSession(page, "ADMIN")
+  await mockPayrollRuns(page)
+  const usedPeriod = {
+    ...period(2026, 11),
+    run: {
+      id: "run-period-2026-11",
+      status: "DRAFT",
+      createdAt: "2026-11-17T08:00:00.000Z",
+      latestCalculation: null,
+    },
+  }
+  await page.route("**/api/payroll/periods**", async (route) => {
+    if (route.request().method() !== "GET") return route.fallback()
+    const url = new URL(route.request().url())
+    if (url.searchParams.get("year") !== "2026") return route.fallback()
+    return route.fulfill({
+      json: { rows: [usedPeriod], total: 1, page: 1, pageSize: 10 },
+    })
+  })
+
+  await page.goto("/module/payroll/runs")
+  await page.getByRole("button", { name: "Create draft run" }).click()
+  const panel = page.getByRole("dialog")
+  await expect(
+    panel.getByRole("heading", { name: "No available periods" }),
+  ).toBeVisible()
+  await expect(
+    panel.getByText(
+      "All generated payroll periods for this year already have associated runs.",
+    ),
+  ).toBeVisible()
+  await expect(
+    panel.getByRole("button", { name: /Generate periods for/ }),
+  ).toHaveCount(0)
+})
+
+test("Create Draft Run keeps actionable load and generation errors open", async ({
+  page,
+}) => {
+  await restoreSession(page, "ADMIN")
+  await mockPayrollRuns(page)
+  let periodReads = 0
+  await page.route("**/api/payroll/periods**", async (route) => {
+    const request = route.request()
+    if (request.method() === "GET") {
+      periodReads += 1
+      if (periodReads === 1)
+        return route.fulfill({
+          status: 503,
+          json: { error: "Period lookup is temporarily unavailable." },
+        })
+      return route.fulfill({
+        json: { rows: [], total: 0, page: 1, pageSize: 10 },
+      })
+    }
+    if (request.method() === "POST")
+      return route.fulfill({
+        status: 409,
+        json: { error: "No payroll schedule covers the selected year." },
+      })
+    return route.fallback()
+  })
+
+  await page.goto("/module/payroll/runs")
+  await page.getByRole("button", { name: "Create draft run" }).click()
+  const panel = page.getByRole("dialog")
+  await expect(panel.getByRole("alert")).toContainText(
+    "Period lookup is temporarily unavailable.",
+  )
+  await panel.getByRole("button", { name: "Try again" }).click()
+  await expect(
+    panel.getByRole("heading", { name: "No payroll periods generated" }),
+  ).toBeVisible()
+
+  await panel.getByRole("button", { name: "Generate periods for 2026" }).click()
+  const generationPanel = page.getByRole("dialog")
+  await generationPanel
+    .getByRole("button", { name: "Generate periods", exact: true })
+    .click()
+  await expect(generationPanel.getByRole("alert")).toContainText(
+    "No payroll schedule covers the selected year.",
+  )
+  await expect(generationPanel).toBeVisible()
+  await expect(
+    generationPanel.getByRole("spinbutton", { name: "Payroll calendar year" }),
+  ).toHaveValue("2026")
 })
 
 test("Superadmin can inspect runs read-only", async ({ page }) => {
@@ -485,8 +852,7 @@ for (const scenario of [
           calculationId: submitted.id,
           ...(reason ? { reason } : {}),
         })
-        run.status =
-          action === "PAYROLL_APPROVED" ? "APPROVED" : "REJECTED"
+        run.status = action === "PAYROLL_APPROVED" ? "APPROVED" : "REJECTED"
         approvalEvents.push({
           id: "decision-1",
           action,
@@ -515,14 +881,9 @@ for (const scenario of [
       page.getByRole("heading", { name: "Approval Details" }),
     ).toBeVisible()
     await expect(
-      page.getByText(
-        "Nov 1–30, 2026 · Monthly · Revision 1",
-        { exact: true },
-      ),
+      page.getByText("Nov 1–30, 2026 · Monthly · Revision 1", { exact: true }),
     ).toBeVisible()
-    await expect(
-      page.getByText("Submission", { exact: true }),
-    ).toBeVisible()
+    await expect(page.getByText("Submission", { exact: true })).toBeVisible()
     await expect(
       page.getByText("Financial summary", { exact: true }),
     ).toBeVisible()
@@ -539,6 +900,46 @@ for (const scenario of [
     await expect(footer.getByRole("button", { name: "Close" })).toBeVisible()
     await page.getByRole("tab", { name: "Employees", exact: true }).click()
     await expect(page.getByText("Morgan Payroll")).toBeVisible()
+    const employeeTable = page.getByRole("table", {
+      name: "Employee payroll calculations",
+    })
+    await expect(employeeTable.getByRole("columnheader")).toHaveText([
+      "Employee",
+      "Gross Pay",
+      "Deductions",
+      "Net Pay",
+      "Status",
+      "Details",
+    ])
+    if (scenario === "reviewer") {
+      const row = employeeTable
+        .getByRole("row")
+        .filter({ hasText: "Morgan Payroll" })
+      const status = row.getByText("Calculated", { exact: true })
+      await expect(status).toBeVisible()
+      expect(
+        await status.evaluate((badge) => badge.scrollWidth),
+      ).toBeLessThanOrEqual(await status.evaluate((badge) => badge.clientWidth))
+      const details = row.getByRole("button", {
+        name: "View employee calculation details for Morgan Payroll",
+      })
+      await expect(details.locator("svg.lucide-eye")).toBeVisible()
+      const viewport = page.viewportSize()!
+      await page.setViewportSize({ width: 390, height: 844 })
+      await expect(employeeTable.getByRole("columnheader")).toHaveCount(6)
+      expect(
+        await employeeTable.evaluate(
+          (table) => table.scrollWidth > table.clientWidth,
+        ),
+      ).toBe(true)
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth),
+      ).toBeLessThanOrEqual(390)
+      await details.click()
+      await page.getByRole("button", { name: "Back to employees" }).click()
+      await page.setViewportSize(viewport)
+      await expect(details).toBeFocused()
+    }
     await expect(
       page.getByRole("columnheader", { name: "Deductions" }),
     ).toBeVisible()
@@ -611,12 +1012,12 @@ for (const scenario of [
         }),
       ).toBeVisible()
       expect(
-        await submissionLabel.evaluate((element) =>
-          element.getBoundingClientRect().top,
+        await submissionLabel.evaluate(
+          (element) => element.getBoundingClientRect().top,
         ),
       ).toBeLessThan(
-        await rejectionLabel.evaluate((element) =>
-          element.getBoundingClientRect().top,
+        await rejectionLabel.evaluate(
+          (element) => element.getBoundingClientRect().top,
         ),
       )
       await expect(reject).toHaveCount(0)

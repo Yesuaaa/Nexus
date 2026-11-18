@@ -14,6 +14,7 @@ import {
 import { useSearchParams } from "next/navigation"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { getWorkspaceModules } from "@/features/dashboard/model/workspace-modules"
+import { moduleRegistry } from "@/features/workspaces/model/module-registry"
 import {
   parseWorkspaceDirectoryState,
   serializeWorkspaceDirectoryState,
@@ -124,7 +125,7 @@ export function Breadcrumbs() {
   const payrollWorkspace =
     decodedSegments[0] === "module" && decodedSegments[1] === "payroll"
       ? getWorkspaceModules(account).find(
-          (module) => module.id === "attendance-monitoring",
+          (module) => module.id === moduleRegistry.payroll.workspaceParent,
         )
       : undefined
   const isProjectManagementDepartmentProjects =

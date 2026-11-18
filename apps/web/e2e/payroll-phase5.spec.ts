@@ -287,7 +287,7 @@ test("Staff searches concerns, views history, edits an open concern and withdraw
   expect(deleteCount).toBe(1)
 })
 
-test("Staff opens My Payroll from the module picker, downloads a PDF and raises a concern", async ({
+test("Staff opens My Payroll inside Workforce Compliance, downloads a PDF and raises a concern", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 })
@@ -343,7 +343,16 @@ test("Staff opens My Payroll from the module picker, downloads a PDF and raises 
   await expect(
     page.getByRole("link", { name: "Open Workforce Compliance workspace" }),
   ).toBeVisible()
-  await page.getByRole("link", { name: "Open My Payroll workspace" }).click()
+  await expect(
+    page.getByRole("link", { name: "Open My Payroll workspace" }),
+  ).toHaveCount(0)
+  await page
+    .getByRole("link", { name: "Open Workforce Compliance workspace" })
+    .click()
+  await page.getByRole("button", { name: "Open navigation menu" }).click()
+  const sidebar = page.locator("#app-sidebar")
+  await expect(sidebar).toContainText("Workforce Compliance")
+  await sidebar.getByRole("link", { name: "My Payroll", exact: true }).click()
   await expect(page).toHaveURL(/\/my-payroll$/)
   await expect(
     page.getByRole("heading", { name: "My Payroll", exact: true }),
@@ -362,6 +371,7 @@ test("Staff opens My Payroll from the module picker, downloads a PDF and raises 
   await expect(
     page.getByRole("navigation", { name: "Breadcrumb" }),
   ).not.toContainText("Attendance")
+  await expect(sidebar).toContainText("Workforce Compliance")
   await expect(
     page.locator('dl[aria-label="My payroll overview"]'),
   ).toContainText("PHP 10000.00")
@@ -683,7 +693,7 @@ test("My Payroll opens directly and survives refresh with no published payslips"
   await page.goto("/staff/my-payroll")
   await expect(page).toHaveURL(/\/my-payroll$/)
   const sidebar = page.locator("#app-sidebar")
-  await expect(sidebar).not.toContainText("Workforce Compliance")
+  await expect(sidebar).toContainText("Workforce Compliance")
   await expect(sidebar).toContainText("My Payroll")
   await expect(
     sidebar.getByRole("link", { name: "My Payroll", exact: true }),
@@ -829,6 +839,28 @@ test("Admin reviews an approved run and an employee payslip", async ({
   page,
 }) => {
   await restoreSession(page, "ADMIN")
+  const approvedEvent = {
+    id: "approval-event-one",
+    action: "PAYROLL_APPROVED",
+    actorId: "reviewer",
+    actorName: "Payroll Reviewer",
+    reason: null,
+    createdAt: "2026-12-01T08:00:00Z",
+  }
+  const approvedCalculation = {
+    id: "approved-calculation-one",
+    revision: 3,
+    status: "COMPLETE",
+    calculatedAt: "2026-12-01T08:00:00Z",
+    currency: "PHP",
+    grossTotal: "10100.00",
+    deductionsTotal: "100.00",
+    netTotal: "10000.00",
+    calculatedItemCount: 1,
+    reviewItemCount: 0,
+    blockedItemCount: 0,
+    approvalEvents: [approvedEvent],
+  }
   const run = {
     id: "approved-run-one",
     status: "APPROVED",
@@ -841,30 +873,46 @@ test("Admin reviews an approved run and an employee payslip", async ({
       configurationId: "config-one",
       startDate: "2026-12-01",
       endDate: "2026-12-31",
-      cutoffLabel: "December 2026",
+      cutoffLabel: "2026-12",
       status: "OPEN",
       frequency: "MONTHLY",
       firstCutoffDay: null,
       currency: "PHP",
     },
     latestCalculation: {
-      id: "approved-calculation-one",
-      revision: 3,
-      status: "COMPLETE",
-      calculatedAt: "2026-12-01T08:00:00Z",
-      currency: "PHP",
-      grossTotal: "10100.00",
-      deductionsTotal: "100.00",
-      netTotal: "10000.00",
-      calculatedItemCount: 1,
-      reviewItemCount: 0,
-      blockedItemCount: 0,
+      ...approvedCalculation,
       payslipEmployeeCount: 1,
       payslipGeneratedCount: 1,
       payslipPublishedCount: 0,
       payslipStatus: "GENERATED",
     },
-    calculationHistory: [],
+    calculationHistory: [approvedCalculation],
+  }
+  const runWithoutNetPay = {
+    ...run,
+    id: "approved-run-without-net-pay",
+    period: {
+      ...run.period,
+      startDate: "2026-11-01",
+      endDate: "2026-11-30",
+      cutoffLabel: "2026-11",
+    },
+    latestCalculation: {
+      ...run.latestCalculation,
+      id: "approved-calculation-without-net-pay",
+      revision: 2,
+      netTotal: null,
+      payslipStatus: "PUBLISHED",
+    },
+    calculationHistory: [
+      {
+        ...approvedCalculation,
+        id: "approved-calculation-without-net-pay",
+        revision: 2,
+        netTotal: null,
+        approvalEvents: [{ ...approvedEvent, id: "approval-event-two" }],
+      },
+    ],
   }
   const item = {
     id: "approved-item-one",
@@ -905,7 +953,7 @@ test("Admin reviews an approved run and an employee payslip", async ({
     if (url.pathname.endsWith("/publish-payslips"))
       return route.fulfill({ json: { changed: 1, total: 1 } })
     if (url.pathname.endsWith("/runs"))
-      return route.fulfill({ json: pageOf([run]) })
+      return route.fulfill({ json: pageOf([run, runWithoutNetPay]) })
     if (url.pathname.endsWith("/items"))
       return route.fulfill({
         json: { ...pageOf([item]), calculationId: "approved-calculation-one" },
@@ -927,9 +975,83 @@ test("Admin reviews an approved run and an employee payslip", async ({
   await expect(
     page.getByRole("button", { name: "Generate payslips", exact: true }),
   ).toHaveCount(0)
+  const approvedTable = page.locator(
+    'section[aria-label="Approved runs"] table',
+  )
+  const approvedRows = approvedTable.locator("tbody tr")
+  await expect(approvedTable.locator("thead th")).toHaveText([
+    "Payroll Period",
+    "Revision",
+    "Employees",
+    "Net Pay",
+    "Payslip Status",
+    "Details",
+  ])
+  await expect(approvedRows).toHaveCount(2)
+  const firstRow = approvedRows.nth(0)
+  await expect(firstRow.locator("td")).toHaveCount(6)
+  await expect(firstRow.locator("td").nth(0)).toContainText("2026-12")
+  await expect(firstRow.locator("td").nth(0)).toContainText("Dec 1, 2026")
+  await expect(firstRow.locator("td").nth(0)).toContainText("Dec 31, 2026")
+  await expect(firstRow.locator("td").nth(1)).toHaveText("3")
+  await expect(firstRow.locator("td").nth(3)).toContainText("₱10,000.00")
+  await expect(approvedRows.nth(1).locator("td").nth(3)).toHaveText(
+    "Unavailable",
+  )
+  for (const index of [1, 2, 3, 5]) {
+    await expect(approvedTable.locator("thead th").nth(index)).toHaveCSS(
+      "text-align",
+      "center",
+    )
+    await expect(firstRow.locator("td").nth(index)).toHaveCSS(
+      "text-align",
+      "center",
+    )
+  }
+  const desktopLayout = await approvedTable.evaluate((table) => {
+    const wrapper = table.parentElement!
+    const bounds = (cells: NodeListOf<Element>) =>
+      Array.from(cells, (cell) => {
+        const { left, width } = cell.getBoundingClientRect()
+        return { left, width }
+      })
+    return {
+      overflow: wrapper.scrollWidth - wrapper.clientWidth,
+      headers: bounds(table.querySelectorAll("thead th")),
+      cells: bounds(table.querySelectorAll("tbody tr:first-child td")),
+    }
+  })
+  expect(desktopLayout.overflow).toBe(0)
+  await firstRow
+    .getByRole("button", { name: /View approved run details/ })
+    .hover()
+  expect(
+    await approvedTable.evaluate((table) => {
+      const wrapper = table.parentElement!
+      return wrapper.scrollWidth - wrapper.clientWidth
+    }),
+  ).toBe(0)
+  expect(desktopLayout.headers).toEqual(desktopLayout.cells)
+  expect(
+    desktopLayout.headers[1].width + desktopLayout.headers[2].width,
+  ).toBeLessThan(desktopLayout.headers[0].width * 1.1)
+  await page.setViewportSize({ width: 390, height: 844 })
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true)
+  const mobileTableSize = await approvedTable.evaluate((table) => ({
+    tableWidth: table.scrollWidth,
+    wrapperWidth: table.parentElement?.clientWidth ?? 0,
+  }))
+  expect(mobileTableSize.tableWidth).toBeGreaterThan(
+    mobileTableSize.wrapperWidth,
+  )
+  await page.setViewportSize({ width: 1280, height: 800 })
   await page
     .getByRole("button", {
-      name: "View approved run details for December 2026",
+      name: "View approved run details for 2026-12",
     })
     .click()
   await expect(

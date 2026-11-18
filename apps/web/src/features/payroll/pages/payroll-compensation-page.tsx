@@ -2,7 +2,7 @@
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
-import { useState, type FormEvent } from "react"
+import { useRef, useState, type FormEvent } from "react"
 import { Banknote, Eye, Plus, X } from "lucide-react"
 import { PageHeader } from "@/components/layout/page-header"
 import { contentClass, focusRing } from "@/components/layout/styles"
@@ -12,9 +12,10 @@ import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { DateInput } from "@/components/ui/date-input"
 import { EmptyState } from "@/components/ui/empty-state"
 import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
-import { Form } from "@/components/ui/form"
+import { Form, validateFields } from "@/components/ui/form"
 import { FormInput, FormTextarea } from "@/components/ui/form-input"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
+import { MoneyInput } from "@/components/ui/money-input"
 import { Pill } from "@/components/ui/pill"
 import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
 import { MemberRowSkeleton } from "@/components/ui/panel-loading"
@@ -54,6 +55,7 @@ import { useDepartments } from "@/features/departments/hooks/use-departments"
 import { canManagePayroll } from "@/features/auth/model/permissions"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { errorMessage } from "@/lib/error-message"
+import { decimalMoneyValue } from "@/lib/money-input"
 import { useAsyncResource } from "@/lib/use-async-resource"
 import { sileo } from "@/lib/toast"
 import {
@@ -456,6 +458,7 @@ export function PayrollCompensationPage() {
 }
 
 type ComponentDraft = {
+  key: number
   type: CompensationComponentType
   name: string
   amount: string
@@ -490,9 +493,12 @@ function CompensationPanel({
   const [minEffectiveDate, setMinEffectiveDate] = useState(todayInManila())
   const [changeReason, setChangeReason] = useState("")
   const [components, setComponents] = useState<ComponentDraft[]>([])
+  const nextComponentKey = useRef(0)
   const [formError, setFormError] = useState("")
   const [pending, setPending] = useState(false)
-  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [revision, setRevision] = useState<
+    Parameters<typeof createPayrollCompensationVersion>[1] | null
+  >(null)
   const employee = panel.data?.details.employee
   const current = panel.data?.details.current
   const future = panel.data?.details.future
@@ -511,6 +517,7 @@ function CompensationPanel({
     setChangeReason("")
     setComponents(
       source?.components.map(({ type, name, amount }) => ({
+        key: nextComponentKey.current++,
         type,
         name,
         amount,
@@ -521,7 +528,8 @@ function CompensationPanel({
   }
 
   function addComponent(type: CompensationComponentType) {
-    setComponents((rows) => [...rows, { type, name: "", amount: "" }])
+    const key = nextComponentKey.current++
+    setComponents((rows) => [...rows, { key, type, name: "", amount: "" }])
   }
 
   function updateComponent(index: number, update: Partial<ComponentDraft>) {
@@ -533,20 +541,13 @@ function CompensationPanel({
   }
 
   async function saveVersion() {
-    if (!employee || !payType) return
+    if (!employee || !revision || pending) return
     setPending(true)
     setFormError("")
     try {
-      await createPayrollCompensationVersion(employeeId, {
-        payType,
-        baseRate: baseRate.trim(),
-        currency: "PHP",
-        effectiveFrom,
-        changeReason: changeReason.trim(),
-        components,
-      })
+      await createPayrollCompensationVersion(employeeId, revision)
       sileo.success({ title: "Compensation revision created" })
-      setConfirmOpen(false)
+      setRevision(null)
       setEditing(false)
       panel.retry()
       onSaved()
@@ -554,7 +555,7 @@ function CompensationPanel({
       setFormError(
         errorMessage(error, "Couldn't create the compensation revision."),
       )
-      setConfirmOpen(false)
+      setRevision(null)
     } finally {
       setPending(false)
     }
@@ -567,7 +568,34 @@ function CompensationPanel({
       setFormError("Choose a pay type before continuing.")
       return
     }
-    setConfirmOpen(true)
+    const reason = event.currentTarget.querySelector<HTMLTextAreaElement>(
+      "#payroll-change-reason",
+    )
+    if (reason) {
+      reason.setCustomValidity(
+        changeReason.trim().length < 3 || changeReason.includes("\u0000")
+          ? "Enter a reason between 3 and 500 characters."
+          : "",
+      )
+      if (!validateFields([reason])) return
+    }
+    if (components.length > 30) {
+      setFormError("Enter up to 30 fixed compensation components.")
+      return
+    }
+    setFormError("")
+    setRevision({
+      payType,
+      baseRate: decimalMoneyValue(baseRate),
+      currency: "PHP",
+      effectiveFrom,
+      changeReason: changeReason.trim(),
+      components: components.map(({ type, name, amount }) => ({
+        type,
+        name: name.trim(),
+        amount: decimalMoneyValue(amount),
+      })),
+    })
   }
 
   return (
@@ -658,15 +686,11 @@ function CompensationPanel({
                   htmlFor="payroll-base-rate"
                 >
                   Base rate (PHP)
-                  <FormInput
+                  <MoneyInput
                     id="payroll-base-rate"
-                    inputMode="decimal"
-                    pattern="(?:0|[1-9]\d{0,9})(?:\.\d{1,2})?"
                     value={baseRate}
-                    onChange={(event) => setBaseRate(event.target.value)}
-                    required
-                    maxLength={13}
-                    autoComplete="off"
+                    onValueChange={setBaseRate}
+                    requirePositive
                   />
                 </label>
                 <label
@@ -704,7 +728,7 @@ function CompensationPanel({
               >
                 {components.map((component, index) => (
                   <div
-                    key={`${index}-${component.type}`}
+                    key={component.key}
                     className="grid gap-2 rounded-lg border border-[#e8ebef] p-3 sm:col-span-2 sm:grid-cols-[minmax(0,1fr)_minmax(100px,.8fr)_36px]"
                   >
                     <label
@@ -721,6 +745,7 @@ function CompensationPanel({
                           updateComponent(index, { name: event.target.value })
                         }
                         required
+                        pattern=".*\S.*"
                         maxLength={80}
                       />
                     </label>
@@ -729,16 +754,12 @@ function CompensationPanel({
                       htmlFor={`component-amount-${index}`}
                     >
                       Amount (PHP)
-                      <FormInput
+                      <MoneyInput
                         id={`component-amount-${index}`}
-                        inputMode="decimal"
-                        pattern="(?:0|[1-9]\d{0,9})(?:\.\d{1,2})?"
                         value={component.amount}
-                        onChange={(event) =>
-                          updateComponent(index, { amount: event.target.value })
+                        onValueChange={(amount) =>
+                          updateComponent(index, { amount })
                         }
-                        required
-                        maxLength={13}
                       />
                     </label>
                     <Button
@@ -919,7 +940,7 @@ function CompensationPanel({
         ) : null}
       </SidePanel>
       <ConfirmationDialog
-        open={confirmOpen}
+        open={revision !== null}
         title="Create this compensation revision?"
         subject={employee?.fullName}
         description="The new rate and recurring components will take effect on the selected date. Previous compensation values remain in history."
@@ -928,9 +949,22 @@ function CompensationPanel({
         pending={pending}
         destructive={false}
         error={formError}
-        onClose={() => setConfirmOpen(false)}
+        onClose={() => setRevision(null)}
         onConfirm={() => void saveVersion()}
-      />
+      >
+        {revision && (
+          <DetailList className="mt-3 max-h-48 overflow-y-auto">
+            <DetailItem label="Base rate">
+              {formatPayrollMoney(revision.baseRate)}
+            </DetailItem>
+            {revision.components.map(({ name, amount }, index) => (
+              <DetailItem key={components[index].key} label={name}>
+                {formatPayrollMoney(amount)}
+              </DetailItem>
+            ))}
+          </DetailList>
+        )}
+      </ConfirmationDialog>
     </>
   )
 }

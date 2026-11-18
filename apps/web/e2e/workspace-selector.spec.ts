@@ -57,7 +57,6 @@ const scenarios = [
       ["Service Operations", "/services"],
       ["People & HR", "/employees"],
       ["Workforce Compliance", "/attendance/overview"],
-      ["Payroll", "/module/payroll"],
     ],
   },
   {
@@ -69,7 +68,6 @@ const scenarios = [
       ["People & HR", "/employees"],
       ["Workforce Compliance", "/attendance/time-logs/overview"],
       ["Administration", "/accounts"],
-      ["Payroll", "/module/payroll"],
     ],
   },
 ] as const

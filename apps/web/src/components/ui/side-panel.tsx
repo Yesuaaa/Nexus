@@ -137,6 +137,7 @@ export function SidePanelHeader({
   leading,
   meta,
   titleClassName,
+  wrapDescription = false,
   closeLabel = "Close panel",
   closeDisabled = false,
   className,
@@ -153,6 +154,8 @@ export function SidePanelHeader({
   /** Elements after the title, e.g. a code pill. */
   meta?: ReactNode
   titleClassName?: string
+  /** Keep a longer description readable instead of truncating it to one line. */
+  wrapDescription?: boolean
   closeLabel?: string
   closeDisabled?: boolean
 }) {
@@ -187,11 +190,13 @@ export function SidePanelHeader({
             {meta}
           </div>
           <SheetDescription
-            className={
-              hideDescription
-                ? "sr-only"
-                : "mt-1 mb-0 truncate text-xs text-[#738096]"
-            }
+            className={cn(
+              hideDescription ? "sr-only" : "mt-1 mb-0 text-xs text-[#738096]",
+              !hideDescription &&
+                (wrapDescription
+                  ? "whitespace-normal break-words leading-5"
+                  : "truncate"),
+            )}
           >
             {description}
           </SheetDescription>

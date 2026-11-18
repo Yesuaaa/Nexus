@@ -97,6 +97,7 @@ import { useAsyncResource } from "@/lib/use-async-resource"
 import { getPayrollPreferences } from "../api/payroll-api"
 import { cn } from "@/lib/utils"
 import { formatPayrollMoney } from "../model/money"
+import { formatPayrollDate } from "../model/period-format"
 import {
   getPayrollRun,
   listPayrollRunItems,
@@ -219,19 +220,33 @@ function PayrollSidePanel({
   description,
   onClose,
   busy,
+  preventClose = false,
+  onPreventClose,
   children,
+  footer,
 }: {
   title: string
   description: string
   onClose: () => void
   busy?: boolean
+  preventClose?: boolean
+  onPreventClose?: () => void
   children: ReactNode
+  footer?: ReactNode
 }) {
   const panel = useSidePanel(onClose)
+  function handleOpenChange(open: boolean) {
+    if (!open && preventClose) {
+      onPreventClose?.()
+      return
+    }
+    panel.onOpenChange(open)
+  }
   return (
-    <SidePanel open={panel.open} onOpenChange={panel.onOpenChange} busy={busy}>
+    <SidePanel open={panel.open} onOpenChange={handleOpenChange} busy={busy}>
       <SidePanelHeader title={title} description={description} />
       <SidePanelBody>{children}</SidePanelBody>
+      {footer}
     </SidePanel>
   )
 }
@@ -244,6 +259,8 @@ function PayrollRecordDetail({
   busy,
   children,
   footer,
+  preventClose,
+  onPreventClose,
 }: {
   sidePanel: boolean
   title: string
@@ -252,6 +269,8 @@ function PayrollRecordDetail({
   busy?: boolean
   children: ReactNode
   footer?: ReactNode
+  preventClose?: boolean
+  onPreventClose?: () => void
 }) {
   if (sidePanel)
     return (
@@ -260,6 +279,9 @@ function PayrollRecordDetail({
         description={description}
         onClose={onClose}
         busy={busy}
+        preventClose={preventClose}
+        onPreventClose={onPreventClose}
+        footer={footer}
       >
         {children}
       </PayrollSidePanel>
@@ -1182,6 +1204,7 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
   const [correction, setCorrection] = useState<boolean | undefined>(undefined)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
+  const [discardResponseConfirm, setDiscardResponseConfirm] = useState(false)
   const [confirm, setConfirm] = useState<{
     action: "generate" | "publish"
     run: PayrollRun
@@ -1388,6 +1411,15 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
 
   const openRequest =
     selected?.status === "OPEN" || selected?.status === "IN_REVIEW"
+  const hasUnsavedResponseChanges = Boolean(
+    manage &&
+    !create &&
+    selected &&
+    (status ||
+      body.length > 0 ||
+      (correction !== undefined &&
+        correction !== selected.needsFinancialCorrection)),
+  )
   const transitions = (
     selected?.status === "OPEN"
       ? ["IN_REVIEW", "CLOSED"]
@@ -1406,6 +1438,16 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
           ? "Enter at least 5 non-whitespace characters."
           : "Enter no more than 2,000 characters."
       : ""
+
+  function closeSelectedRequest() {
+    if (hasUnsavedResponseChanges) {
+      setDiscardResponseConfirm(true)
+      return
+    }
+    setCreate(false)
+    setSelected(null)
+    resetForm()
+  }
 
   const RecordRow = staff ? ResponsiveDataTableRow : TableRow
   const RecordCell = staff ? ResponsiveDataTableCell : TableCell
@@ -1426,6 +1468,12 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
   )
   const selectedDetails =
     requestDetail.data?.id === selected?.id ? requestDetail.data : selected
+  const selectedRequestDescription = selectedDetails?.messages.find(
+    (entry) => !entry.isAdmin,
+  )
+  const requestConversation = selectedDetails?.messages.filter(
+    (entry) => entry.id !== selectedRequestDescription?.id,
+  )
   const concernFiltersActive = Boolean(
     requestQuery || requestStatus || requestType,
   )
@@ -1473,67 +1521,97 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
       {runs.error && <Alert className="mb-3">{runs.error}</Alert>}
       <RecordTable
         headings={[
-          "Payroll period",
+          "Payroll Period",
           "Revision",
           "Employees",
+          "Net Pay",
           "Payslip Status",
           "Details",
         ]}
         alignments={{
-          Revision: "right",
-          Employees: "right",
+          Revision: "center",
+          Employees: "center",
+          "Net Pay": "center",
           Details: "center",
         }}
-        tableClassName="!w-fit min-w-[760px] max-w-full table-auto max-[900px]:!w-full max-[900px]:min-w-0"
+        columnClassNames={{
+          "Payroll Period": "w-[24%]",
+          Revision: "w-[12%]",
+          Employees: "w-[13%]",
+          "Net Pay": "w-[21%]",
+          "Payslip Status": "w-[20%]",
+          Details: "w-[10%]",
+        }}
+        tableClassName="min-w-[720px] table-fixed [&_th]:px-3 [&_tbody_td]:px-3"
         loading={runs.loading || runSearchPending}
         empty={!runs.error && !runs.data?.rows.length}
       >
-        {runs.data?.rows.map((run) => (
-          <TableRow key={run.id}>
-            <TableCell className="min-w-0 truncate align-middle">
-              {run.period.cutoffLabel}
-            </TableCell>
-            <TableCell className="min-w-0 text-right tabular-nums align-middle">
-              {run.latestCalculation?.revision}
-            </TableCell>
-            <TableCell className="min-w-0 text-right tabular-nums align-middle">
-              {run.latestCalculation?.payslipEmployeeCount ??
-                (run.latestCalculation
-                  ? run.latestCalculation.calculatedItemCount +
-                    run.latestCalculation.reviewItemCount +
-                    run.latestCalculation.blockedItemCount
-                  : 0)}
-            </TableCell>
-            <TableCell className="min-w-0 align-middle">
-              {(() => {
-                const status =
-                  run.latestCalculation?.payslipStatus ?? "NOT_GENERATED"
-                return (
-                  <Pill tone={payslipStatusTone(status)}>
-                    {payslipStatusLabel(status)}
-                  </Pill>
-                )
-              })()}
-            </TableCell>
-            <TableCell className="min-w-0 text-center align-middle">
-              <div className="flex justify-center">
-                <Button
-                  type="button"
-                  variant="rowAction"
-                  size={null}
-                  aria-label={`View approved run details for ${run.period.cutoffLabel}`}
-                  onClick={() => {
-                    setSelectedRunId(run.id)
-                    setConfirm(null)
-                  }}
-                >
-                  <Eye size={14} aria-hidden="true" />
-                  <HoverTooltip>View approved run details</HoverTooltip>
-                </Button>
-              </div>
-            </TableCell>
-          </TableRow>
-        ))}
+        {runs.data?.rows.map((run) => {
+          const approvedCalculation = run.calculationHistory.find(
+            (calculation) =>
+              calculation.approvalEvents?.some(
+                (event) => event.action === "PAYROLL_APPROVED",
+              ),
+          )
+          const netPay = formatPayrollMoney(approvedCalculation?.netTotal)
+          return (
+            <TableRow key={run.id}>
+              <TableCell className="min-w-0 align-middle [overflow-wrap:anywhere]">
+                <span className="block font-medium">
+                  {run.period.cutoffLabel}
+                </span>
+                <span className="mt-1 block text-[10px] leading-4 text-[#738096]">
+                  {formatPayrollDate(run.period.startDate)} –{" "}
+                  {formatPayrollDate(run.period.endDate)}
+                </span>
+              </TableCell>
+              <TableCell className="min-w-0 text-center tabular-nums align-middle">
+                {approvedCalculation?.revision ?? "Unavailable"}
+              </TableCell>
+              <TableCell className="min-w-0 text-center tabular-nums align-middle">
+                {run.latestCalculation?.payslipEmployeeCount ??
+                  (run.latestCalculation
+                    ? run.latestCalculation.calculatedItemCount +
+                      run.latestCalculation.reviewItemCount +
+                      run.latestCalculation.blockedItemCount
+                    : 0)}
+              </TableCell>
+              <TableCell className="min-w-0 whitespace-nowrap text-center tabular-nums align-middle">
+                {netPay === "—" ? "Unavailable" : netPay}
+              </TableCell>
+              <TableCell className="min-w-0 align-middle">
+                {(() => {
+                  const status =
+                    run.latestCalculation?.payslipStatus ?? "NOT_GENERATED"
+                  return (
+                    <Pill tone={payslipStatusTone(status)}>
+                      {payslipStatusLabel(status)}
+                    </Pill>
+                  )
+                })()}
+              </TableCell>
+              <TableCell className="min-w-0 text-center align-middle">
+                <div className="flex justify-center">
+                  <Button
+                    type="button"
+                    variant="rowAction"
+                    size={null}
+                    aria-label={`View approved run details for ${run.period.cutoffLabel}`}
+                    onClick={() => {
+                      setSelectedRunId(run.id)
+                      setConfirm(null)
+                    }}
+                  >
+                    <Eye size={14} aria-hidden="true" />
+                    <HoverTooltip side="top-end">
+                      View approved run details
+                    </HoverTooltip>
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          )
+        })}
       </RecordTable>
       <Pages
         result={
@@ -2006,6 +2084,23 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
   )
   const dialogs = (
     <>
+      {discardResponseConfirm && (
+        <ConfirmationDialog
+          title="Discard unsaved response?"
+          subject={selected ? humanizeEnum(selected.type) : undefined}
+          description="Your response changes haven't been saved. Close without saving?"
+          confirmLabel="Discard changes"
+          pendingLabel="Discarding…"
+          pending={false}
+          destructive={false}
+          onClose={() => setDiscardResponseConfirm(false)}
+          onConfirm={() => {
+            setDiscardResponseConfirm(false)
+            setSelected(null)
+            resetForm()
+          }}
+        />
+      )}
       {confirm && (
         <ConfirmationDialog
           title={
@@ -2127,7 +2222,7 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
       )}
       {(create || selected) && (
         <PayrollRecordDetail
-          sidePanel={staff && !create}
+          sidePanel={!create}
           title={
             create
               ? editing
@@ -2137,7 +2232,7 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
                   : "New payroll request"
               : staff
                 ? "Concern details"
-                : humanizeEnum(selected!.type)
+                : "Payroll Request Details"
           }
           description={
             staff
@@ -2146,7 +2241,9 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
                   ? "Update the concern type, description, or related payslip."
                   : "Report missing payslips, salary discrepancies, or other payroll-related concerns."
                 : "Your concern and Admin responses."
-              : "Payroll request and responses."
+              : selected
+                ? humanizeEnum(selected.type)
+                : "Payroll request"
           }
           footer={
             staff && create ? (
@@ -2182,14 +2279,22 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
                       : "Submit concern"}
                 </Button>
               </ModalFooter>
+            ) : !staff && manage && selected && !create && openRequest ? (
+              <SidePanelFooter>
+                <SidePanelButton
+                  type="submit"
+                  form="payroll-request-response-form"
+                  disabled={busy}
+                >
+                  {busy ? "Saving…" : "Save response"}
+                </SidePanelButton>
+              </SidePanelFooter>
             ) : undefined
           }
           busy={busy}
-          onClose={() => {
-            setCreate(false)
-            setSelected(null)
-            resetForm()
-          }}
+          preventClose={hasUnsavedResponseChanges}
+          onPreventClose={() => setDiscardResponseConfirm(true)}
+          onClose={closeSelectedRequest}
         >
           <div
             className={
@@ -2202,27 +2307,38 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
           >
             {selectedDetails && !create && (
               <>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Pill tone="neutral">
-                    {humanizeEnum(selectedDetails.status)}
-                  </Pill>
-                  {selectedDetails.withdrawnAt && (
-                    <Pill tone="warning">Withdrawn</Pill>
+                <SidePanelSection title="Request information">
+                  <DetailList>
+                    <DetailItem label="Employee">
+                      {selectedDetails.employee.fullName}
+                    </DetailItem>
+                    <DetailItem label="Employee ID">
+                      {selectedDetails.employee.employeeId}
+                    </DetailItem>
+                    <DetailItem label="Status">
+                      <Pill tone="neutral">
+                        {humanizeEnum(selectedDetails.status)}
+                      </Pill>
+                    </DetailItem>
+                    <DetailItem label="Submitted">
+                      {timestamp(selectedDetails.createdAt)}
+                    </DetailItem>
+                    {selectedDetails.withdrawnAt && (
+                      <DetailItem label="Withdrawn">
+                        {timestamp(selectedDetails.withdrawnAt)}
+                      </DetailItem>
+                    )}
+                    <DetailItem label="Related payslip">
+                      {selectedDetails.payslip?.reference}
+                    </DetailItem>
+                    <DetailItem label="Description">
+                      {selectedRequestDescription?.body}
+                    </DetailItem>
+                  </DetailList>
+                  {selectedDetails.needsFinancialCorrection && (
+                    <Pill tone="warning">Financial correction needed</Pill>
                   )}
-                </div>
-                <p>Concern type · {humanizeEnum(selectedDetails.type)}</p>
-                <p>Submitted · {timestamp(selectedDetails.createdAt)}</p>
-                {selectedDetails.withdrawnAt && (
-                  <p>Withdrawn · {timestamp(selectedDetails.withdrawnAt)}</p>
-                )}
-                {selectedDetails.needsFinancialCorrection && (
-                  <Pill tone="warning">Financial correction needed</Pill>
-                )}
-                {selectedDetails.payslip && (
-                  <p className="break-all">
-                    Payslip {selectedDetails.payslip.reference}
-                  </p>
-                )}
+                </SidePanelSection>
                 {requestDetail.error && <Alert>{requestDetail.error}</Alert>}
                 {requestDetail.loading && (
                   <div aria-busy="true">
@@ -2233,23 +2349,26 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
                     <MemberRowSkeleton className="py-3" />
                   </div>
                 )}
-                {selectedDetails.messages.map((entry) => (
-                  <div className="grid gap-1 border-b pb-2" key={entry.id}>
-                    <p className="text-xs">
-                      {entry.isAdmin ? "Payroll Admin" : "Employee"} ·{" "}
-                      {timestamp(entry.createdAt)}
-                    </p>
-                    <p className="whitespace-pre-wrap break-words">
-                      {entry.body}
-                    </p>
-                  </div>
-                ))}
+                {requestConversation?.length ? (
+                  <SidePanelSection title="Responses">
+                    {requestConversation.map((entry) => (
+                      <div
+                        className="grid gap-1 border-b border-[#eceef1] pb-3 last:border-b-0"
+                        key={entry.id}
+                      >
+                        <p className="text-xs">
+                          {entry.isAdmin ? "Payroll Admin" : "Employee"} ·{" "}
+                          {timestamp(entry.createdAt)}
+                        </p>
+                        <p className="m-0 whitespace-pre-wrap break-words text-sm">
+                          {entry.body}
+                        </p>
+                      </div>
+                    ))}
+                  </SidePanelSection>
+                ) : null}
                 {selectedDetails.activity?.length ? (
-                  <section
-                    className="grid gap-2 pt-1"
-                    aria-label="Activity history"
-                  >
-                    <h3 className="text-sm font-semibold">Activity history</h3>
+                  <SidePanelSection title="Activity history">
                     {selectedDetails.activity.map((entry) => {
                       const activityName = entry.changes.activity
                       const labels: Record<string, string> = {
@@ -2269,7 +2388,7 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
                       ].filter(Boolean)
                       return (
                         <div
-                          className="grid gap-1 border-b pb-2 text-xs last:border-b-0"
+                          className="grid gap-1 border-b border-[#eceef1] pb-3 text-xs last:border-b-0"
                           key={entry.id}
                         >
                           <p className="font-medium">
@@ -2286,13 +2405,19 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
                         </div>
                       )
                     })}
-                  </section>
+                  </SidePanelSection>
                 ) : null}
               </>
             )}
             {(create || (openRequest && (staff || manage))) && (
               <Form
-                id={staff && create ? "payroll-concern-form" : undefined}
+                id={
+                  staff && create
+                    ? "payroll-concern-form"
+                    : manage && !create
+                      ? "payroll-request-response-form"
+                      : undefined
+                }
                 onSubmit={(event) => {
                   event.preventDefault()
                   if (create && staff) {
@@ -2501,7 +2626,7 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
                     )}
                   </label>
                   {error && <Alert>{error}</Alert>}
-                  {!(staff && create) && (
+                  {!(staff && create) && !(manage && !create) && (
                     <div>
                       <Button type="submit" disabled={busy}>
                         {busy

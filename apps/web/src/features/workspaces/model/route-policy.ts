@@ -37,6 +37,11 @@ export const workspaceModuleLabels = Object.fromEntries(
   Object.entries(moduleRegistry).map(([id, module]) => [id, module.title]),
 ) as Record<WorkspaceModuleId, string>
 
+const payrollWorkspaceModuleId = moduleRegistry.payroll
+  .workspaceParent as WorkspaceModuleId
+const staffPayrollWorkspaceModuleId = moduleRegistry["my-payroll"]
+  .workspaceParent as WorkspaceModuleId
+
 export type RoutePolicyId =
   | `module-${string}`
   | "payroll-compensation"
@@ -157,37 +162,37 @@ export const routePolicies: readonly RoutePolicy[] = [
   {
     id: "payroll-compensation",
     match: { kind: "exact", path: "/module/payroll/compensation" },
-    moduleId: "attendance-monitoring",
+    moduleId: payrollWorkspaceModuleId,
     canAccess: canAccessPayroll,
   },
   {
     id: "payroll-runs",
     match: { kind: "exact", path: "/module/payroll/runs" },
-    moduleId: "attendance-monitoring",
+    moduleId: payrollWorkspaceModuleId,
     canAccess: canAccessPayroll,
   },
   {
     id: "payroll-approvals",
     match: { kind: "exact", path: "/module/payroll/approvals" },
-    moduleId: "attendance-monitoring",
+    moduleId: payrollWorkspaceModuleId,
     canAccess: canAccessPayroll,
   },
   {
     id: "payroll-disbursements",
     match: { kind: "exact", path: "/module/payroll/disbursements" },
-    moduleId: "attendance-monitoring",
+    moduleId: payrollWorkspaceModuleId,
     canAccess: canAccessPayroll,
   },
   {
     id: "payroll-payslips",
     match: { kind: "exact", path: "/module/payroll/payslips" },
-    moduleId: "attendance-monitoring",
+    moduleId: payrollWorkspaceModuleId,
     canAccess: canAccessPayroll,
   },
   {
     id: "staff-my-payroll",
     match: { kind: "exact", path: "/my-payroll" },
-    moduleId: "my-payroll",
+    moduleId: staffPayrollWorkspaceModuleId,
     canAccess: canAccessMyPayroll,
     navigation: {
       label: "My Payroll",
@@ -199,19 +204,19 @@ export const routePolicies: readonly RoutePolicy[] = [
   {
     id: "staff-my-payroll-legacy",
     match: { kind: "exact", path: "/staff/my-payroll" },
-    moduleId: "my-payroll",
+    moduleId: staffPayrollWorkspaceModuleId,
     canAccess: canAccessMyPayroll,
   },
   {
     id: "staff-my-payroll-attendance-legacy",
     match: { kind: "exact", path: "/attendance/my-payroll" },
-    moduleId: "my-payroll",
+    moduleId: staffPayrollWorkspaceModuleId,
     canAccess: canAccessMyPayroll,
   },
   {
     id: "payroll-settings",
     match: { kind: "exact", path: "/module/payroll/settings" },
-    moduleId: "attendance-monitoring",
+    moduleId: payrollWorkspaceModuleId,
     canAccess: canAccessPayroll,
   },
   {

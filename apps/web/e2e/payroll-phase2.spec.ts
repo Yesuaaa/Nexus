@@ -189,7 +189,31 @@ test("Admin creates effective-dated compensation and payroll schedule revisions"
   await page
     .getByRole("button", { name: "Create revision", exact: true })
     .click()
-  await page.getByLabel("Base rate (PHP)").fill("75500.25")
+  const baseRate = page.getByLabel("Base rate (PHP)")
+  await expect(baseRate).toHaveValue("72,500.10")
+  await baseRate.fill("")
+  await page.getByRole("button", { name: "Review revision" }).click()
+  await expect(baseRate).toHaveAccessibleDescription("Base rate is required.")
+  await expect(baseRate).toBeFocused()
+  await baseRate.pressSequentially("25000")
+  await expect(baseRate).toHaveValue("25,000")
+  await baseRate.pressSequentially("e")
+  await expect(baseRate).toHaveValue("25,000")
+  await expect(baseRate).toHaveAccessibleDescription("Enter a valid amount.")
+  await baseRate.fill("75500.25")
+  await expect(baseRate).toHaveValue("75,500.25")
+  await expect(page.getByLabel("Amount (PHP)", { exact: true })).toHaveValue(
+    "1,250.05",
+  )
+  await page.getByLabel("Amount (PHP)", { exact: true }).fill("1250.5")
+  await expect(page.getByLabel("Amount (PHP)", { exact: true })).toHaveValue(
+    "1,250.5",
+  )
+  await page.getByRole("button", { name: "Add deduction" }).click()
+  await page.getByLabel("Deduction name").fill("Equipment")
+  const deduction = page.getByLabel("Amount (PHP)", { exact: true }).last()
+  await deduction.fill("1500")
+  await expect(deduction).toHaveValue("1,500")
   await page
     .getByLabel("Reason for change")
     .fill("Annual compensation adjustment")
@@ -197,6 +221,7 @@ test("Admin creates effective-dated compensation and payroll schedule revisions"
   await expect(
     page.getByRole("heading", { name: "Create this compensation revision?" }),
   ).toBeVisible()
+  await expect(page.getByText("₱75,500.25", { exact: true })).toBeVisible()
   await page
     .getByRole("button", { name: "Create revision", exact: true })
     .click()
@@ -206,6 +231,10 @@ test("Admin creates effective-dated compensation and payroll schedule revisions"
     baseRate: "75500.25",
     currency: "PHP",
     changeReason: "Annual compensation adjustment",
+    components: expect.arrayContaining([
+      { type: "ALLOWANCE", name: "Transport", amount: "1250.50" },
+      { type: "RECURRING_DEDUCTION", name: "Equipment", amount: "1500.00" },
+    ]),
   })
 
   await page.goto("/module/payroll/settings")

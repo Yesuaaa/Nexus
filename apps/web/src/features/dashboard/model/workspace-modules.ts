@@ -51,6 +51,8 @@ export function getWorkspaceModules(account: Account): WorkspaceModule[] {
     if (canAccessRoute(account, "/employees")) add("people-hr", "/employees")
     else if (canAccessRoute(account, "/departments"))
       add("people-hr", "/departments")
+    else if (canAccessRoute(account, "/module/payroll"))
+      add("people-hr", "/module/payroll")
 
     if (canAccessRoute(account, "/attendance/check-ins"))
       add(
@@ -59,12 +61,13 @@ export function getWorkspaceModules(account: Account): WorkspaceModule[] {
           ? "/attendance/overview"
           : "/attendance/check-ins",
       )
-    else if (canAccessRoute(account, "/module/payroll"))
-      add("attendance-monitoring", "/module/payroll")
+    else if (canAccessRoute(account, "/my-payroll"))
+      add(
+        moduleRegistry["my-payroll"].workspaceParent as WorkspaceModuleId,
+        "/my-payroll",
+      )
     if (canAccessRoute(account, "/accounts")) add("administration", "/accounts")
   }
-
-  if (canAccessRoute(account, "/my-payroll")) add("my-payroll", "/my-payroll")
 
   if (modules.length > 0)
     for (const id of Object.keys(moduleRegistry) as WorkspaceModuleId[]) {

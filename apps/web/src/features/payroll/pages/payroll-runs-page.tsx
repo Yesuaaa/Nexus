@@ -63,6 +63,7 @@ import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { errorMessage } from "@/lib/error-message"
 import { useAsyncResource } from "@/lib/use-async-resource"
 import { sileo } from "@/lib/toast"
+import { formatPayrollDate } from "../model/period-format"
 import {
   calculatePayrollRun,
   transitionPayrollApproval,
@@ -95,8 +96,8 @@ const approvalMobileHidden = "max-[560px]:hidden"
 const itemColumns =
   "grid grid-cols-[minmax(0,1fr)_76px_96px_96px_32px] items-center gap-2 px-3 @max-[460px]:grid-cols-[minmax(0,1fr)_76px_96px_32px] @max-[320px]:grid-cols-[minmax(0,1fr)_76px_32px]"
 const approvalItemColumns =
-  "grid grid-cols-[minmax(0,1fr)_minmax(64px,.9fr)_minmax(64px,.9fr)_minmax(64px,.9fr)_minmax(54px,.7fr)_32px] items-center gap-2 px-3 text-[11px] @max-[560px]:grid-cols-[minmax(0,1fr)_64px_64px_64px_56px_28px] @max-[560px]:gap-1 @max-[560px]:px-2 @max-[560px]:text-[10px] @max-[360px]:grid-cols-[minmax(0,1fr)_64px_64px_64px_28px]"
-const approvalStatusColumn = "@max-[360px]:hidden"
+  "grid min-w-[538px] grid-cols-[minmax(94px,1fr)_repeat(3,minmax(100px,1fr))_68px_40px] items-center gap-1 px-2 text-[11px]"
+const approvalAmountCell = "text-right tabular-nums [overflow-wrap:anywhere]"
 const itemNetColumn = "@max-[320px]:hidden"
 const itemGrossColumn = "@max-[460px]:hidden"
 
@@ -109,16 +110,11 @@ function manilaYear() {
   )
 }
 
-function formatDate(value: string | null | undefined) {
-  if (!value) return "—"
-  const [year, month, day] = value.slice(0, 10).split("-").map(Number)
-  return new Intl.DateTimeFormat("en-PH", {
-    dateStyle: "medium",
-    timeZone: "UTC",
-  }).format(new Date(Date.UTC(year, month - 1, day)))
-}
-
-function formatPeriodRange(startDate: string, endDate: string) {
+function formatPeriodRange(
+  startDate: string,
+  endDate: string,
+  monthStyle: "short" | "long" = "short",
+) {
   const [startYear, startMonth, startDay] = startDate
     .slice(0, 10)
     .split("-")
@@ -129,12 +125,13 @@ function formatPeriodRange(startDate: string, endDate: string) {
     .map(Number)
   if (startYear === endYear && startMonth === endMonth) {
     const month = new Intl.DateTimeFormat("en-PH", {
-      month: "short",
+      month: monthStyle,
       timeZone: "UTC",
     }).format(new Date(Date.UTC(startYear, startMonth - 1, startDay)))
+    if (startDay === endDay) return `${month} ${startDay}, ${startYear}`
     return `${month} ${startDay}–${endDay}, ${startYear}`
   }
-  return `${formatDate(startDate)} – ${formatDate(endDate)}`
+  return `${formatPayrollDate(startDate)} – ${formatPayrollDate(endDate)}`
 }
 
 function formatMoney(value: string | null | undefined) {
@@ -225,6 +222,8 @@ export function PayrollRunsPage({
   const runDetailsColumn = "@max-[480px]:col-start-2"
   const [panelMode, setPanelMode] = useState<PanelMode>(null)
   const [panelYear, setPanelYear] = useState(manilaYear())
+  const [returnToCreateAfterGeneration, setReturnToCreateAfterGeneration] =
+    useState(false)
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const [approvalRevisionId, setApprovalRevisionId] = useState<string | null>(
     null,
@@ -268,7 +267,8 @@ export function PayrollRunsPage({
         ? `${result.createdCount} period${result.createdCount === 1 ? "" : "s"} added. Existing periods were kept.`
         : `${result.total} periods already match the schedule.`,
     })
-    setPanelMode(null)
+    setPanelMode(returnToCreateAfterGeneration ? "create-run" : null)
+    setReturnToCreateAfterGeneration(false)
     setRefreshKey((value) => value + 1)
   }
 
@@ -301,6 +301,7 @@ export function PayrollRunsPage({
               <PageHeaderButton
                 type="button"
                 onClick={() => {
+                  setReturnToCreateAfterGeneration(false)
                   setPanelYear(manilaYear())
                   setPanelMode("generate")
                 }}
@@ -311,6 +312,7 @@ export function PayrollRunsPage({
               <PageHeaderButton
                 type="button"
                 onClick={() => {
+                  setReturnToCreateAfterGeneration(false)
                   setPanelYear(manilaYear())
                   setPanelMode("create-run")
                 }}
@@ -499,15 +501,15 @@ export function PayrollRunsPage({
                         {run.period.cutoffLabel}
                       </span>
                       <span className="mt-1 block text-[10px] text-[#738096]">
-                        {formatDate(run.period.startDate)} –{" "}
-                        {formatDate(run.period.endDate)}
+                        {formatPayrollDate(run.period.startDate)} –{" "}
+                        {formatPayrollDate(run.period.endDate)}
                       </span>
                     </ResponsiveDataTableCell>
                     <ResponsiveDataTableCell
                       className={approvals ? approvalMobileHidden : undefined}
                     >
                       {approvals
-                        ? formatDate(submission?.createdAt)
+                        ? formatPayrollDate(submission?.createdAt)
                         : frequencyLabel(run.period.frequency)}
                     </ResponsiveDataTableCell>
                     <ResponsiveDataTableCell>
@@ -629,8 +631,14 @@ export function PayrollRunsPage({
         mode={panelMode}
         year={panelYear}
         onYearChange={setPanelYear}
-        onClose={() => setPanelMode(null)}
-        onSwitchToGenerate={() => setPanelMode("generate")}
+        onClose={() => {
+          setPanelMode(null)
+          setReturnToCreateAfterGeneration(false)
+        }}
+        onSwitchToGenerate={() => {
+          setReturnToCreateAfterGeneration(true)
+          setPanelMode("generate")
+        }}
         onGenerate={onPeriodsGenerated}
         onCreateRun={onRunCreated}
       />
@@ -679,16 +687,31 @@ function PayrollActionPanel({
       fallbackError: "Couldn't load payroll periods.",
     },
   )
-  const availablePeriods = useMemo(
-    () => (periods.data ?? []).filter((period) => period.run === null),
+  const periodsByDate = useMemo(
+    () =>
+      [...(periods.data ?? [])].sort(
+        (first, second) =>
+          first.startDate.localeCompare(second.startDate) ||
+          first.endDate.localeCompare(second.endDate) ||
+          first.id.localeCompare(second.id),
+      ),
     [periods.data],
   )
+  const availablePeriods = useMemo(
+    () => periodsByDate.filter((period) => period.run === null),
+    [periodsByDate],
+  )
+  const periodsReady = validYear && !periods.loading && !periods.error
+  const selectedPeriod = periodsReady
+    ? availablePeriods.find((period) => period.id === selectedPeriodId)
+    : undefined
+  const selectedPeriodAvailable = Boolean(selectedPeriod)
   const title =
-    mode === "generate" ? "Generate payroll periods" : "Create a draft run"
+    mode === "generate" ? "Generate payroll periods" : "Create a Draft Run"
   const description =
     mode === "generate"
       ? "Add calendar periods from the payroll schedule versions that cover the selected year. Existing periods are kept."
-      : "Choose an open period to create its single draft run. The calculation can be reviewed and recalculated later."
+      : "Select an eligible payroll period to create a draft payroll run."
 
   async function generate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -706,8 +729,12 @@ function PayrollActionPanel({
 
   async function createRun(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!selectedPeriodId) {
-      setError("Choose a payroll period first.")
+    if (!selectedPeriodAvailable) {
+      setSelectedPeriodId("")
+      setError(
+        "That payroll period is no longer available. Choose another period.",
+      )
+      periods.retry()
       return
     }
     setPending(true)
@@ -731,7 +758,11 @@ function PayrollActionPanel({
     >
       {mode && (
         <>
-          <SidePanelHeader title={title} description={description} />
+          <SidePanelHeader
+            title={title}
+            description={description}
+            wrapDescription={mode === "create-run"}
+          />
           <SidePanelBody>
             {mode === "generate" ? (
               <Form id="payroll-period-generation" onSubmit={generate}>
@@ -739,7 +770,7 @@ function PayrollActionPanel({
                   title="Calendar year"
                   description="Only periods inside configured schedule dates are generated."
                 >
-                  <label className="grid gap-1.5 text-[11px] font-medium text-[#52627a]">
+                  <label className="grid gap-1.5 text-[11px] font-medium text-[#52627a] sm:col-span-2">
                     Year
                     <FormInput
                       type="number"
@@ -747,6 +778,7 @@ function PayrollActionPanel({
                       max={9999}
                       required
                       value={year || ""}
+                      disabled={pending}
                       onChange={(event) => {
                         setError("")
                         onYearChange(Number(event.target.value) || 0)
@@ -777,6 +809,7 @@ function PayrollActionPanel({
                       max={9999}
                       required
                       value={year || ""}
+                      disabled={pending}
                       onChange={(event) => {
                         setError("")
                         onYearChange(Number(event.target.value) || 0)
@@ -793,12 +826,17 @@ function PayrollActionPanel({
                       </Alert>
                     </div>
                   ) : periods.loading ? (
-                    <p
-                      className="m-0 self-end text-xs text-[#738096]"
-                      role="status"
+                    <div
+                      className="grid min-w-0 gap-2 sm:col-span-2"
+                      aria-busy="true"
                     >
-                      Loading periods…
-                    </p>
+                      <span role="status" className="sr-only">
+                        Loading payroll periods…
+                      </span>
+                      <MemberRowSkeleton className="py-3" />
+                      <MemberRowSkeleton className="py-3" />
+                      <MemberRowSkeleton className="py-3" />
+                    </div>
                   ) : periods.error ? (
                     <div className="sm:col-span-2">
                       <SidePanelError
@@ -806,32 +844,13 @@ function PayrollActionPanel({
                         onRetry={periods.retry}
                       />
                     </div>
-                  ) : availablePeriods.length ? (
-                    <label className="grid gap-1.5 text-[11px] font-medium text-[#52627a] sm:col-span-2">
-                      Period
-                      <Select
-                        value={selectedPeriodId}
-                        onValueChange={setSelectedPeriodId}
-                      >
-                        <SelectTrigger aria-label="Choose payroll period">
-                          <SelectValue placeholder="Choose a period" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {availablePeriods.map((period) => (
-                            <SelectItem key={period.id} value={period.id}>
-                              {periodOptionLabel(period)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </label>
-                  ) : (
+                  ) : periods.data?.length === 0 ? (
                     <div className="sm:col-span-2">
                       <EmptyState
                         icon={CalendarRange}
                         size="sm"
-                        title="No open periods for this year"
-                        description="Generate periods from the active payroll schedule before creating a run."
+                        title="No payroll periods generated"
+                        description="Generate payroll periods for the selected year before creating a draft run."
                         action={
                           <Button
                             type="button"
@@ -843,6 +862,65 @@ function PayrollActionPanel({
                         }
                       />
                     </div>
+                  ) : availablePeriods.length === 0 ? (
+                    <div className="sm:col-span-2">
+                      <EmptyState
+                        icon={CalendarRange}
+                        size="sm"
+                        title="No available periods"
+                        description="All generated payroll periods for this year already have associated runs."
+                      />
+                    </div>
+                  ) : (
+                    <label className="grid min-w-0 gap-1.5 text-[11px] font-medium text-[#52627a]">
+                      Period
+                      <Select
+                        value={selectedPeriodAvailable ? selectedPeriodId : ""}
+                        onValueChange={setSelectedPeriodId}
+                        disabled={pending || periods.loading}
+                      >
+                        <SelectTrigger aria-label="Choose payroll period">
+                          <SelectValue placeholder="Choose a period" />
+                        </SelectTrigger>
+                        <SelectContent maxHeight="roomy">
+                          {periodsByDate.map((period) => (
+                            <SelectItem
+                              key={period.id}
+                              value={period.id}
+                              disabled={period.run !== null}
+                            >
+                              {periodOptionLabel(period)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </label>
+                  )}
+                  {selectedPeriod && (
+                    <SidePanelSection
+                      title="Selected period"
+                      className="sm:col-span-2"
+                    >
+                      <DetailList>
+                        <DetailItem label="Period">
+                          <span className="font-semibold">
+                            {periodOptionLabel(selectedPeriod)}
+                          </span>
+                          <Pill tone="success" className="ml-2">
+                            Available
+                          </Pill>
+                        </DetailItem>
+                        <DetailItem label="Frequency">
+                          {frequencyLabel(selectedPeriod.frequency)}
+                        </DetailItem>
+                        <DetailItem label="Period dates">
+                          {formatPeriodRange(
+                            selectedPeriod.startDate,
+                            selectedPeriod.endDate,
+                          )}
+                        </DetailItem>
+                      </DetailList>
+                    </SidePanelSection>
                   )}
                 </SidePanelFieldset>
                 {error && <Alert>{error}</Alert>}
@@ -875,7 +953,10 @@ function PayrollActionPanel({
                 type="submit"
                 form="payroll-create-run"
                 disabled={
-                  pending || !selectedPeriodId || availablePeriods.length === 0
+                  pending ||
+                  periods.loading ||
+                  !selectedPeriodAvailable ||
+                  availablePeriods.length === 0
                 }
               >
                 {pending ? "Creating…" : "Create draft"}
@@ -889,7 +970,33 @@ function PayrollActionPanel({
 }
 
 function periodOptionLabel(period: PayrollPeriod) {
-  return `${period.cutoffLabel} · ${frequencyLabel(period.frequency)} · ${formatDate(period.startDate)}–${formatDate(period.endDate)}`
+  const [startYear, startMonth, startDay] = period.startDate
+    .slice(0, 10)
+    .split("-")
+    .map(Number)
+  const [endYear, endMonth, endDay] = period.endDate
+    .slice(0, 10)
+    .split("-")
+    .map(Number)
+  const lastDayOfMonth = new Date(
+    Date.UTC(startYear, startMonth, 0),
+  ).getUTCDate()
+
+  if (
+    period.frequency === "MONTHLY" &&
+    startYear === endYear &&
+    startMonth === endMonth &&
+    startDay === 1 &&
+    endDay === lastDayOfMonth
+  ) {
+    return new Intl.DateTimeFormat("en-PH", {
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(new Date(Date.UTC(startYear, startMonth - 1, startDay)))
+  }
+
+  return formatPeriodRange(period.startDate, period.endDate, "long")
 }
 
 function PayrollRunDetailsPanel({
@@ -1133,7 +1240,7 @@ function PayrollRunDetailsPanel({
                   ? approvals
                     ? (approvalPeriodDescription ??
                       "Review the submitted payroll revision.")
-                    : `${formatDate(run.data.period.startDate)} - ${formatDate(run.data.period.endDate)} · ${frequencyLabel(run.data.period.frequency)}`
+                    : `${formatPayrollDate(run.data.period.startDate)} – ${formatPayrollDate(run.data.period.endDate)} · ${frequencyLabel(run.data.period.frequency)}`
                   : approvals
                     ? "Review the submitted payroll revision."
                     : "Review period results and employee calculation details."
@@ -1439,7 +1546,7 @@ function PayrollRunDetailsPanel({
                                     ? approvalTimestamp.format(
                                         new Date(event.createdAt),
                                       )
-                                    : formatDate(event.createdAt)}
+                                    : formatPayrollDate(event.createdAt)}
                                 </span>
                                 {event.reason && (
                                   <p className="m-0 mt-1 text-left text-[11px] font-normal text-[#52627a]">
@@ -1502,6 +1609,7 @@ function PayrollRunDetailsPanel({
                         <ResponsiveDataTable
                           label="Employee payroll calculations"
                           aria-busy={items.loading}
+                          className={approvals ? "overflow-x-auto" : undefined}
                         >
                           <ResponsiveDataTableHeader
                             rowClassName={employeeColumns}
@@ -1520,9 +1628,7 @@ function PayrollRunDetailsPanel({
                                 <ResponsiveDataTableColumnHeader className="text-right">
                                   Net Pay
                                 </ResponsiveDataTableColumnHeader>
-                                <ResponsiveDataTableColumnHeader
-                                  className={approvalStatusColumn}
-                                >
+                                <ResponsiveDataTableColumnHeader className="text-center">
                                   Status
                                 </ResponsiveDataTableColumnHeader>
                               </>
@@ -1543,8 +1649,16 @@ function PayrollRunDetailsPanel({
                                 </ResponsiveDataTableColumnHeader>
                               </>
                             )}
-                            <ResponsiveDataTableColumnHeader>
-                              <span className="sr-only">Open calculation</span>
+                            <ResponsiveDataTableColumnHeader
+                              className={approvals ? "text-center" : undefined}
+                            >
+                              {approvals ? (
+                                "Details"
+                              ) : (
+                                <span className="sr-only">
+                                  Open calculation
+                                </span>
+                              )}
                             </ResponsiveDataTableColumnHeader>
                           </ResponsiveDataTableHeader>
                           <ResponsiveDataTableBody>
@@ -1569,8 +1683,8 @@ function PayrollRunDetailsPanel({
                                         "text-right",
                                         "text-right",
                                         "text-right",
-                                        approvalStatusColumn,
-                                        "",
+                                        "text-center",
+                                        "text-center",
                                       ]
                                     : [
                                         "",
@@ -1601,13 +1715,19 @@ function PayrollRunDetailsPanel({
                                   className={`${employeeColumns} min-h-[48px] border-b border-[#eceef1] py-2 text-[11px] last:border-0`}
                                 >
                                   <ResponsiveDataTableCell className="min-w-0">
-                                    <span className="block truncate font-semibold">
+                                    <span
+                                      className={
+                                        approvals
+                                          ? "block font-semibold [overflow-wrap:anywhere]"
+                                          : "block truncate font-semibold"
+                                      }
+                                    >
                                       {item.employeeName}
                                     </span>
                                     <span
                                       className={
                                         approvals
-                                          ? "mt-0.5 block truncate text-[10px] text-[#738096]"
+                                          ? "mt-0.5 block text-[10px] text-[#738096] [overflow-wrap:anywhere]"
                                           : "mt-0.5 block text-[10px] text-[#738096]"
                                       }
                                     >
@@ -1616,18 +1736,22 @@ function PayrollRunDetailsPanel({
                                   </ResponsiveDataTableCell>
                                   {approvals ? (
                                     <>
-                                      <ResponsiveDataTableCell className="text-right text-[10px] whitespace-nowrap tabular-nums">
+                                      <ResponsiveDataTableCell
+                                        className={approvalAmountCell}
+                                      >
                                         {formatMoney(item.grossAmount)}
                                       </ResponsiveDataTableCell>
-                                      <ResponsiveDataTableCell className="text-right text-[10px] whitespace-nowrap tabular-nums">
+                                      <ResponsiveDataTableCell
+                                        className={approvalAmountCell}
+                                      >
                                         {formatMoney(item.deductionsAmount)}
                                       </ResponsiveDataTableCell>
-                                      <ResponsiveDataTableCell className="text-right text-[10px] whitespace-nowrap tabular-nums">
+                                      <ResponsiveDataTableCell
+                                        className={approvalAmountCell}
+                                      >
                                         {formatMoney(item.netAmount)}
                                       </ResponsiveDataTableCell>
-                                      <ResponsiveDataTableCell
-                                        className={approvalStatusColumn}
-                                      >
+                                      <ResponsiveDataTableCell className="text-center">
                                         <Pill
                                           tone={itemStatusTone(item.status)}
                                         >
@@ -1656,12 +1780,22 @@ function PayrollRunDetailsPanel({
                                       </ResponsiveDataTableCell>
                                     </>
                                   )}
-                                  <ResponsiveDataTableCell>
+                                  <ResponsiveDataTableCell
+                                    className={
+                                      approvals
+                                        ? "flex justify-center"
+                                        : undefined
+                                    }
+                                  >
                                     <Button
                                       type="button"
                                       variant="rowAction"
                                       size={null}
-                                      aria-label={`View ${item.employeeName} calculation`}
+                                      aria-label={
+                                        approvals
+                                          ? `View employee calculation details for ${item.employeeName}`
+                                          : `View ${item.employeeName} calculation`
+                                      }
                                       onClick={(event) => {
                                         returnToRun.current = {
                                           button: event.currentTarget,
@@ -1671,10 +1805,19 @@ function PayrollRunDetailsPanel({
                                         setSelectedItem(item)
                                       }}
                                     >
-                                      <ChevronRight
-                                        size={15}
-                                        aria-hidden="true"
-                                      />
+                                      {approvals ? (
+                                        <>
+                                          <Eye size={15} aria-hidden="true" />
+                                          <HoverTooltip side="top-end">
+                                            View employee calculation details
+                                          </HoverTooltip>
+                                        </>
+                                      ) : (
+                                        <ChevronRight
+                                          size={15}
+                                          aria-hidden="true"
+                                        />
+                                      )}
                                     </Button>
                                   </ResponsiveDataTableCell>
                                 </ResponsiveDataTableRow>
@@ -1859,9 +2002,9 @@ function PayrollItemBreakdown({ item }: { item: PayrollRunItem }) {
                     <Pill tone="neutral">{version.id}</Pill>
                   </div>
                   <p className="mb-0 mt-1 text-[10px] text-[#738096]">
-                    {formatDate(version.effectiveFrom)} –{" "}
+                    {formatPayrollDate(version.effectiveFrom)} –{" "}
                     {version.effectiveTo
-                      ? formatDate(version.effectiveTo)
+                      ? formatPayrollDate(version.effectiveTo)
                       : "No end date"}
                   </p>
                 </li>
@@ -1916,7 +2059,7 @@ function PayrollItemBreakdown({ item }: { item: PayrollRunItem }) {
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="font-medium">
-                      {formatDate(day.workDate)}
+                      {formatPayrollDate(day.workDate)}
                     </span>
                     <span className="text-[10px] text-[#738096]">
                       {day.sessions.length} session
