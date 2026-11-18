@@ -42,6 +42,7 @@ export type RoutePolicyId =
   | "payroll-compensation"
   | "payroll-runs"
   | "payroll-approvals"
+  | "payroll-disbursements"
   | "payroll-payslips"
   | "staff-my-payroll"
   | "staff-my-payroll-legacy"
@@ -124,11 +125,13 @@ export function administrativeModulePolicies(
   registry: Readonly<Record<string, ModuleRegistration>> = moduleRegistry,
 ): RoutePolicy[] {
   return Object.entries(registry)
-    .filter(([, module]) => module.implemented)
+    .filter(([, module]) => module.implemented && !("staffOnly" in module))
     .map(([id, module]) => ({
       id: `module-${id}`,
       match: { kind: "exact", path: `/module/${id}` },
-      moduleId: id as WorkspaceModuleId,
+      moduleId: ("workspaceParent" in module
+        ? module.workspaceParent
+        : id) as WorkspaceModuleId,
       canAccess:
         id === "payroll" ? canAccessPayroll : canAccessAdministrativeModules,
       ...(module.administrativePath === null || id === "service-operations"
@@ -136,9 +139,13 @@ export function administrativeModulePolicies(
             navigation: {
               href: `/module/${id}`,
               label:
-                id === "service-operations" ? "Service Requests" : "Overview",
+                id === "service-operations"
+                  ? "Service Requests"
+                  : id === "payroll"
+                    ? module.title
+                    : "Overview",
               location: "main" as const,
-              order: 1,
+              order: id === "payroll" ? 40 : 1,
             },
           }
         : {}),
@@ -150,31 +157,37 @@ export const routePolicies: readonly RoutePolicy[] = [
   {
     id: "payroll-compensation",
     match: { kind: "exact", path: "/module/payroll/compensation" },
-    moduleId: "payroll",
+    moduleId: "attendance-monitoring",
     canAccess: canAccessPayroll,
   },
   {
     id: "payroll-runs",
     match: { kind: "exact", path: "/module/payroll/runs" },
-    moduleId: "payroll",
+    moduleId: "attendance-monitoring",
     canAccess: canAccessPayroll,
   },
   {
     id: "payroll-approvals",
     match: { kind: "exact", path: "/module/payroll/approvals" },
-    moduleId: "payroll",
+    moduleId: "attendance-monitoring",
+    canAccess: canAccessPayroll,
+  },
+  {
+    id: "payroll-disbursements",
+    match: { kind: "exact", path: "/module/payroll/disbursements" },
+    moduleId: "attendance-monitoring",
     canAccess: canAccessPayroll,
   },
   {
     id: "payroll-payslips",
     match: { kind: "exact", path: "/module/payroll/payslips" },
-    moduleId: "payroll",
+    moduleId: "attendance-monitoring",
     canAccess: canAccessPayroll,
   },
   {
     id: "staff-my-payroll",
     match: { kind: "exact", path: "/my-payroll" },
-    moduleId: "attendance-monitoring",
+    moduleId: "my-payroll",
     canAccess: canAccessMyPayroll,
     navigation: {
       label: "My Payroll",
@@ -186,19 +199,19 @@ export const routePolicies: readonly RoutePolicy[] = [
   {
     id: "staff-my-payroll-legacy",
     match: { kind: "exact", path: "/staff/my-payroll" },
-    moduleId: "attendance-monitoring",
+    moduleId: "my-payroll",
     canAccess: canAccessMyPayroll,
   },
   {
     id: "staff-my-payroll-attendance-legacy",
     match: { kind: "exact", path: "/attendance/my-payroll" },
-    moduleId: "attendance-monitoring",
+    moduleId: "my-payroll",
     canAccess: canAccessMyPayroll,
   },
   {
     id: "payroll-settings",
     match: { kind: "exact", path: "/module/payroll/settings" },
-    moduleId: "payroll",
+    moduleId: "attendance-monitoring",
     canAccess: canAccessPayroll,
   },
   {

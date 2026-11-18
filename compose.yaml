@@ -14,6 +14,8 @@ services:
       SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
       SUPABASE_SERVICE_IMAGES_BUCKET: ${SUPABASE_SERVICE_IMAGES_BUCKET:-service-images}
       CHOKIDAR_USEPOLLING: "true"
+      NODE_ENV: development
+      PAYROLL_LOCAL_SIMULATOR: "true"
     volumes:
       - ./apps/api/src:/workspace/apps/api/src
       - ./apps/api/prisma:/workspace/apps/api/prisma

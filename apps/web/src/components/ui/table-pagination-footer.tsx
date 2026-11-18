@@ -5,7 +5,8 @@ import { cn } from "@/lib/utils"
 
 /**
  * Footer under a paginated table: a live "Showing a–b of n" summary and the
- * page buttons (hidden while there are no results).
+ * page buttons (hidden while there are no results, or for single-page lists
+ * when the caller opts in).
  */
 export function TablePaginationFooter({
   from,
@@ -14,6 +15,7 @@ export function TablePaginationFooter({
   page,
   totalPages,
   disabled = false,
+  hidePaginationWhenSinglePage = false,
   label,
   itemLabel,
   onPageChange,
@@ -27,6 +29,8 @@ export function TablePaginationFooter({
   page: number
   totalPages: number
   disabled?: boolean
+  /** Keep the result summary while hiding page controls for a single page. */
+  hidePaginationWhenSinglePage?: boolean
   /** Accessible name of the pagination nav, e.g. "Employee pages". */
   label: string
   /** Optional noun after the count, e.g. "services" → "… of 12 services". */
@@ -46,7 +50,7 @@ export function TablePaginationFooter({
       <span role="status" aria-live="polite" aria-atomic="true">
         {summary}
       </span>
-      {total > 0 && (
+      {total > 0 && (!hidePaginationWhenSinglePage || totalPages > 1) && (
         <NumberedPagination
           page={page}
           totalPages={Math.max(1, totalPages)}

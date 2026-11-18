@@ -39,7 +39,13 @@ export type PayrollApprovalAuditAction =
   | "PAYROLL_RESUBMITTED"
 
 type PayrollDocumentActivity =
+  | "DISBURSEMENT_PREPARED"
+  | "DISBURSEMENT_VALIDATED"
+  | "DISBURSEMENT_CANCELLED"
+  | "DISBURSEMENT_TEST_DESTINATION"
+  | "DISBURSEMENT_SIMULATED"
   | "GENERATED"
+  | "REGENERATED"
   | "PUBLISHED"
   | "REQUEST_CREATED"
   | "REQUEST_UPDATED"
@@ -89,8 +95,15 @@ type Payloads = Record<
     withdrawnBy?: Transition<string | null>
     activity: PayrollDocumentActivity
     calculationId?: string
+    batchId?: string
   }
   PAYROLL_RUN_CREATED: { periodId: string }
+  PAYROLL_PREFERENCES_UPDATED: {
+    showCompanyLogo?: Transition<boolean>
+    showEmployeeId?: Transition<boolean>
+    requirePublicationConfirmation?: Transition<boolean>
+    requireSimulationConfirmation?: Transition<boolean>
+  }
   PAYROLL_CALCULATED: {
     calculationId: string
     previousCalculationId: string | null
@@ -147,6 +160,10 @@ type WorkforceField =
   | "payslipId"
   | "withdrawnAt"
   | "withdrawnBy"
+  | "showEmployeeId"
+  | "showCompanyLogo"
+  | "requirePublicationConfirmation"
+  | "requireSimulationConfirmation"
 
 type ActionSubjects = Record<PayrollApprovalAuditAction, "PAYROLL_RUN"> & {
   CREATED: Exclude<
@@ -176,6 +193,7 @@ type ActionSubjects = Record<PayrollApprovalAuditAction, "PAYROLL_RUN"> & {
   PAYROLL_PERIOD_CREATED: "PAYROLL_PERIOD"
   PAYROLL_DOCUMENT_ACTIVITY: "PAYROLL_RUN" | "PAYROLL_REQUEST"
   PAYROLL_RUN_CREATED: "PAYROLL_RUN"
+  PAYROLL_PREFERENCES_UPDATED: "PAYROLL_CONFIGURATION"
   PAYROLL_CALCULATED: "PAYROLL_RUN"
   PAYROLL_RECALCULATED: "PAYROLL_RUN"
   PAYROLL_CALCULATION_FAILED: "PAYROLL_RUN"
@@ -334,6 +352,30 @@ export async function writeWorkforceManagementChange(
         : { departmentId: removedId, leadId: removedId }
       fields = Object.keys(checks)
       break
+    case Action.PAYROLL_PREFERENCES_UPDATED:
+      if (
+        input.subjectType !== Subject.PAYROLL_CONFIGURATION ||
+        operation.actorRoleAtTime !== "ADMIN"
+      )
+        throw new Error(
+          "Payroll preference history requires an Admin operation",
+        )
+      checks = {
+        showCompanyLogo: historyTransition(
+          (value) => typeof value === "boolean",
+        ),
+        showEmployeeId: historyTransition(
+          (value) => typeof value === "boolean",
+        ),
+        requirePublicationConfirmation: historyTransition(
+          (value) => typeof value === "boolean",
+        ),
+        requireSimulationConfirmation: historyTransition(
+          (value) => typeof value === "boolean",
+        ),
+      }
+      fields = Object.keys(checks)
+      break
     case Action.VERSION_CREATED:
       if (
         input.subjectType !== "COMPENSATION" &&
@@ -407,11 +449,20 @@ export async function writeWorkforceManagementChange(
           ]
         : []
       required = run ? ["activity", "calculationId"] : ["activity"]
+      if (run && String(input.changes?.activity).startsWith("DISBURSEMENT_"))
+        required.push("batchId")
       checks = {
         activity: (v) =>
           run
             ? operation.actorRoleAtTime === "ADMIN" &&
-              (v === "GENERATED" || v === "PUBLISHED")
+              (v === "GENERATED" ||
+                v === "REGENERATED" ||
+                v === "PUBLISHED" ||
+                v === "DISBURSEMENT_PREPARED" ||
+                v === "DISBURSEMENT_VALIDATED" ||
+                v === "DISBURSEMENT_CANCELLED" ||
+                v === "DISBURSEMENT_TEST_DESTINATION" ||
+                v === "DISBURSEMENT_SIMULATED")
             : operation.actorRoleAtTime === "STAFF"
               ? v === "REQUEST_CREATED" ||
                 v === "REQUEST_MESSAGE" ||
@@ -419,7 +470,14 @@ export async function writeWorkforceManagementChange(
                 v === "REQUEST_WITHDRAWN"
               : operation.actorRoleAtTime === "ADMIN" &&
                 v === "REQUEST_UPDATED",
-        ...(run ? { calculationId: isRecordId } : {}),
+        ...(run
+          ? {
+              calculationId: isRecordId,
+              ...(String(input.changes?.activity).startsWith("DISBURSEMENT_")
+                ? { batchId: isRecordId }
+                : {}),
+            }
+          : {}),
         ...(request
           ? {
               type: historyTransition((value) =>

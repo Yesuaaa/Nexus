@@ -52,6 +52,16 @@
     "description": "Manage employee compensation, payroll processing, approvals, and salary disbursements.",
     "implemented": true,
     "administrativePath": null,
+    "workspaceParent": "attendance-monitoring",
+    "icon": "payroll",
+    "color": "#237d83"
+  },
+  "my-payroll": {
+    "title": "My Payroll",
+    "description": "View your payslips and raise payroll concerns.",
+    "implemented": true,
+    "administrativePath": null,
+    "staffOnly": true,
     "icon": "payroll",
     "color": "#237d83"
   }

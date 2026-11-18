@@ -57,6 +57,17 @@ export type PayrollCalculationSummary = {
   calculatedItemCount: number
   reviewItemCount: number
   blockedItemCount: number
+  payslipEmployeeCount?: number
+  payslipGeneratedCount?: number
+  payslipPublishedCount?: number
+  payslipLastGeneratedAt?: string | null
+  payslipLastPublishedAt?: string | null
+  payslipStatus?:
+    | "NOT_GENERATED"
+    | "PARTIALLY_GENERATED"
+    | "GENERATED"
+    | "PARTIALLY_PUBLISHED"
+    | "PUBLISHED"
   approvalEvents?: PayrollApprovalEvent[]
   createdBy?: { id: string; fullName: string | null; role: string }
 }
@@ -65,6 +76,7 @@ export type PayrollRun = {
   id: string
   status: PayrollRunStatus
   calculationCount: number
+  demoSelfApprovalEnabled?: boolean
   createdAt: string
   updatedAt: string
   createdBy: { id: string; fullName: string | null; role: string }
@@ -149,6 +161,15 @@ export type PayrollRunItem = {
     calculatedAt: string
   }
   components: PayrollRunItemComponent[]
+  payslip: {
+    id: string
+    reference: string
+    generatedAt: string
+    generatedBy: string
+    publishedAt: string | null
+    publishedBy: string | null
+  } | null
+  payslipStatus: "NOT_GENERATED" | "GENERATED" | "PUBLISHED"
 }
 
 export type PayrollPage<T> = {

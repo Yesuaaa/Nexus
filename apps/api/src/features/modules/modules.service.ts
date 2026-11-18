@@ -24,7 +24,11 @@ export function getAdministrativeModule(
     !hasAdministrativeCapability(actor, AdministrativeCapability.MODULE_ACCESS)
   )
     fail(403, "Administrative module access is required")
-  if (!Object.hasOwn(registry, id) || !registry[id].implemented)
+  if (
+    !Object.hasOwn(registry, id) ||
+    !registry[id].implemented ||
+    "staffOnly" in registry[id]
+  )
     fail(404, "Module not available")
   const module = registry[id]
   return {
@@ -41,6 +45,10 @@ export function listAdministrativeModules(actor: AuthorizationActor) {
   )
     fail(403, "Administrative module access is required")
   return Object.entries(moduleRegistry)
-    .filter(([, module]) => module.implemented)
+    .filter(
+      ([, module]) =>
+        module.implemented &&
+        !("staffOnly" in module || "workspaceParent" in module),
+    )
     .map(([id]) => getAdministrativeModule(actor, id))
 }

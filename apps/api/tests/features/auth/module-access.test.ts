@@ -36,12 +36,17 @@ test(
     }
     assert.deepEqual(
       modules.map((module) => module.id),
-      Object.keys(moduleRegistry).filter(
-        (id) => moduleRegistry[id as keyof typeof moduleRegistry].implemented,
-      ),
+      [
+        "service-operations",
+        "project-management",
+        "people-hr",
+        "attendance-monitoring",
+        "administration",
+      ],
     )
     for (const module of modules)
       assert.equal((await request(`/modules/${module.id}`)).status, 200)
+    assert.equal((await request("/modules/payroll")).status, 200)
     assert.equal(
       modules.find((module) => module.id === "project-management")?.href,
       "/project-management/overview",
@@ -53,6 +58,7 @@ test(
     for (const id of [
       "unknown",
       "billing-finance",
+      "my-payroll",
       "constructor",
       "toString",
       "__proto__",

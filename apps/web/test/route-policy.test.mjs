@@ -460,7 +460,6 @@ test("navigation is generated from the same policies without changing role visib
     ],
     ADMIN: [
       "Module",
-      "Overview",
       "Department Management",
       "Employee Management",
       "Attendance",
@@ -468,6 +467,7 @@ test("navigation is generated from the same policies without changing role visib
       "Requests & Approvals",
       "Policies",
       "Audit Trail",
+      "Payroll",
       "Service Management",
       "Calendar",
       "Client Management",
@@ -475,7 +475,6 @@ test("navigation is generated from the same policies without changing role visib
     SUPERADMIN: [
       "Module",
       "Service Requests",
-      "Overview",
       "Project Overview",
       "Account Management",
       "Department Management",
@@ -484,6 +483,7 @@ test("navigation is generated from the same policies without changing role visib
       "Requests & Approvals",
       "Policies",
       "Audit Trail",
+      "Payroll",
       "Service Management",
       "Calendar",
       "Staff Workload",

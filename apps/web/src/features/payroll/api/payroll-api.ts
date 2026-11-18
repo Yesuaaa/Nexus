@@ -80,6 +80,11 @@ export type PayrollConfiguration = {
 export type PayrollSettings = {
   current: PayrollConfiguration | null
   future: PayrollConfiguration | null
+  capabilities: {
+    simulatorEnabled: boolean
+    payMongoEnabled: boolean
+    sandboxDestinationKinds: ("TEST_BANK" | "TEST_EWALLET")[]
+  }
 }
 
 export async function listPayrollCompensation(filters: {
@@ -140,6 +145,27 @@ export function createPayrollCompensationVersion(
 
 export function getPayrollSettings(signal?: AbortSignal) {
   return apiRequest<PayrollSettings>("/api/payroll/settings", { signal })
+}
+
+export type PayrollPreferences = {
+  revision: number
+  showCompanyLogo: boolean
+  showEmployeeId: boolean
+  requirePublicationConfirmation: boolean
+  requireSimulationConfirmation: boolean
+}
+
+export function getPayrollPreferences(signal?: AbortSignal) {
+  return apiRequest<PayrollPreferences>("/api/payroll/settings/preferences", {
+    signal,
+  })
+}
+
+export function savePayrollPreferences(preferences: PayrollPreferences) {
+  return apiRequest<PayrollPreferences>("/api/payroll/settings/preferences", {
+    method: "PUT",
+    body: JSON.stringify(preferences),
+  })
 }
 
 export function getPayrollSettingsHistory(signal?: AbortSignal) {

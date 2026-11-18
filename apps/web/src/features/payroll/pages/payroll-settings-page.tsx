@@ -1,16 +1,22 @@
 "use client"
 
 import { useState, type FormEvent } from "react"
-import { CalendarRange, Plus } from "lucide-react"
+import { CalendarRange, Eye, Plus } from "lucide-react"
 import { PageHeader, PageHeaderButton } from "@/components/layout/page-header"
 import { contentClass } from "@/components/layout/styles"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { DateInput } from "@/components/ui/date-input"
+import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
 import { EmptyState } from "@/components/ui/empty-state"
 import { Form } from "@/components/ui/form"
 import { FormTextarea } from "@/components/ui/form-input"
+import {
+  SettingsSection,
+  SettingsSwitchRow,
+} from "@/components/ui/settings-section"
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Pill } from "@/components/ui/pill"
 import {
   DetailItem,
@@ -21,7 +27,7 @@ import {
   SidePanelFieldset,
   SidePanelFooter,
   SidePanelHeader,
-  SidePanelSection,
+  useSidePanel,
 } from "@/components/ui/side-panel"
 import {
   ResponsiveDataTable,
@@ -39,6 +45,11 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { canManagePayroll } from "@/features/auth/model/permissions"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  pageRange,
+  TablePaginationFooter,
+} from "@/components/ui/table-pagination-footer"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { errorMessage } from "@/lib/error-message"
 import { useAsyncResource } from "@/lib/use-async-resource"
@@ -47,6 +58,9 @@ import {
   createPayrollConfigurationVersion,
   getPayrollSettings,
   getPayrollSettingsHistory,
+  getPayrollPreferences,
+  savePayrollPreferences,
+  type PayrollPreferences,
   type PayrollConfiguration,
   type PayrollFrequency,
 } from "../api/payroll-api"
@@ -65,7 +79,10 @@ function todayInManila() {
 }
 
 const configurationGrid =
-  "grid grid-cols-[minmax(110px,.8fr)_minmax(180px,1.3fr)_minmax(175px,1fr)_minmax(200px,1.5fr)_minmax(100px,.7fr)] items-center gap-3"
+  "grid grid-cols-[minmax(0,.9fr)_minmax(0,1.4fr)_minmax(0,1.2fr)_minmax(0,1.5fr)_minmax(0,.7fr)_56px] items-center gap-3"
+
+const settingsTabs = ["Schedule", "Payslips", "Disbursements"] as const
+const schedulePageSize = 10
 
 function dayAfter(value: string) {
   const [year, month, day] = value.split("-").map(Number)
@@ -124,6 +141,13 @@ export function PayrollSettingsPage() {
     { fallbackError: "Couldn't load Payroll settings." },
   )
   const [editorOpen, setEditorOpen] = useState(false)
+  const [tab, setTab] = useState<string>("Schedule")
+  const [historyPage, setHistoryPage] = useState(1)
+  const [selectedSchedule, setSelectedSchedule] =
+    useState<PayrollConfiguration | null>(null)
+  const history = settings.data?.history ?? []
+  const totalPages = Math.max(1, Math.ceil(history.length / schedulePageSize))
+  const page = Math.min(historyPage, totalPages)
 
   return (
     <main
@@ -132,131 +156,192 @@ export function PayrollSettingsPage() {
     >
       <PageHeader
         title="Payroll Settings"
-        description="Configure payroll schedules and effective-dated settings."
+        description="Manage payroll schedules, payslip preferences, and sandbox simulation confirmation."
         actions={
-          canManage ? (
+          canManage && tab === "Schedule" ? (
             <PageHeaderButton type="button" onClick={() => setEditorOpen(true)}>
               <Plus size={15} aria-hidden="true" /> Add schedule
             </PageHeaderButton>
-          ) : (
+          ) : !canManage ? (
             <Pill tone="neutral">Read only</Pill>
-          )
+          ) : undefined
         }
       />
-      {settings.loading ? (
-        <p className="py-12 text-center text-sm text-[#65718a]" role="status">
-          Loading Payroll settings…
-        </p>
-      ) : settings.error ? (
-        <EmptyState
-          icon={CalendarRange}
-          title="Payroll settings couldn't be loaded"
-          description={settings.error}
-          role="alert"
-          action={
-            <Button variant="outline" onClick={settings.retry}>
-              Try again
-            </Button>
-          }
-        />
-      ) : (
-        <div className="mt-5 grid min-w-0 gap-6">
-          <div className="grid gap-4 md:grid-cols-2">
-            <ScheduleCard
-              title="Current schedule"
-              configuration={settings.data?.settings.current ?? null}
+      <Tabs value={tab} onValueChange={setTab} className="mt-4 min-w-0">
+        <TabsList
+          aria-label="Payroll settings sections"
+          variant="underline"
+          className="flex-wrap gap-x-5 gap-y-0 px-0 max-[560px]:px-0"
+        >
+          {settingsTabs.map((name) => (
+            <TabsTrigger
+              key={name}
+              value={name}
+              variant="underline"
+              className="data-[state=active]:border-b-[#203f8c] data-[state=active]:text-[#203f8c]"
+            >
+              {name}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        <TabsContent value="Schedule" className="mt-0 min-w-0">
+          {settings.error ? (
+            <EmptyState
+              icon={CalendarRange}
+              title="Payroll settings couldn't be loaded"
+              description={settings.error}
+              role="alert"
+              action={
+                <Button variant="outline" onClick={settings.retry}>
+                  Try again
+                </Button>
+              }
             />
-            <ScheduleCard
-              title="Next scheduled change"
-              configuration={settings.data?.settings.future ?? null}
-              scheduled
-            />
-          </div>
-          <section aria-labelledby="payroll-settings-history-heading">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <h2
-                  id="payroll-settings-history-heading"
-                  className="m-0 text-sm font-semibold"
-                >
-                  Configuration history
-                </h2>
-                <p className="mt-1 mb-0 text-xs text-[#738096]">
-                  Each schedule keeps its own effective dates and change reason.
-                </p>
-              </div>
+          ) : (
+            <div className="mt-5 grid min-w-0 gap-6">
+              {!settings.loading && (
+                <div className="grid gap-4">
+                  <ScheduleCard
+                    title="Current schedule"
+                    configuration={settings.data?.settings.current ?? null}
+                  />
+                  <ScheduleCard
+                    title="Next scheduled change"
+                    configuration={settings.data?.settings.future ?? null}
+                    scheduled
+                  />
+                </div>
+              )}
+              <SettingsSection
+                title="Configuration history"
+                description="A mid-period change limits each generated period to its schedule’s effective dates."
+              >
+                {settings.loading || settings.data?.history.length ? (
+                  <ResponsiveDataTable
+                    label="Payroll configuration history"
+                    aria-busy={settings.loading}
+                  >
+                    <ResponsiveDataTableHeader
+                      className="@max-[820px]:sr-only"
+                      rowClassName={configurationGrid}
+                    >
+                      {[
+                        "Frequency",
+                        "Cutoff schedule",
+                        "Effective dates",
+                        "Reason",
+                        "Status",
+                        "Details",
+                      ].map((label) => (
+                        <ResponsiveDataTableColumnHeader key={label}>
+                          {label}
+                        </ResponsiveDataTableColumnHeader>
+                      ))}
+                    </ResponsiveDataTableHeader>
+                    <ResponsiveDataTableBody>
+                      {settings.loading ? (
+                        <DataTableSkeletonRows
+                          label="payroll configuration history"
+                          rows={3}
+                          rowClassName={`${configurationGrid} min-h-[48px] px-4 py-3 @max-[820px]:grid-cols-2`}
+                          cellClassNames={["", "", "", "", "", ""]}
+                        />
+                      ) : (
+                        history
+                          .slice(
+                            (page - 1) * schedulePageSize,
+                            page * schedulePageSize,
+                          )
+                          .map((configuration) => {
+                            const badge = statusFor(configuration)
+                            return (
+                              <ResponsiveDataTableRow
+                                key={configuration.id}
+                                className={`${configurationGrid} border-b border-[#edf0f3] px-4 py-3 last:border-b-0 @max-[820px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] @max-[820px]:gap-x-3 @max-[820px]:gap-y-2`}
+                              >
+                                <ResponsiveDataTableCell className="text-xs font-semibold @max-[820px]:col-start-1 @max-[820px]:row-start-1">
+                                  {frequencyLabel(configuration.frequency)}
+                                </ResponsiveDataTableCell>
+                                <ResponsiveDataTableCell className="min-w-0 break-words text-xs @max-[820px]:col-start-1 @max-[820px]:row-start-2">
+                                  <span className="mr-1.5 hidden text-[#65718a] @max-[820px]:inline">
+                                    Cutoffs
+                                  </span>
+                                  {cutoffLabel(configuration)}
+                                </ResponsiveDataTableCell>
+                                <ResponsiveDataTableCell className="text-xs @max-[820px]:col-start-2 @max-[820px]:row-start-1 @max-[820px]:text-right">
+                                  <span className="mr-1.5 hidden text-[#65718a] @max-[820px]:inline">
+                                    Effective
+                                  </span>
+                                  {formatDate(configuration.effectiveFrom)} –{" "}
+                                  {configuration.effectiveTo
+                                    ? formatDate(configuration.effectiveTo)
+                                    : "Present"}
+                                </ResponsiveDataTableCell>
+                                <ResponsiveDataTableCell className="min-w-0 text-xs @max-[820px]:col-span-2 @max-[820px]:col-start-1 @max-[820px]:row-start-3">
+                                  <span className="line-clamp-2">
+                                    <span className="mr-1.5 hidden text-[#65718a] @max-[820px]:inline">
+                                      Reason
+                                    </span>
+                                    {configuration.changeReason}
+                                  </span>
+                                </ResponsiveDataTableCell>
+                                <ResponsiveDataTableCell className="@max-[820px]:col-start-2 @max-[820px]:row-start-2 @max-[820px]:justify-self-end">
+                                  <span className="mr-1.5 hidden text-xs text-[#65718a] @max-[820px]:inline">
+                                    Status
+                                  </span>
+                                  <Pill tone={badge.tone}>{badge.label}</Pill>
+                                </ResponsiveDataTableCell>
+                                <ResponsiveDataTableCell className="flex justify-center @max-[820px]:col-start-2 @max-[820px]:justify-end">
+                                  <Button
+                                    variant="rowAction"
+                                    size={null}
+                                    aria-label={`View schedule effective ${formatDate(configuration.effectiveFrom)}`}
+                                    onClick={() =>
+                                      setSelectedSchedule(configuration)
+                                    }
+                                  >
+                                    <Eye size={14} aria-hidden="true" />
+                                    <HoverTooltip side="top-end">
+                                      View schedule details
+                                    </HoverTooltip>
+                                  </Button>
+                                </ResponsiveDataTableCell>
+                              </ResponsiveDataTableRow>
+                            )
+                          })
+                      )}
+                    </ResponsiveDataTableBody>
+                  </ResponsiveDataTable>
+                ) : (
+                  <EmptyState
+                    icon={CalendarRange}
+                    title="No payroll schedule configured"
+                    description="Add an effective-dated schedule when payroll frequency and cutoff dates are ready."
+                    size="md"
+                  />
+                )}
+                {!settings.loading && history.length > 0 && (
+                  <TablePaginationFooter
+                    {...pageRange(page, schedulePageSize, history.length)}
+                    page={page}
+                    total={history.length}
+                    totalPages={totalPages}
+                    label="Payroll schedule history pages"
+                    onPageChange={setHistoryPage}
+                    hidePaginationWhenSinglePage
+                  />
+                )}
+              </SettingsSection>
             </div>
-            {settings.data?.history.length ? (
-              <ResponsiveDataTable label="Payroll configuration history">
-                <ResponsiveDataTableHeader
-                  className="@max-[820px]:sr-only"
-                  rowClassName={configurationGrid}
-                >
-                  {[
-                    "Frequency",
-                    "Cutoff schedule",
-                    "Effective dates",
-                    "Reason",
-                    "Status",
-                  ].map((label) => (
-                    <ResponsiveDataTableColumnHeader key={label}>
-                      {label}
-                    </ResponsiveDataTableColumnHeader>
-                  ))}
-                </ResponsiveDataTableHeader>
-                <ResponsiveDataTableBody>
-                  {settings.data.history.map((configuration) => {
-                    const badge = statusFor(configuration)
-                    return (
-                      <ResponsiveDataTableRow
-                        key={configuration.id}
-                        className={`${configurationGrid} border-b border-[#edf0f3] px-4 py-3 last:border-b-0 @max-[820px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] @max-[820px]:gap-x-3 @max-[820px]:gap-y-2`}
-                      >
-                        <ResponsiveDataTableCell className="text-xs font-semibold @max-[820px]:col-start-1 @max-[820px]:row-start-1">
-                          {frequencyLabel(configuration.frequency)}
-                        </ResponsiveDataTableCell>
-                        <ResponsiveDataTableCell className="min-w-0 break-words text-xs @max-[820px]:col-start-1 @max-[820px]:row-start-2">
-                          <span className="mr-1.5 hidden text-[#65718a] @max-[820px]:inline">
-                            Cutoffs
-                          </span>
-                          {cutoffLabel(configuration)}
-                        </ResponsiveDataTableCell>
-                        <ResponsiveDataTableCell className="text-xs @max-[820px]:col-start-2 @max-[820px]:row-start-1 @max-[820px]:text-right">
-                          <span className="mr-1.5 hidden text-[#65718a] @max-[820px]:inline">
-                            Effective
-                          </span>
-                          {formatDate(configuration.effectiveFrom)} –{" "}
-                          {formatDate(configuration.effectiveTo)}
-                        </ResponsiveDataTableCell>
-                        <ResponsiveDataTableCell className="min-w-0 text-xs @max-[820px]:col-span-2 @max-[820px]:col-start-1 @max-[820px]:row-start-3">
-                          <span className="line-clamp-2">
-                            <span className="mr-1.5 hidden text-[#65718a] @max-[820px]:inline">
-                              Reason
-                            </span>
-                            {configuration.changeReason}
-                          </span>
-                        </ResponsiveDataTableCell>
-                        <ResponsiveDataTableCell className="@max-[820px]:col-start-2 @max-[820px]:row-start-2 @max-[820px]:justify-self-end">
-                          <span className="mr-1.5 hidden text-xs text-[#65718a] @max-[820px]:inline">
-                            Status
-                          </span>
-                          <Pill tone={badge.tone}>{badge.label}</Pill>
-                        </ResponsiveDataTableCell>
-                      </ResponsiveDataTableRow>
-                    )
-                  })}
-                </ResponsiveDataTableBody>
-              </ResponsiveDataTable>
-            ) : (
-              <EmptyState
-                icon={CalendarRange}
-                title="No payroll schedule configured"
-                description="Add an effective-dated schedule when payroll frequency and cutoff dates are ready."
-                size="md"
-              />
-            )}
-          </section>
-        </div>
+          )}
+        </TabsContent>
+        <PayrollPreferenceTabs canManage={canManage} />
+      </Tabs>
+      {selectedSchedule && (
+        <ScheduleDetails
+          configuration={selectedSchedule}
+          onClose={() => setSelectedSchedule(null)}
+        />
       )}
       {editorOpen && canManage && (
         <ScheduleEditor
@@ -264,11 +349,228 @@ export function PayrollSettingsPage() {
           onClose={() => setEditorOpen(false)}
           onSaved={() => {
             setEditorOpen(false)
+            setHistoryPage(1)
             settings.retry()
           }}
         />
       )}
     </main>
+  )
+}
+
+function ScheduleDetails({
+  configuration,
+  onClose,
+}: {
+  configuration: PayrollConfiguration
+  onClose: () => void
+}) {
+  const panel = useSidePanel(onClose)
+  const status = statusFor(configuration)
+  return (
+    <SidePanel open={panel.open} onOpenChange={panel.onOpenChange}>
+      <SidePanelHeader
+        title="Schedule details"
+        description={frequencyLabel(configuration.frequency)}
+        meta={<Pill tone={status.tone}>{status.label}</Pill>}
+      />
+      <SidePanelBody>
+        <DetailList>
+          <DetailItem label="Cutoff schedule">
+            {cutoffLabel(configuration)}
+          </DetailItem>
+          <DetailItem label="Effective from">
+            {formatDate(configuration.effectiveFrom)}
+          </DetailItem>
+          <DetailItem label="Effective through">
+            {configuration.effectiveTo
+              ? formatDate(configuration.effectiveTo)
+              : "Present"}
+          </DetailItem>
+          <DetailItem label="Change reason">
+            {configuration.changeReason}
+          </DetailItem>
+        </DetailList>
+      </SidePanelBody>
+      <SidePanelFooter>
+        <SidePanelButton variant="secondary" onClick={() => panel.close()}>
+          Close
+        </SidePanelButton>
+      </SidePanelFooter>
+    </SidePanel>
+  )
+}
+
+function PayrollPreferenceTabs({ canManage }: { canManage: boolean }) {
+  const preferences = useAsyncResource(getPayrollPreferences, [], {
+    fallbackError: "Couldn't load payroll preferences.",
+  })
+
+  return (
+    <>
+      {(["Payslips", "Disbursements"] as const).map((section) => (
+        <TabsContent
+          key={section}
+          value={section}
+          forceMount
+          className="mt-5 min-w-0 data-[state=inactive]:hidden"
+        >
+          {preferences.error ? (
+            <Alert role="alert">
+              {preferences.error}{" "}
+              <Button variant="outline" size="sm" onClick={preferences.retry}>
+                Retry
+              </Button>
+            </Alert>
+          ) : preferences.loading || !preferences.data ? (
+            <p role="status" className="text-sm">
+              Loading payroll preferences…
+            </p>
+          ) : (
+            <PayrollPreferenceForm
+              section={section}
+              canManage={canManage}
+              saved={preferences.data}
+              onSaved={preferences.setData}
+              onReload={preferences.retry}
+            />
+          )}
+        </TabsContent>
+      ))}
+    </>
+  )
+}
+
+function PayrollPreferenceForm({
+  section,
+  canManage,
+  saved,
+  onSaved,
+  onReload,
+}: {
+  section: "Payslips" | "Disbursements"
+  canManage: boolean
+  saved: PayrollPreferences
+  onSaved: (value: PayrollPreferences) => void
+  onReload: () => void
+}) {
+  const [draft, setDraft] = useState<PayrollPreferences | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState("")
+  const value = draft ?? saved
+  const fields =
+    section === "Payslips"
+      ? ([
+          [
+            "showCompanyLogo",
+            "Show company logo",
+            "Include the EXP Digital Solutions logo on generated PDFs.",
+          ],
+          [
+            "showEmployeeId",
+            "Show employee ID",
+            "Include the employee ID when generating a payslip PDF.",
+          ],
+          [
+            "requirePublicationConfirmation",
+            "Confirm payslip publication",
+            "Prompt Admins before publishing approved payslips.",
+          ],
+        ] as const)
+      : ([
+          [
+            "requireSimulationConfirmation",
+            "Confirm payout simulation",
+            "Prompt Admins before recording a local sandbox outcome.",
+          ],
+        ] as const)
+  const dirty = fields.some(([key]) => value[key] !== saved[key])
+  const stale = Boolean(draft && draft.revision !== saved.revision)
+
+  async function save(event: FormEvent) {
+    event.preventDefault()
+    if (!canManage || !draft || !dirty || stale || saving) return
+    setSaving(true)
+    setError("")
+    try {
+      const updated = await savePayrollPreferences(draft)
+      onSaved(updated)
+      setDraft(null)
+      sileo.success({ title: "Payroll preferences saved" })
+    } catch (cause) {
+      const message = errorMessage(cause, "Couldn't save payroll preferences.")
+      setError(message)
+      sileo.error({ title: message })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <SettingsSection
+      tone="tinted"
+      title={`${section === "Payslips" ? "Payslip" : "Disbursement"} preferences`}
+    >
+      <Form onSubmit={save} className="grid gap-4">
+        {!canManage && <Pill tone="neutral">Read only</Pill>}
+        {fields.map(([key, label, description]) => (
+          <SettingsSwitchRow
+            key={key}
+            label={label}
+            description={description}
+            checked={value[key]}
+            disabled={!canManage || saving}
+            onChange={(event) => {
+              const checked = event.target.checked
+              setDraft({ ...value, [key]: checked })
+            }}
+          />
+        ))}
+        {(error || stale) && (
+          <Alert role="alert">
+            {stale
+              ? "Preferences changed. Discard this draft before editing again."
+              : error}
+          </Alert>
+        )}
+        {canManage && (
+          <div className="flex flex-wrap justify-end gap-2">
+            {error && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={saving}
+                onClick={() => {
+                  setDraft(null)
+                  setError("")
+                  onReload()
+                }}
+              >
+                Discard and reload
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              disabled={saving || !draft}
+              onClick={() => {
+                setDraft(null)
+                setError("")
+              }}
+            >
+              Discard changes
+            </Button>
+            <Button
+              type="submit"
+              variant="brand"
+              disabled={!dirty || saving || stale}
+            >
+              {saving ? "Saving…" : "Save changes"}
+            </Button>
+          </div>
+        )}
+      </Form>
+    </SettingsSection>
   )
 }
 
@@ -282,10 +584,7 @@ function ScheduleCard({
   scheduled?: boolean
 }) {
   return (
-    <SidePanelSection
-      title={title}
-      className="rounded-xl border border-[#e8ebef] bg-white p-4"
-    >
+    <SettingsSection title={title}>
       {configuration ? (
         <>
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -311,7 +610,7 @@ function ScheduleCard({
             : "A schedule has not been configured."}
         </p>
       )}
-    </SidePanelSection>
+    </SettingsSection>
   )
 }
 

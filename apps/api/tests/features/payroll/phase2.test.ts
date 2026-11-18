@@ -233,6 +233,71 @@ test(
       initial,
     )
     assert.equal(firstResponse.status, 201, await firstResponse.clone().text())
+    await prisma.employee.createMany({
+      data: Array.from({ length: 21 }, (_, index) => {
+        const number = String(index + 1).padStart(2, "0")
+        return {
+          employeeId: `PAY-PAGE-${number}`,
+          fullName: `Directory Employee ${number}`,
+          departmentId: department.id,
+        }
+      }),
+    })
+    async function directory(params: Record<string, string>) {
+      const response = await request(
+        "/payroll/compensation?" + new URLSearchParams(params),
+      )
+      assert.equal(response.status, 200)
+      return (await response.json()) as {
+        total: number
+        page: number
+        pageSize: number
+        rows: {
+          employee: { employeeId: string }
+          configurationStatus: string
+        }[]
+      }
+    }
+    const pages = await Promise.all(
+      [1, 2, 3].map((page) => directory({ page: String(page) })),
+    )
+    assert.deepEqual(
+      pages.map(({ total, pageSize, rows }) => [total, pageSize, rows.length]),
+      [
+        [22, 10, 10],
+        [22, 10, 10],
+        [22, 10, 2],
+      ],
+    )
+    assert.deepEqual(
+      pages.flatMap(({ rows }) =>
+        rows.map(({ employee }) => employee.employeeId),
+      ),
+      [
+        "PAY-COMP-001",
+        ...Array.from(
+          { length: 21 },
+          (_, index) => `PAY-PAGE-${String(index + 1).padStart(2, "0")}`,
+        ),
+      ],
+    )
+    assert.equal((await directory({ departmentId: department.id })).total, 22)
+    assert.equal((await directory({ status: "NOT_CONFIGURED" })).total, 21)
+    assert.equal(
+      (await directory({ search: "PAY-PAGE-21", status: "NOT_CONFIGURED" }))
+        .total,
+      1,
+    )
+    const configured = await directory({
+      search: "Compensation History",
+      departmentId: department.id,
+      payType: "MONTHLY",
+      status: "CONFIGURED",
+    })
+    assert.equal(configured.total, 1)
+    assert.equal(configured.rows[0]?.employee.employeeId, "PAY-COMP-001")
+    assert.equal((await directory({ payType: "HOURLY" })).total, 0)
+    assert.equal((await request("/payroll/compensation?page=0")).status, 400)
     const first = (await firstResponse.json()) as {
       compensation: {
         id: string
@@ -389,6 +454,18 @@ test(
       { startDay: 16, endDay: "LAST_DAY" },
     ])
 
+    const settings = await request("/payroll/settings")
+    assert.equal(settings.status, 200)
+    const { capabilities } = (await settings.json()) as {
+      capabilities: Record<string, unknown>
+    }
+    assert.deepEqual(capabilities, {
+      simulatorEnabled:
+        process.env.NODE_ENV === "development" &&
+        process.env.PAYROLL_LOCAL_SIMULATOR === "true",
+      payMongoEnabled: false,
+      sandboxDestinationKinds: ["TEST_BANK", "TEST_EWALLET"],
+    })
     const settingsHistory = await request("/payroll/settings/history")
     assert.equal(settingsHistory.status, 200)
     const settingsBody = (await settingsHistory.json()) as {

@@ -1,4 +1,5 @@
 import { cva } from "class-variance-authority"
+import { rowActionButton } from "./row-action-styles"
 
 /**
  * Colour sets for the portal's buttons. Exported for class constants that
@@ -32,6 +33,7 @@ export const buttonVariants = cva(
         brand: buttonTones.brand,
         brandOutline: buttonTones.brandOutline,
         danger: buttonTones.danger,
+        rowAction: rowActionButton,
       },
       size: {
         default: "h-9 px-4 text-sm",

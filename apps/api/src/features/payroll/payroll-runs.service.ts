@@ -18,6 +18,7 @@ import {
 import type { AuthContext } from "../auth/auth.middleware.js"
 import { attendanceWorkdayInclude } from "../attendance/attendance.repository.js"
 import { manilaToday } from "./payroll.service.js"
+import { isPayrollSimulatorEnabled } from "./payroll-simulator.js"
 import {
   generatePayrollPeriodCandidates,
   type PayrollPeriodConfiguration,
@@ -83,6 +84,16 @@ const runInclude = {
 const itemInclude = {
   components: {
     orderBy: [{ componentType: "asc" }, { name: "asc" }],
+  },
+  payslip: {
+    select: {
+      id: true,
+      reference: true,
+      generatedAt: true,
+      generatedBy: true,
+      publishedAt: true,
+      publishedBy: true,
+    },
   },
   calculation: {
     select: { id: true, revision: true, status: true, calculatedAt: true },
@@ -230,6 +241,7 @@ function runView<
     id: value.id,
     status: value.status,
     calculationCount: value.calculationCount,
+    demoSelfApprovalEnabled: isPayrollSimulatorEnabled(),
     createdAt: value.createdAt.toISOString(),
     updatedAt: value.updatedAt.toISOString(),
     createdBy: value.createdBy,
@@ -249,6 +261,92 @@ function runView<
   }
 }
 
+type PayslipSummary = {
+  employeeCount: number
+  generatedCount: number
+  publishedCount: number
+  lastGeneratedAt: Date | null
+  lastPublishedAt: Date | null
+}
+
+function payslipLifecycleStatus(summary: PayslipSummary) {
+  return summary.generatedCount === 0
+    ? "NOT_GENERATED"
+    : summary.publishedCount === summary.employeeCount
+      ? "PUBLISHED"
+      : summary.publishedCount > 0
+        ? "PARTIALLY_PUBLISHED"
+        : summary.generatedCount === summary.employeeCount
+          ? "GENERATED"
+          : "PARTIALLY_GENERATED"
+}
+
+async function loadPayslipSummaries(calculationIds: string[]) {
+  const summaries = new Map<string, PayslipSummary>()
+  if (!calculationIds.length) return summaries
+  const items = await getPrisma()!.payrollRunItem.findMany({
+    where: { calculationId: { in: calculationIds } },
+    select: {
+      calculationId: true,
+      payslip: { select: { generatedAt: true, publishedAt: true } },
+    },
+  })
+  for (const item of items) {
+    const current = summaries.get(item.calculationId) ?? {
+      employeeCount: 0,
+      generatedCount: 0,
+      publishedCount: 0,
+      lastGeneratedAt: null,
+      lastPublishedAt: null,
+    }
+    current.employeeCount += 1
+    if (item.payslip) {
+      current.generatedCount += 1
+      if (item.payslip.publishedAt) current.publishedCount += 1
+      if (
+        !current.lastGeneratedAt ||
+        item.payslip.generatedAt > current.lastGeneratedAt
+      )
+        current.lastGeneratedAt = item.payslip.generatedAt
+      if (
+        item.payslip.publishedAt &&
+        (!current.lastPublishedAt ||
+          item.payslip.publishedAt > current.lastPublishedAt)
+      )
+        current.lastPublishedAt = item.payslip.publishedAt
+    }
+    summaries.set(item.calculationId, current)
+  }
+  return summaries
+}
+
+function applyPayslipSummary(
+  row: ReturnType<typeof runView>,
+  summary: PayslipSummary | undefined,
+) {
+  const calculation = row.latestCalculation
+  if (!calculation) return row
+  const counts = summary ?? {
+    employeeCount: 0,
+    generatedCount: 0,
+    publishedCount: 0,
+    lastGeneratedAt: null,
+    lastPublishedAt: null,
+  }
+  return {
+    ...row,
+    latestCalculation: {
+      ...calculation,
+      payslipEmployeeCount: counts.employeeCount,
+      payslipGeneratedCount: counts.generatedCount,
+      payslipPublishedCount: counts.publishedCount,
+      payslipStatus: payslipLifecycleStatus(counts),
+      payslipLastGeneratedAt: counts.lastGeneratedAt?.toISOString() ?? null,
+      payslipLastPublishedAt: counts.lastPublishedAt?.toISOString() ?? null,
+    },
+  }
+}
+
 function itemView<
   T extends {
     id: string
@@ -265,6 +363,14 @@ function itemView<
     attendanceSnapshot: Prisma.JsonValue
     warnings: Prisma.JsonValue
     blocks: Prisma.JsonValue
+    payslip: {
+      id: string
+      reference: string
+      generatedAt: Date
+      generatedBy: string
+      publishedAt: Date | null
+      publishedBy: string | null
+    } | null
     calculation: {
       id: string
       revision: number
@@ -303,6 +409,18 @@ function itemView<
       ...value.calculation,
       calculatedAt: value.calculation.calculatedAt.toISOString(),
     },
+    payslip: value.payslip
+      ? {
+          ...value.payslip,
+          generatedAt: value.payslip.generatedAt.toISOString(),
+          publishedAt: value.payslip.publishedAt?.toISOString() ?? null,
+        }
+      : null,
+    payslipStatus: value.payslip
+      ? value.payslip.publishedAt
+        ? "PUBLISHED"
+        : "GENERATED"
+      : "NOT_GENERATED",
     components: value.components.map((component) => ({
       id: component.id,
       componentType: component.componentType,
@@ -652,6 +770,7 @@ export const payrollRunsService = {
         fail(409, "Resolve all employee calculation issues before approval")
       if (
         action === "approve" &&
+        !isPayrollSimulatorEnabled() &&
         [run.createdById, revision.createdBy.id].includes(auth.user.id)
       )
         fail(
@@ -867,7 +986,23 @@ export const payrollRunsService = {
         }),
       count: (db) => db.payrollRun.count({ where }),
     })
-    return { ...page, rows: page.rows.map(runView) }
+    const rows = page.rows.map(runView)
+    const payslipSummary = await loadPayslipSummaries(
+      rows.flatMap((row) =>
+        row.latestCalculation ? [row.latestCalculation.id] : [],
+      ),
+    )
+    return {
+      ...page,
+      rows: rows.map((row) =>
+        applyPayslipSummary(
+          row,
+          row.latestCalculation
+            ? payslipSummary.get(row.latestCalculation.id)
+            : undefined,
+        ),
+      ),
+    }
   },
 
   async createRun(auth: AuthContext, periodId: string) {
@@ -910,7 +1045,16 @@ export const payrollRunsService = {
       include: runInclude,
     })
     if (!run) fail(404, "Payroll run not found")
-    return runView(run)
+    const view = runView(run)
+    const summaries = await loadPayslipSummaries(
+      view.latestCalculation ? [view.latestCalculation.id] : [],
+    )
+    return applyPayslipSummary(
+      view,
+      view.latestCalculation
+        ? summaries.get(view.latestCalculation.id)
+        : undefined,
+    )
   },
 
   async listItems(input: {
@@ -1174,38 +1318,51 @@ export const payrollRunsService = {
                 totalsIncludeOnly:
                   "CALCULATED items; review and blocked results are excluded",
               },
-              items: {
-                create: results.map((item) => ({
-                  employeeId: item.employee.id,
-                  employeeNumberSnapshot: item.employee.employeeNumber,
-                  employeeNameSnapshot: item.employee.fullName,
-                  employmentTypeSnapshot: item.employee.employmentType,
-                  status: item.status,
-                  currency: item.currency,
-                  grossAmount: item.grossAmount,
-                  deductionsAmount: item.deductionsAmount,
-                  netAmount: item.netAmount,
-                  compensationSnapshot:
-                    item.compensationSnapshot as Prisma.InputJsonValue,
-                  attendanceSnapshot:
-                    item.attendanceSnapshot as Prisma.InputJsonValue,
-                  warnings: item.warnings as Prisma.InputJsonValue,
-                  blocks: item.blocks as Prisma.InputJsonValue,
-                  components: {
-                    create: item.components.map((component) => ({
-                      componentType: component.componentType,
-                      status: component.status,
-                      sourceId: component.sourceId,
-                      name: component.name,
-                      amount: component.amount,
-                      metadata: component.metadata as Prisma.InputJsonValue,
-                    })),
-                  },
-                })),
-              },
             },
             select: { id: true },
           })
+          if (results.length > 0) {
+            const savedItems = await tx.payrollRunItem.createManyAndReturn({
+              data: results.map((item) => ({
+                calculationId: calculation.id,
+                employeeId: item.employee.id,
+                employeeNumberSnapshot: item.employee.employeeNumber,
+                employeeNameSnapshot: item.employee.fullName,
+                employmentTypeSnapshot: item.employee.employmentType,
+                status: item.status,
+                currency: item.currency,
+                grossAmount: item.grossAmount,
+                deductionsAmount: item.deductionsAmount,
+                netAmount: item.netAmount,
+                compensationSnapshot:
+                  item.compensationSnapshot as Prisma.InputJsonValue,
+                attendanceSnapshot:
+                  item.attendanceSnapshot as Prisma.InputJsonValue,
+                warnings: item.warnings as Prisma.InputJsonValue,
+                blocks: item.blocks as Prisma.InputJsonValue,
+              })),
+              select: { id: true, employeeId: true },
+            })
+            const itemIds = new Map(
+              savedItems.map(({ id, employeeId }) => [employeeId, id]),
+            )
+            const components = results.flatMap((item) => {
+              const itemId = itemIds.get(item.employee.id)
+              if (!itemId) throw new Error("Payroll result was not persisted")
+              return item.components.map((component) => ({
+                itemId,
+                componentType: component.componentType,
+                status: component.status,
+                sourceId: component.sourceId,
+                name: component.name,
+                amount: component.amount,
+                metadata: component.metadata as Prisma.InputJsonValue,
+              }))
+            })
+            if (components.length > 0) {
+              await tx.payrollRunItemComponent.createMany({ data: components })
+            }
+          }
           await writeWorkforceManagementChange(tx, operation, {
             action: previousCalculationId
               ? WorkforceManagementAction.PAYROLL_RECALCULATED

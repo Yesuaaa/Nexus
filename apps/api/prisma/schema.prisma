@@ -96,6 +96,7 @@ enum WorkforceManagementAction {
   PAYROLL_CALCULATED
   PAYROLL_RECALCULATED
   PAYROLL_CALCULATION_FAILED
+  PAYROLL_PREFERENCES_UPDATED
 }
 
 enum WorkforceManagementOrigin {
@@ -837,6 +838,15 @@ model CompensationComponent {
   @@index([compensationId, type], map: "compensation_component_type_idx")
 }
 
+model PayrollPreferences {
+  id                              String  @id
+  revision                        Int
+  showCompanyLogo                 Boolean
+  showEmployeeId                  Boolean
+  requirePublicationConfirmation  Boolean
+  requireSimulationConfirmation  Boolean
+}
+
 model PayrollConfiguration {
   id             String           @id @default(cuid())
   frequency      PayrollFrequency
@@ -889,21 +899,22 @@ model PayrollRun {
 }
 
 model PayrollRunCalculation {
-  id                  String                   @id @default(cuid())
+  disbursement        PayrollDisbursementBatch?
+  id                  String                    @id @default(cuid())
   runId               String
-  run                 PayrollRun               @relation(fields: [runId], references: [id], onDelete: Restrict)
+  run                 PayrollRun                @relation(fields: [runId], references: [id], onDelete: Restrict)
   revision            Int
   status              PayrollCalculationStatus
-  calculatedAt        DateTime                 @default(now()) @db.Timestamptz(3)
+  calculatedAt        DateTime                  @default(now()) @db.Timestamptz(3)
   createdById         String
-  createdBy           User                     @relation("PayrollCalculationCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  currency            String                   @default("PHP") @db.Char(3)
-  grossTotal          Decimal                  @default(0) @db.Decimal(14, 2)
-  deductionsTotal     Decimal                  @default(0) @db.Decimal(14, 2)
-  netTotal            Decimal                  @default(0) @db.Decimal(14, 2)
-  calculatedItemCount Int                      @default(0)
-  reviewItemCount     Int                      @default(0)
-  blockedItemCount    Int                      @default(0)
+  createdBy           User                      @relation("PayrollCalculationCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  currency            String                    @default("PHP") @db.Char(3)
+  grossTotal          Decimal                   @default(0) @db.Decimal(14, 2)
+  deductionsTotal     Decimal                   @default(0) @db.Decimal(14, 2)
+  netTotal            Decimal                   @default(0) @db.Decimal(14, 2)
+  calculatedItemCount Int                       @default(0)
+  reviewItemCount     Int                       @default(0)
+  blockedItemCount    Int                       @default(0)
   inputSnapshot       Json
   items               PayrollRunItem[]
   approvalEvents      PayrollApprovalEvent[]
@@ -927,6 +938,7 @@ model PayrollApprovalEvent {
 }
 
 model PayrollRunItem {
+  payout                 PayrollDisbursementItem?
   id                     String                    @id @default(cuid())
   calculationId          String
   calculation            PayrollRunCalculation     @relation(fields: [calculationId], references: [id], onDelete: Restrict)
@@ -1592,4 +1604,68 @@ model PayrollRequestMessage {
   createdAt DateTime               @default(now()) @db.Timestamptz(3)
 
   @@index([requestId, createdAt])
+}
+
+model PayrollDisbursementBatch {
+  items         PayrollDisbursementItem[]
+  id            String                    @id @default(cuid())
+  calculationId String                    @unique
+  calculation   PayrollRunCalculation     @relation(fields: [calculationId], references: [id], onDelete: Restrict)
+  status        PayrollDisbursementStatus @default(DRAFT)
+  currency      String                    @default("PHP")
+  createdBy     String
+  createdAt     DateTime                  @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime                  @updatedAt @db.Timestamptz(3)
+
+  @@index([status, createdAt, id])
+}
+
+enum PayrollDisbursementStatus {
+  DRAFT
+  BLOCKED
+  CANCELLED
+}
+
+model PayrollDisbursementItem {
+  id            String                     @id @default(cuid())
+  batchId       String
+  batch         PayrollDisbursementBatch   @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  payrollItemId String                     @unique
+  payrollItem   PayrollRunItem             @relation(fields: [payrollItemId], references: [id], onDelete: Restrict)
+  amount        Decimal                    @db.Decimal(14, 2)
+  destination   PayrollSandboxDestination?
+  attempt       PayrollTransferAttempt?
+
+  @@index([batchId])
+}
+
+model PayrollSandboxDestination {
+  id        String                        @id @default(cuid())
+  itemId    String                        @unique
+  item      PayrollDisbursementItem       @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  kind      PayrollSandboxDestinationKind
+  lastFour  String                        @db.Char(4)
+  createdAt DateTime                      @default(now()) @db.Timestamptz(3)
+  createdBy String
+}
+
+enum PayrollSandboxDestinationKind {
+  TEST_BANK
+  TEST_EWALLET
+}
+
+model PayrollTransferAttempt {
+  id             String                   @id @default(cuid())
+  itemId         String                   @unique
+  item           PayrollDisbursementItem  @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  idempotencyKey String                   @unique @db.Uuid
+  outcome        PayrollSimulationOutcome
+  createdAt      DateTime                 @default(now()) @db.Timestamptz(3)
+  createdBy      String
+}
+
+enum PayrollSimulationOutcome {
+  SUCCEEDED
+  FAILED
+  PENDING
 }

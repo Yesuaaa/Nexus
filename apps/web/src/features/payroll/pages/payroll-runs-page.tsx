@@ -1,8 +1,9 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   CalendarRange,
+  ChevronRight,
   CircleAlert,
   Eye,
   Plus,
@@ -18,6 +19,8 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
 import { Form } from "@/components/ui/form"
 import { FormInput, FormTextarea } from "@/components/ui/form-input"
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Pill } from "@/components/ui/pill"
 import {
   ResponsiveDataTable,
@@ -34,6 +37,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
+import { MemberRowSkeleton } from "@/components/ui/panel-loading"
 import { SearchField } from "@/components/ui/search-field"
 import { SidePanelError } from "@/components/ui/side-panel"
 import {
@@ -47,7 +52,10 @@ import {
   SidePanelHeader,
   SidePanelSection,
 } from "@/components/ui/side-panel"
-import { TablePaginationFooter } from "@/components/ui/table-pagination-footer"
+import {
+  TablePaginationFooter,
+  pageRange,
+} from "@/components/ui/table-pagination-footer"
 import { TableSearchStatus } from "@/components/ui/table-search-status"
 import { usePaginatedList } from "@/components/ui/use-paginated-list"
 import { canManagePayroll } from "@/features/auth/model/permissions"
@@ -77,10 +85,20 @@ type PanelMode = "generate" | "create-run" | null
 type RunFilter = "" | PayrollRunStatus
 type FrequencyFilter = "" | PayrollFrequency
 
-const runColumns =
-  "grid grid-cols-[minmax(145px,1.4fr)_minmax(95px,.75fr)_minmax(110px,.8fr)_minmax(130px,1fr)_minmax(92px,.7fr)_minmax(105px,.8fr)_auto] items-center gap-3"
+const approvalColumns =
+  "grid grid-cols-[minmax(0,22fr)_minmax(0,17fr)_minmax(0,17fr)_minmax(0,10fr)_minmax(0,17fr)_minmax(0,9fr)_minmax(42px,8fr)] items-center gap-3"
+const payrollRunColumns =
+  "grid grid-cols-[minmax(0,21fr)_minmax(0,11fr)_minmax(0,11fr)_minmax(0,19fr)_minmax(0,15fr)_minmax(0,12fr)_minmax(0,11fr)] items-center gap-3 @max-[760px]:grid-cols-[minmax(0,1.35fr)_minmax(0,.85fr)_minmax(0,1fr)_minmax(0,1.2fr)_48px] @max-[480px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] @max-[480px]:gap-2"
+const compactApprovalColumns =
+  "max-[900px]:grid-cols-[minmax(0,1.3fr)_minmax(0,.9fr)_minmax(0,.9fr)_minmax(0,1fr)_32px] max-[560px]:grid-cols-[minmax(0,1fr)_minmax(90px,.8fr)_32px]"
+const approvalMobileHidden = "max-[560px]:hidden"
 const itemColumns =
-  "grid grid-cols-[minmax(130px,1.3fr)_minmax(90px,.8fr)_minmax(105px,.9fr)_minmax(85px,.7fr)_auto] items-center gap-2"
+  "grid grid-cols-[minmax(0,1fr)_76px_96px_96px_32px] items-center gap-2 px-3 @max-[460px]:grid-cols-[minmax(0,1fr)_76px_96px_32px] @max-[320px]:grid-cols-[minmax(0,1fr)_76px_32px]"
+const approvalItemColumns =
+  "grid grid-cols-[minmax(0,1fr)_minmax(64px,.9fr)_minmax(64px,.9fr)_minmax(64px,.9fr)_minmax(54px,.7fr)_32px] items-center gap-2 px-3 text-[11px] @max-[560px]:grid-cols-[minmax(0,1fr)_64px_64px_64px_56px_28px] @max-[560px]:gap-1 @max-[560px]:px-2 @max-[560px]:text-[10px] @max-[360px]:grid-cols-[minmax(0,1fr)_64px_64px_64px_28px]"
+const approvalStatusColumn = "@max-[360px]:hidden"
+const itemNetColumn = "@max-[320px]:hidden"
+const itemGrossColumn = "@max-[460px]:hidden"
 
 function manilaYear() {
   return Number(
@@ -98,6 +116,25 @@ function formatDate(value: string | null | undefined) {
     dateStyle: "medium",
     timeZone: "UTC",
   }).format(new Date(Date.UTC(year, month - 1, day)))
+}
+
+function formatPeriodRange(startDate: string, endDate: string) {
+  const [startYear, startMonth, startDay] = startDate
+    .slice(0, 10)
+    .split("-")
+    .map(Number)
+  const [endYear, endMonth, endDay] = endDate
+    .slice(0, 10)
+    .split("-")
+    .map(Number)
+  if (startYear === endYear && startMonth === endMonth) {
+    const month = new Intl.DateTimeFormat("en-PH", {
+      month: "short",
+      timeZone: "UTC",
+    }).format(new Date(Date.UTC(startYear, startMonth - 1, startDay)))
+    return `${month} ${startDay}–${endDay}, ${startYear}`
+  }
+  return `${formatDate(startDate)} – ${formatDate(endDate)}`
 }
 
 function formatMoney(value: string | null | undefined) {
@@ -165,6 +202,12 @@ function submissionFor(revision: PayrollRun["latestCalculation"]) {
   )
 }
 
+const approvalTimestamp = new Intl.DateTimeFormat("en-PH", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "Asia/Manila",
+})
+
 export function PayrollRunsPage({
   approvals = false,
 }: {
@@ -175,9 +218,17 @@ export function PayrollRunsPage({
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState<RunFilter>("")
   const [frequency, setFrequency] = useState<FrequencyFilter>("")
+  const runColumns = approvals
+    ? approvalColumns + " " + compactApprovalColumns
+    : payrollRunColumns
+  const wideColumn = approvals ? "max-[900px]:hidden" : "@max-[760px]:hidden"
+  const runDetailsColumn = "@max-[480px]:col-start-2"
   const [panelMode, setPanelMode] = useState<PanelMode>(null)
   const [panelYear, setPanelYear] = useState(manilaYear())
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
+  const [approvalRevisionId, setApprovalRevisionId] = useState<string | null>(
+    null,
+  )
   const [refreshKey, setRefreshKey] = useState(0)
   const query = search.trim()
   const list = usePaginatedList({
@@ -198,6 +249,8 @@ export function PayrollRunsPage({
   })
 
   const hasFilters = Boolean(query || status || frequency)
+  const approvalPage =
+    approvals && list.hasCurrentData && !list.error ? list.data : null
 
   function clearFilters() {
     setSearch("")
@@ -330,32 +383,41 @@ export function PayrollRunsPage({
         </div>
 
         <ResponsiveDataTable label="Payroll runs" aria-busy={list.loading}>
-          <ResponsiveDataTableHeader>
-            <div
-              className={`${runColumns} max-[900px]:grid-cols-[minmax(140px,1.3fr)_minmax(95px,.8fr)_minmax(105px,.8fr)_minmax(110px,1fr)_auto]`}
+          <ResponsiveDataTableHeader
+            className={approvals ? undefined : "@max-[480px]:sr-only"}
+            rowClassName={runColumns}
+          >
+            <ResponsiveDataTableColumnHeader>
+              {approvals ? "Payroll Period" : "Payroll period"}
+            </ResponsiveDataTableColumnHeader>
+            <ResponsiveDataTableColumnHeader
+              className={approvals ? approvalMobileHidden : undefined}
             >
-              <ResponsiveDataTableColumnHeader>
-                Payroll period
-              </ResponsiveDataTableColumnHeader>
-              <ResponsiveDataTableColumnHeader>
-                {approvals ? "Submission" : "Frequency"}
-              </ResponsiveDataTableColumnHeader>
-              <ResponsiveDataTableColumnHeader>
-                Status
-              </ResponsiveDataTableColumnHeader>
-              <ResponsiveDataTableColumnHeader>
-                {approvals ? "Calculation revision" : "Calculation review"}
-              </ResponsiveDataTableColumnHeader>
-              <ResponsiveDataTableColumnHeader className="text-right max-[900px]:hidden">
-                {approvals ? "Payroll totals" : "Known gross"}
-              </ResponsiveDataTableColumnHeader>
-              <ResponsiveDataTableColumnHeader className="text-right max-[900px]:hidden">
-                Employees
-              </ResponsiveDataTableColumnHeader>
-              <ResponsiveDataTableColumnHeader className="text-right">
-                Details
-              </ResponsiveDataTableColumnHeader>
-            </div>
+              {approvals ? "Submission" : "Frequency"}
+            </ResponsiveDataTableColumnHeader>
+            <ResponsiveDataTableColumnHeader>
+              Status
+            </ResponsiveDataTableColumnHeader>
+            <ResponsiveDataTableColumnHeader
+              className={
+                approvals ? `text-right ${approvalMobileHidden}` : undefined
+              }
+            >
+              {approvals ? "Revisions" : "Calculation review"}
+            </ResponsiveDataTableColumnHeader>
+            <ResponsiveDataTableColumnHeader
+              className={`text-right ${wideColumn}`}
+            >
+              {approvals ? "Net Pay" : "Known gross"}
+            </ResponsiveDataTableColumnHeader>
+            <ResponsiveDataTableColumnHeader
+              className={`text-right ${wideColumn}`}
+            >
+              Employees
+            </ResponsiveDataTableColumnHeader>
+            <ResponsiveDataTableColumnHeader className="text-center">
+              Details
+            </ResponsiveDataTableColumnHeader>
           </ResponsiveDataTableHeader>
           <ResponsiveDataTableBody className="relative min-w-0">
             {list.error ? (
@@ -376,7 +438,22 @@ export function PayrollRunsPage({
                   </button>
                 </ResponsiveDataTableCell>
               </ResponsiveDataTableRow>
-            ) : list.rows.length === 0 && !list.loading ? (
+            ) : list.loading ? (
+              <DataTableSkeletonRows
+                label="payroll runs"
+                rows={3}
+                rowClassName={`${runColumns} ${approvals ? "min-h-[58px] px-4 py-2.5" : "min-h-14 px-4 py-3"}`}
+                cellClassNames={[
+                  "",
+                  approvals ? approvalMobileHidden : "",
+                  "",
+                  approvals ? approvalMobileHidden : "",
+                  wideColumn,
+                  wideColumn,
+                  approvals ? "" : runDetailsColumn,
+                ]}
+              />
+            ) : list.rows.length === 0 ? (
               <ResponsiveDataTableRow>
                 <ResponsiveDataTableCell aria-colspan={7} className="p-3">
                   <EmptyState
@@ -414,7 +491,8 @@ export function PayrollRunsPage({
                 return (
                   <ResponsiveDataTableRow
                     key={run.id}
-                    className={`${runColumns} min-h-[58px] border-b border-[#eceef1] px-4 py-2.5 text-xs last:border-0 max-[900px]:grid-cols-[minmax(140px,1.3fr)_minmax(95px,.8fr)_minmax(105px,.8fr)_minmax(110px,1fr)_auto]`}
+                    variant={approvals ? undefined : "directory"}
+                    className={`${runColumns} text-xs ${approvals ? "min-h-[58px] border-b border-[#eceef1] px-4 py-2.5 last:border-0" : ""}`}
                   >
                     <ResponsiveDataTableCell className="min-w-0">
                       <span className="block truncate font-semibold">
@@ -425,30 +503,23 @@ export function PayrollRunsPage({
                         {formatDate(run.period.endDate)}
                       </span>
                     </ResponsiveDataTableCell>
-                    <ResponsiveDataTableCell>
-                      {approvals ? (
-                        <span>
-                          {submission?.actorName ?? submission?.actorId}
-                          <br />
-                          {formatDate(submission?.createdAt)}
-                        </span>
-                      ) : (
-                        frequencyLabel(run.period.frequency)
-                      )}
+                    <ResponsiveDataTableCell
+                      className={approvals ? approvalMobileHidden : undefined}
+                    >
+                      {approvals
+                        ? formatDate(submission?.createdAt)
+                        : frequencyLabel(run.period.frequency)}
                     </ResponsiveDataTableCell>
                     <ResponsiveDataTableCell>
                       <Pill tone={run.status === "DRAFT" ? "warning" : "brand"}>
                         {runStatusLabel(run.status)}
                       </Pill>
                     </ResponsiveDataTableCell>
-                    <ResponsiveDataTableCell className="min-w-0">
-                      {approvals && calculation ? (
-                        <span>
-                          Revision {calculation.revision}
-                          <br />
-                          {calculation.createdBy?.fullName ??
-                            calculation.createdBy?.id}
-                        </span>
+                    <ResponsiveDataTableCell
+                      className={`min-w-0 ${approvals ? `text-right tabular-nums ${approvalMobileHidden}` : ""}`}
+                    >
+                      {approvals ? (
+                        (calculation?.revision ?? "-")
                       ) : calculation ? (
                         <div className="grid justify-items-start gap-1">
                           <Pill tone={calculationTone(calculation.status)}>
@@ -463,42 +534,57 @@ export function PayrollRunsPage({
                         <span className="text-[#738096]">Not calculated</span>
                       )}
                     </ResponsiveDataTableCell>
-                    <ResponsiveDataTableCell className="text-right tabular-nums max-[900px]:hidden">
-                      {calculation ? (
-                        <span>
-                          {approvals && "Gross "}
-                          {formatMoney(calculation.grossTotal)}
-                          {approvals && (
-                            <>
-                              <br />
-                              Deductions{" "}
-                              {formatMoney(calculation.deductionsTotal)}
-                              <br />
-                              Net {formatMoney(calculation.netTotal)}
-                            </>
-                          )}
-                        </span>
-                      ) : (
-                        "—"
+                    <ResponsiveDataTableCell
+                      className={`text-right tabular-nums ${approvals ? "whitespace-nowrap" : ""} ${wideColumn}`}
+                    >
+                      {formatMoney(
+                        approvals
+                          ? calculation?.netTotal
+                          : calculation?.grossTotal,
                       )}
                     </ResponsiveDataTableCell>
-                    <ResponsiveDataTableCell className="text-right tabular-nums max-[900px]:hidden">
+                    <ResponsiveDataTableCell
+                      className={`text-right tabular-nums ${wideColumn}`}
+                    >
                       {calculation
                         ? calculation.calculatedItemCount +
                           calculation.reviewItemCount +
                           calculation.blockedItemCount
                         : "—"}
                     </ResponsiveDataTableCell>
-                    <ResponsiveDataTableCell className="justify-end">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 gap-1.5 px-2.5 text-[11px]"
-                        aria-label={`View ${run.period.cutoffLabel} payroll run`}
-                        onClick={() => setSelectedRunId(run.id)}
-                      >
-                        <Eye size={14} aria-hidden="true" /> View
-                      </Button>
+                    <ResponsiveDataTableCell
+                      className={
+                        approvals
+                          ? "flex justify-center"
+                          : `flex justify-center @max-[480px]:justify-end ${runDetailsColumn}`
+                      }
+                    >
+                      {approvals ? (
+                        <Button
+                          type="button"
+                          variant="rowAction"
+                          size={null}
+                          aria-label={`View payroll approval for ${run.period.cutoffLabel}`}
+                          onClick={() => {
+                            setApprovalRevisionId(calculation?.id ?? null)
+                            setSelectedRunId(run.id)
+                          }}
+                        >
+                          <Eye size={14} aria-hidden="true" />
+                          <HoverTooltip>View payroll approval</HoverTooltip>
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="rowAction"
+                          size={null}
+                          aria-label={`View ${run.period.cutoffLabel} payroll run`}
+                          onClick={() => setSelectedRunId(run.id)}
+                        >
+                          <Eye size={14} aria-hidden="true" />
+                          <HoverTooltip>View payroll run</HoverTooltip>
+                        </Button>
+                      )}
                     </ResponsiveDataTableCell>
                   </ResponsiveDataTableRow>
                 )
@@ -512,18 +598,34 @@ export function PayrollRunsPage({
           }
           label="payroll runs"
         />
-        {list.footer && (
+        {approvals && approvalPage ? (
+          <TablePaginationFooter
+            {...pageRange(
+              approvalPage.page,
+              approvalPage.pageSize,
+              approvalPage.total,
+            )}
+            page={approvalPage.page}
+            total={approvalPage.total}
+            totalPages={Math.ceil(approvalPage.total / approvalPage.pageSize)}
+            disabled={list.loading}
+            hidePaginationWhenSinglePage
+            label="Payroll approval pages"
+            itemLabel="runs"
+            onPageChange={list.setPage}
+          />
+        ) : !approvals && list.footer ? (
           <TablePaginationFooter
             {...list.footer}
             label="Payroll run pages"
             itemLabel="runs"
             onPageChange={list.setPage}
           />
-        )}
+        ) : null}
       </section>
 
       <PayrollActionPanel
-        key={`${panelMode ?? "closed"}-${panelYear}`}
+        key={panelMode ?? "closed"}
         mode={panelMode}
         year={panelYear}
         onYearChange={setPanelYear}
@@ -534,6 +636,7 @@ export function PayrollRunsPage({
       />
       <PayrollRunDetailsPanel
         runId={selectedRunId}
+        approvalRevisionId={approvalRevisionId}
         canManage={canManage}
         approvals={approvals}
         refreshKey={refreshKey}
@@ -644,9 +747,10 @@ function PayrollActionPanel({
                       max={9999}
                       required
                       value={year || ""}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        setError("")
                         onYearChange(Number(event.target.value) || 0)
-                      }
+                      }}
                       step={1}
                       aria-label="Payroll calendar year"
                     />
@@ -674,6 +778,7 @@ function PayrollActionPanel({
                       required
                       value={year || ""}
                       onChange={(event) => {
+                        setError("")
                         onYearChange(Number(event.target.value) || 0)
                         setSelectedPeriodId("")
                       }}
@@ -789,6 +894,7 @@ function periodOptionLabel(period: PayrollPeriod) {
 
 function PayrollRunDetailsPanel({
   runId,
+  approvalRevisionId,
   canManage,
   approvals,
   refreshKey,
@@ -796,19 +902,37 @@ function PayrollRunDetailsPanel({
   onChanged,
 }: {
   runId: string | null
+  approvalRevisionId: string | null
   canManage: boolean
   approvals: boolean
   refreshKey: number
   onClose: () => void
   onChanged: () => void
 }) {
-  const account = usePortalAccount()
   const [approvalAction, setApprovalAction] =
     useState<PayrollApprovalAction | null>(null)
   const [reason, setReason] = useState("")
   const [itemSearch, setItemSearch] = useState("")
   const [selectedCalculationId, setSelectedCalculationId] = useState("")
   const [selectedItem, setSelectedItem] = useState<PayrollRunItem | null>(null)
+  const runBodyRef = useRef<HTMLDivElement>(null)
+  const breakdownRef = useRef<HTMLDivElement>(null)
+  const returnToRun = useRef<{
+    button: HTMLButtonElement
+    scrollTop: number
+  } | null>(null)
+  useEffect(() => {
+    const body = runBodyRef.current
+    if (!body) return
+    if (selectedItem) {
+      body.scrollTop = 0
+      breakdownRef.current?.focus({ preventScroll: true })
+    } else if (returnToRun.current) {
+      body.scrollTop = returnToRun.current.scrollTop
+      returnToRun.current.button.focus({ preventScroll: true })
+      returnToRun.current = null
+    }
+  }, [selectedItem])
   const [confirmRecalculate, setConfirmRecalculate] = useState(false)
   const [pending, setPending] = useState(false)
   const [actionError, setActionError] = useState("")
@@ -821,9 +945,14 @@ function PayrollRunDetailsPanel({
     },
   )
   const reviewRevision = approvals
-    ? run.data?.calculationHistory.find((revision) => submissionFor(revision))
+    ? run.data?.calculationHistory.find(
+        (revision) =>
+          revision.id === approvalRevisionId && submissionFor(revision),
+      )
     : null
-  const activeRevisionId = selectedCalculationId || reviewRevision?.id || ""
+  const activeRevisionId = approvals
+    ? (reviewRevision?.id ?? "")
+    : selectedCalculationId
   const items = usePaginatedList({
     params: {
       search: itemSearch.trim(),
@@ -831,7 +960,7 @@ function PayrollRunDetailsPanel({
       calculationId: activeRevisionId,
     },
     load: ({ page, signal }) =>
-      runId
+      runId && (!approvals || activeRevisionId)
         ? listPayrollRunItems(runId, {
             page,
             search: itemSearch.trim(),
@@ -850,24 +979,43 @@ function PayrollRunDetailsPanel({
     initial: { rows: [], total: 0, page: 1, pageSize: 10, calculationId: null },
     fallbackError: "Couldn't load employee calculations.",
   })
+  const { onRowsSettled: settleEmployeeRows } = items
+  // Employee rows render directly, so there is no animation to settle.
+  useEffect(settleEmployeeRows, [settleEmployeeRows])
   const selectedRevision = useMemo(
     () =>
-      run.data?.calculationHistory.find(
-        ({ id }) =>
-          id === (activeRevisionId || run.data?.latestCalculation?.id),
-      ) ?? null,
-    [run.data, activeRevisionId],
+      (approvals
+        ? reviewRevision
+        : run.data?.calculationHistory.find(
+            ({ id }) =>
+              id === (activeRevisionId || run.data?.latestCalculation?.id),
+          )) ?? null,
+    [approvals, reviewRevision, run.data, activeRevisionId],
   )
 
   const latest = run.data?.latestCalculation
+  const account = usePortalAccount()
+  const selfApproval =
+    !run.data?.demoSelfApprovalEnabled &&
+    (account.id === run.data?.createdBy.id ||
+      account.id === selectedRevision?.createdBy?.id)
+  const submission = submissionFor(selectedRevision)
+  const decision = selectedRevision?.approvalEvents?.find(
+    ({ action }) =>
+      action === "PAYROLL_APPROVED" || action === "PAYROLL_REJECTED",
+  )
+  const approvalStatus = decision
+    ? runStatusLabel(
+        decision.action === "PAYROLL_APPROVED" ? "APPROVED" : "REJECTED",
+      )
+    : submission
+      ? runStatusLabel("PENDING_APPROVAL")
+      : "—"
   const canRecalculate =
     canManage &&
     !approvals &&
     run.data?.status !== "PENDING_APPROVAL" &&
     run.data?.status !== "APPROVED"
-  const selfApproval =
-    account.id === run.data?.createdBy.id ||
-    account.id === latest?.createdBy?.id
   const reviewIsCurrent = selectedRevision?.id === latest?.id
   const eligible =
     latest?.status === "COMPLETE" &&
@@ -936,6 +1084,7 @@ function PayrollRunDetailsPanel({
   }
 
   function closePanel() {
+    returnToRun.current = null
     onClose()
     setSelectedCalculationId("")
     setSelectedItem(null)
@@ -945,6 +1094,25 @@ function PayrollRunDetailsPanel({
 
   const summary = selectedRevision
   const statusTone = summary ? calculationTone(summary.status) : "neutral"
+  const employeeColumns = approvals ? approvalItemColumns : itemColumns
+  const employeeColumnCount = approvals ? 6 : 5
+  const historyEvents =
+    run.data?.calculationHistory.flatMap((revision) =>
+      (revision.approvalEvents ?? []).map((event) => ({ revision, event })),
+    ) ?? []
+  const displayedHistoryEvents = approvals
+    ? [...historyEvents].sort((left, right) =>
+        left.event.createdAt.localeCompare(right.event.createdAt),
+      )
+    : historyEvents
+  const approvalPeriodDescription =
+    approvals && run.data && selectedRevision
+      ? [
+          formatPeriodRange(run.data.period.startDate, run.data.period.endDate),
+          frequencyLabel(run.data.period.frequency),
+          `Revision ${selectedRevision.revision}`,
+        ].join(" · ")
+      : null
 
   return (
     <>
@@ -955,351 +1123,607 @@ function PayrollRunDetailsPanel({
         {runId && (
           <>
             <SidePanelHeader
-              title={run.data?.period.cutoffLabel ?? "Payroll run details"}
+              title={
+                approvals
+                  ? "Approval Details"
+                  : (run.data?.period.cutoffLabel ?? "Payroll run details")
+              }
               description={
                 run.data
-                  ? `${formatDate(run.data.period.startDate)} – ${formatDate(run.data.period.endDate)} · ${frequencyLabel(run.data.period.frequency)}`
-                  : "Review period results and employee calculation details."
+                  ? approvals
+                    ? (approvalPeriodDescription ??
+                      "Review the submitted payroll revision.")
+                    : `${formatDate(run.data.period.startDate)} - ${formatDate(run.data.period.endDate)} · ${frequencyLabel(run.data.period.frequency)}`
+                  : approvals
+                    ? "Review the submitted payroll revision."
+                    : "Review period results and employee calculation details."
               }
-              eyebrow="Payroll run"
+              eyebrow={approvals ? undefined : "Payroll run"}
               meta={
                 run.data ? (
                   <Pill
                     tone={run.data.status === "DRAFT" ? "warning" : "brand"}
                   >
-                    {runStatusLabel(run.data.status)}
+                    {approvals
+                      ? approvalStatus
+                      : runStatusLabel(run.data.status)}
                   </Pill>
                 ) : undefined
               }
             />
-            <SidePanelBody>
+            <SidePanelBody ref={runBodyRef}>
               {run.loading ? (
-                <p
-                  className="m-0 py-10 text-center text-xs text-[#738096]"
-                  role="status"
-                >
-                  Loading payroll run…
-                </p>
+                <div aria-busy="true">
+                  <span className="sr-only" role="status">
+                    Loading payroll run…
+                  </span>
+                  <MemberRowSkeleton className="py-3" />
+                  <MemberRowSkeleton className="py-3" />
+                </div>
               ) : run.error ? (
                 <SidePanelError message={run.error} onRetry={run.retry} />
+              ) : run.data && approvals && !summary ? (
+                <EmptyState title="No submitted revision" size="sm" />
               ) : run.data ? (
-                <>
-                  {summary ? (
-                    <>
-                      <SidePanelSection
-                        title="Known calculated amounts"
+                <Tabs
+                  className="min-w-0"
+                  defaultValue={approvals && summary ? "approval" : "summary"}
+                  onValueChange={() => {
+                    returnToRun.current = null
+                    setSelectedItem(null)
+                    if (runBodyRef.current) runBodyRef.current.scrollTop = 0
+                  }}
+                >
+                  <TabsList
+                    aria-label={
+                      approvals
+                        ? "Payroll approval sections"
+                        : "Payroll run sections"
+                    }
+                    variant="underline"
+                    className="-mx-6 -mt-5 w-auto max-[560px]:-mx-5"
+                  >
+                    {!approvals && (
+                      <TabsTrigger value="summary" variant="underline">
+                        Summary
+                      </TabsTrigger>
+                    )}
+                    <TabsTrigger
+                      value="approval"
+                      variant="underline"
+                      disabled={!summary}
+                    >
+                      Approval
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="employees"
+                      variant="underline"
+                      disabled={!summary}
+                    >
+                      Employees
+                    </TabsTrigger>
+                  </TabsList>
+                  <TabsContent
+                    value="summary"
+                    className="mt-5 gap-5 data-[state=active]:grid"
+                  >
+                    {summary ? (
+                      <>
+                        <SidePanelSection
+                          title="Known calculated amounts"
+                          action={
+                            <Pill tone={statusTone}>
+                              {calculationStatusLabel(summary.status)}
+                            </Pill>
+                          }
+                        >
+                          <Alert className="m-0 border-[#e3e8ef] bg-[#f8fafc] text-[#52627a]">
+                            Totals include only employees with complete
+                            calculations. Review and blocked results are
+                            excluded.
+                          </Alert>
+                          <DetailList>
+                            <DetailItem label="Known gross">
+                              {formatMoney(summary.grossTotal)}
+                            </DetailItem>
+                            <DetailItem label="Known deductions">
+                              {formatMoney(summary.deductionsTotal)}
+                            </DetailItem>
+                            <DetailItem label="Known net">
+                              {formatMoney(summary.netTotal)}
+                            </DetailItem>
+                            <DetailItem label="Fully calculated">
+                              {summary.calculatedItemCount}
+                            </DetailItem>
+                            <DetailItem label="Needs review">
+                              {summary.reviewItemCount}
+                            </DetailItem>
+                            <DetailItem label="Blocked">
+                              {summary.blockedItemCount}
+                            </DetailItem>
+                          </DetailList>
+                        </SidePanelSection>
+                        {canRecalculate && (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="gap-1.5"
+                              onClick={() => setConfirmRecalculate(true)}
+                            >
+                              <RefreshCw size={14} aria-hidden="true" />{" "}
+                              Recalculate
+                            </Button>
+                            {actionError && (
+                              <Alert className="w-full">{actionError}</Alert>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <EmptyState
+                        icon={CircleAlert}
+                        size="sm"
+                        title="This run has not been calculated"
+                        description="Create a draft calculation to inspect employee results and warnings."
                         action={
-                          <Pill tone={statusTone}>
-                            {calculationStatusLabel(summary.status)}
-                          </Pill>
+                          canRecalculate ? (
+                            <Button
+                              onClick={() => void recalculate()}
+                              disabled={pending}
+                            >
+                              {pending ? "Calculating…" : "Calculate draft"}
+                            </Button>
+                          ) : undefined
                         }
-                      >
-                        <Alert className="m-0 border-[#e3e8ef] bg-[#f8fafc] text-[#52627a]">
-                          Totals include only employees with complete
-                          calculations. Review and blocked results are excluded.
-                        </Alert>
+                      />
+                    )}
+                    {run.data.calculationHistory.length > 1 && (
+                      <SidePanelSection title="Calculation history">
+                        <div className="flex flex-wrap gap-2">
+                          {run.data.calculationHistory.map((calculation) => (
+                            <Button
+                              key={calculation.id}
+                              variant={
+                                calculation.id === summary?.id
+                                  ? "brand"
+                                  : "outline"
+                              }
+                              size="sm"
+                              onClick={() => {
+                                setSelectedCalculationId(calculation.id)
+                                items.setPage(1)
+                              }}
+                            >
+                              Revision {calculation.revision}
+                            </Button>
+                          ))}
+                        </div>
+                      </SidePanelSection>
+                    )}
+                  </TabsContent>
+                  <TabsContent
+                    value="approval"
+                    className="mt-5 gap-5 data-[state=active]:grid"
+                  >
+                    {approvals && selectedRevision && (
+                      <>
+                        <SidePanelSection title="Submission">
+                          <DetailList>
+                            <DetailItem label="Submitted by">
+                              {submission?.actorName ??
+                                submission?.actorId ??
+                                "—"}
+                            </DetailItem>
+                            <DetailItem label="Submitted at">
+                              {submission
+                                ? approvalTimestamp.format(
+                                    new Date(submission.createdAt),
+                                  )
+                                : "—"}
+                            </DetailItem>
+                            <DetailItem label="Submission ID">
+                              <span className="font-mono text-[10px]">
+                                {submission?.id ?? "—"}
+                              </span>
+                            </DetailItem>
+                          </DetailList>
+                        </SidePanelSection>
+                        <SidePanelSection title="Financial summary">
+                          <div className="grid gap-2">
+                            <div>
+                              <p className="m-0 text-[10px] font-semibold tracking-[0.08em] text-[#738096] uppercase">
+                                Net pay for approval
+                              </p>
+                              <p className="m-0 mt-1 text-2xl leading-tight font-semibold tabular-nums">
+                                {formatMoney(selectedRevision.netTotal)}
+                              </p>
+                            </div>
+                            <DetailList>
+                              <DetailItem label="Gross pay">
+                                <span className="tabular-nums">
+                                  {formatMoney(selectedRevision.grossTotal)}
+                                </span>
+                              </DetailItem>
+                              <DetailItem label="Deductions">
+                                <span className="tabular-nums">
+                                  {formatMoney(
+                                    selectedRevision.deductionsTotal,
+                                  )}
+                                </span>
+                              </DetailItem>
+                            </DetailList>
+                          </div>
+                        </SidePanelSection>
+                      </>
+                    )}
+                    {selectedRevision && !approvals && (
+                      <SidePanelSection title="Approval review">
                         <DetailList>
-                          <DetailItem label="Known gross">
-                            {formatMoney(summary.grossTotal)}
+                          <DetailItem label="Revision">
+                            {selectedRevision.revision} · {selectedRevision.id}
                           </DetailItem>
-                          <DetailItem label="Known deductions">
-                            {formatMoney(summary.deductionsTotal)}
+                          <DetailItem label="Prepared by">
+                            {run.data.createdBy.fullName ??
+                              run.data.createdBy.id}
                           </DetailItem>
-                          <DetailItem label="Known net">
-                            {formatMoney(summary.netTotal)}
-                          </DetailItem>
-                          <DetailItem label="Fully calculated">
-                            {summary.calculatedItemCount}
-                          </DetailItem>
-                          <DetailItem label="Needs review">
-                            {summary.reviewItemCount}
-                          </DetailItem>
-                          <DetailItem label="Blocked">
-                            {summary.blockedItemCount}
+                          <DetailItem label="Calculated by">
+                            {selectedRevision.createdBy?.fullName ??
+                              selectedRevision.createdBy?.id}
                           </DetailItem>
                         </DetailList>
-                      </SidePanelSection>
-                      {canRecalculate && (
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="gap-1.5"
-                            onClick={() => setConfirmRecalculate(true)}
-                          >
-                            <RefreshCw size={14} aria-hidden="true" />{" "}
-                            Recalculate
-                          </Button>
-                          {actionError && (
-                            <Alert className="w-full">{actionError}</Alert>
-                          )}
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <EmptyState
-                      icon={CircleAlert}
-                      size="sm"
-                      title="This run has not been calculated"
-                      description="Create a draft calculation to inspect employee results and warnings."
-                      action={
-                        canRecalculate ? (
-                          <Button
-                            onClick={() => void recalculate()}
-                            disabled={pending}
-                          >
-                            {pending ? "Calculating…" : "Calculate draft"}
-                          </Button>
-                        ) : undefined
-                      }
-                    />
-                  )}
-                  {selectedRevision && (
-                    <SidePanelSection title="Approval review">
-                      <DetailList>
-                        <DetailItem label="Revision">
-                          {selectedRevision.revision} · {selectedRevision.id}
-                        </DetailItem>
-                        <DetailItem label="Prepared by">
-                          {run.data.createdBy.fullName ?? run.data.createdBy.id}
-                        </DetailItem>
-                        <DetailItem label="Calculated by">
-                          {selectedRevision.createdBy?.fullName ??
-                            selectedRevision.createdBy?.id}
-                        </DetailItem>
-                      </DetailList>
-                      {canManage &&
-                        run.data.status === "CALCULATED" &&
-                        !approvals &&
-                        (eligible && reviewIsCurrent ? (
-                          <Button
-                            size="sm"
-                            disabled={pending}
-                            onClick={() => openApproval("submit")}
-                          >
-                            Submit for Approval
-                          </Button>
-                        ) : (
-                          <Alert>
-                            {!reviewIsCurrent
-                              ? "Select the current revision to submit it."
-                              : "Resolve all employee calculation issues before submitting."}
-                          </Alert>
-                        ))}
-                      {canManage && run.data.status === "PENDING_APPROVAL" && (
-                        <div className="flex flex-wrap items-center gap-2">
-                          {!reviewIsCurrent ? (
-                            <Alert>
-                              Select the submitted revision to make a decision.
-                            </Alert>
-                          ) : (
-                            <>
-                              {selfApproval ? (
-                                <Alert>
-                                  The preparer and calculation author cannot
-                                  approve this revision.
-                                </Alert>
-                              ) : (
-                                <Button
-                                  size="sm"
-                                  disabled={pending}
-                                  onClick={() => openApproval("approve")}
-                                >
-                                  Approve
-                                </Button>
-                              )}
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={pending}
-                                onClick={() => openApproval("reject")}
-                              >
-                                Reject
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </SidePanelSection>
-                  )}
-                  {run.data.calculationHistory.some(
-                    (revision) => revision.approvalEvents?.length,
-                  ) && (
-                    <SidePanelSection title="Approval history">
-                      <DetailList>
-                        {run.data.calculationHistory.flatMap((revision) =>
-                          (revision.approvalEvents ?? []).map((event) => (
-                            <DetailItem
-                              key={event.id}
-                              label={`Revision ${revision.revision} · ${event.action
-                                .replace(/^PAYROLL_/, "")
-                                .replaceAll("_", " ")
-                                .toLowerCase()}`}
+                        {canManage &&
+                          run.data.status === "CALCULATED" &&
+                          (eligible && reviewIsCurrent ? (
+                            <Button
+                              size="sm"
+                              disabled={pending}
+                              onClick={() => openApproval("submit")}
                             >
-                              {event.actorName ?? event.actorId} ·{" "}
-                              {formatDate(event.createdAt)}
-                              {event.reason && <p>{event.reason}</p>}
-                            </DetailItem>
-                          )),
-                        )}
-                      </DetailList>
-                    </SidePanelSection>
-                  )}
-                  {run.data.calculationHistory.length > 1 && (
-                    <SidePanelSection title="Calculation history">
-                      <div className="flex flex-wrap gap-2">
-                        {run.data.calculationHistory.map((calculation) => (
-                          <Button
-                            key={calculation.id}
-                            variant={
-                              calculation.id ===
-                              (selectedCalculationId ||
-                                run.data?.latestCalculation?.id)
-                                ? "brand"
-                                : "outline"
-                            }
-                            size="sm"
-                            className="h-8 text-[11px]"
-                            onClick={() => {
-                              setSelectedCalculationId(calculation.id)
-                              setSelectedItem(null)
-                              items.setPage(1)
-                            }}
+                              Submit for Approval
+                            </Button>
+                          ) : (
+                            <Alert>
+                              {!reviewIsCurrent
+                                ? "Select the current revision to submit it."
+                                : "Resolve all employee calculation issues before submitting."}
+                            </Alert>
+                          ))}
+                      </SidePanelSection>
+                    )}
+                    {approvals &&
+                      canManage &&
+                      run.data.status === "PENDING_APPROVAL" &&
+                      !reviewIsCurrent && (
+                        <Alert>
+                          Select the submitted revision to make a decision.
+                        </Alert>
+                      )}
+                    {approvals &&
+                      canManage &&
+                      run.data.status === "PENDING_APPROVAL" &&
+                      reviewIsCurrent &&
+                      selfApproval && (
+                        <Alert>
+                          The preparer and calculation author cannot approve
+                          this revision.
+                        </Alert>
+                      )}
+                    {run.data.calculationHistory.some(
+                      (revision) => revision.approvalEvents?.length,
+                    ) && (
+                      <SidePanelSection title="Approval history">
+                        <DetailList>
+                          {displayedHistoryEvents.map(({ revision, event }) => {
+                            const action = event.action
+                              .replace(/^PAYROLL_/, "")
+                              .replaceAll("_", " ")
+                              .toLowerCase()
+                            const actionLabel = approvals
+                              ? action.replace(/^./, (character) =>
+                                  character.toUpperCase(),
+                                )
+                              : action
+                            return (
+                              <DetailItem
+                                key={event.id}
+                                label={
+                                  approvals
+                                    ? `Revision ${revision.revision} ${actionLabel}`
+                                    : `Revision ${revision.revision} · ${action}`
+                                }
+                              >
+                                <span>
+                                  {event.actorName ?? event.actorId} ·{" "}
+                                  {approvals
+                                    ? approvalTimestamp.format(
+                                        new Date(event.createdAt),
+                                      )
+                                    : formatDate(event.createdAt)}
+                                </span>
+                                {event.reason && (
+                                  <p className="m-0 mt-1 text-left text-[11px] font-normal text-[#52627a]">
+                                    Reason: {event.reason}
+                                  </p>
+                                )}
+                              </DetailItem>
+                            )
+                          })}
+                        </DetailList>
+                      </SidePanelSection>
+                    )}
+                  </TabsContent>
+                  <TabsContent
+                    value="employees"
+                    className="mt-5 gap-5 data-[state=active]:grid"
+                  >
+                    {selectedItem && (
+                      <>
+                        <div>
+                          <SidePanelButton
+                            variant="secondary"
+                            onClick={() => setSelectedItem(null)}
                           >
-                            Revision {calculation.revision}
-                          </Button>
-                        ))}
-                      </div>
-                    </SidePanelSection>
-                  )}
-                  {summary && (
-                    <SidePanelSection
-                      title="Employee calculations"
-                      action={
-                        <span className="text-[10px] text-[#738096]">
-                          Revision {summary.revision}
-                        </span>
-                      }
-                    >
-                      <SearchField
-                        label="Search employees in this run"
-                        value={itemSearch}
-                        maxLength={100}
-                        onChange={(event) => {
-                          setItemSearch(event.target.value)
-                          items.setPage(1)
-                          setSelectedItem(null)
-                        }}
-                        placeholder="Search employee…"
-                        containerClassName="w-full"
-                      />
-                      <ResponsiveDataTable
-                        label="Employee payroll calculations"
-                        aria-busy={items.loading}
+                            Back to employees
+                          </SidePanelButton>
+                        </div>
+                        <div
+                          ref={breakdownRef}
+                          tabIndex={-1}
+                          role="group"
+                          aria-label={`${selectedItem.employeeName} calculation breakdown`}
+                        >
+                          <PayrollItemBreakdown item={selectedItem} />
+                        </div>
+                      </>
+                    )}
+                    {summary && (
+                      <SidePanelSection
+                        title="Employee calculations"
+                        className={selectedItem ? "hidden" : undefined}
+                        action={
+                          <span className="text-[10px] text-[#738096]">
+                            Revision {summary.revision}
+                          </span>
+                        }
                       >
-                        <ResponsiveDataTableHeader>
-                          <div
-                            className={`${itemColumns} max-[560px]:grid-cols-[minmax(100px,1fr)_minmax(80px,.7fr)_auto]`}
+                        <SearchField
+                          label="Search employees in this run"
+                          value={itemSearch}
+                          maxLength={100}
+                          onChange={(event) => {
+                            setItemSearch(event.target.value)
+                            items.setPage(1)
+                            setSelectedItem(null)
+                          }}
+                          placeholder="Search employee…"
+                          containerClassName="w-full"
+                        />
+                        <ResponsiveDataTable
+                          label="Employee payroll calculations"
+                          aria-busy={items.loading}
+                        >
+                          <ResponsiveDataTableHeader
+                            rowClassName={employeeColumns}
                           >
                             <ResponsiveDataTableColumnHeader>
                               Employee
                             </ResponsiveDataTableColumnHeader>
+                            {approvals ? (
+                              <>
+                                <ResponsiveDataTableColumnHeader className="text-right">
+                                  Gross Pay
+                                </ResponsiveDataTableColumnHeader>
+                                <ResponsiveDataTableColumnHeader className="text-right">
+                                  Deductions
+                                </ResponsiveDataTableColumnHeader>
+                                <ResponsiveDataTableColumnHeader className="text-right">
+                                  Net Pay
+                                </ResponsiveDataTableColumnHeader>
+                                <ResponsiveDataTableColumnHeader
+                                  className={approvalStatusColumn}
+                                >
+                                  Status
+                                </ResponsiveDataTableColumnHeader>
+                              </>
+                            ) : (
+                              <>
+                                <ResponsiveDataTableColumnHeader>
+                                  Result
+                                </ResponsiveDataTableColumnHeader>
+                                <ResponsiveDataTableColumnHeader
+                                  className={`text-right ${itemNetColumn}`}
+                                >
+                                  Known net
+                                </ResponsiveDataTableColumnHeader>
+                                <ResponsiveDataTableColumnHeader
+                                  className={`text-right ${itemGrossColumn}`}
+                                >
+                                  Gross
+                                </ResponsiveDataTableColumnHeader>
+                              </>
+                            )}
                             <ResponsiveDataTableColumnHeader>
-                              Result
+                              <span className="sr-only">Open calculation</span>
                             </ResponsiveDataTableColumnHeader>
-                            <ResponsiveDataTableColumnHeader className="text-right max-[560px]:hidden">
-                              Known net
-                            </ResponsiveDataTableColumnHeader>
-                            <ResponsiveDataTableColumnHeader className="text-right max-[800px]:hidden">
-                              Gross
-                            </ResponsiveDataTableColumnHeader>
-                            <ResponsiveDataTableColumnHeader className="text-right">
-                              Detail
-                            </ResponsiveDataTableColumnHeader>
-                          </div>
-                        </ResponsiveDataTableHeader>
-                        <ResponsiveDataTableBody>
-                          {items.error ? (
-                            <ResponsiveDataTableRow>
-                              <ResponsiveDataTableCell
-                                aria-colspan={5}
-                                className="p-4 text-xs text-[#a02d42]"
-                              >
-                                <span role="alert">{items.error}</span>
-                              </ResponsiveDataTableCell>
-                            </ResponsiveDataTableRow>
-                          ) : items.rows.length === 0 && !items.loading ? (
-                            <ResponsiveDataTableRow>
-                              <ResponsiveDataTableCell
-                                aria-colspan={5}
-                                className="p-3"
-                              >
-                                <EmptyState
-                                  size="sm"
-                                  title="No employee results"
-                                  description="No employees were included in this calculation revision."
-                                />
-                              </ResponsiveDataTableCell>
-                            </ResponsiveDataTableRow>
-                          ) : (
-                            items.rows.map((item) => (
-                              <ResponsiveDataTableRow
-                                key={item.id}
-                                className={`${itemColumns} min-h-[48px] border-b border-[#eceef1] px-3 py-2 text-[11px] last:border-0 max-[560px]:grid-cols-[minmax(100px,1fr)_minmax(80px,.7fr)_auto]`}
-                              >
-                                <ResponsiveDataTableCell className="min-w-0">
-                                  <span className="block truncate font-semibold">
-                                    {item.employeeName}
-                                  </span>
-                                  <span className="mt-0.5 block text-[10px] text-[#738096]">
-                                    {item.employeeNumber}
-                                  </span>
-                                </ResponsiveDataTableCell>
-                                <ResponsiveDataTableCell>
-                                  <Pill tone={itemStatusTone(item.status)}>
-                                    {itemStatusLabel(item.status)}
-                                  </Pill>
-                                </ResponsiveDataTableCell>
-                                <ResponsiveDataTableCell className="text-right tabular-nums max-[560px]:hidden">
-                                  {formatMoney(item.netAmount)}
-                                </ResponsiveDataTableCell>
-                                <ResponsiveDataTableCell className="text-right tabular-nums max-[800px]:hidden">
-                                  {formatMoney(item.grossAmount)}
-                                </ResponsiveDataTableCell>
-                                <ResponsiveDataTableCell className="justify-end">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-7 px-2 text-[10px]"
-                                    aria-label={`View ${item.employeeName} calculation`}
-                                    onClick={() => setSelectedItem(item)}
-                                  >
-                                    View
-                                  </Button>
+                          </ResponsiveDataTableHeader>
+                          <ResponsiveDataTableBody>
+                            {items.error ? (
+                              <ResponsiveDataTableRow>
+                                <ResponsiveDataTableCell
+                                  aria-colspan={employeeColumnCount}
+                                  className="p-4 text-xs text-[#a02d42]"
+                                >
+                                  <span role="alert">{items.error}</span>
                                 </ResponsiveDataTableCell>
                               </ResponsiveDataTableRow>
-                            ))
-                          )}
-                        </ResponsiveDataTableBody>
-                      </ResponsiveDataTable>
-                      {items.footer && (
-                        <TablePaginationFooter
-                          {...items.footer}
-                          label="Employee calculation pages"
-                          itemLabel="employees"
-                          onPageChange={items.setPage}
-                        />
-                      )}
-                    </SidePanelSection>
-                  )}
-                  {selectedItem && <PayrollItemBreakdown item={selectedItem} />}
-                </>
+                            ) : items.loading ? (
+                              <DataTableSkeletonRows
+                                label="employee results"
+                                rows={3}
+                                rowClassName={`${employeeColumns} min-h-[48px] py-2`}
+                                cellClassNames={
+                                  approvals
+                                    ? [
+                                        "",
+                                        "text-right",
+                                        "text-right",
+                                        "text-right",
+                                        approvalStatusColumn,
+                                        "",
+                                      ]
+                                    : [
+                                        "",
+                                        "",
+                                        itemNetColumn,
+                                        itemGrossColumn,
+                                        "",
+                                      ]
+                                }
+                              />
+                            ) : items.rows.length === 0 ? (
+                              <ResponsiveDataTableRow>
+                                <ResponsiveDataTableCell
+                                  aria-colspan={employeeColumnCount}
+                                  className="p-3"
+                                >
+                                  <EmptyState
+                                    size="sm"
+                                    title="No employee results"
+                                    description="No employees were included in this calculation revision."
+                                  />
+                                </ResponsiveDataTableCell>
+                              </ResponsiveDataTableRow>
+                            ) : (
+                              items.rows.map((item) => (
+                                <ResponsiveDataTableRow
+                                  key={item.id}
+                                  className={`${employeeColumns} min-h-[48px] border-b border-[#eceef1] py-2 text-[11px] last:border-0`}
+                                >
+                                  <ResponsiveDataTableCell className="min-w-0">
+                                    <span className="block truncate font-semibold">
+                                      {item.employeeName}
+                                    </span>
+                                    <span
+                                      className={
+                                        approvals
+                                          ? "mt-0.5 block truncate text-[10px] text-[#738096]"
+                                          : "mt-0.5 block text-[10px] text-[#738096]"
+                                      }
+                                    >
+                                      {item.employeeNumber}
+                                    </span>
+                                  </ResponsiveDataTableCell>
+                                  {approvals ? (
+                                    <>
+                                      <ResponsiveDataTableCell className="text-right text-[10px] whitespace-nowrap tabular-nums">
+                                        {formatMoney(item.grossAmount)}
+                                      </ResponsiveDataTableCell>
+                                      <ResponsiveDataTableCell className="text-right text-[10px] whitespace-nowrap tabular-nums">
+                                        {formatMoney(item.deductionsAmount)}
+                                      </ResponsiveDataTableCell>
+                                      <ResponsiveDataTableCell className="text-right text-[10px] whitespace-nowrap tabular-nums">
+                                        {formatMoney(item.netAmount)}
+                                      </ResponsiveDataTableCell>
+                                      <ResponsiveDataTableCell
+                                        className={approvalStatusColumn}
+                                      >
+                                        <Pill
+                                          tone={itemStatusTone(item.status)}
+                                        >
+                                          {itemStatusLabel(item.status)}
+                                        </Pill>
+                                      </ResponsiveDataTableCell>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <ResponsiveDataTableCell>
+                                        <Pill
+                                          tone={itemStatusTone(item.status)}
+                                        >
+                                          {itemStatusLabel(item.status)}
+                                        </Pill>
+                                      </ResponsiveDataTableCell>
+                                      <ResponsiveDataTableCell
+                                        className={`text-right tabular-nums ${itemNetColumn}`}
+                                      >
+                                        {formatMoney(item.netAmount)}
+                                      </ResponsiveDataTableCell>
+                                      <ResponsiveDataTableCell
+                                        className={`text-right tabular-nums ${itemGrossColumn}`}
+                                      >
+                                        {formatMoney(item.grossAmount)}
+                                      </ResponsiveDataTableCell>
+                                    </>
+                                  )}
+                                  <ResponsiveDataTableCell>
+                                    <Button
+                                      type="button"
+                                      variant="rowAction"
+                                      size={null}
+                                      aria-label={`View ${item.employeeName} calculation`}
+                                      onClick={(event) => {
+                                        returnToRun.current = {
+                                          button: event.currentTarget,
+                                          scrollTop:
+                                            runBodyRef.current?.scrollTop ?? 0,
+                                        }
+                                        setSelectedItem(item)
+                                      }}
+                                    >
+                                      <ChevronRight
+                                        size={15}
+                                        aria-hidden="true"
+                                      />
+                                    </Button>
+                                  </ResponsiveDataTableCell>
+                                </ResponsiveDataTableRow>
+                              ))
+                            )}
+                          </ResponsiveDataTableBody>
+                        </ResponsiveDataTable>
+                        {items.footer && (
+                          <TablePaginationFooter
+                            {...items.footer}
+                            label="Employee calculation pages"
+                            itemLabel="employees"
+                            onPageChange={items.setPage}
+                          />
+                        )}
+                      </SidePanelSection>
+                    )}
+                  </TabsContent>
+                </Tabs>
               ) : null}
             </SidePanelBody>
-            <SidePanelFooter>
+            <SidePanelFooter
+              className={approvals ? "justify-between" : undefined}
+            >
               <SidePanelButton variant="secondary" onClick={closePanel}>
                 Close
               </SidePanelButton>
+              {approvals &&
+                canManage &&
+                run.data?.status === "PENDING_APPROVAL" &&
+                reviewIsCurrent && (
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <SidePanelButton
+                      variant="danger"
+                      disabled={pending}
+                      onClick={() => openApproval("reject")}
+                    >
+                      Reject
+                    </SidePanelButton>
+                    {!selfApproval && (
+                      <SidePanelButton
+                        disabled={pending || !eligible}
+                        onClick={() => openApproval("approve")}
+                      >
+                        Approve
+                      </SidePanelButton>
+                    )}
+                  </div>
+                )}
             </SidePanelFooter>
           </>
         )}

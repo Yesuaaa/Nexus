@@ -1,11 +1,26 @@
 "use client"
 
 import { useEffect, useState, type ReactNode } from "react"
-import { Eye, Pencil, Trash2 } from "lucide-react"
+import {
+  CheckCircle2,
+  ClipboardList,
+  Download,
+  FileText,
+  Eye,
+  ArrowLeft,
+  Pencil,
+  RefreshCw,
+  Trash2,
+  WalletCards,
+} from "lucide-react"
 import { PageHeader, PageHeaderButton } from "@/components/layout/page-header"
+import { ManagementViewToggle } from "@/components/layout/management-view-toggle"
 import { contentClass } from "@/components/layout/styles"
 import { FiguresRow, Section } from "@/components/ui/overview-panel"
-import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
+import {
+  DataTableSkeletonRows,
+  TableSkeletonBody,
+} from "@/components/ui/data-table-skeleton"
 import { EmptyState } from "@/components/ui/empty-state"
 import {
   DataTableErrorRow,
@@ -19,7 +34,13 @@ import {
 import {
   SidePanel,
   SidePanelBody,
+  SidePanelButton,
+  SidePanelError,
+  SidePanelFooter,
   SidePanelHeader,
+  SidePanelSection,
+  DetailItem,
+  DetailList,
   useSidePanel,
 } from "@/components/ui/side-panel"
 import { Alert } from "@/components/ui/alert"
@@ -28,7 +49,11 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { Form } from "@/components/ui/form"
 import { FormTextarea } from "@/components/ui/form-input"
-import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
+import {
+  FilterSelect,
+  filterBarClass,
+  filterGridClass,
+} from "@/components/ui/filter-select"
 import {
   Modal,
   ModalBody,
@@ -36,6 +61,10 @@ import {
   ModalHeader,
 } from "@/components/ui/modal"
 import { Pill } from "@/components/ui/pill"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useTableSearchQuery } from "@/components/ui/use-table-search-query"
+import { MemberRowSkeleton } from "@/components/ui/panel-loading"
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { SearchField } from "@/components/ui/search-field"
 import { TableSearchStatus } from "@/components/ui/table-search-status"
 import {
@@ -56,6 +85,7 @@ import {
 } from "@/components/ui/table-pagination-footer"
 import {
   apiRequest,
+  apiStreamRequest,
   downloadAuthenticatedFile,
 } from "@/features/auth/api/auth-api"
 import { canManagePayroll } from "@/features/auth/model/permissions"
@@ -64,7 +94,16 @@ import { errorMessage } from "@/lib/error-message"
 import { formatDateTime, humanizeEnum } from "@/lib/format"
 import { sileo } from "@/lib/toast"
 import { useAsyncResource } from "@/lib/use-async-resource"
-import { listPayrollRuns, type PayrollRun } from "../api/payroll-runs-api"
+import { getPayrollPreferences } from "../api/payroll-api"
+import { cn } from "@/lib/utils"
+import { formatPayrollMoney } from "../model/money"
+import {
+  getPayrollRun,
+  listPayrollRunItems,
+  listPayrollRuns,
+  type PayrollRun,
+  type PayrollRunItem,
+} from "../api/payroll-runs-api"
 
 type Page<T> = { rows: T[]; page: number; pageSize: number; total: number }
 type Payslip = {
@@ -124,6 +163,39 @@ const requestTypes = [
   { value: "PAYROLL_DISCREPANCY", label: "Payroll discrepancy" },
   { value: "MISSING_SALARY_PAYMENT", label: "Missing salary payment report" },
 ]
+const payrollHistoryViews = [
+  { value: "payslips", label: "Payslips", icon: WalletCards },
+  { value: "runs", label: "Approved Runs", icon: CheckCircle2 },
+  { value: "requests", label: "Payroll Requests", icon: ClipboardList },
+] as const
+type PayslipLifecycleStatus =
+  | "NOT_GENERATED"
+  | "PARTIALLY_GENERATED"
+  | "GENERATED"
+  | "PARTIALLY_PUBLISHED"
+  | "PUBLISHED"
+
+function payslipStatusLabel(status: PayslipLifecycleStatus) {
+  return status === "NOT_GENERATED"
+    ? "Not generated"
+    : status === "PARTIALLY_GENERATED"
+      ? "Partially generated"
+      : status === "GENERATED"
+        ? "Generated"
+        : status === "PARTIALLY_PUBLISHED"
+          ? "Partially published"
+          : "Published"
+}
+
+function payslipStatusTone(status: PayslipLifecycleStatus) {
+  return status === "PUBLISHED"
+    ? "success"
+    : status === "GENERATED"
+      ? "info"
+      : status === "NOT_GENERATED"
+        ? "neutral"
+        : "warning"
+}
 const relatedPayslipTypes = new Set([
   "PAYSLIP_CORRECTION",
   "PAYROLL_DISCREPANCY",
@@ -220,12 +292,18 @@ function RecordTable({
   children,
   loading,
   empty,
+  alignments,
+  columnClassNames,
+  tableClassName,
   responsive,
 }: {
   headings: string[]
   children: ReactNode
   loading: boolean
   empty: boolean
+  alignments?: Record<string, "center" | "right">
+  columnClassNames?: Record<string, string>
+  tableClassName?: string
   responsive?: {
     label: string
     grid: string
@@ -277,28 +355,56 @@ function RecordTable({
       </ResponsiveDataTable>
     )
   return (
-    <div className="overflow-x-auto">
-      <Table aria-busy={loading}>
-        <TableHeader>
-          <TableRow>
-            {headings.map((heading) => (
-              <TableHead key={heading}>{heading}</TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
+    <Table
+      className={cn(
+        "[&_tbody_tr]:h-12 [&_tbody_td]:px-4 [&_tbody_td]:py-3",
+        tableClassName,
+      )}
+      aria-busy={loading}
+    >
+      <TableHeader className="bg-[#e8eef2]">
+        <TableRow className="hover:bg-[#e8eef2]">
+          {headings.map((heading) => (
+            <TableHead
+              key={heading}
+              className={cn(
+                alignments?.[heading] === "right"
+                  ? "text-right"
+                  : alignments?.[heading] === "center"
+                    ? "text-center"
+                    : undefined,
+                columnClassNames?.[heading],
+              )}
+            >
+              {heading}
+            </TableHead>
+          ))}
+        </TableRow>
+      </TableHeader>
+      {loading ? (
+        <TableSkeletonBody
+          label={headings[0] ?? "payroll records"}
+          columns={headings.length}
+          rows={3}
+        />
+      ) : (
         <TableBody>
-          {loading || empty ? (
+          {empty ? (
             <TableRow>
-              <TableCell colSpan={headings.length} role="status">
-                {loading ? "Loading…" : "No records to show."}
+              <TableCell colSpan={headings.length} className="p-0">
+                <EmptyState
+                  title="No records to show."
+                  size="sm"
+                  role="status"
+                />
               </TableCell>
             </TableRow>
           ) : (
             children
           )}
         </TableBody>
-      </Table>
-    </div>
+      )}
+    </Table>
   )
 }
 
@@ -313,12 +419,7 @@ function PayrollPageSection({
 }) {
   if (staff) return <Section title={title}>{children}</Section>
 
-  return (
-    <section aria-label={title} className="grid min-w-0 gap-2">
-      <h2 className="font-semibold">{title}</h2>
-      {children}
-    </section>
-  )
+  return <section aria-label={title}>{children}</section>
 }
 
 function Pages({
@@ -344,9 +445,711 @@ function Pages({
   )
 }
 
+function usePayslipPreview(payslipId: string, generatedAt: string) {
+  const [preview, setPreview] = useState({
+    key: "",
+    url: "",
+    error: "",
+  })
+  const previewKey = payslipId + ":" + generatedAt
+  const previewLoading = Boolean(payslipId && preview.key !== previewKey)
+  const previewUrl = preview.key === previewKey ? preview.url : ""
+  const previewError = preview.key === previewKey ? preview.error : ""
+  useEffect(() => {
+    let active = true
+    let url = ""
+    if (!payslipId) return
+    const controller = new AbortController()
+    void apiStreamRequest(
+      "/api/payroll/payslips/" + encodeURIComponent(payslipId) + "/preview",
+      { signal: controller.signal },
+    )
+      .then((response) => {
+        if (!response.headers.get("content-type")?.includes("application/pdf"))
+          throw new Error("Invalid payslip document")
+        return response.blob()
+      })
+      .then(async (blob) => {
+        if ((await blob.slice(0, 5).text()) !== "%PDF-")
+          throw new Error("Invalid payslip document")
+        if (!active) return
+        url = URL.createObjectURL(blob)
+        setPreview({ key: previewKey, url, error: "" })
+      })
+      .catch(() => {
+        if (active)
+          setPreview({
+            key: previewKey,
+            url: "",
+            error: "Couldn't load the payslip preview.",
+          })
+      })
+    return () => {
+      active = false
+      controller.abort()
+      if (url) URL.revokeObjectURL(url)
+    }
+  }, [payslipId, previewKey])
+  return { previewLoading, previewUrl, previewError }
+}
+
+function PayslipReview({
+  item,
+  manage,
+  busy,
+  onBack,
+  onChanged,
+}: {
+  item: PayrollRunItem
+  manage: boolean
+  busy: boolean
+  onBack: () => void
+  onChanged: () => void
+}) {
+  const [regenerating, setRegenerating] = useState(false)
+  const { previewLoading, previewUrl, previewError } = usePayslipPreview(
+    item.payslip?.id ?? "",
+    item.payslip?.generatedAt ?? "",
+  )
+
+  async function regenerate() {
+    if (!item.payslip || regenerating || busy) return
+    setRegenerating(true)
+    try {
+      await apiRequest(
+        "/api/payroll/payslips/" +
+          encodeURIComponent(item.payslip.id) +
+          "/regenerate",
+        { method: "POST" },
+      )
+      sileo.success({ title: "Payslip regenerated" })
+      onChanged()
+    } catch (cause) {
+      sileo.error({
+        title: errorMessage(cause, "Couldn't regenerate the payslip."),
+      })
+    } finally {
+      setRegenerating(false)
+    }
+  }
+
+  return (
+    <div className="grid min-w-0 gap-5">
+      <SidePanelSection
+        title="Payslip review"
+        action={
+          <Button type="button" size="sm" variant="outline" onClick={onBack}>
+            <ArrowLeft size={14} aria-hidden="true" />
+            Back
+          </Button>
+        }
+      >
+        <DetailList>
+          <DetailItem label="Employee">{item.employeeName}</DetailItem>
+          <DetailItem label="Employee ID">{item.employeeNumber}</DetailItem>
+          <DetailItem label="Net pay">
+            <span className="tabular-nums">
+              {formatPayrollMoney(item.netAmount)}
+            </span>
+          </DetailItem>
+          <DetailItem label="Payslip status">
+            <Pill tone={payslipStatusTone(item.payslipStatus)}>
+              {payslipStatusLabel(item.payslipStatus)}
+            </Pill>
+          </DetailItem>
+          <DetailItem label="Publication status">
+            {item.payslip?.publishedAt ? (
+              <Pill tone="success">Published</Pill>
+            ) : item.payslip ? (
+              <Pill tone="info">Generated</Pill>
+            ) : (
+              <Pill tone="neutral">Not generated</Pill>
+            )}
+          </DetailItem>
+        </DetailList>
+      </SidePanelSection>
+      <SidePanelSection title="PDF preview">
+        {previewLoading ? (
+          <div aria-busy="true" className="grid gap-2">
+            <span className="sr-only" role="status">
+              Loading payslip preview…
+            </span>
+            <MemberRowSkeleton className="py-3" />
+            <MemberRowSkeleton className="py-3" />
+          </div>
+        ) : previewError ? (
+          <Alert>{previewError}</Alert>
+        ) : previewUrl ? (
+          <iframe
+            title={`Payslip preview for ${item.employeeName}`}
+            src={previewUrl}
+            className="h-[min(58dvh,560px)] min-h-[320px] w-full rounded-lg border-0 bg-[#f4f6f9]"
+          />
+        ) : (
+          <EmptyState
+            title="Payslip not generated"
+            description="Generate payslips for this approved run before reviewing a PDF."
+            size="sm"
+            role="status"
+          />
+        )}
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={!item.payslip}
+            onClick={() =>
+              item.payslip &&
+              void downloadAuthenticatedFile(
+                "/api/payroll/payslips/" +
+                  encodeURIComponent(item.payslip.id) +
+                  "/download",
+                item.payslip.reference + ".pdf",
+              )
+            }
+          >
+            <Download size={14} aria-hidden="true" />
+            Download PDF
+          </Button>
+          {manage && item.payslip && !item.payslip.publishedAt && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={regenerating || busy}
+              onClick={() => void regenerate()}
+            >
+              <RefreshCw size={14} aria-hidden="true" />
+              {regenerating ? "Regenerating…" : "Regenerate PDF"}
+            </Button>
+          )}
+        </div>
+      </SidePanelSection>
+    </div>
+  )
+}
+
+function ApprovedRunDetailsSidebar({
+  runId,
+  refreshKey,
+  manage,
+  busy,
+  onClose,
+  onAction,
+  onChanged,
+}: {
+  runId: string
+  refreshKey: number
+  manage: boolean
+  busy: boolean
+  onClose: () => void
+  onAction: (action: "generate" | "publish", run: PayrollRun) => void
+  onChanged: () => void
+}) {
+  const panel = useSidePanel(onClose)
+  const [tab, setTab] = useState("overview")
+  const [employeePage, setEmployeePage] = useState(1)
+  const [employeeSearch, setEmployeeSearch] = useState("")
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState("")
+  const { query: settledEmployeeSearch, pending: employeeSearchPending } =
+    useTableSearchQuery(employeeSearch)
+  const run = useAsyncResource(
+    (signal) => getPayrollRun(runId, signal),
+    [runId, refreshKey],
+    { fallbackError: "Couldn't load the approved payroll run." },
+  )
+  const calculationId = run.data?.latestCalculation?.id ?? ""
+  const employees = useAsyncResource(
+    (signal) =>
+      listPayrollRunItems(runId, {
+        page: employeePage,
+        search: settledEmployeeSearch,
+        calculationId,
+        signal,
+      }),
+    [
+      runId,
+      refreshKey,
+      calculationId,
+      employeePage,
+      settledEmployeeSearch,
+      tab,
+    ],
+    {
+      enabled: Boolean(
+        calculationId && tab === "employees" && !employeeSearchPending,
+      ),
+      fallbackError: "Couldn't load approved employees.",
+    },
+  )
+  const selectedEmployee =
+    employees.data?.rows.find((item) => item.id === selectedEmployeeId) ?? null
+  const calculation = run.data?.latestCalculation
+  const employeeCount =
+    calculation?.payslipEmployeeCount ??
+    (calculation
+      ? calculation.calculatedItemCount +
+        calculation.reviewItemCount +
+        calculation.blockedItemCount
+      : 0)
+  const generatedCount = calculation?.payslipGeneratedCount ?? 0
+  const publishedCount = calculation?.payslipPublishedCount ?? 0
+  const generationStatus = calculation?.payslipStatus ?? "NOT_GENERATED"
+  const detailDescription = run.data
+    ? `${run.data.period.cutoffLabel} · Revision ${calculation?.revision ?? "—"}`
+    : "Approved payroll run"
+
+  return (
+    <SidePanel open={panel.open} onOpenChange={panel.onOpenChange} busy={busy}>
+      <SidePanelHeader
+        title="Payslip Details"
+        description={detailDescription}
+        meta={<Pill tone="success">Approved</Pill>}
+        closeLabel="Close payslip details"
+        closeDisabled={busy}
+      />
+      <Tabs
+        value={tab}
+        onValueChange={(value) => {
+          setTab(value)
+          setSelectedEmployeeId("")
+        }}
+        className="flex min-h-0 min-w-0 flex-1 flex-col"
+      >
+        <div className="flex-none">
+          <TabsList
+            aria-label="Approved run detail sections"
+            variant="underline"
+          >
+            <TabsTrigger value="overview" variant="underline">
+              Overview
+            </TabsTrigger>
+            <TabsTrigger value="employees" variant="underline">
+              Employees
+            </TabsTrigger>
+          </TabsList>
+        </div>
+        <SidePanelBody className="min-w-0 grid-cols-1">
+          <TabsContent value="overview" className="mt-0 grid min-w-0 gap-5">
+            {run.error ? (
+              <SidePanelError message={run.error} onRetry={run.retry} />
+            ) : run.loading && !run.data ? (
+              <div aria-busy="true" className="grid gap-2">
+                <span className="sr-only" role="status">
+                  Loading approved payroll run…
+                </span>
+                <MemberRowSkeleton className="py-3" />
+                <MemberRowSkeleton className="py-3" />
+                <MemberRowSkeleton className="py-3" />
+              </div>
+            ) : run.data ? (
+              <>
+                <SidePanelSection title="Payroll summary">
+                  <DetailList>
+                    <DetailItem label="Employees">{employeeCount}</DetailItem>
+                    <DetailItem label="Gross pay">
+                      <span className="tabular-nums">
+                        {formatPayrollMoney(calculation?.grossTotal)}
+                      </span>
+                    </DetailItem>
+                    <DetailItem label="Deductions">
+                      <span className="tabular-nums">
+                        {formatPayrollMoney(calculation?.deductionsTotal)}
+                      </span>
+                    </DetailItem>
+                    <DetailItem
+                      label="Net pay"
+                      className="font-semibold [&_dd]:text-[13px]"
+                    >
+                      <span className="font-semibold tabular-nums">
+                        {formatPayrollMoney(calculation?.netTotal)}
+                      </span>
+                    </DetailItem>
+                  </DetailList>
+                </SidePanelSection>
+                <SidePanelSection title="Payslip lifecycle">
+                  <DetailList>
+                    <DetailItem label="Status">
+                      <Pill tone={payslipStatusTone(generationStatus)}>
+                        {payslipStatusLabel(generationStatus)}
+                      </Pill>
+                    </DetailItem>
+                    <DetailItem label="Generated">
+                      {generatedCount} of {employeeCount}
+                    </DetailItem>
+                    <DetailItem label="Published">
+                      {publishedCount} of {employeeCount}
+                    </DetailItem>
+                    <DetailItem label="Not generated">
+                      {Math.max(employeeCount - generatedCount, 0)}
+                    </DetailItem>
+                    {calculation?.payslipLastGeneratedAt && (
+                      <DetailItem label="Last generated">
+                        {timestamp(calculation.payslipLastGeneratedAt)}
+                      </DetailItem>
+                    )}
+                    {calculation?.payslipLastPublishedAt && (
+                      <DetailItem label="Last published">
+                        {timestamp(calculation.payslipLastPublishedAt)}
+                      </DetailItem>
+                    )}
+                  </DetailList>
+                </SidePanelSection>
+              </>
+            ) : null}
+          </TabsContent>
+          <TabsContent value="employees" className="mt-0 grid min-w-0 gap-5">
+            {selectedEmployee ? (
+              <PayslipReview
+                item={selectedEmployee}
+                manage={manage}
+                busy={busy}
+                onBack={() => setSelectedEmployeeId("")}
+                onChanged={() => {
+                  employees.retry()
+                  run.retry()
+                  onChanged()
+                }}
+              />
+            ) : (
+              <SidePanelSection title="Employees" className="min-w-0">
+                <div className="grid min-w-0 gap-3">
+                  <SearchField
+                    label="Search approved employees"
+                    value={employeeSearch}
+                    onChange={(event) => {
+                      setEmployeeSearch(event.target.value)
+                      setEmployeePage(1)
+                    }}
+                    placeholder="Search employee or ID…"
+                  />
+                  {employees.error ? (
+                    <SidePanelError
+                      message={employees.error}
+                      onRetry={employees.retry}
+                    />
+                  ) : (
+                    <RecordTable
+                      headings={[
+                        "Employee",
+                        "Net Pay",
+                        "Payslip Status",
+                        "Details",
+                      ]}
+                      alignments={{ "Net Pay": "right", Details: "center" }}
+                      columnClassNames={{
+                        Employee: "w-[38%]",
+                        "Net Pay": "w-[25%]",
+                        "Payslip Status": "w-[24%]",
+                        Details: "w-[13%]",
+                      }}
+                      tableClassName="min-w-0 table-fixed"
+                      loading={employees.loading || employeeSearchPending}
+                      empty={!employees.data?.rows.length}
+                    >
+                      {employees.data?.rows.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell className="min-w-0">
+                            <div className="grid min-w-0 gap-0.5">
+                              <span
+                                className="block min-w-0 truncate font-medium"
+                                title={item.employeeName}
+                              >
+                                {item.employeeName}
+                              </span>
+                              <span
+                                className="block min-w-0 truncate text-[10px] text-[#738096]"
+                                title={item.employeeNumber}
+                              >
+                                {item.employeeNumber}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="min-w-0 whitespace-nowrap text-right tabular-nums">
+                            {formatPayrollMoney(item.netAmount)}
+                          </TableCell>
+                          <TableCell className="min-w-0">
+                            <Pill tone={payslipStatusTone(item.payslipStatus)}>
+                              {payslipStatusLabel(item.payslipStatus)}
+                            </Pill>
+                          </TableCell>
+                          <TableCell className="min-w-0 text-center">
+                            <div className="flex justify-center">
+                              <Button
+                                type="button"
+                                variant="rowAction"
+                                size={null}
+                                aria-label={`Review payslip for ${item.employeeName}`}
+                                onClick={() => setSelectedEmployeeId(item.id)}
+                              >
+                                <Eye size={14} aria-hidden="true" />
+                                <HoverTooltip side="top-end">
+                                  Review payslip
+                                </HoverTooltip>
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </RecordTable>
+                  )}
+                  <Pages
+                    result={
+                      employees.loading ||
+                      employeeSearchPending ||
+                      employees.error
+                        ? null
+                        : employees.data
+                    }
+                    label="Approved employee pages"
+                    onPageChange={setEmployeePage}
+                  />
+                </div>
+              </SidePanelSection>
+            )}
+          </TabsContent>
+        </SidePanelBody>
+      </Tabs>
+      <SidePanelFooter className="justify-between max-[560px]:items-stretch">
+        <SidePanelButton
+          variant="secondary"
+          disabled={busy}
+          onClick={() => panel.close()}
+        >
+          Close
+        </SidePanelButton>
+        {manage && run.data && (
+          <div className="flex flex-wrap justify-end gap-2">
+            <SidePanelButton
+              variant="secondary"
+              disabled={
+                busy ||
+                run.loading ||
+                !employeeCount ||
+                generatedCount >= employeeCount
+              }
+              onClick={() => onAction("generate", run.data!)}
+            >
+              {generatedCount >= employeeCount
+                ? "Payslips generated"
+                : "Generate payslips"}
+            </SidePanelButton>
+            <SidePanelButton
+              disabled={
+                busy ||
+                run.loading ||
+                !employeeCount ||
+                generatedCount < employeeCount ||
+                publishedCount >= employeeCount
+              }
+              onClick={() => onAction("publish", run.data!)}
+            >
+              {publishedCount >= employeeCount
+                ? "Payslips published"
+                : "Publish payslips"}
+            </SidePanelButton>
+          </div>
+        )}
+      </SidePanelFooter>
+    </SidePanel>
+  )
+}
+
+function IndividualPayslipDetails({
+  slip,
+  onClose,
+  onDownload,
+}: {
+  slip: Payslip
+  onClose: () => void
+  onDownload: () => Promise<void>
+}) {
+  const panel = useSidePanel(onClose)
+  const [previewSession, setPreviewSession] = useState({ open: false, id: 0 })
+  const openPreview = () =>
+    setPreviewSession((session) => ({ open: true, id: session.id + 1 }))
+  const [downloading, setDownloading] = useState(false)
+  const preview = usePayslipPreview(
+    previewSession.open ? slip.id : "",
+    slip.generatedAt + ":" + previewSession.id,
+  )
+  const status = slip.publishedAt ? "PUBLISHED" : "GENERATED"
+  const period = `${slip.period.cutoffLabel} · Revision ${slip.revision}`
+
+  return (
+    <SidePanel open={panel.open} onOpenChange={panel.onOpenChange}>
+      <SidePanelHeader
+        title="Payslip Details"
+        description={period}
+        meta={
+          <Pill tone={payslipStatusTone(status)}>
+            {payslipStatusLabel(status)}
+          </Pill>
+        }
+      />
+      <Tabs
+        defaultValue="overview"
+        className="flex min-h-0 min-w-0 flex-1 flex-col"
+      >
+        <TabsList aria-label="Payslip detail sections" variant="underline">
+          <TabsTrigger value="overview" variant="underline">
+            Overview
+          </TabsTrigger>
+          <TabsTrigger value="document" variant="underline">
+            Document
+          </TabsTrigger>
+        </TabsList>
+        <SidePanelBody className="min-w-0 grid-cols-1">
+          <TabsContent value="overview" className="mt-0 min-w-0 space-y-5">
+            <SidePanelSection title="Employee information">
+              <DetailList>
+                <DetailItem label="Employee">{slip.employeeName}</DetailItem>
+                <DetailItem label="Employee ID">
+                  {slip.employeeNumber}
+                </DetailItem>
+                <DetailItem label="Frequency">
+                  {humanizeEnum(slip.period.configuration.frequency)}
+                </DetailItem>
+                {slip.period.startDate && slip.period.endDate && (
+                  <DetailItem label="Payroll dates">
+                    {slip.period.startDate.slice(0, 10)} –{" "}
+                    {slip.period.endDate.slice(0, 10)}
+                  </DetailItem>
+                )}
+              </DetailList>
+            </SidePanelSection>
+            <SidePanelSection title="Financial breakdown">
+              <DetailList className="tabular-nums [&_dt]:min-w-0 [&_dt]:shrink [&_dt]:[overflow-wrap:anywhere] [&_dd]:shrink-0">
+                {slip.lines.map((line, index) => (
+                  <DetailItem
+                    key={index}
+                    label={`${humanizeEnum(line.componentType)} · ${line.name}`}
+                  >
+                    {formatPayrollMoney(line.amount)}
+                  </DetailItem>
+                ))}
+                <DetailItem label="Gross pay">
+                  <strong>{formatPayrollMoney(slip.gross)}</strong>
+                </DetailItem>
+                <DetailItem label="Total deductions">
+                  {formatPayrollMoney(slip.deductions)}
+                </DetailItem>
+                <DetailItem label="Net pay">
+                  <strong className="text-sm">
+                    {formatPayrollMoney(slip.net)}
+                  </strong>
+                </DetailItem>
+              </DetailList>
+            </SidePanelSection>
+            <SidePanelSection title="Document history">
+              <DetailList>
+                <DetailItem label="Generated at">
+                  {timestamp(slip.generatedAt)}
+                </DetailItem>
+                <DetailItem label="Published at">
+                  {slip.publishedAt
+                    ? timestamp(slip.publishedAt)
+                    : "Awaiting publication"}
+                </DetailItem>
+                <DetailItem label="Reference">{slip.reference}</DetailItem>
+              </DetailList>
+            </SidePanelSection>
+          </TabsContent>
+          <TabsContent value="document" className="mt-0 min-w-0">
+            <SidePanelSection
+              title="Payslip document"
+              action={
+                <Button variant="outline" size="sm" onClick={openPreview}>
+                  Preview PDF
+                </Button>
+              }
+            >
+              <DetailList layout="stacked">
+                <DetailItem label="Document">
+                  <FileText
+                    size={14}
+                    className="mr-1 inline"
+                    aria-hidden="true"
+                  />
+                  {slip.employeeName} · Payslip PDF
+                </DetailItem>
+                <DetailItem label="Payroll period">{period}</DetailItem>
+                <DetailItem label="Format">A4 PDF</DetailItem>
+                <DetailItem label="Reference">{slip.reference}</DetailItem>
+              </DetailList>
+              {slip.publishedAt && (
+                <p className="m-0 text-xs text-muted-foreground">
+                  Published payslips retain their original PDF.
+                </p>
+              )}
+            </SidePanelSection>
+          </TabsContent>
+        </SidePanelBody>
+      </Tabs>
+      <SidePanelFooter className="flex-wrap justify-between">
+        <SidePanelButton variant="secondary" onClick={() => panel.close()}>
+          Close
+        </SidePanelButton>
+        <div className="flex flex-wrap gap-2">
+          <SidePanelButton variant="secondary" onClick={openPreview}>
+            Preview PDF
+          </SidePanelButton>
+          <SidePanelButton
+            disabled={downloading}
+            onClick={async () => {
+              setDownloading(true)
+              try {
+                await onDownload()
+              } finally {
+                setDownloading(false)
+              }
+            }}
+          >
+            {downloading ? "Downloading…" : "Download PDF"}
+          </SidePanelButton>
+        </div>
+      </SidePanelFooter>
+      {previewSession.open && (
+        <Modal
+          elevated
+          size="xl"
+          onClose={() =>
+            setPreviewSession((session) => ({ ...session, open: false }))
+          }
+          className="flex max-h-[94dvh] flex-col"
+        >
+          <ModalHeader title="Payslip PDF preview" description={period} />
+          <ModalBody className="min-h-0 overflow-y-auto">
+            {preview.previewLoading ? (
+              <div aria-busy="true">
+                <span role="status">Loading payslip preview…</span>
+                <MemberRowSkeleton />
+              </div>
+            ) : preview.previewError ? (
+              <Alert role="alert">{preview.previewError}</Alert>
+            ) : preview.previewUrl ? (
+              <iframe
+                title={`Payslip preview for ${slip.employeeName}`}
+                src={preview.previewUrl}
+                className="block h-[72dvh] w-full border-0"
+              />
+            ) : (
+              <EmptyState title="Payslip PDF unavailable" size="sm" />
+            )}
+          </ModalBody>
+        </Modal>
+      )}
+    </SidePanel>
+  )
+}
+
 export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
   const account = usePortalAccount()
   const manage = !staff && canManagePayroll(account)
+  const preferences = useAsyncResource(getPayrollPreferences, [], {
+    enabled: manage,
+  })
   const base = staff ? "/api/staff/my-payroll" : "/api/payroll"
   const [slipPage, setSlipPage] = useState(1)
   const [requestPage, setRequestPage] = useState(1)
@@ -357,9 +1160,13 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
   const [requestStatus, setRequestStatus] = useState("")
   const [requestType, setRequestType] = useState("")
   const [requestSearch, setRequestSearch] = useState("")
+  const { query: settledRequestQuery, pending: requestSearchPending } =
+    useTableSearchQuery(requestSearch)
+  const { query: payslipQuery, pending: payslipSearchPending } =
+    useTableSearchQuery(search)
+  const { query: runQuery, pending: runSearchPending } =
+    useTableSearchQuery(runSearch)
   const requestQuery = requestSearch.trim()
-  const [settledRequestQuery, setSettledRequestQuery] = useState(requestQuery)
-  const requestSearchPending = requestQuery !== settledRequestQuery
   const [refresh, setRefresh] = useState(0)
   const [slip, setSlip] = useState<Payslip | null>(null)
   const [selected, setSelected] = useState<Request | null>(null)
@@ -379,14 +1186,8 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
     action: "generate" | "publish"
     run: PayrollRun
   } | null>(null)
-  useEffect(() => {
-    if (!requestSearchPending) return
-    const timer = window.setTimeout(
-      () => setSettledRequestQuery(requestQuery),
-      200,
-    )
-    return () => window.clearTimeout(timer)
-  }, [requestQuery, requestSearchPending])
+  const [activeTab, setActiveTab] = useState("payslips")
+  const [selectedRunId, setSelectedRunId] = useState("")
   const overview = useAsyncResource(
     (signal) =>
       apiRequest<{
@@ -405,13 +1206,16 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
           "/payslips?" +
           new URLSearchParams({
             page: String(slipPage),
-            search,
+            search: payslipQuery,
             status: publication,
           }),
         { signal },
       ),
-    [base, slipPage, search, publication, refresh],
-    { fallbackError: "Couldn't load payslips." },
+    [base, slipPage, payslipQuery, publication, refresh, activeTab],
+    {
+      enabled: !payslipSearchPending && (staff || activeTab === "payslips"),
+      fallbackError: "Couldn't load payslips.",
+    },
   )
   const relatedPayslips = useAsyncResource(
     async (signal) => {
@@ -457,10 +1261,11 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
       requestStatus,
       requestType,
       settledRequestQuery,
+      activeTab,
       refresh,
     ],
     {
-      enabled: !requestSearchPending,
+      enabled: !requestSearchPending && (staff || activeTab === "requests"),
       fallbackError: staff
         ? "Couldn't load payroll concerns."
         : "Couldn't load payroll requests.",
@@ -482,12 +1287,15 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
     (signal) =>
       listPayrollRuns({
         page: runPage,
-        search: runSearch,
+        search: runQuery,
         status: "APPROVED",
         signal,
       }),
-    [runPage, runSearch, refresh],
-    { enabled: manage, fallbackError: "Couldn't load approved runs." },
+    [runPage, runQuery, refresh, activeTab],
+    {
+      enabled: manage && activeTab === "runs" && !runSearchPending,
+      fallbackError: "Couldn't load approved runs.",
+    },
   )
 
   function resetForm() {
@@ -515,10 +1323,9 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
       if ("messages" in result && selected) setSelected(result)
       if ("changed" in result)
         sileo.success({
-          title:
-            confirm?.action === "publish"
-              ? "Payslips published"
-              : "Payslips generated",
+          title: path.endsWith("/publish-payslips")
+            ? "Payslips published"
+            : "Payslips generated",
           description: result.changed + " updated · " + result.total + " total",
         })
       else
@@ -538,7 +1345,10 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
       resetForm()
       setRefresh((value) => value + 1)
     } catch (cause) {
-      setError(errorMessage(cause, "Couldn't save the payroll change."))
+      const message = errorMessage(cause, "Couldn't save the payroll change.")
+      setError(message)
+      if (!confirm && path.endsWith("/publish-payslips"))
+        sileo.error({ title: message })
     } finally {
       setBusy(false)
     }
@@ -619,6 +1429,18 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
   const concernFiltersActive = Boolean(
     requestQuery || requestStatus || requestType,
   )
+  const payrollHistorySwitcher = !staff ? (
+    <ManagementViewToggle
+      className="ml-auto max-[560px]:ml-0 max-[560px]:w-full"
+      active={activeTab}
+      ariaLabel="Payroll history sections"
+      views={payrollHistoryViews}
+      onChange={(tab) => {
+        setActiveTab(tab)
+        setRefresh((value) => value + 1)
+      }}
+    />
+  ) : null
   const startRequest = () => {
     setSelected(null)
     resetForm()
@@ -634,191 +1456,274 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
     setCreate(true)
     setEditing(true)
   }
-  const bodyContent = (
-    <>
-      {overview.error && <Alert>{overview.error}</Alert>}
-      {staff && overview.data && !overview.data.linked && (
-        <Alert>Your Staff account has no linked employee record.</Alert>
-      )}
-      {manage && (
-        <section aria-label="Approved runs" className="grid min-w-0 gap-2">
-          <h2 className="font-semibold">Approved runs</h2>
-          <SearchField
-            label="Search approved runs"
-            value={runSearch}
-            onChange={(value) => {
-              setRunSearch(value.target.value)
-              setRunPage(1)
-            }}
-            placeholder="Search payroll period…"
-          />
-          {runs.error && <Alert>{runs.error}</Alert>}
-          <RecordTable
-            headings={["Payroll period", "Approved revision", "Actions"]}
-            loading={runs.loading}
-            empty={!runs.data?.rows.length}
-          >
-            {runs.data?.rows.map((run) => (
-              <TableRow key={run.id}>
-                <TableCell>{run.period.cutoffLabel}</TableCell>
-                <TableCell>{run.latestCalculation?.revision}</TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        resetForm()
-                        setConfirm({ action: "generate", run })
-                      }}
-                    >
-                      Generate payslips
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        resetForm()
-                        setConfirm({ action: "publish", run })
-                      }}
-                    >
-                      Publish payslips
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </RecordTable>
-          <Pages
-            result={runs.data}
-            label="Approved run pages"
-            onPageChange={setRunPage}
-          />
-        </section>
-      )}
-      <PayrollPageSection
-        title={staff ? "My payslips" : "Payslips"}
-        staff={staff}
+  const approvedRunsContent = (
+    <section aria-label="Approved runs" className="min-w-0">
+      <div className={`${filterBarClass} pb-4`}>
+        <SearchField
+          label="Search approved runs"
+          value={runSearch}
+          onChange={(value) => {
+            setRunSearch(value.target.value)
+            setRunPage(1)
+          }}
+          placeholder="Search payroll period…"
+        />
+        {payrollHistorySwitcher}
+      </div>
+      {runs.error && <Alert className="mb-3">{runs.error}</Alert>}
+      <RecordTable
+        headings={[
+          "Payroll period",
+          "Revision",
+          "Employees",
+          "Payslip Status",
+          "Details",
+        ]}
+        alignments={{
+          Revision: "right",
+          Employees: "right",
+          Details: "center",
+        }}
+        tableClassName="!w-fit min-w-[760px] max-w-full table-auto max-[900px]:!w-full max-[900px]:min-w-0"
+        loading={runs.loading || runSearchPending}
+        empty={!runs.error && !runs.data?.rows.length}
       >
-        <div className="grid min-w-0 gap-2">
-          {!staff && (
-            <div className="flex flex-wrap gap-2">
-              <SearchField
-                label="Search payslips"
-                value={search}
-                onChange={(value) => {
-                  setSearch(value.target.value)
-                  setSlipPage(1)
-                }}
-                placeholder="Search employee, period or reference…"
-              />
-              <FilterSelect
-                label="Publication status"
-                value={publication}
-                onChange={(value) => {
-                  setPublication(value)
-                  setSlipPage(1)
-                }}
-                options={[
-                  { value: "", label: "All payslips" },
-                  { value: "generated", label: "Unpublished" },
-                  { value: "published", label: "Published" },
-                ]}
-              />
-            </div>
-          )}
-          {!staff && slips.error && <Alert>{slips.error}</Alert>}
-          {emptyPayslips ? (
-            <EmptyState
-              title="No payslips available"
-              description="Your published payslips will appear here once they're available."
-              size="md"
-              role="status"
+        {runs.data?.rows.map((run) => (
+          <TableRow key={run.id}>
+            <TableCell className="min-w-0 truncate align-middle">
+              {run.period.cutoffLabel}
+            </TableCell>
+            <TableCell className="min-w-0 text-right tabular-nums align-middle">
+              {run.latestCalculation?.revision}
+            </TableCell>
+            <TableCell className="min-w-0 text-right tabular-nums align-middle">
+              {run.latestCalculation?.payslipEmployeeCount ??
+                (run.latestCalculation
+                  ? run.latestCalculation.calculatedItemCount +
+                    run.latestCalculation.reviewItemCount +
+                    run.latestCalculation.blockedItemCount
+                  : 0)}
+            </TableCell>
+            <TableCell className="min-w-0 align-middle">
+              {(() => {
+                const status =
+                  run.latestCalculation?.payslipStatus ?? "NOT_GENERATED"
+                return (
+                  <Pill tone={payslipStatusTone(status)}>
+                    {payslipStatusLabel(status)}
+                  </Pill>
+                )
+              })()}
+            </TableCell>
+            <TableCell className="min-w-0 text-center align-middle">
+              <div className="flex justify-center">
+                <Button
+                  type="button"
+                  variant="rowAction"
+                  size={null}
+                  aria-label={`View approved run details for ${run.period.cutoffLabel}`}
+                  onClick={() => {
+                    setSelectedRunId(run.id)
+                    setConfirm(null)
+                  }}
+                >
+                  <Eye size={14} aria-hidden="true" />
+                  <HoverTooltip>View approved run details</HoverTooltip>
+                </Button>
+              </div>
+            </TableCell>
+          </TableRow>
+        ))}
+      </RecordTable>
+      <Pages
+        result={
+          runs.loading || runSearchPending || runs.error ? null : runs.data
+        }
+        label="Approved run pages"
+        onPageChange={setRunPage}
+      />
+    </section>
+  )
+  const payslipsContent = (
+    <PayrollPageSection
+      title={staff ? "My payslips" : "Payslips"}
+      staff={staff}
+    >
+      <div className={staff ? "grid min-w-0 gap-2" : "min-w-0"}>
+        {!staff && (
+          <div className={`${filterBarClass} pb-4`}>
+            <SearchField
+              label="Search payslips"
+              value={search}
+              onChange={(value) => {
+                setSearch(value.target.value)
+                setSlipPage(1)
+              }}
+              placeholder="Search employee, period or reference…"
             />
-          ) : (
-            <RecordTable
-              headings={[
-                "Payroll period",
-                ...(!staff ? ["Employee", "Revision"] : []),
-                "Reference",
-                "Net pay",
-                "Publication",
-                "Actions",
+            <FilterSelect
+              label="Publication status"
+              value={publication}
+              onChange={(value) => {
+                setPublication(value)
+                setSlipPage(1)
+              }}
+              options={[
+                { value: "", label: "All payslips" },
+                { value: "generated", label: "Unpublished" },
+                { value: "published", label: "Published" },
               ]}
-              responsive={
-                staff
-                  ? {
-                      label: "My payslips",
-                      grid: staffPayslipGrid,
-                      emptyMessage: "No payslips available.",
-                      error: slips.error,
-                      retry: slips.retry,
-                    }
-                  : undefined
-              }
-              loading={slips.loading}
-              empty={!slips.data?.rows.length}
-            >
-              {slips.data?.rows.map((row) => (
-                <RecordRow
-                  key={row.id}
+            />
+            {payrollHistorySwitcher}
+          </div>
+        )}
+        {!staff && slips.error && <Alert className="mb-3">{slips.error}</Alert>}
+        {emptyPayslips ? (
+          <EmptyState
+            title="No payslips available"
+            description="Your published payslips will appear here once they're available."
+            size="md"
+            role="status"
+          />
+        ) : (
+          <RecordTable
+            headings={[
+              "Payroll period",
+              ...(!staff ? ["Employee", "Revision"] : []),
+              "Reference",
+              "Net pay",
+              "Publication",
+              staff ? "Actions" : "Details",
+            ]}
+            alignments={{
+              Revision: "right",
+              "Net pay": "right",
+              Actions: "center",
+              Details: "center",
+            }}
+            columnClassNames={
+              staff
+                ? undefined
+                : {
+                    "Payroll period": "w-[15%]",
+                    Employee: "w-[21%]",
+                    Revision: "w-[9%]",
+                    Reference: "w-[18%]",
+                    "Net pay": "w-[13%]",
+                    Publication: "w-[16%]",
+                    Details: "w-[8%]",
+                  }
+            }
+            tableClassName={staff ? undefined : "table-fixed min-w-[680px]"}
+            responsive={
+              staff
+                ? {
+                    label: "My payslips",
+                    grid: staffPayslipGrid,
+                    emptyMessage: "No payslips available.",
+                    error: slips.error,
+                    retry: slips.retry,
+                  }
+                : undefined
+            }
+            loading={slips.loading || payslipSearchPending}
+            empty={!slips.error && !slips.data?.rows.length}
+          >
+            {slips.data?.rows.map((row) => (
+              <RecordRow
+                key={row.id}
+                className={
+                  staff ? staffPayslipGrid + " " + staffTableRow : undefined
+                }
+              >
+                <RecordCell>
+                  {staff && (
+                    <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
+                      Payroll period
+                    </span>
+                  )}
+                  {row.period.cutoffLabel}
+                </RecordCell>
+                {!staff && (
+                  <>
+                    <RecordCell>
+                      <span
+                        className="block truncate font-medium"
+                        title={row.employeeName}
+                      >
+                        {row.employeeName}
+                      </span>
+                      <span
+                        className="block truncate text-muted-foreground"
+                        title={row.employeeNumber}
+                      >
+                        {row.employeeNumber}
+                      </span>
+                    </RecordCell>
+                    <RecordCell className="text-right tabular-nums">
+                      {row.revision}
+                    </RecordCell>
+                  </>
+                )}
+                <RecordCell className={staff ? "break-all" : undefined}>
+                  {staff && (
+                    <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
+                      Reference
+                    </span>
+                  )}
+                  {staff ? (
+                    row.reference
+                  ) : (
+                    <span className="block truncate" title={row.reference}>
+                      {row.reference}
+                    </span>
+                  )}
+                </RecordCell>
+                <RecordCell
+                  className={staff ? undefined : "text-right tabular-nums"}
+                >
+                  {staff && (
+                    <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
+                      Net pay
+                    </span>
+                  )}
+                  {staff ? money(row, row.net) : formatPayrollMoney(row.net)}
+                </RecordCell>
+                <RecordCell>
+                  {staff && (
+                    <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
+                      Publication
+                    </span>
+                  )}
+                  {!staff ? (
+                    <div className="grid justify-items-start gap-1">
+                      <Pill tone={row.publishedAt ? "success" : "info"}>
+                        {row.publishedAt ? "Published" : "Generated"}
+                      </Pill>
+                      {row.publishedAt && (
+                        <span className="text-muted-foreground">
+                          {timestamp(row.publishedAt)}
+                        </span>
+                      )}
+                    </div>
+                  ) : row.publishedAt ? (
+                    timestamp(row.publishedAt)
+                  ) : (
+                    <Pill tone="neutral">Generated</Pill>
+                  )}
+                </RecordCell>
+                <RecordCell
                   className={
-                    staff ? staffPayslipGrid + " " + staffTableRow : undefined
+                    staff ? "flex flex-wrap items-center gap-2" : "text-center"
                   }
                 >
-                  <RecordCell>
-                    {staff && (
-                      <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
-                        Payroll period
-                      </span>
-                    )}
-                    {row.period.cutoffLabel}
-                  </RecordCell>
-                  {!staff && (
-                    <>
-                      <RecordCell>{row.employeeName}</RecordCell>
-                      <RecordCell>{row.revision}</RecordCell>
-                    </>
+                  {staff && (
+                    <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
+                      Actions
+                    </span>
                   )}
-                  <RecordCell className={staff ? "break-all" : undefined}>
-                    {staff && (
-                      <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
-                        Reference
-                      </span>
-                    )}
-                    {row.reference}
-                  </RecordCell>
-                  <RecordCell>
-                    {staff && (
-                      <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
-                        Net pay
-                      </span>
-                    )}
-                    {money(row, row.net)}
-                  </RecordCell>
-                  <RecordCell>
-                    {staff && (
-                      <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
-                        Publication
-                      </span>
-                    )}
-                    {row.publishedAt ? (
-                      timestamp(row.publishedAt)
-                    ) : (
-                      <Pill tone="neutral">Generated</Pill>
-                    )}
-                  </RecordCell>
-                  <RecordCell
-                    className={
-                      staff ? "flex flex-wrap items-center gap-2" : undefined
-                    }
-                  >
-                    {staff && (
-                      <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
-                        Actions
-                      </span>
-                    )}
-                    <div className="flex flex-wrap gap-2">
+                  {staff ? (
+                    <div className="flex flex-wrap justify-center gap-2">
                       <Button
                         size="sm"
                         variant="outline"
@@ -834,228 +1739,273 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
                         Download PDF
                       </Button>
                     </div>
-                  </RecordCell>
-                </RecordRow>
-              ))}
-            </RecordTable>
-          )}
-          <Pages
-            result={staff && !slips.data?.total ? null : slips.data}
-            label="Payslip pages"
-            onPageChange={setSlipPage}
-          />
-        </div>
-      </PayrollPageSection>
-      <PayrollPageSection
-        title={staff ? "Payroll Concerns" : "Payroll requests"}
-        staff={staff}
-      >
-        <div className="grid min-w-0 gap-2">
-          <div className={staff ? filterBarClass : "flex flex-wrap gap-2"}>
-            {staff && (
-              <SearchField
-                label="Search payroll concerns"
-                placeholder="Search concerns…"
-                value={requestSearch}
-                maxLength={100}
-                onChange={(event) => {
-                  setRequestSearch(event.target.value)
-                  setRequestPage(1)
-                }}
-              />
-            )}
-            <FilterSelect
-              label={staff ? "Concern status" : "Request status"}
-              value={requestStatus}
-              onChange={(value) => {
-                setRequestStatus(value)
-                setRequestPage(1)
-              }}
-              options={[
-                { value: "", label: "All statuses" },
-                ...requestStatuses,
-              ]}
-            />
-            <FilterSelect
-              label={staff ? "Concern type" : "Request type"}
-              value={requestType}
-              onChange={(value) => {
-                setRequestType(value)
-                setRequestPage(1)
-              }}
-              options={[{ value: "", label: "All types" }, ...requestTypes]}
-            />
-          </div>
+                  ) : (
+                    <div className="flex justify-center">
+                      <Button
+                        type="button"
+                        variant="rowAction"
+                        size={null}
+                        aria-label={`View payslip for ${row.employeeName}, ${row.period.cutoffLabel}, revision ${row.revision}`}
+                        onClick={() => setSlip(row)}
+                      >
+                        <Eye size={14} aria-hidden="true" />
+                        <HoverTooltip side="top-end">
+                          View payslip details
+                        </HoverTooltip>
+                      </Button>
+                    </div>
+                  )}
+                </RecordCell>
+              </RecordRow>
+            ))}
+          </RecordTable>
+        )}
+        <Pages
+          result={
+            slips.loading ||
+            payslipSearchPending ||
+            slips.error ||
+            (staff && !slips.data?.total)
+              ? null
+              : slips.data
+          }
+          label="Payslip pages"
+          onPageChange={setSlipPage}
+        />
+      </div>
+    </PayrollPageSection>
+  )
+  const requestsContent = (
+    <PayrollPageSection
+      title={staff ? "Payroll Concerns" : "Payroll requests"}
+      staff={staff}
+    >
+      <div className={staff ? "grid min-w-0 gap-2" : "min-w-0"}>
+        <div className={staff ? filterBarClass : `${filterGridClass} pb-4`}>
           {staff && (
-            <TableSearchStatus
-              active={
-                requestSearchPending ||
-                (requests.loading && Boolean(requestQuery))
-              }
-              label="payroll concerns"
+            <SearchField
+              label="Search payroll concerns"
+              placeholder="Search concerns…"
+              value={requestSearch}
+              maxLength={100}
+              onChange={(event) => {
+                setRequestSearch(event.target.value)
+                setRequestPage(1)
+              }}
             />
           )}
-          {!staff && requests.error && <Alert>{requests.error}</Alert>}
-          {emptyConcerns ? (
-            <EmptyState
-              title={
-                concernFiltersActive
-                  ? "No concerns match those filters"
-                  : "No payroll concerns"
-              }
-              description={
-                concernFiltersActive
-                  ? "Try changing your search, concern type, or status."
-                  : "You haven't raised any payroll concerns yet."
-              }
-              size="md"
-              role="status"
-            />
-          ) : (
-            <RecordTable
-              headings={[
-                ...(!staff ? ["Employee"] : []),
-                staff ? "Concern type" : "Type",
-                "Status",
-                staff ? "Date created" : "Created",
-                "Actions",
-              ]}
-              responsive={
-                staff
-                  ? {
-                      label: "Payroll concerns",
-                      grid: staffRequestGrid,
-                      emptyMessage: concernFiltersActive
-                        ? "No concerns match your search or filters."
-                        : "No payroll concerns.",
-                      error: requests.error,
-                      retry: requests.retry,
-                    }
-                  : undefined
-              }
-              loading={requests.loading || requestSearchPending}
-              empty={!requests.data?.rows.length}
-            >
-              {requests.data?.rows.map((row) => (
-                <RecordRow
-                  key={row.id}
+          <FilterSelect
+            label={staff ? "Concern status" : "Request status"}
+            value={requestStatus}
+            onChange={(value) => {
+              setRequestStatus(value)
+              setRequestPage(1)
+            }}
+            options={[{ value: "", label: "All statuses" }, ...requestStatuses]}
+          />
+          <FilterSelect
+            label={staff ? "Concern type" : "Request type"}
+            value={requestType}
+            onChange={(value) => {
+              setRequestType(value)
+              setRequestPage(1)
+            }}
+            options={[{ value: "", label: "All types" }, ...requestTypes]}
+          />
+          {payrollHistorySwitcher}
+        </div>
+        {staff && (
+          <TableSearchStatus
+            active={
+              requestSearchPending ||
+              (requests.loading && Boolean(requestQuery))
+            }
+            label="payroll concerns"
+          />
+        )}
+        {!staff && requests.error && (
+          <Alert className="mb-3">{requests.error}</Alert>
+        )}
+        {emptyConcerns ? (
+          <EmptyState
+            title={
+              concernFiltersActive
+                ? "No concerns match those filters"
+                : "No payroll concerns"
+            }
+            description={
+              concernFiltersActive
+                ? "Try changing your search, concern type, or status."
+                : "You haven't raised any payroll concerns yet."
+            }
+            size="md"
+            role="status"
+          />
+        ) : (
+          <RecordTable
+            headings={[
+              ...(!staff ? ["Employee"] : []),
+              staff ? "Concern type" : "Type",
+              "Status",
+              staff ? "Date created" : "Created",
+              "Actions",
+            ]}
+            alignments={{ Actions: "center" }}
+            responsive={
+              staff
+                ? {
+                    label: "Payroll concerns",
+                    grid: staffRequestGrid,
+                    emptyMessage: concernFiltersActive
+                      ? "No concerns match your search or filters."
+                      : "No payroll concerns.",
+                    error: requests.error,
+                    retry: requests.retry,
+                  }
+                : undefined
+            }
+            loading={requests.loading || requestSearchPending}
+            empty={!requests.error && !requests.data?.rows.length}
+          >
+            {requests.data?.rows.map((row) => (
+              <RecordRow
+                key={row.id}
+                className={
+                  staff ? staffRequestGrid + " " + staffTableRow : undefined
+                }
+              >
+                {!staff && <RecordCell>{row.employee.fullName}</RecordCell>}
+                <RecordCell>
+                  {staff && (
+                    <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
+                      Concern type
+                    </span>
+                  )}
+                  {humanizeEnum(row.type)}
+                </RecordCell>
+                <RecordCell>
+                  {staff && (
+                    <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
+                      Status
+                    </span>
+                  )}
+                  <Pill tone="neutral">{humanizeEnum(row.status)}</Pill>
+                </RecordCell>
+                <RecordCell>
+                  {staff && (
+                    <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
+                      Date created
+                    </span>
+                  )}
+                  {timestamp(row.createdAt)}
+                </RecordCell>
+                <RecordCell
                   className={
-                    staff ? staffRequestGrid + " " + staffTableRow : undefined
+                    staff ? "flex flex-wrap items-center gap-2" : "text-center"
                   }
                 >
-                  {!staff && <RecordCell>{row.employee.fullName}</RecordCell>}
-                  <RecordCell>
-                    {staff && (
+                  {staff ? (
+                    <>
                       <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
-                        Concern type
+                        Actions
                       </span>
-                    )}
-                    {humanizeEnum(row.type)}
-                  </RecordCell>
-                  <RecordCell>
-                    {staff && (
-                      <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
-                        Status
-                      </span>
-                    )}
-                    <Pill tone="neutral">{humanizeEnum(row.status)}</Pill>
-                  </RecordCell>
-                  <RecordCell>
-                    {staff && (
-                      <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
-                        Date created
-                      </span>
-                    )}
-                    {timestamp(row.createdAt)}
-                  </RecordCell>
-                  <RecordCell
-                    className={
-                      staff ? "flex flex-wrap items-center gap-2" : undefined
-                    }
-                  >
-                    {staff ? (
-                      <>
-                        <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
-                          Actions
-                        </span>
-                        <RowActionsMenu
-                          triggerLabel={`Actions for payroll concern ${row.id}`}
-                          menuLabel={`Payroll concern actions for ${row.id}`}
-                          items={[
-                            {
-                              action: "view",
-                              label: (
-                                <RowActionLabel icon={Eye}>
-                                  View concern
-                                </RowActionLabel>
-                              ),
-                            },
-                            ...(row.status === "OPEN"
-                              ? [
-                                  {
-                                    action: "edit" as const,
-                                    label: (
-                                      <RowActionLabel icon={Pencil}>
-                                        Edit concern
-                                      </RowActionLabel>
-                                    ),
-                                  },
-                                  {
-                                    action: "delete" as const,
-                                    label: (
-                                      <RowActionLabel icon={Trash2}>
-                                        Delete concern
-                                      </RowActionLabel>
-                                    ),
-                                    className:
-                                      "text-destructive focus:text-destructive",
-                                  },
-                                ]
-                              : []),
-                          ]}
-                          onAction={(action) => {
-                            if (action === "view") {
-                              resetForm()
-                              setCreate(false)
-                              setSelected(row)
-                            } else if (action === "edit") {
-                              startEdit(row)
-                            } else {
-                              setWithdrawalError("")
-                              setWithdrawal(row)
-                            }
-                          }}
-                        />
-                      </>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          resetForm()
-                          setCreate(false)
-                          setSelected(row)
+                      <RowActionsMenu
+                        triggerLabel={`Actions for payroll concern ${row.id}`}
+                        menuLabel={`Payroll concern actions for ${row.id}`}
+                        items={[
+                          {
+                            action: "view",
+                            label: (
+                              <RowActionLabel icon={Eye}>
+                                View concern
+                              </RowActionLabel>
+                            ),
+                          },
+                          ...(row.status === "OPEN"
+                            ? [
+                                {
+                                  action: "edit" as const,
+                                  label: (
+                                    <RowActionLabel icon={Pencil}>
+                                      Edit concern
+                                    </RowActionLabel>
+                                  ),
+                                },
+                                {
+                                  action: "delete" as const,
+                                  label: (
+                                    <RowActionLabel icon={Trash2}>
+                                      Delete concern
+                                    </RowActionLabel>
+                                  ),
+                                  className:
+                                    "text-destructive focus:text-destructive",
+                                },
+                              ]
+                            : []),
+                        ]}
+                        onAction={(action) => {
+                          if (action === "view") {
+                            resetForm()
+                            setCreate(false)
+                            setSelected(row)
+                          } else if (action === "edit") {
+                            startEdit(row)
+                          } else {
+                            setWithdrawalError("")
+                            setWithdrawal(row)
+                          }
                         }}
-                      >
-                        View request
-                      </Button>
-                    )}
-                  </RecordCell>
-                </RecordRow>
-              ))}
-            </RecordTable>
-          )}
-          <Pages
-            result={
-              staff && (!requests.data?.total || requestSearchPending)
-                ? null
-                : requests.data
-            }
-            label={staff ? "Payroll concern pages" : "Payroll request pages"}
-            onPageChange={setRequestPage}
-          />
-        </div>
-      </PayrollPageSection>
+                      />
+                    </>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        resetForm()
+                        setCreate(false)
+                        setSelected(row)
+                      }}
+                    >
+                      View request
+                    </Button>
+                  )}
+                </RecordCell>
+              </RecordRow>
+            ))}
+          </RecordTable>
+        )}
+        <Pages
+          result={
+            requests.loading ||
+            requestSearchPending ||
+            requests.error ||
+            (staff && !requests.data?.total)
+              ? null
+              : requests.data
+          }
+          label={staff ? "Payroll concern pages" : "Payroll request pages"}
+          onPageChange={setRequestPage}
+        />
+      </div>
+    </PayrollPageSection>
+  )
+  const confirmCalculation = confirm?.run.latestCalculation
+  const confirmEmployeeCount =
+    confirmCalculation?.payslipEmployeeCount ??
+    (confirmCalculation
+      ? confirmCalculation.calculatedItemCount +
+        confirmCalculation.reviewItemCount +
+        confirmCalculation.blockedItemCount
+      : 0)
+  const confirmGeneratedCount = confirmCalculation?.payslipGeneratedCount ?? 0
+  const confirmMissingCount = Math.max(
+    confirmEmployeeCount - confirmGeneratedCount,
+    0,
+  )
+  const dialogs = (
+    <>
       {confirm && (
         <ConfirmationDialog
           title={
@@ -1066,8 +2016,8 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
           subject={confirm.run.period.cutoffLabel}
           description={
             confirm.action === "generate"
-              ? "Create private PDFs from the approved calculation."
-              : "Make generated payslips available to their employees."
+              ? `Create ${confirmMissingCount} private PDFs from approved revision ${confirmCalculation?.revision ?? "—"}. ${confirmMissingCount} payslips are not generated yet.`
+              : `Make ${confirmGeneratedCount} generated payslips available to employees. ${confirmMissingCount} documents are still missing.`
           }
           confirmLabel={confirm.action === "generate" ? "Generate" : "Publish"}
           pendingLabel="Saving…"
@@ -1105,7 +2055,15 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
           onConfirm={() => void withdrawConcern()}
         />
       )}
-      {slip && (
+      {slip && !staff && (
+        <IndividualPayslipDetails
+          key={slip.id}
+          slip={slip}
+          onClose={() => setSlip(null)}
+          onDownload={() => download(slip)}
+        />
+      )}
+      {slip && staff && (
         <PayrollRecordDetail
           sidePanel={staff}
           title="Payslip details"
@@ -1267,9 +2225,13 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
                 )}
                 {requestDetail.error && <Alert>{requestDetail.error}</Alert>}
                 {requestDetail.loading && (
-                  <p role="status" className="text-xs text-[#65718a]">
-                    Loading concern history…
-                  </p>
+                  <div aria-busy="true">
+                    <span className="sr-only" role="status">
+                      Loading concern history…
+                    </span>
+                    <MemberRowSkeleton className="py-3" />
+                    <MemberRowSkeleton className="py-3" />
+                  </div>
                 )}
                 {selectedDetails.messages.map((entry) => (
                   <div className="grid gap-1 border-b pb-2" key={entry.id}>
@@ -1609,23 +2571,71 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
             label="My payroll overview"
           />
         </Section>
-        <div className="grid min-w-0 gap-6">{bodyContent}</div>
+        <div className="grid min-w-0 gap-6">
+          {overview.error && <Alert>{overview.error}</Alert>}
+          {overview.data && !overview.data.linked && (
+            <Alert>Your Staff account has no linked employee record.</Alert>
+          )}
+          {payslipsContent}
+          {requestsContent}
+          {dialogs}
+        </div>
       </main>
     )
 
   return (
-    <main
-      className={
-        contentClass + " grid min-w-0 gap-6 p-[clamp(16px,2.1vw,32px)]"
-      }
-    >
+    <main className={contentClass + " min-w-0 p-[clamp(16px,2.1vw,32px)]"}>
       <PageHeader
         headingId="payroll-documents-heading"
         title="Payslips & Payroll History"
         description="Manage approved payroll records, employee payslips, and publication history."
         actions={!manage ? <Pill tone="neutral">Read only</Pill> : undefined}
       />
-      {bodyContent}
+      <Tabs
+        value={activeTab}
+        onValueChange={(tab) => {
+          setActiveTab(tab)
+          setRefresh((value) => value + 1)
+        }}
+        className="mt-[18px] min-w-0"
+      >
+        <TabsContent value="payslips">{payslipsContent}</TabsContent>
+        <TabsContent value="runs">
+          {manage ? (
+            approvedRunsContent
+          ) : (
+            <Alert>
+              Approved run actions are available to payroll managers.
+            </Alert>
+          )}
+        </TabsContent>
+        <TabsContent value="requests">{requestsContent}</TabsContent>
+      </Tabs>
+      {selectedRunId && (
+        <ApprovedRunDetailsSidebar
+          key={selectedRunId}
+          runId={selectedRunId}
+          refreshKey={refresh}
+          manage={manage}
+          busy={busy}
+          onClose={() => setSelectedRunId("")}
+          onAction={(action, run) => {
+            resetForm()
+            if (
+              action === "publish" &&
+              preferences.data?.requirePublicationConfirmation === false
+            ) {
+              void mutate(
+                "/runs/" + encodeURIComponent(run.id) + "/publish-payslips",
+              )
+              return
+            }
+            setConfirm({ action, run })
+          }}
+          onChanged={() => setRefresh((value) => value + 1)}
+        />
+      )}
+      {dialogs}
     </main>
   )
 }

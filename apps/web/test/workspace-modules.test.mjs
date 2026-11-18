@@ -52,10 +52,11 @@ test("clients do not receive workspace selector entries", () => {
   assert.deepEqual(moduleEntries(account("USER")), [])
 })
 
-test("Staff receive project and Workforce Compliance workspaces", () => {
+test("Staff receive project, Workforce Compliance, and My Payroll workspaces", () => {
   assert.deepEqual(moduleEntries(account("STAFF")), [
     ["Project Management", "/project-workspace"],
     ["Workforce Compliance", "/attendance/check-ins"],
+    ["My Payroll", "/my-payroll"],
     ["Billing & Finance", null],
   ])
 })
@@ -71,6 +72,7 @@ test("a current department head receives Service Operations without changing Sta
       ["Service Operations", "/request-inbox"],
       ["Project Management", "/project-workspace"],
       ["Workforce Compliance", "/attendance/overview"],
+      ["My Payroll", "/my-payroll"],
       ["Billing & Finance", null],
     ],
   )
@@ -81,7 +83,6 @@ test("the selector returns only the Admin operational workspaces", () => {
     ["Service Operations", "/services"],
     ["People & HR", "/employees"],
     ["Workforce Compliance", "/attendance/overview"],
-    ["Payroll", "/module/payroll"],
     ["Billing & Finance", null],
   ])
 })
@@ -93,7 +94,6 @@ test("Superadmin receives operational modules alongside Administration", () => {
     ["People & HR", "/employees"],
     ["Workforce Compliance", "/attendance/time-logs/overview"],
     ["Administration", "/accounts"],
-    ["Payroll", "/module/payroll"],
     ["Billing & Finance", null],
   ])
 })

@@ -33,7 +33,13 @@ test("an unassigned Superadmin enters every implemented registered module", () =
   )
   assert.deepEqual(
     modules.map((module) => module.id),
-    Object.keys(moduleRegistry).filter((id) => moduleRegistry[id].implemented),
+    [
+      "service-operations",
+      "project-management",
+      "people-hr",
+      "attendance-monitoring",
+      "administration",
+    ],
   )
   for (const module of modules) {
     assert.equal(canAccessRoute(superadmin, module.href), true, module.href)
@@ -215,7 +221,7 @@ test("Payroll route and write capability follow the Payroll-specific role split"
   )
 })
 
-test("Staff My Payroll sits inside Workforce Compliance without altering Admin Payroll", () => {
+test("Workforce Compliance contains administrative Payroll while Staff has a separate My Payroll workspace", () => {
   for (const role of ["STAFF", "ADMIN", "SUPERADMIN", "USER"]) {
     const actor = {
       ...superadmin,
@@ -226,7 +232,28 @@ test("Staff My Payroll sits inside Workforce Compliance without altering Admin P
     const entries = getWorkspaceModules(actor).filter(
       (module) => module.id === "payroll",
     )
-    assert.equal(entries.length, staff || role === "USER" ? 0 : 1)
+    assert.equal(entries.length, 0)
+    assert.equal(
+      getWorkspaceModules(actor).some((module) => module.id === "my-payroll"),
+      staff,
+    )
+    if (role === "ADMIN" || role === "SUPERADMIN") {
+      for (const path of [
+        "/module/payroll",
+        "/module/payroll/runs",
+        "/module/payroll/disbursements",
+      ])
+        assert.equal(
+          resolveWorkspaceModuleId(actor, path, null),
+          "attendance-monitoring",
+        )
+      assert.equal(
+        getNavigationPolicies(actor, "main").find(
+          (entry) => entry.id === "module-payroll",
+        )?.moduleId,
+        "attendance-monitoring",
+      )
+    }
     if (staff) {
       assert.ok(
         getWorkspaceModules(actor).some(
@@ -234,12 +261,6 @@ test("Staff My Payroll sits inside Workforce Compliance without altering Admin P
             module.id === "attendance-monitoring" &&
             module.title === "Workforce Compliance",
         ),
-      )
-      assert.equal(
-        getWorkspaceModules(actor).some(
-          (module) => module.title === "My Payroll",
-        ),
-        false,
       )
     }
     for (const path of [
@@ -250,7 +271,7 @@ test("Staff My Payroll sits inside Workforce Compliance without altering Admin P
       assert.equal(canAccessRoute(actor, path), staff)
       assert.equal(
         resolveWorkspaceModuleId(actor, path, "payroll"),
-        staff ? "attendance-monitoring" : null,
+        staff ? "my-payroll" : null,
       )
     }
     if (staff) {

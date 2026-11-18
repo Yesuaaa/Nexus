@@ -19,7 +19,13 @@ export function getAdministrativeModuleEntries<
 >(account: Account, definitions: T) {
   if (!canAccessAdministrativeModules(account)) return []
   return (Object.keys(definitions) as (keyof T & string)[])
-    .filter((id) => definitions[id].implemented)
+    .filter((id) => {
+      const module = definitions[id]
+      return (
+        module.implemented &&
+        !("staffOnly" in module || "workspaceParent" in module)
+      )
+    })
     .map((id) => ({
       id,
       title: definitions[id].title,

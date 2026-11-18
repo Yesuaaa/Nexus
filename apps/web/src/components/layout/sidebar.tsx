@@ -235,7 +235,6 @@ function payrollModuleGroup(visible: (account: Account) => boolean): NavGroup {
       {
         href: "/module/payroll/disbursements",
         label: "Disbursements",
-        disabled: true,
       },
       {
         href: "/module/payroll/payslips",

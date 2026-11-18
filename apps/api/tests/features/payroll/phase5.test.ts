@@ -166,6 +166,92 @@ test(
     })
     const document = await prisma.payrollPayslip.findFirstOrThrow()
     const detail = self + "/payslips/" + document.id
+    assert.equal((await api(detail + "/preview", staff)).status, 404)
+    const draftPreview = await api(
+      "/payroll/payslips/" + document.id + "/preview",
+      admin,
+    )
+    assert.equal(draftPreview.status, 200)
+    assert.match(draftPreview.headers.get("content-type")!, /application\/pdf/)
+    const draftPdf = await draftPreview.text()
+    assert.match(draftPdf, /Employee ID: PAY-001/)
+    assert.match(draftPdf, /\/Logo Do/)
+    const preferencesPath = "/payroll/settings/preferences"
+    const defaults = {
+      revision: 0,
+      showCompanyLogo: true,
+      showEmployeeId: true,
+      requirePublicationConfirmation: true,
+      requireSimulationConfirmation: false,
+    }
+    assert.deepEqual(
+      await (await api(preferencesPath, superadmin)).json(),
+      defaults,
+    )
+    assert.equal((await api(preferencesPath, staff)).status, 403)
+    assert.equal((await api(preferencesPath, client)).status, 403)
+    assert.equal(
+      (await api(preferencesPath, superadmin, "PUT", defaults)).status,
+      403,
+    )
+    assert.equal(
+      (
+        await api(preferencesPath, admin, "PUT", {
+          ...defaults,
+          showEmployeeId: "false",
+        })
+      ).status,
+      400,
+    )
+    const next = {
+      ...defaults,
+      showCompanyLogo: false,
+      showEmployeeId: false,
+      requirePublicationConfirmation: false,
+      requireSimulationConfirmation: true,
+    }
+    const concurrent = await Promise.all([
+      api(preferencesPath, admin, "PUT", next),
+      api(preferencesPath, admin, "PUT", next),
+    ])
+    assert.deepEqual(concurrent.map(({ status }) => status).sort(), [200, 409])
+    assert.deepEqual(await (await api(preferencesPath, admin)).json(), {
+      ...next,
+      revision: 1,
+    })
+    const preferenceAudit =
+      await prisma.workforceManagementChange.findFirstOrThrow({
+        where: { action: "PAYROLL_PREFERENCES_UPDATED" },
+      })
+    assert.equal(preferenceAudit.actorAccountId, admin.id)
+    const regenerated = await api(
+      "/payroll/payslips/" + document.id + "/regenerate",
+      admin,
+      "POST",
+    )
+    assert.equal(regenerated.status, 200)
+    const refreshedDocument = await prisma.payrollPayslip.findUniqueOrThrow({
+      where: { id: document.id },
+    })
+    assert.equal(refreshedDocument.reference, document.reference)
+    assert.equal(refreshedDocument.itemId, document.itemId)
+    assert.equal(refreshedDocument.publishedAt, null)
+    assert.doesNotMatch(
+      Buffer.from(refreshedDocument.document).toString(),
+      /\/Logo Do/,
+    )
+    assert.doesNotMatch(
+      Buffer.from(refreshedDocument.document).toString(),
+      /Employee ID: PAY-001/,
+    )
+    assert.match(
+      Buffer.from(refreshedDocument.document).toString(),
+      /TOTAL NET PAYABLE/,
+    )
+    const generatedRun = (await api("/payroll/runs/" + run.id, admin).then(
+      (response) => response.json(),
+    )) as { latestCalculation: { payslipStatus: string } }
+    assert.equal(generatedRun.latestCalculation.payslipStatus, "GENERATED")
     assert.equal((await api(detail, staff)).status, 404)
     const unpublishedResponse = await api(self + "/payslips", staff)
     const unpublishedPayslips = (await unpublishedResponse.json()) as {
@@ -191,6 +277,27 @@ test(
       total: 1,
       changed: 1,
     })
+    const publishedRun = (await api("/payroll/runs/" + run.id, admin).then(
+      (response) => response.json(),
+    )) as { latestCalculation: { payslipStatus: string } }
+    assert.equal(publishedRun.latestCalculation.payslipStatus, "PUBLISHED")
+    await assert.rejects(
+      prisma.payrollPayslip.update({
+        where: { id: document.id },
+        data: { document: Uint8Array.from([0]) },
+      }),
+      /Payslip documents are immutable/,
+    )
+    assert.equal(
+      (
+        await api(
+          "/payroll/payslips/" + document.id + "/regenerate",
+          admin,
+          "POST",
+        )
+      ).status,
+      409,
+    )
     assert.deepEqual(await (await api(publish, admin, "POST")).json(), {
       total: 1,
       changed: 0,
@@ -220,14 +327,155 @@ test(
     assert.equal(initialSummary.linked, true)
     assert.equal(initialSummary.latestPayslip?.net, "12300.00")
     assert.equal(initialSummary.openConcernCount, 0)
+
+    const batches = "/payroll/disbursements"
+    const prepare = () => api(batches, admin, "POST", { runId: run.id })
+    const [firstBatch, repeatedBatch] = await Promise.all([
+      prepare(),
+      prepare(),
+    ])
+    assert.equal(firstBatch.status, 200)
+    assert.equal(repeatedBatch.status, 200)
+    const batch = (await firstBatch.json()) as {
+      id: string
+      frequency: string
+      totalNet: string
+      proposedAmount: string
+    }
+    assert.equal(((await repeatedBatch.json()) as { id: string }).id, batch.id)
+    assert.equal(batch.totalNet, "12300.00")
+    assert.equal(batch.proposedAmount, "0.00")
+    assert.equal(batch.frequency, "MONTHLY")
+    const batchPath = batches + "/" + batch.id
+    assert.equal((await api(batchPath, superadmin)).status, 200)
+    assert.equal((await api(batchPath, staff)).status, 403)
+    assert.equal(
+      (await api(batchPath + "/validate", superadmin, "POST")).status,
+      403,
+    )
+    const batchDetails = (await (await api(batchPath, admin)).json()) as {
+      items: { id: string; amount: string }[]
+      itemsPage: { page: number; pageSize: number; total: number }
+    }
+    const item = batchDetails.items[0]!
+    assert.equal(item.amount, "12300.00")
+    assert.equal(batchDetails.itemsPage.page, 1)
+    assert.equal(batchDetails.itemsPage.pageSize, 10)
+    assert.equal(batchDetails.itemsPage.total, 1)
+    const pagedBatch = await api(
+      batchPath + "?page=1&pageSize=20&sort=NET_DESC",
+      admin,
+    )
+    assert.equal(pagedBatch.status, 200)
+    assert.equal(
+      (
+        (await pagedBatch.json()) as {
+          itemsPage: { pageSize: number; sort: string }
+        }
+      ).itemsPage.pageSize,
+      20,
+    )
+    const destinationPath = batchPath + "/items/" + item.id + "/destination"
+    const simulatePath = batchPath + "/items/" + item.id + "/simulate"
+    assert.equal(
+      (await api(destinationPath, admin, "POST", { kind: "TEST_BANK" })).status,
+      403,
+    )
+    const oldNodeEnv = process.env.NODE_ENV
+    const oldSimulator = process.env.PAYROLL_LOCAL_SIMULATOR
+    process.env.NODE_ENV = "development"
+    process.env.PAYROLL_LOCAL_SIMULATOR = "true"
+    try {
+      const key = "55ac1828-e12c-47a5-8e13-9ab05cf67132"
+      const simulation = { outcome: "FAILED", idempotencyKey: key }
+      assert.equal(
+        (await api(simulatePath, admin, "POST", simulation)).status,
+        409,
+      )
+      assert.equal(
+        (await api(destinationPath, superadmin, "POST", { kind: "TEST_BANK" }))
+          .status,
+        403,
+      )
+      const destination = await api(destinationPath, admin, "POST", {
+        kind: "TEST_BANK",
+      })
+      assert.equal(destination.status, 200)
+      const configured = (await destination.json()) as {
+        items: {
+          id: string
+          status: string
+          destination: { masked: string } | null
+        }[]
+      }
+      assert.equal(configured.items[0]?.status, "BLOCKED")
+      assert.match(configured.items[0]?.destination?.masked ?? "", /•••• \d{4}/)
+      const replay = await Promise.all([
+        api(simulatePath, admin, "POST", simulation),
+        api(simulatePath, admin, "POST", simulation),
+      ])
+      assert.deepEqual(
+        replay.map((response) => response.status),
+        [200, 200],
+      )
+      assert.equal(
+        await prisma.payrollTransferAttempt.count({
+          where: { itemId: item.id },
+        }),
+        1,
+      )
+      assert.equal(
+        (
+          await prisma.payrollTransferAttempt.findUniqueOrThrow({
+            where: { itemId: item.id },
+          })
+        ).outcome,
+        "FAILED",
+      )
+      assert.equal(
+        (
+          await api(simulatePath, admin, "POST", {
+            ...simulation,
+            outcome: "PENDING",
+          })
+        ).status,
+        409,
+      )
+      assert.equal(
+        (
+          await api(simulatePath, admin, "POST", {
+            outcome: "SUCCEEDED",
+            idempotencyKey: "cb5ee10e-bdfc-4530-87be-db51b7a6bda8",
+          })
+        ).status,
+        409,
+      )
+    } finally {
+      if (oldNodeEnv === undefined) delete process.env.NODE_ENV
+      else process.env.NODE_ENV = oldNodeEnv
+      if (oldSimulator === undefined) delete process.env.PAYROLL_LOCAL_SIMULATOR
+      else process.env.PAYROLL_LOCAL_SIMULATOR = oldSimulator
+    }
+    const validation = await api(batchPath + "/validate", admin, "POST")
+    assert.equal(validation.status, 200)
+    assert.equal(
+      ((await validation.json()) as { status: string }).status,
+      "BLOCKED",
+    )
+    assert.equal((await api(batchPath + "/cancel", admin, "POST")).status, 200)
+    assert.equal(
+      (await api(batchPath + "/validate", admin, "POST")).status,
+      409,
+    )
     const pdf = await api(detail + "/download", staff)
     assert.equal(pdf.status, 200)
     assert.match(pdf.headers.get("cache-control")!, /no-store/)
     assert.match(pdf.headers.get("content-type")!, /application\/pdf/)
     const pdfContents = await pdf.text()
     assert.match(pdfContents, /^%PDF-/)
-    assert.match(pdfContents, /Net pay: PHP 12300\.00/)
-    assert.match(pdfContents, /Total deductions: PHP 45\.67/)
+    assert.match(pdfContents, /TOTAL NET PAYABLE/)
+    assert.match(pdfContents, /\(12,300\.00\) Tj/)
+    assert.match(pdfContents, /\(45\.67\) Tj/)
     for (const actor of [other, unlinked]) {
       assert.equal((await api(detail, actor)).status, 404)
       assert.equal((await api(detail + "/download", actor)).status, 404)
@@ -583,7 +831,7 @@ test(
       await prisma.workforceManagementChange.count({
         where: { action: "PAYROLL_DOCUMENT_ACTIVITY" },
       }),
-      13 + (editRaceStaff.status === 200 ? 1 : 0),
+      19 + (editRaceStaff.status === 200 ? 1 : 0),
     )
   },
 )

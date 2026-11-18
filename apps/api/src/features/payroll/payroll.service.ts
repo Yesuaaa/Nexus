@@ -182,12 +182,16 @@ export const payrollService = {
     const [current, future] = asOfConditions(today)
     const and: Prisma.EmployeeWhereInput[] = []
     if (input.departmentId) and.push({ departmentId: input.departmentId })
-    if (input.payType)
+    if (input.payType) {
+      const currentPayType = { ...current, payType: input.payType }
+      const futurePayType = { ...future, payType: input.payType }
       and.push({
-        compensations: {
-          some: { AND: [...asOfConditions(today), { payType: input.payType }] },
-        },
+        OR: [
+          { compensations: { some: currentPayType } },
+          { compensations: { none: current, some: futurePayType } },
+        ],
       })
+    }
     if (input.status === "CONFIGURED")
       and.push({ compensations: { some: current } })
     if (input.status === "NOT_CONFIGURED")

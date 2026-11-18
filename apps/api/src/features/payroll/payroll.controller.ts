@@ -1,8 +1,10 @@
+import { disbursementsRouter } from "./payroll-disbursements.controller.js"
 import { Router } from "express"
 import {
   PayrollFrequency,
   PayrollPayType,
   PayrollRunStatus,
+  PayrollSandboxDestinationKind,
 } from "../../generated/prisma/client.js"
 import { mapPrismaErrors } from "../../shared/http-error.js"
 import { parsePage } from "../../shared/query/pagination.js"
@@ -16,6 +18,12 @@ import {
 } from "./payroll.schema.js"
 import { payrollService } from "./payroll.service.js"
 import { payrollRunsService } from "./payroll-runs.service.js"
+import { isPayrollSimulatorEnabled } from "./payroll-simulator.js"
+import { payMongoDisbursements } from "./paymongo-disbursements.js"
+import {
+  readPayrollPreferences,
+  updatePayrollPreferences,
+} from "./payroll-preferences.js"
 import {
   validatePayrollPeriodGeneration,
   validatePayrollRunCreation,
@@ -25,7 +33,7 @@ import { payrollDocumentsRouter } from "./payroll-documents.controller.js"
 
 export const payrollRouter = Router()
 payrollRouter.use(requireAuth)
-payrollRouter.use(payrollDocumentsRouter)
+payrollRouter.use(payrollDocumentsRouter, disbursementsRouter)
 
 payrollRouter.get(
   "/periods/current",
@@ -334,7 +342,14 @@ payrollRouter.get(
   "/settings",
   requirePermission(Permission.PAYROLL_READ),
   async (_request, response) =>
-    response.json(await payrollService.getPayrollSettings()),
+    response.json({
+      ...(await payrollService.getPayrollSettings()),
+      capabilities: {
+        simulatorEnabled: isPayrollSimulatorEnabled(),
+        payMongoEnabled: payMongoDisbursements.enabled,
+        sandboxDestinationKinds: Object.values(PayrollSandboxDestinationKind),
+      },
+    }),
 )
 payrollRouter.post(
   "/settings/versions",
@@ -352,6 +367,21 @@ payrollRouter.post(
         ),
       )
   },
+)
+
+payrollRouter.get(
+  "/settings/preferences",
+  requirePermission(Permission.PAYROLL_READ),
+  async (_request, response) => {
+    response.set("Cache-Control", "private, no-store")
+    return response.json(await readPayrollPreferences())
+  },
+)
+payrollRouter.put(
+  "/settings/preferences",
+  requirePermission(Permission.PAYROLL_MANAGE),
+  async (request, response) =>
+    response.json(await updatePayrollPreferences(request.auth!, request.body)),
 )
 
 payrollRouter.use(

@@ -1,7 +1,9 @@
 "use client"
 
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+
 import { useState, type FormEvent } from "react"
-import { ArrowRight, Banknote, Plus, X } from "lucide-react"
+import { Banknote, Eye, Plus, X } from "lucide-react"
 import { PageHeader } from "@/components/layout/page-header"
 import { contentClass, focusRing } from "@/components/layout/styles"
 import { Alert } from "@/components/ui/alert"
@@ -12,7 +14,10 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
 import { Form } from "@/components/ui/form"
 import { FormInput, FormTextarea } from "@/components/ui/form-input"
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Pill } from "@/components/ui/pill"
+import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
+import { MemberRowSkeleton } from "@/components/ui/panel-loading"
 import { SearchField } from "@/components/ui/search-field"
 import {
   DetailItem,
@@ -33,7 +38,10 @@ import {
   ResponsiveDataTableHeader,
   ResponsiveDataTableRow,
 } from "@/components/ui/responsive-data-table"
-import { TablePaginationFooter } from "@/components/ui/table-pagination-footer"
+import {
+  TablePaginationFooter,
+  pageRange,
+} from "@/components/ui/table-pagination-footer"
 import { usePaginatedList } from "@/components/ui/use-paginated-list"
 import {
   Select,
@@ -79,7 +87,7 @@ const configurationStatuses: {
 ]
 
 const compensationGrid =
-  "grid grid-cols-[minmax(105px,1.4fr)_minmax(70px,.9fr)_minmax(80px,1fr)_minmax(75px,.8fr)_minmax(95px,1fr)_minmax(90px,1fr)_minmax(95px,1fr)_minmax(80px,.9fr)] items-center gap-3"
+  "grid grid-cols-[minmax(105px,1.4fr)_minmax(70px,.9fr)_minmax(80px,1fr)_minmax(75px,.8fr)_minmax(95px,1fr)_minmax(90px,1fr)_minmax(95px,1fr)_56px] items-center gap-3"
 
 function todayInManila() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -169,6 +177,7 @@ export function PayrollCompensationPage() {
     })),
   ]
   const hasFilters = Boolean(search.trim() || departmentId || payType || status)
+  const currentPage = list.hasCurrentData && !list.error ? list.data : null
   const allEmployeesAreUnconfigured = Boolean(
     list.data &&
     list.data.total === list.data.rows.length &&
@@ -261,11 +270,7 @@ export function PayrollCompensationPage() {
             </button>
           </Alert>
         )}
-        {list.loading && !list.data?.rows.length ? (
-          <p className="py-12 text-center text-sm text-[#65718a]" role="status">
-            Loading employee compensation…
-          </p>
-        ) : list.error ? (
+        {list.error ? (
           <EmptyState
             icon={Banknote}
             title="Compensation couldn't be loaded"
@@ -277,7 +282,7 @@ export function PayrollCompensationPage() {
               </Button>
             }
           />
-        ) : list.rows.length === 0 ? (
+        ) : !list.loading && list.rows.length === 0 ? (
           <EmptyState
             icon={Banknote}
             title={
@@ -296,7 +301,7 @@ export function PayrollCompensationPage() {
           />
         ) : (
           <>
-            {allEmployeesAreUnconfigured && !hasFilters && (
+            {!list.loading && allEmployeesAreUnconfigured && !hasFilters && (
               <p role="status" className="mb-3 text-xs text-[#65718a]">
                 No compensation configurations yet. Select an employee to add
                 the first version.
@@ -320,81 +325,113 @@ export function PayrollCompensationPage() {
                   "Status",
                   "Actions",
                 ].map((label) => (
-                  <ResponsiveDataTableColumnHeader key={label}>
+                  <ResponsiveDataTableColumnHeader
+                    key={label}
+                    className={label === "Actions" ? "text-center" : undefined}
+                  >
                     {label}
                   </ResponsiveDataTableColumnHeader>
                 ))}
               </ResponsiveDataTableHeader>
               <ResponsiveDataTableBody>
-                {list.rows.map((row) => (
-                  <ResponsiveDataTableRow
-                    key={row.employee.id}
-                    className={`${compensationGrid} border-b border-[#edf0f3] px-4 py-3 last:border-b-0 @max-[820px]:grid-cols-[minmax(0,1.2fr)_minmax(110px,.8fr)] @max-[820px]:gap-x-3 @max-[820px]:gap-y-1`}
-                  >
-                    <ResponsiveDataTableCell className="min-w-0 @max-[820px]:col-start-1 @max-[820px]:row-start-1">
-                      <div className="truncate text-xs font-semibold">
-                        {row.employee.fullName}
-                      </div>
-                      <div className="mt-0.5 truncate text-[10px] text-[#738096]">
-                        {row.employee.employeeId}
-                      </div>
-                    </ResponsiveDataTableCell>
-                    <ResponsiveDataTableCell className="truncate text-xs @max-[820px]:hidden">
-                      {row.employee.department?.name ?? "—"}
-                    </ResponsiveDataTableCell>
-                    <ResponsiveDataTableCell className="text-xs @max-[820px]:hidden">
-                      {row.employee.employmentType
-                        .replaceAll("_", " ")
-                        .toLowerCase()}
-                    </ResponsiveDataTableCell>
-                    <ResponsiveDataTableCell className="text-xs @max-[820px]:col-start-1 @max-[820px]:row-start-2">
-                      <span className="mr-1.5 hidden text-[#65718a] @max-[820px]:inline">
-                        Pay type
-                      </span>
-                      {payTypeLabel(row.compensation?.payType)}
-                    </ResponsiveDataTableCell>
-                    <ResponsiveDataTableCell className="text-xs font-semibold @max-[820px]:col-start-2 @max-[820px]:row-start-1 @max-[820px]:text-right">
-                      <span className="mr-1.5 hidden font-normal text-[#65718a] @max-[820px]:inline">
-                        Rate
-                      </span>
-                      {formatPayrollMoney(row.compensation?.baseRate)}
-                    </ResponsiveDataTableCell>
-                    <ResponsiveDataTableCell className="text-xs @max-[820px]:col-start-2 @max-[820px]:row-start-2 @max-[820px]:text-right">
-                      <span className="mr-1.5 hidden text-[#65718a] @max-[820px]:inline">
-                        From
-                      </span>
-                      {formatDate(row.compensation?.effectiveFrom)}
-                    </ResponsiveDataTableCell>
-                    <ResponsiveDataTableCell className="@max-[820px]:col-start-1 @max-[820px]:row-start-3">
-                      <span className="mr-1.5 hidden text-[#65718a] @max-[820px]:inline">
-                        Status
-                      </span>
-                      <Pill tone={statusTone(row.configurationStatus)}>
-                        {statusLabel(row.configurationStatus)}
-                      </Pill>
-                    </ResponsiveDataTableCell>
-                    <ResponsiveDataTableCell className="flex justify-end @max-[820px]:col-start-2 @max-[820px]:row-start-3">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        aria-label={`${canManage && row.configurationStatus === "NOT_CONFIGURED" ? "Configure" : "View"} compensation for ${row.employee.fullName}`}
-                        onClick={() => setSelectedEmployeeId(row.employee.id)}
-                      >
-                        {canManage &&
-                        row.configurationStatus === "NOT_CONFIGURED"
-                          ? "Configure"
-                          : "View"}
-                        <ArrowRight size={14} aria-hidden="true" />
-                      </Button>
-                    </ResponsiveDataTableCell>
-                  </ResponsiveDataTableRow>
-                ))}
+                {list.loading ? (
+                  <DataTableSkeletonRows
+                    label="employee compensation"
+                    rows={3}
+                    rowClassName={`${compensationGrid} min-h-[48px] px-4 py-3 @max-[820px]:grid-cols-2`}
+                    cellClassNames={[
+                      "",
+                      "@max-[820px]:hidden",
+                      "@max-[820px]:hidden",
+                      "",
+                      "",
+                      "",
+                      "",
+                      "",
+                    ]}
+                  />
+                ) : (
+                  list.rows.map((row) => (
+                    <ResponsiveDataTableRow
+                      key={row.employee.id}
+                      variant="directory"
+                      className={`${compensationGrid} @max-[820px]:grid-cols-[minmax(0,1.2fr)_minmax(110px,.8fr)] @max-[820px]:gap-x-3 @max-[820px]:gap-y-1`}
+                    >
+                      <ResponsiveDataTableCell className="min-w-0 @max-[820px]:col-start-1 @max-[820px]:row-start-1">
+                        <div className="truncate text-xs font-semibold">
+                          {row.employee.fullName}
+                        </div>
+                        <div className="mt-0.5 truncate text-[10px] text-[#738096]">
+                          {row.employee.employeeId}
+                        </div>
+                      </ResponsiveDataTableCell>
+                      <ResponsiveDataTableCell className="truncate text-xs @max-[820px]:hidden">
+                        {row.employee.department?.name ?? "—"}
+                      </ResponsiveDataTableCell>
+                      <ResponsiveDataTableCell className="text-xs @max-[820px]:hidden">
+                        {row.employee.employmentType
+                          .replaceAll("_", " ")
+                          .toLowerCase()}
+                      </ResponsiveDataTableCell>
+                      <ResponsiveDataTableCell className="text-xs @max-[820px]:col-start-1 @max-[820px]:row-start-2">
+                        <span className="mr-1.5 hidden text-[#65718a] @max-[820px]:inline">
+                          Pay type
+                        </span>
+                        {payTypeLabel(row.compensation?.payType)}
+                      </ResponsiveDataTableCell>
+                      <ResponsiveDataTableCell className="text-xs font-semibold @max-[820px]:col-start-2 @max-[820px]:row-start-1 @max-[820px]:text-right">
+                        <span className="mr-1.5 hidden font-normal text-[#65718a] @max-[820px]:inline">
+                          Rate
+                        </span>
+                        {formatPayrollMoney(row.compensation?.baseRate)}
+                      </ResponsiveDataTableCell>
+                      <ResponsiveDataTableCell className="text-xs @max-[820px]:col-start-2 @max-[820px]:row-start-2 @max-[820px]:text-right">
+                        <span className="mr-1.5 hidden text-[#65718a] @max-[820px]:inline">
+                          From
+                        </span>
+                        {formatDate(row.compensation?.effectiveFrom)}
+                      </ResponsiveDataTableCell>
+                      <ResponsiveDataTableCell className="@max-[820px]:col-start-1 @max-[820px]:row-start-3">
+                        <span className="mr-1.5 hidden text-[#65718a] @max-[820px]:inline">
+                          Status
+                        </span>
+                        <Pill tone={statusTone(row.configurationStatus)}>
+                          {statusLabel(row.configurationStatus)}
+                        </Pill>
+                      </ResponsiveDataTableCell>
+                      <ResponsiveDataTableCell className="flex justify-center @max-[820px]:col-start-2 @max-[820px]:row-start-3 @max-[820px]:justify-end">
+                        <Button
+                          type="button"
+                          variant="rowAction"
+                          size={null}
+                          aria-label={`${canManage && row.configurationStatus === "NOT_CONFIGURED" ? "Configure" : "View"} compensation for ${row.employee.fullName}`}
+                          onClick={() => setSelectedEmployeeId(row.employee.id)}
+                        >
+                          <Eye size={14} aria-hidden="true" />
+                          <HoverTooltip>
+                            {canManage &&
+                            row.configurationStatus === "NOT_CONFIGURED"
+                              ? "Configure compensation"
+                              : "View compensation"}
+                          </HoverTooltip>
+                        </Button>
+                      </ResponsiveDataTableCell>
+                    </ResponsiveDataTableRow>
+                  ))
+                )}
               </ResponsiveDataTableBody>
             </ResponsiveDataTable>
-            {list.footer && (
+            {currentPage && currentPage.total > 0 && (
               <TablePaginationFooter
-                {...list.footer}
+                {...pageRange(
+                  currentPage.page,
+                  currentPage.pageSize,
+                  currentPage.total,
+                )}
+                page={currentPage.page}
+                total={currentPage.total}
+                totalPages={Math.ceil(currentPage.total / currentPage.pageSize)}
+                disabled={list.loading}
                 label="Compensation pages"
                 itemLabel="employees"
                 onPageChange={list.setPage}
@@ -559,9 +596,13 @@ function CompensationPanel({
         />
         {panel.loading ? (
           <SidePanelBody>
-            <p role="status" className="text-sm text-[#65718a]">
-              Loading compensation…
-            </p>
+            <div aria-busy="true">
+              <span className="sr-only" role="status">
+                Loading compensation…
+              </span>
+              <MemberRowSkeleton className="py-3" />
+              <MemberRowSkeleton className="py-3" />
+            </div>
           </SidePanelBody>
         ) : panel.error ? (
           <SidePanelBody>
@@ -756,94 +797,119 @@ function CompensationPanel({
           </Form>
         ) : employee ? (
           <>
-            <SidePanelBody>
-              <SidePanelSection title="Employee">
-                <DetailList>
-                  <DetailItem label="Employee ID">
-                    {employee.employeeId}
-                  </DetailItem>
-                  <DetailItem label="Department">
-                    {employee.department?.name ?? "—"}
-                  </DetailItem>
-                  <DetailItem label="Employment type">
-                    {employee.employmentType.replaceAll("_", " ").toLowerCase()}
-                  </DetailItem>
-                  <DetailItem label="Employment status">
-                    {employee.status.replaceAll("_", " ").toLowerCase()}
-                  </DetailItem>
-                </DetailList>
-              </SidePanelSection>
-              <SidePanelSection
-                title="Current compensation"
-                action={
-                  canManage && employee.status !== "INACTIVE" ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={beginEdit}
-                    >
-                      {current || future
-                        ? "Create revision"
-                        : "Configure compensation"}
-                    </Button>
-                  ) : undefined
-                }
+            <Tabs
+              defaultValue="overview"
+              className="flex min-h-0 min-w-0 flex-1 flex-col"
+            >
+              <TabsList
+                aria-label="Compensation detail sections"
+                variant="underline"
               >
-                {current ? (
-                  <DetailList>
-                    <DetailItem label="Pay type">
-                      {payTypeLabel(current.payType)}
-                    </DetailItem>
-                    <DetailItem label="Base rate">
-                      {formatPayrollMoney(current.baseRate)}
-                    </DetailItem>
-                    <DetailItem label="Effective dates">
-                      {formatDate(current.effectiveFrom)} –{" "}
-                      {formatDate(current.effectiveTo)}
-                    </DetailItem>
-                    <DetailItem label="Change reason">
-                      {current.changeReason}
-                    </DetailItem>
-                  </DetailList>
-                ) : (
-                  <p className="m-0 text-xs text-[#738096]">
-                    No compensation is effective today.
-                  </p>
-                )}
-              </SidePanelSection>
-              {future && (
-                <SidePanelSection title="Next scheduled revision">
-                  <DetailList>
-                    <DetailItem label="Effective from">
-                      {formatDate(future.effectiveFrom)}
-                    </DetailItem>
-                    <DetailItem label="Pay type">
-                      {payTypeLabel(future.payType)}
-                    </DetailItem>
-                    <DetailItem label="Base rate">
-                      {formatPayrollMoney(future.baseRate)}
-                    </DetailItem>
-                  </DetailList>
-                </SidePanelSection>
-              )}
-              <SidePanelSection title="Compensation history">
-                {history.length === 0 ? (
-                  <p className="m-0 text-xs text-[#738096]">
-                    No compensation versions yet.
-                  </p>
-                ) : (
-                  <ol className="m-0 grid list-none gap-3 p-0">
-                    {history.map((version) => (
-                      <CompensationHistoryItem
-                        key={version.id}
-                        version={version}
-                      />
-                    ))}
-                  </ol>
-                )}
-              </SidePanelSection>
-            </SidePanelBody>
+                <TabsTrigger value="overview" variant="underline">
+                  Overview
+                </TabsTrigger>
+                <TabsTrigger value="history" variant="underline">
+                  History
+                </TabsTrigger>
+              </TabsList>
+              <SidePanelBody>
+                <TabsContent
+                  value="overview"
+                  className="mt-0 gap-5 data-[state=active]:grid"
+                >
+                  <SidePanelSection title="Employee">
+                    <DetailList>
+                      <DetailItem label="Employee ID">
+                        {employee.employeeId}
+                      </DetailItem>
+                      <DetailItem label="Department">
+                        {employee.department?.name ?? "—"}
+                      </DetailItem>
+                      <DetailItem label="Employment type">
+                        {employee.employmentType
+                          .replaceAll("_", " ")
+                          .toLowerCase()}
+                      </DetailItem>
+                      <DetailItem label="Employment status">
+                        {employee.status.replaceAll("_", " ").toLowerCase()}
+                      </DetailItem>
+                    </DetailList>
+                  </SidePanelSection>
+                  <SidePanelSection
+                    title="Current compensation"
+                    action={
+                      canManage && employee.status !== "INACTIVE" ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={beginEdit}
+                        >
+                          {current || future
+                            ? "Create revision"
+                            : "Configure compensation"}
+                        </Button>
+                      ) : undefined
+                    }
+                  >
+                    {current ? (
+                      <DetailList>
+                        <DetailItem label="Pay type">
+                          {payTypeLabel(current.payType)}
+                        </DetailItem>
+                        <DetailItem label="Base rate">
+                          {formatPayrollMoney(current.baseRate)}
+                        </DetailItem>
+                        <DetailItem label="Effective dates">
+                          {formatDate(current.effectiveFrom)} –{" "}
+                          {formatDate(current.effectiveTo)}
+                        </DetailItem>
+                        <DetailItem label="Change reason">
+                          {current.changeReason}
+                        </DetailItem>
+                      </DetailList>
+                    ) : (
+                      <p className="m-0 text-xs text-[#738096]">
+                        No compensation is effective today.
+                      </p>
+                    )}
+                  </SidePanelSection>
+                  {future && (
+                    <SidePanelSection title="Next scheduled revision">
+                      <DetailList>
+                        <DetailItem label="Effective from">
+                          {formatDate(future.effectiveFrom)}
+                        </DetailItem>
+                        <DetailItem label="Pay type">
+                          {payTypeLabel(future.payType)}
+                        </DetailItem>
+                        <DetailItem label="Base rate">
+                          {formatPayrollMoney(future.baseRate)}
+                        </DetailItem>
+                      </DetailList>
+                    </SidePanelSection>
+                  )}
+                </TabsContent>
+                <TabsContent value="history" className="mt-0 min-w-0">
+                  <SidePanelSection title="Compensation history">
+                    {history.length === 0 ? (
+                      <p className="m-0 text-xs text-[#738096]">
+                        No compensation versions yet.
+                      </p>
+                    ) : (
+                      <ol className="m-0 grid list-none gap-3 p-0">
+                        {history.map((version) => (
+                          <CompensationHistoryItem
+                            key={version.id}
+                            version={version}
+                          />
+                        ))}
+                      </ol>
+                    )}
+                  </SidePanelSection>
+                </TabsContent>
+              </SidePanelBody>
+            </Tabs>
             <SidePanelFooter>
               <SidePanelButton variant="secondary" onClick={onClose}>
                 Close

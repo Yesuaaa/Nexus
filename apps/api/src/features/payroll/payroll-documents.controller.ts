@@ -23,6 +23,7 @@ import {
 } from "../auth/auth.middleware.js"
 import { Permission } from "../auth/auth.permissions.js"
 import { renderPayslipPdf } from "./payslip-pdf.js"
+import { readPayrollPreferences } from "./payroll-preferences.js"
 
 export const payrollDocumentsRouter = Router()
 export const staffPayrollRouter = Router()
@@ -191,6 +192,87 @@ async function downloadSlip(
   return slip
 }
 
+type ApprovedPayslipItem = {
+  employeeNameSnapshot: string
+  employeeNumberSnapshot: string
+  currency: string
+  grossAmount: Prisma.Decimal | null
+  deductionsAmount: Prisma.Decimal | null
+  netAmount: Prisma.Decimal | null
+  status: string
+  components: {
+    componentType: string
+    status: string
+    name: string
+    amount: Prisma.Decimal | null
+  }[]
+}
+
+type ApprovedPayslipRun = {
+  period: {
+    cutoffLabel: string
+    startDate: Date
+    endDate: Date
+    configuration: { frequency: string }
+  }
+}
+
+function assertRenderablePayslipItem(item: ApprovedPayslipItem) {
+  if (
+    item.status !== "CALCULATED" ||
+    !item.grossAmount ||
+    !item.deductionsAmount ||
+    !item.netAmount ||
+    !item.components.some(
+      ({ componentType }) => componentType === "BASE_EARNING",
+    ) ||
+    item.components.some(
+      ({ status, amount }) => status !== "CALCULATED" || amount === null,
+    )
+  )
+    fail(409, "An approved employee result is missing its financial breakdown")
+}
+
+function renderApprovedPayslipDocument(
+  item: ApprovedPayslipItem,
+  run: ApprovedPayslipRun,
+  revision: number,
+  reference: string,
+  generatedAt: Date,
+  preferences: Awaited<ReturnType<typeof readPayrollPreferences>>,
+) {
+  assertRenderablePayslipItem(item)
+  const lineView = (line: ApprovedPayslipItem["components"][number]) => ({
+    name: line.name,
+    amount: line.amount!.toFixed(2),
+  })
+  return renderPayslipPdf({
+    employee: item.employeeNameSnapshot,
+    showCompanyLogo: preferences.showCompanyLogo,
+    employeeId: preferences.showEmployeeId
+      ? item.employeeNumberSnapshot
+      : undefined,
+    period: run.period.cutoffLabel,
+    dates: `${run.period.startDate.toISOString().slice(0, 10)} to ${run.period.endDate.toISOString().slice(0, 10)}`,
+    frequency:
+      run.period.configuration.frequency === "MONTHLY"
+        ? "Monthly"
+        : "Semi-monthly",
+    revision,
+    reference,
+    generatedOn: generatedAt.toISOString().slice(0, 10),
+    earnings: item.components
+      .filter((line) => line.componentType !== "DEDUCTION")
+      .map(lineView),
+    deductions: item.components
+      .filter((line) => line.componentType === "DEDUCTION")
+      .map(lineView),
+    gross: item.grossAmount!.toFixed(2),
+    totalDeductions: item.deductionsAmount!.toFixed(2),
+    net: item.netAmount!.toFixed(2),
+  })
+}
+
 payrollDocumentsRouter.get("/payslips", read, async (req, res) => {
   const search =
     typeof req.query.search === "string"
@@ -250,9 +332,28 @@ for (const [router, guards, staff] of [
       .set("X-Content-Type-Options", "nosniff")
       .send(Buffer.from(slip.document))
   })
+  router.get("/payslips/:id/preview", ...guards, async (req, res) => {
+    const employee = staff ? await staffEmployee(req.auth!.user.id) : null
+    if (staff && !employee) fail(404, "Payslip not found")
+    const slip = await downloadSlip(
+      String(req.params.id),
+      employee ? ownSlips(employee.id) : {},
+    )
+    return res
+      .type("application/pdf")
+      .set(
+        "Content-Disposition",
+        `inline; filename="${encodeURIComponent(slip.reference)}.pdf"`,
+      )
+      .set("X-Content-Type-Options", "nosniff")
+      .send(Buffer.from(slip.document))
+  })
 }
 
-async function approvedRevision(tx: Prisma.TransactionClient, runId: string) {
+export async function approvedRevision(
+  tx: Prisma.TransactionClient,
+  runId: string,
+) {
   const run = await tx.payrollRun.findUnique({
     where: { id: runId },
     include: {
@@ -308,61 +409,19 @@ for (const action of ["generate", "publish"] as const) {
         }
 
         const generatedAt = new Date()
+        const preferences = await readPayrollPreferences(tx)
         const rows = revision.items
           .filter((item) => !item.payslip)
           .map((item) => {
-            if (
-              item.status !== "CALCULATED" ||
-              !item.grossAmount ||
-              !item.deductionsAmount ||
-              !item.netAmount ||
-              !item.components.some(
-                ({ componentType }) => componentType === "BASE_EARNING",
-              ) ||
-              item.components.some(
-                ({ status, amount }) =>
-                  status !== "CALCULATED" || amount === null,
-              )
-            )
-              fail(
-                409,
-                "An approved employee result is missing its financial breakdown",
-              )
             const reference = "PS-" + randomUUID()
-            const currency = item.currency.trim()
-            const money = (amount: Prisma.Decimal) =>
-              currency + " " + amount.toFixed(2)
-            const document = renderPayslipPdf([
-              "EXP Digital Solutions",
-              "Payslip " + reference,
-              item.employeeNameSnapshot +
-                " (" +
-                item.employeeNumberSnapshot +
-                ")",
-              run.period.cutoffLabel +
-                " | " +
-                run.period.startDate.toISOString().slice(0, 10) +
-                " to " +
-                run.period.endDate.toISOString().slice(0, 10),
-              "Frequency: " +
-                run.period.configuration.frequency.replaceAll("_", " ") +
-                " | Approved revision: " +
-                revision.revision,
-              "Generated: " + generatedAt.toISOString().slice(0, 10),
-              "",
-              ...item.components.map(
-                (line) =>
-                  line.componentType.replaceAll("_", " ") +
-                  " - " +
-                  line.name +
-                  ": " +
-                  money(line.amount!),
-              ),
-              "",
-              "Gross pay: " + money(item.grossAmount),
-              "Total deductions: " + money(item.deductionsAmount),
-              "Net pay: " + money(item.netAmount),
-            ])
+            const document = renderApprovedPayslipDocument(
+              item,
+              run,
+              revision.revision,
+              reference,
+              generatedAt,
+              preferences,
+            )
             return {
               itemId: item.id,
               reference,
@@ -385,6 +444,69 @@ for (const action of ["generate", "publish"] as const) {
     },
   )
 }
+
+payrollDocumentsRouter.post(
+  "/payslips/:id/regenerate",
+  manage,
+  async (req, res) => {
+    const payslipId = String(req.params.id)
+    const actorId = req.auth!.user.id
+    const result = await getPrisma()!.$transaction(async (tx) => {
+      const link = await tx.payrollPayslip.findUnique({
+        where: { id: payslipId },
+        select: {
+          itemId: true,
+          publishedAt: true,
+          item: { select: { calculation: { select: { runId: true } } } },
+        },
+      })
+      if (!link) fail(404, "Payslip not found")
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(848225, hashtext(${link.item.calculation.runId}))`
+      const { run, revision } = await approvedRevision(
+        tx,
+        link.item.calculation.runId,
+      )
+      const item = revision.items.find(
+        (candidate) => candidate.id === link.itemId,
+      )
+      if (!item) fail(404, "Payslip not found")
+      if (link.publishedAt) {
+        fail(409, "Published payslips cannot be regenerated")
+      }
+      const generatedAt = new Date()
+      const current = await tx.payrollPayslip.findUnique({
+        where: { id: payslipId },
+        select: { reference: true, publishedAt: true },
+      })
+      if (!current) fail(404, "Payslip not found")
+      if (current.publishedAt) {
+        fail(409, "Published payslips cannot be regenerated")
+      }
+      const document = renderApprovedPayslipDocument(
+        item,
+        run,
+        revision.revision,
+        current.reference,
+        generatedAt,
+        await readPayrollPreferences(tx),
+      )
+      const updated = await tx.payrollPayslip.update({
+        where: { id: payslipId },
+        data: { document, generatedAt, generatedBy: actorId },
+        select: { id: true, reference: true, generatedAt: true },
+      })
+      await payrollActivity(tx, req.auth!, "PAYROLL_RUN", run.id, {
+        activity: "REGENERATED",
+        calculationId: revision.id,
+      })
+      return {
+        ...updated,
+        generatedAt: updated.generatedAt.toISOString(),
+      }
+    })
+    return res.json(result)
+  },
+)
 
 const requestSelect = {
   id: true,

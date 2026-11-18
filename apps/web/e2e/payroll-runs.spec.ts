@@ -212,12 +212,25 @@ async function mockPayrollRuns(page: Page, initialRun = false) {
         url.searchParams.get("calculationId") ?? history[0]?.id ?? ""
       const revision =
         history.find((value) => value.id === calculationId)?.revision ?? 1
-      const rows = run && history.length ? [itemFor(run, revision)] : []
+      const pageNumber = Number(url.searchParams.get("page") ?? 1)
+      const rows =
+        run && history.length
+          ? Array.from({ length: 11 }, (_, index) => {
+              const item = itemFor(run, revision)
+              return index === 0
+                ? item
+                : {
+                    ...item,
+                    id: `${item.id}-${index}`,
+                    employeeName: `Test employee ${index + 1}`,
+                  }
+            })
+          : []
       await route.fulfill({
         json: {
-          rows,
+          rows: rows.slice((pageNumber - 1) * 10, pageNumber * 10),
           total: rows.length,
-          page: Number(url.searchParams.get("page") ?? 1),
+          page: pageNumber,
           pageSize: 10,
           calculationId: calculationId || null,
         },
@@ -296,6 +309,16 @@ test("Admin generates periods, creates a draft, and reviews blocked calculations
   await page.getByRole("button", { name: "Calculate draft" }).click()
 
   await expect(page.getByText("Blocked", { exact: true }).first()).toBeVisible()
+  await page.getByRole("tab", { name: "Employees", exact: true }).click()
+  await expect(page.getByText("Showing 1-10 of 11 employees")).toBeVisible()
+  const employeePages = page.getByRole("navigation", {
+    name: "Employee calculation pages",
+  })
+  await employeePages.getByRole("button", { name: "Next page" }).click()
+  await expect(
+    page.getByText("Test employee 11", { exact: true }),
+  ).toBeVisible()
+  await employeePages.getByRole("button", { name: "Previous page" }).click()
   await page
     .getByRole("button", { name: "View Morgan Payroll calculation" })
     .click()
@@ -304,6 +327,9 @@ test("Admin generates periods, creates a draft, and reviews blocked calculations
       "Monthly salary versions change inside this period; no proration rule is configured.",
     ),
   ).toBeVisible()
+  await page.getByRole("button", { name: "Back to employees" }).click()
+  await expect(page.getByText("Showing 1-10 of 11 employees")).toBeVisible()
+  await page.getByRole("tab", { name: "Summary", exact: true }).click()
   await expect(page.getByText("Known calculated amounts")).toBeVisible()
   await expect(
     page.getByText(/Review and blocked results are excluded/),
@@ -368,7 +394,13 @@ for (const role of ["STAFF", "USER"] as const)
     expect(payrollRequests).toEqual([])
   })
 
-for (const scenario of ["reviewer", "preparer", "superadmin"] as const) {
+for (const scenario of [
+  "reviewer",
+  "rejecter",
+  "preparer",
+  "demo-preparer",
+  "superadmin",
+] as const) {
   test(`Payroll Approvals shows the submitted revision to the ${scenario}`, async ({
     page,
   }) => {
@@ -377,27 +409,42 @@ for (const scenario of ["reviewer", "preparer", "superadmin"] as const) {
       scenario === "superadmin" ? "SUPERADMIN" : "ADMIN",
     )
     const baseRun = runFor(period(2026, 11))
+    const approvalEvents: {
+      id: string
+      action: string
+      actorId: string
+      actorName: string
+      reason: string | null
+      createdAt: string
+    }[] = [
+      {
+        id: "submission-1",
+        action: "PAYROLL_SUBMITTED",
+        actorId: "submitter",
+        actorName: "Payroll Submitter",
+        reason: null,
+        createdAt: "2026-12-01T08:00:00.000Z",
+      },
+    ]
     const submitted = {
       ...summary(1, "revision-1"),
       status: "COMPLETE",
+      grossTotal: "42000.00",
+      deductionsTotal: "1250.00",
+      netTotal: "40750.00",
       calculatedItemCount: 1,
       blockedItemCount: 0,
-      approvalEvents: [
-        {
-          id: "submission-1",
-          action: "PAYROLL_SUBMITTED",
-          actorId: "submitter",
-          actorName: "Payroll Submitter",
-          reason: null,
-          createdAt: "2026-12-01T08:00:00.000Z",
-        },
-      ],
+      approvalEvents,
     }
     const run = {
       ...baseRun,
+      demoSelfApprovalEnabled: scenario === "demo-preparer",
       createdBy: {
         ...baseRun.createdBy,
-        id: scenario === "preparer" ? "actor" : "admin-1",
+        id:
+          scenario === "preparer" || scenario === "demo-preparer"
+            ? "actor"
+            : "admin-1",
       },
       status: "PENDING_APPROVAL",
       calculationCount: 1,
@@ -413,18 +460,41 @@ for (const scenario of ["reviewer", "preparer", "superadmin"] as const) {
       if (path.endsWith("/items"))
         return route.fulfill({
           json: {
-            rows: [itemFor(baseRun, 1)],
+            rows: [
+              {
+                ...itemFor(baseRun, 1),
+                status: "CALCULATED",
+                grossAmount: "42000.00",
+                deductionsAmount: "1250.00",
+                netAmount: "40750.00",
+              },
+            ],
             total: 1,
             page: 1,
             pageSize: 10,
             calculationId: submitted.id,
           },
         })
-      if (path.endsWith("/approve")) {
+      if (path.endsWith("/approve") || path.endsWith("/reject")) {
+        const action = path.endsWith("/approve")
+          ? "PAYROLL_APPROVED"
+          : "PAYROLL_REJECTED"
+        const reason =
+          action === "PAYROLL_REJECTED" ? "Payroll totals need review." : null
         expect(route.request().postDataJSON()).toMatchObject({
           calculationId: submitted.id,
+          ...(reason ? { reason } : {}),
         })
-        run.status = "APPROVED"
+        run.status =
+          action === "PAYROLL_APPROVED" ? "APPROVED" : "REJECTED"
+        approvalEvents.push({
+          id: "decision-1",
+          action,
+          actorId: "reviewer",
+          actorName: "Payroll Reviewer",
+          reason,
+          createdAt: "2026-12-02T08:00:00.000Z",
+        })
       }
       return route.fulfill({ json: run })
     })
@@ -436,14 +506,70 @@ for (const scenario of ["reviewer", "preparer", "superadmin"] as const) {
     await expect(
       page.getByRole("heading", { name: "Payroll Approvals" }),
     ).toBeVisible()
-    await page.getByRole("button", { name: "View 2026-11 payroll run" }).click()
+    await page
+      .getByRole("button", {
+        name: "View payroll approval for 2026-11",
+      })
+      .click()
+    await expect(
+      page.getByRole("heading", { name: "Approval Details" }),
+    ).toBeVisible()
+    await expect(
+      page.getByText(
+        "Nov 1–30, 2026 · Monthly · Revision 1",
+        { exact: true },
+      ),
+    ).toBeVisible()
+    await expect(
+      page.getByText("Submission", { exact: true }),
+    ).toBeVisible()
+    await expect(
+      page.getByText("Financial summary", { exact: true }),
+    ).toBeVisible()
+    await expect(page.getByText("Net pay for approval")).toBeVisible()
+    await expect(page.getByText("Payroll Submitter")).toBeVisible()
+    await expect(page.getByText("submission-1", { exact: true })).toBeVisible()
+    await expect(page.getByText("₱40,750.00").first()).toBeVisible()
+    await expect(page.getByText("₱42,000.00")).toBeVisible()
+    await expect(page.getByText("₱1,250.00")).toBeVisible()
+    await expect(
+      page.getByText("Approval decision", { exact: true }),
+    ).toHaveCount(0)
+    const footer = page.getByRole("dialog").locator("footer")
+    await expect(footer.getByRole("button", { name: "Close" })).toBeVisible()
+    await page.getByRole("tab", { name: "Employees", exact: true }).click()
     await expect(page.getByText("Morgan Payroll")).toBeVisible()
+    await expect(
+      page.getByRole("columnheader", { name: "Deductions" }),
+    ).toBeVisible()
+    await expect(page.getByText("₱42,000.00").last()).toBeVisible()
+    await expect(page.getByText("₱1,250.00").last()).toBeVisible()
+    await expect(page.getByText("₱40,750.00").last()).toBeVisible()
+    await page.getByRole("tab", { name: "Approval", exact: true }).click()
     await expect(
       page.getByText("Approval history", { exact: true }),
     ).toBeVisible()
-    const approve = page.getByRole("button", { name: "Approve", exact: true })
-    const reject = page.getByRole("button", { name: "Reject", exact: true })
-    if (scenario === "reviewer") {
+    const footerButtons = footer.getByRole("button")
+    const approve = footer.getByRole("button", {
+      name: "Approve",
+      exact: true,
+    })
+    const reject = footer.getByRole("button", {
+      name: "Reject",
+      exact: true,
+    })
+    const expectedFooterButtons =
+      scenario === "reviewer" ||
+      scenario === "rejecter" ||
+      scenario === "demo-preparer"
+        ? ["Close", "Reject", "Approve"]
+        : scenario === "preparer"
+          ? ["Close", "Reject"]
+          : ["Close"]
+    expect(
+      (await footerButtons.allTextContents()).map((label) => label.trim()),
+    ).toEqual(expectedFooterButtons)
+    if (scenario === "reviewer" || scenario === "demo-preparer") {
       await reject.click()
       await expect(
         page.getByRole("textbox", { name: "Rejection reason" }),
@@ -452,9 +578,48 @@ for (const scenario of ["reviewer", "preparer", "superadmin"] as const) {
       await approve.click()
       await page
         .getByRole("dialog")
+        .last()
         .getByRole("button", { name: "Approve", exact: true })
         .click()
       await expect(page.getByText("Payroll approved")).toBeVisible()
+      await expect(
+        page.getByText("Revision 1 approved", { exact: true }),
+      ).toBeVisible()
+      await expect(page.getByText("Payroll Reviewer")).toBeVisible()
+    } else if (scenario === "rejecter") {
+      await reject.click()
+      await page
+        .getByRole("textbox", { name: "Rejection reason" })
+        .fill("Payroll totals need review.")
+      await page
+        .getByRole("dialog")
+        .last()
+        .getByRole("button", { name: "Reject", exact: true })
+        .click()
+      await expect(page.getByText("Payroll rejected")).toBeVisible()
+      const submissionLabel = page.getByText("Revision 1 submitted", {
+        exact: true,
+      })
+      const rejectionLabel = page.getByText("Revision 1 rejected", {
+        exact: true,
+      })
+      await expect(submissionLabel).toBeVisible()
+      await expect(rejectionLabel).toBeVisible()
+      await expect(
+        page.getByText("Reason: Payroll totals need review.", {
+          exact: true,
+        }),
+      ).toBeVisible()
+      expect(
+        await submissionLabel.evaluate((element) =>
+          element.getBoundingClientRect().top,
+        ),
+      ).toBeLessThan(
+        await rejectionLabel.evaluate((element) =>
+          element.getBoundingClientRect().top,
+        ),
+      )
+      await expect(reject).toHaveCount(0)
     } else {
       await expect(approve).toHaveCount(0)
       if (scenario === "preparer")
@@ -464,6 +629,183 @@ for (const scenario of ["reviewer", "preparer", "superadmin"] as const) {
           ),
         ).toBeVisible()
       else await expect(reject).toHaveCount(0)
+      if (scenario === "preparer") await expect(reject).toBeVisible()
     }
   })
 }
+
+test("Payroll Approvals balances its columns and paginates filtered results", async ({
+  page,
+}) => {
+  await restoreSession(page, "ADMIN")
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const runs = Array.from({ length: 11 }, (_, index) => {
+    const baseRun = runFor(period(2026, index + 1))
+    const calculation = {
+      ...summary(1, `approval-revision-${index + 1}`),
+      status: "COMPLETE",
+      grossTotal: `${(index + 1) * 10000}.00`,
+      deductionsTotal: "1000.00",
+      netTotal: `${(index + 1) * 9000}.00`,
+      calculatedItemCount: 1,
+      blockedItemCount: 0,
+      approvalEvents: [
+        {
+          id: `submission-${index + 1}`,
+          action: "PAYROLL_SUBMITTED",
+          actorId: "submitter",
+          actorName: "Payroll Submitter",
+          reason: null,
+          createdAt: "2026-12-01T08:00:00.000Z",
+        },
+      ],
+    }
+    return {
+      ...baseRun,
+      status: "PENDING_APPROVAL",
+      calculationCount: 2,
+      latestCalculation: summary(2, `newer-unsubmitted-${index + 1}`),
+      calculationHistory: [
+        summary(2, `newer-unsubmitted-${index + 1}`),
+        calculation,
+      ],
+    }
+  })
+  const requests: {
+    page: string
+    search: string
+    status: string
+    frequency: string
+  }[] = []
+  let pageTwoStarted = false
+  let releasePageTwo = () => {}
+  const pageTwoGate = new Promise<void>((resolve) => {
+    releasePageTwo = resolve
+  })
+
+  await page.route("**/api/payroll/**", async (route) => {
+    const url = new URL(route.request().url())
+    if (url.pathname.endsWith("/approvals")) {
+      const pageNumber = Number(url.searchParams.get("page") ?? "1")
+      const search = url.searchParams.get("search") ?? ""
+      const status = url.searchParams.get("status") ?? ""
+      const frequency = url.searchParams.get("frequency") ?? ""
+      requests.push({
+        page: String(pageNumber),
+        search,
+        status,
+        frequency,
+      })
+      if (pageNumber === 2) {
+        pageTwoStarted = true
+        await pageTwoGate
+      }
+      const filtered = runs.filter(
+        (run) =>
+          (!search ||
+            run.period.cutoffLabel
+              .toLowerCase()
+              .includes(search.toLowerCase())) &&
+          (!status || run.status === status) &&
+          (!frequency || run.period.frequency === frequency),
+      )
+      return route.fulfill({
+        json: {
+          rows: filtered.slice((pageNumber - 1) * 10, pageNumber * 10),
+          total: filtered.length,
+          page: pageNumber,
+          pageSize: 10,
+        },
+      })
+    }
+    return route.fulfill({
+      json: { rows: [], total: 0, page: 1, pageSize: 10 },
+    })
+  })
+
+  await page.goto("/module/payroll/runs")
+  await page.getByRole("link", { name: "Approvals", exact: true }).click()
+  const table = page.getByRole("table", { name: "Payroll runs" })
+  await expect(page.getByText("Showing 1–10 of 11 runs")).toBeVisible()
+  const headerRow = table.getByRole("rowgroup").first().getByRole("row")
+  const dataRow = table.getByRole("row").nth(1)
+  const headers = headerRow.getByRole("columnheader")
+  await expect(headers).toHaveText([
+    "Payroll Period",
+    "Submission",
+    "Status",
+    "Revisions",
+    "Net Pay",
+    "Employees",
+    "Details",
+  ])
+  const headerTracks = await headerRow.evaluate(
+    (element) => getComputedStyle(element).gridTemplateColumns,
+  )
+  const bodyTracks = await dataRow.evaluate(
+    (element) => getComputedStyle(element).gridTemplateColumns,
+  )
+  expect(bodyTracks).toBe(headerTracks)
+  const trackWidths = headerTracks
+    .split(" ")
+    .map((width) => Number.parseFloat(width))
+  expect(trackWidths[4]).toBeGreaterThan(trackWidths[5] * 1.5)
+  expect(trackWidths[4]).toBeGreaterThan(trackWidths[6])
+  await expect(dataRow.getByRole("cell").nth(3)).toHaveText("1")
+  await expect(dataRow.getByRole("cell").nth(4)).toHaveText("₱9,000.00")
+  const approvalAction = dataRow.getByRole("button", {
+    name: "View payroll approval for 2026-01",
+  })
+  await expect(approvalAction).toHaveAttribute("data-slot", "button")
+  await expect(approvalAction.locator("svg")).toBeVisible()
+  await expect(
+    approvalAction.getByText("View payroll approval", { exact: true }),
+  ).toBeHidden()
+
+  await page.getByRole("button", { name: "Next", exact: true }).click()
+  await expect.poll(() => pageTwoStarted).toBe(true)
+  await expect(table).toHaveAttribute("aria-busy", "true")
+  await expect(
+    page.getByRole("status", { name: "Loading payroll runs…" }),
+  ).toBeVisible()
+  releasePageTwo()
+  await expect(page.getByText("Showing 11–11 of 11 runs")).toBeVisible()
+  await expect(page.getByText("2026-11", { exact: true })).toBeVisible()
+  await expect(
+    page.getByRole("button", { name: "Next", exact: true }),
+  ).toBeDisabled()
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  const mobileHeaders = table.locator("[role='columnheader']")
+  await expect(mobileHeaders.nth(1)).toBeHidden()
+  await expect(mobileHeaders.nth(2)).toBeVisible()
+  await expect(mobileHeaders.nth(3)).toBeHidden()
+  const mobileHeaderTracks = await headerRow.evaluate(
+    (element) => getComputedStyle(element).gridTemplateColumns,
+  )
+  const mobileBodyTracks = await table
+    .getByRole("row")
+    .nth(1)
+    .evaluate((element) => getComputedStyle(element).gridTemplateColumns)
+  expect(mobileBodyTracks).toBe(mobileHeaderTracks)
+
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.getByRole("combobox", { name: "Filter by run status" }).click()
+  await page.getByRole("option", { name: "Pending approval" }).click()
+  await page.getByRole("combobox", { name: "Filter by frequency" }).click()
+  await page.getByRole("option", { name: "Monthly" }).click()
+  const search = page.getByRole("searchbox", { name: "Search payroll runs" })
+  await search.fill("2026-10")
+  await expect
+    .poll(() => requests.at(-1))
+    .toMatchObject({
+      page: "1",
+      search: "2026-10",
+      status: "PENDING_APPROVAL",
+      frequency: "MONTHLY",
+    })
+  await expect(page.getByText("Showing 1–1 of 1 runs")).toBeVisible()
+  await expect(
+    page.getByRole("navigation", { name: "Payroll run pages" }),
+  ).toHaveCount(0)
+})

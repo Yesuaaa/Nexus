@@ -213,7 +213,7 @@ for (const [role, width, readOnly] of [
   ["ADMIN", 390, false],
   ["SUPERADMIN", 1440, true],
 ] as const)
-  test(`${role} opens Payroll with Phase 2 sections available at ${width}px`, async ({
+  test(`${role} opens Payroll from Workforce Compliance at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 844 })
@@ -224,8 +224,20 @@ for (const [role, width, readOnly] of [
       name: "Open Payroll workspace",
       exact: true,
     })
-    await expect(payroll).toBeVisible()
-    await payroll.click()
+    await expect(payroll).toHaveCount(0)
+    await page
+      .getByRole("link", { name: "Open Workforce Compliance workspace" })
+      .click()
+    if (width < 768)
+      await page.getByRole("button", { name: "Open navigation menu" }).click()
+    const sidebar = page.getByRole("complementary", {
+      name: "Primary navigation",
+    })
+    await expect(sidebar).toContainText("Workforce Compliance")
+    await sidebar.getByRole("button", { name: "Payroll", exact: true }).click()
+    await sidebar
+      .getByRole("link", { name: "Payroll overview", exact: true })
+      .click()
     await expect(page).toHaveURL("/module/payroll")
     await expect(
       page.getByRole("heading", { name: "Payroll Management", exact: true }),
@@ -242,29 +254,23 @@ for (const [role, width, readOnly] of [
 
     if (width < 768)
       await page.getByRole("button", { name: "Open navigation menu" }).click()
-    const sidebar = page.getByRole("complementary", {
-      name: "Primary navigation",
-    })
     const overview = sidebar.getByRole("link", {
       name: "Payroll overview",
       exact: true,
     })
     await expect(overview).toHaveAttribute("aria-current", "page")
-    for (const section of ["Compensation", "Settings"]) {
-      const link = sidebar.getByRole("link", { name: section, exact: true })
-      await expect(link).toBeVisible()
-      await expect(link).not.toHaveAttribute("aria-disabled", "true")
-    }
-    for (const section of [
+    const sections = [
+      "Compensation",
+      "Settings",
       "Payroll Runs",
       "Approvals",
       "Disbursements",
       "Payslips & History",
-    ]) {
-      await expect(sidebar.getByText(section, { exact: true })).toBeVisible()
-      await expect(
-        sidebar.getByRole("link", { name: section, exact: true }),
-      ).toHaveCount(0)
+    ]
+    for (const section of sections) {
+      const link = sidebar.getByRole("link", { name: section, exact: true })
+      await expect(link).toBeVisible()
+      await expect(link).not.toHaveAttribute("aria-disabled", "true")
     }
     if (width >= 768) {
       await page.getByRole("button", { name: "Collapse sidebar" }).click()
@@ -272,23 +278,10 @@ for (const [role, width, readOnly] of [
         .getByRole("button", { name: "Payroll", exact: true })
         .click()
       const flyout = page.getByRole("menu")
-      for (const section of ["Compensation", "Settings"]) {
+      for (const section of sections) {
         const item = flyout.getByRole("menuitem", { name: section })
         await expect(item).toBeVisible()
         await expect(item).not.toHaveAttribute("aria-disabled", "true")
-      }
-      for (const section of [
-        "Payroll Runs",
-        "Approvals",
-        "Disbursements",
-        "Payslips & History",
-      ]) {
-        const item = flyout.getByRole("menuitem", { name: section })
-        await expect(item).toBeVisible()
-        await expect(item).toHaveAttribute("aria-disabled", "true")
-        await expect(
-          flyout.getByRole("link", { name: section, exact: true }),
-        ).toHaveCount(0)
       }
     }
     expect(

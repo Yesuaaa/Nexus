@@ -7,6 +7,7 @@ const alertVariants = {
     "m-0 rounded-lg border border-[#f4d6db] bg-[#fff6f7] p-3 text-xs text-[#bc3649]",
   /** Plain error text, e.g. under a control or beside an action. */
   text: "m-0 text-xs text-[#bc3649]",
+  info: "m-0 text-xs text-muted-foreground",
 } as const
 
 /**
@@ -25,7 +26,7 @@ export function Alert({
 }) {
   return (
     <Element
-      role="alert"
+      role={variant === "info" ? "status" : "alert"}
       className={cn(alertVariants[variant], className)}
       {...props}
     />
