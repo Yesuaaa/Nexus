@@ -5,12 +5,39 @@ import {
   live,
   restoreSession,
 } from "./regression-support"
+import type { ProjectManagementOverview } from "../src/features/admin-project-management/api/project-management-api"
 
 configureRegressionTest()
 test.skip(live, "Module navigation regressions use isolated API fixtures")
 
 function mainMenu(page: Page) {
   return page.getByRole("navigation", { name: "Main menu", exact: true })
+}
+
+const emptyProjectManagementOverview: ProjectManagementOverview = {
+  totals: {
+    totalProjects: 0,
+    planned: 0,
+    inProgress: 0,
+    onHold: 0,
+    completed: 0,
+    cancelled: 0,
+    workspaceGroups: 0,
+    departmentsWithProjects: 0,
+    projectsWithoutDepartment: 0,
+    projectsWithTasks: 0,
+    projectsWithoutTasks: 0,
+    totalTasks: 0,
+    completedTasks: 0,
+    activeProjects: 0,
+    activeProjectsWithoutLead: 0,
+    activeProjectsWithoutTeam: 0,
+    activeAssignments: 0,
+  },
+  statusDistribution: [],
+  departments: [],
+  topStaffAssignments: [],
+  recentlyUpdatedProjects: [],
 }
 
 for (const role of ["SUPERADMIN"] as const) {
@@ -29,6 +56,9 @@ for (const role of ["SUPERADMIN"] as const) {
         projectDataRequests.push(pathname)
     })
     await restoreSession(page, role)
+    await page.route("**/api/project-management/overview", (route) =>
+      route.fulfill({ json: emptyProjectManagementOverview }),
+    )
     await page.route(
       "**/api/departments/project-management-directory",
       (route) => {
@@ -45,7 +75,7 @@ for (const role of ["SUPERADMIN"] as const) {
         exact: true,
       })
       .click()
-    await expect(page).toHaveURL(/\/module\/project-management$/)
+    await expect(page).toHaveURL("/project-management/overview")
     await mainMenu(page)
       .getByRole("button", { name: "Project Workspace", exact: true })
       .click()

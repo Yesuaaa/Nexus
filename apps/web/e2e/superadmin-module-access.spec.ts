@@ -4,9 +4,36 @@ import {
   live,
   restoreSession,
 } from "./regression-support"
+import type { ProjectManagementOverview } from "../src/features/admin-project-management/api/project-management-api"
 
 configureRegressionTest()
 test.skip(live, "Module entry coverage uses isolated API fixtures")
+
+const emptyProjectManagementOverview: ProjectManagementOverview = {
+  totals: {
+    totalProjects: 0,
+    planned: 0,
+    inProgress: 0,
+    onHold: 0,
+    completed: 0,
+    cancelled: 0,
+    workspaceGroups: 0,
+    departmentsWithProjects: 0,
+    projectsWithoutDepartment: 0,
+    projectsWithTasks: 0,
+    projectsWithoutTasks: 0,
+    totalTasks: 0,
+    completedTasks: 0,
+    activeProjects: 0,
+    activeProjectsWithoutLead: 0,
+    activeProjectsWithoutTeam: 0,
+    activeAssignments: 0,
+  },
+  statusDistribution: [],
+  departments: [],
+  topStaffAssignments: [],
+  recentlyUpdatedProjects: [],
+}
 
 for (const [title, path, heading] of [
   ["Service Operations", "/services", "Service Management"],
@@ -21,6 +48,10 @@ for (const [title, path, heading] of [
 ] as const) {
   test(`Superadmin selects and enters ${title}`, async ({ page }) => {
     await restoreSession(page, "SUPERADMIN")
+    if (title === "Project Management")
+      await page.route("**/api/project-management/overview", (route) =>
+        route.fulfill({ json: emptyProjectManagementOverview }),
+      )
     const personalReads: string[] = []
     page.on("request", (request) => {
       if (request.url().includes("/api/attendance/me/"))
@@ -93,6 +124,9 @@ test("Superadmin enters Project Management without Staff reads and retains modul
   page,
 }) => {
   await restoreSession(page, "SUPERADMIN")
+  await page.route("**/api/project-management/overview", (route) =>
+    route.fulfill({ json: emptyProjectManagementOverview }),
+  )
   const operationalReads: string[] = []
   await page.route("**/api/projects/calendar**", (route) =>
     route.fulfill({
