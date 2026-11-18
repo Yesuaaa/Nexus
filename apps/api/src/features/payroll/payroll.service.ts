@@ -421,6 +421,14 @@ export const payrollService = {
         orderBy: { effectiveFrom: "desc" },
         select: { id: true, effectiveFrom: true },
       })
+      if (
+        input.expectedLatestId !== undefined &&
+        input.expectedLatestId !== (previous?.id ?? null)
+      )
+        fail(
+          409,
+          "Payroll schedule changed. Reload Settings before adding another schedule.",
+        )
       if (previous && input.effectiveFrom <= previous.effectiveFrom)
         fail(409, "A payroll schedule already exists on or after this date")
       if (previous)

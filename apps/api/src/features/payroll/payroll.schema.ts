@@ -1,3 +1,4 @@
+import { isRecordId } from "../../shared/validation.js"
 import {
   CompensationComponentType,
   PayrollFrequency,
@@ -23,6 +24,7 @@ export type PayrollConfigurationInput = {
   currency: "PHP"
   effectiveFrom: Date
   changeReason: string
+  expectedLatestId?: string | null
 }
 
 type Validation<T> = { value: T } | { error: string }
@@ -156,6 +158,7 @@ export function validatePayrollConfiguration(
     "currency",
     "effectiveFrom",
     "changeReason",
+    "expectedLatestId",
   ]
   if (
     !hasExactKeys(input, keys) ||
@@ -170,6 +173,12 @@ export function validatePayrollConfiguration(
     )
   )
     return { error: "Choose a valid payroll frequency" }
+  if (
+    input.expectedLatestId !== undefined &&
+    input.expectedLatestId !== null &&
+    !isRecordId(input.expectedLatestId)
+  )
+    return { error: "Invalid current schedule reference" }
   const effectiveFrom = dateOnly(input.effectiveFrom)
   if (!effectiveFrom) return { error: "Enter a valid effective date" }
   const currency = input.currency === undefined ? "PHP" : input.currency
@@ -205,6 +214,7 @@ export function validatePayrollConfiguration(
       currency: "PHP",
       effectiveFrom,
       changeReason: input.changeReason.trim(),
+      expectedLatestId: input.expectedLatestId,
     },
   }
 }

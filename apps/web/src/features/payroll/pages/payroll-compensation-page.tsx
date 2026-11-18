@@ -227,6 +227,7 @@ export function PayrollCompensationPage() {
               }
             />
             <FilterSelect
+              fitOptions
               label="Filter by department"
               value={departmentId}
               options={departmentOptions}
@@ -235,6 +236,7 @@ export function PayrollCompensationPage() {
               triggerClassName="min-w-[170px]"
             />
             <FilterSelect
+              fitOptions
               label="Filter by pay type"
               value={payType}
               options={payTypes}
@@ -242,6 +244,7 @@ export function PayrollCompensationPage() {
               triggerClassName="min-w-[140px]"
             />
             <FilterSelect
+              fitOptions
               label="Filter by configuration status"
               value={status}
               options={configurationStatuses}

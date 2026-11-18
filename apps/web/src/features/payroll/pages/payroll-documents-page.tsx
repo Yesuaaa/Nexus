@@ -1640,6 +1640,7 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
               placeholder="Search employee, period or reference…"
             />
             <FilterSelect
+              fitOptions
               label="Publication status"
               value={publication}
               onChange={(value) => {
@@ -1873,6 +1874,7 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
             />
           )}
           <FilterSelect
+            fitOptions
             label={staff ? "Concern status" : "Request status"}
             value={requestStatus}
             onChange={(value) => {
@@ -1882,6 +1884,7 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
             options={[{ value: "", label: "All statuses" }, ...requestStatuses]}
           />
           <FilterSelect
+            fitOptions
             label={staff ? "Concern type" : "Request type"}
             value={requestType}
             onChange={(value) => {
@@ -2474,6 +2477,7 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
                       <label className="grid gap-2 text-sm">
                         Concern type
                         <FilterSelect
+                          fitOptions
                           label="Concern type"
                           value={type}
                           triggerClassName="h-11 text-sm"
@@ -2489,6 +2493,7 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
                       </label>
                     ) : (
                       <FilterSelect
+                        fitOptions
                         label="Request type"
                         value={type}
                         onChange={setType}
@@ -2537,6 +2542,7 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
                         </div>
                       ) : relatedPayslips.data?.length ? (
                         <FilterSelect
+                          fitOptions
                           label="Related payslip"
                           value={related}
                           triggerClassName="h-11 text-sm"
@@ -2567,6 +2573,7 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
                   )}
                   {manage && openRequest && (
                     <FilterSelect
+                      fitOptions
                       label="Update status"
                       value={status}
                       onChange={setStatus}

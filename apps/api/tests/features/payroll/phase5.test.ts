@@ -1,3 +1,4 @@
+import { writeFile } from "node:fs/promises"
 import { randomUUID } from "node:crypto"
 import {
   type readReconciliation,
@@ -91,6 +92,9 @@ test(
         createdById: admin.id,
         inputSnapshot: {},
         calculatedItemCount: 1,
+        grossTotal: "12345.67",
+        deductionsTotal: "45.67",
+        netTotal: "12300.00",
         items: {
           create: {
             employeeId: employee.id,
@@ -145,6 +149,70 @@ test(
     const generate = "/payroll/runs/" + run.id + "/generate-payslips"
     const publish = "/payroll/runs/" + run.id + "/publish-payslips"
     const self = "/staff/my-payroll"
+    const reports = "/payroll/reports"
+    assert.equal((await api(reports, staff)).status, 403)
+    assert.equal((await api(reports, client)).status, 403)
+    assert.equal((await api(reports + "/export", superadmin)).status, 403)
+    assert.equal(
+      (await api(reports + "?through=2026-02-30", admin)).status,
+      400,
+    )
+    const draftReport = await api(reports, superadmin)
+    assert.equal(draftReport.status, 200)
+    assert.equal(((await draftReport.json()) as { total: number }).total, 0)
+    const overview = "/payroll/overview"
+    assert.equal((await api(overview, staff)).status, 403)
+    assert.equal((await api(overview, client)).status, 403)
+    assert.equal((await api(overview + "?periods=50", admin)).status, 400)
+    const draftOverview = (await (await api(overview, superadmin)).json()) as {
+      approvedNet: string
+      approvedRuns: number
+    }
+    assert.equal(draftOverview.approvedRuns, 0)
+    assert.equal(draftOverview.approvedNet, "0.00")
+    const readinessPath = "/payroll/settings/readiness"
+    const auditPath = "/payroll/settings/audit"
+    for (const actor of [staff, client]) {
+      assert.equal((await api(readinessPath, actor)).status, 403)
+      assert.equal((await api(auditPath, actor)).status, 403)
+    }
+    type Readiness = {
+      capabilities: { id: string; state: string; reason: string }[]
+    }
+    const initialProbe = await api(readinessPath, superadmin)
+    assert.equal(initialProbe.status, 200)
+    const initialReadiness = (await initialProbe.json()) as Readiness
+    assert.equal(
+      initialReadiness.capabilities.find(({ id }) => id === "real-disbursement")
+        ?.reason,
+      "LIVE_EXECUTION_DISABLED",
+    )
+    assert.equal(
+      initialReadiness.capabilities.find(({ id }) => id === "publication")
+        ?.state,
+      "READY",
+    )
+    assert.equal(
+      initialReadiness.capabilities.find(({ id }) => id === "reconciliation")
+        ?.state,
+      "READY",
+    )
+    assert.equal((await api(auditPath + "?page=0", admin)).status, 400)
+    const scheduleWithStaleSource = await api(
+      "/payroll/settings/versions",
+      admin,
+      "POST",
+      {
+        frequency: "MONTHLY",
+        firstCutoffDay: null,
+        currency: "PHP",
+        effectiveFrom: "2027-01-01",
+        expectedLatestId: null,
+        changeReason: "Stale schedule form",
+      },
+    )
+    assert.equal(scheduleWithStaleSource.status, 409)
+    assert.equal(await prisma.payrollConfiguration.count(), 1)
     const reconciliation = "/payroll/runs/" + run.id + "/reconciliation"
     assert.equal((await api(reconciliation, admin)).status, 409)
     assert.equal((await api(reconciliation, staff)).status, 403)
@@ -403,6 +471,17 @@ test(
     process.env.NODE_ENV = "development"
     process.env.PAYROLL_LOCAL_SIMULATOR = "true"
     try {
+      const enabledProbe = await api(readinessPath, admin)
+      assert.equal(enabledProbe.status, 200)
+      const ready = (await enabledProbe.json()) as Readiness
+      assert.equal(
+        ready.capabilities.find(({ id }) => id === "simulation")?.state,
+        "READY",
+      )
+      assert.equal(
+        ready.capabilities.find(({ id }) => id === "real-disbursement")?.state,
+        "UNAVAILABLE",
+      )
       const key = "55ac1828-e12c-47a5-8e13-9ab05cf67132"
       const simulation = { outcome: "FAILED", idempotencyKey: key }
       assert.equal(
@@ -546,6 +625,26 @@ test(
       const afterResolution = (await (
         await api(reconciliation, superadmin)
       ).json()) as Awaited<ReturnType<typeof readReconciliation>>
+      const dashboardResponse = await api(overview + "?periods=3", admin)
+      assert.equal(dashboardResponse.status, 200)
+      const dashboard = (await dashboardResponse.json()) as {
+        approvedNet: string
+        realConfirmedPaid: string
+        approvedRuns: number
+        currentExceptions: number
+        payoutCounts: Record<string, number>
+      }
+      assert.equal(dashboard.approvedNet, "12300.00")
+      assert.equal(dashboard.approvedRuns, 1)
+      assert.equal(dashboard.realConfirmedPaid, "0.00")
+      assert.equal(dashboard.currentExceptions, 1)
+      assert.equal(dashboard.payoutCounts.FAILED, 1)
+      assert.equal(
+        await prisma.payrollReconciliationDecision.count({
+          where: { calculationId: revision.id },
+        }),
+        2,
+      )
       assert.equal(afterResolution.amounts.failed, "12300.00")
       assert.equal(afterResolution.amounts.realPaid, "0.00")
       assert.equal(afterResolution.exceptions.rows[0]?.lifecycle, "RESOLVED")
@@ -649,6 +748,139 @@ test(
         }),
         5,
       )
+      const reportSummary = await api(reports + "?category=summary", superadmin)
+      assert.equal(reportSummary.status, 200)
+      type ReportFixture = { rows: { cells: string[] }[]; total: number }
+      assert.deepEqual(
+        ((await reportSummary.json()) as ReportFixture).rows[0]?.cells.slice(2),
+        ["1", "12345.67", "45.67", "12300.00"],
+      )
+      const reportComponents = await api(
+        reports + "?category=compensation",
+        admin,
+      )
+      assert.equal(reportComponents.status, 200)
+      assert.equal(
+        ((await reportComponents.json()) as ReportFixture).rows[0]?.cells[2],
+        "12345.67",
+      )
+      const payoutReport = await api(
+        reports + "?category=disbursements&status=FAILED",
+        admin,
+      )
+      assert.equal(payoutReport.status, 200)
+      assert.deepEqual(
+        ((await payoutReport.json()) as ReportFixture).rows[0]?.cells.slice(
+          2,
+          5,
+        ),
+        ["12300.00", "Failed", "None"],
+      )
+      const exceptionReport = await api(
+        reports + "?category=reconciliation&status=HISTORICAL",
+        superadmin,
+      )
+      assert.equal(exceptionReport.status, 200)
+      assert.equal(
+        ((await exceptionReport.json()) as ReportFixture).rows[0]?.cells[3],
+        "Historical",
+      )
+      assert.equal(
+        await prisma.payrollReconciliationDecision.count({
+          where: { calculationId: revision.id },
+        }),
+        5,
+      )
+      const csv = await api(
+        reports + "/export?category=summary&page=99&search=november",
+        admin,
+      )
+      assert.equal(csv.status, 200)
+      assert.match(csv.headers.get("content-type")!, /text\/csv/)
+      assert.match(
+        await csv.text(),
+        /"November 2026","1","1","12345\.67","45\.67","12300\.00"/,
+      )
+      const auditCount = await prisma.workforceManagementChange.count()
+      const auditResponse = await api(
+        auditPath + "?subject=PAYROLL_RUN",
+        superadmin,
+      )
+      assert.equal(auditResponse.status, 200)
+      const auditPage = (await auditResponse.json()) as {
+        rows: { activity: string; subjectType: string; changes?: unknown }[]
+        total: number
+      }
+      assert.ok(
+        auditPage.rows.some(
+          ({ activity }) => activity === "RECONCILIATION_DECIDED",
+        ),
+      )
+      assert.ok(
+        auditPage.rows.every(
+          (event) =>
+            event.subjectType === "PAYROLL_RUN" &&
+            !Object.hasOwn(event, "changes"),
+        ),
+      )
+      assert.equal(await prisma.workforceManagementChange.count(), auditCount)
+      const exportQuery = "?category=summary&search=november&format="
+      const detailed = await api(
+        reports + "/export" + exportQuery + "csv",
+        admin,
+      )
+      assert.equal(detailed.status, 200)
+      const detailedCsv = await detailed.text()
+      assert.match(
+        detailedCsv,
+        /"Employee name","Base compensation","Allowances","Gross pay"/,
+      )
+      assert.match(
+        detailedCsv,
+        /"12345\.67","","12345\.67","Recurring deduction: 45\.67","45\.67","12300\.00"/,
+      )
+      const workbook = await api(
+        reports + "/export" + exportQuery + "xlsx",
+        admin,
+      )
+      assert.equal(workbook.status, 200)
+      assert.equal(
+        workbook.headers.get("content-type"),
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      )
+      assert.match(
+        workbook.headers.get("content-disposition")!,
+        /converyn-payroll-summary-2026-11-01-to-2026-11-30\.xlsx/,
+      )
+      const workbookBytes = Buffer.from(await workbook.arrayBuffer())
+      assert.equal(workbookBytes.readUInt32LE(0), 0x04034b50)
+      if (process.env.NEXUS_PAYROLL_WORKBOOK_CAPTURE)
+        await writeFile(
+          process.env.NEXUS_PAYROLL_WORKBOOK_CAPTURE,
+          workbookBytes,
+        )
+      assert.equal(
+        (await api(reports + "/export" + exportQuery + "xlsx", superadmin))
+          .status,
+        403,
+      )
+      assert.equal(
+        (await api(reports + "/export" + exportQuery + "invalid", admin))
+          .status,
+        400,
+      )
+      for (const [category, filter, expected] of [
+        ["compensation", "", /Recurring deduction: 45\.67/],
+        ["disbursements", "&status=FAILED", /"Failed","None"/],
+        ["reconciliation", "&status=HISTORICAL", /"Historical"/],
+      ] as const) {
+        const exported = await api(
+          reports + "/export?format=csv&category=" + category + filter,
+          admin,
+        )
+        assert.equal(exported.status, 200)
+        assert.match(await exported.text(), expected)
+      }
       const history = await api(
         reconciliation + "?observation=HISTORICAL",
         admin,

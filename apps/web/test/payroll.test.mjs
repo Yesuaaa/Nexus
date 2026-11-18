@@ -8,6 +8,10 @@ test("Payroll formats exact PHP decimal strings without floating-point rounding"
   assert.equal(formatPayrollMoney("9999999999.99"), "₱9,999,999,999.99")
   assert.equal(formatPayrollMoney("999999999999.99"), "₱999,999,999,999.99")
   assert.equal(formatPayrollMoney("0.01"), "₱0.01")
+  assert.equal(
+    formatPayrollMoney("11999999999999.88"),
+    "₱11,999,999,999,999.88",
+  )
   assert.equal(formatPayrollMoney("72500.105"), "—")
   assert.equal(formatPayrollMoney("1e5"), "—")
 })

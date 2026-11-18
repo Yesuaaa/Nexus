@@ -440,7 +440,7 @@ function sameEvidence(stored: Prisma.JsonValue, current: Evidence) {
   return Object.entries(current).every(([key, value]) => stored[key] === value)
 }
 
-function startsReviewCycle(
+export function startsReviewCycle(
   stored: { observed: boolean; status: string; lastEvidence: Prisma.JsonValue },
   current: Evidence,
 ) {

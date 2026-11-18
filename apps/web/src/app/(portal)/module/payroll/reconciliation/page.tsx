@@ -541,6 +541,7 @@ function ExceptionInvestigation({
             </label>
             {requiredChoices && (
               <FilterSelect
+                fitOptions
                 label={
                   action === "ASSESS" ? "Corrective action" : "Classification"
                 }
@@ -672,6 +673,7 @@ function ReconciliationDashboard() {
             }}
           />
           <FilterSelect
+            fitOptions
             label="Approved payroll run"
             value={runId}
             options={[
@@ -756,6 +758,7 @@ function ReconciliationDashboard() {
                   }}
                 />
                 <FilterSelect
+                  fitOptions
                   label="Payout status"
                   value={payoutStatus}
                   onChange={(value) => {
@@ -821,6 +824,7 @@ function ReconciliationDashboard() {
             <SidePanelSection title="Exceptions">
               <div className={filterBarClass}>
                 <FilterSelect
+                  fitOptions
                   label="Exception category"
                   value={category}
                   onChange={(value) => {
@@ -830,6 +834,7 @@ function ReconciliationDashboard() {
                   options={options(categories, "All categories")}
                 />
                 <FilterSelect
+                  fitOptions
                   label="Observation state"
                   value={observation}
                   onChange={(value) => {

@@ -424,7 +424,21 @@ test(
     )
     assert.equal(invalidSchedule.status, 400)
 
+    const baseline = await request("/payroll/settings/readiness")
+    assert.equal(baseline.status, 200)
+    const readiness = (await baseline.json()) as {
+      capabilities: { id: string; state: string; reason: string }[]
+    }
+    assert.equal(
+      readiness.capabilities.find(({ id }) => id === "calculation")?.reason,
+      "NO_EFFECTIVE_SCHEDULE",
+    )
+    assert.equal(
+      readiness.capabilities.find(({ id }) => id === "approval")?.state,
+      "READY",
+    )
     const monthly = await request("/payroll/settings/versions", adminToken, {
+      expectedLatestId: null,
       frequency: "MONTHLY",
       firstCutoffDay: null,
       effectiveFrom: manilaToday(),
@@ -433,7 +447,11 @@ test(
     })
     assert.equal(monthly.status, 201, await monthly.clone().text())
     const monthlyBody = (await monthly.json()) as {
-      configuration: { frequency: string; periods: { startDay: number }[] }
+      configuration: {
+        id: string
+        frequency: string
+        periods: { startDay: number }[]
+      }
     }
     assert.equal(monthlyBody.configuration.frequency, "MONTHLY")
     assert.equal(monthlyBody.configuration.periods[0].startDay, 1)
@@ -447,6 +465,7 @@ test(
         effectiveFrom: "2099-04-01",
         currency: "PHP",
         changeReason: "Future semi-monthly schedule",
+        expectedLatestId: monthlyBody.configuration.id,
       },
     )
     assert.equal(semiMonthly.status, 201, await semiMonthly.clone().text())

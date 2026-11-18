@@ -1,3 +1,14 @@
+import { serializePayrollExport } from "./payroll-report-export.js"
+import {
+  readPayrollReadiness,
+  readPayrollAudit,
+} from "./payroll-administration.service.js"
+import {
+  payrollReportFilters,
+  readPayrollReport,
+  payrollReportCsv,
+} from "./payroll-reports.service.js"
+import { readPayrollOverview } from "./payroll-overview.service.js"
 import { createManagementOperation } from "../../shared/management-history.js"
 import {
   readReconciliation,
@@ -41,6 +52,58 @@ import { payrollDocumentsRouter } from "./payroll-documents.controller.js"
 export const payrollRouter = Router()
 payrollRouter.use(requireAuth)
 payrollRouter.use(payrollDocumentsRouter, disbursementsRouter)
+
+payrollRouter.get(
+  "/reports",
+  requirePermission(Permission.PAYROLL_READ),
+  async (request, response) => {
+    const page = parsePage(request.query.page)
+    if (page === null) fail(400, "Invalid report page")
+    response.set("Cache-Control", "no-store")
+    response.json(
+      await readPayrollReport(payrollReportFilters(request.query), page),
+    )
+  },
+)
+
+payrollRouter.get(
+  "/reports/export",
+  requirePermission(Permission.PAYROLL_MANAGE),
+  async (request, response) => {
+    const filters = payrollReportFilters(request.query)
+    const format = request.query.format
+    if (format !== undefined && format !== "csv" && format !== "xlsx")
+      fail(400, "Choose CSV or Excel")
+    const report = await readPayrollReport(
+      filters,
+      1,
+      true,
+      format !== undefined,
+    )
+    response.set("Cache-Control", "private, no-store")
+    if (format === undefined) {
+      response.attachment("payroll-" + filters.kind + ".csv")
+      response
+        .type("text/csv; charset=utf-8")
+        .send(payrollReportCsv(report.columns, report.rows))
+      return
+    }
+    const file = serializePayrollExport(filters, report, format)
+    response.attachment(file.filename).type(file.type).send(file.content)
+  },
+)
+
+payrollRouter.get(
+  "/overview",
+  requirePermission(Permission.PAYROLL_READ),
+  async (request, response) => {
+    const range = request.query.periods ?? "6"
+    if (range !== "3" && range !== "6" && range !== "12")
+      fail(400, "Select 3, 6, or 12 payroll periods")
+    response.set("Cache-Control", "no-store")
+    response.json(await readPayrollOverview(Number(range)))
+  },
+)
 
 payrollRouter.get(
   "/periods/current",
@@ -432,6 +495,25 @@ payrollRouter.post(
   },
 )
 
+payrollRouter.get(
+  "/settings/readiness",
+  requirePermission(Permission.PAYROLL_READ),
+  async (_request, response) => {
+    response.set("Cache-Control", "private, no-store")
+    response.json(await readPayrollReadiness())
+  },
+)
+
+payrollRouter.get(
+  "/settings/audit",
+  requirePermission(Permission.PAYROLL_READ),
+  async (request, response) => {
+    const page = parsePage(request.query.page)
+    if (page === null) fail(400, "Invalid audit page")
+    response.set("Cache-Control", "private, no-store")
+    response.json(await readPayrollAudit(page, request.query.subject))
+  },
+)
 payrollRouter.get(
   "/settings/history",
   requirePermission(Permission.PAYROLL_READ),

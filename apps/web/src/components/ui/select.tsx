@@ -74,6 +74,7 @@ type SelectContentProps = React.ComponentPropsWithoutRef<
   typeof SelectPrimitive.Content
 > & {
   maxHeight?: "default" | "roomy"
+  fitOptions?: boolean
 }
 
 const selectContentHeightClass = {
@@ -91,6 +92,7 @@ const SelectContent = React.forwardRef<
       children,
       position = "popper",
       maxHeight = "default",
+      fitOptions = false,
       ...props
     },
     ref,
@@ -101,7 +103,10 @@ const SelectContent = React.forwardRef<
         className={cn(
           "relative z-[130] flex min-w-[8rem] max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-lg border border-[#e1e4ea] bg-background text-foreground shadow-md origin-[var(--radix-select-content-transform-origin)]",
           selectContentHeightClass[maxHeight],
-          position === "popper" && "w-[var(--radix-select-trigger-width)]",
+          position === "popper" &&
+            (fitOptions
+              ? "w-max min-w-[min(var(--radix-select-trigger-width),var(--radix-select-content-available-width))] max-w-[min(calc(100vw-16px),var(--radix-select-content-available-width))]"
+              : "w-[var(--radix-select-trigger-width)]"),
           className,
         )}
         position={position}
@@ -137,12 +142,17 @@ SelectLabel.displayName = SelectPrimitive.Label.displayName
 
 const SelectItem = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item>
->(({ className, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item> & {
+    wrapLabel?: boolean
+  }
+>(({ className, children, wrapLabel, ...props }, ref) => (
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex min-h-8 w-full min-w-0 cursor-pointer select-none items-center rounded-md py-1.5 pl-2 pr-8 text-xs outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>span:last-child]:truncate",
+      "relative flex min-h-8 w-full min-w-0 cursor-pointer select-none items-center rounded-md py-1.5 pl-2 pr-8 text-xs outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      wrapLabel
+        ? "[&>span:last-child]:min-w-0 [&>span:last-child]:whitespace-normal [&>span:last-child]:[overflow-wrap:anywhere]"
+        : "[&>span:last-child]:truncate",
       className,
     )}
     {...props}

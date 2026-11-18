@@ -244,6 +244,7 @@ function payrollModuleGroup(visible: (account: Account) => boolean): NavGroup {
         href: "/module/payroll/payslips",
         label: "Payslips & History",
       },
+      { href: "/module/payroll/reports", label: "Reports" },
       { href: "/module/payroll/settings", label: "Settings" },
     ],
   }

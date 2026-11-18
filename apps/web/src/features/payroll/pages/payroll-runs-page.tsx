@@ -343,6 +343,7 @@ export function PayrollRunsPage({
             placeholder="Search period or run ID…"
           />
           <FilterSelect
+            fitOptions
             label="Filter by run status"
             value={status}
             options={[
@@ -360,6 +361,7 @@ export function PayrollRunsPage({
             }}
           />
           <FilterSelect
+            fitOptions
             label="Filter by frequency"
             value={frequency}
             options={[

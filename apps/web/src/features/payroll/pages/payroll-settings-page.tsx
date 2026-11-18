@@ -1,6 +1,11 @@
 "use client"
 
 import { useState, type FormEvent } from "react"
+import Link from "next/link"
+import { apiRequest } from "@/features/auth/api/auth-api"
+import { FilterSelect } from "@/components/ui/filter-select"
+import { Skeleton } from "@/components/ui/skeleton"
+import { formatDateTime, humanizeEnum } from "@/lib/format"
 import { CalendarRange, Eye, Plus } from "lucide-react"
 import { PageHeader, PageHeaderButton } from "@/components/layout/page-header"
 import { contentClass } from "@/components/layout/styles"
@@ -81,7 +86,13 @@ function todayInManila() {
 const configurationGrid =
   "grid grid-cols-[minmax(0,.9fr)_minmax(0,1.4fr)_minmax(0,1.2fr)_minmax(0,1.5fr)_minmax(0,.7fr)_56px] items-center gap-3"
 
-const settingsTabs = ["Schedule", "Payslips", "Disbursements"] as const
+const settingsTabs = [
+  "Schedule",
+  "Payslips",
+  "Disbursements",
+  "Readiness",
+  "Audit History",
+] as const
 const schedulePageSize = 10
 
 function dayAfter(value: string) {
@@ -156,10 +167,16 @@ export function PayrollSettingsPage() {
     >
       <PageHeader
         title="Payroll Settings"
-        description="Manage payroll schedules, payslip preferences, and sandbox simulation confirmation."
+        description="Manage payroll schedules, preferences, operational readiness, and audit history."
         actions={
           canManage && tab === "Schedule" ? (
-            <PageHeaderButton type="button" onClick={() => setEditorOpen(true)}>
+            <PageHeaderButton
+              type="button"
+              disabled={
+                settings.loading || Boolean(settings.error) || !settings.data
+              }
+              onClick={() => setEditorOpen(true)}
+            >
               <Plus size={15} aria-hidden="true" /> Add schedule
             </PageHeaderButton>
           ) : !canManage ? (
@@ -336,6 +353,12 @@ export function PayrollSettingsPage() {
           )}
         </TabsContent>
         <PayrollPreferenceTabs canManage={canManage} />
+        <TabsContent value="Readiness">
+          <PayrollReadiness onOpenSchedule={() => setTab("Schedule")} />
+        </TabsContent>
+        <TabsContent value="Audit History">
+          <PayrollAudit />
+        </TabsContent>
       </Tabs>
       {selectedSchedule && (
         <ScheduleDetails
@@ -623,6 +646,7 @@ function ScheduleEditor({
   onClose: () => void
   onSaved: () => void
 }) {
+  const [expectedLatestId] = useState(history[0]?.id ?? null)
   const latestStart = history[0]?.effectiveFrom
   const nextAllowed = latestStart ? dayAfter(latestStart) : todayInManila()
   const minimumDate =
@@ -663,6 +687,7 @@ function ScheduleEditor({
         currency: "PHP",
         effectiveFrom,
         changeReason: changeReason.trim(),
+        expectedLatestId,
       })
       sileo.success({ title: "Payroll schedule created" })
       setConfirmOpen(false)
@@ -818,5 +843,268 @@ function ScheduleEditor({
         onConfirm={() => void save()}
       />
     </>
+  )
+}
+
+type Readiness = {
+  capabilities: {
+    id: string
+    label: string
+    state: "READY" | "ATTENTION_REQUIRED" | "NOT_CONFIGURED" | "UNAVAILABLE"
+    reason: string
+    description: string
+    target?: string
+  }[]
+  permissions: { role: string; read: boolean; manage: boolean }[]
+}
+
+const readinessLabels = {
+  READY: "Ready",
+  ATTENTION_REQUIRED: "Attention required",
+  NOT_CONFIGURED: "Not configured",
+  UNAVAILABLE: "Unavailable",
+} as const
+
+function PayrollReadiness({ onOpenSchedule }: { onOpenSchedule: () => void }) {
+  const result = useAsyncResource(
+    (signal) =>
+      apiRequest<Readiness>("/api/payroll/settings/readiness", { signal }),
+    [],
+  )
+  return (
+    <div className="grid min-w-0 gap-4">
+      <SettingsSection title="Payroll Operational Readiness">
+        <p className="m-0 text-xs text-muted-foreground">
+          These checks describe capability availability. Each payroll run still
+          has its own prerequisites.
+        </p>
+        {result.error ? (
+          <Alert>
+            {result.error}{" "}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={result.retry}
+            >
+              Retry
+            </Button>
+          </Alert>
+        ) : result.loading ? (
+          <Skeleton className="h-36 w-full" />
+        ) : (
+          <ul className="m-0 grid list-none divide-y divide-border p-0">
+            {result.data?.capabilities.map((capability) => (
+              <li
+                key={capability.id}
+                className="flex flex-wrap items-start justify-between gap-2 py-3"
+              >
+                <div className="grid min-w-0 flex-1 gap-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold">
+                      {capability.label}
+                    </span>
+                    <Pill
+                      tone={
+                        capability.state === "READY"
+                          ? "success"
+                          : capability.state === "ATTENTION_REQUIRED"
+                            ? "warning"
+                            : "neutral"
+                      }
+                    >
+                      {readinessLabels[capability.state]}
+                    </Pill>
+                  </div>
+                  <p className="m-0 text-xs text-muted-foreground">
+                    {capability.description}
+                  </p>
+                </div>
+                {[
+                  "NO_EFFECTIVE_SCHEDULE",
+                  "INVALID_EFFECTIVE_SCHEDULE",
+                ].includes(capability.reason) ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={onOpenSchedule}
+                  >
+                    Open Schedule
+                  </Button>
+                ) : (
+                  capability.target && (
+                    <Button asChild variant="outline" size="sm">
+                      <Link
+                        href={capability.target}
+                        aria-label={"Open " + capability.label + " workflow"}
+                      >
+                        Open workflow
+                      </Link>
+                    </Button>
+                  )
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </SettingsSection>
+      {result.data && (
+        <SettingsSection title="Payroll Access">
+          <DetailList>
+            {result.data.permissions.map(({ role, read, manage }) => (
+              <DetailItem
+                key={role}
+                label={role === "USER" ? "Client" : humanizeEnum(role)}
+              >
+                {manage
+                  ? "Configure payroll, prepare disbursements, and export reports. Approval and final exception decisions require independent review where applicable."
+                  : read
+                    ? "View payroll records and reports."
+                    : role === "STAFF"
+                      ? "Own published payslips and payroll requests through My Payroll."
+                      : "No Payroll access."}
+              </DetailItem>
+            ))}
+          </DetailList>
+        </SettingsSection>
+      )}
+    </div>
+  )
+}
+
+type AuditPage = {
+  page: number
+  pageSize: number
+  total: number
+  rows: {
+    id: string
+    actorName: string
+    actorRoleAtTime: string
+    subjectType: string
+    subjectId: string
+    action: string
+    activity: string | null
+    createdAt: string
+  }[]
+}
+const auditGrid =
+  "grid min-w-[660px] grid-cols-[1.15fr_1.1fr_1.1fr_1fr] items-center gap-3 px-4"
+
+function PayrollAudit() {
+  const [page, setPage] = useState(1)
+  const [subject, setSubject] = useState("")
+  const result = useAsyncResource(
+    (signal) =>
+      apiRequest<AuditPage>(
+        "/api/payroll/settings/audit?" +
+          new URLSearchParams({
+            page: String(page),
+            ...(subject ? { subject } : {}),
+          }),
+        { signal },
+      ),
+    [page, subject],
+  )
+  const data = result.loading || result.error ? undefined : result.data
+  return (
+    <SettingsSection title="Payroll Audit History">
+      <FilterSelect
+        fitOptions
+        label="Audit category"
+        value={subject}
+        options={[
+          { value: "", label: "All Payroll events" },
+          { value: "PAYROLL_CONFIGURATION", label: "Configuration" },
+          { value: "COMPENSATION", label: "Compensation" },
+          { value: "PAYROLL_PERIOD", label: "Payroll periods" },
+          { value: "PAYROLL_RUN", label: "Runs and operational actions" },
+        ]}
+        onChange={(value) => {
+          setSubject(value)
+          setPage(1)
+        }}
+      />
+      {result.error ? (
+        <Alert>
+          {result.error}{" "}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={result.retry}
+          >
+            Retry
+          </Button>
+        </Alert>
+      ) : (
+        <ResponsiveDataTable
+          label="Payroll audit history"
+          className="overflow-x-auto"
+          aria-busy={result.loading}
+        >
+          <ResponsiveDataTableHeader rowClassName={auditGrid}>
+            {["Event", "Actor", "Record", "Recorded at"].map((label) => (
+              <ResponsiveDataTableColumnHeader key={label}>
+                {label}
+              </ResponsiveDataTableColumnHeader>
+            ))}
+          </ResponsiveDataTableHeader>
+          <ResponsiveDataTableBody>
+            {result.loading ? (
+              <DataTableSkeletonRows
+                label="Payroll audit history"
+                rows={3}
+                rowClassName={auditGrid + " min-h-12"}
+                cellClassNames={["", "", "", ""]}
+              />
+            ) : (
+              data?.rows.map((event) => (
+                <ResponsiveDataTableRow
+                  key={event.id}
+                  variant="directory"
+                  className={auditGrid + " min-h-12 text-xs"}
+                >
+                  <ResponsiveDataTableCell>
+                    {humanizeEnum(event.activity ?? event.action)}
+                  </ResponsiveDataTableCell>
+                  <ResponsiveDataTableCell className="break-words">
+                    {event.actorName}
+                    <div className="text-muted-foreground">
+                      {humanizeEnum(event.actorRoleAtTime)}
+                    </div>
+                  </ResponsiveDataTableCell>
+                  <ResponsiveDataTableCell className="break-all">
+                    {humanizeEnum(event.subjectType)}
+                    <div className="text-muted-foreground">
+                      {event.subjectId}
+                    </div>
+                  </ResponsiveDataTableCell>
+                  <ResponsiveDataTableCell>
+                    {formatDateTime(event.createdAt, "Asia/Manila")}
+                  </ResponsiveDataTableCell>
+                </ResponsiveDataTableRow>
+              ))
+            )}
+          </ResponsiveDataTableBody>
+        </ResponsiveDataTable>
+      )}
+      {data?.total === 0 && (
+        <EmptyState
+          title="No Payroll audit events in this category"
+          size="sm"
+        />
+      )}
+      {data && data.total > data.pageSize && (
+        <TablePaginationFooter
+          {...pageRange(data.page, data.pageSize, data.total)}
+          page={data.page}
+          total={data.total}
+          totalPages={Math.ceil(data.total / data.pageSize)}
+          label="Payroll audit pages"
+          onPageChange={setPage}
+        />
+      )}
+    </SettingsSection>
   )
 }

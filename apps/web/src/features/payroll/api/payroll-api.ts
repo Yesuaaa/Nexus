@@ -181,6 +181,7 @@ export function createPayrollConfigurationVersion(input: {
   currency: "PHP"
   effectiveFrom: string
   changeReason: string
+  expectedLatestId?: string | null
 }) {
   return apiRequest<{ configuration: PayrollConfiguration }>(
     "/api/payroll/settings/versions",

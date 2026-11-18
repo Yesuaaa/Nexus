@@ -49,6 +49,7 @@ export type RoutePolicyId =
   | "payroll-approvals"
   | "payroll-disbursements"
   | "payroll-reconciliation"
+  | "payroll-reports"
   | "payroll-payslips"
   | "staff-my-payroll"
   | "staff-my-payroll-legacy"
@@ -181,6 +182,12 @@ export const routePolicies: readonly RoutePolicy[] = [
   {
     id: "payroll-disbursements",
     match: { kind: "exact", path: "/module/payroll/disbursements" },
+    moduleId: payrollWorkspaceModuleId,
+    canAccess: canAccessPayroll,
+  },
+  {
+    id: "payroll-reports",
+    match: { kind: "exact", path: "/module/payroll/reports" },
     moduleId: payrollWorkspaceModuleId,
     canAccess: canAccessPayroll,
   },

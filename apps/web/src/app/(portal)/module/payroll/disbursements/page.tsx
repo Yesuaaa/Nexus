@@ -426,6 +426,7 @@ export default function DisbursementsPage() {
             }}
           />
           <FilterSelect
+            fitOptions
             label="Batch status"
             triggerClassName="w-[142px]"
             value={status}
@@ -609,6 +610,7 @@ export default function DisbursementsPage() {
                 }}
               />
               <FilterSelect
+                fitOptions
                 label="Approved payroll run"
                 value={runId}
                 onChange={setRunId}
@@ -838,6 +840,7 @@ export default function DisbursementsPage() {
                             containerClassName="min-w-[190px] flex-1"
                           />
                           <FilterSelect
+                            fitOptions
                             label="Payout status"
                             value={itemStatus}
                             onChange={(value) => {
@@ -854,6 +857,7 @@ export default function DisbursementsPage() {
                             }))}
                           />
                           <FilterSelect
+                            fitOptions
                             label="Sort payouts"
                             value={itemSort}
                             onChange={(value) => {
@@ -1109,6 +1113,7 @@ export default function DisbursementsPage() {
                           />
                         )}
                         <FilterSelect
+                          fitOptions
                           label="Employees per page"
                           value={String(itemPageSize)}
                           onChange={(value) => {
