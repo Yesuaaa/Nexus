@@ -18,7 +18,6 @@ import {
 import type { AuthContext } from "../auth/auth.middleware.js"
 import { attendanceWorkdayInclude } from "../attendance/attendance.repository.js"
 import { manilaToday } from "./payroll.service.js"
-import { isPayrollSimulatorEnabled } from "./payroll-simulator.js"
 import {
   generatePayrollPeriodCandidates,
   type PayrollPeriodConfiguration,
@@ -241,7 +240,7 @@ function runView<
     id: value.id,
     status: value.status,
     calculationCount: value.calculationCount,
-    demoSelfApprovalEnabled: isPayrollSimulatorEnabled(),
+    demoSelfApprovalEnabled: false,
     createdAt: value.createdAt.toISOString(),
     updatedAt: value.updatedAt.toISOString(),
     createdBy: value.createdBy,
@@ -732,6 +731,7 @@ export const payrollRunsService = {
   ) {
     return getPrisma()!.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(848225, hashtext(${runId}))`
+      await tx.$queryRaw`SELECT id FROM "PayrollRun" WHERE id = ${runId} FOR UPDATE`
       const run = await tx.payrollRun.findUnique({
         where: { id: runId },
         include: runInclude,
@@ -770,7 +770,6 @@ export const payrollRunsService = {
         fail(409, "Resolve all employee calculation issues before approval")
       if (
         action === "approve" &&
-        !isPayrollSimulatorEnabled() &&
         [run.createdById, revision.createdBy.id].includes(auth.user.id)
       )
         fail(
@@ -868,6 +867,7 @@ export const payrollRunsService = {
     const yearEnd = dateAtEndOfYear(year)
     return prisma.$transaction(
       async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock_shared(848222, 1)`
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(848223, ${year})`
         const configurations = await tx.payrollConfiguration.findMany({
           where: {
@@ -949,7 +949,8 @@ export const payrollRunsService = {
           rows: detailed.map(periodView),
         }
       },
-      { isolationLevel: "Serializable" },
+      // Read the schedule after acquiring both locks, including a writer's committed change.
+      { isolationLevel: "ReadCommitted" },
     )
   },
 

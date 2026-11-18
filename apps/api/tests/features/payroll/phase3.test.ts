@@ -358,14 +358,47 @@ test(
       (await approvalRequest(reviewer, "submit", authoredId)).status,
       409,
     )
-    assert.equal(
-      (await approvalRequest(admin, "approve", authoredId)).status,
-      403,
-    )
-    assert.equal(
-      (await approvalRequest(calculator, "approve", authoredId)).status,
-      403,
-    )
+    const readApprovalState = async () => ({
+      run: await prisma.payrollRun.findUniqueOrThrow({ where: { id: run.id } }),
+      revisions: await prisma.payrollRunCalculation.findMany({
+        where: { runId: run.id },
+        orderBy: { revision: "asc" },
+        include: {
+          items: {
+            orderBy: { id: "asc" },
+            include: { components: { orderBy: { id: "asc" } } },
+          },
+        },
+      }),
+      events: await prisma.payrollApprovalEvent.findMany({
+        where: { calculation: { runId: run.id } },
+        orderBy: { id: "asc" },
+      }),
+      audit: await prisma.workforceManagementChange.findMany({
+        where: { subjectType: "PAYROLL_RUN", subjectId: run.id },
+        orderBy: { id: "asc" },
+      }),
+    })
+    const beforeDeniedApproval = await readApprovalState()
+    const originalNodeEnv = process.env.NODE_ENV
+    const originalSimulator = process.env.PAYROLL_LOCAL_SIMULATOR
+    try {
+      process.env.NODE_ENV = "development"
+      for (const enabled of ["true", "false"]) {
+        process.env.PAYROLL_LOCAL_SIMULATOR = enabled
+        for (const user of [admin, calculator]) {
+          const denied = await approvalRequest(user, "approve", authoredId)
+          assert.equal(denied.status, 403, `Simulator setting: ${enabled}`)
+          assert.deepEqual(await readApprovalState(), beforeDeniedApproval)
+        }
+      }
+    } finally {
+      if (originalNodeEnv === undefined) delete process.env.NODE_ENV
+      else process.env.NODE_ENV = originalNodeEnv
+      if (originalSimulator === undefined)
+        delete process.env.PAYROLL_LOCAL_SIMULATOR
+      else process.env.PAYROLL_LOCAL_SIMULATOR = originalSimulator
+    }
     for (const denied of [superadmin, staff, client]) {
       assert.equal(
         (await approvalRequest(denied, "approve", authoredId)).status,
@@ -377,6 +410,7 @@ test(
         403,
       )
     }
+    assert.deepEqual(await readApprovalState(), beforeDeniedApproval)
     assert.equal(
       (await approvalRequest(reviewer, "reject", authoredId, " ")).status,
       400,
@@ -405,21 +439,29 @@ test(
       (await approvalRequest(admin, "submit", revisedId)).status,
       200,
     )
+    const beforeStaleApproval = await readApprovalState()
     assert.equal(
       (await approvalRequest(reviewer, "approve", authoredId)).status,
       409,
     )
+    assert.deepEqual(await readApprovalState(), beforeStaleApproval)
     const competing = await Promise.all([
       approvalRequest(reviewer, "approve", revisedId),
       approvalRequest(calculator, "approve", revisedId),
     ])
     assert.deepEqual(competing.map(({ status }) => status).sort(), [200, 409])
+    const approvedState = await readApprovalState()
+    assert.equal(
+      (await approvalRequest(reviewer, "approve", revisedId)).status,
+      409,
+    )
     assert.equal(
       (await approvalRequest(reviewer, "reject", revisedId, "Check totals"))
         .status,
       409,
     )
     assert.equal((await calculate()).status, 409)
+    assert.deepEqual(await readApprovalState(), approvedState)
     const queue = await fetch(`${base}/payroll/approvals`, {
       headers: superadmin.headers,
     })

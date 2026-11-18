@@ -431,6 +431,16 @@ export const payrollService = {
         )
       if (previous && input.effectiveFrom <= previous.effectiveFrom)
         fail(409, "A payroll schedule already exists on or after this date")
+      if (
+        await tx.payrollPeriod.findFirst({
+          where: { endDate: { gte: input.effectiveFrom } },
+          select: { id: true },
+        })
+      )
+        fail(
+          409,
+          "The new schedule would change already-generated payroll periods",
+        )
       if (previous)
         await tx.payrollConfiguration.update({
           where: { id: previous.id },

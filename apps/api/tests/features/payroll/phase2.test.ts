@@ -456,21 +456,27 @@ test(
     assert.equal(monthlyBody.configuration.frequency, "MONTHLY")
     assert.equal(monthlyBody.configuration.periods[0].startDay, 1)
 
-    const semiMonthly = await request(
-      "/payroll/settings/versions",
-      adminToken,
-      {
-        frequency: "SEMI_MONTHLY",
-        firstCutoffDay: 15,
-        effectiveFrom: "2099-04-01",
-        currency: "PHP",
-        changeReason: "Future semi-monthly schedule",
-        expectedLatestId: monthlyBody.configuration.id,
-      },
+    const scheduleResponses = await Promise.all(
+      ["2099-04-01", "2099-05-01"].map((effectiveFrom) =>
+        request("/payroll/settings/versions", adminToken, {
+          frequency: "SEMI_MONTHLY",
+          firstCutoffDay: 15,
+          effectiveFrom,
+          currency: "PHP",
+          changeReason: `Future semi-monthly schedule ${effectiveFrom}`,
+          expectedLatestId: monthlyBody.configuration.id,
+        }),
+      ),
     )
+    assert.deepEqual(
+      scheduleResponses.map(({ status }) => status).sort(),
+      [201, 409],
+    )
+    const semiMonthly = scheduleResponses.find(({ status }) => status === 201)!
     assert.equal(semiMonthly.status, 201, await semiMonthly.clone().text())
     const semiMonthlyBody = (await semiMonthly.json()) as {
       configuration: {
+        effectiveFrom: string
         periods: { startDay: number; endDay: number | string }[]
       }
     }
@@ -499,14 +505,20 @@ test(
     assert.equal(settingsBody.rows.length, 2)
     assert.equal(settingsBody.rows[0].frequency, "SEMI_MONTHLY")
     assert.equal(settingsBody.rows[1].frequency, "MONTHLY")
-    assert.equal(settingsBody.rows[1].effectiveTo, "2099-03-31")
+    const expectedEnd =
+      semiMonthlyBody.configuration.effectiveFrom === "2099-04-01"
+        ? "2099-03-31"
+        : "2099-04-30"
+    assert.equal(settingsBody.rows[1].effectiveTo, expectedEnd)
 
     const configAudit = await prisma.workforceManagementChange.findMany({
       where: { subjectType: "PAYROLL_CONFIGURATION" },
     })
     assert.equal(configAudit.length, 2)
     assert.ok(
-      JSON.stringify(configAudit).includes("Future semi-monthly schedule"),
+      JSON.stringify(configAudit).includes(
+        `Future semi-monthly schedule ${semiMonthlyBody.configuration.effectiveFrom}`,
+      ),
     )
 
     const superadminWrite = await request(
