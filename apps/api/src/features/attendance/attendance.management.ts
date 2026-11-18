@@ -32,6 +32,11 @@ import {
   submitRecordedOvertime,
 } from "./attendance.overtime.js"
 import { parseAttendanceHistory } from "./attendance.schema.js"
+import {
+  approvedLeaveForDate,
+  approvedLeaveMinutesByDate,
+  approvedLeaveOverlappingInterval,
+} from "../leave/leave.repository.js"
 
 function attendanceEmployeeIdentity<
   T extends {
@@ -162,6 +167,13 @@ async function validateCorrection(
       400,
       "Correction timestamps must be ordered and cannot be in the future",
     )
+  if (
+    (await approvedLeaveOverlappingInterval(tx, employeeId, start, end)).length
+  )
+    fail(
+      409,
+      "Proposed attendance crosses approved leave; ask HR to reverse the leave first",
+    )
   const session = sessionId
     ? await attendanceRepository.session(tx, employeeId, sessionId)
     : null
@@ -184,6 +196,14 @@ async function validateCorrection(
       where: { id: session.workdayId },
     })
     if (
+      await approvedLeaveForDate(
+        tx,
+        employeeId,
+        day.workDate.toISOString().slice(0, 10),
+      )
+    )
+      fail(409, "Approved leave covers this attendance workday")
+    if (
       attendanceWorkDate(start, day.timeZone) !==
       attendanceWorkDate(session.startedAt, day.timeZone)
     )
@@ -198,8 +218,13 @@ async function validateCorrection(
         409,
         "The proposed session must contain its recorded breaks; end any open break first",
       )
-  } else if (!(await policyAt(tx, employeeId, start)))
-    fail(409, "No policy is assigned for the missing session's starting date")
+  } else {
+    const policy = await policyAt(tx, employeeId, start)
+    if (!policy)
+      fail(409, "No policy is assigned for the missing session's starting date")
+    if (await approvedLeaveForDate(tx, employeeId, policy.workDate))
+      fail(409, "Approved leave covers this attendance workday")
+  }
   if (
     await tx.attendanceWorkSession.findFirst({
       where: {
@@ -523,11 +548,26 @@ export function createAttendanceManagement(clock: () => Date) {
             },
             { tx },
           )
+          const leaveByDate = await approvedLeaveMinutesByDate(
+            tx,
+            [...new Set(rows.map((day) => day.employeeId))],
+            range.from,
+            range.to,
+          )
           return {
             asOf: now,
             ...paging,
             workdays: rows.map((day) => ({
-              ...summarizeAttendance(day, now),
+              ...summarizeAttendance(
+                {
+                  ...day,
+                  approvedLeaveMinutes:
+                    leaveByDate.get(
+                      `${day.employeeId}:${day.workDate.toISOString().slice(0, 10)}`,
+                    ) ?? 0,
+                },
+                now,
+              ),
               employee: attendanceEmployeeIdentity(day.employee),
             })),
           }
@@ -634,7 +674,24 @@ export function createAttendanceManagement(clock: () => Date) {
               400,
               "Narrow the overview date range to at most 10,000 records",
             )
-          const days = rows.map((day) => summarizeAttendance(day, now))
+          const leaveByDate = await approvedLeaveMinutesByDate(
+            tx,
+            [...new Set(rows.map((day) => day.employeeId))],
+            range.from,
+            range.to,
+          )
+          const days = rows.map((day) =>
+            summarizeAttendance(
+              {
+                ...day,
+                approvedLeaveMinutes:
+                  leaveByDate.get(
+                    `${day.employeeId}:${day.workDate.toISOString().slice(0, 10)}`,
+                  ) ?? 0,
+              },
+              now,
+            ),
+          )
           const statusBreakdown = {
             NOT_STARTED: 0,
             IN_PROGRESS: 0,
@@ -794,6 +851,20 @@ export function createAttendanceManagement(clock: () => Date) {
         const policy = await lockedPolicy(tx, policyId)
         if (policy.archivedAt)
           fail(409, "Restore the archived policy before editing it")
+        const futureLeave = await tx.leaveRequestDay.findFirst({
+          where: {
+            assignment: { policyId },
+            request: { status: "APPROVED" },
+            workDate: {
+              gte: new Date(attendanceWorkDate(clock(), policy.timeZone)),
+            },
+          },
+        })
+        if (futureLeave)
+          fail(
+            409,
+            "Reverse future approved leave before editing its attendance policy",
+          )
         if (policy._count.assignments && policy.timeZone !== input.timeZone)
           fail(
             409,
@@ -949,6 +1020,21 @@ export function createAttendanceManagement(clock: () => Date) {
         const today = attendanceWorkDate(clock(), assignment.policy.timeZone)
         const tomorrow = new Date(today)
         tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
+        if (
+          await tx.leaveRequestDay.findFirst({
+            where: {
+              assignmentId,
+              workDate: { gte: tomorrow },
+              request: {
+                status: { in: ["SUBMITTED", "VERIFIED", "APPROVED"] },
+              },
+            },
+          })
+        )
+          fail(
+            409,
+            "Resolve future leave requests before ending this assignment",
+          )
         if (assignment.effectiveUntil && assignment.effectiveUntil <= tomorrow)
           fail(409, "This assignment has already ended or is already ending")
         await context(tx, userId, "Unassigned attendance policy")
@@ -1016,6 +1102,19 @@ export function createAttendanceManagement(clock: () => Date) {
               OR: [{ effectiveUntil: null }, { effectiveUntil: { gt: from } }],
             },
           })
+          if (
+            await tx.leaveRequestDay.findFirst({
+              where: {
+                employeeId,
+                workDate: { gte: from },
+                request: { status: "APPROVED" },
+              },
+            })
+          )
+            fail(
+              409,
+              "Reverse future approved leave before changing its policy assignment",
+            )
           if (overlapping.some((item) => item.effectiveFrom >= from))
             fail(409, "An assignment already starts on or after that date")
           if (

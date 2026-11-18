@@ -201,6 +201,11 @@ for (const width of [1440, 390])
       )
         prohibited.push(path)
     })
+    await page.route("**/api/administrative-requests?**", (route) =>
+      route.fulfill({
+        json: { serviceRequests: [], total: 0, page: 1, pageSize: 10 },
+      }),
+    )
     await page.route("**/api/administrative-requests/request-1", (route) =>
       route.fulfill({
         json: { serviceRequest: { ...request, workflowInspection: workflow } },
@@ -275,6 +280,11 @@ test("on-hold workflow retains its prior stage while revoked backend access clea
 }) => {
   await restoreSession(page, "SUPERADMIN")
   let denied = false
+  await page.route("**/api/administrative-requests?**", (route) =>
+    route.fulfill({
+      json: { serviceRequests: [], total: 0, page: 1, pageSize: 10 },
+    }),
+  )
   await page.route("**/api/administrative-requests/request-1", (route) =>
     denied
       ? route.fulfill({

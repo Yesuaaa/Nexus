@@ -188,13 +188,15 @@ export function AuthContent({
                 type="tel"
                 value={contactNumber}
                 onChange={(value) =>
-                  changeValue(setContactNumber, value.replace(/\D/g, ""))
+                  changeValue(
+                    setContactNumber,
+                    value.replace(/\D/g, "").slice(0, 11),
+                  )
                 }
                 onBlur={() => markTouched("contactNumber")}
                 onFocus={() => handleFieldFocus("contactNumber")}
                 autoComplete="tel"
                 placeholder="09123456789"
-                maxLength={11}
                 error={visibleError("contactNumber")}
               />
             </div>

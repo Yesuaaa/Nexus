@@ -18,6 +18,7 @@ import { sileo } from "sileo"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
+import { ClientProjectSkeleton } from "../components/client-project-skeleton"
 import { Pill, pillToneClass, type PillTone } from "@/components/ui/pill"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
 import {
@@ -177,9 +178,7 @@ export function ClientProjectPage({
   if (loading) {
     return (
       <main className={`${contentClass} p-6 max-[767px]:p-4`}>
-        <p role="status" className="py-12 text-center text-sm text-[#60718c]">
-          Loading project…
-        </p>
+        <ClientProjectSkeleton />
       </main>
     )
   }

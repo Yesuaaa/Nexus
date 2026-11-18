@@ -14,6 +14,7 @@ export type AttendanceTab =
   | "requests-overview"
   | "overtime"
   | "corrections"
+  | "leave"
   | "policies-overview"
 const headings: Record<AttendanceTab, { title: string; description: string }> =
   {
@@ -41,6 +42,11 @@ const headings: Record<AttendanceTab, { title: string; description: string }> =
       title: "Attendance Corrections",
       description:
         "Request and review missing or incorrect attendance records.",
+    },
+    leave: {
+      title: "Leave Requests",
+      description:
+        "Request dated leave and review department or organization approvals within your permitted scope.",
     },
     "policies-overview": {
       title: "Policies Overview",

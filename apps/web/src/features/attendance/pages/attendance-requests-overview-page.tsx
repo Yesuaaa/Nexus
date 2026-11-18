@@ -22,6 +22,7 @@ import {
 import { humanizeEnum } from "@/lib/format"
 import { useAsyncResource } from "@/lib/use-async-resource"
 import { attendanceRequestSummary } from "../api/attendance-api"
+import { leaveOverview } from "@/features/leave/api/leave-api"
 import { AttendanceShell } from "../components/attendance-shell"
 import { ResourceStatus } from "../components/attendance-shared"
 
@@ -38,13 +39,25 @@ export function AttendanceRequestsOverviewPage() {
     [scope],
     { fallbackError: "Couldn't load request summaries." },
   )
+  const leaveResult = useAsyncResource(
+    (signal) => leaveOverview(scope, signal),
+    [scope],
+    { fallbackError: "Couldn't load leave request summaries." },
+  )
   const data = result.loading || result.error ? undefined : result.data
   const groups = data?.groups ?? []
-  const total = groups.reduce((sum, group) => sum + group.count, 0)
+  const leaveGroups = leaveResult.data?.groups ?? []
+  const leaveCount = leaveGroups.reduce((sum, group) => sum + group.count, 0)
+  const total = groups.reduce((sum, group) => sum + group.count, 0) + leaveCount
+  const countLeave = (status: (typeof leaveGroups)[number]["status"]) =>
+    leaveGroups
+      .filter((group) => group.status === status)
+      .reduce((sum, group) => sum + group.count, 0)
   const countRequests = (status: (typeof requestStatuses)[number]) =>
     groups
       .filter((group) => group.status === status)
-      .reduce((sum, group) => sum + group.count, 0)
+      .reduce((sum, group) => sum + group.count, 0) +
+    (status === "PENDING" ? countLeave("SUBMITTED") : countLeave(status))
   const overtimeCount = groups
     .filter((group) => group.type === "OVERTIME")
     .reduce((sum, group) => sum + group.count, 0)
@@ -54,8 +67,14 @@ export function AttendanceRequestsOverviewPage() {
   const awaiting = groups.filter(
     (group) => group.status === "PENDING" || group.status === "VERIFIED",
   )
-  const awaitingCount = awaiting.reduce((sum, group) => sum + group.count, 0)
-  const unavailable = Boolean(result.error)
+  const leaveAwaiting = leaveGroups
+    .filter(
+      (group) => group.status === "SUBMITTED" || group.status === "VERIFIED",
+    )
+    .map((group) => ({ ...group, type: "LEAVE" as const }))
+  const attention = [...awaiting, ...leaveAwaiting]
+  const awaitingCount = attention.reduce((sum, group) => sum + group.count, 0)
+  const unavailable = Boolean(result.error || leaveResult.error)
 
   return (
     <AttendanceShell tab="requests-overview">
@@ -81,8 +100,11 @@ export function AttendanceRequestsOverviewPage() {
       )}
       <ResourceStatus
         loading={false}
-        error={result.error}
-        retry={result.retry}
+        error={result.error || leaveResult.error}
+        retry={() => {
+          result.retry()
+          leaveResult.retry()
+        }}
       />
 
       <FiguresRow
@@ -256,6 +278,51 @@ export function AttendanceRequestsOverviewPage() {
         })}
       </div>
 
+      <Section title="Leave" aside={`${leaveCount} total`} className="mt-9">
+        <p className="m-0 text-xs leading-5 text-[#65718a]">
+          Whole-day leave verified by the department and finalized by HR.
+        </p>
+        <Button asChild variant="brandOutline" size="panel" className="mt-3">
+          <Link href="/attendance/requests/leave">View leave requests</Link>
+        </Button>
+        {leaveResult.loading ? (
+          <div className="mt-4">
+            <RowsSkeleton rows={3} />
+          </div>
+        ) : leaveResult.error ? (
+          <p className="mt-4 mb-0 text-xs text-[#65718a]">
+            Leave request summaries unavailable.
+          </p>
+        ) : leaveCount === 0 ? (
+          <p className="mt-4 mb-0 text-xs text-[#8a94a6]">
+            No leave requests in this scope.
+          </p>
+        ) : (
+          <table className={`${tableClass} mt-4`}>
+            <thead>
+              <tr>
+                <th className={headCellClass}>Status</th>
+                <th className="border-b border-[#e3e7ed] pb-2 text-right text-[11px] font-medium text-[#738096]">
+                  Requests
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {leaveGroups.map((group) => (
+                <tr key={`${group.type}-${group.status}`}>
+                  <td className={`${cellClass} text-[#182235]`}>
+                    {humanizeEnum(group.status)}
+                  </td>
+                  <td className={`${cellClass} text-right tabular-nums`}>
+                    {group.count}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Section>
+
       <Section
         title="Needs attention"
         aside={data ? `${awaitingCount} awaiting` : undefined}
@@ -268,13 +335,13 @@ export function AttendanceRequestsOverviewPage() {
           <p className="m-0 text-xs leading-5 text-[#65718a]">
             Request summaries unavailable.
           </p>
-        ) : awaiting.length === 0 ? (
+        ) : attention.length === 0 ? (
           <p className="m-0 text-xs text-[#25745b]">
             No requests are awaiting a decision in this scope.
           </p>
         ) : (
           <dl className="m-0 grid gap-2 text-xs">
-            {awaiting.map((group) => (
+            {attention.map((group) => (
               <div
                 key={group.type + group.status}
                 className="flex gap-4 max-[560px]:flex-col max-[560px]:gap-0.5"

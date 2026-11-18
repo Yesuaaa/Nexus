@@ -46,6 +46,7 @@ import {
 } from "../model/conversation-groups"
 import { matchesConversationSearch } from "../model/conversation-search"
 import { ConversationSearch } from "../components/conversation-search"
+import { ConversationListSkeleton } from "../components/conversation-list-skeleton"
 import { errorMessage } from "@/lib/error-message"
 import { watchVisibleRefresh } from "@/lib/visible-refresh"
 import { useWorkspaceModuleId } from "@/features/workspaces/providers/workspace-provider"
@@ -144,7 +145,7 @@ function ConversationInbox({
       })
   }, [internalError])
   const [loadingMore, setLoadingMore] = useState(false)
-  const [internalLoading, setInternalLoading] = useState(false)
+  const [internalLoading, setInternalLoading] = useState(mode === "internal")
   const [internalLoadingMore, setInternalLoadingMore] = useState(false)
   const [creatingInternal, setCreatingInternal] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -724,41 +725,10 @@ function ConversationInbox({
             </p>
           )}
           {mode === "requests" && conversationsLoading && (
-            <p
-              role="status"
-              className={cn(
-                "p-5 text-xs text-[#52627a]",
-                railCollapsed && "px-0 text-center",
-                "max-[767px]:px-5 max-[767px]:text-left",
-              )}
-            >
-              {railCollapsed ? (
-                <>
-                  <LoaderCircle
-                    size={18}
-                    aria-hidden="true"
-                    className="mx-auto animate-spin motion-reduce:animate-none max-[767px]:hidden"
-                  />
-                  <span className="sr-only max-[767px]:not-sr-only">
-                    Loading conversations…
-                  </span>
-                </>
-              ) : (
-                "Loading conversations…"
-              )}
-            </p>
+            <ConversationListSkeleton railCollapsed={railCollapsed} />
           )}
           {mode === "internal" && internalLoading && (
-            <p
-              role="status"
-              className={cn(
-                "p-5 text-xs text-[#52627a]",
-                railCollapsed && "px-0 text-center",
-                "max-[767px]:px-5 max-[767px]:text-left",
-              )}
-            >
-              Loading internal chats…
-            </p>
+            <ConversationListSkeleton internal railCollapsed={railCollapsed} />
           )}
           {mode === "requests" &&
             !conversationsLoading &&

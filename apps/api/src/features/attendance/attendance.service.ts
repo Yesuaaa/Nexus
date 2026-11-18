@@ -16,6 +16,10 @@ import type {
 import { summarizeAttendance } from "./attendance.summary.js"
 import { attendanceWorkDate } from "./attendance.validation.js"
 import { submitRecordedOvertime } from "./attendance.overtime.js"
+import {
+  approvedLeaveForDate,
+  approvedLeaveOverlappingInterval,
+} from "../leave/leave.repository.js"
 
 type Clock = () => Date
 
@@ -88,11 +92,32 @@ async function workdayResponse(
 ) {
   const day = await repository.workday(tx, employeeId, workdayId)
   if (!day) fail(404, "Attendance workday not found")
+  const approvedLeave = await approvedLeaveForDate(
+    tx,
+    employeeId,
+    day.workDate.toISOString().slice(0, 10),
+  )
+  const leaveConflicts = (
+    await Promise.all(
+      day.sessions.map((session) =>
+        approvedLeaveOverlappingInterval(
+          tx,
+          employeeId,
+          session.startedAt,
+          session.endedAt ?? now,
+        ),
+      ),
+    )
+  ).flat()
   return {
     asOf: now,
     employeeId,
     needsPolicy: false,
-    workday: summarizeAttendance(day, now),
+    leaveConflict: leaveConflicts.length > 0,
+    workday: summarizeAttendance(
+      { ...day, approvedLeaveMinutes: approvedLeave?.leaveMinutes ?? 0 },
+      now,
+    ),
   }
 }
 
@@ -116,6 +141,7 @@ export function createAttendanceService(clock: Clock = () => new Date()) {
             if (await repository.activeSession(tx, employee.id))
               fail(409, "You already have an active attendance session")
             const latest = await repository.latestSession(tx, employee.id)
+            let selectedWorkDate: string
             if (input.workdayId) {
               const selected = await repository.workday(
                 tx,
@@ -127,6 +153,7 @@ export function createAttendanceService(clock: Clock = () => new Date()) {
               const previous = new Date(`${today}T00:00:00Z`)
               previous.setUTCDate(previous.getUTCDate() - 1)
               const selectedDate = selected.workDate.toISOString().slice(0, 10)
+              selectedWorkDate = selectedDate
               const overnightContinuation =
                 selectedDate === previous.toISOString().slice(0, 10) &&
                 latest?.workdayId === selected.id &&
@@ -137,9 +164,25 @@ export function createAttendanceService(clock: Clock = () => new Date()) {
                   409,
                   "Choose today's workday or your latest overnight continuation",
                 )
-            } else if (!(await policyAt(tx, employee.id, now))) {
-              fail(409, "No attendance policy is assigned for this workday")
+            } else {
+              const policy = await policyAt(tx, employee.id, now)
+              if (!policy)
+                fail(409, "No attendance policy is assigned for this workday")
+              selectedWorkDate = policy.workDate
             }
+            if (await approvedLeaveForDate(tx, employee.id, selectedWorkDate))
+              fail(409, "Approved leave covers this workday")
+            if (
+              (
+                await approvedLeaveOverlappingInterval(
+                  tx,
+                  employee.id,
+                  now,
+                  new Date(now.getTime() + 1),
+                )
+              ).length
+            )
+              fail(409, "Approved leave covers the current local date")
             if (latest?.endedAt && latest.endedAt > now)
               fail(409, "Clock-in must follow your previous session")
             const session = await tx.attendanceWorkSession.create({
@@ -162,6 +205,37 @@ export function createAttendanceService(clock: Clock = () => new Date()) {
             (pause) => pause.endedAt === null,
           )
           if (action === "clock-out") {
+            const conflicts = await approvedLeaveOverlappingInterval(
+              tx,
+              employee.id,
+              session.startedAt,
+              now,
+            )
+            if (conflicts.length) {
+              await tx.$executeRaw`SELECT set_config('app.attendance_reason', 'Clock-out recovery crossed approved leave; HR reconciliation required', true)`
+              const reviewers = await tx.user.findMany({
+                where: {
+                  isActive: true,
+                  accountDeletedAt: null,
+                  role: { in: ["ADMIN", "SUPERADMIN"] },
+                },
+                select: { id: true },
+              })
+              await tx.workflowNotification.createMany({
+                data: [
+                  ...new Set(conflicts.map((day) => day.requestId)),
+                ].flatMap((leaveRequestId) =>
+                  reviewers.map(({ id }) => ({
+                    userId: id,
+                    leaveRequestId,
+                    type: "LEAVE_ATTENDANCE_CONFLICT",
+                    summary:
+                      "Recorded attendance crosses approved leave. HR reconciliation is required.",
+                  })),
+                ),
+                skipDuplicates: true,
+              })
+            }
             if (
               now <= session.startedAt ||
               (activeBreak && now <= activeBreak.startedAt) ||
@@ -261,6 +335,11 @@ export function createAttendanceService(clock: Clock = () => new Date()) {
             (day) => day.weekday === workDate.getUTCDay(),
           )
           if (!rule) fail(409, "Attendance policy weekdays are incomplete")
+          const approvedLeave = await approvedLeaveForDate(
+            tx,
+            employee.id,
+            policy.workDate,
+          )
           return {
             asOf: now,
             employeeId: employee.id,
@@ -281,6 +360,7 @@ export function createAttendanceService(clock: Clock = () => new Date()) {
                   policy.assignment.policy.overnightRequiresReview,
                 assignment: { policy: policy.assignment.policy },
                 sessions: [],
+                approvedLeaveMinutes: approvedLeave?.leaveMinutes ?? 0,
               },
               now,
             ),
@@ -344,11 +424,35 @@ export function createAttendanceService(clock: Clock = () => new Date()) {
             },
             { tx },
           )
+          const leaveDays = await tx.leaveRequestDay.findMany({
+            where: {
+              employeeId,
+              workDate: { gte: query.from, lte: query.to },
+              request: { status: "APPROVED" },
+            },
+            select: { workDate: true, leaveMinutes: true },
+          })
+          const leaveByDate = new Map(
+            leaveDays.map((day) => [
+              day.workDate.toISOString().slice(0, 10),
+              day.leaveMinutes,
+            ]),
+          )
           return {
             asOf: now,
             employeeId,
             ...page,
-            workdays: rows.map((day) => summarizeAttendance(day, now)),
+            workdays: rows.map((day) =>
+              summarizeAttendance(
+                {
+                  ...day,
+                  approvedLeaveMinutes:
+                    leaveByDate.get(day.workDate.toISOString().slice(0, 10)) ??
+                    0,
+                },
+                now,
+              ),
+            ),
           }
         },
         { isolationLevel: "RepeatableRead" },

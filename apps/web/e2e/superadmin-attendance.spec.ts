@@ -256,6 +256,10 @@ for (const width of [1440, 390])
     await restoreSession(page, "SUPERADMIN")
     const { reads, writes } = await mockAttendance(page)
     await page.goto("/module")
+    if (width === 390)
+      await page
+        .getByRole("button", { name: "Next module", exact: true })
+        .click()
     await page
       .getByRole("link", {
         name: "Open Workforce Compliance workspace",
@@ -331,6 +335,9 @@ for (const width of [1440, 390])
       .click()
     await page
       .getByRole("menuitem", { name: "View policy details", exact: true })
+      .click()
+    await page
+      .getByRole("tab", { name: "Assigned people", exact: true })
       .click()
     await expect(
       page.getByText("Engineering Employee", { exact: true }),

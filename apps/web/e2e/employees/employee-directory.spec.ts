@@ -98,15 +98,27 @@ test("employee directory applies filters and resets pagination to the first page
     .getByRole("combobox", { name: "Filter by employee status" })
     .click()
   await page.getByRole("option", { name: "On Leave" }).click()
+  const searchRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url())
+    return (
+      request.method() === "GET" &&
+      url.pathname === "/api/employees" &&
+      url.searchParams.get("search") === "Jordan" &&
+      url.searchParams.get("departmentId") === "dept-1" &&
+      url.searchParams.get("employmentType") === "CONTRACT" &&
+      url.searchParams.get("status") === "ON_LEAVE"
+    )
+  })
   await page
     .getByRole("searchbox", { name: "Search employees" })
     .fill(" Jordan ")
+  const finalRequest = await searchRequest
 
   await expect(page.getByRole("row", { name: /Jordan Reyes/ })).toBeVisible()
   await expect(
     page.getByText("Showing 1–1 of 1", { exact: true }),
   ).toBeVisible()
-  const finalQuery = new URLSearchParams(lastQuery)
+  const finalQuery = new URL(finalRequest.url()).searchParams
   expect(finalQuery.get("page")).toBe("1")
   expect(finalQuery.get("search")).toBe("Jordan")
   expect(finalQuery.get("departmentId")).toBe("dept-1")

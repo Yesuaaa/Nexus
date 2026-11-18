@@ -29,10 +29,37 @@ export function validateFields(fields: Iterable<Control>) {
   }
   if (firstInvalid) {
     const control = firstInvalid
-    control.focus()
+    control.focus({ preventScroll: true })
     // Wait for inline feedback to mount before scrolling nested panels.
     requestAnimationFrame(() => {
       if (!control.isConnected || document.activeElement !== control) return
+      // Keep validation scrolling inside the nearest scrollable panel so a
+      // clipped application shell cannot be shifted above the viewport.
+      let panel = control.parentElement
+      while (panel) {
+        const overflow = getComputedStyle(panel).overflowY
+        if (
+          (overflow === "auto" || overflow === "scroll") &&
+          panel.scrollHeight > panel.clientHeight
+        )
+          break
+        panel = panel.parentElement
+      }
+      if (panel && panel !== document.scrollingElement) {
+        const field =
+          control.closest("[data-validation-field]") ||
+          control.labels?.[0] ||
+          control
+        const bounds = field.getBoundingClientRect()
+        const viewport = panel.getBoundingClientRect()
+        if (bounds.top < viewport.top || bounds.bottom > viewport.bottom) {
+          panel.scrollBy({
+            top: bounds.top - viewport.top - panel.clientTop - 16,
+            behavior: "instant",
+          })
+        }
+        return
+      }
       control.scrollIntoView({ block: "center", inline: "nearest" })
       for (const id of (control.getAttribute("aria-describedby") || "").split(
         " ",
