@@ -38,8 +38,8 @@ export function getWorkspaceModules(account: Account): WorkspaceModule[] {
   if (!canAccessAdministrativeModules(account)) {
     if (canAccessRoute(account, "/services"))
       add("service-operations", "/services")
-    else if (canAccessRoute(account, "/request-inbox"))
-      add("service-operations", "/request-inbox")
+    else if (canAccessRoute(account, "/request-inbox/overview"))
+      add("service-operations", "/request-inbox/overview")
     else if (canAccessRoute(account, "/clients"))
       add("service-operations", "/clients")
 

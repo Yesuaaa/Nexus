@@ -1,0 +1,34 @@
+diff --git a/dist/parseSettings/resolveProjectList.js b/dist/parseSettings/resolveProjectList.js
+index f349aef99e4ef1c58e89cc616031e26629f4bc50..28bfac274076548bf9c1bd2a7e8e79e581c30409 100644
+--- a/dist/parseSettings/resolveProjectList.js
++++ b/dist/parseSettings/resolveProjectList.js	
+@@ -7,7 +7,7 @@ exports.clearGlobCache = clearGlobCache;
+ exports.resolveProjectList = resolveProjectList;
+ exports.clearGlobResolutionCache = clearGlobResolutionCache;
+ const debug_1 = __importDefault(require("debug"));
+-const tinyglobby_1 = require("tinyglobby");
++const glob_1 = require("glob");
+ const shared_1 = require("../create-program/shared");
+ const ExpiringCache_1 = require("./ExpiringCache");
+ const log = (0, debug_1.default)('typescript-eslint:typescript-estree:parseSettings:resolveProjectList');
+@@ -54,15 +54,16 @@ function resolveProjectList(options) {
+         }
+     }
+     // Transform glob patterns into paths
+-    const nonGlobProjects = sanitizedProjects.filter(project => !(0, tinyglobby_1.isDynamicPattern)(project));
+-    const globProjects = sanitizedProjects.filter(project => (0, tinyglobby_1.isDynamicPattern)(project));
++    const nonGlobProjects = sanitizedProjects.filter(project => !(0, glob_1.hasMagic)(project, { magicalBraces: true }));
++    const globProjects = sanitizedProjects.filter(project => (0, glob_1.hasMagic)(project, { magicalBraces: true }));
+     let globProjectPaths = [];
+     if (globProjects.length > 0) {
+         // To ensure the order is correct, we need to glob for each pattern
+         // separately and then concatenate the results in patterns' order.
+-        globProjectPaths = globProjects.flatMap(pattern => (0, tinyglobby_1.globSync)(pattern, {
++        globProjectPaths = globProjects.flatMap(pattern => (0, glob_1.globSync)(pattern, {
+             cwd: options.tsconfigRootDir,
+-            expandDirectories: false,
++            nodir: true,
++            posix: true,
+             ignore: projectFolderIgnoreList,
+         }));
+     }

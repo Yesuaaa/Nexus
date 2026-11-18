@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
 import {
   configureRegressionTest,
   live,
@@ -65,6 +65,20 @@ const request: AdministrativeRequest = {
   },
 }
 
+function requestActions(page: Page, id: string) {
+  return page.getByRole("button", {
+    name: `More actions for request ${id}`,
+    exact: true,
+  })
+}
+
+async function inspectRequest(page: Page, id: string) {
+  await requestActions(page, id).click()
+  await page
+    .getByRole("menuitem", { name: "Inspect request", exact: true })
+    .click()
+}
+
 for (const width of [390, 1440]) {
   test(`Superadmin inspects requests in the shared drawer at ${width}px without operational actions`, async ({
     page,
@@ -103,16 +117,19 @@ for (const width of [390, 1440]) {
       await page.getByRole("button", { name: "Open navigation menu" }).click()
     const menu = page.getByRole("navigation", { name: "Main menu" })
     await expect(
-      menu.getByRole("link", { name: "Service Requests", exact: true }),
-    ).toHaveCount(0)
+      menu.getByRole("button", { name: "Request", exact: true }),
+    ).toHaveAttribute("aria-expanded", "false")
     await expect(
       menu.getByRole("button", { name: "Service", exact: true }),
     ).toHaveAttribute("aria-expanded", "true")
-    await page.getByRole("link", { name: "Requests", exact: true }).click()
+    await menu.getByRole("button", { name: "Request", exact: true }).click()
+    await page
+      .getByRole("link", { name: "Request overview", exact: true })
+      .click()
     if (width < 768)
       await page.getByRole("button", { name: "Open navigation menu" }).click()
     await expect(
-      menu.getByRole("link", { name: "Requests", exact: true }),
+      menu.getByRole("link", { name: "Request overview", exact: true }),
     ).toHaveAttribute("aria-current", "page")
     if (width < 768)
       await page
@@ -132,9 +149,7 @@ for (const width of [390, 1440]) {
           .inputValue(),
       )
       .toBe("Design")
-    await page
-      .getByRole("button", { name: "Inspect request request-1", exact: true })
-      .click()
+    await inspectRequest(page, "request-1")
     await expect(page).toHaveURL(/\?request=request-1$/)
     const drawer = page.getByRole("dialog", {
       name: "Organization request",
@@ -167,12 +182,9 @@ for (const width of [390, 1440]) {
     await expect(
       page.getByLabel("Search service requests", { exact: true }),
     ).toHaveValue("Design")
-    const inspect = page.getByRole("button", {
-      name: "Inspect request request-1",
-      exact: true,
-    })
+    const inspect = requestActions(page, "request-1")
     await expect(inspect).toBeFocused()
-    await inspect.click()
+    await inspectRequest(page, "request-1")
     await expect(drawer).toBeVisible()
     await page.reload()
     await expect(
@@ -220,7 +232,7 @@ test("administrative request search stays pending without a false empty result",
       exact: true,
     })
     await expect(
-      table.getByRole("button", { name: "Inspect request request-1" }),
+      table.getByRole("button", { name: "More actions for request request-1" }),
     ).toBeVisible()
     await page
       .getByRole("searchbox", { name: "Search service requests", exact: true })
@@ -310,12 +322,7 @@ test("shared filters, sorting and pagination send administrative request scopes 
   })
   await page.goto("/module/service-operations")
   await page.getByRole("button", { name: "Page 2", exact: true }).click()
-  await expect(
-    page.getByRole("button", {
-      name: "Inspect request request-11",
-      exact: true,
-    }),
-  ).toBeVisible()
+  await expect(requestActions(page, "request-11")).toBeVisible()
   await page
     .getByRole("combobox", {
       name: "Responsible or routed department",
@@ -338,12 +345,7 @@ test("shared filters, sorting and pagination send administrative request scopes 
     .getByLabel("Search service requests", { exact: true })
     .fill("Design")
   await expect.poll(() => queries.at(-1)?.get("search")).toBe("Design")
-  await expect(
-    page.getByRole("button", {
-      name: "Inspect request request-1",
-      exact: true,
-    }),
-  ).toBeVisible()
+  await expect(requestActions(page, "request-1")).toBeVisible()
   await expect(page.getByRole("button", { name: /chat|delete/i })).toHaveCount(
     0,
   )

@@ -1,4 +1,6 @@
 import type { Prisma } from "../../generated/prisma/client.js"
+import { writeServiceLog } from "../service-operation-logs/log-writer.js"
+import { auditText } from "../service-operation-logs/audit-context.js"
 import { randomUUID } from "node:crypto"
 import { getPrisma } from "../../lib/db.js"
 import { isUniqueConflict } from "../../lib/errors.js"
@@ -181,7 +183,7 @@ export async function submitServiceRequest(clientId: string, body: unknown) {
           ? { ...selectedPackage, isPublic: selectedPackage.isPricingPublic }
           : service.pricingTemplate
         const publicPricing = pricing?.isPublic ? pricing : null
-        return tx.serviceRequest.create({
+        const receipt = await tx.serviceRequest.create({
           data: {
             clientId,
             referenceNumber: `SR-${randomUUID().toUpperCase()}`,
@@ -208,6 +210,31 @@ export async function submitServiceRequest(clientId: string, body: unknown) {
           },
           select: receiptSelect,
         })
+        await writeServiceLog(
+          tx,
+          "REQUEST_SUBMITTED",
+          receipt.id,
+          receipt.id,
+          clientId,
+          undefined,
+          {
+            targetLabel: `${service.name} (${receipt.referenceNumber ?? receipt.id})`,
+            changes: [
+              { field: "Status", before: null, after: "Submitted" },
+              {
+                field: "Package",
+                before: null,
+                after: auditText(selectedPackage?.name ?? "Standard service"),
+              },
+              {
+                field: "Preferred specialist",
+                before: null,
+                after: auditText(specialist?.fullName),
+              },
+            ],
+          },
+        )
+        return receipt
       },
       { isolationLevel: "RepeatableRead" },
     )

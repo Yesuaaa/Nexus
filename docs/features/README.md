@@ -6,6 +6,10 @@ Use the date the feature was completed, and keep later implementation changes in
 
 ## Records
 
+- [Branch 266 database rollback](branch266-database-rollback.md), completed 2026-11-17.
+
+- [Superadmin Service Operations logs](service-operation-logs.md), developed 2026-11-17.
+
 - [Leave requests: workflow, edge cases, and frontend reuse](leave-requests-plan.md), developed 2026-11-17.
 
 - [Browser regression baseline and contract remediation (Phase 4C.1)](browser-regression-contract-remediation.md), developed 2026-11-15; [preserved initial baseline](browser-regression-baseline.md).

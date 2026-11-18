@@ -4,6 +4,7 @@ import { requireAuth } from "../auth/auth.middleware.js"
 import { parseInboxFilters } from "./request-inbox.schema.js"
 import {
   acceptInboxRequest,
+  getInboxOverview,
   getInboxRequest,
   listInbox,
   requireDepartmentHead,
@@ -19,6 +20,9 @@ requestInboxRouter.get("/", async (request, response) => {
   if (!filters)
     return response.status(400).json({ error: "Invalid inbox filters" })
   return response.json(await listInbox(request.auth!.user.id, filters))
+})
+requestInboxRouter.get("/overview", async (request, response) => {
+  response.json(await getInboxOverview(request.auth!.user.id))
 })
 requestInboxRouter.param("id", recordIdParam("Invalid request id"))
 requestInboxRouter.get("/:id", async (request, response) => {

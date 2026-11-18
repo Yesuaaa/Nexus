@@ -542,6 +542,16 @@ test("department head keeps request and workload navigation in their approved mo
   await restoreSession(page, "STAFF", {
     account: { headOf: { id: "design", name: "Design" } },
   })
+  await page.route("**/api/request-inbox/overview", (route) =>
+    route.fulfill({
+      json: {
+        department: { id: "design", name: "Design" },
+        total: 0,
+        statusCounts: {},
+        recentRequests: [],
+      },
+    }),
+  )
   await page.route("**/api/request-inbox?**", (route) =>
     route.fulfill({
       json: {
@@ -562,9 +572,12 @@ test("department head keeps request and workload navigation in their approved mo
       exact: true,
     })
     .click()
-  await expect(page).toHaveURL(/\/request-inbox$/)
+  await expect(page).toHaveURL(/\/request-inbox\/overview$/)
   await expect(
-    menu.getByRole("link", { name: "Request Inbox", exact: true }),
+    menu.getByRole("button", { name: "Request", exact: true }),
+  ).toHaveAttribute("aria-expanded", "true")
+  await expect(
+    menu.getByRole("link", { name: "Request overview", exact: true }),
   ).toHaveAttribute("aria-current", "page")
   await expect(menu.getByRole("link", { name: "Staff Workload" })).toHaveCount(
     0,

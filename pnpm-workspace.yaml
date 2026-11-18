@@ -1,10 +1,20 @@
 packages:
   - apps/*
 
+# Remove once typescript-estree can use a picomatch release that fixes GHSA-fc5q-39xc-vjpf.
+overrides:
+  "@typescript-eslint/typescript-estree@8.72.0>tinyglobby": "-"
+
+packageExtensions:
+  "@typescript-eslint/typescript-estree@8.72.0":
+    dependencies:
+      glob: 14.0.6
+
 allowBuilds:
   "@prisma/engines": true
   esbuild: true
   prisma: true
 
 patchedDependencies:
+  "@typescript-eslint/typescript-estree@8.72.0": patches/@typescript-eslint__typescript-estree@8.72.0.patch
   sileo@0.1.6: patches/sileo@0.1.6.patch
