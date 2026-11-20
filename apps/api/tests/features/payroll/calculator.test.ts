@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
+import { validateCompensationVersion } from "../../../src/features/payroll/payroll.schema.js"
 import {
   calculatePayrollEmployee,
   type PayrollEmployeeCalculationInput,
@@ -43,6 +44,124 @@ function baseInput(
     ...patch,
   }
 }
+
+test("compensation validator rejects unsafe monetary representations and preserves zero components", () => {
+  const input = {
+    payType: "MONTHLY",
+    baseRate: "1.00",
+    currency: "PHP",
+    effectiveFrom: "2026-01-01",
+    changeReason: "Boundary regression",
+    components: [{ type: "ALLOWANCE", name: "Zero component", amount: "0.00" }],
+  }
+  assert.ok("value" in validateCompensationVersion(input))
+  for (const baseRate of [
+    "0",
+    "0.00",
+    "-1",
+    "1.001",
+    "10000000000.00",
+    "NaN",
+    "Infinity",
+    "1e3",
+    "",
+    " 1.00",
+    1,
+    NaN,
+    Infinity,
+    null,
+  ]) {
+    assert.ok(
+      "error" in validateCompensationVersion({ ...input, baseRate }),
+      String(baseRate),
+    )
+  }
+  for (const amount of ["-0.01", "0.001", "10000000000", "NaN", null, 0]) {
+    assert.ok(
+      "error" in
+        validateCompensationVersion({
+          ...input,
+          components: [{ ...input.components[0], amount }],
+        }),
+      String(amount),
+    )
+  }
+  assert.ok(
+    "value" in
+      validateCompensationVersion({ ...input, baseRate: "9999999999.99" }),
+  )
+})
+
+test("deductions above gross and aggregate overflow block final financial values", () => {
+  const input = baseInput()
+  const version = input.compensationVersions[0]!
+  const excessive = calculatePayrollEmployee(
+    baseInput({
+      compensationVersions: [
+        {
+          ...version,
+          components: [
+            {
+              id: "deduction",
+              type: "RECURRING_DEDUCTION",
+              name: "Excess deduction",
+              amount: "25000.01",
+              calculationType: "FIXED",
+            },
+          ],
+        },
+      ],
+    }),
+  )
+  assert.equal(excessive.status, "BLOCKED")
+  assert.equal(excessive.netAmount, null)
+  assert.ok(
+    excessive.blocks.some(({ code }) => code === "DEDUCTIONS_EXCEED_GROSS"),
+  )
+  const overflow = calculatePayrollEmployee(
+    baseInput({
+      compensationVersions: [
+        {
+          ...version,
+          baseRate: "999999999999.99",
+          components: [
+            {
+              id: "allowance",
+              type: "ALLOWANCE",
+              name: "Overflow cent",
+              amount: "0.01",
+              calculationType: "FIXED",
+            },
+          ],
+        },
+      ],
+    }),
+  )
+  assert.equal(overflow.status, "BLOCKED")
+  assert.equal(overflow.netAmount, null)
+  const exact = calculatePayrollEmployee(
+    baseInput({
+      compensationVersions: [
+        {
+          ...version,
+          baseRate: "0.01",
+          components: [
+            {
+              id: "zero",
+              type: "ALLOWANCE",
+              name: "Zero",
+              amount: "0.00",
+              calculationType: "FIXED",
+            },
+          ],
+        },
+      ],
+    }),
+  )
+  assert.equal(exact.grossAmount, "0.01")
+  assert.equal(exact.deductionsAmount, "0.00")
+  assert.equal(exact.netAmount, "0.01")
+})
 
 function attendanceDay(
   workDate: string,
@@ -123,6 +242,68 @@ test("monthly rate and fixed components calculate for a fully covered calendar m
       ["BASE_EARNING", "25000.00"],
       ["ALLOWANCE", "500.00"],
       ["DEDUCTION", "1000.00"],
+    ],
+  )
+})
+
+test("same-named compensation components remain separate calculated line items", () => {
+  const input = baseInput({
+    compensationVersions: [
+      {
+        id: "comp-duplicates",
+        payType: "MONTHLY",
+        baseRate: "25000.00",
+        currency: "PHP",
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+        components: [
+          {
+            id: "allowance-one",
+            type: "ALLOWANCE",
+            name: "Transport",
+            amount: "500.00",
+            calculationType: "FIXED",
+          },
+          {
+            id: "allowance-two",
+            type: "ALLOWANCE",
+            name: "Transport",
+            amount: "250.00",
+            calculationType: "FIXED",
+          },
+          {
+            id: "deduction-one",
+            type: "RECURRING_DEDUCTION",
+            name: "Equipment",
+            amount: "100.00",
+            calculationType: "FIXED",
+          },
+          {
+            id: "deduction-two",
+            type: "RECURRING_DEDUCTION",
+            name: "Equipment",
+            amount: "50.00",
+            calculationType: "FIXED",
+          },
+        ],
+      },
+    ],
+  })
+
+  const result = calculatePayrollEmployee(input)
+  assert.equal(result.status, "CALCULATED")
+  assert.equal(result.grossAmount, "25750.00")
+  assert.equal(result.deductionsAmount, "150.00")
+  assert.equal(result.netAmount, "25600.00")
+  assert.deepEqual(
+    result.components
+      .filter(({ name }) => name === "Transport" || name === "Equipment")
+      .map(({ name, amount }) => [name, amount]),
+    [
+      ["Transport", "500.00"],
+      ["Transport", "250.00"],
+      ["Equipment", "100.00"],
+      ["Equipment", "50.00"],
     ],
   )
 })

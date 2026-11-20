@@ -225,19 +225,70 @@ test(
     assert.equal((await api(generate, admin, "POST")).status, 409)
     await prisma.payrollRun.update({
       where: { id: run.id },
-      data: { status: "APPROVED" },
+      data: { status: "CALCULATED" },
     })
-    await prisma.payrollApprovalEvent.create({
-      data: {
-        calculationId: revision.id,
-        action: "PAYROLL_APPROVED",
-        actorId: "independent-reviewer",
-      },
-    })
+    assert.equal(
+      (
+        await api("/payroll/runs/" + run.id + "/submit", admin, "POST", {
+          calculationId: revision.id,
+        })
+      ).status,
+      200,
+    )
+    assert.equal(
+      (
+        await api("/payroll/runs/" + run.id + "/approve", reviewer, "POST", {
+          calculationId: revision.id,
+        })
+      ).status,
+      200,
+    )
     assert.equal((await api(publish, admin, "POST")).status, 409)
     assert.equal((await api(generate, superadmin, "POST")).status, 403)
-    const generated = await api(generate, admin, "POST")
-    assert.deepEqual(await generated.json(), { total: 1, changed: 1 })
+    const beforeGeneration =
+      await prisma.payrollRunCalculation.findUniqueOrThrow({
+        where: { id: revision.id },
+        include: { items: { include: { components: true } } },
+      })
+    const auditBeforeGeneration = await prisma.workforceManagementChange.count()
+    await prisma.$executeRaw`
+      ALTER TABLE "PayrollPayslip"
+      ADD CONSTRAINT payroll_generation_test_failure CHECK (false)
+    `
+    try {
+      assert.equal((await api(generate, admin, "POST")).status, 500)
+      assert.equal(await prisma.payrollPayslip.count(), 0)
+      assert.equal(
+        await prisma.workforceManagementChange.count(),
+        auditBeforeGeneration,
+      )
+      assert.deepEqual(
+        await prisma.payrollRunCalculation.findUniqueOrThrow({
+          where: { id: revision.id },
+          include: { items: { include: { components: true } } },
+        }),
+        beforeGeneration,
+      )
+    } finally {
+      await prisma.$executeRaw`ALTER TABLE "PayrollPayslip" DROP CONSTRAINT payroll_generation_test_failure`
+    }
+    const generationRace = await Promise.all([
+      api(generate, admin, "POST"),
+      api(generate, admin, "POST"),
+    ])
+    for (const response of generationRace) assert.equal(response.status, 200)
+    const generationResults = await Promise.all(
+      generationRace.map(
+        (response) =>
+          response.json() as Promise<{ total: number; changed: number }>,
+      ),
+    )
+    assert.deepEqual(
+      generationResults.map(({ changed }) => changed).sort(),
+      [0, 1],
+    )
+    assert.ok(generationResults.every(({ total }) => total === 1))
+    assert.equal(await prisma.payrollPayslip.count(), 1)
     assert.deepEqual(await (await api(generate, admin, "POST")).json(), {
       total: 1,
       changed: 0,
@@ -360,10 +411,12 @@ test(
     )) as { latestCalculation: { payslipStatus: string } }
     assert.equal(publishedRun.latestCalculation.payslipStatus, "PUBLISHED")
     await assert.rejects(
-      prisma.payrollPayslip.update({
-        where: { id: document.id },
-        data: { document: Uint8Array.from([0]) },
-      }),
+      prisma.$transaction((tx) =>
+        tx.payrollPayslip.update({
+          where: { id: document.id },
+          data: { document: Uint8Array.from([0]) },
+        }),
+      ),
       /Payslip documents are immutable/,
     )
     assert.equal(
@@ -973,10 +1026,12 @@ test(
     assert.equal((await api(detail, client)).status, 403)
     assert.equal((await api("/payroll/payslips", staff)).status, 403)
     await assert.rejects(
-      prisma.payrollPayslip.update({
-        where: { id: document.id },
-        data: { document: Buffer.from("changed") },
-      }),
+      prisma.$transaction((tx) =>
+        tx.payrollPayslip.update({
+          where: { id: document.id },
+          data: { document: Buffer.from("changed") },
+        }),
+      ),
     )
 
     const requestBody = {
@@ -984,14 +1039,70 @@ test(
       payslipId: document.id,
       description: "Please review my payslip.",
     }
-    assert.equal(
-      (
-        await api(self + "/requests", staff, "POST", {
-          ...requestBody,
-          payslipId: "invalid/reference",
+    const beforeInvalidRequests = await prisma.payrollEmployeeRequest.count()
+    for (const payslipId of ["", "invalid/reference", "x".repeat(81)]) {
+      const response = await api(self + "/requests", staff, "POST", {
+        ...requestBody,
+        payslipId,
+      })
+      const payload = await response.text()
+      assert.equal(response.status, 400, payload)
+      assert.deepEqual(JSON.parse(payload), {
+        error: "Invalid payslip reference",
+      })
+    }
+    for (let round = 0; round < 3; round++) {
+      const invalidRequests = await Promise.all(
+        Array.from({ length: 4 }, () =>
+          api(self + "/requests", staff, "POST", {
+            ...requestBody,
+            payslipId: "invalid/reference",
+          }),
+        ),
+      )
+      for (const response of invalidRequests) {
+        const payload = await response.text()
+        assert.equal(response.status, 400, payload)
+        assert.deepEqual(JSON.parse(payload), {
+          error: "Invalid payslip reference",
         })
-      ).status,
-      400,
+      }
+    }
+    const missingPayslipId = randomUUID()
+    const missingPayslipReads = await Promise.all(
+      Array.from({ length: 4 }, () =>
+        api(self + "/payslips/" + missingPayslipId, staff),
+      ),
+    )
+    for (const response of missingPayslipReads) {
+      const payload = await response.text()
+      assert.equal(response.status, 404, payload)
+      assert.deepEqual(JSON.parse(payload), { error: "Payslip not found" })
+    }
+    const missingPayslipRequest = await api(self + "/requests", staff, "POST", {
+      ...requestBody,
+      payslipId: missingPayslipId,
+    })
+    assert.equal(missingPayslipRequest.status, 404)
+    assert.deepEqual(await missingPayslipRequest.json(), {
+      error: "Payslip not found",
+    })
+    const oversizedPath = await api(self + "/payslips/" + "x".repeat(81), staff)
+    assert.equal(oversizedPath.status, 400)
+    assert.deepEqual(await oversizedPath.json(), {
+      error: "Invalid payroll reference",
+    })
+    assert.equal(
+      (await api(self + "/requests", undefined, "POST", requestBody)).status,
+      401,
+    )
+    assert.equal(
+      (await api(self + "/requests", client, "POST", requestBody)).status,
+      403,
+    )
+    assert.equal(
+      await prisma.payrollEmployeeRequest.count(),
+      beforeInvalidRequests,
     )
     assert.equal(
       (await api(self + "/requests", other, "POST", requestBody)).status,
@@ -1294,10 +1405,12 @@ test(
     assert.equal(otherOverview.latestPayslip, null)
     assert.equal(otherOverview.openConcernCount, 0)
     await assert.rejects(
-      prisma.payrollRunItem.update({
-        where: { id: document.itemId },
-        data: { netAmount: "1.00" },
-      }),
+      prisma.$transaction((tx) =>
+        tx.payrollRunItem.update({
+          where: { id: document.itemId },
+          data: { netAmount: "1.00" },
+        }),
+      ),
     )
     assert.equal(
       (

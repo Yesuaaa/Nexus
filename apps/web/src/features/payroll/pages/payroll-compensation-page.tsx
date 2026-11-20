@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useRef, useState, type FormEvent } from "react"
 import { Banknote, Eye, Plus, X } from "lucide-react"
 import { PageHeader } from "@/components/layout/page-header"
-import { contentClass, focusRing } from "@/components/layout/styles"
+import { contentClass } from "@/components/layout/styles"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
@@ -252,13 +252,14 @@ export function PayrollCompensationPage() {
               triggerClassName="min-w-[180px]"
             />
             {hasFilters && (
-              <button
+              <Button
                 type="button"
-                className={`inline-flex min-h-[34px] cursor-pointer items-center gap-1.5 rounded-lg border-0 bg-transparent px-2 text-xs font-semibold text-[#294a9b] hover:bg-[#eef2fa] ${focusRing}`}
+                variant="ghost"
+                size="panel"
                 onClick={clearFilters}
               >
                 <X size={13} aria-hidden="true" /> Clear filters
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -266,13 +267,15 @@ export function PayrollCompensationPage() {
           <Alert variant="text" className="mb-3" role="alert">
             Couldn't load the department filter. Compensation data is still
             available.
-            <button
-              className="ml-2 font-semibold underline"
+            <Button
+              variant="ghost"
+              size="sm"
+              className="ml-2"
               type="button"
               onClick={departments.retry}
             >
               Retry
-            </button>
+            </Button>
           </Alert>
         )}
         {list.error ? (
@@ -639,13 +642,15 @@ function CompensationPanel({
           <SidePanelBody>
             <Alert variant="text" role="alert">
               {panel.error}
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
+                className="ml-2"
                 type="button"
-                className="ml-2 underline"
                 onClick={panel.retry}
               >
                 Try again
-              </button>
+              </Button>
             </Alert>
           </SidePanelBody>
         ) : editing && employee ? (

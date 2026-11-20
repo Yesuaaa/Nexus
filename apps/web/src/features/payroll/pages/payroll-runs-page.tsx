@@ -433,13 +433,15 @@ export function PayrollRunsPage({
                   <p className="m-0 text-[#a02d42]" role="alert">
                     {list.error}
                   </p>
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="mt-2"
                     type="button"
-                    className="mt-2 cursor-pointer border-0 bg-transparent text-[#244993] underline"
                     onClick={list.retry}
                   >
                     Try again
-                  </button>
+                  </Button>
                 </ResponsiveDataTableCell>
               </ResponsiveDataTableRow>
             ) : list.loading ? (

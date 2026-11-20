@@ -251,6 +251,34 @@ test(
     )
     assert.equal(itemResponse.status, 200)
 
+    const futureCompensationInput = {
+      payType: "MONTHLY",
+      baseRate: "30000.00",
+      currency: "PHP",
+      effectiveFrom: "2099-01-01",
+      changeReason: "Future compensation must preserve historical payroll",
+      components: [],
+    }
+    const createFutureCompensation = () =>
+      fetch(`${base}/payroll/compensation/${employee.id}/versions`, {
+        method: "POST",
+        headers: { ...admin.headers, "Content-Type": "application/json" },
+        body: JSON.stringify(futureCompensationInput),
+      })
+    const futureCompensation = await createFutureCompensation()
+    assert.equal(
+      futureCompensation.status,
+      201,
+      await futureCompensation.text(),
+    )
+    assert.equal((await createFutureCompensation()).status, 409)
+    assert.equal(
+      await prisma.employeeCompensation.count({
+        where: { employeeId: employee.id },
+      }),
+      2,
+      "retrying the committed effective-date update must not create a duplicate version",
+    )
     await prisma.employee.update({
       where: { id: employee.id },
       data: { fullName: "Updated Payroll Test Employee" },
@@ -265,6 +293,22 @@ test(
       calculationHistory: { revision: number; id: string }[]
     }
     assert.equal(recalculated.calculationCount, 2)
+    const historicalItemsResponse = await fetch(
+      `${base}/payroll/runs/${run.id}/items`,
+      { headers: admin.headers },
+    )
+    assert.equal(historicalItemsResponse.status, 200)
+    const historicalItems = (await historicalItemsResponse.json()) as {
+      rows: {
+        grossAmount: string
+        compensationSnapshot: { baseRate: string }[]
+      }[]
+    }
+    assert.equal(historicalItems.rows[0]?.grossAmount, "25500.00")
+    assert.equal(
+      historicalItems.rows[0]?.compensationSnapshot[0]?.baseRate,
+      "25000.00",
+    )
     assert.deepEqual(
       recalculated.calculationHistory.map(({ revision }) => revision),
       [2, 1],
@@ -1000,6 +1044,176 @@ test(
         where: { calculation: { runId: run.id } },
       }),
       1,
+    )
+  },
+)
+
+test(
+  "Payroll HTTP calculation reads persisted attendance, unpaid breaks and leave blockers",
+  { timeout: 120_000 },
+  async (t) => {
+    const { prisma, base } = await startPgliteApp(t)
+    const admin = await actor(prisma, "attendance-payroll-admin", Role.ADMIN)
+    const configuration = await prisma.payrollConfiguration.create({
+      data: {
+        frequency: "MONTHLY",
+        currency: "PHP",
+        effectiveFrom: new Date("2026-01-01"),
+        createdById: admin.user.id,
+        changeReason: "Attendance payroll integration",
+      },
+    })
+    const period = await prisma.payrollPeriod.create({
+      data: {
+        configurationId: configuration.id,
+        startDate: new Date("2026-11-02"),
+        endDate: new Date("2026-11-02"),
+        cutoffLabel: "Attendance test day",
+        createdById: admin.user.id,
+      },
+    })
+    const policy = await prisma.attendancePolicy.create({
+      data: {
+        name: "Payroll integration policy",
+        timeZone: "Asia/Manila",
+        overnightRequiresReview: false,
+        days: {
+          create: Array.from({ length: 7 }, (_, weekday) => ({
+            weekday,
+            isWorkingDay: true,
+            requiredMinutes: 480,
+          })),
+        },
+      },
+    })
+    const overnightReviewPolicy = await prisma.attendancePolicy.create({
+      data: {
+        name: "Payroll overnight review policy",
+        timeZone: "Asia/Manila",
+        overnightRequiresReview: true,
+        days: {
+          create: Array.from({ length: 7 }, (_, weekday) => ({
+            weekday,
+            isWorkingDay: true,
+            requiredMinutes: 480,
+          })),
+        },
+      },
+    })
+    for (const [name, payType, status] of [
+      ["Daily complete", "DAILY", "ACTIVE"],
+      ["Hourly unpaid break", "HOURLY", "ACTIVE"],
+      ["Missing attendance", "DAILY", "ACTIVE"],
+      ["Open session", "HOURLY", "ACTIVE"],
+      ["Overnight without review", "HOURLY", "ACTIVE"],
+      ["Overnight requiring review", "HOURLY", "ACTIVE"],
+      ["Leave treatment", "DAILY", "ON_LEAVE"],
+    ] as const) {
+      const employee = await prisma.employee.create({
+        data: {
+          employeeId: name.replaceAll(" ", "-"),
+          fullName: name,
+          employmentType: "FULL_TIME",
+          status,
+          startDate: new Date("2025-01-01"),
+        },
+      })
+      await prisma.employeeCompensation.create({
+        data: {
+          employeeId: employee.id,
+          payType,
+          baseRate: payType === "DAILY" ? "1000.00" : "100.00",
+          currency: "PHP",
+          effectiveFrom: new Date("2026-01-01"),
+          createdById: admin.user.id,
+          changeReason: "Attendance integration compensation",
+        },
+      })
+      await prisma.attendancePolicyAssignment.create({
+        data: {
+          employeeId: employee.id,
+          policyId:
+            name === "Overnight requiring review"
+              ? overnightReviewPolicy.id
+              : policy.id,
+          effectiveFrom: new Date("2026-01-01"),
+        },
+      })
+      if (name === "Missing attendance" || name === "Leave treatment") continue
+      const session = await prisma.attendanceWorkSession.create({
+        data: {
+          employeeId: employee.id,
+          startedAt: name.startsWith("Overnight")
+            ? new Date("2026-11-02T15:00:00Z")
+            : new Date("2026-11-02T01:00:00Z"),
+          endedAt:
+            name === "Open session"
+              ? null
+              : name.startsWith("Overnight")
+                ? new Date("2026-11-02T23:00:00Z")
+                : new Date("2026-11-02T09:00:00Z"),
+        },
+      })
+      if (name === "Hourly unpaid break") {
+        await prisma.attendanceBreak.create({
+          data: {
+            sessionId: session.id,
+            startedAt: new Date("2026-11-02T04:00:00Z"),
+            endedAt: new Date("2026-11-02T05:00:00Z"),
+            isPaid: false,
+          },
+        })
+      }
+    }
+    const runResponse = await fetch(base + "/payroll/runs", {
+      method: "POST",
+      headers: { ...admin.headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ periodId: period.id }),
+    })
+    assert.equal(runResponse.status, 201)
+    const run = (await runResponse.json()) as { id: string }
+    const calculated = await fetch(`${base}/payroll/runs/${run.id}/calculate`, {
+      method: "POST",
+      headers: admin.headers,
+    })
+    assert.equal(calculated.status, 200, await calculated.text())
+    const itemsResponse = await fetch(`${base}/payroll/runs/${run.id}/items`, {
+      headers: admin.headers,
+    })
+    assert.equal(itemsResponse.status, 200)
+    const { rows } = (await itemsResponse.json()) as {
+      rows: {
+        employeeName: string
+        grossAmount: string | null
+        status: string
+        blocks: { code: string }[]
+        warnings: { code: string }[]
+      }[]
+    }
+    const byName = new Map(rows.map((row) => [row.employeeName, row]))
+    assert.equal(byName.get("Daily complete")?.grossAmount, "1000.00")
+    assert.equal(byName.get("Hourly unpaid break")?.grossAmount, "700.00")
+    assert.equal(byName.get("Missing attendance")?.status, "BLOCKED")
+    assert.notEqual(byName.get("Open session")?.status, "CALCULATED")
+    assert.equal(byName.get("Overnight without review")?.status, "CALCULATED")
+    assert.equal(byName.get("Overnight without review")?.grossAmount, "800.00")
+    assert.equal(
+      byName.get("Overnight requiring review")?.status,
+      "REVIEW_REQUIRED",
+    )
+    assert.equal(
+      byName.get("Overnight requiring review")?.grossAmount,
+      "800.00",
+    )
+    assert.ok(
+      byName
+        .get("Overnight requiring review")
+        ?.warnings.some(({ code }) => code === "OVERNIGHT_ATTENDANCE_REVIEW"),
+    )
+    assert.ok(
+      byName
+        .get("Leave treatment")
+        ?.blocks.some(({ code }) => code === "LEAVE_POLICY_UNAVAILABLE"),
     )
   },
 )

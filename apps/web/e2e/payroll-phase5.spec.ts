@@ -150,6 +150,11 @@ test("Staff searches concerns, views history, edits an open concern and withdraw
         json: { error: "Unexpected method" },
       })
     }
+    if (
+      path.endsWith("/requests/" + otherConcern.id) &&
+      route.request().method() === "GET"
+    )
+      return route.fulfill({ json: otherConcern })
     if (path.endsWith("/requests/" + concern.id)) {
       if (route.request().method() === "GET")
         return route.fulfill({ json: concern })
@@ -240,9 +245,16 @@ test("Staff searches concerns, views history, edits an open concern and withdraw
   await actions.click()
   await page.getByRole("menuitem", { name: "View concern" }).click()
   await expect(
-    page.getByText("Concern type · Missing salary payment report"),
+    page
+      .getByRole("definition")
+      .filter({ hasText: "Missing salary payment report" }),
   ).toBeVisible()
-  await expect(page.getByText(/Submitted · Nov 17, 2026/)).toBeVisible()
+  await expect(
+    page.getByRole("term").filter({ hasText: /^Submitted$/ }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("definition").filter({ hasText: "Nov 17, 2026" }),
+  ).toBeVisible()
   await expect(
     page.getByRole("heading", { name: "Activity history" }),
   ).toBeVisible()
@@ -268,6 +280,10 @@ test("Staff searches concerns, views history, edits an open concern and withdraw
   })
   await page.getByRole("button", { name: "Close panel" }).click()
 
+  // The edited description no longer matches the active phrase search.
+  await expect(actions).toHaveCount(0)
+  await search.fill("")
+  await expect(actions).toBeVisible()
   await actions.click()
   await page.getByRole("menuitem", { name: "Delete concern" }).click()
   const deleteDialog = page.getByRole("dialog")
@@ -281,6 +297,12 @@ test("Staff searches concerns, views history, edits an open concern and withdraw
       name: "Actions for payroll concern payroll-concern-one",
     }),
   ).toHaveCount(0)
+  await page
+    .getByRole("button", {
+      name: "Actions for payroll concern payroll-concern-two",
+    })
+    .click()
+  await page.getByRole("menuitem", { name: "View concern" }).click()
   await expect(
     page.getByText("Other salary payment is missing for December."),
   ).toBeVisible()
@@ -293,6 +315,10 @@ test("Staff opens My Payroll inside Workforce Compliance, downloads a PDF and ra
   await page.setViewportSize({ width: 390, height: 844 })
   await restoreSession(page, "STAFF")
   let concernPosts = 0
+  let releaseConcern!: () => void
+  const concernGate = new Promise<void>((resolve) => {
+    releaseConcern = resolve
+  })
   let concernReads = 0
   await page.route("**/api/attendance/me/**", (route) =>
     route.fulfill({
@@ -321,7 +347,7 @@ test("Staff opens My Payroll inside Workforce Compliance, downloads a PDF and ra
             status: 503,
             json: { error: "Payroll is temporarily unavailable." },
           })
-        await new Promise((resolve) => setTimeout(resolve, 300))
+        await concernGate
         return route.fulfill({
           status: 201,
           json: { id: "request-one", messages: [] },
@@ -392,7 +418,10 @@ test("Staff opens My Payroll inside Workforce Compliance, downloads a PDF and ra
     .click()
   const firstConcernDialog = page.getByRole("dialog")
   await expect(
-    firstConcernDialog.getByText("Concern type", { exact: true }),
+    firstConcernDialog.getByRole("combobox", {
+      name: "Concern type",
+      exact: true,
+    }),
   ).toBeVisible()
   const emptySubmitConcern = firstConcernDialog.getByRole("button", {
     name: "Submit concern",
@@ -414,7 +443,7 @@ test("Staff opens My Payroll inside Workforce Compliance, downloads a PDF and ra
   const relatedPayslip = concernDialog.getByRole("combobox", {
     name: "Related payslip",
   })
-  await expect(relatedPayslip).toContainText("November 2026 — PS-TEST")
+  await expect(relatedPayslip).toContainText("No related payslip")
   await relatedPayslip.click()
   await page
     .getByRole("option", { name: "November 2026 — PS-TEST", exact: true })
@@ -439,7 +468,10 @@ test("Staff opens My Payroll inside Workforce Compliance, downloads a PDF and ra
   await expect(relatedPayslip).toContainText("November 2026 — PS-TEST")
   await expect(submitConcern).toBeEnabled()
   await submitConcern.click()
-  await expect(submitConcern).toBeDisabled()
+  await expect(
+    concernDialog.getByRole("button", { name: "Submitting…", exact: true }),
+  ).toBeDisabled()
+  releaseConcern()
   await expect(page.getByText("Payroll concern submitted")).toBeVisible()
   await expect(page.getByRole("dialog")).toHaveCount(0)
   await expect.poll(() => concernPosts).toBe(2)
@@ -637,7 +669,7 @@ for (const role of ["ADMIN", "SUPERADMIN"] as const) {
     await expect(search).toHaveCount(0)
     await expect(
       page.getByRole("searchbox", { name: "Search approved runs" }),
-    ).toHaveCount(role === "ADMIN" ? 1 : 0)
+    ).toHaveCount(1)
     await tabs.getByRole("button", { name: "Payroll Requests" }).click()
     await expect(
       page

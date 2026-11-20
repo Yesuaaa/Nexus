@@ -332,7 +332,7 @@ test("Admin generates periods, creates a draft, and reviews blocked calculations
 
   await page.getByRole("button", { name: "Create draft run" }).click()
   await page.getByRole("combobox", { name: "Choose payroll period" }).click()
-  await page.getByRole("option", { name: /2026-11 · Monthly/ }).click()
+  await page.getByRole("option", { name: "November 2026", exact: true }).click()
   await page.getByRole("button", { name: "Create draft", exact: true }).click()
   await expect(page.getByText("This run has not been calculated")).toBeVisible()
   await page.getByRole("button", { name: "Calculate draft" }).click()
@@ -536,12 +536,14 @@ test("Create Draft Run sorts semimonthly periods and supports bounded keyboard s
   const periodBounds = await periodSelect.boundingBox()
   expect(yearBounds).not.toBeNull()
   expect(periodBounds).not.toBeNull()
-  expect(
-    Math.abs(yearBounds!.width - periodBounds!.width),
-  ).toBeLessThanOrEqual(1)
+  expect(Math.abs(yearBounds!.width - periodBounds!.width)).toBeLessThanOrEqual(
+    1,
+  )
   await page.setViewportSize({ width: 768, height: 800 })
   await expect(
-    page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
   ).resolves.toBe(true)
   const tabletYearBounds = await yearInput.boundingBox()
   const tabletPeriodBounds = await periodSelect.boundingBox()
@@ -553,7 +555,9 @@ test("Create Draft Run sorts semimonthly periods and supports bounded keyboard s
 
   await page.setViewportSize({ width: 390, height: 620 })
   await expect(
-    page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
   ).resolves.toBe(true)
   await periodSelect.focus()
   await page.keyboard.press("Enter")
@@ -594,7 +598,9 @@ test("Create Draft Run sorts semimonthly periods and supports bounded keyboard s
   expect(menuBounds!.y).toBeGreaterThanOrEqual(0)
   expect(menuBounds!.y + menuBounds!.height).toBeLessThanOrEqual(620)
   await expect(
-    page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
   ).resolves.toBe(true)
   const firstOptionBounds = await options.first().boundingBox()
   expect(firstOptionBounds).not.toBeNull()
@@ -677,6 +683,8 @@ test("Create Draft Run keeps actionable load and generation errors open", async 
   let periodReads = 0
   await page.route("**/api/payroll/periods**", async (route) => {
     const request = route.request()
+    if (new URL(request.url()).pathname !== "/api/payroll/periods")
+      return route.fallback()
     if (request.method() === "GET") {
       periodReads += 1
       if (periodReads === 1)
@@ -883,12 +891,16 @@ for (const scenario of [
     await expect(
       page.getByText("Nov 1–30, 2026 · Monthly · Revision 1", { exact: true }),
     ).toBeVisible()
-    await expect(page.getByText("Submission", { exact: true })).toBeVisible()
+    await expect(
+      page.getByRole("dialog").getByText("Submission", { exact: true }),
+    ).toBeVisible()
     await expect(
       page.getByText("Financial summary", { exact: true }),
     ).toBeVisible()
     await expect(page.getByText("Net pay for approval")).toBeVisible()
-    await expect(page.getByText("Payroll Submitter")).toBeVisible()
+    await expect(
+      page.getByRole("dialog").getByText("Payroll Submitter", { exact: true }),
+    ).toBeVisible()
     await expect(page.getByText("submission-1", { exact: true })).toBeVisible()
     await expect(page.getByText("₱40,750.00").first()).toBeVisible()
     await expect(page.getByText("₱42,000.00")).toBeVisible()
@@ -984,7 +996,7 @@ for (const scenario of [
         .click()
       await expect(page.getByText("Payroll approved")).toBeVisible()
       await expect(
-        page.getByText("Revision 1 approved", { exact: true }),
+        page.getByText("Revision 1 Approved", { exact: true }),
       ).toBeVisible()
       await expect(page.getByText("Payroll Reviewer")).toBeVisible()
     } else if (scenario === "rejecter") {
@@ -998,10 +1010,10 @@ for (const scenario of [
         .getByRole("button", { name: "Reject", exact: true })
         .click()
       await expect(page.getByText("Payroll rejected")).toBeVisible()
-      const submissionLabel = page.getByText("Revision 1 submitted", {
+      const submissionLabel = page.getByText("Revision 1 Submitted", {
         exact: true,
       })
-      const rejectionLabel = page.getByText("Revision 1 rejected", {
+      const rejectionLabel = page.getByText("Revision 1 Rejected", {
         exact: true,
       })
       await expect(submissionLabel).toBeVisible()
@@ -1163,17 +1175,17 @@ test("Payroll Approvals balances its columns and paginates filtered results", as
     approvalAction.getByText("View payroll approval", { exact: true }),
   ).toBeHidden()
 
-  await page.getByRole("button", { name: "Next", exact: true }).click()
+  await page.getByRole("button", { name: "Next page", exact: true }).click()
   await expect.poll(() => pageTwoStarted).toBe(true)
   await expect(table).toHaveAttribute("aria-busy", "true")
   await expect(
-    page.getByRole("status", { name: "Loading payroll runs…" }),
+    page.getByRole("status").filter({ hasText: "Loading payroll runs…" }),
   ).toBeVisible()
   releasePageTwo()
   await expect(page.getByText("Showing 11–11 of 11 runs")).toBeVisible()
   await expect(page.getByText("2026-11", { exact: true })).toBeVisible()
   await expect(
-    page.getByRole("button", { name: "Next", exact: true }),
+    page.getByRole("button", { name: "Next page", exact: true }),
   ).toBeDisabled()
 
   await page.setViewportSize({ width: 390, height: 844 })
@@ -1194,7 +1206,7 @@ test("Payroll Approvals balances its columns and paginates filtered results", as
   await page.getByRole("combobox", { name: "Filter by run status" }).click()
   await page.getByRole("option", { name: "Pending approval" }).click()
   await page.getByRole("combobox", { name: "Filter by frequency" }).click()
-  await page.getByRole("option", { name: "Monthly" }).click()
+  await page.getByRole("option", { name: "Monthly", exact: true }).click()
   const search = page.getByRole("searchbox", { name: "Search payroll runs" })
   await search.fill("2026-10")
   await expect
@@ -1207,6 +1219,6 @@ test("Payroll Approvals balances its columns and paginates filtered results", as
     })
   await expect(page.getByText("Showing 1–1 of 1 runs")).toBeVisible()
   await expect(
-    page.getByRole("navigation", { name: "Payroll run pages" }),
+    page.getByRole("navigation", { name: "Payroll approval pages" }),
   ).toHaveCount(0)
 })

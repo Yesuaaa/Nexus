@@ -266,6 +266,8 @@ test("Admin creates effective-dated compensation and payroll schedule revisions"
     "Schedule",
     "Payslips",
     "Disbursements",
+    "Readiness",
+    "Audit History",
   ])
   for (const [tab, label] of [
     ["Payslips", "Show company logo"],

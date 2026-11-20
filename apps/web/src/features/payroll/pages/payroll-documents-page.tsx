@@ -88,7 +88,10 @@ import {
   apiStreamRequest,
   downloadAuthenticatedFile,
 } from "@/features/auth/api/auth-api"
-import { canManagePayroll } from "@/features/auth/model/permissions"
+import {
+  canAccessPayroll,
+  canManagePayroll,
+} from "@/features/auth/model/permissions"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { errorMessage } from "@/lib/error-message"
 import { formatDateTime, humanizeEnum } from "@/lib/format"
@@ -1316,7 +1319,11 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
       }),
     [runPage, runQuery, refresh, activeTab],
     {
-      enabled: manage && activeTab === "runs" && !runSearchPending,
+      enabled:
+        !staff &&
+        canAccessPayroll(account) &&
+        activeTab === "runs" &&
+        !runSearchPending,
       fallbackError: "Couldn't load approved runs.",
     },
   )
@@ -2312,6 +2319,11 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
               <>
                 <SidePanelSection title="Request information">
                   <DetailList>
+                    <DetailItem label="Concern type">
+                      {requestTypes.find(
+                        (option) => option.value === selectedDetails.type,
+                      )?.label ?? humanizeEnum(selectedDetails.type)}
+                    </DetailItem>
                     <DetailItem label="Employee">
                       {selectedDetails.employee.fullName}
                     </DetailItem>
@@ -2733,7 +2745,7 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
       >
         <TabsContent value="payslips">{payslipsContent}</TabsContent>
         <TabsContent value="runs">
-          {manage ? (
+          {canAccessPayroll(account) ? (
             approvedRunsContent
           ) : (
             <Alert>

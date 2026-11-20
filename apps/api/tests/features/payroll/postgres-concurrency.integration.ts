@@ -9,6 +9,12 @@ import { issueSession } from "../../../src/features/auth/auth.service.js"
 import { payrollRunsService } from "../../../src/features/payroll/payroll-runs.service.js"
 import { payrollService } from "../../../src/features/payroll/payroll.service.js"
 import { disconnectPrisma, getPrisma } from "../../../src/lib/db.js"
+import {
+  auditPayrollDatabasePermissions,
+  createPayrollAuditClient,
+  expectedPayrollGuardMigrationChecksum,
+  type PayrollAuditQueryClient,
+} from "../../../src/lib/payroll-db-permissions-audit.js"
 import { isWriteConflict } from "../../../src/lib/errors.js"
 import { closeServer, listen } from "../../support/pglite-app.js"
 
@@ -38,6 +44,208 @@ test(
       },
     )
     assert.equal(await prisma.payrollConfiguration.count(), 0)
+
+    const runPermissionAuditTest = () =>
+      t.test(
+        "read-only database permission audit distinguishes restricted and risky roles",
+        { timeout: 15_000 },
+        async () => {
+          const databaseUrl = process.env.DATABASE_URL!
+          const auditReader = `payroll_audit_reader_${randomBytes(4).toString("hex")}`
+          const auditPrivileged = `payroll_audit_privileged_${randomBytes(4).toString("hex")}`
+          const auditOwner = `payroll_audit_owner_${randomBytes(4).toString("hex")}`
+          const readerPassword = randomBytes(16).toString("hex")
+          const privilegedPassword = randomBytes(16).toString("hex")
+          const administrator = new pg.Client({
+            connectionString: databaseUrl,
+            connectionTimeoutMillis: 3_000,
+            statement_timeout: 5_000,
+          })
+          let administratorConnected = false
+          let itemOwnerChanged = false
+          let originalItemOwner: string | undefined
+          try {
+            await administrator.connect()
+            administratorConnected = true
+            const ownerResult = await administrator.query<{
+              owner_name: string
+            }>(
+              `SELECT pg_get_userbyid(relowner) AS owner_name
+             FROM pg_catalog.pg_class WHERE oid = '"PayrollRunItem"'::regclass`,
+            )
+            originalItemOwner = ownerResult.rows[0]?.owner_name
+            assert.ok(originalItemOwner)
+            assert.equal(originalItemOwner, "payroll_91b")
+
+            // The disposable launcher applies SQL files directly instead of
+            // recording Prisma migration metadata. Add only the ledger shape and
+            // guard-migration marker needed to exercise this audit check.
+            await administrator.query(`
+            CREATE TABLE IF NOT EXISTS public."_prisma_migrations" (
+              id varchar(36) PRIMARY KEY NOT NULL,
+              checksum varchar(64) NOT NULL,
+              finished_at timestamptz,
+              migration_name varchar(255) NOT NULL,
+              logs text,
+              rolled_back_at timestamptz,
+              started_at timestamptz NOT NULL DEFAULT now(),
+              applied_steps_count integer NOT NULL DEFAULT 0
+            )
+          `)
+            const guardMigrationChecksum =
+              expectedPayrollGuardMigrationChecksum()
+            assert.match(guardMigrationChecksum ?? "", /^[a-f\d]{64}$/)
+            await administrator.query(
+              `INSERT INTO public."_prisma_migrations" (id, checksum, finished_at, migration_name, applied_steps_count)
+             VALUES ($1, $2, now(), $3, 1)`,
+              [
+                randomBytes(18).toString("hex"),
+                guardMigrationChecksum,
+                "20261118160000_payroll_approved_snapshot_guard",
+              ],
+            )
+
+            await administrator.query(
+              `CREATE ROLE "${auditReader}" LOGIN PASSWORD '${readerPassword}' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION`,
+            )
+            await administrator.query(
+              `CREATE ROLE "${auditPrivileged}" LOGIN PASSWORD '${privilegedPassword}' CREATEDB NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOREPLICATION`,
+            )
+            await administrator.query(
+              `CREATE ROLE "${auditOwner}" NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION`,
+            )
+            await administrator.query(
+              `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "${auditReader}"`,
+            )
+            await administrator.query(
+              `GRANT SELECT ON public."_prisma_migrations" TO "${auditReader}"`,
+            )
+            await administrator.query(
+              `GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE, TRIGGER ON "PayrollRunItem" TO "${auditPrivileged}"`,
+            )
+            await administrator.query(
+              `GRANT CREATE ON SCHEMA public TO "${auditOwner}"`,
+            )
+            await administrator.query(
+              `ALTER TABLE "PayrollRunItem" OWNER TO "${auditOwner}"`,
+            )
+            itemOwnerChanged = true
+            await administrator.query(
+              `GRANT "${auditOwner}" TO "${auditPrivileged}"`,
+            )
+
+            const snapshot = async () => {
+              const rows = await administrator.query(`
+              SELECT c.relname, pg_get_userbyid(c.relowner) AS owner_name,
+                (SELECT count(*) FROM "PayrollRun") AS payroll_runs,
+                (SELECT count(*) FROM "PayrollRunCalculation") AS calculations,
+                (SELECT count(*) FROM "PayrollRunItem") AS items,
+                (SELECT count(*) FROM "PayrollRunItemComponent") AS components,
+                (SELECT count(*) FROM "PayrollPayslip") AS payslips
+              FROM pg_catalog.pg_class c
+              WHERE c.oid = '"PayrollRunItem"'::regclass
+            `)
+              return JSON.stringify(rows.rows)
+            }
+            const runAudit = async (roleName: string, password: string) => {
+              const url = new URL(databaseUrl)
+              url.username = roleName
+              url.password = password
+              const client = createPayrollAuditClient(url.toString())
+              try {
+                await client.connect()
+                const auditClient: PayrollAuditQueryClient = {
+                  query: async (text) => {
+                    const result = await client.query(text)
+                    return {
+                      rows: result.rows as unknown as Record<string, unknown>[],
+                    }
+                  },
+                }
+                return await auditPayrollDatabasePermissions(auditClient)
+              } finally {
+                await client.end().catch(() => {})
+              }
+            }
+
+            const readerStateBefore = await snapshot()
+            const readerReport = await runAudit(auditReader, readerPassword)
+            const readerStateAfter = await snapshot()
+            assert.equal(readerReport.verdict, "PASS")
+            assert.equal(readerStateAfter, readerStateBefore)
+            assert.equal(
+              readerReport.checks.find(
+                ({ id }) => id === "financial-table-privileges",
+              )?.status,
+              "PASS",
+              "ordinary Payroll DML permissions remain compatible with database guards",
+            )
+            assert.equal(
+              readerReport.checks.find(
+                ({ id }) => id === "approved-snapshot-triggers",
+              )?.status,
+              "PASS",
+            )
+
+            const privilegedStateBefore = await snapshot()
+            const privilegedReport = await runAudit(
+              auditPrivileged,
+              privilegedPassword,
+            )
+            const privilegedStateAfter = await snapshot()
+            assert.equal(privilegedReport.verdict, "FAIL")
+            assert.equal(privilegedStateAfter, privilegedStateBefore)
+            assert.equal(
+              privilegedReport.checks.find(({ id }) => id === "role-privileges")
+                ?.status,
+              "FAIL",
+            )
+            assert.equal(
+              privilegedReport.checks.find(
+                ({ id }) => id === "privileged-memberships",
+              )?.status,
+              "FAIL",
+            )
+            assert.equal(
+              privilegedReport.checks.find(
+                ({ id }) => id === "financial-table-privileges",
+              )?.status,
+              "FAIL",
+            )
+            assert.equal(
+              readerReport.checks.find(({ id }) => id === "row-level-security")
+                ?.status,
+              "NOT APPLICABLE",
+            )
+          } finally {
+            if (administratorConnected) {
+              if (itemOwnerChanged) {
+                await administrator
+                  .query(
+                    `ALTER TABLE "PayrollRunItem" OWNER TO "${originalItemOwner}"`,
+                  )
+                  .catch(() => {})
+              }
+              await administrator
+                .query(`DROP OWNED BY "${auditPrivileged}"`)
+                .catch(() => {})
+              await administrator
+                .query(`DROP OWNED BY "${auditReader}"`)
+                .catch(() => {})
+              await administrator
+                .query(`DROP OWNED BY "${auditOwner}"`)
+                .catch(() => {})
+              await administrator
+                .query(
+                  `DROP ROLE IF EXISTS "${auditPrivileged}", "${auditReader}", "${auditOwner}"`,
+                )
+                .catch(() => {})
+            }
+            await administrator.end().catch(() => {})
+          }
+        },
+      )
+
     const user = await prisma.user.create({
       data: {
         email: "schedule-verification@payroll.test",
@@ -46,6 +254,205 @@ test(
       },
     })
     const auth = { user, sessionId: "disposable-postgres-verification" }
+
+    await t.test(
+      "PostgreSQL lock and statement timeouts roll back pending writes",
+      async () => {
+        const clients = [
+          new pg.Client({ connectionString: process.env.DATABASE_URL }),
+          new pg.Client({ connectionString: process.env.DATABASE_URL }),
+        ]
+        try {
+          await Promise.all(clients.map((client) => client.connect()))
+          const [first, second] = clients as [pg.Client, pg.Client]
+          const pids = await Promise.all(
+            clients.map(
+              async (client) =>
+                (
+                  await client.query<{ pid: number }>(
+                    "SELECT pg_backend_pid() AS pid",
+                  )
+                ).rows[0]!.pid,
+            ),
+          )
+          assert.notEqual(pids[0], pids[1])
+          await first.query("BEGIN")
+          await first.query("SELECT pg_advisory_xact_lock(848239, 1)")
+          await second.query("BEGIN")
+          await second.query("SET LOCAL lock_timeout = '150ms'")
+          await second.query('UPDATE "User" SET email = $1 WHERE id = $2', [
+            "rollback-marker@payroll.test",
+            user.id,
+          ])
+          await assert.rejects(
+            second.query("SELECT pg_advisory_xact_lock(848239, 1)"),
+            { code: "55P03" },
+          )
+          await second.query("ROLLBACK")
+          assert.equal(
+            (await prisma.user.findUniqueOrThrow({ where: { id: user.id } }))
+              .email,
+            user.email,
+          )
+          await second.query("BEGIN")
+          await second.query("SET LOCAL statement_timeout = '150ms'")
+          await second.query('UPDATE "User" SET email = $1 WHERE id = $2', [
+            "statement-marker@payroll.test",
+            user.id,
+          ])
+          await assert.rejects(second.query("SELECT pg_sleep(1)"), {
+            code: "57014",
+          })
+          await second.query("ROLLBACK")
+          assert.equal(
+            (await prisma.user.findUniqueOrThrow({ where: { id: user.id } }))
+              .email,
+            user.email,
+          )
+        } finally {
+          for (const client of clients) {
+            await client.query("ROLLBACK").catch(() => {})
+            await client.end()
+          }
+        }
+      },
+    )
+
+    await t.test(
+      "PostgreSQL deadlock victim rolls back and both sessions recover",
+      async () => {
+        const clients = [
+          new pg.Client({ connectionString: process.env.DATABASE_URL }),
+          new pg.Client({ connectionString: process.env.DATABASE_URL }),
+        ]
+        const secondMarker = await prisma.user.create({
+          data: {
+            email: "deadlock-marker-second@payroll.test",
+            role: "ADMIN",
+            passwordHash: "test-only",
+          },
+        })
+        const markers = [user, secondMarker]
+        try {
+          await Promise.all(clients.map((client) => client.connect()))
+          const pids = await Promise.all(
+            clients.map(async (client) =>
+              Number(
+                (
+                  await client.query<{ pid: number }>(
+                    "SELECT pg_backend_pid() AS pid",
+                  )
+                ).rows[0]?.pid,
+              ),
+            ),
+          )
+          assert.notEqual(pids[0], pids[1])
+          for (const [index, client] of clients.entries()) {
+            await client.query("BEGIN")
+            await client.query("SET LOCAL statement_timeout = '4s'")
+            await client.query("SET LOCAL deadlock_timeout = '100ms'")
+            await client.query("SELECT pg_advisory_xact_lock(848240, $1)", [
+              index,
+            ])
+            await client.query('UPDATE "User" SET email = $1 WHERE id = $2', [
+              `deadlock-committed-${index}@payroll.test`,
+              markers[index]!.id,
+            ])
+          }
+
+          const financialState = async () => ({
+            configurations: await prisma.payrollConfiguration.count(),
+            periods: await prisma.payrollPeriod.count(),
+            runs: await prisma.payrollRun.count(),
+            calculations: await prisma.payrollRunCalculation.count(),
+            items: await prisma.payrollRunItem.count(),
+            components: await prisma.payrollRunItemComponent.count(),
+            payslips: await prisma.payrollPayslip.count(),
+          })
+          const financialStateBefore = await financialState()
+          const attempt = (index: number) => {
+            const pending = clients[index]!.query(
+              "SELECT pg_advisory_xact_lock(848240, $1)",
+              [1 - index],
+            )
+            return pending
+              .then(async () => {
+                await clients[index]!.query("COMMIT")
+                return index
+              })
+              .catch(async (error: unknown) => {
+                // A deadlock victim must explicitly leave its aborted transaction.
+                await clients[index]!.query("ROLLBACK").catch(() => {})
+                throw error
+              })
+          }
+
+          const firstAttempt = attempt(0)
+          void firstAttempt.catch(() => {})
+          const deadline = Date.now() + 3_000
+          for (;;) {
+            const [waiter] = await prisma.$queryRaw<{ waiting: number }[]>`
+              SELECT count(*)::int AS waiting FROM pg_locks
+              WHERE pid = ${pids[0]!} AND locktype = 'advisory'
+                AND NOT granted AND classid = 848240::oid AND objsubid = 2
+            `
+            if (waiter?.waiting === 1) break
+            assert.ok(
+              Date.now() < deadline,
+              "Expected the first deadlock waiter",
+            )
+            await delay(25)
+          }
+          const secondAttempt = attempt(1)
+          const attempts = await Promise.allSettled([
+            firstAttempt,
+            secondAttempt,
+          ])
+          assert.equal(
+            attempts.filter((result) => result.status === "fulfilled").length,
+            1,
+          )
+          const failed = attempts.find((result) => result.status === "rejected")
+          assert.ok(failed?.status === "rejected")
+          assert.equal((failed.reason as { code: string }).code, "40P01")
+          const committed = attempts.find(
+            (result) => result.status === "fulfilled",
+          )
+          assert.ok(committed?.status === "fulfilled")
+          const committedIndex = committed.value
+          const persistedMarkers = await prisma.user.findMany({
+            where: { id: { in: markers.map(({ id }) => id) } },
+            select: { id: true, email: true },
+          })
+          assert.deepEqual(
+            new Map(persistedMarkers.map(({ id, email }) => [id, email])),
+            new Map(
+              markers.map(({ id }, index) => [
+                id,
+                index === committedIndex
+                  ? `deadlock-committed-${index}@payroll.test`
+                  : markers[index]!.email,
+              ]),
+            ),
+          )
+          assert.deepEqual(await financialState(), financialStateBefore)
+          for (const client of clients) {
+            assert.equal(
+              (await client.query("SELECT 1 AS ready")).rows[0]?.ready,
+              1,
+            )
+          }
+          t.diagnostic(
+            `Database-level deadlock aborted backend ${pids[attempts.findIndex((result) => result.status === "rejected")]}; only backend ${pids[committedIndex]} committed its non-payroll marker`,
+          )
+        } finally {
+          for (const client of clients) {
+            await client.query("ROLLBACK").catch(() => {})
+            await client.end()
+          }
+        }
+      },
+    )
 
     // Hold the existing locks until PostgreSQL reports both calls waiting.
     async function compete<T, U>(
@@ -643,14 +1050,89 @@ test(
         const { server, origin } = await listen(createApp())
         snapshotTest.after(() => closeServer(server))
         const { token } = await issueSession(reviewer)
-        const response = await fetch(
+        const [runLock] = await prisma.$queryRaw<
+          { key: number }[]
+        >`SELECT hashtext(${run.id}) AS key`
+        const holder = new pg.Client({
+          connectionString: process.env.DATABASE_URL,
+          statement_timeout: 5_000,
+        })
+        const controller = new AbortController()
+        let interrupted: Promise<unknown> | undefined
+        try {
+          await holder.connect()
+          await holder.query("BEGIN")
+          await holder.query("SELECT pg_advisory_xact_lock(848225, $1)", [
+            runLock!.key,
+          ])
+          interrupted = fetch(
+            `${origin}/api/payroll/runs/${run.id}/generate-payslips`,
+            {
+              method: "POST",
+              headers: { Authorization: `Bearer ${token}` },
+              signal: controller.signal,
+            },
+          )
+          void interrupted.catch(() => {})
+          const deadline = Date.now() + 3_000
+          for (;;) {
+            const waiting = await holder.query<{ count: number }>(
+              "SELECT count(*)::int AS count FROM pg_locks WHERE locktype = 'advisory' AND NOT granted AND classid = 848225::oid AND objid = $1::oid",
+              [runLock!.key],
+            )
+            if (waiting.rows[0]!.count === 1) break
+            assert.ok(
+              Date.now() < deadline,
+              "Interrupted request must reach the server transaction",
+            )
+            await delay(25)
+          }
+          controller.abort()
+          await assert.rejects(interrupted, { name: "AbortError" })
+          await holder.query("COMMIT")
+        } finally {
+          controller.abort()
+          await holder.query("ROLLBACK").catch(() => {})
+          await holder.end()
+          await interrupted?.catch(() => {})
+        }
+        const recovered = await fetch(
           `${origin}/api/payroll/runs/${run.id}/generate-payslips`,
           {
             method: "POST",
             headers: { Authorization: `Bearer ${token}` },
           },
         )
-        assert.equal(response.status, 200, await response.text())
+        assert.equal(recovered.status, 200)
+        const recovery = (await recovered.json()) as {
+          total: number
+          changed: number
+        }
+        assert.equal(recovery.total, 1)
+        assert.ok(recovery.changed === 0 || recovery.changed === 1)
+        assert.equal(await prisma.payrollPayslip.count(), 1)
+        const generate = () =>
+          fetch(`${origin}/api/payroll/runs/${run.id}/generate-payslips`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+          })
+        const generated = await compete(848225, runLock!.key, () => [
+          generate(),
+          generate(),
+        ])
+        const changes: number[] = []
+        for (const response of generated) {
+          if (response.status === "rejected") throw response.reason
+          assert.equal(response.value.status, 200)
+          const result = (await response.value.json()) as {
+            total: number
+            changed: number
+          }
+          assert.equal(result.total, 1)
+          changes.push(result.changed)
+        }
+        assert.deepEqual(changes, [0, 0])
+        assert.equal(await prisma.payrollPayslip.count(), 1)
         const payslip = await prisma.payrollPayslip.findUniqueOrThrow({
           where: { itemId: item.id },
         })
@@ -663,5 +1145,6 @@ test(
         )
       },
     )
+    await runPermissionAuditTest()
   },
 )
