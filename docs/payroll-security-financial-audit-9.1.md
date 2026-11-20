@@ -4,23 +4,23 @@
 
 The administrative router is mounted at /api/payroll with authenticated Payroll permissions. The Staff router is mounted separately at /api/staff/my-payroll and uses authenticated Staff identity and employee ownership. The browser provides navigation and carries the session but does not authorize database operations. Prisma transactions enforce write boundaries. The local simulator supplies operational evidence only. The PayMongo adapter is disabled and its declaration is not a transfer route.
 
-| Surface | Reads | Writes and grants |
-| --- | --- | --- |
-| Overview, Reports and exports | GET overview and reports require Payroll read. GET reports/export requires Payroll manage and reads a bounded snapshot. | None. CSV and XLSX are returned to the authorized caller with private no-store headers. |
-| Compensation and Settings | GET compensation list, employee details and history, settings, settings/history, settings/preferences, settings/readiness and settings/audit require Payroll read. | POST compensation versions and settings versions, PUT preferences require Payroll manage. Existing advisory locks and preference revision or schedule version checks protect updates. |
-| Periods and runs | GET periods, periods/current, runs, approvals, run details, items and approval-history require Payroll read. | POST periods, runs, calculate, submit, approve and reject require Payroll manage. Run locks serialize calculation and decision changes. Approval checks the current revision and complete inputs. |
-| Admin documents and requests | GET payslips, details, preview/download, and requests require Payroll read. | Generate, publish, regenerate and request management require Payroll manage. Published PDFs use immutable source evidence and private response headers. |
-| Staff My Payroll | GET overview, payslips, PDFs and own requests. Staff identity and ownership apply. | Staff may create, edit, withdraw or message on their own requests within existing transition rules. |
-| Disbursements | GET batches and batch detail require Payroll read. | Prepare, validate, cancel, destination and simulate require Payroll manage. Destination and simulation additionally require local development enablement. Batch locks and unique attempt keys protect replay. |
-| Reconciliation | GET run reconciliation and decision history require Payroll read. | POST observations and decisions require Payroll manage and revision-scoped evidence. Decision versions, request IDs, and run/batch locks protect persistence. |
+| Surface                       | Reads                                                                                                                                                              | Writes and grants                                                                                                                                                                                             |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Overview, Reports and exports | GET overview and reports require Payroll read. GET reports/export requires Payroll manage and reads a bounded snapshot.                                            | None. CSV and XLSX are returned to the authorized caller with private no-store headers.                                                                                                                       |
+| Compensation and Settings     | GET compensation list, employee details and history, settings, settings/history, settings/preferences, settings/readiness and settings/audit require Payroll read. | POST compensation versions and settings versions, PUT preferences require Payroll manage. Existing advisory locks and preference revision or schedule version checks protect updates.                         |
+| Periods and runs              | GET periods, periods/current, runs, approvals, run details, items and approval-history require Payroll read.                                                       | POST periods, runs, calculate, submit, approve and reject require Payroll manage. Run locks serialize calculation and decision changes. Approval checks the current revision and complete inputs.             |
+| Admin documents and requests  | GET payslips, details, preview/download, and requests require Payroll read.                                                                                        | Generate, publish, regenerate and request management require Payroll manage. Published PDFs use immutable source evidence and private response headers.                                                       |
+| Staff My Payroll              | GET overview, payslips, PDFs and own requests. Staff identity and ownership apply.                                                                                 | Staff may create, edit, withdraw or message on their own requests within existing transition rules.                                                                                                           |
+| Disbursements                 | GET batches and batch detail require Payroll read.                                                                                                                 | Prepare, validate, cancel, destination and simulate require Payroll manage. Destination and simulation additionally require local development enablement. Batch locks and unique attempt keys protect replay. |
+| Reconciliation                | GET run reconciliation and decision history require Payroll read.                                                                                                  | POST observations and decisions require Payroll manage and revision-scoped evidence. Decision versions, request IDs, and run/batch locks protect persistence.                                                 |
 
 Admin has Payroll read/manage; Superadmin has Payroll read. Staff has no administrative Payroll grant; Clients have neither grant. Search and pagination narrow already authorized datasets. Run-item reads and payout mutations additionally scope child IDs to their parent. Staff PDFs and requests use employee scope, with published-only checks for Staff payslips.
 
 ## Findings register before remediation
 
-| ID | Severity | Evidence and affected boundary | Impact | Remediation and validation |
-| --- | --- | --- | --- | --- |
-| PAY-901 | High | The run approval service conditions its preparer/author check on the payout simulator being off. The run view also advertises demo self-approval. Source inspection confirmed that a payout configuration flag governs approval authorization. | An environment using local simulations can record non-independent approvals as ordinary approved financial records. | Remove the simulator from the approval decision and return false for the existing client flag. Verify the normal independent-review regression and verify the approval branch has no simulator dependency. |
+| ID      | Severity | Evidence and affected boundary                                                                                                                                                                                                                 | Impact                                                                                                              | Remediation and validation                                                                                                                                                                                 |
+| ------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PAY-901 | High     | The run approval service conditions its preparer/author check on the payout simulator being off. The run view also advertises demo self-approval. Source inspection confirmed that a payout configuration flag governs approval authorization. | An environment using local simulations can record non-independent approvals as ordinary approved financial records. | Remove the simulator from the approval decision and return false for the existing client flag. Verify the normal independent-review regression and verify the approval branch has no simulator dependency. |
 
 ## Additional risks requiring validation or policy
 
@@ -42,12 +42,12 @@ Reuse-components was reviewed. The remediation uses the existing approval servic
 
 **Status: PARTIALLY VERIFIED.** PAY-901 remains remediated in source. The closure brief reports a prior isolated regression run with 9 passed, 0 failed and 0 skipped in about 32.8 seconds, including HTTP 403 approval rejections. These are reported results from the brief. This closure review did not reproduce the run or inspect its raw output. Cross-connection concurrency and database-level immutability remain sign-off blockers.
 
-| Check | Evidence | Result |
-| --- | --- | --- |
-| Independent approval | The Phase 3 API fixture checks that the preparer and calculation author each receive a denial with the simulator enabled and disabled, and compares persisted run, revision, employee item, component and audit records. The service no longer imports the simulator and evaluates reviewer identity inside the locked transaction. | HTTP 403 rejections reported in the closure brief. No fresh integration run. |
-| Approval lifecycle and RBAC | The same fixture covers independent reviewers, competing decisions, repeated approval, stale revisions and Superadmin, Staff and Client denials. Repeated approval, rejection and recalculation after approval are checked against the persisted approved state. | Fixture inspected. Case-by-case output from the reported run was unavailable. |
-| Schedule updates | The Phase 2 API fixture expects one creation and one conflict, a continuous two-version timeline and an audit entry for the winner. | The fixture sets a single Prisma connection. Cross-session locking and rollback remain unverified. |
-| Payroll calculator and period generator | Existing database-free unit suites exercised monetary calculation and period boundaries. | Fresh run: 19 passed, 0 failed, 0 skipped. The runner compiled the TypeScript test tree. |
+| Check                                   | Evidence                                                                                                                                                                                                                                                                                                                            | Result                                                                                             |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Independent approval                    | The Phase 3 API fixture checks that the preparer and calculation author each receive a denial with the simulator enabled and disabled, and compares persisted run, revision, employee item, component and audit records. The service no longer imports the simulator and evaluates reviewer identity inside the locked transaction. | HTTP 403 rejections reported in the closure brief. No fresh integration run.                       |
+| Approval lifecycle and RBAC             | The same fixture covers independent reviewers, competing decisions, repeated approval, stale revisions and Superadmin, Staff and Client denials. Repeated approval, rejection and recalculation after approval are checked against the persisted approved state.                                                                    | Fixture inspected. Case-by-case output from the reported run was unavailable.                      |
+| Schedule updates                        | The Phase 2 API fixture expects one creation and one conflict, a continuous two-version timeline and an audit entry for the winner.                                                                                                                                                                                                 | The fixture sets a single Prisma connection. Cross-session locking and rollback remain unverified. |
+| Payroll calculator and period generator | Existing database-free unit suites exercised monetary calculation and period boundaries.                                                                                                                                                                                                                                            | Fresh run: 19 passed, 0 failed, 0 skipped. The runner compiled the TypeScript test tree.           |
 
 Closure checks from the repository root:
 
@@ -69,11 +69,11 @@ The lock keys are `(848222, 1)` for schedule updates and `(848223, year)` for pe
 
 Payroll manage authorization precedes supported mutation routes. The run lock serializes approval and recalculation, recalculation appends a revision only in eligible states, and an approved run cannot be recalculated through that service. Approval events are unique per revision and action, and a migration trigger prevents their modification. Foreign keys and uniqueness constrain revision structure. Separate payslip-source triggers protect employee items and components once a payslip references them. The repository migrations reviewed do not establish a general database immutability rule for approved revision totals or pre-payslip item data. Deployed database grants were not inspected. Before accepting this residual risk, verify effective writer permissions and exercise supported mutation paths against the isolated approved fixture. Any future database guard needs compatibility review for calculation creation, payslip generation and draft regeneration, and migration rollout.
 
-| Record | Protection established in source | Remaining evidence |
-| --- | --- | --- |
-| PayrollRun and PayrollRunCalculation | Approval updates run status and appends audit evidence in one locked transaction. Gross, deduction and net totals reside on the calculation revision. | Verify writer privileges and database enforcement for approved revision amounts and snapshots before and after payslip generation. |
-| PayrollRunItem and PayrollRunItemComponent | The calculation service creates them during eligible revision creation. The payslip-source trigger guards items and components linked to a payslip. | Verify database enforcement before a payslip exists. The linked-source trigger does not cover calculation-level totals. |
-| PayrollApprovalEvent and workforce audit | The decision and both audit writes share a transaction. Approval events have a dedicated immutable trigger and uniqueness constraint. | Verify effective database permissions and the full audit record lifecycle in the disposable database. |
+| Record                                     | Protection established in source                                                                                                                      | Remaining evidence                                                                                                                 |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| PayrollRun and PayrollRunCalculation       | Approval updates run status and appends audit evidence in one locked transaction. Gross, deduction and net totals reside on the calculation revision. | Verify writer privileges and database enforcement for approved revision amounts and snapshots before and after payslip generation. |
+| PayrollRunItem and PayrollRunItemComponent | The calculation service creates them during eligible revision creation. The payslip-source trigger guards items and components linked to a payslip.   | Verify database enforcement before a payslip exists. The linked-source trigger does not cover calculation-level totals.            |
+| PayrollApprovalEvent and workforce audit   | The decision and both audit writes share a transaction. Approval events have a dedicated immutable trigger and uniqueness constraint.                 | Verify effective database permissions and the full audit record lifecycle in the disposable database.                              |
 
 ### PostgreSQL client warning
 
@@ -138,14 +138,14 @@ Migration `20261118160000_payroll_approved_snapshot_guard` protects the run's fi
 
 The disposable PostgreSQL suite creates and calculates a real run, submits it, approves it as a second admin and generates its payslip using the authenticated API. The database checks use harmless same-value SQL updates for revision totals, employee amounts and component amounts and classifications. They require SQLSTATE `23514` and compare the persisted snapshots and approval events. The suite also checks draft updates, payslip bytes and rollback of a permitted metadata update when a protected write fails in the same transaction. Direct insert and delete behavior is covered by trigger declarations. The suite does not run direct insert or delete probes or test a deployed application role.
 
-| Record or operation | Verified result on disposable PostgreSQL 16.16 |
-| --- | --- |
-| Revision gross, deductions and net totals | Same-value SQL updates rejected with `23514` before and after generation. |
-| Employee gross, deductions and net amounts | Same-value SQL updates rejected with `23514` before and after generation. |
-| Component amount and classification | Same-value SQL updates rejected with `23514` before and after generation. |
-| Run metadata and transaction atomicity | Permitted metadata update rolled back after a later rejected financial statement. A direct approved run status-change rejection was not exercised. |
-| Draft calculation, employee item and component | Real calculation succeeded, including item and component creation. Same-value draft item and component updates affected one row each. |
-| Approval events and generated payslip | Approval history and stored payslip bytes compared unchanged after rejected writes. Existing independent-review and RBAC regressions passed. |
+| Record or operation                            | Verified result on disposable PostgreSQL 16.16                                                                                                     |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Revision gross, deductions and net totals      | Same-value SQL updates rejected with `23514` before and after generation.                                                                          |
+| Employee gross, deductions and net amounts     | Same-value SQL updates rejected with `23514` before and after generation.                                                                          |
+| Component amount and classification            | Same-value SQL updates rejected with `23514` before and after generation.                                                                          |
+| Run metadata and transaction atomicity         | Permitted metadata update rolled back after a later rejected financial statement. A direct approved run status-change rejection was not exercised. |
+| Draft calculation, employee item and component | Real calculation succeeded, including item and component creation. Same-value draft item and component updates affected one row each.              |
+| Approval events and generated payslip          | Approval history and stored payslip bytes compared unchanged after rejected writes. Existing independent-review and RBAC regressions passed.       |
 
 The PostgreSQL launcher verified the database identity, applied all 72 migrations and returned 2 passed, 0 failed, 0 skipped. Independent sessions were observed for all three existing contention checks. The ownership-filtered Docker listing was empty afterward. The existing Payroll API suite in isolated PGlite returned 9 passed, 0 failed, 0 skipped. The calculator and period-generator suite returned 19 passed, 0 failed, 0 skipped. TypeScript test compilation, Prettier and `git diff --check` passed. No shared database was contacted. The Prisma adapter emitted the same queued-query deprecation warning in both database suites. The PostgreSQL trace again identified the adapter call, with no demonstrated transaction failure.
 
@@ -174,19 +174,19 @@ The launcher reuses the native Node runner, the existing migration order and the
 
 The database verification inspects trigger declarations for INSERT, UPDATE and DELETE and executes same-value UPDATE rejection checks. The restricted test writer has DML access to the revision, lacks superuser and table-owner privileges, and is distinct from the deployed application role. Deployment-specific privileges remain unverified.
 
-| Financial integrity check | Executed scope |
-| --- | --- |
-| Approved revision totals, employee items and components | Direct same-value UPDATE rejected with `23514` before and after payslip generation. INSERT and DELETE trigger declarations verified in the catalog. Direct execution of those operations remains unverified. |
-| Draft operations, approval history, payslip and rollback | Draft calculation and permitted updates succeeded. Rejected writes preserved approval history, financial data and payslip bytes. The transaction rolled back an earlier metadata change. |
-| Concurrent approval and SQL update | Fresh PostgreSQL observed independent PIDs 607 and 608 waiting. The approval was queued first, committed, and the waiting same-value SQL update was rejected. |
-| Restricted database role | A non-owner, non-superuser test role with revision UPDATE privileges received `23514` for its direct update. |
+| Financial integrity check                                | Executed scope                                                                                                                                                                                               |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Approved revision totals, employee items and components  | Direct same-value UPDATE rejected with `23514` before and after payslip generation. INSERT and DELETE trigger declarations verified in the catalog. Direct execution of those operations remains unverified. |
+| Draft operations, approval history, payslip and rollback | Draft calculation and permitted updates succeeded. Rejected writes preserved approval history, financial data and payslip bytes. The transaction rolled back an earlier metadata change.                     |
+| Concurrent approval and SQL update                       | Fresh PostgreSQL observed independent PIDs 607 and 608 waiting. The approval was queued first, committed, and the waiting same-value SQL update was rejected.                                                |
+| Restricted database role                                 | A non-owner, non-superuser test role with revision UPDATE privileges received `23514` for its direct update.                                                                                                 |
 
-| Concurrency check | Executed scope |
-| --- | --- |
-| Competing schedule updates | One commit and one stale-version rejection, with continuous schedule history and consistent audit data. |
-| Concurrent same-year generation | Twelve unique monthly periods. A retry following an allowed serialization conflict must add zero rows. |
+| Concurrency check                  | Executed scope                                                                                                    |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Competing schedule updates         | One commit and one stale-version rejection, with continuous schedule history and consistent audit data.           |
+| Concurrent same-year generation    | Twelve unique monthly periods. A retry following an allowed serialization conflict must add zero rows.            |
 | Compatible cross-operation changes | A future schedule update and historical regeneration completed concurrently without changing the historical year. |
-| Conflicting schedule boundary | An edit that changes the year being generated remains unverified. |
+| Conflicting schedule boundary      | An edit that changes the year being generated remains unverified.                                                 |
 
 The final unified run exited zero on PostgreSQL 16.16. Fresh install applied all 72 migrations and passed 2 tests. The upgrade applied 71 migrations before creating approved payroll data, then applied the final migration and passed 2 tests with no changes to the approved snapshot or approval events. The isolated API and unit stage passed 28 tests (9 API, 19 unit). Total: 32 passed, 0 failed, 0 skipped. TypeScript compilation, Prettier and `git diff --check` passed. The ownership-filtered Docker listing was empty. The existing Prisma adapter warning recurred. This pass required no changes to production services, financial formulas or migration SQL.
 
@@ -204,12 +204,12 @@ The same-year regression uses the existing independent-session lock fixture to q
 
 The final local run of `powershell.exe -NoProfile -File apps\api\scripts\verify-payroll-postgres.ps1 -RunFullSuite` passed on PostgreSQL 16.16. The same-year checks observed independent sessions 608 and 609 on the fresh database and 603 and 602 on the upgrade database. Both passed the date coverage, version ownership, historical preservation and idempotency assertions, and both rejected the six direct INSERT and DELETE probes before generation and again afterward.
 
-| Stage | Result |
-| --- | --- |
-| Fresh PostgreSQL, all 72 migrations | 2 passed |
-| PostgreSQL upgrade with approved data | 2 passed |
-| Isolated PGlite API regressions | 9 passed |
-| Calculator and period-generator unit tests | 19 passed |
-| TypeScript compilation, Prettier, and diff check | Passed |
+| Stage                                            | Result    |
+| ------------------------------------------------ | --------- |
+| Fresh PostgreSQL, all 72 migrations              | 2 passed  |
+| PostgreSQL upgrade with approved data            | 2 passed  |
+| Isolated PGlite API regressions                  | 9 passed  |
+| Calculator and period-generator unit tests       | 19 passed |
+| TypeScript compilation, Prettier, and diff check | Passed    |
 
 **Phase 9.1 verdict: VERIFIED for the local test environment.** All 32 tests passed with zero failures and skips. Docker reported no remaining verification containers. The existing Prisma PostgreSQL adapter deprecation warning recurred. This pass required no new migration, formula change, or access to a deployed database.
