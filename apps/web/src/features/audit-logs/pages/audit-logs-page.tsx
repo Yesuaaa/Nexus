@@ -1,8 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { Fragment, useState } from "react"
 import Link from "next/link"
-import { RefreshCw } from "lucide-react"
 import { PageHeader } from "@/components/layout/page-header"
 import { contentClass } from "@/components/layout/styles"
 import { Avatar } from "@/components/ui/avatar"
@@ -22,7 +21,6 @@ import {
 import { TablePaginationFooter } from "@/components/ui/table-pagination-footer"
 import { TableSearchStatus } from "@/components/ui/table-search-status"
 import { usePaginatedList } from "@/components/ui/use-paginated-list"
-import { roleLabels } from "@/features/auth/model/roles"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 import { cn } from "@/lib/utils"
 import {
@@ -30,9 +28,11 @@ import {
   type LogFilters,
   type AuditLog,
   type AuditLogChangeValue,
+  type AuditLogEffect,
 } from "../api/audit-logs-api"
 import {
   matchesAuditLogSearch,
+  auditActorRole,
   AuditLogsTable,
 } from "../components/audit-logs-table"
 
@@ -45,34 +45,88 @@ const outcomeOptions = [
 ]
 const timeOptions = [
   { value: "", label: "Last 30 days" },
-  { value: "24h", label: "Last 24 hours" },
   { value: "7d", label: "Last 7 days" },
+  { value: "24h", label: "Last 24 hours" },
 ]
 
-function fromForRange(range: TimeRange) {
-  if (!range) return ""
-  const hours = range === "24h" ? 24 : 24 * 7
+function fromForRange(range: TimeRange, includeDefault: boolean) {
+  if (!range && !includeDefault) return ""
+  const hours = range === "24h" ? 24 : range === "7d" ? 24 * 7 : 24 * 30
   return new Date(Date.now() - hours * 60 * 60 * 1000).toISOString()
 }
 
-function logFilters(
-  search: string,
-  outcome: string,
-  source: string,
-  range: TimeRange,
-): LogFilters {
-  return {
-    search: search.trim(),
-    outcome,
-    source,
-    from: fromForRange(range),
-    to: "",
-    event: "",
-    actorId: "",
-    subjectId: "",
-    requestId: "",
-    correlationId: "",
+const valueLabel = (value: AuditLogChangeValue) =>
+  value === null
+    ? "Not set"
+    : typeof value === "boolean"
+      ? value
+        ? "Yes"
+        : "No"
+      : String(value)
+
+function ChangeValues({
+  before,
+  after,
+}: {
+  before: AuditLogChangeValue
+  after: AuditLogChangeValue
+}) {
+  return (
+    <>
+      <span className="text-[#667085]">{valueLabel(before)}</span>{" "}
+      <span aria-hidden="true">→</span>{" "}
+      <span className="font-medium text-foreground">{valueLabel(after)}</span>
+    </>
+  )
+}
+
+function OperationEffects({ effects }: { effects: AuditLogEffect[] }) {
+  const records = new Map<string, AuditLogEffect[]>()
+  for (const effect of effects) {
+    const key = JSON.stringify([effect.target.type, effect.target.id])
+    const entries = records.get(key)
+    if (entries) entries.push(effect)
+    else records.set(key, [effect])
   }
+  return (
+    <SidePanelSection title="Recorded changes">
+      {Array.from(records, ([key, entries]) => {
+        const { target } = entries[0]
+        return (
+          <section key={key} className="grid min-w-0 gap-2">
+            <h4 className="text-xs font-medium">{target.type}</h4>
+            <DetailList>
+              {target.label && (
+                <DetailItem label="Current record name">
+                  {target.label}
+                </DetailItem>
+              )}
+              <DetailItem label="Record ID">{target.id}</DetailItem>
+              {entries.map(({ id, action, changes, notes }) => (
+                <Fragment key={id}>
+                  <DetailItem label="Action">{action}</DetailItem>
+                  {changes.map((change) => (
+                    <DetailItem key={change.field} label={change.field}>
+                      {"before" in change ? (
+                        <ChangeValues {...change} />
+                      ) : (
+                        "Changed"
+                      )}
+                    </DetailItem>
+                  ))}
+                  {notes.map(({ label, value }) => (
+                    <DetailItem key={label} label={label}>
+                      {value}
+                    </DetailItem>
+                  ))}
+                </Fragment>
+              ))}
+            </DetailList>
+          </section>
+        )
+      })}
+    </SidePanelSection>
+  )
 }
 
 function LogDetails({
@@ -88,29 +142,18 @@ function LogDetails({
 }) {
   const panel = useSidePanel(onClose)
   const { formatDateTime } = useDatePreferences()
-  const role = log.actor.role
-    ? roleLabels[log.actor.role]
-    : log.actor.attribution === "UNKNOWN"
-      ? "Unknown"
-      : "Automated process"
   const attributionNote =
     log.actor.attribution === "CURRENT"
-      ? "Name resolved from the current account because this older log did not store a name snapshot."
+      ? log.operationId && log.actor.role
+        ? "The name comes from the current account. The role is the one recorded at the time."
+        : "Name resolved from the current account because this older log did not store a name snapshot."
       : log.actor.attribution === "UNAVAILABLE"
-        ? "The account is no longer available, but its recorded identifier is retained."
+        ? "The current account name is unavailable. The recorded account ID is shown."
         : log.actor.attribution === "SYSTEM"
           ? "This operation was performed by an automated process."
           : log.actor.attribution === "UNKNOWN"
             ? "The request did not identify an authenticated actor."
             : "Actor information was recorded when the operation occurred."
-  const valueLabel = (value: AuditLogChangeValue) =>
-    value === null
-      ? "Not set"
-      : typeof value === "boolean"
-        ? value
-          ? "Yes"
-          : "No"
-        : String(value)
   return (
     <SidePanel open={panel.open} onOpenChange={panel.onOpenChange}>
       <SidePanelHeader
@@ -153,7 +196,7 @@ function LogDetails({
         <SidePanelSection title="Performed by">
           <DetailList>
             <DetailItem label="Name">{log.actor.name}</DetailItem>
-            <DetailItem label="Role">{role}</DetailItem>
+            <DetailItem label="Role">{auditActorRole(log.actor)}</DetailItem>
             {log.actor.id && (
               <DetailItem label="Account ID">{log.actor.id}</DetailItem>
             )}
@@ -162,57 +205,56 @@ function LogDetails({
             {attributionNote}
           </p>
         </SidePanelSection>
-        {(log.target.type || log.target.label || log.target.id) && (
-          <SidePanelSection title="Affected record">
-            <DetailList>
-              {log.target.type && (
-                <DetailItem label="Record type">{log.target.type}</DetailItem>
-              )}
-              {log.target.label && (
-                <DetailItem label="Record">{log.target.label}</DetailItem>
-              )}
-              {log.target.id && (
-                <DetailItem label="Record ID">{log.target.id}</DetailItem>
-              )}
-              {log.projectName && (
-                <DetailItem label="Project">{log.projectName}</DetailItem>
-              )}
-            </DetailList>
+        {!log.effects &&
+          (log.target.type || log.target.label || log.target.id) && (
+            <SidePanelSection title="Affected record">
+              <DetailList>
+                {log.target.type && (
+                  <DetailItem label="Record type">{log.target.type}</DetailItem>
+                )}
+                {log.target.label && (
+                  <DetailItem label="Record">{log.target.label}</DetailItem>
+                )}
+                {log.target.id && (
+                  <DetailItem label="Record ID">{log.target.id}</DetailItem>
+                )}
+                {log.projectName && (
+                  <DetailItem label="Project">{log.projectName}</DetailItem>
+                )}
+              </DetailList>
+            </SidePanelSection>
+          )}
+        {log.effects ? (
+          <OperationEffects effects={log.effects} />
+        ) : (
+          <SidePanelSection
+            title={
+              log.outcome === "SUCCESS" ? "What changed" : "What was attempted"
+            }
+          >
+            {log.changes.length ? (
+              <DetailList>
+                {log.changes.map((change) => (
+                  <DetailItem key={change.field} label={change.field}>
+                    <ChangeValues {...change} />
+                  </DetailItem>
+                ))}
+              </DetailList>
+            ) : (
+              <p className="m-0 text-xs leading-5 text-[#738096]">
+                {log.outcome === "SUCCESS"
+                  ? "This earlier log did not capture field-level changes."
+                  : "No field-level attempted change was available for this operation."}
+              </p>
+            )}
           </SidePanelSection>
         )}
-        <SidePanelSection
-          title={
-            log.outcome === "SUCCESS" ? "What changed" : "What was attempted"
-          }
-        >
-          {log.changes.length ? (
-            <DetailList>
-              {log.changes.map((change) => (
-                <DetailItem key={change.field} label={change.field}>
-                  <span className="text-[#667085]">
-                    {valueLabel(change.before)}
-                  </span>{" "}
-                  <span aria-hidden="true">→</span>{" "}
-                  <span className="font-medium text-foreground">
-                    {valueLabel(change.after)}
-                  </span>
-                </DetailItem>
-              ))}
-            </DetailList>
-          ) : (
-            <p className="m-0 text-xs leading-5 text-[#738096]">
-              {log.outcome === "SUCCESS"
-                ? "This earlier log did not capture field-level changes."
-                : "No field-level attempted change was available for this operation."}
-            </p>
-          )}
-        </SidePanelSection>
         <SidePanelSection title="Operation">
           <DetailList>
             <DetailItem label="Area">
               {sourceLabels[log.source] ?? log.source}
             </DetailItem>
-            <DetailItem label="Event">{log.event}</DetailItem>
+            {!log.effects && <DetailItem label="Event">{log.event}</DetailItem>}
             {log.action && <DetailItem label="Action">{log.action}</DetailItem>}
             {log.status && (
               <DetailItem label="HTTP status">{log.status}</DetailItem>
@@ -242,7 +284,14 @@ function LogDetails({
             {log.subjectId && !log.target.id && (
               <DetailItem label="Subject ID">{log.subjectId}</DetailItem>
             )}
-            <DetailItem label="Correlation ID">{log.correlationId}</DetailItem>
+            {log.operationId && (
+              <DetailItem label="Operation ID">{log.operationId}</DetailItem>
+            )}
+            {log.correlationId && (
+              <DetailItem label="Correlation ID">
+                {log.correlationId}
+              </DetailItem>
+            )}
           </DetailList>
           {log.outcome === "FAILURE" && (
             <p className="m-0 text-[11px] leading-5 text-[#738096]">
@@ -263,36 +312,57 @@ function LogDetails({
 
 export function AuditLogsPage({
   title,
+  description = "Review 30 days of successful activity and system failures.",
   endpoint,
   sourceLabels,
   searchPlaceholder,
   linkToRecord,
+  operationActions,
 }: {
   title: string
+  description?: string
   endpoint: Parameters<typeof getAuditLogs>[0]
   sourceLabels: Readonly<Record<string, string>>
   searchPlaceholder: string
   linkToRecord?: (log: AuditLog) => { href: string; label: string } | undefined
+  operationActions?: Readonly<Record<string, string>>
 }) {
   const sourceOptions = [
     { value: "", label: "All areas" },
     ...Object.entries(sourceLabels).map(([value, label]) => ({ value, label })),
   ]
+  const activityOptions = operationActions
+    ? [
+        { value: "", label: "All actions" },
+        ...Object.entries(operationActions).map(([value, label]) => ({
+          value,
+          label,
+        })),
+      ]
+    : outcomeOptions
   const [search, setSearch] = useState("")
   const query = search.trim()
-  const [outcome, setOutcome] = useState("")
+  const [activity, setActivity] = useState("")
   const [source, setSource] = useState("")
   const [range, setRange] = useState<TimeRange>("")
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const list = usePaginatedList({
-    params: { search: query, outcome, source, range },
-    load: ({ page, signal }) =>
-      getAuditLogs(
-        endpoint,
-        logFilters(query, outcome, source, range),
-        page,
-        signal,
-      ),
+    params: { search: query, activity, source, range },
+    load: ({ page, signal }) => {
+      const filters: LogFilters = {
+        search: query,
+        outcome: operationActions ? "" : activity,
+        source,
+        from: fromForRange(range, endpoint === "/api/people-hr-logs"),
+        to: "",
+        event: operationActions ? activity : "",
+        actorId: "",
+        subjectId: "",
+        requestId: "",
+        correlationId: "",
+      }
+      return getAuditLogs(endpoint, filters, page, signal)
+    },
     rows: (result) => result.events,
     matches: matchesAuditLogSearch,
     initial: null,
@@ -311,12 +381,9 @@ export function AuditLogsPage({
 
   return (
     <main className={cn(contentClass, "p-[clamp(16px,2.1vw,32px)]")}>
-      <PageHeader
-        title={title}
-        description="Review 30 days of successful activity and system failures."
-      />
+      <PageHeader title={title} description={description} />
       <section className="mt-[18px] min-w-0" aria-label={`${title} history`}>
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 pb-4 max-[700px]:grid-cols-1">
+        <div className="pb-4">
           <div className={`${filterBarClass} min-w-0`}>
             <SearchField
               label="Search logs"
@@ -329,13 +396,15 @@ export function AuditLogsPage({
               }}
             />
             <FilterSelect
-              label="Filter by outcome"
+              label={
+                operationActions ? "Filter by action" : "Filter by outcome"
+              }
               announceValue
-              value={outcome}
-              options={outcomeOptions}
+              value={activity}
+              options={activityOptions}
               triggerClassName="min-w-[145px]"
               onChange={(value) => {
-                setOutcome(value)
+                setActivity(value)
                 resetSelectionAndPage()
               }}
             />
@@ -362,19 +431,6 @@ export function AuditLogsPage({
               }}
             />
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            className="h-[34px] gap-2 text-xs max-[700px]:h-11 max-[700px]:justify-self-start"
-            disabled={list.loading}
-            onClick={() => {
-              setSelectedId(null)
-              list.retry()
-            }}
-          >
-            <RefreshCw className="size-3.5" aria-hidden="true" />
-            Refresh
-          </Button>
         </div>
         <AuditLogsTable
           title={title}

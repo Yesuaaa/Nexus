@@ -40,6 +40,8 @@ Project Management logs (2026-11-18) provide the Superadmin-only viewer at `/mod
 
 The sidebar's **System Tool** section shows the log link for the active workspace. **Service Logs** and **Project Logs** each open the history of their own module.
 
+Superadmin opens the organization-wide request overview through **Service → Request**. Department heads use the **Request** group's **Overview** and **Inbox** for their own department.
+
 Implemented: catalog/pricing/packages, public active-service discovery at `/api/services/available`, client requests/booked services, Head inbox, conversation-centered requirements/consultation/quotation/agreement/payment workflow, project workspaces/milestones/deliverables/review/change requests, workload, and administrative oversight.
 
 Start with `apps/api/src/app.ts` and mounted controllers in `services`, `client-services`, `service-requests`, `request-inbox`, `request-workflow`, `projects`, `project-workspace`, `workload`, and conversation features. Trace corresponding web features/route entry points and API/PGlite/browser tests.

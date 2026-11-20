@@ -13,6 +13,7 @@ import { hasPermission, Permission } from "../auth/auth.permissions.js"
 import { selfEmployee } from "../attendance/attendance.service.js"
 import { attendanceWorkDate } from "../attendance/attendance.validation.js"
 import { leaveAdminVisibility } from "./leave.repository.js"
+import { workforceLogContext } from "../workforce-compliance-logs/write-context.js"
 import {
   expectedLeaveVersion,
   leaveObject,
@@ -58,7 +59,19 @@ const requestInclude = {
   },
   days: { orderBy: { workDate: "asc" as const } },
   decisions: {
-    include: { actor: { select: { id: true, fullName: true } } },
+    select: {
+      id: true,
+      requestId: true,
+      actorId: true,
+      actionId: true,
+      action: true,
+      fromStatus: true,
+      toStatus: true,
+      note: true,
+      version: true,
+      createdAt: true,
+      actor: { select: { id: true, fullName: true } },
+    },
     orderBy: [{ createdAt: "asc" as const }, { id: "asc" as const }],
   },
 } satisfies Prisma.LeaveRequestInclude
@@ -477,6 +490,7 @@ export function createLeaveService(clock: Clock = () => new Date()) {
               days: { create: days },
               decisions: {
                 create: {
+                  ...workforceLogContext(userId),
                   actorId: userId,
                   actionId: requestKey,
                   action: "SUBMITTED",
@@ -704,6 +718,7 @@ export function createLeaveService(clock: Clock = () => new Date()) {
           const nextVersion = current.version + 1
           await tx.leaveDecision.create({
             data: {
+              ...workforceLogContext(userId),
               requestId,
               actorId: userId,
               actionId,

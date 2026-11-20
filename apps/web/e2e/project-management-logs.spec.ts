@@ -117,7 +117,7 @@ for (const width of [1440, 390]) {
     await page.getByRole("option", { name: "All outcomes" }).click()
     await expect(openDetails).toBeVisible()
     deny = true
-    await page.getByRole("button", { name: "Refresh", exact: true }).click()
+    await page.getByLabel("Search logs").fill("project-trace")
     await expect(
       page.getByRole("alert").filter({ hasText: "Project log access denied" }),
     ).toBeVisible()

@@ -13,6 +13,124 @@ import type {
 configureRegressionTest()
 test.skip(live, "Attendance administration uses isolated API fixtures")
 const stamp = "2026-11-14T08:00:00Z"
+
+for (const width of [1440, 390]) {
+  test(`Workforce Compliance uses the shared log viewer at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 950 })
+    await restoreSession(page, "SUPERADMIN")
+    await mockAttendance(page)
+    await page.route("**/api/workforce-compliance-logs?**", (route) => {
+      const query = new URL(route.request().url()).searchParams
+      const events =
+        query.get("source") === "policies"
+          ? []
+          : [
+              {
+                id: "leave-log",
+                operationId: "operation-1",
+                correlationId: "trace-1",
+                source: "leave",
+                event: "APPROVED",
+                action: "Approved",
+                outcome: "SUCCESS",
+                actorId: "superadmin-1",
+                actorRole: "SUPERADMIN",
+                actor: {
+                  id: "superadmin-1",
+                  name: "Superadmin",
+                  role: "SUPERADMIN",
+                  attribution: "CURRENT",
+                },
+                message: "Approved leave request",
+                target: {
+                  id: "leave-1",
+                  type: "Leave request",
+                  label: "Workforce Employee",
+                },
+                subjectId: "leave-1",
+                changes: [],
+                effects: [
+                  {
+                    id: "leave-change",
+                    action: "Approved",
+                    target: {
+                      id: "leave-1",
+                      type: "Leave request",
+                      label: null,
+                    },
+                    changes: [
+                      {
+                        field: "Status",
+                        before: "SUBMITTED",
+                        after: "APPROVED",
+                      },
+                    ],
+                    notes: [
+                      {
+                        label: "Current employee name",
+                        value: "Workforce Employee",
+                      },
+                    ],
+                  },
+                ],
+                createdAt: stamp,
+              },
+            ]
+      return route.fulfill({
+        json: { events, total: events.length, page: 1, pageSize: 25 },
+      })
+    })
+    await page.goto("/attendance/time-logs/overview")
+    if (width < 768)
+      await page.getByRole("button", { name: "Open navigation menu" }).click()
+    const sidebar = page.locator("#app-sidebar")
+    await expect(
+      sidebar.getByRole("link", { name: "Audit Trail", exact: true }),
+    ).toBeVisible()
+    await sidebar
+      .getByRole("group", { name: "System Tool", exact: true })
+      .getByRole("link", { name: "Workforce Logs", exact: true })
+      .click()
+    await expect(page).toHaveURL(/\/module\/attendance-monitoring\/logs$/)
+    await expect(
+      page.getByRole("heading", {
+        name: "Workforce Logs",
+        exact: true,
+      }),
+    ).toBeVisible()
+    await page.getByLabel("Filter by time").click()
+    await expect(page.getByRole("option")).toHaveText([
+      "Last 30 days",
+      "Last 7 days",
+      "Last 24 hours",
+    ])
+    await page.keyboard.press("Escape")
+    await page.getByLabel("Filter by area").click()
+    await page.getByRole("option", { name: "Policies", exact: true }).click()
+    await expect(
+      page.getByText("No logs match your search and filters."),
+    ).toBeVisible()
+    await page.getByLabel("Filter by area").click()
+    await page.getByRole("option", { name: "Leave", exact: true }).click()
+    await page
+      .getByRole("button", { name: "View log: Approved leave request" })
+      .click()
+    const drawer = page.getByRole("dialog")
+    await expect(
+      drawer.getByRole("heading", { name: "Leave request", exact: true }),
+    ).toBeVisible()
+    await expect(drawer.getByText("SUBMITTED → APPROVED")).toBeVisible()
+    await expect(drawer.getByText("trace-1", { exact: true })).toBeVisible()
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true)
+  })
+}
+
 const employees = [
   {
     id: "design-employee",
@@ -131,6 +249,9 @@ const overtime: AttendanceAdjustment = {
 async function mockAttendance(page: Page, allowReview = true) {
   const reads: URL[] = []
   const writes: string[] = []
+  await page.route("**/api/leave/overview?**", (route) =>
+    route.fulfill({ json: { groups: [] } }),
+  )
   await page.route("**/api/attendance/**", (route) => {
     const url = new URL(route.request().url())
     if (route.request().method() !== "GET") {

@@ -1049,9 +1049,14 @@ model LeaveDecision {
   note       String?      @db.VarChar(2000)
   version    Int
   createdAt  DateTime     @default(now()) @db.Timestamptz(3)
+  operationId String?    @db.Uuid
+  correlationId String?  @db.Uuid
+  actorRoleAtTime Role?
 
   @@unique([requestId, actorId, actionId])
   @@index([requestId, createdAt, id])
+  @@index([createdAt, id])
+  @@index([operationId])
 }
 
 model WorkloadCapacity {
@@ -1302,10 +1307,15 @@ model AttendanceAudit {
   after      Json?
   actionId   String             @unique
   createdAt  DateTime           @default(now()) @db.Timestamptz(3)
+  operationId String?          @db.Uuid
+  correlationId String?        @db.Uuid
+  actorRoleAtTime Role?
 
   @@index([workdayId, createdAt])
   @@index([employeeId, createdAt])
   @@index([entityType, entityId, createdAt])
+  @@index([createdAt, id])
+  @@index([operationId])
 }
 
 enum AttendanceAdjustmentStatus {

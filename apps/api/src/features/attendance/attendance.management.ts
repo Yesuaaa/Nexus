@@ -32,6 +32,7 @@ import {
   submitRecordedOvertime,
 } from "./attendance.overtime.js"
 import { parseAttendanceHistory } from "./attendance.schema.js"
+import { setAttendanceAuditContext as context } from "../workforce-compliance-logs/write-context.js"
 import {
   approvedLeaveForDate,
   approvedLeaveMinutesByDate,
@@ -129,14 +130,6 @@ async function lockedPolicy(tx: Prisma.TransactionClient, policyId: string) {
   })
   if (!policy) fail(404, "Attendance policy not found")
   return policy
-}
-async function context(
-  tx: Prisma.TransactionClient,
-  userId: string,
-  reason: string,
-) {
-  await tx.$executeRaw`SELECT set_config('app.attendance_actor_id', ${userId}, true)`
-  await tx.$executeRaw`SELECT set_config('app.attendance_reason', ${reason}, true)`
 }
 function sessionSnapshot(
   session: NonNullable<
@@ -491,6 +484,11 @@ export function createAttendanceManagement(clock: () => Date) {
                 rows: (db, window) =>
                   db.attendanceAudit.findMany({
                     where,
+                    omit: {
+                      operationId: true,
+                      correlationId: true,
+                      actorRoleAtTime: true,
+                    },
                     include: {
                       actor: { select: { fullName: true } },
                       employee: { select: { fullName: true } },

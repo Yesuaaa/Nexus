@@ -151,10 +151,27 @@ for (const width of [1440, 390])
         () => document.documentElement.scrollWidth <= window.innerWidth,
       ),
     ).toBe(true)
+    const logTable = page.getByRole("table", { name: "Service Logs" })
     if (width === 1440)
-      await expect(
-        page.getByRole("columnheader", { name: "Performed by" }),
-      ).toBeVisible()
+      await expect(logTable.getByRole("columnheader")).toHaveText([
+        "What happened",
+        "Performed by",
+        "Area",
+        "Time",
+        "Status",
+        "View",
+      ])
+    for (const [message, status] of [
+      [successMessage, "Success"],
+      [failureMessage, "Failed"],
+    ]) {
+      const cells = logTable
+        .getByRole("row")
+        .filter({ hasText: message })
+        .getByRole("cell")
+      await expect(cells.first()).toContainText(message)
+      await expect(cells.nth(4)).toHaveText(status)
+    }
     await page
       .getByRole("button", { name: `View log: ${successMessage}` })
       .click()
@@ -197,7 +214,7 @@ for (const width of [1440, 390])
     await page.getByLabel("Search logs").fill("request-1")
     await request
     denied = true
-    await page.getByRole("button", { name: "Refresh", exact: true }).click()
+    await page.getByLabel("Search logs").fill("request-2")
     await expect(
       page.getByRole("alert").filter({ hasText: "Log access denied" }),
     ).toBeVisible()

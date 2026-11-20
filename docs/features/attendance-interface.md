@@ -158,3 +158,5 @@ Attendance Overview now uses `/api/attendance/me/overview`, deriving the employe
 ## Standalone audit navigation (2026-11-16)
 
 Audit Trail is a standalone item within Workforce Compliance at `/attendance/audit`, covering attendance records, overtime, corrections, review decisions, and policy changes within the existing attendance management scope. The former `/attendance/time-logs/audit` route redirects to it. Time Logs Overview now contains session figures, session status distribution, and employee coverage; it no longer fetches or displays audit summaries or recent change history.
+
+Superadmins can also open [Workforce Logs](workforce-compliance-logs.md) from **System Tool** to review a combined view of attendance and leave changes.

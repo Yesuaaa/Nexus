@@ -16,6 +16,7 @@ import type {
 import { summarizeAttendance } from "./attendance.summary.js"
 import { attendanceWorkDate } from "./attendance.validation.js"
 import { submitRecordedOvertime } from "./attendance.overtime.js"
+import { setAttendanceAuditContext } from "../workforce-compliance-logs/write-context.js"
 import {
   approvedLeaveForDate,
   approvedLeaveOverlappingInterval,
@@ -133,8 +134,7 @@ export function createAttendanceService(clock: Clock = () => new Date()) {
           const employee = await selfEmployee(tx, userId, true)
           // Capture once, after serialization. Callers cannot supply/backdate punches.
           const now = serverTime(clock)
-          await tx.$executeRaw`SELECT set_config('app.attendance_actor_id', ${userId}, true)`
-          await tx.$executeRaw`SELECT set_config('app.attendance_reason', ${`Employee ${action}`}, true)`
+          await setAttendanceAuditContext(tx, userId, `Employee ${action}`)
           if (action === "clock-in") {
             if (employee.status !== "ACTIVE")
               fail(403, "Only active employees can clock in")

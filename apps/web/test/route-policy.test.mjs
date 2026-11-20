@@ -491,7 +491,9 @@ test("navigation is generated from the same policies without changing role visib
       getNavigationPolicies(currentAccount, "system-tool").map((policy) =>
         getNavigationLabel(policy, currentAccount),
       ),
-      actor === "SUPERADMIN" ? ["Project Logs", "Service Logs"] : [],
+      actor === "SUPERADMIN"
+        ? ["Project Logs", "Service Logs", "People & HR Logs", "Workforce Logs"]
+        : [],
     )
     assert.deepEqual(
       getNavigationPolicies(currentAccount, "footer").map((policy) =>
@@ -521,7 +523,12 @@ test("project navigation remains active on current dynamic project routes", () =
   )
 })
 
-for (const moduleId of ["service-operations", "project-management"])
+for (const moduleId of [
+  "service-operations",
+  "project-management",
+  "people-hr",
+  "attendance-monitoring",
+])
   test(`${moduleId} logs require a current Superadmin and both administrative grants`, () => {
     const path = `/module/${moduleId}/logs`
     const sa = account("SUPERADMIN")

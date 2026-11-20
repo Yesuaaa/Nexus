@@ -407,6 +407,37 @@ test.describe("Authentication and session regression", () => {
     }
   })
 
+  for (const role of ["STAFF", "ADMIN", "SUPERADMIN"] as const) {
+    test(`${role} sign-in goes directly to the workspace selector`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ reducedMotion: "reduce" })
+      await mockApi(page, role)
+      await page.goto("/internal/login")
+      const loginPath = new URL(page.url()).pathname
+      const destinations: string[] = []
+      page.on("framenavigated", (frame) => {
+        if (frame === page.mainFrame()) {
+          const pathname = new URL(frame.url()).pathname
+          if (pathname !== loginPath) destinations.push(pathname)
+        }
+      })
+
+      await page
+        .getByLabel("Email address", { exact: true })
+        .fill(testAccounts[role].email)
+      await page
+        .getByLabel("Password", { exact: true })
+        .fill("CorrectHorse123!")
+      await page.getByRole("button", { name: "Sign In", exact: true }).click()
+
+      await expect(
+        page.getByRole("main", { name: "Workspace selector" }),
+      ).toBeVisible()
+      expect(destinations).toEqual(["/module"])
+    })
+  }
+
   test("login preserves the loader, session, success toast, and sign-out", async ({
     page,
   }) => {

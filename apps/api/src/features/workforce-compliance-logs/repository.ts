@@ -1,0 +1,155 @@
+import { Prisma, type Role } from "../../generated/prisma/client.js"
+import { getPrisma } from "../../lib/db.js"
+import { fail } from "../../shared/http-error.js"
+import { presentWorkforceComplianceLogs } from "./projection.js"
+
+type LogFilters = {
+  from?: Date
+  to?: Date
+  page: number
+  source?: string
+  event?: string
+  actorId?: string
+  subjectId?: string
+  operationId?: string
+  correlationId?: string
+  search?: string
+}
+
+export type ComplianceHistoryRow = {
+  id: string
+  groupId: string
+  operationId: string | null
+  correlationId: string | null
+  actorId: string | null
+  actorName: string | null
+  actorRoleAtTime: Role | null
+  employeeId: string | null
+  employeeName: string | null
+  subjectId: string
+  entityType: string
+  source: string
+  event: string
+  before: Prisma.JsonValue
+  after: Prisma.JsonValue
+  createdAt: Date
+}
+
+function history(from: Date, to: Date) {
+  return Prisma.sql`
+    SELECT a.id, coalesce(a."operationId"::text, 'attendance:' || a.id) AS "groupId",
+      a."operationId", a."correlationId", a."actorRoleAtTime", a."actorId",
+      a."employeeId", a."entityId" AS "subjectId", a."entityType",
+      CASE WHEN a."entityType" = 'AttendanceAdjustment' THEN
+          CASE WHEN coalesce(a.after, a.before)->>'type' = 'OVERTIME'
+            THEN 'overtime' ELSE 'corrections' END
+        WHEN a."entityType" IN ('AttendancePolicy', 'AttendancePolicyDay', 'AttendancePolicyAssignment')
+          THEN 'policies'
+        ELSE 'time-logs'
+      END AS source,
+      CASE
+        WHEN a."entityType" = 'AttendanceAdjustment' AND a.action = 'INSERT'
+          AND a.after->>'status' = 'PENDING' THEN 'SUBMITTED'
+        WHEN a."entityType" = 'AttendanceAdjustment' AND a.action = 'UPDATE'
+          AND a.before->>'status' IS DISTINCT FROM a.after->>'status'
+          AND a.after->>'status' IN ('VERIFIED', 'APPROVED', 'REJECTED') THEN a.after->>'status'
+        WHEN a."entityType" = 'AttendancePolicy' AND a.action = 'UPDATE'
+          AND a.before->>'archivedAt' IS NULL AND a.after->>'archivedAt' IS NOT NULL THEN 'ARCHIVED'
+        WHEN a."entityType" = 'AttendancePolicy' AND a.action = 'UPDATE'
+          AND a.before->>'archivedAt' IS NOT NULL AND a.after->>'archivedAt' IS NULL THEN 'RESTORED'
+        WHEN a.action = 'INSERT' THEN 'CREATED'
+        WHEN a.action = 'DELETE' THEN 'DELETED'
+        ELSE 'UPDATED'
+      END AS event,
+      a.before, a.after, a."createdAt"
+    FROM "AttendanceAudit" a
+    WHERE a."createdAt" BETWEEN ${from.toISOString()}::timestamptz AND ${to.toISOString()}::timestamptz
+      AND a.before IS DISTINCT FROM a.after
+    UNION ALL
+    SELECT d.id, coalesce(d."operationId"::text, 'leave:' || d.id),
+      d."operationId", d."correlationId", d."actorRoleAtTime", d."actorId",
+      r."employeeId", d."requestId", 'LeaveRequest', 'leave', d.action::text,
+      jsonb_build_object('status', d."fromStatus"), jsonb_build_object('status', d."toStatus"), d."createdAt"
+    FROM "LeaveDecision" d JOIN "LeaveRequest" r ON r.id = d."requestId"
+    WHERE d."createdAt" BETWEEN ${from.toISOString()}::timestamptz AND ${to.toISOString()}::timestamptz
+  `
+}
+
+const names = Prisma.sql`
+  LEFT JOIN "User" actor ON actor.id = h."actorId" AND strpos(actor."fullName", '@') = 0
+  LEFT JOIN "Employee" employee ON employee.id = h."employeeId" AND strpos(employee."fullName", '@') = 0
+`
+const pageSize = 25
+const day = 24 * 60 * 60 * 1000
+
+export async function listWorkforceComplianceLogs(filters: LogFilters) {
+  const conditions: Prisma.Sql[] = []
+  if (filters.source) conditions.push(Prisma.sql`h.source = ${filters.source}`)
+  if (filters.event) conditions.push(Prisma.sql`h.event = ${filters.event}`)
+  if (filters.actorId)
+    conditions.push(Prisma.sql`h."actorId" = ${filters.actorId}`)
+  if (filters.subjectId)
+    conditions.push(Prisma.sql`h."subjectId" = ${filters.subjectId}`)
+  if (filters.operationId)
+    conditions.push(Prisma.sql`h."operationId" = ${filters.operationId}::uuid`)
+  if (filters.correlationId)
+    conditions.push(
+      Prisma.sql`h."correlationId" = ${filters.correlationId}::uuid`,
+    )
+  const search = filters.search?.trim()
+  if (search)
+    conditions.push(Prisma.sql`
+    strpos(lower(concat_ws(' ', actor."fullName", employee."fullName", h."actorId", h."employeeId",
+      h."subjectId", h."operationId", h."correlationId", h.event, replace(h.source, '-', ' '))),
+      lower(${search})) > 0
+  `)
+
+  return getPrisma()!.$transaction(
+    async (tx) => {
+      const [{ asOf }] = await tx.$queryRaw<{ asOf: Date }[]>`
+        SELECT CURRENT_TIMESTAMP(3) AS "asOf"
+      `
+      const to = filters.to && filters.to < asOf ? filters.to : asOf
+      const from = filters.from ?? new Date(to.getTime() - 30 * day)
+      if (from > to || to.getTime() - from.getTime() > 366 * day)
+        fail(400, "Choose a log range of at most 366 days")
+      const rowsInRange = history(from, to)
+      const [result] = await tx.$queryRaw<
+        { total: number; page: number; ids: string[] }[]
+      >`
+      WITH matched AS (
+        SELECT h."groupId", max(h."createdAt") AS "createdAt"
+        FROM (${rowsInRange}) h
+        ${search ? names : Prisma.empty}
+        ${conditions.length ? Prisma.sql`WHERE ${Prisma.join(conditions, " AND ")}` : Prisma.empty}
+        GROUP BY h."groupId"
+      ), pagination AS (
+        SELECT count(*)::int AS total,
+          least(${filters.page}::int, greatest(1, ceil(count(*)::numeric / ${pageSize})))::int AS page
+        FROM matched
+      )
+      SELECT total, page, ARRAY(
+        SELECT "groupId" FROM matched ORDER BY "createdAt" DESC, "groupId" DESC
+        LIMIT ${pageSize} OFFSET (pagination.page - 1) * ${pageSize}
+      ) AS ids FROM pagination
+    `
+      const rows = result.ids.length
+        ? await tx.$queryRaw<ComplianceHistoryRow[]>`
+          SELECT h.*, left(actor."fullName", 100) AS "actorName", left(employee."fullName", 100) AS "employeeName"
+          FROM (${rowsInRange}) h
+          ${names}
+          WHERE h."groupId" IN (${Prisma.join(result.ids)})
+          ORDER BY h."createdAt" DESC, h.id DESC
+        `
+        : []
+      return {
+        asOf,
+        events: presentWorkforceComplianceLogs(result.ids, rows),
+        total: result.total,
+        page: result.page,
+        pageSize,
+      }
+    },
+    { isolationLevel: "RepeatableRead" },
+  )
+}
