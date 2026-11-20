@@ -18,9 +18,11 @@ test(
     assert.deepEqual(
       serviceRequestStatuses.rows.map((row) => row.enumlabel).sort(),
       [
+        "ACTIVATED",
         "AWAITING_CLIENT_INFO",
         "CANCELLED",
         "CLOSED",
+        "CONCLUDED",
         "READY_FOR_QUOTATION",
         "SUBMITTED",
         "UNDER_REVIEW",

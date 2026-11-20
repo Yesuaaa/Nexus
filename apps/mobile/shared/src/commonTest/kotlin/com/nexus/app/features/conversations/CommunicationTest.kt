@@ -4,8 +4,14 @@ import androidx.lifecycle.viewModelScope
 import com.nexus.app.features.conversations.model.*
 import com.nexus.app.features.conversations.api.*
 import com.nexus.app.features.conversations.viewmodel.ConversationsViewModel
+import com.nexus.app.features.booking.model.RequestRecord
+import com.nexus.app.features.booking.model.RequestService
+import com.nexus.app.features.booking.model.statusLabel
 import com.nexus.app.features.help.model.filterFaqGroups
 import com.nexus.app.features.help.model.helpFaqGroups
+import com.nexus.app.features.notifications.model.NotificationFeed
+import com.nexus.app.features.notifications.model.WorkflowNotification
+import com.nexus.app.features.notifications.viewmodel.NotificationsViewModel
 import com.nexus.app.features.workflow.api.WorkflowRepository
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.HttpClient
@@ -17,12 +23,15 @@ import io.ktor.http.content.TextContent
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.yield
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.*
 import kotlin.test.*
 
@@ -98,6 +107,161 @@ class CommunicationTest {
 
         assertTrue(filterFaqGroups("nonexistent-topic-xyz").isEmpty())
     }
+    @Test fun workflowNotificationsDeserializeNullableAndDefaultRoutingFields() {
+        val feed = Json.decodeFromString<NotificationFeed>(
+            """{"notifications":[{"id":"project-notice","requestId":null,"summary":"Project activated","createdAt":"2026-11-17T00:00:00Z","type":"PROJECT_ACTIVATED","entityId":"project-1"}],"unreadCount":1}"""
+        )
+        val project = feed.notifications.single()
+        assertNull(project.requestId)
+        assertEquals("PROJECT_ACTIVATED", project.type)
+        assertEquals("project-1", project.entityId)
+
+        val legacy = Json.decodeFromString<WorkflowNotification>(
+            """{"id":"legacy-notice","summary":"Request updated","createdAt":"2026-11-17T00:00:00Z"}"""
+        )
+        assertNull(legacy.requestId)
+        assertNull(legacy.type)
+        assertNull(legacy.entityId)
+    }
+    @Test fun projectNotificationsRouteByEntityIdWithoutRequestAccessChecks() = runTest {
+        val reads = mutableListOf<String>()
+        val requestAccessChecks = mutableListOf<String>()
+        val client = client { request ->
+            val path = request.url.encodedPath
+            when {
+                request.method == HttpMethod.Patch && path.endsWith("/read") -> {
+                    reads.add(path)
+                    respond("""{"ok":true}""", headers = jsonHeaders)
+                }
+                path == "/api/request-workflows/notifications" ->
+                    respond("""{"notifications":[],"unreadCount":0}""", headers = jsonHeaders)
+                path.startsWith("/api/request-workflows/") -> {
+                    requestAccessChecks.add(path)
+                    respond("{}", headers = jsonHeaders)
+                }
+                else -> error("Unexpected path: $path")
+            }
+        }
+        val vm = NotificationsViewModel(ClientCommunicationRepository(client))
+        val types = listOf(
+            "PROJECT_ACTIVATED",
+            "PROJECT_CANCELLATION_REQUESTED",
+            "PROJECT_CANCELLATION_APPROVED",
+            "PROJECT_CANCELLATION_DECLINED",
+        )
+        try {
+            types.forEachIndexed { index, type ->
+                val projectId = "project-$index"
+                val navigated = CompletableDeferred<String>()
+                var requestTarget: String? = null
+                vm.open(
+                    WorkflowNotification(
+                        id = "notice-$index",
+                        summary = "Project update",
+                        createdAt = "2026-11-17T00:00:0${index}Z",
+                        type = type,
+                        entityId = projectId,
+                    ),
+                    onProject = { navigated.complete(it) },
+                    onRequest = { requestTarget = it },
+                )
+                assertEquals(projectId, navigated.await())
+                assertNull(requestTarget)
+                yield()
+            }
+
+            val groupedNavigation = CompletableDeferred<String>()
+            vm.openGroup(
+                listOf(
+                    WorkflowNotification(
+                        id = "group-older",
+                        summary = "Cancellation requested",
+                        createdAt = "2026-11-17T01:00:00Z",
+                        type = "PROJECT_CANCELLATION_REQUESTED",
+                        entityId = "project-group",
+                    ),
+                    WorkflowNotification(
+                        id = "group-latest",
+                        summary = "Cancellation approved",
+                        createdAt = "2026-11-17T02:00:00Z",
+                        type = "PROJECT_CANCELLATION_APPROVED",
+                        entityId = "project-group",
+                    ),
+                ),
+                onProject = { groupedNavigation.complete(it) },
+                onRequest = { fail("Project groups must not use request routing") },
+            )
+            assertEquals("project-group", groupedNavigation.await())
+            assertTrue(reads.any { it.endsWith("/group-older/read") })
+            assertTrue(reads.any { it.endsWith("/group-latest/read") })
+            assertTrue(requestAccessChecks.isEmpty())
+        } finally {
+            vm.viewModelScope.cancel()
+            client.close()
+        }
+    }
+    @Test fun requestNotificationsStillCheckAccessBeforeNavigation() = runTest {
+        val calls = mutableListOf<String>()
+        val client = client { request ->
+            val path = request.url.encodedPath
+            when {
+                path == "/api/request-workflows/request-1" -> {
+                    calls.add("access")
+                    respond("{}", headers = jsonHeaders)
+                }
+                request.method == HttpMethod.Patch && path.endsWith("/notice-1/read") -> {
+                    calls.add("read")
+                    respond("""{"ok":true}""", headers = jsonHeaders)
+                }
+                path == "/api/request-workflows/notifications" ->
+                    respond("""{"notifications":[],"unreadCount":0}""", headers = jsonHeaders)
+                else -> error("Unexpected path: $path")
+            }
+        }
+        val vm = NotificationsViewModel(ClientCommunicationRepository(client))
+        val navigated = CompletableDeferred<String>()
+        try {
+            vm.open(WorkflowNotification("notice-1", "request-1", "Update", "now")) {
+                navigated.complete(it)
+            }
+            assertEquals("request-1", navigated.await())
+            assertEquals(listOf("access", "read"), calls)
+        } finally {
+            vm.viewModelScope.cancel()
+            client.close()
+        }
+    }
+    @Test fun unroutableNotificationDoesNotReadOrNavigate() = runTest {
+        var repositoryCalled = false
+        val client = client {
+            repositoryCalled = true
+            respond("{}", headers = jsonHeaders)
+        }
+        val vm = NotificationsViewModel(ClientCommunicationRepository(client))
+        var navigated = false
+        try {
+            vm.open(WorkflowNotification(id = "orphan", summary = "Update", createdAt = "now")) {
+                navigated = true
+            }
+            vm.state.first { it.error != null }
+            assertEquals("Unable to open notification", vm.state.value.error)
+            assertFalse(repositoryCalled)
+            assertFalse(navigated)
+        } finally {
+            vm.viewModelScope.cancel()
+            client.close()
+        }
+    }
+    @Test fun activatedAndConcludedStatusesUseLatestLifecycleRules() {
+        assertEquals("Activated", statusLabel("ACTIVATED"))
+        assertEquals("Concluded", statusLabel("CONCLUDED"))
+
+        val service = RequestService("service", "Service")
+        setOf("CANCELLED", "CLOSED", "CONCLUDED", "ACTIVATED").forEach { status ->
+            assertFalse(RequestRecord(status.lowercase(), status = status, service = service).canCancel)
+        }
+        assertTrue(RequestRecord("review", status = "UNDER_REVIEW", service = service).canCancel)
+    }
     @Test fun projectConversationsToggleActiveArchivedAndSendMessages() = runTest {
         val seenViews = mutableListOf<String>()
         var readCalled = false
@@ -163,6 +327,7 @@ class CommunicationTest {
             client.close()
         }
     }
+    private val jsonHeaders = headersOf(HttpHeaders.ContentType, "application/json")
     private fun client(handler: MockRequestHandler) = HttpClient(MockEngine(handler)) {
         defaultRequest { contentType(ContentType.Application.Json) }
         install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true; encodeDefaults = true }) }

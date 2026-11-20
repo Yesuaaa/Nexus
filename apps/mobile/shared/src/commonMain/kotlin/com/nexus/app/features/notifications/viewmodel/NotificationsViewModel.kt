@@ -26,23 +26,37 @@ class NotificationsViewModel(private val repository: ClientCommunicationReposito
         if (mutation?.isActive == true) return
         mutation = viewModelScope.launch { perform { repository.readAll(); refresh() } }
     }
-    fun open(notification: WorkflowNotification, navigate: (String) -> Unit) {
+    fun open(
+        notification: WorkflowNotification,
+        onProject: (String) -> Unit = {},
+        onRequest: (String) -> Unit,
+    ) {
         if (mutation?.isActive == true) return
         mutation = viewModelScope.launch { perform {
-            repository.checkRequestAccess(notification.requestId)
+            val projectId = notification.projectId
+            val requestId = notification.requestId?.takeIf { it.isNotBlank() }
+            if (projectId == null && requestId == null) error("Unable to open notification")
+            if (projectId == null) repository.checkRequestAccess(requestId!!)
             repository.readNotification(notification.id)
             refresh()
-            navigate(notification.requestId)
+            if (projectId != null) onProject(projectId) else onRequest(requestId!!)
         } }
     }
-    fun openGroup(notifications: List<WorkflowNotification>, navigate: (String) -> Unit) {
+    fun openGroup(
+        notifications: List<WorkflowNotification>,
+        onProject: (String) -> Unit = {},
+        onRequest: (String) -> Unit,
+    ) {
         val latest = notifications.maxByOrNull { it.createdAt } ?: return
         if (mutation?.isActive == true) return
         mutation = viewModelScope.launch { perform {
-            repository.checkRequestAccess(latest.requestId)
+            val projectId = latest.projectId
+            val requestId = latest.requestId?.takeIf { it.isNotBlank() }
+            if (projectId == null && requestId == null) error("Unable to open notification")
+            if (projectId == null) repository.checkRequestAccess(requestId!!)
             notifications.filter { it.readAt == null }.forEach { repository.readNotification(it.id) }
             refresh()
-            navigate(latest.requestId)
+            if (projectId != null) onProject(projectId) else onRequest(requestId!!)
         } }
     }
     private suspend fun perform(block: suspend () -> Unit) {

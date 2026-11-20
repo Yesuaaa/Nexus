@@ -80,9 +80,9 @@ data class RequestFilters(val search: String = "", val status: String = "", val 
 fun statusLabel(status: String): String = when (status) {
     "SUBMITTED" -> "Pending review"
     "UNDER_REVIEW" -> "Under review"
+    "ACTIVATED" -> "Activated"
     "AWAITING_CLIENT_INFO" -> "Awaiting your information"
     "READY_FOR_QUOTATION" -> "Ready for quotation"
-    "ACTIVATED" -> "Activated"
     "CONCLUDED" -> "Concluded"
     "CLOSED" -> "Closed"
     "CANCELLED" -> "Cancelled"
