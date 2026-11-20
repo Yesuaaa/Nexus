@@ -241,12 +241,27 @@ test(
           ((await response.json()) as { error: string }).error,
           /temporarily/,
         )
+        const entries = logs.mock.calls.map((call) =>
+          JSON.parse(String(call.arguments[0])),
+        ) as {
+          event?: string
+          method?: string
+          path?: string
+          error?: { name?: string; code?: string }
+        }[]
         assert.ok(
-          logs.mock.calls.some(
-            (call) =>
-              call.arguments[1] === "GET" &&
-              call.arguments[2] === "/api/auth/me",
+          entries.some(
+            (entry) =>
+              entry.event === "api.request_failed" &&
+              entry.method === "GET" &&
+              entry.path === "/api/auth/me" &&
+              entry.error?.name === "PrismaClientKnownRequestError" &&
+              entry.error.code === "P1017",
           ),
+        )
+        assert.equal(
+          JSON.stringify(entries).includes("Connection closed"),
+          false,
         )
       },
     )

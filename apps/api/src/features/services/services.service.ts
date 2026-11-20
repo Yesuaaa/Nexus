@@ -17,6 +17,7 @@ import {
   type ServicePersistenceInput,
 } from "./services.schema.js"
 import { HttpError as ServicesError } from "../../shared/http-error.js"
+import { safeLog } from "../../shared/safe-logger.js"
 
 /** Feature-named alias of the shared `HttpError`. */
 export { ServicesError }
@@ -79,7 +80,7 @@ async function removeImageBestEffort(path: string | null) {
   try {
     await getServiceImageStorage().remove(path)
   } catch (error) {
-    console.error(`Failed to remove obsolete service image ${path}`, error)
+    safeLog("error", "storage.obsolete_service_image_cleanup_failed", {}, error)
   }
 }
 

@@ -7,6 +7,8 @@ import type {
 } from "express"
 import { isTemporaryDatabaseError } from "../lib/database-read.js"
 import { HttpError, prismaHttpError } from "./http-error.js"
+import { requestId } from "./request-context.js"
+import { safeLog } from "./safe-logger.js"
 
 /**
  * Extracts the file path and line number of the caller or the error source,
@@ -59,6 +61,7 @@ export function extractErrorLocation(error?: unknown): string {
 }
 
 export function logDevError(options: {
+  requestId?: string
   status: number
   method: string
   url: string
@@ -68,39 +71,19 @@ export function logDevError(options: {
   stack?: string
 }) {
   if (process.env.NODE_ENV !== "development") return
-
-  const divider = "─".repeat(50)
-  console.error(
-    `\n┌─ [API ERROR ${options.status}] ${options.method} ${options.url} ${divider}`,
-  )
-  if (options.location && options.location !== "unknown") {
-    console.error(`│ 📍 Location: ${options.location}`)
-  }
-  console.error(`│ 💬 Toast:    ${options.clientMessage}`)
-  if (options.devDetails !== undefined) {
-    const detailsStr =
-      typeof options.devDetails === "object"
-        ? JSON.stringify(options.devDetails, null, 2)
-            .split("\n")
-            .join("\n│    ")
-        : String(options.devDetails)
-    console.error(`│ 🔍 Details:  ${detailsStr}`)
-  }
-  if (options.status >= 500 && options.stack) {
-    const relevantStack = options.stack
-      .split("\n")
-      .slice(1, 4)
-      .map((l) => l.trim())
-      .join("\n│    ")
-    console.error(`│ 💥 Trace:    ${relevantStack}`)
-  }
-  console.error(`└${divider}\n`)
+  safeLog(options.status >= 500 ? "error" : "warn", "api.response_error", {
+    requestId: options.requestId ?? "unknown",
+    status: options.status,
+    method: options.method,
+    path: options.url.split("?", 1)[0],
+    location: options.location ?? "unknown",
+  })
 }
 
 /**
  * Middleware that intercepts outgoing JSON responses with status >= 400 in development mode.
  * - Enriches the response with `location` and `details` for Network Tab inspection
- * - Prints the formatted error box in the backend terminal
+ * - Emits bounded structured metadata without request or response payloads
  * - Preserves `error` as the clean toast message for client UI (Web & Mobile)
  */
 export const devErrorInterceptor = (
@@ -133,6 +116,7 @@ export const devErrorInterceptor = (
 
       if (!(response.locals as Record<string, unknown>)._devErrorLogged) {
         logDevError({
+          requestId: requestId(response),
           status: response.statusCode,
           method: request.method,
           url: request.originalUrl || request.url,
@@ -245,16 +229,13 @@ export const handleError: ErrorRequestHandler = (
   const isDev = process.env.NODE_ENV === "development"
 
   const { status, message, details, retryAfter } = resolveError(error)
-  if (status >= 500) {
-    console.error("API request failed:", request.method, request.path, error)
-  }
-
   const source =
     error instanceof HttpError && error.cause instanceof Error
       ? error.cause
       : error
   const location = extractErrorLocation(source)
   logDevError({
+    requestId: requestId(response),
     status,
     method: request.method,
     url: request.originalUrl || request.url,
@@ -263,6 +244,19 @@ export const handleError: ErrorRequestHandler = (
     devDetails: details,
     stack: source instanceof Error ? source.stack : undefined,
   })
+  if (status >= 500 && process.env.NODE_ENV !== "development")
+    safeLog(
+      "error",
+      "api.request_failed",
+      {
+        requestId: requestId(response),
+        status,
+        method: request.method,
+        path: request.path,
+        location,
+      },
+      source,
+    )
 
   if (retryAfter) response.setHeader("Retry-After", retryAfter)
   response.status(status).json({

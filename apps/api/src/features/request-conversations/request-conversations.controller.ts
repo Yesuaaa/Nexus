@@ -11,6 +11,8 @@ import {
 import { requireAuth } from "../auth/auth.middleware.js"
 import { verifyAccessToken } from "../auth/auth.jwt.js"
 import { HttpError } from "../../shared/http-error.js"
+import { requestId } from "../../shared/request-context.js"
+import { safeLog } from "../../shared/safe-logger.js"
 import {
   conversationRealtime,
   type ConversationRealtime,
@@ -222,9 +224,10 @@ export function createRequestConversationsRouter(
           event("access-revoked")
         else {
           event("reconnecting")
-          console.error(
-            "Conversation stream check failed:",
-            conversationId,
+          safeLog(
+            "error",
+            "conversation.stream_check_failed",
+            { requestId: requestId(response) },
             error,
           )
         }

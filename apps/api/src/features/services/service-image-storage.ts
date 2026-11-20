@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 import { safeHttpsUrl } from "../../shared/validation.js"
+import { safeLog } from "../../shared/safe-logger.js"
 
 const defaultBucket = "service-images"
 const maxImageBytes = 2 * 1024 * 1024
@@ -78,8 +79,10 @@ function supabaseStorage({
           ? await client.storage.updateBucket(bucket, options)
           : await client.storage.createBucket(bucket, options)
       if (result.error) {
-        console.error(
-          "Supabase service image bucket setup failed",
+        safeLog(
+          "error",
+          "storage.service_image_bucket_setup_failed",
+          { bucket },
           result.error,
         )
         throw new ServiceImageStorageError(
@@ -117,7 +120,12 @@ function supabaseStorage({
           upsert: false,
         })
       if (error) {
-        console.error("Supabase service image upload failed", error)
+        safeLog(
+          "error",
+          "storage.service_image_upload_failed",
+          { bucket, mimeType: `image/${subtype}` },
+          error,
+        )
         throw new ServiceImageStorageError(
           "The service image could not be uploaded. Please try again.",
         )
@@ -128,7 +136,12 @@ function supabaseStorage({
     async remove(path) {
       const { error } = await client.storage.from(bucket).remove([path])
       if (error) {
-        console.error("Supabase service image removal failed", error)
+        safeLog(
+          "error",
+          "storage.service_image_removal_failed",
+          { bucket },
+          error,
+        )
         throw new ServiceImageStorageError(
           "The previous service image could not be removed",
         )

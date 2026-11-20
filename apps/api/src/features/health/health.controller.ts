@@ -1,5 +1,7 @@
 import { Router } from "express"
 import { getPrisma } from "../../lib/db.js"
+import { requestId } from "../../shared/request-context.js"
+import { safeLog } from "../../shared/safe-logger.js"
 
 export const healthRouter = Router()
 
@@ -20,7 +22,12 @@ healthRouter.get("/db-check", async (_request, response) => {
     await prisma.$queryRaw`SELECT 1`
     response.json({ status: "ok" })
   } catch (error) {
-    console.error("Database check failed:", error)
+    safeLog(
+      "error",
+      "health.database_check_failed",
+      { requestId: requestId(response) },
+      error,
+    )
     response.status(503).json({ status: "unavailable" })
   }
 })
