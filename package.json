@@ -21,6 +21,8 @@
     "test:web": "node scripts/tests/run-web.mjs",
     "test:e2e": "node scripts/tests/run-e2e.mjs",
     "test:postman": "node scripts/run-postman.mjs",
+    "smoke:mobile-release": "node scripts/smoke-mobile-release.mjs",
+    "test:smoke-mobile-release": "node --test scripts/smoke-mobile-release.test.mjs",
     "start:api": "pnpm --filter @nexus/api start",
     "start:web": "pnpm --filter @nexus/web start",
     "preview:web": "pnpm --filter @nexus/web preview",

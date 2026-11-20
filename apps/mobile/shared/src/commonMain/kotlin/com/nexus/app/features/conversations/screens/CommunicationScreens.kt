@@ -126,6 +126,12 @@ fun NotificationsScreen(
     }
 }
 
+private data class InboxConversation(
+    val key: String, val id: String, val project: Boolean, val title: String,
+    val subtitle: String, val preview: String, val updatedAt: String, val unreadCount: Int,
+    val searchText: String, val imageUrl: String? = null,
+)
+
 @Composable
 fun MessagesScreen(
     onConversation: (String) -> Unit,
@@ -134,6 +140,33 @@ fun MessagesScreen(
     viewModel: ConversationsViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    var search by rememberSaveable { mutableStateOf("") }
+    val rows = remember(state.page, state.projectPage, state.archived, search) {
+        fun preview(message: com.nexus.app.features.conversations.model.ChatMessage?): String =
+            message?.let { if (it.deletedAt != null) "Message deleted" else it.body.orEmpty() } ?: "Start a conversation"
+        val requests = state.page.conversations.filter { (it.status == "ARCHIVED") == state.archived }.map { row ->
+            val title = row.acceptedDepartment?.head?.fullName ?: row.acceptedDepartment?.name ?: row.title
+            val subtitle = row.service.name + if (row.bookings.size > 1) " - ${row.bookings.size} bookings" else ""
+            InboxConversation("request-${row.id}", row.id, false, title, subtitle, preview(row.lastMessage),
+                row.updatedAt, row.unreadCount,
+                listOfNotNull(title, subtitle, row.client.fullName, row.title, row.referenceNumber,
+                    row.acceptedDepartment?.name, preview(row.lastMessage)).plus(row.bookings.flatMap {
+                    listOfNotNull(it.title, it.serviceName, it.referenceNumber)
+                }).joinToString(" "), row.acceptedDepartment?.head?.imageUrl)
+        }
+        fun projectPreview(message: com.nexus.app.features.projects.model.ProjectChatMessage?): String =
+            message?.body ?: "Start a conversation"
+        val projects = state.projectPage.conversations.filter { it.archived == state.archived }.map { row ->
+            InboxConversation("project-${row.id}", row.id, true, row.name, "Project team", projectPreview(row.lastMessage),
+                row.updatedAt, row.unreadCount,
+                (listOf(row.name, projectPreview(row.lastMessage)) + row.participants.mapNotNull { it.fullName }).joinToString(" "))
+        }
+        val terms = search.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        (requests + projects).filter { row -> terms.all { row.searchText.contains(it, ignoreCase = true) } }
+            .sortedWith(compareByDescending<InboxConversation> {
+                runCatching { kotlinx.datetime.Instant.parse(it.updatedAt).toEpochMilliseconds() }.getOrDefault(Long.MIN_VALUE)
+            }.thenBy { it.key })
+    }
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(viewModel, lifecycle) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -143,10 +176,8 @@ fun MessagesScreen(
             }
         }
     }
-    val requestConversations = remember(state.page.conversations, state.archived) {
-        state.page.conversations.filter { (it.status == "ARCHIVED") == state.archived }
-    }
-    val projectConversations = state.projectPage.conversations
+    val requestConversations = state.page.conversations.associateBy { it.id }
+    val projectConversations = state.projectPage.conversations.associateBy { it.id }
     val hasMore = state.page.nextCursor != null || state.projectPage.nextCursor != null
 
     LazyColumn(
@@ -164,33 +195,50 @@ fun MessagesScreen(
             )
         }
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                listOf(false to "Active", true to "Archived").forEach { (archivedTab, label) ->
+            androidx.compose.foundation.text.BasicTextField(
+                value = search,
+                onValueChange = { search = it },
+                modifier = Modifier.fillMaxWidth().height(44.dp),
+                singleLine = true,
+                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = ConversationStyle.Ink),
+                cursorBrush = androidx.compose.ui.graphics.SolidColor(ConversationStyle.Navy),
+                decorationBox = { input ->
+                    Surface(Modifier.fillMaxSize(), shape = RoundedCornerShape(6.dp), color = Color.White,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, ConversationStyle.Navy.copy(alpha = .45f))) {
+                        Row(Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Icon(Icons.Outlined.Search, null, Modifier.size(18.dp), tint = ConversationStyle.Navy)
+                            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                                if (search.isEmpty()) Text("Search conversations…", fontSize = 14.sp, color = ConversationStyle.Muted)
+                                input()
+                            }
+                            if (search.isNotEmpty()) IconButton(onClick = { search = "" }, modifier = Modifier.size(32.dp)) {
+                                Icon(Icons.Outlined.Close, "Clear search", Modifier.size(18.dp), tint = ConversationStyle.Navy)
+                            }
+                        }
+                    }
+                },
+            )
+        }
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                listOf(false to "All", true to "Archive").forEach { (archivedTab, label) ->
                     val selected = state.archived == archivedTab
                     Surface(
                         modifier = Modifier.clickable(enabled = !state.loading) {
-                            if (state.archived != archivedTab) {
-                                viewModel.setArchived(archivedTab)
-                            }
+                            if (state.archived != archivedTab) viewModel.setArchived(archivedTab)
                         },
                         shape = RoundedCornerShape(8.dp),
-                        color = if (selected) ConversationStyle.Navy else Color.White,
-                        border = androidx.compose.foundation.BorderStroke(
-                            1.dp,
-                            if (selected) ConversationStyle.Navy else NexusColors.Border,
-                        ),
+                        color = if (selected) Color(0xFFDBEAFE) else Color(0xFFF3F7FF),
+                        border = androidx.compose.foundation.BorderStroke(1.dp,
+                            if (selected) ConversationStyle.Navy.copy(alpha = .45f) else NexusColors.Border),
                     ) {
-                        Text(
-                            text = label,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (selected) Color.White else ConversationStyle.Ink,
-                        )
+                        Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(if (archivedTab) Icons.Outlined.Archive else Icons.Outlined.Inbox,
+                                null, Modifier.size(16.dp), tint = ConversationStyle.Navy)
+                            Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = ConversationStyle.Navy)
+                        }
                     }
                 }
             }
@@ -206,16 +254,16 @@ fun MessagesScreen(
                 ) { Text("Retry") }
             }
         }
-        if (!state.loading && state.error == null && requestConversations.isEmpty() && projectConversations.isEmpty()) {
+        if (!state.loading && state.error == null && rows.isEmpty()) {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = if (state.archived) "No archived conversations" else "No conversations yet.",
+                        text = if (search.isNotBlank()) "No conversations found." else if (state.archived) "No archived conversations" else "No conversations yet.",
                         color = if (state.archived) ConversationStyle.Ink else NexusColors.TextSecondary,
                         fontWeight = if (state.archived) FontWeight.SemiBold else FontWeight.Normal,
                         fontSize = 14.sp,
                     )
-                    if (state.archived) {
+                    if (state.archived && search.isBlank()) {
                         Text(
                             text = "Completed project chats will appear here.",
                             color = NexusColors.TextSecondary,
@@ -225,53 +273,51 @@ fun MessagesScreen(
                 }
             }
         }
-        items(requestConversations, key = { "request-${it.id}" }) { row ->
-            Card(
-                onClick = { onConversation(row.id) },
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                border = androidx.compose.foundation.BorderStroke(1.dp, NexusColors.Border),
-            ) {
-                Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    BadgedBox(badge = {
-                        if (row.unreadCount > 0) Badge(containerColor = Color(0xFF3B82F6), modifier = Modifier.size(8.dp))
-                    }) {
-                        ChatAvatar(row.acceptedDepartment?.head?.fullName ?: "EXP", row.acceptedDepartment?.head?.imageUrl)
+        items(rows, key = { it.key }) { entry ->
+            if (entry.project) {
+                val project = projectConversations[entry.id] ?: return@items
+                ProjectConversationCard(
+                    project = project,
+                    currentUserId = currentUserId,
+                    onClick = { onProjectConversation(project.id) },
+                )
+            } else {
+                val row = requestConversations[entry.id] ?: return@items
+                Card(
+                    onClick = { onConversation(row.id) },
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, NexusColors.Border),
+                ) {
+                    Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        ChatAvatar(entry.title, row.acceptedDepartment?.head?.imageUrl)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                row.acceptedDepartment?.head?.fullName ?: row.acceptedDepartment?.name ?: row.title,
+                                fontSize = 14.sp,
+                                fontWeight = if (row.unreadCount > 0) FontWeight.Bold else FontWeight.Medium,
+                                color = ConversationStyle.Ink,
+                                maxLines = 2,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                row.service.name + if (row.bookings.size > 1) " - ${row.bookings.size} bookings" else "",
+                                fontSize = 12.sp,
+                                color = NexusColors.TextSecondary,
+                            )
+                            Text(
+                                row.lastMessage?.let { if (it.deletedAt != null) "Message deleted" else it.body.orEmpty() }
+                                    ?: "Start a conversation",
+                                maxLines = 2,
+                                fontSize = 12.sp,
+                                lineHeight = 18.sp,
+                                color = ConversationStyle.Muted,
+                            )
+                        }
+                        if (row.unreadCount > 0) Badge(containerColor = Color(0xFF3B82F6), contentColor = Color.White) { Text(row.unreadCount.toString()) }
                     }
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            row.acceptedDepartment?.head?.fullName ?: row.acceptedDepartment?.name ?: row.title,
-                            fontSize = 14.sp,
-                            fontWeight = if (row.unreadCount > 0) FontWeight.Bold else FontWeight.Medium,
-                            color = ConversationStyle.Ink,
-                            maxLines = 2,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            row.service.name + if (row.bookings.size > 1) " - ${row.bookings.size} bookings" else "",
-                            fontSize = 12.sp,
-                            color = NexusColors.TextSecondary,
-                        )
-                        Text(
-                            row.lastMessage?.let { if (it.deletedAt != null) "Message deleted" else it.body.orEmpty() }
-                                ?: "Start a conversation",
-                            maxLines = 2,
-                            fontSize = 12.sp,
-                            lineHeight = 18.sp,
-                            color = ConversationStyle.Muted,
-                        )
-                    }
-                    if (row.unreadCount > 0) Badge(containerColor = Color(0xFF3B82F6), contentColor = Color.White) { Text(row.unreadCount.toString()) }
-                    Text(" >", color = NexusColors.PrimaryBlue)
                 }
             }
-        }
-        items(projectConversations, key = { "project-${it.id}" }) { project ->
-            ProjectConversationCard(
-                project = project,
-                currentUserId = currentUserId,
-                onClick = { onProjectConversation(project.id) },
-            )
         }
         if (hasMore) {
             item {
@@ -423,6 +469,11 @@ fun ChatScreen(
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = list, contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.Bottom)) {
             if (state.reconnecting) item { Text("Reconnecting...", fontSize = 12.sp, color = ConversationStyle.Muted) }
             state.error?.let { error -> item { Text(error, color = NexusColors.ErrorRed, fontSize = 12.sp) } }
+            items(state.history?.meetings.orEmpty().filter { it.status == "SCHEDULED" }, key = { "meeting-${it.id}" }) { meeting ->
+                ConversationMeetingCard(meeting, state.history?.canSend == true && state.history?.archived != true,
+                    state.meetingBusy, state.meetingError, viewModel::clearMeetingError,
+                    viewModel::requestMeetingReschedule)
+            }
             workflow?.let { workflow ->
                 item { Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     ChatWorkflowForms(workflow, workflowState.busy, workflowState.selectedFileId,
@@ -449,12 +500,8 @@ fun ChatScreen(
                 val message = entry.message ?: return@items
                 val own = message.sender.id == userId
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = if (own) Alignment.End else Alignment.Start) {
-                    Surface(shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp,
-                        bottomEnd = if (own) 6.dp else 16.dp, bottomStart = if (own) 16.dp else 6.dp),
-                        color = if (message.deletedAt != null) Color(0xFFF6F8FC) else if (own) ConversationStyle.Navy else Color(0xFFDFE4EB),
-                        border = if (message.deletedAt != null) androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD8E1EF)) else null) {
-                        Text(if (message.deletedAt != null) "Message deleted" else message.body.orEmpty(), Modifier.widthIn(max = 300.dp).padding(12.dp),
-                            fontSize = 14.sp, lineHeight = 21.sp, color = if (message.deletedAt != null) ConversationStyle.Muted else if (own) Color.White else ConversationStyle.Ink)
+                    ChatMessageBubble(own, deleted = message.deletedAt != null) {
+                        Text(if (message.deletedAt != null) "Message deleted" else message.body.orEmpty())
                     }
                     if (message.booking == null && conversation?.bookings.orEmpty().size > 1) {
                         Text("Shared conversation", fontSize = 10.sp, color = ConversationStyle.Muted)

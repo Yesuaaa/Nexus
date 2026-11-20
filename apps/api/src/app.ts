@@ -21,6 +21,7 @@ import { projectsRouter } from "./features/projects/projects.controller.js"
 import { projectWorkspaceRouter } from "./features/project-workspace/project-workspace.controller.js"
 import { projectConversationsRouter } from "./features/project-conversations/project-conversations.controller.js"
 import { devErrorInterceptor, handleError } from "./shared/error-handler.js"
+import { requestContext } from "./shared/request-context.js"
 
 import { workloadRouter } from "./features/workload/workload.controller.js"
 
@@ -30,8 +31,14 @@ export function createApp(
   const app = express()
   app.set("trust proxy", trustedProxyAddresses(process.env.TRUST_PROXY))
   app.disable("x-powered-by")
+  app.use(requestContext)
   app.use(securityHeaders)
-  app.use(cors({ origin: process.env.WEB_ORIGIN || "http://localhost:5173" }))
+  app.use(
+    cors({
+      origin: process.env.WEB_ORIGIN || "http://localhost:5173",
+      exposedHeaders: ["X-Request-Id"],
+    }),
+  )
   app.use("/api", noStore)
   app.use(devErrorInterceptor)
   app.use("/api/services", servicesRouter)

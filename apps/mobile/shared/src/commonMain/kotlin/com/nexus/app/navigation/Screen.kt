@@ -9,8 +9,8 @@ enum class BottomTab(
 ) {
     DASHBOARD("Dashboard", NexusNavIcons.Dashboard),
     SERVICES("Services", NexusNavIcons.Services),
-    CALENDAR("Calendar", NexusNavIcons.Calendar),
     BOOKED_REQUESTS("Requests", NexusNavIcons.BookedRequests),
+    CALENDAR("Calendar", NexusNavIcons.Calendar),
     PROJECTS("Projects", NexusNavIcons.Projects)
 }
 

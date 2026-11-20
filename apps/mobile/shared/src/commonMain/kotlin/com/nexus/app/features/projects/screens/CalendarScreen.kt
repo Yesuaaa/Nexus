@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
@@ -128,6 +129,20 @@ fun CalendarScreen(onBooking: () -> Unit, onEvent: (CalendarEvent) -> Unit, view
 
 @Composable
 private fun EventRow(event: CalendarEvent, onEvent: (CalendarEvent) -> Unit) {
+    val uriHandler = LocalUriHandler.current
+    val meetingUrl = remember(event.type, event.location) {
+        event.location?.trim()?.takeIf { location ->
+            event.type in setOf("meeting", "consultation") &&
+                location.startsWith("https://", ignoreCase = true) &&
+                location.none { it.isWhitespace() || it.isISOControl() } &&
+                runCatching {
+                    val url = io.ktor.http.Url(location)
+                    url.protocol == io.ktor.http.URLProtocol.HTTPS && url.host.isNotBlank() &&
+                        url.user.isNullOrEmpty() && url.password.isNullOrEmpty()
+                }.getOrDefault(false)
+        }
+    }
+    var joinError by remember(event.id, event.location) { mutableStateOf<String?>(null) }
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).clickable { onEvent(event) }.padding(vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("${monthNames[calendarDate(event.startsAt).monthNumber - 1].take(3)} ${calendarDate(event.startsAt).dayOfMonth} · ${event.title}", color = eventColor(event.type), fontSize = 14.sp, fontWeight = FontWeight.Medium)
         ProjectCopy("${calendarTime(event.startsAt)}${event.endsAt?.let { " – ${calendarTime(it)}" }.orEmpty()} · ${event.context}")
@@ -135,5 +150,13 @@ private fun EventRow(event: CalendarEvent, onEvent: (CalendarEvent) -> Unit) {
         event.staff?.let { ProjectCopy(it) }
         if (event.pending) ProjectStatus("Awaiting confirmation")
         if (event.completed) ProjectStatus("COMPLETED")
+        meetingUrl?.let { url ->
+            NexusButton("Join meeting", {
+                joinError = runCatching { uriHandler.openUri(url) }.exceptionOrNull()?.let {
+                    "Unable to open this meeting link. Please try again."
+                }
+            }, compact = true)
+        }
+        joinError?.let { Text(it, color = NexusColors.ErrorRed, fontSize = 12.sp) }
     }
 }

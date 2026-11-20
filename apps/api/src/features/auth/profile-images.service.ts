@@ -6,6 +6,7 @@ import {
   getServiceImageStorage,
   ServiceImageStorageError,
 } from "../services/service-image-storage.js"
+import { safeLog } from "../../shared/safe-logger.js"
 
 export async function uploadProfileImage(userId: string, input: unknown) {
   const body = input as { kind?: unknown; dataUrl?: unknown } | null
@@ -90,8 +91,13 @@ export async function uploadProfileImage(userId: string, input: unknown) {
   } catch (error) {
     try {
       await storage.remove(path)
-    } catch {
-      console.error("Unable to remove an uncommitted profile image")
+    } catch (cleanupError) {
+      safeLog(
+        "error",
+        "profile.uncommitted_image_cleanup_failed",
+        { userId, kind },
+        cleanupError,
+      )
     }
     throw error
   }

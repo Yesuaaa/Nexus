@@ -2,19 +2,18 @@ import "dotenv/config"
 import { createApp } from "./app.js"
 import { jwtKey } from "./features/auth/auth.jwt.js"
 import { purgeExpiredConversationMessages } from "./features/request-conversations/request-conversations.service.js"
+import { safeLog } from "./shared/safe-logger.js"
 
 jwtKey()
 const port = Number(process.env.PORT || 3001)
 const host = "0.0.0.0"
 createApp().listen(port, host, () =>
-  console.log(
-    `API listening on http://${host === "0.0.0.0" ? "localhost" : host}:${port}`,
-  ),
+  safeLog("info", "api.started", { host, port }),
 )
 
 function purgeExpiredMessages() {
   void purgeExpiredConversationMessages().catch((error: unknown) => {
-    console.error("Unable to purge expired conversation messages", error)
+    safeLog("error", "conversation.expired_message_purge_failed", {}, error)
   })
 }
 

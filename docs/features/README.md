@@ -6,6 +6,8 @@ Use the date the feature was completed, and keep later implementation changes in
 
 ## Records
 
+- [Mobile operational readiness](mobile-operational-readiness.md), developed 2026-11-17.
+- [Native push notification plan](mobile-push-plan.md), developed 2026-11-17 and explicitly deferred.
 - [Role-aware calendar](calendar.md), developed 2026-11-10.
 - [Employee Management (Admin)](employee-management.md), developed 2026-10-26.
 - [Client Service Requests](client-service-requests.md), developed 2026-10-30.
