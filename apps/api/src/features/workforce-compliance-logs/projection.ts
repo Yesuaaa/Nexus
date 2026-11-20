@@ -158,6 +158,36 @@ function priority(row: ComplianceHistoryRow) {
   return 3
 }
 
+function describeWorkforceActivity(row: ComplianceHistoryRow, type: string) {
+  const previous = snapshot(row.before)
+  const next = snapshot(row.after)
+  const employee = row.employeeName?.trim()
+  const forEmployee = employee ? ` for ${employee}` : ""
+  const started = row.event === "CREATED" && next.endedAt === null
+  const ended =
+    row.event === "UPDATED" &&
+    previous.endedAt === null &&
+    isoDate(next.endedAt)
+  if (row.entityType === "AttendanceWorkSession") {
+    if (started)
+      return `${row.operationId ? "Recorded clock-in" : "Started an attendance session"}${forEmployee}.`
+    if (ended)
+      return `${row.operationId ? "Recorded clock-out" : "Ended an attendance session"}${forEmployee}.`
+  }
+  if (row.entityType === "AttendanceBreak") {
+    if (started) return `Started a break${forEmployee}.`
+    if (ended) return `Ended a break${forEmployee}.`
+  }
+  if (
+    row.entityType === "AttendancePolicyAssignment" &&
+    row.event === "CREATED"
+  )
+    return `Assigned an attendance policy${forEmployee}.`
+
+  const article = /^[aeiou]/i.test(type) ? "an" : "a"
+  return `${eventLabels[row.event]} ${article} ${type.toLowerCase()}${forEmployee}.`
+}
+
 export function presentWorkforceComplianceLogs(
   ids: string[],
   rows: ComplianceHistoryRow[],
@@ -176,6 +206,22 @@ export function presentWorkforceComplianceLogs(
     const effects = group.map(presentEffect)
     const main = effects[0]
     const name = primary.actorName?.trim()
+    const overtimeSubmitted =
+      primary.source === "time-logs" &&
+      group.some(
+        ({ source, event }) => source === "overtime" && event === "SUBMITTED",
+      )
+    const scheduleChanged =
+      primary.source === "policies" &&
+      primary.event === "UPDATED" &&
+      group.some(({ entityType }) => entityType === "AttendancePolicyDay")
+    const summaryDetail = overtimeSubmitted
+      ? "Overtime request also submitted"
+      : scheduleChanged
+        ? "Weekly schedule changed"
+        : primary.source === "policies" && primary.event === "UPDATED"
+          ? main.changes.map(({ field }) => field).join(", ") || null
+          : null
     return [
       {
         id,
@@ -199,12 +245,8 @@ export function presentWorkforceComplianceLogs(
         outcome: "SUCCESS",
         subjectId: primary.subjectId,
         target: { ...main.target, label: primary.employeeName?.trim() || null },
-        message: [
-          `${main.action} ${main.target.type.toLowerCase()}`,
-          primary.employeeName?.trim(),
-        ]
-          .filter(Boolean)
-          .join(" · "),
+        message: describeWorkforceActivity(primary, main.target.type),
+        summaryDetail,
         effects,
         changes: [],
         createdAt: primary.createdAt,

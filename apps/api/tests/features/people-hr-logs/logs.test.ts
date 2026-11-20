@@ -12,6 +12,8 @@ type LogPage = {
   retentionDays: number | null
   events: {
     operationId: string
+    message: string
+    summaryDetail: string | null
     correlationId: string | null
     actor: { id: string; name: string; role: Role; attribution: string }
     effects: {
@@ -148,6 +150,10 @@ test(
       assert.equal(page.retentionDays, null)
       const [operation] = page.events
       assert.equal(operation.operationId, operationId)
+      assert.equal(
+        operation.message,
+        "Created an employee record and Staff login for “Recorded Employee”.",
+      )
       assert.equal(operation.correlationId, null)
       assert.deepEqual(operation.actor, {
         id: admin.id,
@@ -250,5 +256,48 @@ test(
       label: null,
       type: "Team",
     })
+    assert.equal(last.events[0].message, "Deleted the team.")
+
+    const profileEdit = randomUUID()
+    await prisma.workforceManagementChange.create({
+      data: {
+        ...workforce,
+        id: undefined,
+        operationId: profileEdit,
+        action: "PROFILE_UPDATED",
+        changedFields: ["contactNumber", "startDate"],
+        changes: {
+          contactNumber: {
+            before: "PRIVATE-OLD-CONTACT",
+            after: "PRIVATE-NEW-CONTACT",
+          },
+        },
+      },
+    })
+    const [profile] = (await list(`?operationId=${profileEdit}`)).events
+    assert.equal(
+      profile.message,
+      "Updated the employee profile for “Recorded Employee”.",
+    )
+    assert.equal(profile.summaryDetail, "Contact number, Start date")
+
+    const newHead = randomUUID()
+    await prisma.workforceManagementChange.create({
+      data: {
+        actorAccountId: admin.id,
+        actorRoleAtTime: "ADMIN",
+        operationId: newHead,
+        subjectId: department.id,
+        subjectType: "DEPARTMENT",
+        action: "HEAD_CHANGED",
+        origin: "DEPARTMENT_MANAGEMENT",
+        changedFields: ["headId"],
+        changes: { headId: { before: null, after: staff.id } },
+      },
+    })
+    assert.equal(
+      (await list(`?operationId=${newHead}`)).events[0].message,
+      "Appointed a Department Head for “People & HR test department”.",
+    )
   },
 )

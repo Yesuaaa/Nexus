@@ -16,7 +16,8 @@ for (const width of [1440, 390]) {
       "**/api/departments/project-management-directory",
       (route) => route.fulfill({ json: { departments: [] } }),
     )
-    const message = "Changed task status · Prepare artwork"
+    const message = "Moved task “Prepare artwork” to Done."
+    const summaryDetail = "Project “Brand refresh” · In progress → Done"
     let deny = false
     await page.route("**/api/project-management-logs?**", (route) => {
       const query = new URL(route.request().url()).searchParams
@@ -44,6 +45,7 @@ for (const width of [1440, 390]) {
                   type: "Task",
                 },
                 message,
+                summaryDetail,
                 changes: [
                   { field: "Status", before: "In progress", after: "Done" },
                 ],
@@ -95,12 +97,21 @@ for (const width of [1440, 390]) {
     const openDetails = page.getByRole("button", {
       name: `View log: ${message}`,
     })
+    const summary = page.getByRole("cell").filter({ hasText: message })
+    await expect(
+      summary.getByText(summaryDetail, { exact: true }),
+    ).toBeVisible()
+    await expect(
+      summary.getByText("TASK_STATUS_CHANGED", { exact: true }),
+    ).toHaveCount(0)
     await openDetails.click()
     await expect(
       page.getByRole("heading", { name: "Log details" }),
     ).toBeVisible()
     await expect(page.getByText("Brand refresh", { exact: true })).toBeVisible()
-    await expect(page.getByText("In progress → Done")).toBeVisible()
+    await expect(
+      page.getByRole("dialog").getByText("In progress → Done"),
+    ).toBeVisible()
     await expect(page.getByText("project-trace")).toBeVisible()
     expect(
       await page.evaluate(

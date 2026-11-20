@@ -13,6 +13,7 @@ import type {
 configureRegressionTest()
 test.skip(live, "Attendance administration uses isolated API fixtures")
 const stamp = "2026-11-14T08:00:00Z"
+const leaveLogMessage = "Approved a leave request for Workforce Employee."
 
 for (const width of [1440, 390]) {
   test(`Workforce Compliance uses the shared log viewer at ${width}px`, async ({
@@ -43,7 +44,8 @@ for (const width of [1440, 390]) {
                   role: "SUPERADMIN",
                   attribution: "CURRENT",
                 },
-                message: "Approved leave request",
+                message: leaveLogMessage,
+                summaryDetail: null,
                 target: {
                   id: "leave-1",
                   type: "Leave request",
@@ -114,8 +116,11 @@ for (const width of [1440, 390]) {
     ).toBeVisible()
     await page.getByLabel("Filter by area").click()
     await page.getByRole("option", { name: "Leave", exact: true }).click()
+    await expect(
+      page.getByRole("cell").getByText(leaveLogMessage, { exact: true }),
+    ).toBeVisible()
     await page
-      .getByRole("button", { name: "View log: Approved leave request" })
+      .getByRole("button", { name: `View log: ${leaveLogMessage}` })
       .click()
     const drawer = page.getByRole("dialog")
     await expect(

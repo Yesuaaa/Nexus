@@ -9,8 +9,9 @@ import {
 configureRegressionTest()
 test.skip(live, "Uses isolated People & HR history fixtures")
 
-const message = "Created · Staff account"
-const independentMessage = "Changed status · Employee"
+const message =
+  "Created an employee record and Staff login for “Staff account”."
+const independentMessage = "Changed the HR status to Inactive."
 const log: AuditLog = {
   id: "operation-1",
   operationId: "operation-1",
@@ -29,6 +30,7 @@ const log: AuditLog = {
   target: { id: "staff-1", label: "Staff account", type: "Staff login" },
   subjectId: "staff-1",
   message,
+  summaryDetail: null,
   effects: [
     {
       id: "account-change",
@@ -142,6 +144,9 @@ for (const width of [1440, 390]) {
     )
     await expect(
       page.getByText("3 recorded changes", { exact: true }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole("cell").getByText(independentMessage, { exact: true }),
     ).toBeVisible()
     await page.getByRole("button", { name: `View log: ${message}` }).click()
     const details = page.getByRole("dialog")

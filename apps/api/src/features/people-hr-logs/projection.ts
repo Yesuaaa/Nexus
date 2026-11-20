@@ -56,6 +56,7 @@ const actions: Record<string, string> = {
   TITLE_CLEARED: "Cleared former Head title",
   ARCHIVED: "Archived",
   DELETED: "Deleted",
+  ROLE_CHANGED: "Changed account role",
 }
 
 type ChangeValue = string | boolean | null
@@ -134,6 +135,82 @@ function presentEffect(row: HistoryRow) {
   }
 }
 
+const employeeStatusLabels: Record<string, string> = {
+  ACTIVE: "Active",
+  INACTIVE: "Inactive",
+  ON_LEAVE: "On leave",
+}
+
+function describePeopleHrOperation(
+  primary: HistoryRow,
+  effects: ReturnType<typeof presentEffect>[],
+) {
+  const main = effects[0]
+  const { type, label } = main.target
+  const name = label ? `“${label}”` : null
+  const record = name
+    ? `${type.toLowerCase()} ${name}`
+    : `the ${type.toLowerCase()}`
+  const forName = name ? ` for ${name}` : ""
+  const transition = (field: string) => {
+    const change = main.changes.find((change) => change.field === field)
+    return change && "before" in change && "after" in change
+      ? change
+      : undefined
+  }
+  switch (primary.action) {
+    case "CREATED":
+      if (
+        primary.subjectType === "ACCOUNT" &&
+        effects.some(
+          (effect) =>
+            effect.target.type === "Employee" && effect.action === "Created",
+        )
+      )
+        return `Created an employee record and Staff login${forName}.`
+      return `Created ${record}.`
+    case "PROFILE_UPDATED":
+      return primary.subjectType === "EMPLOYEE"
+        ? `Updated the employee profile${forName}.`
+        : `Updated details for ${record}.`
+    case "STATUS_CHANGED": {
+      if (main.action === "Revoked login sessions")
+        return `Revoked Staff login sessions${forName}.`
+      const enabled = transition("Login enabled")?.after
+      if (typeof enabled === "boolean")
+        return `${enabled ? "Enabled" : "Disabled"} Staff login${forName}.`
+      const status = transition("HR status")?.after
+      if (
+        typeof status === "string" &&
+        Object.hasOwn(employeeStatusLabels, status)
+      )
+        return `Changed the HR status${forName} to ${employeeStatusLabels[status]}.`
+      return `Changed the status of ${record}.`
+    }
+    case "ASSIGNMENT_CHANGED":
+      return `Changed membership assignments for ${record}.`
+    case "HEAD_CHANGED":
+    case "LEAD_CHANGED": {
+      const head = primary.action === "HEAD_CHANGED"
+      const role = head ? "Department Head" : "Team Lead"
+      const assignment = transition(head ? "Head ID" : "Team Lead ID")
+      if (assignment?.after === null) return `Removed the ${role}${forName}.`
+      if (assignment?.before === null) return `Appointed a ${role}${forName}.`
+      return `${assignment ? "Replaced" : "Changed"} the ${role}${forName}.`
+    }
+    case "TEMPORARY_HEAD_CHANGED":
+      return `Changed the temporary Department Head assignment${forName}.`
+    case "TITLE_CLEARED":
+      return `Cleared the former Department Head title${forName}.`
+    case "ARCHIVED":
+      return `Archived ${record}.`
+    case "DELETED":
+      return `Deleted ${record}.`
+    default:
+      return `${main.action} for ${record}.`
+  }
+}
+
 const primaryTypes: Record<string, HistoryRow["subjectType"]> = {
   DEPARTMENT_MANAGEMENT: "DEPARTMENT",
   TEAM_MANAGEMENT: "TEAM",
@@ -155,12 +232,26 @@ export function presentPeopleHrOperations(ids: string[], rows: HistoryRow[]) {
       (group.some((row) => row.subjectType === "ACCOUNT")
         ? "ACCOUNT"
         : "EMPLOYEE")
-    const primary =
+    const preferred =
       group.find((row) => row.subjectType === primaryType) ?? first
+    const primary =
+      preferred.subjectType === "ACCOUNT" &&
+      preferred.action === "PROFILE_UPDATED"
+        ? (group.find(
+            (row) =>
+              row.subjectType === "EMPLOYEE" &&
+              row.action === "PROFILE_UPDATED",
+          ) ?? preferred)
+        : preferred
     const ordered = [primary, ...group.filter((row) => row !== primary)]
     const effects = ordered.map(presentEffect)
     const main = effects[0]
-    const recordName = main.target.label ?? main.target.id
+    const fields = [...new Set(main.changes.map(({ field }) => field))]
+    const summaryDetail =
+      primary.action === "PROFILE_UPDATED" ||
+      primary.action === "ASSIGNMENT_CHANGED"
+        ? fields.join(", ") || null
+        : null
     return [
       {
         id: operationId,
@@ -179,7 +270,8 @@ export function presentPeopleHrOperations(ids: string[], rows: HistoryRow[]) {
         },
         target: main.target,
         subjectId: primary.subjectId,
-        message: `${main.action} · ${recordName}`,
+        message: describePeopleHrOperation(primary, effects),
+        summaryDetail,
         effects,
         changes: [],
         correlationId: null,

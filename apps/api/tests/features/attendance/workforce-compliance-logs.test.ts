@@ -7,6 +7,8 @@ import { startPgliteApp } from "../../support/pglite-app.js"
 
 type Log = {
   operationId?: string
+  message: string
+  summaryDetail: string | null
   correlationId: string | null
   source: string
   event: string
@@ -139,6 +141,10 @@ test(
     assert.equal(legacy.operationId, undefined)
     assert.equal(legacy.correlationId, null)
     assert.equal(legacy.actor.attribution, "UNKNOWN")
+    assert.equal(
+      legacy.message,
+      "Assigned an attendance policy for Workforce Employee.",
+    )
 
     const clockIn = await request("/attendance/me/clock-in", staff, {})
     assert.equal(clockIn.status, 201, await clockIn.clone().text())
@@ -155,6 +161,14 @@ test(
     assert.equal(
       overtime.events[0].correlationId,
       clockOut.headers.get("X-Correlation-ID"),
+    )
+    assert.equal(
+      overtime.events[0].message,
+      "Recorded clock-out for Workforce Employee.",
+    )
+    assert.equal(
+      overtime.events[0].summaryDetail,
+      "Overtime request also submitted",
     )
     assert.deepEqual(
       overtime.events[0].effects.map(({ target }) => target.type),
@@ -188,6 +202,10 @@ test(
     assert.equal(leaveLogs.total, 2)
     const approval = leaveLogs.events.find(({ event }) => event === "APPROVED")
     assert.ok(approval)
+    assert.equal(
+      approval.message,
+      "Approved a leave request for Workforce Employee.",
+    )
     assert.equal(
       approval.correlationId,
       decision.headers.get("X-Correlation-ID"),

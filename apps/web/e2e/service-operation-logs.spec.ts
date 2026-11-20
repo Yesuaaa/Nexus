@@ -14,6 +14,8 @@ for (const width of [1440, 390])
       "Accepted a service request for department review: Website Development (SR-1001)."
     const failureMessage =
       "Failed while updating workload capacity for Jordan Reyes because the database operation timed out."
+    const successDetail = "Status · Submitted → Under Review"
+    const failureDetail = "Attempted change · Scheduled hours · 40 → 32"
     await page.setViewportSize({ width, height: 1000 })
     await restoreSession(page, "SUPERADMIN")
     await page.route("**/api/administrative-requests?**", (route) =>
@@ -50,6 +52,7 @@ for (const width of [1440, 390])
                       attribution: "RECORDED",
                     },
                     message: successMessage,
+                    summaryDetail: successDetail,
                     target: {
                       id: "request-1",
                       type: "Service request",
@@ -90,6 +93,7 @@ for (const width of [1440, 390])
                       attribution: "RECORDED",
                     },
                     message: failureMessage,
+                    summaryDetail: failureDetail,
                     target: {
                       id: "employee-1",
                       type: "Staff capacity",
@@ -161,15 +165,21 @@ for (const width of [1440, 390])
         "Status",
         "View",
       ])
-    for (const [message, status] of [
-      [successMessage, "Success"],
-      [failureMessage, "Failed"],
+    for (const [message, status, detail, event] of [
+      [successMessage, "Success", successDetail, "REQUEST_ACCEPTED"],
+      [failureMessage, "Failed", failureDetail, "API_FAILURE"],
     ]) {
       const cells = logTable
         .getByRole("row")
         .filter({ hasText: message })
         .getByRole("cell")
       await expect(cells.first()).toContainText(message)
+      await expect(
+        cells.first().getByText(detail, { exact: true }),
+      ).toBeVisible()
+      await expect(cells.first().getByText(event, { exact: true })).toHaveCount(
+        0,
+      )
       await expect(cells.nth(4)).toHaveText(status)
     }
     await page
@@ -183,7 +193,9 @@ for (const width of [1440, 390])
     await expect(
       page.getByText("Website Development (SR-1001)", { exact: true }),
     ).toBeVisible()
-    await expect(page.getByText("Submitted → Under Review")).toBeVisible()
+    await expect(
+      page.getByRole("dialog").getByText("Submitted → Under Review"),
+    ).toBeVisible()
     await expect(
       page.getByRole("link", { name: "View service request" }),
     ).toHaveAttribute("href", "/module/service-operations?request=request-1")
@@ -193,7 +205,7 @@ for (const width of [1440, 390])
       .click()
     await expect(page.getByText("Why it failed")).toBeVisible()
     await expect(page.getByText("What was attempted")).toBeVisible()
-    await expect(page.getByText("40 → 32")).toBeVisible()
+    await expect(page.getByRole("dialog").getByText("40 → 32")).toBeVisible()
     await expect(
       page.getByText(
         "The database operation timed out before it could finish.",

@@ -36,10 +36,33 @@ function rowClass(_log: AuditLog, _index: number, isLast: boolean) {
 
 const logKey = (log: AuditLog) => log.id
 
+function AuditLogSummaryCell({ log }: { log: AuditLog }) {
+  const count = log.effects?.length ?? 0
+  const changeCount = count > 1 ? `${count} recorded changes` : null
+  const detail = [log.summaryDetail, changeCount].filter(Boolean).join(" · ")
+
+  return (
+    <ResponsiveDataTableCell className="grid min-w-0 gap-1 @max-[850px]:col-span-2">
+      <strong
+        className="line-clamp-2 min-w-0 font-medium wrap-anywhere text-foreground"
+        title={log.message}
+      >
+        {log.message}
+      </strong>
+      {detail && (
+        <span className="truncate text-[11px] text-[#738096]" title={detail}>
+          {detail}
+        </span>
+      )}
+    </ResponsiveDataTableCell>
+  )
+}
+
 export function matchesAuditLogSearch(log: AuditLog, query: string) {
   const needle = query.trim().toLocaleLowerCase()
   return [
     log.message,
+    log.summaryDetail,
     log.target.label,
     log.target.type,
     ...log.changes.flatMap(({ field, before, after }) => [
@@ -165,16 +188,7 @@ export function AuditLogsTable({
           className="relative min-w-0"
           renderRow={(log) => (
             <>
-              <ResponsiveDataTableCell className="grid min-w-0 gap-1 @max-[850px]:col-span-2">
-                <strong className="min-w-0 truncate font-medium text-foreground @max-[850px]:whitespace-normal">
-                  {log.message}
-                </strong>
-                <span className="truncate text-[11px] text-[#738096]">
-                  {log.effects && log.effects.length > 1
-                    ? `${log.effects.length} recorded changes`
-                    : (log.action ?? log.event)}
-                </span>
-              </ResponsiveDataTableCell>
+              <AuditLogSummaryCell log={log} />
               <ResponsiveDataTableCell className="flex min-w-0 items-center gap-2.5 @max-[850px]:col-start-1">
                 <Avatar name={log.actor.name} className="size-8" fallback="S" />
                 <div className="grid min-w-0 gap-0.5">

@@ -6,6 +6,8 @@ The viewer combines the existing attendance audit and leave decision histories, 
 
 New writes record an operation ID and, for authenticated HTTP requests, the server correlation ID and actor role in the same business transaction. For example, a clock-out and the overtime it automatically submits share an operation. Older rows without grouping metadata appear individually. Older actor roles can be unavailable. Current actor and employee names are labeled accordingly.
 
+The **What happened** column identifies clock-ins, clock-outs, break starts and ends, policy assignments, and request decisions. It calls out overtime submitted during the same operation and weekly schedule changes when recorded.
+
 The API projects approved values such as statuses, attendance times, schedule settings, and assignment dates. Policy name changes appear as field names. Free-text reasons and review notes, leave types and dates, original session snapshots, private contact fields, request keys, and raw data are excluded from the response and search. API incidents are outside this viewer's scope.
 
 Deploy the additive `20261120120000_workforce_compliance_log_context` migration before the application update. The existing audit and leave history protection triggers remain in effect.

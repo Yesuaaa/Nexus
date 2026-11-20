@@ -35,6 +35,7 @@ export type AuditLog = {
   actorRole: string | null
   actor: AuditLogActor
   message: string
+  summaryDetail?: string | null
   target: {
     id: string | null
     type: string | null
