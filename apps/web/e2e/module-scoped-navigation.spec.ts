@@ -76,9 +76,12 @@ for (const role of ["SUPERADMIN"] as const) {
       })
       .click()
     await expect(page).toHaveURL("/project-management/overview")
-    await mainMenu(page)
-      .getByRole("button", { name: "Project Workspace", exact: true })
-      .click()
+    const projectWorkspaceGroup = mainMenu(page).getByRole("button", {
+      name: "Project Workspace",
+      exact: true,
+    })
+    if ((await projectWorkspaceGroup.getAttribute("aria-expanded")) !== "true")
+      await projectWorkspaceGroup.click()
     await mainMenu(page)
       .getByRole("link", {
         name: "Project Workspace Management",
@@ -130,7 +133,7 @@ for (const role of ["SUPERADMIN"] as const) {
     await expect(page).toHaveURL(/\/project-management\/overview$/)
     await expect(
       page.getByRole("heading", {
-        name: "Project Workspace Overview",
+        name: "Project Overview",
         exact: true,
       }),
     ).toBeVisible()
@@ -139,9 +142,7 @@ for (const role of ["SUPERADMIN"] as const) {
         .getByRole("navigation", { name: "Breadcrumb" })
         .getByText("Overview"),
     ).toBeVisible()
-    await expect(
-      page.getByText("Project metrics are not included in Phase 1."),
-    ).toBeVisible()
+    await expect(page.locator('dl[aria-label="Project figures"]')).toBeVisible()
 
     await menu
       .getByRole("link", { name: "Switch Workspace", exact: true })

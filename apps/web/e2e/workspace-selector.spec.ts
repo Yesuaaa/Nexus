@@ -222,6 +222,25 @@ for (const width of [1440, 390]) {
   })
 }
 
+test("anonymous users cannot open the selector or a dynamic module route", async ({
+  page,
+}) => {
+  for (const path of ["/module", "/module/project-management"]) {
+    await page.goto(path)
+    await expect(page).toHaveURL(/\/login$/)
+    await expect(
+      page.getByRole("heading", { name: "Welcome Back" }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole("main", { name: "Workspace selector" }),
+    ).toHaveCount(0)
+    await expect(
+      page.getByRole("main", { name: "Administrative workspace" }),
+    ).toHaveCount(0)
+  }
+  expect(await storedTokens(page)).toEqual([null, null])
+})
+
 for (const width of [390, 768, 1440]) {
   for (const role of ["STAFF", "ADMIN", "SUPERADMIN", "USER"] as const) {
     test(`${role} login uses its correct shell at ${width}px`, async ({
