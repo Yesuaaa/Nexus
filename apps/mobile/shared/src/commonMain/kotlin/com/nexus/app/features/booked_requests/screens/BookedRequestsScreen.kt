@@ -142,7 +142,7 @@ fun BookedRequestsScreen(
                 item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterMenu(if (state.filters.status.isEmpty()) "All statuses" else statusLabel(state.filters.status),
                         listOf("" to "All statuses") + listOf("SUBMITTED", "UNDER_REVIEW", "AWAITING_CLIENT_INFO",
-                            "READY_FOR_QUOTATION", "CLOSED", "CANCELLED").map { it to statusLabel(it) },
+                            "READY_FOR_QUOTATION", "ACTIVATED", "CONCLUDED", "CLOSED", "CANCELLED").map { it to statusLabel(it) },
                         modifier = Modifier.weight(1f), onSelect = viewModel::status)
                     FilterMenu(if (state.filters.sortOrder == "desc") "Newest first" else "Oldest first",
                         listOf("desc" to "Newest first", "asc" to "Oldest first"), modifier = Modifier.weight(1f), onSelect = viewModel::sort)

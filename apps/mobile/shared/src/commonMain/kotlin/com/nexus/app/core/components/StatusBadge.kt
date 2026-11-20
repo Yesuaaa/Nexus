@@ -29,6 +29,16 @@ fun StatusBadge(
             NexusColors.StatusReviewText,
             "Under review"
         )
+        "ACTIVATED" -> Triple(
+            NexusColors.StatusReviewBg,
+            NexusColors.StatusReviewText,
+            "Activated"
+        )
+        "CONCLUDED" -> Triple(
+            NexusColors.StatusClosedBg,
+            NexusColors.StatusClosedText,
+            "Concluded"
+        )
         "CLOSED", "COMPLETED" -> Triple(
             NexusColors.StatusClosedBg,
             NexusColors.StatusClosedText,

@@ -21,6 +21,9 @@ import kotlinx.coroutines.sync.withLock
 
 data class ConversationsState(
     val archived: Boolean = false, val page: ConversationPage = ConversationPage(),
+
+
+    val meetingBusy: Boolean = false, val meetingError: String? = null,
     val selectedBookingId: String? = null,
     val selectedWorkflow: com.nexus.app.features.workflow.model.ClientWorkflow? = null,
     val loading: Boolean = false, val error: String? = null, val id: String? = null,
@@ -104,12 +107,37 @@ class ConversationsViewModel(private val repository: ClientCommunicationReposito
                     }
                 }
             } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { mutable.update { it.copy(loading = false, error = e.message) } }
+            catch (e: Exception) {
+                mutable.update { it.copy(loading = false, error = e.message ?: "Unable to load conversations. Please try again.") }
+            }
+        }
+    }
+    fun clearMeetingError() { mutable.update { it.copy(meetingError = null) } }
+    suspend fun requestMeetingReschedule(meeting: ConversationMeeting, startsAt: String, note: String): Boolean {
+        val current = state.value
+        val id = current.id ?: return false
+        val history = current.history ?: return false
+        if (current.meetingBusy || !history.canSend || history.archived || meeting.status != "SCHEDULED" || meeting.proposedStartsAt != null) return false
+        mutable.update { it.copy(meetingBusy = true, meetingError = null) }
+        return try {
+            val saved = repository.requestMeetingReschedule(id, meeting, startsAt, note)
+            if (state.value.id == id) mutable.update { latest ->
+                latest.copy(history = latest.history?.let { loaded ->
+                    loaded.copy(meetings = loaded.meetings.map { row -> if (row.id == saved.id) saved else row })
+                })
+            }
+            true
+        } catch (e: CancellationException) { throw e }
+        catch (e: Exception) {
+            if (state.value.id == id) mutable.update { it.copy(meetingError = e.message ?: "Unable to request a reschedule. Please retry.") }
+            false
+        } finally {
+            if (state.value.id == id) mutable.update { it.copy(meetingBusy = false) }
         }
     }
     fun open(id: String) {
         streamJob?.cancel()
-        mutable.update { if (it.id == id) it else it.copy(id = id, selectedBookingId = null, selectedWorkflow = null, reconnecting = false, history = null, attachments = emptyList(), attachmentError = null, messages = emptyList(), pending = emptyList(), error = null) }
+        mutable.update { if (it.id == id) it else it.copy(id = id, meetingBusy = false, meetingError = null, selectedBookingId = null, selectedWorkflow = null, reconnecting = false, history = null, attachments = emptyList(), attachmentError = null, messages = emptyList(), pending = emptyList(), error = null) }
         if (foreground) connect()
     }
     fun selectBooking(bookingId: String) {

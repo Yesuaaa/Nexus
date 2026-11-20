@@ -44,6 +44,22 @@ fun ChatAvatar(name: String, image: String? = null, modifier: Modifier = Modifie
 }
 
 @Composable
+fun ChatMessageBubble(own: Boolean, deleted: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
+    Surface(
+        modifier = Modifier.widthIn(max = 300.dp),
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp,
+            bottomEnd = if (own) 6.dp else 16.dp, bottomStart = if (own) 16.dp else 6.dp),
+        color = if (deleted) Color(0xFFF6F8FC) else if (own) ConversationStyle.Navy else Color(0xFFDFE4EB),
+        contentColor = if (deleted) ConversationStyle.Muted else if (own) Color.White else ConversationStyle.Ink,
+        border = if (deleted) BorderStroke(1.dp, Color(0xFFD8E1EF)) else null,
+    ) {
+        ProvideTextStyle(LocalTextStyle.current.copy(fontSize = 14.sp, lineHeight = 21.sp)) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
+        }
+    }
+}
+
+@Composable
 fun WorkflowPill(label: String, complete: Boolean = false) {
     Surface(color = if (complete) Color(0xFFEAF7EF) else Color(0xFFFFF6E7), shape = RoundedCornerShape(4.dp)) {
         Text(label, Modifier.padding(horizontal = 6.dp, vertical = 3.dp), fontSize = 11.sp, lineHeight = 13.sp,
@@ -86,7 +102,7 @@ fun WorkflowDocumentCards(workflow: ClientWorkflow, onFile: (WorkflowFile) -> Un
         DocumentFrame("Payment requirement", Icons.Outlined.CreditCard, if (verified) "Verified" else humanStatus(payment.status), verified) {
             Text((if (payment.currency == "PHP") "\u20B1" else payment.currency + " ") + displayAmount(payment.amount),
                 color = ConversationStyle.Navy, fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold)
-            Text("Uploaded payment proof is reviewed by the department head or assigned verifier before project activation.", fontSize = 14.sp, lineHeight = 21.sp, color = ConversationStyle.Ink)
+            Text("Sandbox card checkout confirms payment automatically. Uploaded payment proof is reviewed by the department head or assigned verifier before project activation.", fontSize = 14.sp, lineHeight = 21.sp, color = ConversationStyle.Ink)
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).background(ConversationStyle.Notice).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Outlined.Info, null, Modifier.size(16.dp), tint = ConversationStyle.Navy)
                 Text(if (verified) "Payment has been verified. Project activation will wait until the required agreement is approved too." else "Payment can be completed now. Project activation will wait until the required agreement is approved too.",
@@ -97,6 +113,15 @@ fun WorkflowDocumentCards(workflow: ClientWorkflow, onFile: (WorkflowFile) -> Un
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Reference", fontSize = 12.sp, color = ConversationStyle.Muted)
                     Text(it, fontSize = 12.sp, lineHeight = 18.sp, color = ConversationStyle.Ink)
+                }
+            }
+            if (verified && payment.reference?.startsWith("XENDIT-SANDBOX-") == true) {
+                Surface(color = Color(0xFFECFDF3), shape = RoundedCornerShape(8.dp)) {
+                    Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Outlined.CheckCircle, null, Modifier.size(18.dp), tint = Color(0xFF067647))
+                        Text("Payment successful. Your sandbox card payment was automatically verified.",
+                            fontSize = 12.sp, lineHeight = 18.sp, color = Color(0xFF067647))
+                    }
                 }
             }
             workflow.files.firstOrNull { it.id == payment.proofFileId }?.let { file -> FileAttachmentCard(file, { onFile(file) }) }
@@ -170,7 +195,7 @@ fun workflowProgress(value: String): Float = when (value) {
     else -> 0f
 }
 
-private fun displayAmount(value: String): String {
+internal fun displayAmount(value: String): String {
     val parts = value.split('.', limit = 2)
     return parts[0].reversed().chunked(3).joinToString(",").reversed() + "." + (parts.getOrNull(1) ?: "00").padEnd(2, '0')
 }

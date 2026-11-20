@@ -436,7 +436,10 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                         CalendarScreen(
                             onBooking = { navController.switchTab(Routes.SERVICES) },
                             onEvent = { event ->
-                                val targetId = event.href.substringAfterLast('/').substringAfter("request=")
+                                val path = event.href.substringBefore('?').substringBefore('#').trimEnd('/')
+                                val targetId = if (path == "/messages") {
+                                    io.ktor.http.parseQueryString(event.href.substringAfter('?', "").substringBefore('#'))["request"].orEmpty()
+                                } else path.substringAfterLast('/')
                                 if (targetId.matches(Regex("[A-Za-z0-9_-]{1,80}"))) {
                                     when (event.type) {
                                         "milestone" -> navController.navigate("projects/$targetId/overview")
@@ -484,9 +487,17 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                     composable(Routes.PROJECT_CHAT) { entry ->
                         val id = entry.arguments?.getString("projectId") ?: return@composable
                         ProjectChatScreen(id, user?.id.orEmpty(), onBack = { navController.popBackStack() },
-                            onDeliverables = { navController.navigate("projects/$id/overview?tab=DELIVERABLES") })
+                            onDeliverables = { navController.navigate("projects/$id/overview?tab=DELIVERABLES") },
+                            onOpenProject = { navController.navigate("projects/$it/overview") })
                     }
-                    composable(Routes.DASHBOARD) { DashboardScreen() }
+                    composable(Routes.DASHBOARD) {
+                        DashboardScreen(
+                            onServices = { navController.switchTab(Routes.SERVICES) },
+                            onRequests = { navController.switchTab(Routes.BOOKED_REQUESTS) },
+                            onProjects = { navController.switchTab(Routes.PROJECTS) },
+                            onCalendar = { navController.switchTab(Routes.CALENDAR) },
+                        )
+                    }
                     composable(Routes.SERVICES) {
                         ServicesScreen(
                             onBookedRequests = { navController.switchTab(Routes.BOOKED_REQUESTS) },

@@ -15,6 +15,8 @@ import io.ktor.client.plugins.timeout
 import io.ktor.http.*
 import io.ktor.utils.io.*
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.*
+
 
 class CommunicationException(val status: Int, message: String) : Exception(message)
 @Serializable private data class ErrorBody(val error: String = "Request failed. Please retry.")
@@ -32,7 +34,16 @@ class ClientCommunicationRepository(private val client: HttpClient) {
             parameter("view", if (archived) "archived" else "active")
             before?.let { parameter("before", it) }
         }.checked()
-    suspend fun history(id: String, before: String? = null, bookingId: String? = null): History = client.get(ApiEndpoints.conversationMessages(id)) {
+    suspend fun requestMeetingReschedule(id: String, meeting: ConversationMeeting, startsAt: String, note: String): ConversationMeeting =
+        client.patch("/api/request-conversations/$id/meetings/${meeting.id}") {
+            setBody(buildJsonObject {
+                put("type", "REQUEST_RESCHEDULE")
+                put("expectedVersion", meeting.version)
+                put("startsAt", startsAt)
+                put("note", note.trim())
+            })
+        }.checked<MeetingResponse>().meeting
+    suspend fun history(id: String, before: String? = null, bookingId: String? = null): History = client.get("/api/request-conversations/$id") {
         before?.let { parameter("before", it) }
         bookingId?.let { parameter("booking", it) }
     }.checked()

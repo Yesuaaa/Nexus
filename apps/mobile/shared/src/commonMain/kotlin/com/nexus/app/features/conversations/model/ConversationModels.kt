@@ -15,12 +15,13 @@ import kotlinx.serialization.Serializable
     val id: String, val title: String = "", val status: String = "",
     val service: ServiceName = ServiceName(), val acceptedDepartment: Department? = null,
     val lastMessage: ChatMessage? = null, val unreadCount: Int = 0, val bookings: List<ConversationBooking> = emptyList(),
-    val updatedAt: String = ""
+    val updatedAt: String = "", val referenceNumber: String? = null, val client: Person = Person()
 )
 @Serializable data class ConversationPage(val conversations: List<ConversationRow> = emptyList(), val nextCursor: String? = null, val unreadCount: Int = 0)
 @Serializable data class ConversationInfo(val head: Person? = null, val department: Department? = null, val bookings: List<ConversationBooking> = emptyList())
 @Serializable data class History(val messages: List<ChatMessage> = emptyList(), val nextCursor: String? = null,
-    val selectedBookingId: String? = null, val archived: Boolean = true, val canSend: Boolean = false, val conversation: ConversationInfo? = null)
+    val selectedBookingId: String? = null, val archived: Boolean = true, val canSend: Boolean = false, val conversation: ConversationInfo? = null,
+    val meetings: List<ConversationMeeting> = emptyList())
 @Serializable data class SendMessage(val body: String, val clientMessageId: String, val bookingId: String? = null)
 @Serializable data class MessageResponse(val message: ChatMessage)
 data class PendingMessage(val clientMessageId: String, val body: String, val failed: Boolean = false, val failureReason: String? = null, val bookingId: String? = null)
@@ -41,3 +42,13 @@ fun conversationTimeline(messages: List<ChatMessage>, attachments: List<Conversa
     (messages.map { ConversationEntry("message-${it.id}", it.createdAt, message = it) } +
         attachments.distinctBy { it.requestId to it.file.id }.map { ConversationEntry("file-${it.requestId}-${it.file.id}", it.file.createdAt, attachment = it) })
         .sortedWith(compareBy<ConversationEntry> { it.createdAt }.thenBy { it.id })
+
+@Serializable data class MeetingBookingDetails(val id: String, val referenceNumber: String? = null, val service: ServiceName = ServiceName())
+@Serializable data class MeetingBooking(val booking: MeetingBookingDetails)
+@Serializable data class ConversationMeeting(
+    val id: String, val startsAt: String, val endsAt: String, val location: String,
+    val notes: String = "", val status: String, val version: Int,
+    val proposedStartsAt: String? = null, val rescheduleNote: String? = null,
+    val bookings: List<MeetingBooking> = emptyList(),
+)
+@Serializable data class MeetingResponse(val meeting: ConversationMeeting)
