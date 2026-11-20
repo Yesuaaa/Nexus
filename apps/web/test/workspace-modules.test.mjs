@@ -68,7 +68,7 @@ test("a current department head receives Service Operations without changing Sta
       }),
     ),
     [
-      ["Service Operations", "/request-inbox"],
+      ["Service Operations", "/request-inbox/overview"],
       ["Project Management", "/project-workspace"],
       ["Workforce Compliance", "/attendance/overview"],
       ["Billing & Finance", null],

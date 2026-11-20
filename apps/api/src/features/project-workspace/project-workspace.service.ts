@@ -1,4 +1,13 @@
 import { randomUUID } from "node:crypto"
+import { isDeepStrictEqual } from "node:util"
+import {
+  auditLabel,
+  projectAuditStatus,
+  type ProjectLogEvent,
+} from "../project-management-logs/events.js"
+import { writeProjectLog } from "../project-management-logs/writer.js"
+import { writeServiceLog } from "../service-operation-logs/log-writer.js"
+import { auditCode } from "../service-operation-logs/audit-context.js"
 import {
   Prisma,
   Role,
@@ -104,12 +113,11 @@ export async function saveProjectPlan(
       where: { id: acceptedDepartmentId ?? "", headId: userId },
       select: { id: true },
     })
+    const previousPlan = readWorkPlan(project.workPlan)
     const previousTasks = new Map(
-      (
-        readWorkPlan(project.workPlan)?.phases.flatMap(
-          (phase) => phase.tasks,
-        ) ?? []
-      ).map((task) => [task.id, task]),
+      (previousPlan?.phases.flatMap((phase) => phase.tasks) ?? []).map(
+        (task) => [task.id, task],
+      ),
     )
     const assignedIds: string[] = []
     const nextTaskIds = new Set(
@@ -174,6 +182,33 @@ export async function saveProjectPlan(
       "WORKSPACE_TASK_UPDATED",
       "Updated the project phases and task plan.",
     )
+    if (!isDeepStrictEqual(previousPlan, plan)) {
+      const previousPhases = previousPlan?.phases ?? []
+      const tasks = plan.phases.flatMap(({ tasks }) => tasks)
+      const editedTasks = tasks.filter(
+        (task) =>
+          previousTasks.has(task.id) &&
+          !isDeepStrictEqual(previousTasks.get(task.id), task),
+      ).length
+      const editedPhases = plan.phases.filter((phase, index) => {
+        const previous = previousPhases[index]
+        return (
+          !previous ||
+          previous.id !== phase.id ||
+          previous.title !== phase.title ||
+          !isDeepStrictEqual(
+            previous.tasks.map(({ id }) => id),
+            phase.tasks.map(({ id }) => id),
+          )
+        )
+      }).length
+      await writeProjectLog(tx, userId, project.id, "PLAN_UPDATED", {
+        "Phase count": [previousPhases.length, plan.phases.length],
+        "Task count": [previousTasks.size, tasks.length],
+        "Phases edited": [0, editedPhases],
+        "Tasks edited": [0, editedTasks],
+      })
+    }
   })
   return getProjectWorkspace(userId, workspaceId)
 }
@@ -1286,6 +1321,18 @@ export async function createProjectWorkspaces(userId: string, input: unknown) {
             internal: true,
           },
         })
+        await writeProjectLog(tx, userId, project.id, "WORKSPACE_CREATED", {
+          "Workspace configured": [false, true],
+          "Workspace structure": [
+            null,
+            command.structure === "SEPARATE" ? "Separate" : "Multi-workstream",
+          ],
+          "Phase count": [null, workPlan.phases.length],
+          "Task count": [
+            null,
+            workPlan.phases.flatMap(({ tasks }) => tasks).length,
+          ],
+        })
       }
     }
     return { workspaces }
@@ -1382,6 +1429,7 @@ export async function getProjectWorkspace(userId: string, workspaceId: string) {
 
 type MutableWorkspaceProject = {
   id: string
+  name: string
   status: ProjectStatus
   requestId: string | null
   request: { acceptedDepartmentId: string | null } | null
@@ -1406,6 +1454,7 @@ async function getMutableWorkspace(
               where: scope,
               select: {
                 id: true,
+                name: true,
                 status: true,
                 requestId: true,
                 request: { select: { acceptedDepartmentId: true } },
@@ -1427,6 +1476,7 @@ async function getMutableWorkspace(
           },
           select: {
             id: true,
+            name: true,
             status: true,
             requestId: true,
             request: { select: { acceptedDepartmentId: true } },
@@ -1555,6 +1605,14 @@ export async function assignProjectTeamLead(
         403,
         "Only the department head can manage the full project team",
       )
+    const previousLeads = await tx.projectStaff.findMany({
+      where: { project: projectScope, isTeamLead: true },
+      select: {
+        projectId: true,
+        employeeId: true,
+        employee: { select: { fullName: true } },
+      },
+    })
     await tx.projectStaff.updateMany({
       where: { project: projectScope, isTeamLead: true },
       data: { isTeamLead: false },
@@ -1576,6 +1634,39 @@ export async function assignProjectTeamLead(
         409,
         "Choose an active project team member",
       )
+    const wasSelected = previousLeads.some(
+      (lead) => lead.projectId === projectId && lead.employeeId === employeeId,
+    )
+    for (const lead of previousLeads) {
+      if (lead.projectId === projectId && lead.employeeId === employeeId)
+        continue
+      await writeProjectLog(
+        tx,
+        userId,
+        lead.projectId,
+        "TEAM_LEAD_CHANGED",
+        {
+          "Team lead": [true, false],
+        },
+        { id: lead.employeeId, label: lead.employee.fullName },
+      )
+    }
+    if (!wasSelected) {
+      const employee = await tx.employee.findUniqueOrThrow({
+        where: { id: employeeId },
+        select: { fullName: true },
+      })
+      await writeProjectLog(
+        tx,
+        userId,
+        projectId,
+        "TEAM_LEAD_CHANGED",
+        {
+          "Team lead": [false, true],
+        },
+        { id: employeeId, label: employee.fullName },
+      )
+    }
   })
   return getProjectWorkspace(userId, workspaceId)
 }
@@ -1687,6 +1778,11 @@ export async function renameProjectWorkspace(
     )
       throw new ServiceRequestsError(409, "Archived projects cannot be renamed")
 
+    const previousName = await workspaceName(
+      tx,
+      workspace.groupId,
+      workspace.projects[0].id,
+    )
     if (workspace.groupId) {
       await tx.projectWorkspaceGroup.update({
         where: { id: workspace.groupId },
@@ -1699,6 +1795,7 @@ export async function renameProjectWorkspace(
       })
     }
     for (const project of workspace.projects) {
+      await recordWorkspaceRename(tx, userId, project.id, previousName, name)
       if (project.requestId)
         await writeWorkspaceEvent(
           tx,
@@ -1749,6 +1846,34 @@ async function getAdministrativelyManagedWorkspace(
     if (project) return { groupId: null, projects: [project] }
   }
   throw new ServiceRequestsError(404, "Project workspace not found")
+}
+
+async function workspaceName(
+  tx: Prisma.TransactionClient,
+  groupId: string | null,
+  projectId: string,
+) {
+  const query = { select: { name: true } } as const
+  const record = groupId
+    ? await tx.projectWorkspaceGroup.findUniqueOrThrow({
+        ...query,
+        where: { id: groupId },
+      })
+    : await tx.project.findUniqueOrThrow({ ...query, where: { id: projectId } })
+  return record.name
+}
+
+async function recordWorkspaceRename(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  projectId: string,
+  before: string,
+  after: string,
+) {
+  if (before !== after)
+    await writeProjectLog(tx, userId, projectId, "WORKSPACE_RENAMED", {
+      Name: [auditLabel(before), auditLabel(after)],
+    })
 }
 
 export async function renameProjectWorkspaceAdministratively(
@@ -1930,6 +2055,11 @@ export async function renameProjectWorkspaceAdministratively(
         "Workspace renaming requires existing workflow history for actor attribution",
       )
 
+    const previousName = await workspaceName(
+      tx,
+      workspace.groupId,
+      workspace.projects[0]!.id,
+    )
     if (workspace.groupId) {
       await tx.projectWorkspaceGroup.update({
         where: { id: workspace.groupId },
@@ -1941,7 +2071,8 @@ export async function renameProjectWorkspaceAdministratively(
         data: { name },
       })
     }
-    for (const project of workspace.projects)
+    for (const project of workspace.projects) {
+      await recordWorkspaceRename(tx, userId, project.id, previousName, name)
       if (project.requestId)
         await writeWorkspaceEvent(
           tx,
@@ -1951,6 +2082,7 @@ export async function renameProjectWorkspaceAdministratively(
           "WORKSPACE_RENAMED",
           `Renamed the project workspace to “${name}”.`,
         )
+    }
   })
   return { saved: true }
 }
@@ -1988,6 +2120,12 @@ export async function cancelProjectWorkspace(
         "The project changed while you were cancelling it. Refresh and try again.",
       )
     for (const project of cancellable) {
+      await writeProjectLog(tx, userId, project.id, "WORKSPACE_CANCELLED", {
+        Status: [
+          projectAuditStatus(project.status),
+          projectAuditStatus("CANCELLED"),
+        ],
+      })
       if (project.requestId) {
         await tx.serviceRequest.update({
           where: { id: project.requestId },
@@ -2030,7 +2168,7 @@ export async function updateProjectWorkspaceStatus(
 
     let affected: MutableWorkspaceProject[]
     let status: ProjectStatus
-    let eventType: string
+    let eventType: ProjectLogEvent
     let summary: string
 
     if (action === "ON_HOLD") {
@@ -2070,6 +2208,7 @@ export async function updateProjectWorkspaceStatus(
         where: { id: { in: workspace.projects.map(({ id }) => id) } },
         select: {
           id: true,
+          name: true,
           workPlan: true,
           milestones: { select: { deliveryStatus: true } },
         },
@@ -2133,11 +2272,36 @@ export async function updateProjectWorkspaceStatus(
       )
 
     for (const project of affected) {
-      if (project.requestId && status === "COMPLETED")
+      await writeProjectLog(tx, userId, project.id, eventType, {
+        Status: [
+          projectAuditStatus(project.status),
+          projectAuditStatus(status),
+        ],
+      })
+      if (project.requestId && status === "COMPLETED") {
         await tx.serviceRequest.update({
           where: { id: project.requestId },
           data: { status: "CONCLUDED" },
         })
+        await writeServiceLog(
+          tx,
+          "REQUEST_CONCLUDED",
+          project.requestId,
+          project.requestId,
+          userId,
+          undefined,
+          {
+            targetLabel: project.name,
+            changes: [
+              {
+                field: "Status",
+                before: auditCode(project.status),
+                after: "Concluded",
+              },
+            ],
+          },
+        )
+      }
       if (project.requestId)
         await writeWorkspaceEvent(
           tx,
@@ -2404,13 +2568,19 @@ export async function updateProjectDeliverable(
     await lockRows(tx, "ProjectMilestone", deliverableId)
     const current = await tx.projectMilestone.findUniqueOrThrow({
       where: { id: deliverableId },
-      select: { deliveryStatus: true, title: true },
+      select: {
+        deliveryStatus: true,
+        title: true,
+        description: true,
+        expectedFileType: true,
+      },
     })
     if (current.deliveryStatus === "SENT_TO_CLIENT")
       throw new ServiceRequestsError(409, "Sent deliverables cannot be edited")
-    await tx.projectMilestone.update({
+    const saved = await tx.projectMilestone.update({
       where: { id: deliverableId },
       data: update,
+      select: { title: true, description: true, expectedFileType: true },
     })
     await tx.project.update({
       where: { id: project.id },
@@ -2424,6 +2594,21 @@ export async function updateProjectDeliverable(
       "PROJECT_DELIVERABLE_UPDATED",
       `Updated the details for deliverable “${body.title ?? current.title}”.`,
     )
+    const descriptionEdited = saved.description !== current.description
+    const fileTypeEdited = saved.expectedFileType !== current.expectedFileType
+    if (saved.title !== current.title || descriptionEdited || fileTypeEdited)
+      await writeProjectLog(
+        tx,
+        userId,
+        projectId,
+        "DELIVERABLE_UPDATED",
+        {
+          Name: [auditLabel(current.title), auditLabel(saved.title)],
+          "Description edited": [false, descriptionEdited],
+          "Expected file type edited": [false, fileTypeEdited],
+        },
+        { id: deliverableId, label: saved.title },
+      )
   })
   return getProjectWorkspace(userId, workspaceId)
 }
@@ -2570,6 +2755,21 @@ export async function uploadProjectDeliverable(
       uploadId: parsed.uploadId,
       sha256: parsed.sha256,
     })
+    await writeProjectLog(
+      tx,
+      userId,
+      projectId,
+      current.workflowFileId ? "ATTACHMENT_REPLACED" : "ATTACHMENT_ADDED",
+      {
+        Status: [
+          projectAuditStatus(current.deliveryStatus),
+          projectAuditStatus("IN_REVIEW"),
+        ],
+        "Attachment present": [Boolean(current.workflowFileId), true],
+        "Attachment type": [null, parsed.mimeType],
+      },
+      { id: deliverableId, label: current.title },
+    )
   })
   return getProjectWorkspace(userId, workspaceId)
 }
@@ -2612,13 +2812,14 @@ export async function removeProjectDeliverableAttachment(
       )
     if (!current.workflowFileId)
       throw new ServiceRequestsError(409, "This deliverable has no attachment")
+    const status =
+      current.deliveryStatus === "REJECTED" ? "REJECTED" : "NOT_SUBMITTED"
     await tx.workflowFile.delete({ where: { id: current.workflowFileId } })
     await tx.projectMilestone.update({
       where: { id: deliverableId },
       data: {
         workflowFileId: null,
-        deliveryStatus:
-          current.deliveryStatus === "REJECTED" ? "REJECTED" : "NOT_SUBMITTED",
+        deliveryStatus: status,
       },
     })
     await tx.project.update({
@@ -2632,6 +2833,20 @@ export async function removeProjectDeliverableAttachment(
       userId,
       "PROJECT_DELIVERABLE_REMOVED",
       `Removed the attachment for “${current.title}”.`,
+    )
+    await writeProjectLog(
+      tx,
+      userId,
+      projectId,
+      "ATTACHMENT_REMOVED",
+      {
+        Status: [
+          projectAuditStatus(current.deliveryStatus),
+          projectAuditStatus(status),
+        ],
+        "Attachment present": [true, false],
+      },
+      { id: deliverableId, label: current.title },
     )
   })
   return getProjectWorkspace(userId, workspaceId)
@@ -2704,6 +2919,19 @@ export async function reviewProjectDeliverable(
     )
     if (!request?.workflow)
       throw new ServiceRequestsError(409, "This project has no client workflow")
+    await writeProjectLog(
+      tx,
+      userId,
+      projectId,
+      approved ? "DELIVERABLE_APPROVED" : "DELIVERABLE_REJECTED",
+      {
+        Status: [
+          projectAuditStatus(current.deliveryStatus),
+          projectAuditStatus(approved ? "APPROVED" : "REJECTED"),
+        ],
+      },
+      { id: deliverableId, label: current.title },
+    )
   })
   return getProjectWorkspace(userId, workspaceId)
 }
@@ -2791,6 +3019,19 @@ export async function sendProjectDeliverableToClient(
       where: { id: project.requestId! },
       data: { updatedAt: new Date() },
     })
+    await writeProjectLog(
+      tx,
+      userId,
+      projectId,
+      "DELIVERABLE_SHARED",
+      {
+        Status: [
+          projectAuditStatus(current.deliveryStatus),
+          projectAuditStatus("SENT_TO_CLIENT"),
+        ],
+      },
+      { id: deliverableId, label: current.title },
+    )
   })
   return getProjectWorkspace(userId, workspaceId)
 }
@@ -2844,20 +3085,19 @@ export async function updateProjectTask(
     const plan = readWorkPlan(project.workPlan)
     if (!plan)
       throw new ServiceRequestsError(409, "This project has no task plan yet")
-    let taskTitle = ""
-    let found = false
+    const current = plan.phases
+      .flatMap(({ tasks }) => tasks)
+      .find(({ id }) => id === taskId)
+    if (!current) throw new ServiceRequestsError(404, "Task not found")
     const nextPlan: ProjectWorkPlan = {
       phases: plan.phases.map((phase) => ({
         ...phase,
         tasks: phase.tasks.map((task) => {
           if (task.id !== taskId) return task
-          found = true
-          taskTitle = task.title
           return { ...task, status }
         }),
       })),
     }
-    if (!found) throw new ServiceRequestsError(404, "Task not found")
     await tx.project.update({
       where: { id: project.id },
       data: {
@@ -2871,8 +3111,22 @@ export async function updateProjectTask(
       project.id,
       userId,
       "WORKSPACE_TASK_UPDATED",
-      `Updated “${taskTitle}” to ${status.toLowerCase().replaceAll("_", " ")}.`,
+      `Updated “${current.title}” to ${status.toLowerCase().replaceAll("_", " ")}.`,
     )
+    if (current.status !== status)
+      await writeProjectLog(
+        tx,
+        userId,
+        projectId,
+        "TASK_STATUS_CHANGED",
+        {
+          Status: [
+            projectAuditStatus(current.status),
+            projectAuditStatus(status),
+          ],
+        },
+        { id: taskId, label: current.title },
+      )
   })
   return getProjectWorkspace(userId, workspaceId)
 }
@@ -2930,6 +3184,16 @@ export async function addProjectTask(
       userId,
       "WORKSPACE_TASK_ADDED",
       `Added “${title}” to ${phase.title}.`,
+    )
+    await writeProjectLog(
+      tx,
+      userId,
+      projectId,
+      "TASK_ADDED",
+      {
+        Status: [null, projectAuditStatus(task.status)],
+      },
+      { id: task.id, label: task.title },
     )
   })
   return getProjectWorkspace(userId, workspaceId)

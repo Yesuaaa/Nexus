@@ -14,11 +14,14 @@ import {
 import { useSearchParams } from "next/navigation"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { getWorkspaceModules } from "@/features/dashboard/model/workspace-modules"
-import { moduleRegistry } from "@/features/workspaces/model/module-registry"
 import {
   parseWorkspaceDirectoryState,
   serializeWorkspaceDirectoryState,
 } from "@/features/project-workspace/model/workspace-directory-state"
+import {
+  getModuleLogsLabel,
+  moduleRegistry,
+} from "@/features/workspaces/model/module-registry"
 import { ChevronRightIcon, HomeIcon } from "./icons"
 import { focusRing } from "./styles"
 
@@ -90,6 +93,11 @@ const routeLabels: Record<string, string> = {
 }
 
 const contextualRouteLabels: Record<string, Record<string, string>> = {
+  module: {
+    "project-management": moduleRegistry["project-management"].title,
+  },
+  "project-management": { logs: getModuleLogsLabel("project-management") },
+  "service-operations": { logs: getModuleLogsLabel("service-operations") },
   attendance: {
     my: "Check-Ins",
     "check-ins": "Check-Ins",

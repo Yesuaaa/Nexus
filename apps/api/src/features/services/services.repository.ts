@@ -1,4 +1,11 @@
 import type { Prisma } from "../../generated/prisma/client.js"
+import { writeServiceLog } from "../service-operation-logs/log-writer.js"
+import {
+  auditCode,
+  auditList,
+  auditText,
+  type ServiceLogChange,
+} from "../service-operation-logs/audit-context.js"
 import { getPrisma } from "../../lib/db.js"
 import { activeStaff } from "../../shared/query/accounts.js"
 import type {
@@ -27,6 +34,92 @@ export const serviceInclude = {
     orderBy: [{ displayOrder: "asc" as const }, { name: "asc" as const }],
   },
 } satisfies Prisma.ServiceInclude
+
+type ServiceAuditRecord = Prisma.ServiceGetPayload<{
+  include: typeof serviceInclude
+}>
+
+function availability(value: boolean) {
+  return value ? "Available" : "Unavailable"
+}
+
+function serviceChanges(
+  before: ServiceAuditRecord,
+  after: ServiceAuditRecord,
+): ServiceLogChange[] {
+  return [
+    {
+      field: "Name",
+      before: auditText(before.name),
+      after: auditText(after.name),
+    },
+    {
+      field: "Availability",
+      before: availability(before.isActive),
+      after: availability(after.isActive),
+    },
+    {
+      field: "Departments",
+      before: auditList(before.departments.map(({ name }) => name)),
+      after: auditList(after.departments.map(({ name }) => name)),
+    },
+    {
+      field: "Pricing template",
+      before: auditText(before.pricingTemplate?.name),
+      after: auditText(after.pricingTemplate?.name),
+    },
+    {
+      field: "Packages",
+      before: auditList(before.packages.map(({ name }) => name)),
+      after: auditList(after.packages.map(({ name }) => name)),
+    },
+    {
+      field: "Key benefits",
+      before: auditList(before.keyBenefits.map(({ title }) => title)),
+      after: auditList(after.keyBenefits.map(({ title }) => title)),
+    },
+    {
+      field: "Client requirements",
+      before: auditList(before.clientRequirements),
+      after: auditList(after.clientRequirements),
+    },
+    {
+      field: "Consultation required",
+      before: before.requiresConsultation,
+      after: after.requiresConsultation,
+    },
+    {
+      field: "Agreement required",
+      before: before.requiresAgreement,
+      after: after.requiresAgreement,
+    },
+    {
+      field: "Payment required",
+      before: before.requiresPayment,
+      after: after.requiresPayment,
+    },
+    {
+      field: "Quotation approval required",
+      before: before.requiresQuotationApproval,
+      after: after.requiresQuotationApproval,
+    },
+    {
+      field: "Image",
+      before: before.imagePath ? "Configured" : "Not configured",
+      after: after.imagePath ? "Configured" : "Not configured",
+    },
+  ]
+}
+
+function price(value: {
+  pricingModel: string
+  currency: string
+  amount: { toString(): string } | null
+}) {
+  return value.pricingModel === "CUSTOM_QUOTE" || value.amount === null
+    ? "Custom quote"
+    : `${value.currency} ${value.amount.toString()}`
+}
 
 const availableServiceInclude = {
   ...serviceInclude,
@@ -187,15 +280,55 @@ export const servicesRepository = {
   },
 
   async updatePricingTemplate(id: string, data: PricingConfigurationInput) {
-    return getPrisma()!.pricingTemplate.update({
-      where: { id },
-      data,
-      include: {
-        services: {
-          select: { id: true, name: true },
-          orderBy: { name: "asc" },
+    return getPrisma()!.$transaction(async (tx) => {
+      const before = await tx.pricingTemplate.findUniqueOrThrow({
+        where: { id },
+      })
+      const result = await tx.pricingTemplate.update({
+        where: { id },
+        data,
+        include: {
+          services: {
+            select: { id: true, name: true },
+            orderBy: { name: "asc" },
+          },
         },
-      },
+      })
+      await writeServiceLog(
+        tx,
+        "PRICING_UPDATED",
+        id,
+        undefined,
+        undefined,
+        undefined,
+        {
+          targetLabel: result.name,
+          changes: [
+            {
+              field: "Name",
+              before: auditText(before.name),
+              after: auditText(result.name),
+            },
+            {
+              field: "Pricing model",
+              before: auditCode(before.pricingModel),
+              after: auditCode(result.pricingModel),
+            },
+            { field: "Amount", before: price(before), after: price(result) },
+            {
+              field: "Billing interval",
+              before: auditCode(before.billingInterval),
+              after: auditCode(result.billingInterval),
+            },
+            {
+              field: "Public pricing",
+              before: before.isPublic,
+              after: result.isPublic,
+            },
+          ],
+        },
+      )
+      return result
     })
   },
 
@@ -205,11 +338,23 @@ export const servicesRepository = {
       await lockRows(tx, "PricingTemplate", id)
       const template = await tx.pricingTemplate.findUnique({
         where: { id },
-        select: { _count: { select: { services: true } } },
+        select: { name: true, _count: { select: { services: true } } },
       })
       if (!template) return "not-found" as const
       if (template._count.services > 0) return "in-use" as const
       await tx.pricingTemplate.delete({ where: { id } })
+      await writeServiceLog(
+        tx,
+        "PRICING_DELETED",
+        id,
+        undefined,
+        undefined,
+        undefined,
+        {
+          targetLabel: template.name,
+          changes: [{ field: "Record", before: "Existing", after: "Deleted" }],
+        },
+      )
       return "deleted" as const
     })
   },
@@ -235,7 +380,7 @@ export const servicesRepository = {
       const createdTemplate = pricingTemplate
         ? await tx.pricingTemplate.create({ data: pricingTemplate })
         : null
-      return tx.service.create({
+      const result = await tx.service.create({
         data: {
           ...serviceInput,
           pricingTemplateId: createdTemplate?.id ?? pricingTemplateId,
@@ -251,12 +396,36 @@ export const servicesRepository = {
         },
         include: serviceInclude,
       })
+      await writeServiceLog(
+        tx,
+        "SERVICE_CREATED",
+        result.id,
+        undefined,
+        undefined,
+        undefined,
+        {
+          targetLabel: result.name,
+          changes: [
+            { field: "Record", before: null, after: "Created" },
+            {
+              field: "Availability",
+              before: null,
+              after: availability(result.isActive),
+            },
+          ],
+        },
+      )
+      return result
     })
   },
 
   async update(id: string, data: ServicePersistenceInput) {
     const prisma = getPrisma()!
     return prisma.$transaction(async (tx) => {
+      const before = await tx.service.findUniqueOrThrow({
+        where: { id },
+        include: serviceInclude,
+      })
       const {
         departmentIds,
         packages,
@@ -295,7 +464,7 @@ export const servicesRepository = {
         }
       }
 
-      return tx.service.update({
+      const result = await tx.service.update({
         where: { id },
         data: {
           ...serviceInput,
@@ -310,20 +479,80 @@ export const servicesRepository = {
         },
         include: serviceInclude,
       })
+      await writeServiceLog(
+        tx,
+        "SERVICE_UPDATED",
+        id,
+        undefined,
+        undefined,
+        undefined,
+        {
+          targetLabel: result.name,
+          changes: serviceChanges(before, result),
+        },
+      )
+      return result
     })
   },
 
   async updateStatus(id: string, isActive: boolean) {
-    return getPrisma()!.service.update({
-      where: { id },
-      data: { isActive },
-      include: serviceInclude,
+    return getPrisma()!.$transaction(async (tx) => {
+      const before = await tx.service.findUniqueOrThrow({
+        where: { id },
+        select: { name: true, isActive: true },
+      })
+      const result = await tx.service.update({
+        where: { id },
+        data: { isActive },
+        include: serviceInclude,
+      })
+      await writeServiceLog(
+        tx,
+        "SERVICE_STATUS_CHANGED",
+        id,
+        undefined,
+        undefined,
+        undefined,
+        {
+          targetLabel: result.name,
+          changes: [
+            {
+              field: "Availability",
+              before: availability(before.isActive),
+              after: availability(result.isActive),
+            },
+          ],
+        },
+      )
+      return result
     })
   },
 
   async deleteInactive(id: string) {
-    return getPrisma()!.service.deleteMany({
-      where: { id, isActive: false },
+    return getPrisma()!.$transaction(async (tx) => {
+      const service = await tx.service.findFirst({
+        where: { id, isActive: false },
+        select: { name: true },
+      })
+      const result = await tx.service.deleteMany({
+        where: { id, isActive: false },
+      })
+      if (result.count)
+        await writeServiceLog(
+          tx,
+          "SERVICE_DELETED",
+          id,
+          undefined,
+          undefined,
+          undefined,
+          {
+            targetLabel: service?.name,
+            changes: [
+              { field: "Record", before: "Existing", after: "Deleted" },
+            ],
+          },
+        )
+      return result
     })
   },
 }

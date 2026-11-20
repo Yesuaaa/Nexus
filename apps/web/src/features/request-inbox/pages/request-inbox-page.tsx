@@ -58,7 +58,7 @@ export function RequestInboxPage() {
   const account = usePortalAccount()
   const [search, setSearch] = useState("")
   const query = search.trim()
-  const [view, setView] = useState<InboxView>("pending")
+  const [view, setView] = useState<InboxView>("all")
   const [sortBy, setSortBy] = useState<InboxSort>("createdAt")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
   const [selected, setSelected] = useState<InboxRequest | null>(null)
@@ -292,6 +292,7 @@ export function RequestInboxPage() {
           key={selected.id}
           id={selected.id}
           loadDetails={getInboxRequest}
+          panelStyle="management"
           closeDisabled={accepting || !!confirm}
           onClose={() => setSelected(null)}
           description="Review the client's booking before accepting it for department review."

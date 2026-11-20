@@ -26,6 +26,7 @@ import {
 import type { Account } from "../../auth/model/types.ts"
 import {
   canAccessAdministrativeModules,
+  getModuleLogsLabel,
   moduleRegistry,
   type ModuleRegistration,
   type WorkspaceModuleId,
@@ -100,6 +101,9 @@ export type RoutePolicyId =
   | "booked-services"
   | "staff-workload"
   | "administrative-workload"
+  | "service-operation-logs"
+  | "project-management-logs"
+  | "request-inbox-overview"
   | "request-inbox"
   | "profile"
   | "settings"
@@ -107,7 +111,7 @@ export type RoutePolicyId =
 export type RouteMatch =
   { kind: "exact" | "prefix"; path: string } | { kind: "pattern"; path: string }
 
-type NavigationLocation = "main" | "footer"
+type NavigationLocation = "main" | "system-tool" | "footer"
 
 type RouteNavigation = {
   href: string | ((account: Account) => string)
@@ -147,7 +151,7 @@ export function administrativeModulePolicies(
               href: `/module/${id}`,
               label:
                 id === "service-operations"
-                  ? "Service Requests"
+                  ? "Request Overview"
                   : id === "payroll"
                     ? module.title
                     : "Overview",
@@ -160,6 +164,36 @@ export function administrativeModulePolicies(
 }
 
 export const routePolicies: readonly RoutePolicy[] = [
+  {
+    id: "project-management-logs",
+    match: { kind: "exact", path: "/module/project-management/logs" },
+    moduleId: "project-management",
+    canAccess: (account) =>
+      account.role === "SUPERADMIN" &&
+      canAccessAdministrativeModules(account) &&
+      hasPermission(account, Permissions.ORGANIZATION_READ_ALL),
+    navigation: {
+      href: "/module/project-management/logs",
+      label: getModuleLogsLabel("project-management"),
+      location: "system-tool",
+      order: 0,
+    },
+  },
+  {
+    id: "service-operation-logs",
+    match: { kind: "exact", path: "/module/service-operations/logs" },
+    moduleId: "service-operations",
+    canAccess: (account) =>
+      account.role === "SUPERADMIN" &&
+      canAccessAdministrativeModules(account) &&
+      hasPermission(account, Permissions.ORGANIZATION_READ_ALL),
+    navigation: {
+      href: "/module/service-operations/logs",
+      label: getModuleLogsLabel("service-operations"),
+      location: "system-tool",
+      order: 0,
+    },
+  },
   ...administrativeModulePolicies(),
   {
     id: "payroll-compensation",
@@ -254,12 +288,6 @@ export const routePolicies: readonly RoutePolicy[] = [
     canAccess: (account) =>
       canAccessAdministrativeModules(account) &&
       hasPermission(account, Permissions.ORGANIZATION_READ_ALL),
-    navigation: {
-      href: "/project-management/overview",
-      label: "Project Overview",
-      location: "main",
-      order: 2,
-    },
   },
   {
     id: "admin-project-management",
@@ -579,6 +607,12 @@ export const routePolicies: readonly RoutePolicy[] = [
       location: "main",
       order: 80,
     },
+  },
+  {
+    id: "request-inbox-overview",
+    match: { kind: "exact", path: "/request-inbox/overview" },
+    moduleId: "service-operations",
+    canAccess: canAccessRequestInbox,
   },
   {
     id: "request-inbox",

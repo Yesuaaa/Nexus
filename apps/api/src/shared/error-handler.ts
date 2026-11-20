@@ -1,4 +1,10 @@
 import path from "node:path"
+import { recordProjectIncident } from "../features/project-management-logs/incidents.js"
+import { recordServiceIncident } from "../features/service-operation-logs/log-incidents.js"
+import {
+  logContext,
+  serviceLogEndpoint,
+} from "../features/service-operation-logs/log-context.js"
 import type {
   Request,
   Response,
@@ -246,7 +252,17 @@ export const handleError: ErrorRequestHandler = (
 
   const { status, message, details, retryAfter } = resolveError(error)
   if (status >= 500) {
-    console.error("API request failed:", request.method, request.path, error)
+    void recordServiceIncident(request, status, error)
+    void recordProjectIncident(request, status, error)
+    console.error(
+      "API request failed",
+      {
+        correlationId: logContext.getStore()?.correlationId ?? "unavailable",
+        endpoint: serviceLogEndpoint(request) ?? "unavailable",
+        status,
+      },
+      error,
+    )
   }
 
   const source =

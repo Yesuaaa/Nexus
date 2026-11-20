@@ -221,7 +221,7 @@ test("Payroll route and write capability follow the Payroll-specific role split"
   )
 })
 
-test("Workforce Compliance contains administrative Payroll while Staff has a separate My Payroll workspace", () => {
+test("People and HR contains administrative Payroll and Workforce Compliance contains Staff My Payroll", () => {
   for (const role of ["STAFF", "ADMIN", "SUPERADMIN", "USER"]) {
     const actor = {
       ...superadmin,
@@ -235,7 +235,7 @@ test("Workforce Compliance contains administrative Payroll while Staff has a sep
     assert.equal(entries.length, 0)
     assert.equal(
       getWorkspaceModules(actor).some((module) => module.id === "my-payroll"),
-      staff,
+      false,
     )
     if (role === "ADMIN" || role === "SUPERADMIN") {
       for (const path of [
@@ -243,15 +243,12 @@ test("Workforce Compliance contains administrative Payroll while Staff has a sep
         "/module/payroll/runs",
         "/module/payroll/disbursements",
       ])
-        assert.equal(
-          resolveWorkspaceModuleId(actor, path, null),
-          "attendance-monitoring",
-        )
+        assert.equal(resolveWorkspaceModuleId(actor, path, null), "people-hr")
       assert.equal(
         getNavigationPolicies(actor, "main").find(
           (entry) => entry.id === "module-payroll",
         )?.moduleId,
-        "attendance-monitoring",
+        "people-hr",
       )
     }
     if (staff) {
@@ -271,7 +268,7 @@ test("Workforce Compliance contains administrative Payroll while Staff has a sep
       assert.equal(canAccessRoute(actor, path), staff)
       assert.equal(
         resolveWorkspaceModuleId(actor, path, "payroll"),
-        staff ? "my-payroll" : null,
+        staff ? "attendance-monitoring" : null,
       )
     }
     if (staff) {

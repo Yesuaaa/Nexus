@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto"
+import { writeServiceLog } from "../service-operation-logs/log-writer.js"
 import type { RequestWorkflowState } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { activeStaff } from "../../shared/query/accounts.js"
@@ -9,6 +10,10 @@ import {
   type WorkflowTx,
 } from "./workflow.access.js"
 import { snapshot } from "./workflow.snapshot.js"
+import {
+  workflowAuditChanges,
+  workflowAuditSnapshot,
+} from "./workflow-audit.js"
 import {
   amount,
   cents,
@@ -1096,7 +1101,9 @@ export async function actOnWorkflow(
           "The workflow changed. Review the latest state and try again.",
           409,
         )
+      const before = await workflowAuditSnapshot(tx, requestId, command)
       await runAction(tx, userId, requestId, command)
+      const after = await workflowAuditSnapshot(tx, requestId, command)
       await tx.requestWorkflow.update({
         where: { requestId },
         data: { version: { increment: 1 } },
@@ -1108,6 +1115,18 @@ export async function actOnWorkflow(
       await tx.workflowActionReceipt.create({
         data: { requestId, actorId: userId, actionId, payloadHash },
       })
+      await writeServiceLog(
+        tx,
+        "WORKFLOW_ACTION_COMPLETED",
+        requestId,
+        requestId,
+        userId,
+        command.type,
+        {
+          targetLabel: `${request.service.name} (${request.referenceNumber ?? requestId})`,
+          changes: workflowAuditChanges(command, before, after),
+        },
+      )
       return snapshot(tx, userId, requestId)
     },
     { timeout: 20_000 },

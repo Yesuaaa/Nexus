@@ -22,12 +22,12 @@ export function ModuleEntryPage({ moduleId }: { moduleId: string }) {
   const module =
     !result.loading && !result.error ? result.data?.module : undefined
   const pageTitle =
-    moduleId === "service-operations" ? "Service Requests" : module?.title
+    moduleId === "service-operations" ? "Request Overview" : module?.title
   const pageDescription =
     moduleId === "service-operations"
       ? "Review organization-wide service requests."
       : module?.description
-  useBreadcrumbLabel(moduleId, module?.title)
+  useBreadcrumbLabel(moduleId, pageTitle)
 
   if (moduleId === "payroll" && module) return <PayrollOverviewPage />
 

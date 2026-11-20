@@ -1,4 +1,6 @@
 import type { Prisma } from "../../generated/prisma/client.js"
+import { writeServiceLog } from "../service-operation-logs/log-writer.js"
+import { auditCode } from "../service-operation-logs/audit-context.js"
 import { getPrisma } from "../../lib/db.js"
 import { activeDepartmentHead } from "../../shared/query/accounts.js"
 import { insensitive, paginate } from "../../shared/query/pagination.js"
@@ -143,6 +145,38 @@ export async function listInbox(userId: string, filters: InboxFilters) {
   )
 }
 
+/** Department-scoped figures and recent records for a head's request overview. */
+export async function getInboxOverview(userId: string) {
+  const department = await requireDepartmentHead(userId)
+  const where = departmentScope(userId)
+  const db = getPrisma()!
+  return db.$transaction(async (tx) => {
+    const [total, byStatus, recentRequests] = await Promise.all([
+      tx.serviceRequest.count({ where }),
+      tx.serviceRequest.groupBy({
+        by: ["status"],
+        where,
+        orderBy: { status: "asc" },
+        _count: { _all: true },
+      }),
+      tx.serviceRequest.findMany({
+        where,
+        select: requestSelect,
+        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+        take: 5,
+      }),
+    ])
+    return {
+      department,
+      total,
+      statusCounts: Object.fromEntries(
+        byStatus.map((group) => [group.status, group._count._all]),
+      ),
+      recentRequests,
+    }
+  })
+}
+
 export async function getInboxRequest(userId: string, id: string) {
   await requireDepartmentHead(userId)
   const request = await getPrisma()!.serviceRequest.findFirst({
@@ -169,7 +203,13 @@ export async function acceptInboxRequest(userId: string, id: string) {
     }
     const request = await tx.serviceRequest.findFirst({
       where,
-      select: { clientId: true, status: true, acceptedDepartmentId: true },
+      select: {
+        clientId: true,
+        status: true,
+        acceptedDepartmentId: true,
+        referenceNumber: true,
+        service: { select: { name: true } },
+      },
     })
     if (!request) throw new ServiceRequestsError(404, "Request not found")
     if (
@@ -224,6 +264,21 @@ export async function acceptInboxRequest(userId: string, id: string) {
       data: { conversationId: conversation.id },
     })
     await initializeWorkflow(tx, id, userId)
+    await writeServiceLog(tx, "REQUEST_ACCEPTED", id, id, userId, undefined, {
+      targetLabel: `${request.service.name} (${request.referenceNumber ?? id})`,
+      changes: [
+        {
+          field: "Status",
+          before: auditCode(request.status),
+          after: "Under Review",
+        },
+        {
+          field: "Department",
+          before: null,
+          after: department.name,
+        },
+      ],
+    })
     return tx.serviceRequest.findUniqueOrThrow({
       where: { id },
       select: requestSelect,

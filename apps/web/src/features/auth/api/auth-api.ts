@@ -47,6 +47,11 @@ export function clearToken() {
 }
 
 function storeTokens(result: TokenResult) {
+  if (!validTokenResult(result))
+    throw new ApiError(
+      "Invalid authentication response. Please try again.",
+      502,
+    )
   try {
     sessionStorage.setItem(tokenKey, result.token)
     if (result.refreshToken)
@@ -56,6 +61,36 @@ function storeTokens(result: TokenResult) {
     clearToken()
     throw error
   }
+}
+
+function validTokenResult(result: unknown): result is TokenResult {
+  if (!result || typeof result !== "object") return false
+  return (
+    "token" in result &&
+    typeof result.token === "string" &&
+    Boolean(result.token.trim()) &&
+    "refreshToken" in result &&
+    typeof result.refreshToken === "string" &&
+    Boolean(result.refreshToken.trim()) &&
+    "expiresIn" in result &&
+    typeof result.expiresIn === "number" &&
+    Number.isFinite(result.expiresIn) &&
+    result.expiresIn > 0
+  )
+}
+
+function assertAuthResult(result: unknown): asserts result is AuthResult {
+  if (
+    !validTokenResult(result) ||
+    !("user" in result) ||
+    !result.user ||
+    typeof result.user !== "object" ||
+    Array.isArray(result.user)
+  )
+    throw new ApiError(
+      "Invalid authentication response. Please try again.",
+      502,
+    )
 }
 
 async function responseError(response: Response) {
@@ -97,15 +132,10 @@ async function refreshSession(version: number) {
         clearToken()
       throw error
     }
-    const result = (await response.json()) as TokenResult
+    const result: unknown = await response.json()
     if (sessionVersion !== version)
       throw new ApiError("Session changed. Please try again.", 409)
-    if (
-      typeof result.token !== "string" ||
-      !result.token ||
-      typeof result.refreshToken !== "string" ||
-      !result.refreshToken
-    )
+    if (!validTokenResult(result))
       throw new ApiError("Unable to renew your session. Please try again.", 502)
     // An in-flight refresh must not restore a signed-out or replaced session.
     if (sessionStorage.getItem(refreshKey) !== refreshToken)
@@ -200,14 +230,13 @@ export async function signIn(
   password: string,
 ): Promise<Account> {
   const version = ++sessionVersion
-  const result = await request<AuthResult>("/api/auth/login", {
+  const result = await request<unknown>("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
   })
   if (sessionVersion !== version)
     throw new ApiError("Session changed. Please try again.", 409)
-  if (typeof result?.token !== "string" || !result.token.trim())
-    throw new ApiError("Unable to sign in. Please try again.", 502)
+  assertAuthResult(result)
   storeTokens(result)
   return result.user
 }
@@ -233,12 +262,13 @@ export async function signInToPortal(
 
 export async function register(data: RegistrationData): Promise<Account> {
   const version = ++sessionVersion
-  const result = await request<AuthResult>("/api/auth/register", {
+  const result = await request<unknown>("/api/auth/register", {
     method: "POST",
     body: JSON.stringify(data),
   })
   if (sessionVersion !== version)
     throw new ApiError("Session changed. Please try again.", 409)
+  assertAuthResult(result)
   storeTokens(result)
   return result.user
 }

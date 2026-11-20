@@ -114,6 +114,7 @@ const routeMatrix = {
     "/projects",
     "/project-workspace",
     "/request-inbox",
+    "/request-inbox/overview",
     "/staff-workload",
     "/calendar",
     "/profile",
@@ -170,6 +171,7 @@ const protectedRoutes = [
   "/staff-workload",
   "/request-inbox",
   "/module/payroll/runs",
+  "/request-inbox/overview",
 ]
 
 for (const [actor, allowedRoutes] of Object.entries(routeMatrix)) {
@@ -474,8 +476,7 @@ test("navigation is generated from the same policies without changing role visib
     ],
     SUPERADMIN: [
       "Module",
-      "Service Requests",
-      "Project Overview",
+      "Request Overview",
       "Account Management",
       "Department Management",
       "Employee Management",
@@ -505,6 +506,12 @@ test("navigation is generated from the same policies without changing role visib
       labels,
     )
     assert.deepEqual(
+      getNavigationPolicies(currentAccount, "system-tool").map((policy) =>
+        getNavigationLabel(policy, currentAccount),
+      ),
+      actor === "SUPERADMIN" ? ["Project Logs", "Service Logs"] : [],
+    )
+    assert.deepEqual(
       getNavigationPolicies(currentAccount, "footer").map((policy) =>
         getNavigationLabel(policy, currentAccount),
       ),
@@ -531,6 +538,34 @@ test("project navigation remains active on current dynamic project routes", () =
     true,
   )
 })
+
+for (const moduleId of ["service-operations", "project-management"])
+  test(`${moduleId} logs require a current Superadmin and both administrative grants`, () => {
+    const path = `/module/${moduleId}/logs`
+    const sa = account("SUPERADMIN")
+    assert.equal(canAccessRoute(sa, path), true)
+    assert.equal(getActiveWorkspaceModuleId(sa, path), moduleId)
+    for (const role of ["ADMIN", "STAFF", "USER"])
+      assert.equal(
+        canAccessRoute(account(role, { permissions: sa.permissions }), path),
+        false,
+      )
+    assert.equal(canAccessRoute({ ...sa, isActive: false }, path), false)
+    for (const permission of [
+      Permissions.MODULES_ACCESS_ALL,
+      Permissions.ORGANIZATION_READ_ALL,
+    ])
+      assert.equal(
+        canAccessRoute(
+          {
+            ...sa,
+            permissions: sa.permissions.filter((value) => value !== permission),
+          },
+          path,
+        ),
+        false,
+      )
+  })
 
 test("department-head handoff immediately removes head-only routes and navigation", () => {
   const currentHead = account("STAFF", {

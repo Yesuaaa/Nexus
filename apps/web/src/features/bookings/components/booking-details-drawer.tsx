@@ -1,6 +1,7 @@
 "use client"
 
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
+import { BriefcaseBusiness } from "lucide-react"
 
 import type { ReactNode } from "react"
 import { getBooking, type BookingDetails } from "../api/bookings-api"
@@ -22,6 +23,7 @@ export function BookingDetailsDrawer({
   showMessagesLink = true,
   statusLabels,
   onLoaded,
+  panelStyle = "booking",
 }: {
   id: string
   onClose: () => void
@@ -37,14 +39,52 @@ export function BookingDetailsDrawer({
   showMessagesLink?: boolean | ((details: BookingDetails) => boolean)
   onLoaded?: (details: BookingDetails) => void
   statusLabels?: Partial<Record<string, string>>
+  /** Uses the Service Management-style header and detail layout for staff inboxes. */
+  panelStyle?: "booking" | "management"
 }) {
   const { formatDate } = useDatePreferences()
+  const managementStyle = panelStyle === "management"
   return (
     <RequestDetailsDrawer
       id={id}
       onClose={onClose}
       loadDetails={loadDetails}
-      description={description}
+      title={
+        managementStyle ? (details) => details.service.name : "Booking details"
+      }
+      description={
+        managementStyle
+          ? (details) =>
+              `${details.referenceNumber || details.id} Â· Service request`
+          : description
+      }
+      fallbackTitle={managementStyle ? "Request details" : "Booking details"}
+      fallbackDescription={
+        managementStyle ? "Loading service request detailsâ€¦" : description
+      }
+      leading={
+        managementStyle ? (
+          <span
+            className="grid size-11 flex-none place-items-center rounded-xl bg-[#e5edff] text-[#2058d4]"
+            aria-hidden="true"
+          >
+            <BriefcaseBusiness size={20} />
+          </span>
+        ) : undefined
+      }
+      meta={
+        managementStyle
+          ? (details) => (
+              <BookingStatusPill
+                status={details.status}
+                label={statusLabels?.[details.status]}
+              />
+            )
+          : undefined
+      }
+      closeLabel={
+        managementStyle ? "Close request details" : "Close booking details"
+      }
       closeDisabled={closeDisabled}
       fallbackFocusId={fallbackFocusId}
       refreshKey={refreshKey}
@@ -63,6 +103,18 @@ export function BookingDetailsDrawer({
           fields={[
             ...additionalFields,
             ["Request reference", details.referenceNumber || details.id],
+            ...(managementStyle
+              ? [
+                  [
+                    "Status",
+                    <BookingStatusPill
+                      key="status"
+                      status={details.status}
+                      label={statusLabels?.[details.status]}
+                    />,
+                  ] as [string, ReactNode],
+                ]
+              : []),
             ["Package", details.packageName || "Standard service"],
             ["Date requested", formatDate(details.createdAt)],
             ["Last updated", formatDate(details.updatedAt)],
@@ -77,7 +129,16 @@ export function BookingDetailsDrawer({
             ["Project requirements", details.projectRequirements],
             ["Additional details", details.additionalDetails],
           ]}
-          note="Specialist preferences are subject to availability and department approval. An expected timeline is your requested schedule."
+          detailLayout={managementStyle ? "inline" : "stacked"}
+          detailSectionTitle={
+            managementStyle ? "Request information" : undefined
+          }
+          showIntro={!managementStyle}
+          note={
+            managementStyle
+              ? "Specialist preferences are subject to availability and department approval. An expected timeline is the client's requested schedule."
+              : "Specialist preferences are subject to availability and department approval. An expected timeline is your requested schedule."
+          }
           messagesRequestId={
             (
               typeof showMessagesLink === "function"
