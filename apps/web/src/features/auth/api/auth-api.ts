@@ -212,6 +212,19 @@ export function apiStreamRequest(path: string, options: RequestInit = {}) {
   return request<Response>(path, options, false, true)
 }
 
+export async function downloadAuthenticatedFile(
+  path: string,
+  fileName: string,
+) {
+  const response = await apiStreamRequest(path)
+  const url = URL.createObjectURL(await response.blob())
+  const anchor = document.createElement("a")
+  anchor.href = url
+  anchor.download = fileName
+  anchor.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
 export async function signIn(
   email: string,
   password: string,

@@ -70,34 +70,62 @@ const SelectScrollDownButton = React.forwardRef<
 SelectScrollDownButton.displayName =
   SelectPrimitive.ScrollDownButton.displayName
 
+type SelectContentProps = React.ComponentPropsWithoutRef<
+  typeof SelectPrimitive.Content
+> & {
+  maxHeight?: "default" | "roomy"
+  fitOptions?: boolean
+}
+
+const selectContentHeightClass = {
+  default: "max-h-[min(20rem,var(--radix-select-content-available-height))]",
+  roomy: "max-h-[min(32rem,var(--radix-select-content-available-height))]",
+} as const
+
 const SelectContent = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
->(({ className, children, position = "popper", ...props }, ref) => (
-  <SelectPrimitive.Portal>
-    <SelectPrimitive.Content
-      ref={ref}
-      className={cn(
-        "relative z-[130] flex max-h-[min(20rem,var(--radix-select-content-available-height))] min-w-[8rem] max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-lg border border-[#e1e4ea] bg-background text-foreground shadow-md origin-[var(--radix-select-content-transform-origin)]",
-        position === "popper" && "w-[var(--radix-select-trigger-width)]",
-        className,
-      )}
-      position={position}
-      sideOffset={4}
-      collisionPadding={8}
-      hideWhenDetached
-      {...props}
-    >
-      <SelectScrollUpButton />
-      <SelectPrimitive.Viewport
-        className={cn("p-1", position === "popper" && "w-full min-w-0")}
+  SelectContentProps
+>(
+  (
+    {
+      className,
+      children,
+      position = "popper",
+      maxHeight = "default",
+      fitOptions = false,
+      ...props
+    },
+    ref,
+  ) => (
+    <SelectPrimitive.Portal>
+      <SelectPrimitive.Content
+        ref={ref}
+        className={cn(
+          "relative z-[130] flex min-w-[8rem] max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-lg border border-[#e1e4ea] bg-background text-foreground shadow-md origin-[var(--radix-select-content-transform-origin)]",
+          selectContentHeightClass[maxHeight],
+          position === "popper" &&
+            (fitOptions
+              ? "w-max min-w-[min(var(--radix-select-trigger-width),var(--radix-select-content-available-width))] max-w-[min(calc(100vw-16px),var(--radix-select-content-available-width))]"
+              : "w-[var(--radix-select-trigger-width)]"),
+          className,
+        )}
+        position={position}
+        sideOffset={4}
+        collisionPadding={8}
+        hideWhenDetached
+        {...props}
       >
-        {children}
-      </SelectPrimitive.Viewport>
-      <SelectScrollDownButton />
-    </SelectPrimitive.Content>
-  </SelectPrimitive.Portal>
-))
+        <SelectScrollUpButton />
+        <SelectPrimitive.Viewport
+          className={cn("p-1", position === "popper" && "w-full min-w-0")}
+        >
+          {children}
+        </SelectPrimitive.Viewport>
+        <SelectScrollDownButton />
+      </SelectPrimitive.Content>
+    </SelectPrimitive.Portal>
+  ),
+)
 SelectContent.displayName = SelectPrimitive.Content.displayName
 
 const SelectLabel = React.forwardRef<
@@ -114,12 +142,17 @@ SelectLabel.displayName = SelectPrimitive.Label.displayName
 
 const SelectItem = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item>
->(({ className, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item> & {
+    wrapLabel?: boolean
+  }
+>(({ className, children, wrapLabel, ...props }, ref) => (
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex min-h-8 w-full min-w-0 cursor-pointer select-none items-center rounded-md py-1.5 pl-2 pr-8 text-xs outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>span:last-child]:truncate",
+      "relative flex min-h-8 w-full min-w-0 cursor-pointer select-none items-center rounded-md py-1.5 pl-2 pr-8 text-xs outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      wrapLabel
+        ? "[&>span:last-child]:min-w-0 [&>span:last-child]:whitespace-normal [&>span:last-child]:[overflow-wrap:anywhere]"
+        : "[&>span:last-child]:truncate",
       className,
     )}
     {...props}

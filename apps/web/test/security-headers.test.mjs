@@ -28,6 +28,22 @@ test("all web responses disable MIME sniffing", async () => {
   assert.equal(nosniff, "nosniff")
 })
 
+test("page CSP allows blob PDF frames and retains embedding protections", () => {
+  for (const development of [false, true]) {
+    const directives = buildContentSecurityPolicy(
+      "test-nonce",
+      "",
+      development,
+    ).split("; ")
+    assert.equal(
+      directives.find((directive) => directive.startsWith("frame-src ")),
+      "frame-src 'self' blob:",
+    )
+    assert.ok(directives.includes("object-src 'none'"))
+    assert.ok(directives.includes("frame-ancestors 'none'"))
+  }
+})
+
 test("page CSP permits eval only for the Next.js development runtime", () => {
   const developmentCsp = buildContentSecurityPolicy("test-nonce", "", true)
   const productionCsp = buildContentSecurityPolicy("test-nonce", "", false)

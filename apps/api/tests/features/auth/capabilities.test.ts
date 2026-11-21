@@ -15,6 +15,15 @@ import {
   permissionsFor,
 } from "../../../src/features/auth/auth.permissions.js"
 
+const payrollAuthorization =
+  (await import("../../../src/features/auth/auth.capabilities.js")) as unknown as {
+    PayrollCapability?: { READ: string; MANAGE: string }
+    hasPayrollCapability?: (
+      actor: AuthorizationActor,
+      capability: string,
+    ) => boolean
+  }
+
 function actor(role: Role): AuthorizationActor {
   return { id: "actor", role, isActive: true, accountDeletedAt: null }
 }
@@ -78,6 +87,35 @@ test("Admin, Staff, and Client receive no new global administrative grants", () 
       assert.equal(hasPermission(role, capability), false)
       assert.equal(permissionsFor(role).includes(capability), false)
     }
+})
+
+test("Payroll capabilities give Admin operational access and Superadmin read-only access", () => {
+  const { PayrollCapability: payroll, hasPayrollCapability: hasPayroll } =
+    payrollAuthorization
+  assert.equal(typeof hasPayroll, "function")
+  if (!payroll || !hasPayroll) return
+
+  for (const role of Object.values(Role)) {
+    const canRead = role === Role.ADMIN || role === Role.SUPERADMIN
+    assert.equal(hasPayroll(actor(role), payroll.READ), canRead, `${role} read`)
+    assert.equal(
+      hasPayroll(actor(role), payroll.MANAGE),
+      role === Role.ADMIN,
+      `${role} manage`,
+    )
+  }
+
+  assert.equal(
+    hasPayroll({ ...actor(Role.ADMIN), isActive: false }, payroll.READ),
+    false,
+  )
+  assert.equal(
+    hasPayroll(
+      { ...actor(Role.SUPERADMIN), accountDeletedAt: new Date() },
+      payroll.READ,
+    ),
+    false,
+  )
 })
 
 test("operational capabilities retain role eligibility even with matching record identities", () => {

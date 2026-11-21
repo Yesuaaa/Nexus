@@ -13,8 +13,10 @@ import {
   findRoutePolicy,
   getActiveWorkspaceModuleId,
   getNavigationPolicies,
+  getNavigationLabel,
 } from "../src/features/workspaces/model/route-policy.ts"
 import { resolveWorkspaceModuleId } from "../src/features/workspaces/model/workspace-selection.ts"
+const payrollAccess = await import("../src/features/auth/model/permissions.ts")
 
 const superadmin = {
   id: "superadmin",
@@ -31,7 +33,13 @@ test("an unassigned Superadmin enters every implemented registered module", () =
   )
   assert.deepEqual(
     modules.map((module) => module.id),
-    Object.keys(moduleRegistry).filter((id) => moduleRegistry[id].implemented),
+    [
+      "service-operations",
+      "project-management",
+      "people-hr",
+      "attendance-monitoring",
+      "administration",
+    ],
   )
   for (const module of modules) {
     assert.equal(canAccessRoute(superadmin, module.href), true, module.href)
@@ -138,6 +146,148 @@ test("new administrative entries require an active account and the explicit capa
   ]) {
     assert.equal(canAccessRoute(actor, "/module/project-management"), false)
     assert.deepEqual(getAdministrativeModuleEntries(actor, moduleRegistry), [])
+  }
+})
+
+test("Payroll route and write capability follow the Payroll-specific role split", () => {
+  assert.equal(typeof payrollAccess.canAccessPayroll, "function")
+  assert.equal(typeof payrollAccess.canManagePayroll, "function")
+  if (
+    typeof payrollAccess.canAccessPayroll !== "function" ||
+    typeof payrollAccess.canManagePayroll !== "function"
+  )
+    return
+
+  const cases = [
+    {
+      role: "ADMIN",
+      permissions: ["payroll:read", "payroll:manage"],
+      canRead: true,
+      canManage: true,
+    },
+    {
+      role: "SUPERADMIN",
+      permissions: ["payroll:read"],
+      canRead: true,
+      canManage: false,
+    },
+    {
+      role: "STAFF",
+      permissions: ["payroll:read", "payroll:manage"],
+      canRead: false,
+      canManage: false,
+    },
+    {
+      role: "USER",
+      permissions: [],
+      canRead: false,
+      canManage: false,
+    },
+  ]
+
+  for (const scenario of cases) {
+    const actor = { ...superadmin, ...scenario }
+    assert.equal(payrollAccess.canAccessPayroll(actor), scenario.canRead)
+    assert.equal(payrollAccess.canManagePayroll(actor), scenario.canManage)
+    assert.equal(
+      canAccessRoute(actor, "/module/payroll"),
+      scenario.canRead,
+      scenario.role,
+    )
+    for (const section of ["compensation", "settings"])
+      assert.equal(
+        canAccessRoute(actor, `/module/payroll/${section}`),
+        scenario.canRead,
+        `${scenario.role} ${section}`,
+      )
+  }
+  assert.equal(
+    payrollAccess.canAccessPayroll({
+      ...superadmin,
+      role: "ADMIN",
+      permissions: ["payroll:read"],
+      isActive: false,
+    }),
+    false,
+  )
+  assert.equal(
+    payrollAccess.canAccessPayroll({
+      ...superadmin,
+      role: "ADMIN",
+      permissions: ["payroll:read"],
+      accountDeletedAt: "2026-11-14T00:00:00.000Z",
+    }),
+    false,
+  )
+})
+
+test("People and HR contains administrative Payroll and Workforce Compliance contains Staff My Payroll", () => {
+  for (const role of ["STAFF", "ADMIN", "SUPERADMIN", "USER"]) {
+    const actor = {
+      ...superadmin,
+      role,
+      permissions: role === "STAFF" ? [] : superadmin.permissions,
+    }
+    const staff = role === "STAFF"
+    const entries = getWorkspaceModules(actor).filter(
+      (module) => module.id === "payroll",
+    )
+    assert.equal(entries.length, 0)
+    assert.equal(
+      getWorkspaceModules(actor).some((module) => module.id === "my-payroll"),
+      false,
+    )
+    if (role === "ADMIN" || role === "SUPERADMIN") {
+      for (const path of [
+        "/module/payroll",
+        "/module/payroll/runs",
+        "/module/payroll/disbursements",
+      ])
+        assert.equal(resolveWorkspaceModuleId(actor, path, null), "people-hr")
+      assert.equal(
+        getNavigationPolicies(actor, "main").find(
+          (entry) => entry.id === "module-payroll",
+        )?.moduleId,
+        "people-hr",
+      )
+    }
+    if (staff) {
+      assert.ok(
+        getWorkspaceModules(actor).some(
+          (module) =>
+            module.id === "attendance-monitoring" &&
+            module.title === "Workforce Compliance",
+        ),
+      )
+    }
+    for (const path of [
+      "/my-payroll",
+      "/attendance/my-payroll",
+      "/staff/my-payroll",
+    ]) {
+      assert.equal(canAccessRoute(actor, path), staff)
+      assert.equal(
+        resolveWorkspaceModuleId(actor, path, "payroll"),
+        staff ? "attendance-monitoring" : null,
+      )
+    }
+    if (staff) {
+      const policy = getNavigationPolicies(actor, "main").find(
+        (entry) => entry.id === "staff-my-payroll",
+      )
+      assert.ok(policy)
+      assert.equal(policy.navigation.href, "/my-payroll")
+      assert.equal(getNavigationLabel(policy, actor), "My Payroll")
+      assert.equal(canAccessRoute(actor, "/module/payroll"), false)
+    }
+  }
+  for (const state of [
+    { isActive: false },
+    { accountDeletedAt: "2026-11-17" },
+  ]) {
+    const actor = { ...superadmin, role: "STAFF", ...state }
+    assert.equal(canAccessRoute(actor, "/my-payroll"), false)
+    assert.equal(getWorkspaceModules(actor).length, 0)
   }
 })
 

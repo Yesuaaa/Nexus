@@ -12,6 +12,8 @@ import {
   type ReactNode,
 } from "react"
 import { useSearchParams } from "next/navigation"
+import { usePortalAccount } from "@/features/auth/providers/account-context"
+import { getWorkspaceModules } from "@/features/dashboard/model/workspace-modules"
 import {
   parseWorkspaceDirectoryState,
   serializeWorkspaceDirectoryState,
@@ -66,6 +68,7 @@ export function useBreadcrumbLabel(key: string, label: string | undefined) {
 
 const routeLabels: Record<string, string> = {
   attendance: "Attendance",
+  "my-payroll": "My Payroll",
   my: "Check-Ins",
   adjustments: "Requests & Approvals",
   records: "Records",
@@ -122,10 +125,17 @@ function labelFor(segment: string, parentSegment?: string) {
 
 export function Breadcrumbs() {
   const pathname = usePathname()
+  const account = usePortalAccount()
   const searchParams = useSearchParams()
   const { labels } = useContext(BreadcrumbLabelContext)
   const segments = pathname.split("/").filter(Boolean)
   const decodedSegments = segments.map(decodeURIComponent)
+  const payrollWorkspace =
+    decodedSegments[0] === "module" && decodedSegments[1] === "payroll"
+      ? getWorkspaceModules(account).find(
+          (module) => module.id === moduleRegistry.payroll.workspaceParent,
+        )
+      : undefined
   const isProjectManagementDepartmentProjects =
     decodedSegments.length === 4 &&
     decodedSegments[0] === "project-management" &&
@@ -168,6 +178,7 @@ export function Breadcrumbs() {
                 ? "Project Workspaces"
                 : undefined
           const label =
+            (index === 0 ? payrollWorkspace?.title : undefined) ??
             projectManagementLabel ??
             labels[segment] ??
             labels[decodedSegment] ??
@@ -178,13 +189,16 @@ export function Breadcrumbs() {
           const isDepartmentContext =
             isProjectManagementDepartmentProjects && index === 2
           const baseHref = `/${segments.slice(0, index + 1).join("/")}`
-          const href = isProjectManagementDepartmentProjects
-            ? index === 0
-              ? "/project-management/overview"
-              : "/project-management"
-            : index === 0 && directoryQuery
-              ? `${baseHref}?${directoryQuery}`
-              : baseHref
+          const href =
+            index === 0 && payrollWorkspace?.href
+              ? payrollWorkspace.href
+              : isProjectManagementDepartmentProjects
+                ? index === 0
+                  ? "/project-management/overview"
+                  : "/project-management"
+                : index === 0 && directoryQuery
+                  ? `${baseHref}?${directoryQuery}`
+                  : baseHref
           return (
             <li
               key={`${index}-${segment}`}

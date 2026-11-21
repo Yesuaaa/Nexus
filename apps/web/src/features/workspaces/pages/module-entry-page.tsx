@@ -11,6 +11,7 @@ import { useBreadcrumbLabel } from "@/components/layout/breadcrumbs"
 import { getAdministrativeModule } from "../api/modules-api"
 import { AdministrativeProjectsOverview } from "@/features/projects/pages/administrative-projects-overview"
 import { AdministrativeRequestsPage } from "@/features/request-inbox/pages/administrative-requests-page"
+import { PayrollOverviewPage } from "@/features/payroll/pages/payroll-overview-page"
 
 export function ModuleEntryPage({ moduleId }: { moduleId: string }) {
   const result = useAsyncResource(
@@ -27,6 +28,8 @@ export function ModuleEntryPage({ moduleId }: { moduleId: string }) {
       ? "Review organization-wide service requests."
       : module?.description
   useBreadcrumbLabel(moduleId, pageTitle)
+
+  if (moduleId === "payroll" && module) return <PayrollOverviewPage />
 
   return (
     <main

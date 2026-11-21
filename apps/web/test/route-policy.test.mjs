@@ -34,6 +34,8 @@ const permissionsByRole = {
     Permissions.SERVICES_READ,
     Permissions.SERVICES_MANAGE,
     Permissions.CLIENTS_READ,
+    Permissions.PAYROLL_READ,
+    Permissions.PAYROLL_MANAGE,
   ],
   SUPERADMIN: [
     Permissions.MODULES_ACCESS_ALL,
@@ -49,6 +51,7 @@ const permissionsByRole = {
     Permissions.DEPARTMENTS_READ,
     Permissions.DEPARTMENTS_MANAGE,
     Permissions.DEPARTMENTS_DELETE,
+    Permissions.PAYROLL_READ,
     Permissions.ACCOUNTS_READ,
     Permissions.ACCOUNTS_RESET_PASSWORD,
     Permissions.ACCOUNTS_CREATE_BASIC,
@@ -124,6 +127,7 @@ const routeMatrix = {
     "/clients",
     "/departments",
     "/employees",
+    "/module/payroll/runs",
     "/calendar",
     "/profile",
     "/settings",
@@ -134,6 +138,7 @@ const routeMatrix = {
     "/clients",
     "/departments",
     "/employees",
+    "/module/payroll/runs",
     "/messages",
     "/accounts",
     "/module/project-management",
@@ -165,6 +170,7 @@ const protectedRoutes = [
   "/booked-services",
   "/staff-workload",
   "/request-inbox",
+  "/module/payroll/runs",
   "/request-inbox/overview",
 ]
 
@@ -231,6 +237,14 @@ test("dynamic project routes are explicit and unknown descendants are denied", (
     ),
     undefined,
   )
+})
+
+test("Payroll Runs is an explicit reader route for Admin and Superadmin", () => {
+  assert.equal(findRoutePolicy("/module/payroll/runs")?.id, "payroll-runs")
+  for (const role of ["ADMIN", "SUPERADMIN"])
+    assert.equal(canAccessRoute(account(role), "/module/payroll/runs"), true)
+  for (const role of ["STAFF", "USER"])
+    assert.equal(canAccessRoute(account(role), "/module/payroll/runs"), false)
 })
 
 test("department-first Project Management routes require the current global read grants", () => {
@@ -430,6 +444,7 @@ test("navigation is generated from the same policies without changing role visib
       "Module",
       "Attendance",
       "Requests & Approvals",
+      "My Payroll",
       "Calendar",
       "Project Workspace",
     ],
@@ -439,6 +454,7 @@ test("navigation is generated from the same policies without changing role visib
       "Time Logs",
       "Requests & Approvals",
       "Audit Trail",
+      "My Payroll",
       "Calendar",
       "Staff Workload",
       "Request Inbox",
@@ -453,6 +469,7 @@ test("navigation is generated from the same policies without changing role visib
       "Requests & Approvals",
       "Policies",
       "Audit Trail",
+      "Payroll",
       "Service Management",
       "Calendar",
       "Client Management",
@@ -467,6 +484,7 @@ test("navigation is generated from the same policies without changing role visib
       "Requests & Approvals",
       "Policies",
       "Audit Trail",
+      "Payroll",
       "Service Management",
       "Calendar",
       "Staff Workload",
@@ -563,6 +581,7 @@ test("department-head handoff immediately removes head-only routes and navigatio
       "dashboard",
       "attendance",
       "attendance-requests",
+      "staff-my-payroll",
       "calendar",
       "project-workspace",
     ],
