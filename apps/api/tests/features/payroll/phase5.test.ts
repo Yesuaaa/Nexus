@@ -1434,5 +1434,29 @@ test(
       }),
       26 + (editRaceStaff.status === 200 ? 1 : 0),
     )
+
+    // PAY-API-001: self-service ownership follows the current employee link.
+    await prisma.$transaction([
+      prisma.employee.updateMany({
+        where: { userId: other.id },
+        data: { userId: null },
+      }),
+      prisma.employee.update({
+        where: { id: employee.id },
+        data: { userId: other.id },
+      }),
+    ])
+    assert.equal((await api(detail, staff)).status, 404)
+    const previousOwnerPayslips = await api(self + "/payslips", staff)
+    assert.deepEqual(
+      ((await previousOwnerPayslips.json()) as { rows: { id: string }[] }).rows,
+      [],
+    )
+    const currentOwnerPayslip = await api(detail, other)
+    assert.equal(currentOwnerPayslip.status, 200)
+    assert.equal(
+      ((await currentOwnerPayslip.json()) as { net: string }).net,
+      "12300.00",
+    )
   },
 )

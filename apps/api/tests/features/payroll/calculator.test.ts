@@ -246,6 +246,43 @@ test("monthly rate and fixed components calculate for a fully covered calendar m
   )
 })
 
+test("[PAY-CALC-001] monthly compensation includes both inclusive period boundaries", () => {
+  const version = {
+    id: "comp-period-boundary",
+    payType: "MONTHLY" as const,
+    baseRate: "25000.00",
+    currency: "PHP",
+    effectiveFrom: "2026-11-01",
+    effectiveTo: "2026-11-30",
+    components: [],
+  }
+  const calculate = (effectiveFrom: string, effectiveTo: string) =>
+    calculatePayrollEmployee(
+      baseInput({
+        compensationVersions: [{ ...version, effectiveFrom, effectiveTo }],
+      }),
+    )
+
+  const exactlyCovered = calculate("2026-11-01", "2026-11-30")
+  assert.equal(exactlyCovered.status, "CALCULATED")
+  assert.equal(exactlyCovered.grossAmount, "25000.00")
+  assert.equal(exactlyCovered.netAmount, "25000.00")
+
+  for (const [effectiveFrom, effectiveTo] of [
+    ["2026-11-02", "2026-11-30"],
+    ["2026-11-01", "2026-11-29"],
+  ]) {
+    const partial = calculate(effectiveFrom, effectiveTo)
+    assert.equal(partial.status, "BLOCKED")
+    assert.equal(partial.grossAmount, null)
+    assert.ok(
+      partial.blocks.some(
+        ({ code }) => code === "MONTHLY_RATE_REVISION_UNSUPPORTED",
+      ),
+    )
+  }
+})
+
 test("same-named compensation components remain separate calculated line items", () => {
   const input = baseInput({
     compensationVersions: [
@@ -457,6 +494,66 @@ test("contractors paid daily can be calculated from completed scheduled days", (
   assert.equal(result.status, "CALCULATED")
   assert.equal(result.grossAmount, "1200.00")
   assert.ok(result.attendanceSnapshot.workdays.length === 1)
+})
+
+test("[PAY-CALC-001] daily compensation requires every scheduled minute", () => {
+  const date = "2026-11-02"
+  const calculate = (endedAt: string) =>
+    calculatePayrollEmployee(
+      baseInput({
+        compensationVersions: [
+          {
+            id: "daily-threshold",
+            payType: "DAILY",
+            baseRate: "1200.00",
+            currency: "PHP",
+            effectiveFrom: "2026-01-01",
+            effectiveTo: null,
+            components: [],
+          },
+        ],
+        attendance: {
+          policyMissing: false,
+          expectedWorkdays: [
+            {
+              workDate: date,
+              assignmentId: "assignment-1",
+              policyId: "policy-1",
+              policyName: "Standard",
+              isWorkingDay: true,
+              requiredMinutes: 420,
+            },
+          ],
+          workdays: [
+            attendanceDay(date, 420, [
+              {
+                id: "daily-threshold-session",
+                startedAt: new Date(`${date}T09:00:00.000Z`),
+                endedAt: new Date(endedAt),
+                breaks: [],
+                pendingCorrections: [],
+              },
+            ]),
+          ],
+          overtimeAdjustments: [],
+        },
+      }),
+    )
+
+  const oneMinuteShort = calculate(`${date}T15:59:00.000Z`)
+  assert.equal(oneMinuteShort.status, "REVIEW_REQUIRED")
+  assert.equal(oneMinuteShort.grossAmount, "0.00")
+  assert.equal(oneMinuteShort.netAmount, "0.00")
+  assert.ok(
+    oneMinuteShort.warnings.some(
+      ({ code }) => code === "ATTENDANCE_INCOMPLETE",
+    ),
+  )
+
+  const exactlyScheduled = calculate(`${date}T16:00:00.000Z`)
+  assert.equal(exactlyScheduled.status, "CALCULATED")
+  assert.equal(exactlyScheduled.grossAmount, "1200.00")
+  assert.equal(exactlyScheduled.netAmount, "1200.00")
 })
 
 test("hourly pay subtracts unpaid breaks and never pays overtime without a rate", () => {
